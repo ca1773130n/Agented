@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.pyc
+*.egg-info/
+.coverage
+
+# Node
+node_modules/
+
+# Build / test artifacts
+dist/
+coverage/
+test-results/
+playwright-report/
+test-dashboard.mjs
+
+# Tooling
+.playwright-mcp/
+
+# Runtime
+*.db
+project_links/
