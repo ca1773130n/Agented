@@ -1,0 +1,11 @@
+/* Base reset - App.vue handles the actual styling */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+#app {
+  width: 100%;
+  min-height: 100vh;
+}

@@ -1,0 +1,11 @@
+{
+  "name": "playground-webapp-frontend",
+  "version": "1.0.0",
+  "description": "Skills Playground Example - Simple Todo App Frontend",
+  "scripts": {
+    "serve": "npx serve ."
+  },
+  "devDependencies": {
+    "serve": "^14.0.0"
+  }
+}

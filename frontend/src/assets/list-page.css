@@ -1,0 +1,385 @@
+/* Shared styles for list pages (Hooks, Commands, Rules, etc.) */
+
+/* Page header */
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 24px;
+}
+
+.page-header .header-content h1 {
+  font-size: 28px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0 0 8px 0;
+}
+
+.page-header .subtitle {
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+.page-header .header-actions {
+  display: flex;
+  gap: 12px;
+}
+
+/* Filter bar */
+.filters-bar {
+  display: flex;
+  gap: 24px;
+  margin-bottom: 24px;
+  padding: 16px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+}
+
+.filter-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.filter-group label {
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.filter-group select {
+  padding: 6px 12px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-default);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+/* Buttons */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+}
+
+.btn:hover {
+  background: var(--bg-elevated, var(--bg-tertiary));
+  color: var(--text-primary);
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+.btn-primary {
+  background: var(--accent-cyan);
+  color: #000;
+}
+
+.btn-primary:hover {
+  background: #00c4ee;
+  color: #000;
+}
+
+.btn-sm {
+  padding: 6px 12px;
+  font-size: 13px;
+}
+
+.btn-sm svg {
+  width: 14px;
+  height: 14px;
+}
+
+.btn-danger {
+  background: var(--accent-crimson-dim);
+  color: var(--accent-crimson);
+}
+
+.btn-danger:hover {
+  background: rgba(255, 51, 102, 0.25);
+}
+
+.btn-icon {
+  padding: 6px;
+  border-radius: 6px;
+}
+
+.btn-secondary {
+  background: var(--accent-violet-dim, rgba(136, 85, 255, 0.15));
+  color: var(--accent-violet, #8855ff);
+}
+
+.btn-secondary:hover {
+  background: rgba(136, 85, 255, 0.25);
+}
+
+.btn-ai {
+  background: linear-gradient(135deg, rgba(136, 85, 255, 0.2), rgba(0, 212, 255, 0.2));
+  color: var(--accent-cyan);
+  border: 1px solid rgba(0, 212, 255, 0.3);
+}
+
+.btn-ai:hover {
+  background: linear-gradient(135deg, rgba(136, 85, 255, 0.3), rgba(0, 212, 255, 0.3));
+  border-color: rgba(0, 212, 255, 0.5);
+  color: var(--accent-cyan);
+}
+
+.ai-badge {
+  font-size: 10px;
+  font-weight: 700;
+  background: var(--accent-cyan);
+  color: #000;
+  padding: 1px 5px;
+  border-radius: 3px;
+  letter-spacing: 0.05em;
+}
+
+/* Modal styles */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-default);
+  border-radius: 12px;
+  padding: 24px;
+  max-width: 500px;
+  width: 90%;
+}
+
+.modal h2 {
+  margin: 0 0 20px 0;
+  font-size: 18px;
+  color: var(--text-primary);
+}
+
+.modal p {
+  color: var(--text-secondary);
+  margin: 0 0 12px 0;
+}
+
+.modal .warning {
+  color: var(--accent-amber);
+  font-size: 13px;
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+
+.modal-body {
+  margin-bottom: 20px;
+}
+
+.modal-footer,
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 24px;
+}
+
+/* Form groups: labels should use for="field-id" with matching id on input.
+   When adding new forms, always pair <label for="x"> with <input id="x">. */
+.form-group {
+  margin-bottom: 16px;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.form-group input[type="text"],
+.form-group select,
+.form-group textarea {
+  width: 100%;
+  padding: 10px 12px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-default);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-size: 14px;
+  font-family: inherit;
+  box-sizing: border-box;
+}
+
+.form-group textarea {
+  font-family: var(--font-mono);
+  resize: vertical;
+}
+
+.form-group input:focus,
+.form-group select:focus,
+.form-group textarea:focus {
+  border-color: var(--accent-cyan);
+}
+.form-group input:focus-visible,
+.form-group select:focus-visible,
+.form-group textarea:focus-visible {
+  outline: 2px solid var(--accent-cyan);
+  outline-offset: 2px;
+}
+
+.checkbox-group label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.checkbox-group input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+}
+
+/* Loading, empty, and error states */
+.loading-state,
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 80px 20px;
+  text-align: center;
+}
+
+.loading-state .spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid var(--border-default);
+  border-top-color: var(--accent-cyan);
+  border-radius: 50%;
+  animation: list-page-spin 1s linear infinite;
+  margin-bottom: 16px;
+}
+
+@keyframes list-page-spin {
+  to { transform: rotate(360deg); }
+}
+
+.empty-state .empty-icon {
+  width: 80px;
+  height: 80px;
+  background: var(--bg-tertiary);
+  border-radius: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 24px;
+}
+
+.empty-state .empty-icon svg {
+  width: 40px;
+  height: 40px;
+  color: var(--text-tertiary);
+}
+
+.empty-state h3 {
+  margin: 0 0 8px 0;
+  color: var(--text-primary);
+}
+
+.empty-state p {
+  color: var(--text-secondary);
+  margin: 0 0 24px 0;
+}
+
+.error-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 80px 20px;
+  text-align: center;
+  color: var(--accent-crimson);
+}
+
+/* Entity grid (card grid layout) */
+.entity-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+  gap: 20px;
+}
+
+/* Base entity card */
+.entity-card {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-default);
+  border-radius: 12px;
+  padding: 20px;
+  transition: border-color 0.2s;
+}
+
+.entity-card:hover {
+  border-color: var(--border-strong);
+}
+
+.entity-card.disabled {
+  opacity: 0.6;
+}
+
+/* Tags and badges */
+.tag {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+}
+
+.badge {
+  display: inline-block;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+/* Highlight pulse animation (for newly created entities) */
+.highlight-pulse {
+  animation: highlightPulse 2s ease-out;
+}
+
+@keyframes highlightPulse {
+  0% { box-shadow: 0 0 0 3px var(--accent-cyan, #00d4ff); }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .loading-state .spinner { animation: none; }
+  .highlight-pulse { animation: none; }
+}

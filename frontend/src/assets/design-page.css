@@ -1,0 +1,153 @@
+/* Shared styles for design pages (Hook, Command, Rule) */
+
+/* Page shell */
+.design-page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  max-height: 100vh;
+  overflow: hidden;
+}
+
+.design-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px 24px;
+  border-bottom: 1px solid var(--border-default);
+  background: var(--bg-secondary);
+}
+
+.btn-back {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: transparent;
+  border: 1px solid var(--border-default);
+  border-radius: 6px;
+  color: var(--text-secondary);
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.btn-back:hover { background: var(--bg-tertiary); color: var(--text-primary); }
+.btn-back svg { width: 18px; height: 18px; }
+
+.header-title { flex: 1; }
+.header-title h1 { margin: 0; font-size: 18px; color: var(--text-primary); }
+.header-title p { margin: 4px 0 0 0; font-size: 13px; color: var(--text-tertiary); }
+.btn-finalize { padding: 10px 20px; }
+
+/* Form mode layout */
+.design-content {
+  display: grid;
+  grid-template-columns: 1fr 400px;
+  gap: 32px;
+  padding: 24px;
+  flex: 1;
+  overflow-y: auto;
+}
+
+.design-form {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-default);
+  border-radius: 12px;
+  padding: 24px;
+}
+
+.form-section h3 { margin: 0 0 20px 0; font-size: 16px; font-weight: 600; color: var(--text-primary); }
+.form-group { margin-bottom: 20px; }
+.form-group label { display: block; margin-bottom: 6px; color: var(--text-secondary); font-size: 13px; font-weight: 500; }
+
+.form-group input[type="text"],
+.form-group select,
+.form-group textarea {
+  width: 100%;
+  padding: 10px 12px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-default);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-size: 14px;
+  font-family: inherit;
+  box-sizing: border-box;
+}
+
+.form-group textarea { font-family: var(--font-mono); font-size: 13px; resize: vertical; }
+.form-group input:focus, .form-group select:focus, .form-group textarea:focus { border-color: var(--accent-cyan); }
+.form-group input:focus-visible, .form-group select:focus-visible, .form-group textarea:focus-visible { outline: 2px solid var(--accent-cyan); outline-offset: 2px; }
+.form-hint { margin: 6px 0 0 0; font-size: 12px; color: var(--text-tertiary); }
+.checkbox-group label { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+.checkbox-group input[type="checkbox"] { width: 16px; height: 16px; }
+
+.form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 24px;
+  padding-top: 24px;
+  border-top: 1px solid var(--border-subtle, var(--border-default));
+}
+
+/* Form preview sidebar */
+.design-preview { position: sticky; top: 0; }
+.design-preview h3 { margin: 0 0 16px 0; font-size: 14px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.05em; }
+
+.preview-card {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-default);
+  border-radius: 12px;
+  padding: 20px;
+}
+.preview-name { font-weight: 600; color: var(--text-primary); }
+.preview-description { color: var(--text-secondary); font-size: 14px; margin: 0 0 12px 0; }
+
+/* Chat mode */
+.design-body { display: flex; flex: 1; overflow: hidden; }
+
+/* Config preview fields (sidebar slot content) */
+.config-field { display: flex; flex-direction: column; gap: 6px; }
+.config-label { font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--text-tertiary); letter-spacing: 0.5px; }
+.config-value { font-size: 14px; color: var(--text-primary); }
+.config-description { color: var(--text-secondary); font-size: 13px; line-height: 1.5; }
+
+.config-code {
+  background: var(--bg-primary);
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  padding: 12px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.enabled-badge { display: inline-block; padding: 3px 10px; border-radius: 4px; font-size: 12px; font-weight: 600; }
+.enabled-badge.yes { background: rgba(0, 255, 136, 0.15); color: #00ff88; }
+.enabled-badge.no { background: rgba(255, 51, 102, 0.15); color: #ff3366; }
+
+/* Buttons */
+.btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border: none; border-radius: 6px; font-size: 14px; font-weight: 500; cursor: pointer; transition: all 0.15s; background: var(--bg-tertiary); color: var(--text-secondary); }
+.btn:hover { background: var(--bg-elevated, var(--bg-tertiary)); color: var(--text-primary); }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn svg { width: 16px; height: 16px; }
+.btn-primary { background: var(--accent-violet); color: #fff; }
+.btn-primary:hover { background: #9966ff; }
+.btn-primary svg { width: 16px; height: 16px; }
+.btn-secondary { background: var(--accent-violet-dim, rgba(136, 85, 255, 0.15)); color: var(--accent-violet, #8855ff); }
+.btn-secondary:hover { background: rgba(136, 85, 255, 0.25); }
+
+/* Export modal */
+.modal-overlay { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.7); display: flex; align-items: center; justify-content: center; z-index: 1000; }
+.modal { background: var(--bg-secondary); border: 1px solid var(--border-default); border-radius: 12px; padding: 32px; max-width: 500px; width: 90%; text-align: center; }
+.modal-icon { width: 64px; height: 64px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 20px; }
+.modal-icon.success { background: var(--accent-emerald-dim, rgba(0, 200, 83, 0.15)); color: var(--accent-emerald, #00c853); }
+.modal-icon svg { width: 32px; height: 32px; }
+.modal h2 { margin: 0 0 12px 0; font-size: 20px; color: var(--text-primary); }
+.modal p { margin: 0 0 24px 0; color: var(--text-secondary); }
+.modal-actions { display: flex; justify-content: center; gap: 12px; flex-wrap: wrap; }

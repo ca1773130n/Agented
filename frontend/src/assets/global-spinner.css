@@ -1,0 +1,9 @@
+/* Global spinner keyframes — imported once in App.vue, available to all components */
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .global-spinner { animation: none; }
+}
