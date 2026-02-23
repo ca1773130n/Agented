@@ -63,7 +63,7 @@ interface ParsedCommandConfig {
 const conversation = useConversation<ParsedCommandConfig>(commandConversationApi, createConfigParser<ParsedCommandConfig>('---COMMAND_CONFIG---'));
 
 useWebMcpTool({
-  name: 'hive_command_design_get_state',
+  name: 'agented_command_design_get_state',
   description: 'Returns the current state of the CommandDesignPage',
   page: 'CommandDesignPage',
   execute: async () => ({

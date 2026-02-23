@@ -1,4 +1,4 @@
-# Hive Database Schema
+# Agented Database Schema
 
 *Generated: 2026-02-15 16:19 UTC | Tables: 30*
 

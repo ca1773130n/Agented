@@ -11,7 +11,7 @@ from . import config as app_config
 
 # API Info for OpenAPI spec
 API_INFO = Info(
-    title="Hive API",
+    title="Agented API",
     version="1.0.0",
     description="Bot management and security audit API for webhook automation",
 )
@@ -78,7 +78,7 @@ def create_app(config=None):
 
             _grd_log.getLogger(__name__).warning(
                 "GRD binary not found — GRD CLI write operations will be unavailable. "
-                "Configure grd_binary_path in Hive settings or set CLAUDE_PLUGIN_ROOT env var."
+                "Configure grd_binary_path in Agented settings or set CLAUDE_PLUGIN_ROOT env var."
             )
 
         # Clear model discovery cache on every startup — always rediscover fresh

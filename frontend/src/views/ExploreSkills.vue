@@ -36,7 +36,7 @@ const addModalRef = ref<HTMLElement | null>(null);
 useFocusTrap(addModalRef, showAddModal);
 
 useWebMcpTool({
-  name: 'hive_explore_skills_get_state',
+  name: 'agented_explore_skills_get_state',
   description: 'Returns the current state of the Explore Skills page',
   page: 'ExploreSkills',
   execute: async () => ({

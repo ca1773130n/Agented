@@ -1,8 +1,8 @@
-"""Plugin export service for assembling Hive team entities into plugin packages.
+"""Plugin export service for assembling Agented team entities into plugin packages.
 
 Supports two export formats:
 - Claude Code plugin: directory structure with .claude-plugin/plugin.json, agents/, skills/, etc.
-- Hive package: hive.json + Claude Code plugin structure for bidirectional compatibility.
+- Agented package: agented.json + Claude Code plugin structure for bidirectional compatibility.
 """
 
 import json
@@ -29,7 +29,7 @@ from app.utils.plugin_format import (
     content_hash,
     generate_agent_md,
     generate_command_md,
-    generate_hive_manifest,
+    generate_agented_manifest,
     generate_hooks_json,
     generate_plugin_manifest,
     generate_rule_script,
@@ -40,7 +40,7 @@ log = logging.getLogger(__name__)
 
 
 class ExportService:
-    """Service for exporting Hive teams as Claude Code plugins or Hive packages."""
+    """Service for exporting Agented teams as Claude Code plugins or Agented packages."""
 
     @staticmethod
     def export_as_claude_plugin(team_id: str, output_dir: str, plugin_id: str = None) -> dict:
@@ -150,8 +150,8 @@ class ExportService:
         }
 
     @staticmethod
-    def export_as_hive_package(team_id: str, output_dir: str, plugin_id: str = None) -> dict:
-        """Export a team as a Hive package (hive.json + Claude Code plugin structure).
+    def export_as_agented_package(team_id: str, output_dir: str, plugin_id: str = None) -> dict:
+        """Export a team as a Agented package (agented.json + Claude Code plugin structure).
 
         Args:
             team_id: The team ID to export.
@@ -166,8 +166,8 @@ class ExportService:
         """
         entities = ExportService._load_team_entities(team_id)
 
-        # Generate hive.json with all entity data embedded
-        hive_manifest = generate_hive_manifest(
+        # Generate agented.json with all entity data embedded
+        agented_manifest = generate_agented_manifest(
             team=entities["team"],
             members=entities["members"],
             assignments=entities["assignments"],
@@ -180,7 +180,7 @@ class ExportService:
 
         base = Path(output_dir)
         os.makedirs(base, exist_ok=True)
-        _write_json(base / "hive.json", hive_manifest)
+        _write_json(base / "agented.json", agented_manifest)
 
         # Also generate the Claude Code plugin structure
         result = ExportService.export_as_claude_plugin(team_id, output_dir, plugin_id=None)
@@ -191,7 +191,7 @@ class ExportService:
             export_id = add_plugin_export(
                 plugin_id=plugin_id,
                 team_id=team_id,
-                export_format="hive",
+                export_format="agented",
                 export_path=str(base),
                 version="1.0.0",
             )
@@ -203,7 +203,7 @@ class ExportService:
                 )
 
         result["export_id"] = export_id
-        result["format"] = "hive"
+        result["format"] = "agented"
         return result
 
     @staticmethod

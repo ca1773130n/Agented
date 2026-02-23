@@ -1,7 +1,7 @@
 """Plugin deployment service for marketplace git operations.
 
 Handles deploying exported plugins to marketplace git repos and
-loading plugins from marketplace repos into Hive entities.
+loading plugins from marketplace repos into Agented entities.
 """
 
 import json
@@ -80,7 +80,7 @@ class DeployService:
         export_id = latest_export.get("id")
 
         # 4-9. Clone, copy, commit, push
-        with tempfile.TemporaryDirectory(prefix="hive-deploy-") as temp_dir:
+        with tempfile.TemporaryDirectory(prefix="agented-deploy-") as temp_dir:
             # 5. Clone marketplace repo
             try:
                 subprocess.run(
@@ -214,7 +214,7 @@ class DeployService:
 
     @staticmethod
     def load_from_marketplace(marketplace_id: str, remote_plugin_name: str) -> dict:
-        """Load a plugin from a marketplace into Hive entities.
+        """Load a plugin from a marketplace into Agented entities.
 
         Args:
             marketplace_id: ID of the marketplace to load from.
@@ -240,7 +240,7 @@ class DeployService:
             raise ValueError(f"Marketplace has no URL configured: {marketplace_id}")
 
         # 2. Clone marketplace repo
-        with tempfile.TemporaryDirectory(prefix="hive-load-") as temp_dir:
+        with tempfile.TemporaryDirectory(prefix="agented-load-") as temp_dir:
             try:
                 subprocess.run(
                     ["git", "clone", marketplace_url, temp_dir],
@@ -369,7 +369,7 @@ class DeployService:
         if not url:
             raise ValueError("Marketplace has no URL configured")
 
-        with tempfile.TemporaryDirectory(prefix="hive-discover-") as temp_dir:
+        with tempfile.TemporaryDirectory(prefix="agented-discover-") as temp_dir:
             try:
                 subprocess.run(
                     ["git", "clone", "--depth", "1", url, temp_dir],

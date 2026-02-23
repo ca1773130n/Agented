@@ -1,4 +1,4 @@
-"""Database initialization, migrations, and seeding for Hive.
+"""Database initialization, migrations, and seeding for Agented.
 
 This module is EXEMPT from the 500-line limit because migration code is an
 append-only historical record that is never edited once written.

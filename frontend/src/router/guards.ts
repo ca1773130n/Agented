@@ -97,9 +97,9 @@ export function registerGuards(router: Router): void {
     // Set page title
     const title = to.meta.title as string | undefined;
     if (title) {
-      document.title = `Hive - ${title}`;
+      document.title = `Agented - ${title}`;
     } else {
-      document.title = 'Hive';
+      document.title = 'Agented';
     }
 
     // Prevent infinite redirect loop: never validate the not-found route itself

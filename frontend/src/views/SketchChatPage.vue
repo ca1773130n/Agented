@@ -44,7 +44,7 @@ const {
 const inputText = ref('');
 
 useWebMcpTool({
-  name: 'hive_sketch_chat_get_state',
+  name: 'agented_sketch_chat_get_state',
   description: 'Returns the current state of the Sketch Chat page',
   page: 'SketchChatPage',
   execute: async () => ({

@@ -405,9 +405,9 @@ class AuditService:
             # Handle 'github://owner/repo' format
             return f"github:{inner}"
 
-        # Check if path looks like a temp clone directory (hive_clone_owner_repo_xxx)
-        # Pattern: any_prefix/hive_clone_OWNER_REPO_randomsuffix(es) (with optional trailing slash)
-        match = re.search(r"hive_clone_([^_]+)_(.+?)(?:_[a-z0-9]+)+/?$", path)
+        # Check if path looks like a temp clone directory (agented_clone_owner_repo_xxx)
+        # Pattern: any_prefix/agented_clone_OWNER_REPO_randomsuffix(es) (with optional trailing slash)
+        match = re.search(r"agented_clone_([^_]+)_(.+?)(?:_[a-z0-9]+)+/?$", path)
         if match:
             return f"github:{match.group(1)}/{match.group(2)}"
 
@@ -419,7 +419,7 @@ class AuditService:
         """Extract a clean project name.
 
         Prefers GitHub repo name over temp directory names.
-        Handles hive_clone_* patterns in both paths and names.
+        Handles agented_clone_* patterns in both paths and names.
         """
         # If we have a GitHub URL, extract repo name
         # Supports various GitHub domains (github.com, github.example.com, etc.)
@@ -442,9 +442,9 @@ class AuditService:
                 return parts[1]
             return inner
 
-        # Check if path or name matches hive_clone pattern
-        # Can be a full path or just a name like 'hive_clone_owner_repo_xxx'
-        match = re.search(r"hive_clone_([^_]+)_(.+?)(?:_[a-z0-9]+)+/?$", path)
+        # Check if path or name matches agented_clone pattern
+        # Can be a full path or just a name like 'agented_clone_owner_repo_xxx'
+        match = re.search(r"agented_clone_([^_]+)_(.+?)(?:_[a-z0-9]+)+/?$", path)
         if match:
             return match.group(2)
 
@@ -453,16 +453,16 @@ class AuditService:
 
     @staticmethod
     def _clean_project_name(name: str, path: str = None, github_url: str = None) -> str:
-        """Clean a project name, extracting clean name from hive_clone patterns.
+        """Clean a project name, extracting clean name from agented_clone patterns.
 
-        Always checks if name contains hive_clone pattern and cleans it.
+        Always checks if name contains agented_clone pattern and cleans it.
         Falls back to _extract_project_name if name is empty.
         """
         if not name:
             return AuditService._extract_project_name(path or "", github_url)
 
-        # Check if name itself is a hive_clone pattern
-        match = re.search(r"hive_clone_([^_]+)_(.+?)(?:_[a-z0-9]+)+$", name)
+        # Check if name itself is a agented_clone pattern
+        match = re.search(r"agented_clone_([^_]+)_(.+?)(?:_[a-z0-9]+)+$", name)
         if match:
             return match.group(2)
 

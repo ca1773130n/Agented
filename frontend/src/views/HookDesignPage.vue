@@ -185,7 +185,7 @@ interface ParsedHookConfig {
 const conversation = useConversation<ParsedHookConfig>(hookConversationApi, createConfigParser<ParsedHookConfig>('---HOOK_CONFIG---'));
 
 useWebMcpTool({
-  name: 'hive_hook_design_get_state',
+  name: 'agented_hook_design_get_state',
   description: 'Returns the current state of the HookDesignPage',
   page: 'HookDesignPage',
   execute: async () => ({

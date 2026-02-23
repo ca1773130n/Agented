@@ -45,11 +45,11 @@ describe('generic-tools', () => {
   it('registers tools with correct names', () => {
     callRegisterAndCapture()
     const expectedNames = [
-      'hive_get_page_info',
-      'hive_check_console_errors',
-      'hive_navigate_to',
-      'hive_get_health_status',
-      'hive_list_registered_tools',
+      'agented_get_page_info',
+      'agented_check_console_errors',
+      'agented_navigate_to',
+      'agented_get_health_status',
+      'agented_list_registered_tools',
     ]
     const registeredNames = mockRegisterTool.mock.calls.map((call: any) => call[0].name)
     expect(registeredNames).toEqual(expectedNames)
@@ -62,30 +62,30 @@ describe('generic-tools', () => {
     expect(manifest.every((e) => e.page === 'generic')).toBe(true)
   })
 
-  describe('hive_get_page_info', () => {
+  describe('agented_get_page_info', () => {
     it('returns page title, URL, and view in ToolResponse shape', async () => {
       callRegisterAndCapture()
-      const tool = getToolByName('hive_get_page_info')
+      const tool = getToolByName('agented_get_page_info')
       expect(tool).toBeDefined()
 
       // happy-dom provides document.title and window.location
-      document.title = 'Hive Dashboard'
+      document.title = 'Agented Dashboard'
       const result = (await tool!.execute({})) as any
       expect(result).toHaveProperty('content')
       expect(result.content).toHaveLength(1)
       expect(result.content[0].type).toBe('text')
 
       const data = JSON.parse(result.content[0].text)
-      expect(data.title).toBe('Hive Dashboard')
+      expect(data.title).toBe('Agented Dashboard')
       expect(data).toHaveProperty('url')
       expect(data).toHaveProperty('view')
     })
   })
 
-  describe('hive_check_console_errors', () => {
+  describe('agented_check_console_errors', () => {
     it('captures console.error calls and returns them', async () => {
       callRegisterAndCapture()
-      const tool = getToolByName('hive_check_console_errors')
+      const tool = getToolByName('agented_check_console_errors')
 
       // console.error should now be intercepted
       console.error('test error one')
@@ -100,7 +100,7 @@ describe('generic-tools', () => {
 
     it('clears errors when clear=true', async () => {
       callRegisterAndCapture()
-      const tool = getToolByName('hive_check_console_errors')
+      const tool = getToolByName('agented_check_console_errors')
 
       console.error('to be cleared')
       const result1 = (await tool!.execute({ clear: true })) as any
@@ -116,7 +116,7 @@ describe('generic-tools', () => {
 
     it('returns ToolResponse shape', async () => {
       callRegisterAndCapture()
-      const tool = getToolByName('hive_check_console_errors')
+      const tool = getToolByName('agented_check_console_errors')
       const result = (await tool!.execute({})) as any
       expect(result).toHaveProperty('content')
       expect(Array.isArray(result.content)).toBe(true)
@@ -125,10 +125,10 @@ describe('generic-tools', () => {
     })
   })
 
-  describe('hive_navigate_to', () => {
+  describe('agented_navigate_to', () => {
     it('sets window.location.href to the given path', async () => {
       callRegisterAndCapture()
-      const tool = getToolByName('hive_navigate_to')
+      const tool = getToolByName('agented_navigate_to')
       expect(tool).toBeDefined()
 
       const result = (await tool!.execute({ path: '/projects' })) as any
@@ -140,7 +140,7 @@ describe('generic-tools', () => {
 
     it('returns ToolResponse shape', async () => {
       callRegisterAndCapture()
-      const tool = getToolByName('hive_navigate_to')
+      const tool = getToolByName('agented_navigate_to')
       const result = (await tool!.execute({ path: '/agents' })) as any
       expect(result).toHaveProperty('content')
       expect(result.content).toHaveLength(1)
@@ -148,7 +148,7 @@ describe('generic-tools', () => {
     })
   })
 
-  describe('hive_get_health_status', () => {
+  describe('agented_get_health_status', () => {
     it('fetches /health/readiness and returns status', async () => {
       const mockFetch = vi.fn().mockResolvedValue({
         status: 200,
@@ -158,7 +158,7 @@ describe('generic-tools', () => {
       vi.stubGlobal('fetch', mockFetch)
 
       callRegisterAndCapture()
-      const tool = getToolByName('hive_get_health_status')
+      const tool = getToolByName('agented_get_health_status')
       const result = (await tool!.execute({})) as any
       const data = JSON.parse(result.content[0].text)
 
@@ -172,7 +172,7 @@ describe('generic-tools', () => {
       vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('Network error')))
 
       callRegisterAndCapture()
-      const tool = getToolByName('hive_get_health_status')
+      const tool = getToolByName('agented_get_health_status')
       const result = (await tool!.execute({})) as any
       const data = JSON.parse(result.content[0].text)
 
@@ -192,29 +192,29 @@ describe('generic-tools', () => {
       )
 
       callRegisterAndCapture()
-      const tool = getToolByName('hive_get_health_status')
+      const tool = getToolByName('agented_get_health_status')
       const result = (await tool!.execute({})) as any
       expect(result).toHaveProperty('content')
       expect(result.content[0]).toHaveProperty('type', 'text')
     })
   })
 
-  describe('hive_list_registered_tools', () => {
+  describe('agented_list_registered_tools', () => {
     it('returns manifest entries from the tool registry', async () => {
       callRegisterAndCapture()
-      const tool = getToolByName('hive_list_registered_tools')
+      const tool = getToolByName('agented_list_registered_tools')
       const result = (await tool!.execute({})) as any
       const data = JSON.parse(result.content[0].text)
 
       expect(data.count).toBe(5) // The 5 generic tools themselves
       expect(data.tools).toHaveLength(5)
-      expect(data.tools.map((t: any) => t.name)).toContain('hive_get_page_info')
-      expect(data.tools.map((t: any) => t.name)).toContain('hive_list_registered_tools')
+      expect(data.tools.map((t: any) => t.name)).toContain('agented_get_page_info')
+      expect(data.tools.map((t: any) => t.name)).toContain('agented_list_registered_tools')
     })
 
     it('returns ToolResponse shape', async () => {
       callRegisterAndCapture()
-      const tool = getToolByName('hive_list_registered_tools')
+      const tool = getToolByName('agented_list_registered_tools')
       const result = (await tool!.execute({})) as any
       expect(result).toHaveProperty('content')
       expect(Array.isArray(result.content)).toBe(true)

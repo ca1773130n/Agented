@@ -403,7 +403,7 @@ const codexSettings = ref({
 const otherBackendAccounts = ref<{ backend_name: string; backend_type: string; accounts: BackendAccount[] }[]>([]);
 
 useWebMcpTool({
-  name: 'hive_backend_detail_get_state',
+  name: 'agented_backend_detail_get_state',
   description: 'Returns the current state of the BackendDetailPage',
   page: 'BackendDetailPage',
   execute: async () => ({

@@ -24,7 +24,7 @@ const isOpen = toRef(props, 'show');
 useFocusTrap(exportModalRef, isOpen);
 
 const selectedTeamId = ref(props.preSelectedTeamId || '');
-const exportFormat = ref<'claude' | 'hive'>('claude');
+const exportFormat = ref<'claude' | 'agented'>('claude');
 const outputDir = ref('');
 const isExporting = ref(false);
 const exportResult = ref<PluginExportResponse | null>(null);
@@ -129,8 +129,8 @@ async function copyPath() {
 
                 <div
                   class="format-card"
-                  :class="{ active: exportFormat === 'hive' }"
-                  @click="exportFormat = 'hive'"
+                  :class="{ active: exportFormat === 'agented' }"
+                  @click="exportFormat = 'agented'"
                 >
                   <div class="format-icon">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
@@ -140,8 +140,8 @@ async function copyPath() {
                     </svg>
                   </div>
                   <div class="format-text">
-                    <strong>Hive Package</strong>
-                    <span>Standalone hive.json with embedded entities</span>
+                    <strong>Agented Package</strong>
+                    <span>Standalone agented.json with embedded entities</span>
                   </div>
                 </div>
               </div>

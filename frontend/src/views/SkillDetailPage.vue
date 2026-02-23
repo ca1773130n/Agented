@@ -41,7 +41,7 @@ const parsedMetadata = computed(() => {
 });
 
 useWebMcpTool({
-  name: 'hive_skill_detail_get_state',
+  name: 'agented_skill_detail_get_state',
   description: 'Returns the current state of the SkillDetailPage',
   page: 'SkillDetailPage',
   execute: async () => ({

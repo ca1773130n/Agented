@@ -2,7 +2,7 @@
  * Runtime tool manifest for discoverability.
  *
  * Tracks all currently registered WebMCP tools so that the
- * `hive_list_registered_tools` generic tool can enumerate them.
+ * `agented_list_registered_tools` generic tool can enumerate them.
  * The useWebMcpTool composable calls registerInManifest/deregisterFromManifest
  * on mount/unmount to keep this manifest in sync with actual registrations.
  */
@@ -26,7 +26,7 @@ export function deregisterFromManifest(name: string): void {
   registry.delete(name);
 }
 
-/** Returns all manifest entries as an array (for hive_list_registered_tools to consume). */
+/** Returns all manifest entries as an array (for agented_list_registered_tools to consume). */
 export function getManifest(): ManifestEntry[] {
   return Array.from(registry.values());
 }

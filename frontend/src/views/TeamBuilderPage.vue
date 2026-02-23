@@ -50,7 +50,7 @@ const availableSuperAgents = computed(() => {
 });
 
 useWebMcpTool({
-  name: 'hive_team_builder_get_state',
+  name: 'agented_team_builder_get_state',
   description: 'Returns the current state of the TeamBuilderPage',
   page: 'TeamBuilderPage',
   execute: async () => ({

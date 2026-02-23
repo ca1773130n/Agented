@@ -16,7 +16,7 @@ class PluginGenerationService(BaseGenerationService):
     def _build_prompt(cls, description: str, context: dict) -> str:
         plugins = context.get("plugins", [])
         sections = [
-            "You are a plugin configuration generator for an AI agent platform called Hive.",
+            "You are a plugin configuration generator for an AI agent platform called Agented.",
             "Plugins bundle multiple components together. Component types include: skill, command, hook, rule.",
         ]
 

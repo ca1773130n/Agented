@@ -1,8 +1,8 @@
-# Hive
+# Agented
 
 A tool for Harness engineering to organize teams, agents, and automation into a working structure — whether that's a real business team or a virtual one.
 
-Hive gives you a dashboard to define products, projects, and teams, then wire up AI agents, bots, skills, and webhooks to do the work.
+Agented gives you a dashboard to define products, projects, and teams, then wire up AI agents, bots, skills, and webhooks to do the work.
 
 ## Getting Started
 
@@ -44,7 +44,7 @@ API docs are at http://localhost:20000/docs once the backend is running.
 
 | Variable | Description | Default |
 |---|---|---|
-| `HIVE_DB_PATH` | SQLite database path | `backend/hive.db` |
+| `AGENTED_DB_PATH` | SQLite database path | `backend/agented.db` |
 | `SECRET_KEY` | Flask secret key | Auto-generated |
 | `CORS_ALLOWED_ORIGINS` | Comma-separated allowed origins | `*` |
 

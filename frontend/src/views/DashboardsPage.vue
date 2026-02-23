@@ -111,7 +111,7 @@ const entityDashboards: EntityDashConfig[] = [
 ];
 
 useWebMcpTool({
-  name: 'hive_dashboards_get_state',
+  name: 'agented_dashboards_get_state',
   description: 'Returns the current state of the DashboardsPage',
   page: 'DashboardsPage',
   execute: async () => ({

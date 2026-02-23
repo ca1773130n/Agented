@@ -30,7 +30,7 @@ const conversation = useConversation<AgentConfig>(
 );
 
 useWebMcpTool({
-  name: 'hive_agent_create_get_state',
+  name: 'agented_agent_create_get_state',
   description: 'Returns the current state of the AgentCreateWizard',
   page: 'AgentCreateWizard',
   execute: async () => ({

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Entry point for Hive backend API server."""
+"""Entry point for Agented backend API server."""
 
 import argparse
 import atexit
@@ -67,7 +67,7 @@ if os.environ.get("WERKZEUG_RUN_MAIN") == "true" or not any(
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Hive Backend API Server")
+    parser = argparse.ArgumentParser(description="Agented Backend API Server")
     parser.add_argument(
         "--port", "-p", type=int, default=20000, help="Port to run on (default: 20000)"
     )

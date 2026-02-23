@@ -42,7 +42,7 @@ const newProjectGithubRepo = ref('');
 const isCreatingProject = ref(false);
 
 useWebMcpTool({
-  name: 'hive_product_dashboard_get_state',
+  name: 'agented_product_dashboard_get_state',
   description: 'Returns the current state of the ProductDashboard',
   page: 'ProductDashboard',
   execute: async () => ({

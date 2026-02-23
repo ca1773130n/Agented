@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate SCHEMA.md from SQLite introspection of a fresh Hive database.
+"""Generate SCHEMA.md from SQLite introspection of a fresh Agented database.
 
 Usage:
     cd backend && python scripts/generate_schema.py
@@ -52,7 +52,7 @@ try:
     table_names = [row[0] for row in tables]
 
     lines = []
-    lines.append("# Hive Database Schema")
+    lines.append("# Agented Database Schema")
     lines.append("")
     lines.append(
         f"*Generated: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')} "

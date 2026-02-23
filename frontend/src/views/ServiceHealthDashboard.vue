@@ -89,7 +89,7 @@ const groupedAccounts = computed(() => {
 });
 
 useWebMcpTool({
-  name: 'hive_service_health_get_state',
+  name: 'agented_service_health_get_state',
   description: 'Returns the current state of the ServiceHealthDashboard',
   page: 'ServiceHealthDashboard',
   execute: async () => ({

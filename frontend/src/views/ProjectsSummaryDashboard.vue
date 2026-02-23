@@ -26,7 +26,7 @@ const githubConnected = computed(() => projects.value.filter(p => p.github_repo)
 const activeCount = computed(() => projects.value.filter(p => p.status === 'active').length);
 
 useWebMcpTool({
-  name: 'hive_projects_summary_get_state',
+  name: 'agented_projects_summary_get_state',
   description: 'Returns the current state of the ProjectsSummaryDashboard',
   page: 'ProjectsSummaryDashboard',
   execute: async () => ({

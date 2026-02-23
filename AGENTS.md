@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Hive is a bot automation platform with a Flask backend and Vue.js frontend. It manages AI-powered bots that execute CLI tools (Claude, OpenCode) in response to webhooks, GitHub events, schedules, or manual triggers. The platform also provides organization management for products, projects, teams, agents, plugins, skills, hooks, commands, and rules.
+Agented is a bot automation platform with a Flask backend and Vue.js frontend. It manages AI-powered bots that execute CLI tools (Claude, OpenCode) in response to webhooks, GitHub events, schedules, or manual triggers. The platform also provides organization management for products, projects, teams, agents, plugins, skills, hooks, commands, and rules.
 
 ## Development Commands
 

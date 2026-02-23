@@ -71,7 +71,7 @@ const showPluginDropdown = ref(false);
 let pluginDebounceTimer: ReturnType<typeof setTimeout>;
 
 useWebMcpTool({
-  name: 'hive_harness_integration_get_state',
+  name: 'agented_harness_integration_get_state',
   description: 'Returns the current state of the Harness Integration page',
   page: 'HarnessIntegration',
   execute: async () => ({

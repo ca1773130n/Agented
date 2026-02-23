@@ -1,4 +1,4 @@
-"""Database connection management for Hive."""
+"""Database connection management for Agented."""
 
 import sqlite3
 from contextlib import contextmanager

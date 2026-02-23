@@ -30,7 +30,7 @@ const pageSize = ref(25);
 const totalPages = computed(() => Math.max(1, Math.ceil(reviewTotal.value / pageSize.value)));
 
 useWebMcpTool({
-  name: 'hive_pr_dashboard_get_state',
+  name: 'agented_pr_dashboard_get_state',
   description: 'Returns the current state of the PrReviewDashboard',
   page: 'PrReviewDashboard',
   execute: async () => ({

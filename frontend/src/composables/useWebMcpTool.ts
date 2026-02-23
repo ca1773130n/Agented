@@ -10,7 +10,7 @@
  *
  * Usage:
  *   useWebMcpTool({
- *     name: 'hive_kanban_get_plan_cards',
+ *     name: 'agented_kanban_get_plan_cards',
  *     description: 'Returns all plan cards on the kanban board',
  *     page: 'ProjectManagement',
  *     execute: async () => ({ content: [{ type: 'text', text: '...' }] }),

@@ -46,7 +46,7 @@ const editInfoModalRef = ref<HTMLElement | null>(null);
 const addComponentModalRef = ref<HTMLElement | null>(null);
 const editComponentModalRef = ref<HTMLElement | null>(null);
 useWebMcpTool({
-  name: 'hive_plugin_detail_get_state',
+  name: 'agented_plugin_detail_get_state',
   description: 'Returns the current state of the PluginDetailPage',
   page: 'PluginDetailPage',
   execute: async () => ({

@@ -123,7 +123,7 @@ router.afterEach(() => {
 });
 
 useWebMcpTool({
-  name: 'hive_sidebar_get_state',
+  name: 'agented_sidebar_get_state',
   description: 'Returns the current state of the AppSidebar',
   page: 'AppSidebar',
   execute: async () => ({
@@ -307,7 +307,7 @@ function handleSidebarKeydown(e: KeyboardEvent) {
       </div>
       <div class="logo-text">
         <div class="logo-line-2">
-          <span>Hive</span>
+          <span>Agented</span>
           <span class="version-tag">{{ props.appVersion }}</span>
           <span class="health-indicator" :style="{ backgroundColor: props.healthColor }" :title="props.healthTooltip"></span>
           <span v-if="props.activeExecutionCount > 0" class="active-badge" :title="`${props.activeExecutionCount} execution(s) running`">

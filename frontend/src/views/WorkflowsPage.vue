@@ -57,7 +57,7 @@ useWebMcpPageTools({
 });
 
 useWebMcpTool({
-  name: 'hive_workflows_toggle_enabled',
+  name: 'agented_workflows_toggle_enabled',
   description: 'Toggles the enabled state of a workflow (not yet implemented)',
   page: 'WorkflowsPage',
   inputSchema: { type: 'object', properties: { workflowId: { type: 'string', description: 'ID of the workflow to toggle' } }, required: ['workflowId'] },

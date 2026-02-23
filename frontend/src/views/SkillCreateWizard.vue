@@ -28,7 +28,7 @@ const conversation = useConversation<SkillConfig>(
 );
 
 useWebMcpTool({
-  name: 'hive_skill_create_get_state',
+  name: 'agented_skill_create_get_state',
   description: 'Returns the current state of the SkillCreateWizard',
   page: 'SkillCreateWizard',
   execute: async () => ({

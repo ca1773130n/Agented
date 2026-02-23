@@ -1,6 +1,6 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue';
 
-const STORAGE_KEY = 'hive-sidebar-collapsed';
+const STORAGE_KEY = 'agented-sidebar-collapsed';
 const MOBILE_QUERY = '(max-width: 767px)';
 
 export function useSidebarCollapse() {

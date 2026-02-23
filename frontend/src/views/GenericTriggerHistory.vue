@@ -28,7 +28,7 @@ const selectedProject = ref('');
 const filteredAudits = ref<AuditRecord[]>([]);
 
 useWebMcpTool({
-  name: 'hive_trigger_history_get_state',
+  name: 'agented_trigger_history_get_state',
   description: 'Returns the current state of the Trigger History page',
   page: 'GenericTriggerHistory',
   execute: async () => ({

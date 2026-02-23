@@ -328,7 +328,7 @@ class TeamSpawnHandler(ExecutionTypeHandler):
 
         # Build team name from project ID
         project_id = session_config["project_id"]
-        team_name = f"hive-{project_id[:8]}"
+        team_name = f"agented-{project_id[:8]}"
 
         # Build team creation prompt with roles
         if roles:

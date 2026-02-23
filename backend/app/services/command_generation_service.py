@@ -16,7 +16,7 @@ class CommandGenerationService(BaseGenerationService):
     def _build_prompt(cls, description: str, context: dict) -> str:
         commands = context.get("commands", [])
         sections = [
-            "You are a slash command configuration generator for an AI agent platform called Hive.",
+            "You are a slash command configuration generator for an AI agent platform called Agented.",
             "Commands are slash commands that users can invoke. They have a name (prefixed with /), a description, content (the prompt/instructions), and optional arguments.",
         ]
 

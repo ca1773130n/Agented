@@ -2,16 +2,16 @@
  * Five generic verification tools registered at app startup.
  *
  * These tools provide a baseline verification layer that works across
- * any Hive page. They are registered directly via navigator.modelContext
+ * any Agented page. They are registered directly via navigator.modelContext
  * (NOT via the useWebMcpTool composable) because they live for the
  * entire app lifetime, not scoped to a single component.
  *
  * Tools:
- * 1. hive_get_page_info       - Current page title, URL, and active view name
- * 2. hive_check_console_errors - Captured JS console.error messages
- * 3. hive_navigate_to          - Navigate to a Hive view by path
- * 4. hive_get_health_status    - Backend /health/readiness check
- * 5. hive_list_registered_tools - Manifest of all registered WebMCP tools
+ * 1. agented_get_page_info       - Current page title, URL, and active view name
+ * 2. agented_check_console_errors - Captured JS console.error messages
+ * 3. agented_navigate_to          - Navigate to a Agented view by path
+ * 4. agented_get_health_status    - Backend /health/readiness check
+ * 5. agented_list_registered_tools - Manifest of all registered WebMCP tools
  */
 
 import type { ToolResponse } from './types';
@@ -61,8 +61,8 @@ function textResponse(data: unknown): ToolResponse {
 
 function createPageInfoTool() {
   return {
-    name: 'hive_get_page_info',
-    description: 'Returns the current page title, URL, and active Hive view name',
+    name: 'agented_get_page_info',
+    description: 'Returns the current page title, URL, and active Agented view name',
     inputSchema: { type: 'object', properties: {} },
     execute: async (): Promise<ToolResponse> => {
       const title = document.title;
@@ -82,7 +82,7 @@ function createPageInfoTool() {
 
 function createConsoleErrorsTool() {
   return {
-    name: 'hive_check_console_errors',
+    name: 'agented_check_console_errors',
     description: 'Returns any JavaScript console errors captured on the current page',
     inputSchema: {
       type: 'object',
@@ -106,8 +106,8 @@ function createConsoleErrorsTool() {
 
 function createNavigateToTool() {
   return {
-    name: 'hive_navigate_to',
-    description: 'Navigates to a Hive view by changing the URL path',
+    name: 'agented_navigate_to',
+    description: 'Navigates to a Agented view by changing the URL path',
     inputSchema: {
       type: 'object',
       properties: {
@@ -128,7 +128,7 @@ function createNavigateToTool() {
 
 function createHealthStatusTool() {
   return {
-    name: 'hive_get_health_status',
+    name: 'agented_get_health_status',
     description: 'Calls the /health/readiness endpoint and returns backend connection status',
     inputSchema: { type: 'object', properties: {} },
     execute: async (): Promise<ToolResponse> => {
@@ -153,7 +153,7 @@ function createHealthStatusTool() {
 
 function createListRegisteredToolsTool() {
   return {
-    name: 'hive_list_registered_tools',
+    name: 'agented_list_registered_tools',
     description: 'Returns a manifest of all currently registered WebMCP tools on this page',
     inputSchema: { type: 'object', properties: {} },
     execute: async (): Promise<ToolResponse> => {

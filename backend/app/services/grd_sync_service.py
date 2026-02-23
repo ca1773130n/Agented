@@ -54,7 +54,7 @@ class GrdSyncService:
         """Full sync of a project's .planning/ directory.
 
         Args:
-            project_id: The project ID in Hive's database.
+            project_id: The project ID in Agented's database.
             planning_dir: Absolute path to the .planning/ directory.
 
         Returns:

@@ -1,4 +1,4 @@
-"""Shared pytest fixtures for Hive tests."""
+"""Shared pytest fixtures for Agented tests."""
 
 import os
 import sys

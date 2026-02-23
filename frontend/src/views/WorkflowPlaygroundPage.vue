@@ -27,7 +27,7 @@ const generatedWorkflowId = ref<string | null>(null);
 const isDemoMode = ref(true);
 
 useWebMcpTool({
-  name: 'hive_workflow_playground_get_state',
+  name: 'agented_workflow_playground_get_state',
   description: 'Returns the current state of the Workflow Playground page',
   page: 'WorkflowPlaygroundPage',
   execute: async () => ({

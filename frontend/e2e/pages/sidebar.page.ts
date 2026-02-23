@@ -1,5 +1,5 @@
 /**
- * Page object for the Hive sidebar navigation.
+ * Page object for the Agented sidebar navigation.
  *
  * Encapsulates sidebar interactions including section expand/collapse,
  * submenu item clicks, and view transition waiting.

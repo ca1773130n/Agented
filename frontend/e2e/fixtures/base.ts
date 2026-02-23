@@ -19,12 +19,12 @@ import {
   MOCK_BACKENDS,
 } from './mock-data';
 
-type HiveFixtures = {
+type AgentedFixtures = {
   sidebarPage: SidebarPage;
   mockApi: (routes: Record<string, unknown>) => Promise<void>;
 };
 
-export const test = base.extend<HiveFixtures>({
+export const test = base.extend<AgentedFixtures>({
   page: async ({ page }, use) => {
     // Mock all initial API calls that App.vue makes on mount.
     // These MUST be set up BEFORE navigating to any page.

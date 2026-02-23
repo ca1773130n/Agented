@@ -59,7 +59,7 @@ const rightTab = ref<'identity' | 'team' | 'sessions' | 'messages'>('identity');
 const selectedThreadPeer = ref<string | null>(null);
 
 useWebMcpTool({
-  name: 'hive_super_agent_playground_get_state',
+  name: 'agented_super_agent_playground_get_state',
   description: 'Returns the current state of the SuperAgent Playground page',
   page: 'SuperAgentPlayground',
   execute: async () => ({

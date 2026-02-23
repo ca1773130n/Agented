@@ -12,7 +12,7 @@ from app.services.mcp_sync_service import McpSyncService
 
 
 def test_transform_stdio_server():
-    """Stdio server produces command + args + _hive_managed, empty env omitted."""
+    """Stdio server produces command + args + _agented_managed, empty env omitted."""
     server = {
         "name": "ctx7",
         "server_type": "stdio",
@@ -22,7 +22,7 @@ def test_transform_stdio_server():
     }
     result = McpSyncService.transform_to_claude(server)
 
-    assert result["_hive_managed"] is True
+    assert result["_agented_managed"] is True
     assert result["command"] == "npx"
     assert result["args"] == ["-y", "@upstash/context7-mcp"]
     assert "env" not in result  # empty dict omitted
@@ -34,7 +34,7 @@ def test_transform_stdio_server():
 
 
 def test_transform_http_server():
-    """HTTP server produces type + url + _hive_managed, empty headers omitted."""
+    """HTTP server produces type + url + _agented_managed, empty headers omitted."""
     server = {
         "name": "github",
         "server_type": "http",
@@ -43,7 +43,7 @@ def test_transform_http_server():
     }
     result = McpSyncService.transform_to_claude(server)
 
-    assert result["_hive_managed"] is True
+    assert result["_agented_managed"] is True
     assert result["type"] == "http"
     assert result["url"] == "https://api.github.com/mcp/"
     assert "headers" not in result  # empty headers omitted
@@ -109,20 +109,20 @@ def test_sync_project_dry_run(tmp_path):
 
 
 # =============================================================================
-# Test 5: sync_project writes .mcp.json with Hive entries
+# Test 5: sync_project writes .mcp.json with Agented entries
 # =============================================================================
 
 
 def test_sync_project_writes_mcp_json(tmp_path):
-    """Live sync creates .mcp.json with Hive-managed entries."""
+    """Live sync creates .mcp.json with Agented-managed entries."""
     mock_servers_data = {
         "ctx7": {
-            "_hive_managed": True,
+            "_agented_managed": True,
             "command": "npx",
             "args": ["-y", "@upstash/context7-mcp"],
         },
         "playwright": {
-            "_hive_managed": True,
+            "_agented_managed": True,
             "command": "npx",
             "args": ["-y", "@playwright/mcp@latest"],
         },
@@ -139,34 +139,34 @@ def test_sync_project_writes_mcp_json(tmp_path):
     mcp_file = tmp_path / ".mcp.json"
     assert mcp_file.exists()
     content = json.loads(mcp_file.read_text())
-    assert content["ctx7"]["_hive_managed"] is True
-    assert content["playwright"]["_hive_managed"] is True
+    assert content["ctx7"]["_agented_managed"] is True
+    assert content["playwright"]["_agented_managed"] is True
 
 
 # =============================================================================
-# Test 6: sync_project preserves non-Hive entries
+# Test 6: sync_project preserves non-Agented entries
 # =============================================================================
 
 
-def test_sync_project_preserves_non_hive_entries(tmp_path):
-    """Non-Hive entries (without _hive_managed) survive sync. Old Hive entries replaced."""
+def test_sync_project_preserves_non_agented_entries(tmp_path):
+    """Non-Agented entries (without _agented_managed) survive sync. Old Agented entries replaced."""
     existing = {
         "my-custom": {"command": "python", "args": ["-m", "my_server"]},
-        "hive-old": {"_hive_managed": True, "command": "old"},
+        "agented-old": {"_agented_managed": True, "command": "old"},
     }
     mcp_file = tmp_path / ".mcp.json"
     mcp_file.write_text(json.dumps(existing, indent=2))
 
-    new_hive_entry = {
+    new_agented_entry = {
         "ctx7": {
-            "_hive_managed": True,
+            "_agented_managed": True,
             "command": "npx",
             "args": ["-y", "@upstash/context7-mcp"],
         }
     }
 
     with patch("app.services.mcp_sync_service.McpSyncService.build_merged_config") as mock_build:
-        mock_build.return_value = new_hive_entry
+        mock_build.return_value = new_agented_entry
         result = McpSyncService.sync_project("proj-abc", str(tmp_path), dry_run=False)
 
     assert "written" in result
@@ -174,10 +174,10 @@ def test_sync_project_preserves_non_hive_entries(tmp_path):
 
     # my-custom preserved exactly
     assert content["my-custom"] == {"command": "python", "args": ["-m", "my_server"]}
-    # hive-old removed (was _hive_managed, not in new build)
-    assert "hive-old" not in content
-    # new Hive entry present
-    assert content["ctx7"]["_hive_managed"] is True
+    # agented-old removed (was _agented_managed, not in new build)
+    assert "agented-old" not in content
+    # new Agented entry present
+    assert content["ctx7"]["_agented_managed"] is True
 
 
 # =============================================================================
@@ -192,7 +192,7 @@ def test_sync_project_creates_backup(tmp_path):
     mcp_file.write_text(json.dumps(existing, indent=2))
 
     with patch("app.services.mcp_sync_service.McpSyncService.build_merged_config") as mock_build:
-        mock_build.return_value = {"new-server": {"_hive_managed": True, "command": "npx"}}
+        mock_build.return_value = {"new-server": {"_agented_managed": True, "command": "npx"}}
         result = McpSyncService.sync_project("proj-abc", str(tmp_path), dry_run=False)
 
     assert result.get("backup") is not None

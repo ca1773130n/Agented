@@ -104,10 +104,10 @@ describe('useWebMcpPageTools factory', () => {
     const manifest = getManifest();
     const names = manifest.map((e) => e.name).sort();
     expect(names).toEqual([
-      'hive_test_items_get_list_state',
-      'hive_test_items_get_modal_state',
-      'hive_test_items_trigger_create',
-      'hive_test_items_trigger_delete',
+      'agented_test_items_get_list_state',
+      'agented_test_items_get_modal_state',
+      'agented_test_items_trigger_create',
+      'agented_test_items_trigger_delete',
     ]);
 
     wrapper.unmount();
@@ -120,7 +120,7 @@ describe('useWebMcpPageTools factory', () => {
 
     const manifest = getManifest();
     expect(manifest).toHaveLength(1);
-    expect(manifest[0].name).toBe('hive_test_items_get_list_state');
+    expect(manifest[0].name).toBe('agented_test_items_get_list_state');
 
     wrapper.unmount();
   });
@@ -131,7 +131,7 @@ describe('useWebMcpPageTools factory', () => {
     await nextTick();
 
     const calls = mockRegisterTool.mock.calls as any[][];
-    const listStateTool = calls.find((c) => c[0].name === 'hive_test_items_get_list_state');
+    const listStateTool = calls.find((c) => c[0].name === 'agented_test_items_get_list_state');
     expect(listStateTool).toBeDefined();
 
     const result = await listStateTool![0].execute({});
@@ -153,7 +153,7 @@ describe('useWebMcpPageTools factory', () => {
     await nextTick();
 
     const calls = mockRegisterTool.mock.calls as any[][];
-    const modalTool = calls.find((c) => c[0].name === 'hive_test_items_get_modal_state');
+    const modalTool = calls.find((c) => c[0].name === 'agented_test_items_get_modal_state');
     expect(modalTool).toBeDefined();
 
     const result = await modalTool![0].execute({});
@@ -170,7 +170,7 @@ describe('useWebMcpPageTools factory', () => {
     await nextTick();
 
     const calls = mockRegisterTool.mock.calls as any[][];
-    const createTool = calls.find((c) => c[0].name === 'hive_test_items_trigger_create');
+    const createTool = calls.find((c) => c[0].name === 'agented_test_items_trigger_create');
     expect(createTool).toBeDefined();
 
     const result = await createTool![0].execute({});
@@ -187,7 +187,7 @@ describe('useWebMcpPageTools factory', () => {
     await nextTick();
 
     const calls = mockRegisterTool.mock.calls as any[][];
-    const deleteTool = calls.find((c) => c[0].name === 'hive_test_items_trigger_delete');
+    const deleteTool = calls.find((c) => c[0].name === 'agented_test_items_trigger_delete');
     expect(deleteTool).toBeDefined();
 
     // Without id
@@ -233,7 +233,7 @@ describe('useWebMcpPageTools factory', () => {
     await nextTick();
 
     const calls = mockRegisterTool.mock.calls as any[][];
-    const deleteTool = calls.find((c) => c[0].name === 'hive_test_items_trigger_delete');
+    const deleteTool = calls.find((c) => c[0].name === 'agented_test_items_trigger_delete');
     expect(deleteTool![0].inputSchema).toEqual({
       type: 'object',
       properties: {

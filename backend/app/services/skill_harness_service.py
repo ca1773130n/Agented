@@ -139,7 +139,7 @@ class SkillHarnessService(SkillMarketplaceService):
         config = {
             "name": "custom-harness",
             "version": "1.0.0",
-            "description": "Custom skill harness generated from Hive",
+            "description": "Custom skill harness generated from Agented",
             "skills": [],
         }
 

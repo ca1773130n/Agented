@@ -32,7 +32,7 @@ const isLoading = ref(true);
 const selectedProject = ref((route.query.project as string) || props.initialProjectFilter || '');
 
 useWebMcpTool({
-  name: 'hive_audit_history_get_state',
+  name: 'agented_audit_history_get_state',
   description: 'Returns the current state of the Audit History page',
   page: 'AuditHistory',
   execute: async () => ({

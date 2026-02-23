@@ -75,7 +75,7 @@ class TeamGenerationService(BaseGenerationService):
         sections = []
 
         sections.append(
-            "You are a team configuration generator for an AI agent platform called Hive."
+            "You are a team configuration generator for an AI agent platform called Agented."
         )
         sections.append(
             "Given the user's description, create a team configuration.\n\n"

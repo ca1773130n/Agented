@@ -63,7 +63,7 @@ useFocusTrap(assignModalRef, showAssignModal);
 useFocusTrap(editModalRef, isEditingInfo);
 
 useWebMcpTool({
-  name: 'hive_mcp_detail_get_state',
+  name: 'agented_mcp_detail_get_state',
   description: 'Returns the current state of the McpServerDetailPage',
   page: 'McpServerDetailPage',
   execute: async () => ({

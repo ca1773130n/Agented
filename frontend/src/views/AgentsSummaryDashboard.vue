@@ -27,7 +27,7 @@ const claudeCount = computed(() => agents.value.filter(a => a.backend_type === '
 const openCodeCount = computed(() => agents.value.filter(a => a.backend_type === 'opencode').length);
 
 useWebMcpTool({
-  name: 'hive_agents_summary_get_state',
+  name: 'agented_agents_summary_get_state',
   description: 'Returns the current state of the AgentsSummaryDashboard',
   page: 'AgentsSummaryDashboard',
   execute: async () => ({

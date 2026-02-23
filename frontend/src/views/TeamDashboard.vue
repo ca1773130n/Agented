@@ -37,7 +37,7 @@ const agentMembers = computed(() =>
 const expandedAgents = ref<Set<string>>(new Set());
 
 useWebMcpTool({
-  name: 'hive_team_dashboard_get_state',
+  name: 'agented_team_dashboard_get_state',
   description: 'Returns the current state of the TeamDashboard',
   page: 'TeamDashboard',
   execute: async () => ({
@@ -206,7 +206,7 @@ async function runTeam() {
           <span class="test-run-badge">Runs on server codebase</span>
         </div>
         <div class="test-run-info">
-          Test mode runs on the Hive server's local directory, not a project working directory. For project-scoped runs, use the Project dashboard.
+          Test mode runs on the Agented server's local directory, not a project working directory. For project-scoped runs, use the Project dashboard.
         </div>
         <div class="run-body">
           <input

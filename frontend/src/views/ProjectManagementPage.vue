@@ -54,7 +54,7 @@ const breadcrumbs = computed(() => [
 
 // WebMCP page-specific tool: exposes kanban board state to verification agents
 useWebMcpTool({
-  name: 'hive_project_get_kanban_state',
+  name: 'agented_project_get_kanban_state',
   description:
     'Returns the current state of the project kanban board including plan cards grouped by status column',
   page: 'ProjectManagement',

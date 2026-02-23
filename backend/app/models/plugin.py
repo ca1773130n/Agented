@@ -120,8 +120,8 @@ class ExportRequest(BaseModel):
     """Request body for exporting a team as a plugin."""
 
     team_id: str = Field(..., description="Team ID whose entities to export")
-    export_format: Literal["claude", "hive"] = Field(
-        ..., description="Export format: 'claude' for Claude Code plugin, 'hive' for Hive package"
+    export_format: Literal["claude", "agented"] = Field(
+        ..., description="Export format: 'claude' for Claude Code plugin, 'agented' for Agented package"
     )
     output_dir: Optional[str] = Field(
         default=None, description="Output directory path (auto-generated if not provided)"

@@ -72,17 +72,17 @@ function textResponse(data: unknown): ToolResponse {
 
 /**
  * Registers standardized WebMCP tools for a list page:
- * - `hive_{domain}_get_list_state`  — Current list state
- * - `hive_{domain}_get_modal_state` — Modal/form state (if modalGetter provided)
- * - `hive_{domain}_trigger_create`  — Open create modal (if modalActions provided)
- * - `hive_{domain}_trigger_delete`  — Open delete confirm (if modalActions provided)
+ * - `agented_{domain}_get_list_state`  — Current list state
+ * - `agented_{domain}_get_modal_state` — Modal/form state (if modalGetter provided)
+ * - `agented_{domain}_trigger_create`  — Open create modal (if modalActions provided)
+ * - `agented_{domain}_trigger_delete`  — Open delete confirm (if modalActions provided)
  */
 export function useWebMcpPageTools(options: WebMcpPageToolsOptions): void {
   const { page, domain, stateGetter, modalGetter, modalActions, deps } = options;
 
   // 1. List state tool
   useWebMcpTool({
-    name: `hive_${domain}_get_list_state`,
+    name: `agented_${domain}_get_list_state`,
     description: `Returns the current list state of the ${page} including items, search, sort, and pagination`,
     page,
     execute: async () => textResponse(stateGetter()),
@@ -92,7 +92,7 @@ export function useWebMcpPageTools(options: WebMcpPageToolsOptions): void {
   // 2. Modal state tool
   if (modalGetter) {
     useWebMcpTool({
-      name: `hive_${domain}_get_modal_state`,
+      name: `agented_${domain}_get_modal_state`,
       description: `Returns modal and form state for the ${page} (create/delete dialogs)`,
       page,
       execute: async () => textResponse(modalGetter()),
@@ -103,7 +103,7 @@ export function useWebMcpPageTools(options: WebMcpPageToolsOptions): void {
   // 3. Trigger create action
   if (modalActions) {
     useWebMcpTool({
-      name: `hive_${domain}_trigger_create`,
+      name: `agented_${domain}_trigger_create`,
       description: `Opens the create modal on the ${page}`,
       page,
       execute: async () => {
@@ -114,7 +114,7 @@ export function useWebMcpPageTools(options: WebMcpPageToolsOptions): void {
 
     // 4. Trigger delete action
     useWebMcpTool({
-      name: `hive_${domain}_trigger_delete`,
+      name: `agented_${domain}_trigger_delete`,
       description: `Opens the delete confirmation dialog for an entity on the ${page}`,
       page,
       inputSchema: {

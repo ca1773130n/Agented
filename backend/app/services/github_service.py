@@ -60,7 +60,7 @@ class GitHubService:
         owner, repo_name = GitHubService.parse_repo_url(repo_url)
 
         if target_dir is None:
-            prefix = f"hive_clone_{owner}_{repo_name}_"
+            prefix = f"agented_clone_{owner}_{repo_name}_"
             target_dir = tempfile.mkdtemp(prefix=prefix)
 
         try:

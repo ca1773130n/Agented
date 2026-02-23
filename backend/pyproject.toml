@@ -1,7 +1,7 @@
 [project]
-name = "hive-backend"
+name = "agented-backend"
 version = "0.1.0"
-description = "Hive - Bot management and security audit API for webhook automation"
+description = "Agented - Bot management and security audit API for webhook automation"
 requires-python = ">=3.10"
 dependencies = [
     "Flask>=2.2.3,<3.0",

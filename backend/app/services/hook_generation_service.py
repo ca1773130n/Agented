@@ -28,7 +28,7 @@ class HookGenerationService(BaseGenerationService):
     def _build_prompt(cls, description: str, context: dict) -> str:
         hooks = context.get("hooks", [])
         sections = [
-            "You are a hook configuration generator for an AI agent platform called Hive.",
+            "You are a hook configuration generator for an AI agent platform called Agented.",
             f"Valid hook events: {', '.join(VALID_EVENTS)}",
         ]
 

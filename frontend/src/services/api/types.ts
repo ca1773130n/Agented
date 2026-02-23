@@ -807,7 +807,7 @@ export interface Plugin {
 
 export interface PluginExportRequest {
   team_id: string;
-  export_format: 'claude' | 'hive';
+  export_format: 'claude' | 'agented';
   output_dir?: string;
   plugin_id?: string;
 }

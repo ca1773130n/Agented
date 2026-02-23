@@ -29,7 +29,7 @@ const currentExecutionId = ref<string | null>(null);
 let statusPollInterval: number | null = null;
 
 useWebMcpTool({
-  name: 'hive_trigger_dashboard_get_state',
+  name: 'agented_trigger_dashboard_get_state',
   description: 'Returns the current state of the GenericTriggerDashboard',
   page: 'GenericTriggerDashboard',
   execute: async () => ({

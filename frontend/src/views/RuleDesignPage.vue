@@ -176,7 +176,7 @@ interface ParsedRuleConfig {
 const conversation = useConversation<ParsedRuleConfig>(ruleConversationApi, createConfigParser<ParsedRuleConfig>('---RULE_CONFIG---'));
 
 useWebMcpTool({
-  name: 'hive_rule_design_get_state',
+  name: 'agented_rule_design_get_state',
   description: 'Returns the current state of the RuleDesignPage',
   page: 'RuleDesignPage',
   execute: async () => ({

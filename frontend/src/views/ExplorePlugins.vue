@@ -37,7 +37,7 @@ const detailModalOpen = computed(() => !!selectedPlugin.value);
 useFocusTrap(detailModalRef, detailModalOpen);
 
 useWebMcpTool({
-  name: 'hive_explore_plugins_get_state',
+  name: 'agented_explore_plugins_get_state',
   description: 'Returns the current state of the Explore Plugins page',
   page: 'ExplorePlugins',
   execute: async () => ({

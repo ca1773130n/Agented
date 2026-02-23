@@ -13,32 +13,32 @@ function createMockToolMap() {
 
   // Simulate tools from multiple pages
   const pageTools = [
-    'hive_teams_get_list_state',
-    'hive_teams_get_modal_state',
-    'hive_teams_trigger_create',
-    'hive_agents_get_list_state',
-    'hive_agents_get_modal_state',
-    'hive_agents_perform_search',
-    'hive_agents_perform_sort',
-    'hive_agent_design_get_state',
-    'hive_dashboards_get_state',
-    'hive_settings_get_state',
-    'hive_settings_switch_tab',
-    'hive_get_page_info',
-    'hive_list_registered_tools',
-    'hive_sidebar_get_state',
+    'agented_teams_get_list_state',
+    'agented_teams_get_modal_state',
+    'agented_teams_trigger_create',
+    'agented_agents_get_list_state',
+    'agented_agents_get_modal_state',
+    'agented_agents_perform_search',
+    'agented_agents_perform_sort',
+    'agented_agent_design_get_state',
+    'agented_dashboards_get_state',
+    'agented_settings_get_state',
+    'agented_settings_switch_tab',
+    'agented_get_page_info',
+    'agented_list_registered_tools',
+    'agented_sidebar_get_state',
   ];
 
   for (const name of pageTools) {
     const inputSchema: Record<string, unknown> = { type: 'object', properties: {} };
 
-    if (name === 'hive_agents_perform_search') {
+    if (name === 'agented_agents_perform_search') {
       inputSchema.properties = { query: { type: 'string' } };
       inputSchema.required = ['query'];
-    } else if (name === 'hive_agents_perform_sort') {
+    } else if (name === 'agented_agents_perform_sort') {
       inputSchema.properties = { field: { type: 'string' }, order: { type: 'string' } };
       inputSchema.required = ['field', 'order'];
-    } else if (name === 'hive_settings_switch_tab') {
+    } else if (name === 'agented_settings_switch_tab') {
       inputSchema.properties = { tab: { type: 'string' } };
       inputSchema.required = ['tab'];
     }
@@ -83,7 +83,7 @@ describe('random-walk', () => {
 
   it('aborts on consecutive errors', async () => {
     const failingMap = new Map<string, { execute: (a: Record<string, unknown>) => Promise<unknown>; inputSchema?: Record<string, unknown> }>();
-    failingMap.set('hive_test_get_state', {
+    failingMap.set('agented_test_get_state', {
       execute: vi.fn(async () => { throw new Error('test failure'); }),
     });
 
@@ -99,7 +99,7 @@ describe('random-walk', () => {
   });
 
   it('excludes destructive tools by default', () => {
-    const names = ['hive_teams_get_list_state', 'hive_teams_trigger_delete'];
+    const names = ['agented_teams_get_list_state', 'agented_teams_trigger_delete'];
     const selections = new Set<string>();
 
     for (let i = 0; i < 100; i++) {
@@ -107,12 +107,12 @@ describe('random-walk', () => {
       if (selected) selections.add(selected);
     }
 
-    expect(selections.has('hive_teams_trigger_delete')).toBe(false);
-    expect(selections.has('hive_teams_get_list_state')).toBe(true);
+    expect(selections.has('agented_teams_trigger_delete')).toBe(false);
+    expect(selections.has('agented_teams_get_list_state')).toBe(true);
   });
 
   it('includes destructive tools when opted in', () => {
-    const names = ['hive_teams_trigger_delete'];
+    const names = ['agented_teams_trigger_delete'];
     // trigger_delete has weight 0 by default, so it's still excluded even with allowDestructive
     expect(selectWeightedTool(names, { allowDestructive: true })).toBeNull();
     // Override weight to include it
@@ -120,12 +120,12 @@ describe('random-walk', () => {
       allowDestructive: true,
       weights: [{ pattern: '*_trigger_delete', weight: 10, destructive: true }],
     });
-    expect(selected2).toBe('hive_teams_trigger_delete');
+    expect(selected2).toBe('agented_teams_trigger_delete');
   });
 
   it('state tools have higher weight than action tools', () => {
-    const stateWeight = getToolWeight('hive_teams_get_list_state');
-    const actionWeight = getToolWeight('hive_teams_trigger_create');
+    const stateWeight = getToolWeight('agented_teams_get_list_state');
+    const actionWeight = getToolWeight('agented_teams_trigger_create');
 
     expect(stateWeight.weight).toBeGreaterThan(actionWeight.weight);
     expect(stateWeight.destructive).toBe(false);
@@ -134,12 +134,12 @@ describe('random-walk', () => {
   it('verifies state after action tools', async () => {
     const toolMap = new Map<string, { execute: (a: Record<string, unknown>) => Promise<unknown>; inputSchema?: Record<string, unknown> }>();
 
-    toolMap.set('hive_teams_trigger_create', {
+    toolMap.set('agented_teams_trigger_create', {
       execute: vi.fn(async () => ({
         content: [{ type: 'text', text: JSON.stringify({ success: true }) }],
       })),
     });
-    toolMap.set('hive_teams_get_modal_state', {
+    toolMap.set('agented_teams_get_modal_state', {
       execute: vi.fn(async () => ({
         content: [{ type: 'text', text: JSON.stringify({ showCreateModal: true }) }],
       })),

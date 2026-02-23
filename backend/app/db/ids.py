@@ -1,4 +1,4 @@
-"""ID generation utilities for Hive database entities."""
+"""ID generation utilities for Agented database entities."""
 
 import secrets
 import string

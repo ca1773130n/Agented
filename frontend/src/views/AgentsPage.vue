@@ -76,7 +76,7 @@ useWebMcpPageTools({
 });
 
 useWebMcpTool({
-  name: 'hive_agents_perform_search',
+  name: 'agented_agents_perform_search',
   description: 'Sets the search query on the agents list',
   page: 'AgentsPage',
   inputSchema: {
@@ -91,7 +91,7 @@ useWebMcpTool({
 });
 
 useWebMcpTool({
-  name: 'hive_agents_perform_sort',
+  name: 'agented_agents_perform_sort',
   description: 'Sets the sort field and order on the agents list',
   page: 'AgentsPage',
   inputSchema: {

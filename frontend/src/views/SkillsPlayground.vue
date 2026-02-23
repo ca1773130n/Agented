@@ -39,7 +39,7 @@ const filteredSkills = computed(() => {
 });
 
 useWebMcpTool({
-  name: 'hive_skills_playground_get_state',
+  name: 'agented_skills_playground_get_state',
   description: 'Returns the current state of the SkillsPlayground',
   page: 'SkillsPlayground',
   execute: async () => ({

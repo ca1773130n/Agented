@@ -13,7 +13,7 @@ from .base_conversation_service import BaseConversationService
 
 logger = logging.getLogger(__name__)
 
-COMMAND_CREATION_SYSTEM_PROMPT = """You are an AI assistant helping to create a new Slash Command for the Hive platform. Your job is to guide the user through designing their command step by step.
+COMMAND_CREATION_SYSTEM_PROMPT = """You are an AI assistant helping to create a new Slash Command for the Agented platform. Your job is to guide the user through designing their command step by step.
 
 A slash command is invoked by the user with a / prefix (e.g., /deploy, /lint, /review). Commands provide reusable instructions that Claude follows when the command is triggered.
 

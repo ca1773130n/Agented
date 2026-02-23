@@ -177,7 +177,7 @@ function getAccountName(accountId: number | null): string {
 
 // WebMCP page-specific tool: exposes rotation status to verification agents
 useWebMcpTool({
-  name: 'hive_scheduling_get_rotation_status',
+  name: 'agented_scheduling_get_rotation_status',
   description:
     'Returns the current rotation status including active sessions, recent rotation events, and countdown timers',
   page: 'SchedulingDashboard',

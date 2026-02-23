@@ -22,26 +22,26 @@ function createDomainToolMap(domain: string) {
 
   let createModalOpen = false;
 
-  tools.set(`hive_${domain}_get_list_state`, {
+  tools.set(`agented_${domain}_get_list_state`, {
     execute: vi.fn(async () => ({
       content: [{ type: 'text', text: JSON.stringify(listState) }],
     })),
   });
 
-  tools.set(`hive_${domain}_get_modal_state`, {
+  tools.set(`agented_${domain}_get_modal_state`, {
     execute: vi.fn(async () => ({
       content: [{ type: 'text', text: JSON.stringify(createModalOpen ? modalOpen : modalClosed) }],
     })),
   });
 
-  tools.set(`hive_${domain}_trigger_create`, {
+  tools.set(`agented_${domain}_trigger_create`, {
     execute: vi.fn(async () => {
       createModalOpen = true;
       return { content: [{ type: 'text', text: JSON.stringify({ success: true, action: 'create_modal_opened' }) }] };
     }),
   });
 
-  tools.set(`hive_${domain}_trigger_delete`, {
+  tools.set(`agented_${domain}_trigger_delete`, {
     inputSchema: {
       type: 'object',
       properties: { id: { type: 'string' } },
@@ -62,25 +62,25 @@ describe('crud-cycle', () => {
       resetState();
 
       // Step 1: Read list state
-      const listResult = await invokeTool(`hive_${domain}_get_list_state`, {}, tools);
+      const listResult = await invokeTool(`agented_${domain}_get_list_state`, {}, tools);
       expect(listResult.success).toBe(true);
       const listData = JSON.parse((listResult.data as any).content[0].text);
       expect(listData.itemCount).toBeGreaterThanOrEqual(0);
 
       // Step 2: Verify modal is initially closed
-      const modalBefore = await invokeTool(`hive_${domain}_get_modal_state`, {}, tools);
+      const modalBefore = await invokeTool(`agented_${domain}_get_modal_state`, {}, tools);
       expect(modalBefore.success).toBe(true);
       const beforeData = JSON.parse((modalBefore.data as any).content[0].text);
       expect(beforeData.showCreateModal).toBe(false);
 
       // Step 3: Trigger create modal
-      const createResult = await invokeTool(`hive_${domain}_trigger_create`, {}, tools);
+      const createResult = await invokeTool(`agented_${domain}_trigger_create`, {}, tools);
       expect(createResult.success).toBe(true);
       const createData = JSON.parse((createResult.data as any).content[0].text);
       expect(createData.action).toBe('create_modal_opened');
 
       // Step 4: Verify modal is now open
-      const modalAfter = await invokeTool(`hive_${domain}_get_modal_state`, {}, tools);
+      const modalAfter = await invokeTool(`agented_${domain}_get_modal_state`, {}, tools);
       expect(modalAfter.success).toBe(true);
       const afterData = JSON.parse((modalAfter.data as any).content[0].text);
       expect(afterData.showCreateModal).toBe(true);
@@ -88,12 +88,12 @@ describe('crud-cycle', () => {
   }
 
   it('state tool mapping is correct for all action patterns', () => {
-    expect(getStateToolForAction('hive_teams_trigger_create')).toBe('hive_teams_get_modal_state');
-    expect(getStateToolForAction('hive_teams_trigger_delete')).toBe('hive_teams_get_modal_state');
-    expect(getStateToolForAction('hive_agents_perform_search')).toBe('hive_agents_get_list_state');
-    expect(getStateToolForAction('hive_agents_perform_sort')).toBe('hive_agents_get_list_state');
-    expect(getStateToolForAction('hive_settings_switch_tab')).toBe('hive_settings_get_state');
-    expect(getStateToolForAction('hive_navigate_to')).toBe('hive_get_page_info');
+    expect(getStateToolForAction('agented_teams_trigger_create')).toBe('agented_teams_get_modal_state');
+    expect(getStateToolForAction('agented_teams_trigger_delete')).toBe('agented_teams_get_modal_state');
+    expect(getStateToolForAction('agented_agents_perform_search')).toBe('agented_agents_get_list_state');
+    expect(getStateToolForAction('agented_agents_perform_sort')).toBe('agented_agents_get_list_state');
+    expect(getStateToolForAction('agented_settings_switch_tab')).toBe('agented_settings_get_state');
+    expect(getStateToolForAction('agented_navigate_to')).toBe('agented_get_page_info');
   });
 
   it('generateRandomInputs produces valid args for string fields', () => {

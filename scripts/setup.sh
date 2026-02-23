@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Bootstrap script for Hive — installs all prerequisites and project dependencies
+# Bootstrap script for Agented — installs all prerequisites and project dependencies
 # Run: bash scripts/setup.sh (or ./scripts/setup.sh after chmod +x)
 
 RED='\033[0;31m'
@@ -96,7 +96,7 @@ check_python() {
 
 # ---------- Main ----------
 echo ""
-echo "=== Hive — Project Bootstrap ==="
+echo "=== Agented — Project Bootstrap ==="
 echo ""
 
 cd "$(dirname "$0")/.."

@@ -1,7 +1,7 @@
 /**
  * WebMCP tool type helpers and response shapes.
  *
- * These types provide a simplified, Hive-specific subset of the WebMCP
+ * These types provide a simplified, Agented-specific subset of the WebMCP
  * type system for use in verification tool definitions. They align with
  * the W3C WebMCP spec and @mcp-b/global polyfill types.
  */

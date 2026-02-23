@@ -24,7 +24,7 @@ const detailModalOpen = computed(() => !!selectedItem.value);
 useFocusTrap(detailModalRef, detailModalOpen);
 
 useWebMcpTool({
-  name: 'hive_explore_super_agents_get_state',
+  name: 'agented_explore_super_agents_get_state',
   description: 'Returns the current state of the Explore SuperAgents page',
   page: 'ExploreSuperAgents',
   execute: async () => ({

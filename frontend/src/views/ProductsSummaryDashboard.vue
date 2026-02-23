@@ -27,7 +27,7 @@ const inactiveCount = computed(() => products.value.filter(p => p.status !== 'ac
 const totalProjectCount = computed(() => products.value.reduce((sum, p) => sum + (p.project_count || 0), 0));
 
 useWebMcpTool({
-  name: 'hive_products_summary_get_state',
+  name: 'agented_products_summary_get_state',
   description: 'Returns the current state of the ProductsSummaryDashboard',
   page: 'ProductsSummaryDashboard',
   execute: async () => ({

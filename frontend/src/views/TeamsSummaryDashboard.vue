@@ -25,7 +25,7 @@ const totalMembers = computed(() => teams.value.reduce((sum, t) => sum + (t.memb
 const enabledCount = computed(() => teams.value.filter(t => t.enabled !== 0).length);
 
 useWebMcpTool({
-  name: 'hive_teams_summary_get_state',
+  name: 'agented_teams_summary_get_state',
   description: 'Returns the current state of the TeamsSummaryDashboard',
   page: 'TeamsSummaryDashboard',
   execute: async () => ({

@@ -12,7 +12,7 @@ from .base_conversation_service import BaseConversationService
 
 logger = logging.getLogger(__name__)
 
-RULE_CREATION_SYSTEM_PROMPT = """You are an AI assistant helping to create a new Rule for the Hive platform. Your job is to guide the user through designing their rule step by step.
+RULE_CREATION_SYSTEM_PROMPT = """You are an AI assistant helping to create a new Rule for the Agented platform. Your job is to guide the user through designing their rule step by step.
 
 A rule defines validation logic, pre-checks, or post-checks that Claude applies during operations. Rules enforce standards, catch issues, and ensure quality.
 

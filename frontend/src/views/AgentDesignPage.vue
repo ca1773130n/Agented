@@ -58,7 +58,7 @@ const isDirty = computed(() => editMode.value && JSON.stringify(editForm.value) 
 useUnsavedGuard(isDirty);
 
 useWebMcpTool({
-  name: 'hive_agent_design_get_state',
+  name: 'agented_agent_design_get_state',
   description: 'Returns the current state of the AgentDesignPage',
   page: 'AgentDesignPage',
   execute: async () => ({

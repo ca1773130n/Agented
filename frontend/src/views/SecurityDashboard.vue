@@ -32,7 +32,7 @@ const securityTrigger = ref<Trigger | null>(null);
 const securityTriggerStatus = ref<{ pr_urls?: string[]; status?: string }>({});
 
 useWebMcpTool({
-  name: 'hive_security_dashboard_get_state',
+  name: 'agented_security_dashboard_get_state',
   description: 'Returns the current state of the SecurityDashboard',
   page: 'SecurityDashboard',
   execute: async () => ({

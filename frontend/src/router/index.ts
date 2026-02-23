@@ -14,7 +14,7 @@ import { settingsRoutes } from './routes/settings';
 import { miscRoutes } from './routes/misc';
 import { registerGuards } from './guards';
 
-// Extend RouteMeta with Hive-specific fields
+// Extend RouteMeta with Agented-specific fields
 declare module 'vue-router' {
   interface RouteMeta {
     /** Entity param key to validate before navigation (e.g., 'teamId') */

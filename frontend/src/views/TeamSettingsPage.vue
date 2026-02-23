@@ -28,7 +28,7 @@ const editDescription = ref('');
 const editColor = ref('#00d4ff');
 
 useWebMcpTool({
-  name: 'hive_team_settings_get_state',
+  name: 'agented_team_settings_get_state',
   description: 'Returns the current state of the TeamSettingsPage',
   page: 'TeamSettingsPage',
   execute: async () => ({

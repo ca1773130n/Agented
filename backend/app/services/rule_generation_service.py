@@ -18,7 +18,7 @@ class RuleGenerationService(BaseGenerationService):
     def _build_prompt(cls, description: str, context: dict) -> str:
         rules = context.get("rules", [])
         sections = [
-            "You are a rule configuration generator for an AI agent platform called Hive.",
+            "You are a rule configuration generator for an AI agent platform called Agented.",
             f"Valid rule types: {', '.join(VALID_RULE_TYPES)}",
             "Rules define conditions and actions. A 'condition' is the check/trigger, and 'action' is what happens when the condition is met.",
         ]

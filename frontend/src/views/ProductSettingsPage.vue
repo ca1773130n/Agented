@@ -29,7 +29,7 @@ const editDescription = ref('');
 const originalDescription = ref('');
 
 useWebMcpTool({
-  name: 'hive_product_settings_get_state',
+  name: 'agented_product_settings_get_state',
   description: 'Returns the current state of the ProductSettingsPage',
   page: 'ProductSettingsPage',
   execute: async () => ({

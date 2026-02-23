@@ -27,7 +27,7 @@ class PluginExportPath(BaseModel):
 
 @plugin_exports_bp.post("/export")
 def export_plugin():
-    """Export a team as a Claude Code plugin or Hive package."""
+    """Export a team as a Claude Code plugin or Agented package."""
     from ..services.plugin_export_service import ExportService
 
     data = request.get_json()
@@ -39,12 +39,12 @@ def export_plugin():
         return {"error": "team_id is required"}, HTTPStatus.BAD_REQUEST
 
     export_format = data.get("export_format")
-    if export_format not in ("claude", "hive"):
-        return {"error": "export_format must be 'claude' or 'hive'"}, HTTPStatus.BAD_REQUEST
+    if export_format not in ("claude", "agented"):
+        return {"error": "export_format must be 'claude' or 'agented'"}, HTTPStatus.BAD_REQUEST
 
     output_dir = data.get("output_dir")
     if not output_dir:
-        output_dir = tempfile.mkdtemp(prefix="hive-export-")
+        output_dir = tempfile.mkdtemp(prefix="agented-export-")
 
     try:
         if export_format == "claude":
@@ -53,7 +53,7 @@ def export_plugin():
                 output_dir=output_dir,
             )
         else:
-            result = ExportService.export_as_hive_package(
+            result = ExportService.export_as_agented_package(
                 team_id=team_id,
                 output_dir=output_dir,
             )

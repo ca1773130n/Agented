@@ -48,7 +48,7 @@ const installForm = ref({
 });
 
 useWebMcpTool({
-  name: 'hive_explore_mcp_servers_get_state',
+  name: 'agented_explore_mcp_servers_get_state',
   description: 'Returns the current state of the Explore MCP Servers page',
   page: 'ExploreMcpServers',
   execute: async () => ({

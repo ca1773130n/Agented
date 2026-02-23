@@ -22,7 +22,7 @@ const showToast = useToast();
 const audit = ref<AuditRecord | null>(null);
 
 useWebMcpTool({
-  name: 'hive_audit_detail_get_state',
+  name: 'agented_audit_detail_get_state',
   description: 'Returns the current state of the Audit Detail page',
   page: 'AuditDetail',
   execute: async () => ({

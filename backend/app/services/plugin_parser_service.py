@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 class PluginParserService:
     """Orchestrator + parsing helpers for plugin import."""
 
-    # Claude Code event types that map to Hive rule entities
+    # Claude Code event types that map to Agented rule entities
     _RULE_EVENT_MAP = {
         "PreToolUse": "pre_check",
         "PostToolUse": "post_check",
@@ -37,7 +37,7 @@ class PluginParserService:
         plugin_dir: str,
         plugin_name: Optional[str] = None,
     ) -> dict:
-        """Parse a Claude Code plugin directory and create Hive entities.
+        """Parse a Claude Code plugin directory and create Agented entities.
 
         Args:
             plugin_dir: Path to the plugin directory.
@@ -64,7 +64,7 @@ class PluginParserService:
         description = manifest.get("description", "")
         version = manifest.get("version", "1.0.0")
 
-        # Step 2: Create Hive plugin record
+        # Step 2: Create Agented plugin record
         plugin_id = add_plugin(
             name=name,
             description=description,
@@ -106,31 +106,31 @@ class PluginParserService:
         }
 
     @classmethod
-    def import_from_hive_package(cls, package_dir: str) -> dict:
-        """Import entities from a Hive package (hive.json manifest).
+    def import_from_agented_package(cls, package_dir: str) -> dict:
+        """Import entities from a Agented package (agented.json manifest).
 
         Args:
-            package_dir: Path to the Hive package directory containing hive.json.
+            package_dir: Path to the Agented package directory containing agented.json.
 
         Returns:
             Dict with plugin_id, plugin_name, and counts of imported entities.
 
         Raises:
-            FileNotFoundError: If package_dir or hive.json does not exist.
+            FileNotFoundError: If package_dir or agented.json does not exist.
         """
         package_path = Path(package_dir)
 
         if not package_path.exists():
             raise FileNotFoundError(f"Package directory not found: {package_dir}")
 
-        hive_json_path = package_path / "hive.json"
-        if not hive_json_path.exists():
-            raise FileNotFoundError(f"hive.json not found in: {package_dir}")
+        agented_json_path = package_path / "agented.json"
+        if not agented_json_path.exists():
+            raise FileNotFoundError(f"agented.json not found in: {package_dir}")
 
         try:
-            manifest = json.loads(hive_json_path.read_text(encoding="utf-8"))
+            manifest = json.loads(agented_json_path.read_text(encoding="utf-8"))
         except (json.JSONDecodeError, OSError) as e:
-            logger.error("Failed to parse hive.json: %s", e)
+            logger.error("Failed to parse agented.json: %s", e)
             raise
 
         name = manifest.get("name", package_path.name)
@@ -145,7 +145,7 @@ class PluginParserService:
             status="imported",
         )
         if not plugin_id:
-            logger.error("Failed to create plugin record for Hive package '%s'", name)
+            logger.error("Failed to create plugin record for Agented package '%s'", name)
             return {
                 "plugin_id": None,
                 "plugin_name": name,

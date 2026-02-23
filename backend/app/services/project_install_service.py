@@ -34,7 +34,7 @@ VALID_COMPONENT_TYPES = set(COMPONENT_SUBDIRS.keys())
 
 
 class ProjectInstallService:
-    """Service for installing and uninstalling Hive components as .claude/ files."""
+    """Service for installing and uninstalling Agented components as .claude/ files."""
 
     @staticmethod
     def install_component(project_id: str, component_type: str, component_id: str) -> dict:

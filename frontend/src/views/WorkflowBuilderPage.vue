@@ -85,7 +85,7 @@ const selectedNode = computed<Node | null>(() => {
 });
 
 useWebMcpTool({
-  name: 'hive_workflow_builder_get_state',
+  name: 'agented_workflow_builder_get_state',
   description: 'Returns the current state of the WorkflowBuilderPage',
   page: 'WorkflowBuilderPage',
   execute: async () => ({

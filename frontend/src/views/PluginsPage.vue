@@ -290,7 +290,7 @@ onMounted(() => {
 
     <ErrorState v-else-if="loadError" title="Failed to load plugins" :message="loadError" @retry="loadPlugins" />
 
-    <EmptyState v-else-if="plugins.length === 0" title="No plugins yet" description="Create your first plugin to extend Hive's capabilities">
+    <EmptyState v-else-if="plugins.length === 0" title="No plugins yet" description="Create your first plugin to extend Agented's capabilities">
       <template #actions>
         <button class="btn btn-primary" @click="showCreateModal = true">Create Your First Plugin</button>
       </template>

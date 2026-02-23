@@ -1,4 +1,4 @@
-"""Plugin format utilities for converting Hive entities to Claude Code plugin files.
+"""Plugin format utilities for converting Agented entities to Claude Code plugin files.
 
 All functions are pure -- they transform data structures without making DB calls.
 """
@@ -31,7 +31,7 @@ def content_hash(content: str) -> str:
 
 
 def generate_agent_md(agent: dict) -> str:
-    """Convert a Hive agent dict to Claude Code agent .md format.
+    """Convert a Agented agent dict to Claude Code agent .md format.
 
     YAML frontmatter with name (kebab-case) and description.
     Body from system_prompt or role.
@@ -71,7 +71,7 @@ def generate_agent_md(agent: dict) -> str:
 
 
 def generate_skill_md(skill: dict) -> str:
-    """Convert a Hive skill dict to Claude Code SKILL.md format.
+    """Convert a Agented skill dict to Claude Code SKILL.md format.
 
     YAML frontmatter with description. Body from content or description.
     """
@@ -83,7 +83,7 @@ def generate_skill_md(skill: dict) -> str:
 
 
 def generate_command_md(command: dict) -> str:
-    """Convert a Hive command dict to Claude Code command .md format.
+    """Convert a Agented command dict to Claude Code command .md format.
 
     YAML frontmatter with description. If arguments exists (JSON string),
     parse and add as parameters in frontmatter. Body from content.
@@ -103,7 +103,7 @@ def generate_command_md(command: dict) -> str:
 
 
 def generate_hooks_json(hooks: list, rules: list) -> tuple:
-    """Convert Hive hooks and rules to Claude Code hooks.json format + scripts dict.
+    """Convert Agented hooks and rules to Claude Code hooks.json format + scripts dict.
 
     Maps hooks by their event field.
     Maps rules: pre_check -> PreToolUse, post_check -> PostToolUse, validation -> PreToolUse.
@@ -161,7 +161,7 @@ def generate_hooks_json(hooks: list, rules: list) -> tuple:
 
 
 def generate_rule_script(rule: dict) -> str:
-    """Generate a shell script from a Hive rule with condition/action as script body."""
+    """Generate a shell script from a Agented rule with condition/action as script body."""
     name = rule.get("name", "unnamed-rule")
     description = rule.get("description") or ""
     condition = rule.get("condition") or ""
@@ -201,8 +201,8 @@ def generate_plugin_manifest(
         "version": "1.0.0",
         "description": team.get("description")
         or f"Plugin generated from team: {team.get('name', '')}",
-        "author": "Hive",
-        "keywords": ["hive-generated"],
+        "author": "Agented",
+        "keywords": ["agented-generated"],
     }
 
     components = {}
@@ -226,7 +226,7 @@ def generate_plugin_manifest(
     return manifest
 
 
-def generate_hive_manifest(
+def generate_agented_manifest(
     team: dict,
     members: list,
     assignments: list,
@@ -236,13 +236,13 @@ def generate_hive_manifest(
     hooks: list,
     rules: list,
 ) -> dict:
-    """Generate hive.json with full team config including topology, trigger config, all entity data.
+    """Generate agented.json with full team config including topology, trigger config, all entity data.
 
-    This is the standalone Hive package format that can be imported back into a Hive instance.
+    This is the standalone Agented package format that can be imported back into a Agented instance.
     """
     manifest = {
-        "hive_version": "1.0.0",
-        "format": "hive-package",
+        "agented_version": "1.0.0",
+        "format": "agented-package",
         "team": {
             "name": team.get("name", ""),
             "description": team.get("description") or "",

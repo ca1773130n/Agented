@@ -1,4 +1,4 @@
-"""Fresh database schema creation for Hive.
+"""Fresh database schema creation for Agented.
 
 Contains all CREATE TABLE and CREATE INDEX statements for a fresh database.
 """

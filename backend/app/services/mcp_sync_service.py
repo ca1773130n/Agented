@@ -1,6 +1,6 @@
-"""MCP Sync Service -- transforms Hive's canonical MCP config to Claude Code's .mcp.json format.
+"""MCP Sync Service -- transforms Agented's canonical MCP config to Claude Code's .mcp.json format.
 
-Supports dry-run mode, non-Hive entry preservation via _hive_managed markers,
+Supports dry-run mode, non-Agented entry preservation via _agented_managed markers,
 backup creation before writes, and atomic file writes.
 """
 
@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 
 class McpSyncService:
-    """Service for syncing Hive MCP configuration to Claude Code .mcp.json files."""
+    """Service for syncing Agented MCP configuration to Claude Code .mcp.json files."""
 
     @staticmethod
     def transform_to_claude(server: dict, env_overrides: str | None = None) -> dict:
@@ -27,9 +27,9 @@ class McpSyncService:
             env_overrides: Optional JSON string of env var overrides (overrides win over base).
 
         Returns:
-            Dict suitable for inclusion in .mcp.json with _hive_managed marker.
+            Dict suitable for inclusion in .mcp.json with _agented_managed marker.
         """
-        config: dict = {"_hive_managed": True}
+        config: dict = {"_agented_managed": True}
 
         server_type = server.get("server_type", "stdio")
 
@@ -56,7 +56,7 @@ class McpSyncService:
 
     @staticmethod
     def build_merged_config(project_id: str) -> dict:
-        """Build the Hive-managed portion of .mcp.json for a project.
+        """Build the Agented-managed portion of .mcp.json for a project.
 
         Fetches all enabled MCP servers assigned to the project and transforms them.
 
@@ -64,7 +64,7 @@ class McpSyncService:
             project_id: The project ID to fetch MCP servers for.
 
         Returns:
-            Dict mapping server_name -> Claude Code config dict (all with _hive_managed=True).
+            Dict mapping server_name -> Claude Code config dict (all with _agented_managed=True).
         """
         from app.db import get_project_mcp_servers
 
@@ -118,8 +118,8 @@ class McpSyncService:
 
         The .mcp.json format is flat: server names are top-level keys (no mcpServers wrapper).
 
-        Non-Hive entries (those without _hive_managed: True) are preserved.
-        Hive-managed entries are replaced with the current build_merged_config output.
+        Non-Agented entries (those without _agented_managed: True) are preserved.
+        Agented-managed entries are replaced with the current build_merged_config output.
 
         Args:
             project_id: The project ID to sync.
@@ -142,29 +142,29 @@ class McpSyncService:
             except json.JSONDecodeError:
                 return {"error": "Invalid JSON in existing .mcp.json"}
 
-        # Preserve non-Hive entries (those without _hive_managed key)
+        # Preserve non-Agented entries (those without _agented_managed key)
         preserved = {
             k: v
             for k, v in existing.items()
-            if not (isinstance(v, dict) and v.get("_hive_managed"))
+            if not (isinstance(v, dict) and v.get("_agented_managed"))
         }
 
-        # Build Hive-managed entries
+        # Build Agented-managed entries
         try:
-            hive_entries = McpSyncService.build_merged_config(project_id)
+            agented_entries = McpSyncService.build_merged_config(project_id)
         except Exception as e:
             logger.error("Failed to build MCP config for project %s: %s", project_id, e)
             return {"error": f"Failed to build config: {e}"}
 
-        # Merge: preserved non-Hive entries + new Hive entries
-        merged = {**preserved, **hive_entries}
+        # Merge: preserved non-Agented entries + new Agented entries
+        merged = {**preserved, **agented_entries}
 
         if dry_run:
             diff = McpSyncService._compute_diff(existing, merged)
             return {
                 "diff": diff,
                 "would_write": str(mcp_file),
-                "servers_count": len(hive_entries),
+                "servers_count": len(agented_entries),
             }
 
         # Write mode

@@ -24,7 +24,7 @@ export const DEFAULT_WEIGHTS: ToolWeight[] = [
   { pattern: '*_get_modal_state', weight: 20 },
 
   // Navigation — moderate weight
-  { pattern: 'hive_navigate_to', weight: 15 },
+  { pattern: 'agented_navigate_to', weight: 15 },
 
   // Search/sort actions — moderate weight (non-destructive)
   { pattern: '*_perform_search', weight: 10 },
@@ -39,11 +39,11 @@ export const DEFAULT_WEIGHTS: ToolWeight[] = [
   { pattern: '*_trigger_delete', weight: 0, destructive: true },
 
   // Generic tools — moderate weight
-  { pattern: 'hive_get_page_info', weight: 15 },
-  { pattern: 'hive_check_console_errors', weight: 10 },
-  { pattern: 'hive_get_health_status', weight: 5 },
-  { pattern: 'hive_list_registered_tools', weight: 20 },
-  { pattern: 'hive_sidebar_get_state', weight: 10 },
+  { pattern: 'agented_get_page_info', weight: 15 },
+  { pattern: 'agented_check_console_errors', weight: 10 },
+  { pattern: 'agented_get_health_status', weight: 5 },
+  { pattern: 'agented_list_registered_tools', weight: 20 },
+  { pattern: 'agented_sidebar_get_state', weight: 10 },
 ];
 
 /**

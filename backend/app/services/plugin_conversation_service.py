@@ -23,9 +23,9 @@ from ..database import (
 STALE_CONVERSATION_THRESHOLD = 1800
 
 # System prompt for plugin creation conversation
-PLUGIN_CREATION_SYSTEM_PROMPT = """You are an AI assistant helping to create a new Plugin for the Hive platform. Your job is to guide the user through designing their plugin step by step.
+PLUGIN_CREATION_SYSTEM_PROMPT = """You are an AI assistant helping to create a new Plugin for the Agented platform. Your job is to guide the user through designing their plugin step by step.
 
-A plugin is a bundle of components that extends Hive's capabilities. Each plugin can contain multiple components of the following types:
+A plugin is a bundle of components that extends Agented's capabilities. Each plugin can contain multiple components of the following types:
 - **skill** — A markdown instruction file for Claude to follow when performing a specific task
 - **command** — A slash command that users can invoke (e.g., /deploy, /lint)
 - **hook** — An event-driven action triggered by lifecycle events (e.g., PreToolUse, PostToolUse, Stop)

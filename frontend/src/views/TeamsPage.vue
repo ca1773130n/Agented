@@ -106,7 +106,7 @@ useWebMcpPageTools({
 });
 
 useWebMcpTool({
-  name: 'hive_teams_perform_search',
+  name: 'agented_teams_perform_search',
   description: 'Sets the search query on the teams list',
   page: 'TeamsPage',
   inputSchema: { type: 'object', properties: { query: { type: 'string', description: 'Search text' } }, required: ['query'] },

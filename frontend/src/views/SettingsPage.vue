@@ -33,7 +33,7 @@ const addModalRef = ref<HTMLElement | null>(null);
 useFocusTrap(addModalRef, showAddModal);
 
 useWebMcpTool({
-  name: 'hive_settings_get_state',
+  name: 'agented_settings_get_state',
   description: 'Returns the current state of the Settings page',
   page: 'SettingsPage',
   execute: async () => ({
@@ -52,7 +52,7 @@ useWebMcpTool({
 });
 
 useWebMcpTool({
-  name: 'hive_settings_switch_tab',
+  name: 'agented_settings_switch_tab',
   description: 'Switches the active tab on the Settings page',
   page: 'SettingsPage',
   inputSchema: { type: 'object', properties: { tab: { type: 'string', description: 'Tab name: general, marketplaces, harness, or mcp' } }, required: ['tab'] },

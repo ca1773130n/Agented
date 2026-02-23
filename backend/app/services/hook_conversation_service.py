@@ -12,7 +12,7 @@ from .base_conversation_service import BaseConversationService
 
 logger = logging.getLogger(__name__)
 
-HOOK_CREATION_SYSTEM_PROMPT = """You are an AI assistant helping to create a new Hook for the Hive platform. Your job is to guide the user through designing their hook step by step.
+HOOK_CREATION_SYSTEM_PROMPT = """You are an AI assistant helping to create a new Hook for the Agented platform. Your job is to guide the user through designing their hook step by step.
 
 A hook is an event-driven action triggered by Claude Code lifecycle events. Hooks run automatically when specific events occur during a coding session.
 

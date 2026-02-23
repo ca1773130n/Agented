@@ -64,7 +64,7 @@ const rotationStatus = ref<RotationDashboardStatus | null>(null);
 const rotationPollingInterval = ref<ReturnType<typeof setInterval> | null>(null);
 
 useWebMcpTool({
-  name: 'hive_token_usage_get_state',
+  name: 'agented_token_usage_get_state',
   description: 'Returns the current state of the TokenUsageDashboard',
   page: 'TokenUsageDashboard',
   execute: async () => ({

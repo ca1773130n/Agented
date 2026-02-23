@@ -125,7 +125,7 @@ class SkillsShService:
         url = f"{_SKILLS_SH_API_URL}?q={urllib.parse.quote(query)}&limit=200"
         try:
             req = urllib.request.Request(
-                url, headers={"Accept": "application/json", "User-Agent": "Hive/1.0"}
+                url, headers={"Accept": "application/json", "User-Agent": "Agented/1.0"}
             )
             with urllib.request.urlopen(req, timeout=10) as response:
                 data = json.loads(response.read())

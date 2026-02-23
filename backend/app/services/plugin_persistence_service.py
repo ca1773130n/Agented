@@ -157,8 +157,8 @@ class PluginPersistenceService:
         """Import hooks and rules from hooks/hooks.json.
 
         Classifies entries as hooks or rules based on the script name:
-        - Scripts starting with 'rule-' are classified as Hive rules.
-        - All other entries are classified as Hive hooks.
+        - Scripts starting with 'rule-' are classified as Agented rules.
+        - All other entries are classified as Agented hooks.
 
         Returns:
             Tuple of (hooks_count, rules_count).

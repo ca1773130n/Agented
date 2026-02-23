@@ -98,7 +98,7 @@ const totalTeamCount = computed(() => {
 });
 
 useWebMcpTool({
-  name: 'hive_project_dashboard_get_state',
+  name: 'agented_project_dashboard_get_state',
   description: 'Returns the current state of the ProjectDashboard',
   page: 'ProjectDashboard',
   execute: async () => ({

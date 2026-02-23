@@ -39,7 +39,7 @@ def export_super_agent():
         if export_format == "directory":
             output_dir = data.get("output_dir")
             if not output_dir:
-                output_dir = tempfile.mkdtemp(prefix="hive-sa-export-")
+                output_dir = tempfile.mkdtemp(prefix="agented-sa-export-")
             result = SuperAgentExportService.export_super_agent(
                 super_agent_id=super_agent_id,
                 output_dir=output_dir,
@@ -47,7 +47,7 @@ def export_super_agent():
         else:
             output_dir = data.get("output_dir")
             if not output_dir:
-                output_dir = tempfile.mkdtemp(prefix="hive-sa-export-")
+                output_dir = tempfile.mkdtemp(prefix="agented-sa-export-")
             output_path = f"{output_dir}/super_agent_export.zip"
             result = SuperAgentExportService.export_as_zip(
                 super_agent_id=super_agent_id,

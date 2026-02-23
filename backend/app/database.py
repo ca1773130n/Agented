@@ -1,4 +1,4 @@
-"""Database operations for Hive.
+"""Database operations for Agented.
 
 This module is a backward-compatibility shim. All database functions
 have been moved to the app.db package. This module re-exports everything

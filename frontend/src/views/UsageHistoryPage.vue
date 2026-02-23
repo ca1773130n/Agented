@@ -50,7 +50,7 @@ function formatTokenCount(n: number): string {
 }
 
 useWebMcpTool({
-  name: 'hive_usage_history_get_state',
+  name: 'agented_usage_history_get_state',
   description: 'Returns the current state of the UsageHistoryPage',
   page: 'UsageHistoryPage',
   execute: async () => ({

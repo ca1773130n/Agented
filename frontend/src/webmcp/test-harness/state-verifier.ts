@@ -25,26 +25,26 @@ export interface VerificationResult {
  * Returns null if no state tool mapping exists.
  */
 export function getStateToolForAction(actionToolName: string): string | null {
-  // Pattern: hive_{domain}_trigger_create -> hive_{domain}_get_modal_state
+  // Pattern: agented_{domain}_trigger_create -> agented_{domain}_get_modal_state
   if (actionToolName.includes('_trigger_create') || actionToolName.includes('_trigger_delete')) {
-    const domain = actionToolName.replace(/^hive_/, '').replace(/_(trigger_create|trigger_delete)$/, '');
-    return `hive_${domain}_get_modal_state`;
+    const domain = actionToolName.replace(/^agented_/, '').replace(/_(trigger_create|trigger_delete)$/, '');
+    return `agented_${domain}_get_modal_state`;
   }
 
-  // Pattern: hive_{domain}_perform_search -> hive_{domain}_get_list_state
+  // Pattern: agented_{domain}_perform_search -> agented_{domain}_get_list_state
   if (actionToolName.includes('_perform_search') || actionToolName.includes('_perform_sort')) {
-    const domain = actionToolName.replace(/^hive_/, '').replace(/_(perform_search|perform_sort)$/, '');
-    return `hive_${domain}_get_list_state`;
+    const domain = actionToolName.replace(/^agented_/, '').replace(/_(perform_search|perform_sort)$/, '');
+    return `agented_${domain}_get_list_state`;
   }
 
-  // Pattern: hive_settings_switch_tab -> hive_settings_get_state
-  if (actionToolName === 'hive_settings_switch_tab') {
-    return 'hive_settings_get_state';
+  // Pattern: agented_settings_switch_tab -> agented_settings_get_state
+  if (actionToolName === 'agented_settings_switch_tab') {
+    return 'agented_settings_get_state';
   }
 
-  // Pattern: hive_navigate_to -> hive_get_page_info
-  if (actionToolName === 'hive_navigate_to') {
-    return 'hive_get_page_info';
+  // Pattern: agented_navigate_to -> agented_get_page_info
+  if (actionToolName === 'agented_navigate_to') {
+    return 'agented_get_page_info';
   }
 
   return null;

@@ -33,7 +33,7 @@ const logModalOpen = computed(() => !!selectedExecution.value);
 useFocusTrap(logModalRef, logModalOpen);
 
 useWebMcpTool({
-  name: 'hive_execution_history_get_state',
+  name: 'agented_execution_history_get_state',
   description: 'Returns the current state of the Execution History page',
   page: 'ExecutionHistory',
   execute: async () => ({

@@ -34,7 +34,7 @@ const isDirty = computed(() => conversation.messages.value.some((m: { role: stri
 useUnsavedGuard(isDirty);
 
 useWebMcpTool({
-  name: 'hive_plugin_design_get_state',
+  name: 'agented_plugin_design_get_state',
   description: 'Returns the current state of the PluginDesignPage',
   page: 'PluginDesignPage',
   execute: async () => ({
