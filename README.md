@@ -6,12 +6,23 @@ Hive gives you a dashboard to define products, projects, and teams, then wire up
 
 ## Getting Started
 
-Requires [uv](https://docs.astral.sh/uv/) and [Node.js](https://nodejs.org/).
+### Fresh machine (auto-installs prerequisites)
 
 ```bash
-# Install everything
-just setup
+bash scripts/setup.sh
+```
 
+This installs [just](https://just.systems/), [uv](https://docs.astral.sh/uv/), and [Node.js](https://nodejs.org/) if missing, then installs all project dependencies. Safe to re-run.
+
+### Already have prerequisites
+
+```bash
+just setup
+```
+
+### Run
+
+```bash
 # Run backend and frontend in separate terminals
 just dev-backend    # http://localhost:20000
 just dev-frontend   # http://localhost:3000

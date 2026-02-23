@@ -9,7 +9,10 @@ Hive is a bot automation platform with a Flask backend and Vue.js frontend. It m
 ## Development Commands
 
 ```bash
-# Setup
+# Bootstrap (fresh clone — installs just, uv, node if missing)
+bash scripts/setup.sh
+
+# Setup (prerequisites already installed)
 just setup                # Install all dependencies (backend + frontend)
 just setup-backend        # cd backend && uv sync
 just setup-frontend       # cd frontend && npm install
