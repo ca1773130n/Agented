@@ -50,9 +50,9 @@ class SkillMarketplaceService:
         marketplace_url = marketplace.get("url", "")
         marketplace_type = marketplace.get("type", "git")
 
-        if marketplace_type != "git" or "github.com" not in marketplace_url:
+        if marketplace_type != "git" or not marketplace_url.startswith(("https://", "http://")):
             return {
-                "error": "Only GitHub-based marketplaces are currently supported"
+                "error": "Only git-based marketplaces with HTTP(S) URLs are currently supported"
             }, HTTPStatus.BAD_REQUEST
 
         # Clone/update the marketplace repo and fetch plugin

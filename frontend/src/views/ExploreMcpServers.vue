@@ -360,7 +360,7 @@ onMounted(async () => {
                 id="marketplace-url"
                 v-model="newMarketplace.url"
                 type="url"
-                placeholder="https://github.com/user/repo"
+                placeholder="https://github.com/user/repo or enterprise URL"
                 required
               />
             </div>

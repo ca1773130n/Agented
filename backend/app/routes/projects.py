@@ -74,14 +74,16 @@ def create_project():
     github_repo_raw = data.get("github_repo")
     local_path = data.get("local_path")
 
-    # Normalize github_repo to 'owner/repo' slug for consistent storage
+    # Normalize github_repo to 'owner/repo' slug and extract host for consistent storage
     github_repo = None
+    github_host = None
     if github_repo_raw:
+        github_host = ProjectWorkspaceService._extract_github_host(github_repo_raw)
         github_repo = ProjectWorkspaceService._normalize_github_repo(github_repo_raw)
 
     # Validate GitHub repository exists and is accessible (if provided)
     if github_repo:
-        full_url = f"https://github.com/{github_repo}"
+        full_url = f"https://{github_host}/{github_repo}"
         if not GitHubService.validate_repo_url(full_url):
             return {
                 "error": f"Invalid or inaccessible GitHub repo: {github_repo}"
@@ -95,6 +97,7 @@ def create_project():
         github_repo=github_repo,
         owner_team_id=data.get("owner_team_id"),
         local_path=local_path,
+        github_host=github_host,
     )
     if not project_id:
         return {"error": "Failed to create project"}, HTTPStatus.INTERNAL_SERVER_ERROR
@@ -135,6 +138,7 @@ def update_project_endpoint(path: ProjectPath):
         github_repo=data.get("github_repo"),
         owner_team_id=data.get("owner_team_id"),
         local_path=data.get("local_path"),
+        github_host=data.get("github_host"),
     ):
         return {"error": "Project not found or no changes made"}, HTTPStatus.NOT_FOUND
 

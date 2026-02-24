@@ -2850,6 +2850,13 @@ def _migrate_v45_project_clone_fields(conn):
         conn.execute("ALTER TABLE projects ADD COLUMN last_synced_at TIMESTAMP")
 
 
+def _migrate_v46_project_github_host(conn):
+    """v0.4.0: Add github_host column to projects for GitHub Enterprise support."""
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(projects)")}
+    if "github_host" not in cols:
+        conn.execute("ALTER TABLE projects ADD COLUMN github_host TEXT DEFAULT 'github.com'")
+
+
 # =============================================================================
 # Versioned migration registry
 # =============================================================================
@@ -2902,6 +2909,7 @@ VERSIONED_MIGRATIONS = [
     (43, "expand_mcp_schema", _migrate_v43_expand_mcp_schema),
     (44, "product_owner_columns", _migrate_v44_product_owner_columns),
     (45, "project_clone_fields", _migrate_v45_project_clone_fields),
+    (46, "project_github_host", _migrate_v46_project_github_host),
 ]
 
 

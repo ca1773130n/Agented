@@ -450,7 +450,7 @@ async function deleteTriggerBudget() {
           <button class="toggle-btn" :class="{ active: pathInputMode === 'project' }" @click="pathInputMode = 'project'">Project</button>
         </div>
         <input v-if="pathInputMode === 'local'" type="text" v-model="newPathInput" placeholder="/path/to/project" @keydown.enter="handleAddPathOrRepo">
-        <input v-else-if="pathInputMode === 'github'" type="text" v-model="newGitHubUrl" placeholder="https://github.com/owner/repo" @keydown.enter="handleAddPathOrRepo">
+        <input v-else-if="pathInputMode === 'github'" type="text" v-model="newGitHubUrl" placeholder="https://github.com/owner/repo or enterprise URL" @keydown.enter="handleAddPathOrRepo">
         <select v-else v-model="selectedProjectId" @change="addProject">
           <option value="">Select a project...</option>
           <option v-for="p in projects" :key="p.id" :value="p.id">{{ p.name }} ({{ p.github_repo }})</option>

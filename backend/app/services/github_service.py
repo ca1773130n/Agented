@@ -207,9 +207,10 @@ class GitHubService:
     def validate_github_url_format(url: str) -> bool:
         """Validate GitHub URL format without requiring gh CLI auth.
 
-        Accepts https://github.com/owner/repo format.
+        Accepts https://github.com/owner/repo and GitHub Enterprise URLs
+        like https://github.acme.com/owner/repo.
         """
-        pattern = r"^https?://github\.com/[a-zA-Z0-9._-]+/[a-zA-Z0-9._-]+/?$"
+        pattern = r"^https?://[a-zA-Z0-9._-]+(?:\.[a-zA-Z0-9._-]+)+/[a-zA-Z0-9._-]+/[a-zA-Z0-9._-]+/?$"
         return bool(re.match(pattern, url.strip()))
 
     @staticmethod

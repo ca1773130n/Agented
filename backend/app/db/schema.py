@@ -287,6 +287,7 @@ def create_fresh_schema(conn):
             status TEXT DEFAULT 'active',
             product_id TEXT,
             github_repo TEXT,
+            github_host TEXT DEFAULT 'github.com',
             owner_team_id TEXT,
             local_path TEXT,
             team_topology_config TEXT,

@@ -24,19 +24,41 @@ class ProjectWorkspaceService:
         """Extract 'owner/repo' from various GitHub URL formats.
 
         Accepts: 'owner/repo', 'https://github.com/owner/repo',
-        'https://github.com/owner/repo.git', 'github.com/owner/repo', etc.
+        'https://github.acme.com/owner/repo.git', 'github.com/owner/repo', etc.
         Returns the bare 'owner/repo' slug.
         """
         repo = raw.strip().rstrip("/")
         # Strip .git suffix
         if repo.endswith(".git"):
             repo = repo[:-4]
-        # Strip URL prefixes
-        for prefix in ("https://github.com/", "http://github.com/", "github.com/"):
-            if repo.startswith(prefix):
-                repo = repo[len(prefix) :]
-                break
+        # Strip full URL prefixes (any host)
+        import re
+
+        url_match = re.match(r"https?://[^/]+/(.+)", repo)
+        if url_match:
+            repo = url_match.group(1)
+        elif "/" in repo and "." in repo.split("/")[0]:
+            # Handle bare host prefix like 'github.acme.com/owner/repo'
+            repo = "/".join(repo.split("/")[1:])
         return repo
+
+    @staticmethod
+    def _extract_github_host(raw: str) -> str:
+        """Extract the GitHub host from a URL.
+
+        Returns the host (e.g. 'github.com' or 'github.acme.com').
+        Defaults to 'github.com' if no host can be extracted.
+        """
+        import re
+
+        raw = raw.strip()
+        match = re.match(r"https?://([^/]+)", raw)
+        if match:
+            return match.group(1)
+        # Handle bare host prefix like 'github.acme.com/owner/repo'
+        if "/" in raw and "." in raw.split("/")[0]:
+            return raw.split("/")[0]
+        return "github.com"
 
     @staticmethod
     def _get_clone_dir(project: dict) -> str | None:
@@ -91,7 +113,8 @@ class ProjectWorkspaceService:
                 return clone_dir
 
             # Clone the repo
-            repo_url = f"https://github.com/{ProjectWorkspaceService._normalize_github_repo(github_repo)}.git"
+            github_host = project.get("github_host", "github.com")
+            repo_url = f"https://{github_host}/{ProjectWorkspaceService._normalize_github_repo(github_repo)}.git"
             os.makedirs(os.path.dirname(clone_dir), exist_ok=True)
             logger.info(f"Cloning {repo_url} to {clone_dir}")
             result = subprocess.run(
@@ -147,7 +170,8 @@ class ProjectWorkspaceService:
                     update_project_clone_status(project_id, "cloned", last_synced_at=now)
                     return
 
-                repo_url = f"https://github.com/{ProjectWorkspaceService._normalize_github_repo(project['github_repo'])}.git"
+                github_host = project.get("github_host", "github.com")
+                repo_url = f"https://{github_host}/{ProjectWorkspaceService._normalize_github_repo(project['github_repo'])}.git"
                 os.makedirs(os.path.dirname(clone_dir), exist_ok=True)
                 logger.info(f"[clone_async] Cloning {repo_url} to {clone_dir}")
                 result = subprocess.run(

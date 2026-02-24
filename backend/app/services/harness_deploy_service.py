@@ -41,7 +41,8 @@ class HarnessDeployService:
 
         clone_path = None
         try:
-            repo_url = f"https://github.com/{github_repo}"
+            github_host = project.get("github_host", "github.com")
+            repo_url = f"https://{github_host}/{github_repo}"
             clone_path = GitHubService.clone_repo(repo_url)
 
             # Generate harness files

@@ -186,7 +186,7 @@ onUnmounted(() => {
             </div>
             <div class="form-group">
               <label for="marketplace-url">URL *</label>
-              <input id="marketplace-url" v-model="newMarketplace.url" type="text" placeholder="e.g., https://github.com/org/repo" />
+              <input id="marketplace-url" v-model="newMarketplace.url" type="text" placeholder="e.g., https://github.com/org/repo or enterprise URL" />
             </div>
             <div class="form-group">
               <label for="marketplace-type">Type</label>

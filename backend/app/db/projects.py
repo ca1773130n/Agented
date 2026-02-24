@@ -23,6 +23,7 @@ def add_project(
     github_repo: str = None,
     owner_team_id: str = None,
     local_path: str = None,
+    github_host: str = None,
 ) -> Optional[str]:
     """Add a new project. Returns project_id on success, None on failure."""
     with get_connection() as conn:
@@ -30,8 +31,8 @@ def add_project(
             project_id = _get_unique_project_id(conn)
             conn.execute(
                 """
-                INSERT INTO projects (id, name, description, status, product_id, github_repo, owner_team_id, local_path)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO projects (id, name, description, status, product_id, github_repo, owner_team_id, local_path, github_host)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
                 (
                     project_id,
@@ -42,6 +43,7 @@ def add_project(
                     github_repo,
                     owner_team_id,
                     local_path,
+                    github_host or "github.com",
                 ),
             )
             conn.commit()
@@ -60,6 +62,7 @@ def update_project(
     owner_team_id: str = None,
     local_path: str = None,
     grd_sync_at: str = None,
+    github_host: str = None,
 ) -> bool:
     """Update project fields. Returns True on success."""
     updates = []
@@ -89,6 +92,9 @@ def update_project(
     if grd_sync_at is not None:
         updates.append("grd_sync_at = ?")
         values.append(grd_sync_at)
+    if github_host is not None:
+        updates.append("github_host = ?")
+        values.append(github_host if github_host else "github.com")
 
     if not updates:
         return False

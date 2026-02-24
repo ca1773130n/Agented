@@ -107,7 +107,7 @@ def create_marketplace():
     marketplace_type = data.get("type", "git")
 
     # Validate GitHub URL format for git type marketplaces
-    if marketplace_type == "git" and "github.com" in url:
+    if marketplace_type == "git" and url.startswith(("https://", "http://")):
         if not GitHubService.validate_github_url_format(url):
             return {
                 "error": f"Invalid GitHub URL format: {url}. Expected format: https://github.com/owner/repo"

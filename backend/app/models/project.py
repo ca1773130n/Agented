@@ -23,6 +23,7 @@ class Project(BaseModel):
     product_id: Optional[str] = None
     product_name: Optional[str] = None
     github_repo: Optional[str] = None
+    github_host: Optional[str] = None
     team_count: int = Field(default=0)
     grd_config: Optional[str] = None
     grd_sync_hash: Optional[str] = None
@@ -70,6 +71,7 @@ class UpdateProjectRequest(BaseModel):
     status: Optional[str] = None
     product_id: Optional[str] = None
     github_repo: Optional[str] = None
+    github_host: Optional[str] = None
     grd_config: Optional[str] = None
     current_milestone_id: Optional[str] = None
     worktree_base_path: Optional[str] = None

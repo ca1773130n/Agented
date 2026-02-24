@@ -477,7 +477,11 @@ def list_paths_for_trigger(trigger_id: str) -> List[dict]:
 def add_github_repo(trigger_id: str, github_repo_url: str) -> bool:
     """Add a GitHub repo to a trigger. Returns True on success."""
     # Use github:// placeholder as local_project_path for uniqueness constraint
-    placeholder = f"github://{github_repo_url.rstrip('/').split('github.com/')[-1]}"
+    # Extract owner/repo from any GitHub host URL
+    url_stripped = github_repo_url.rstrip("/")
+    match = re.match(r"https?://[^/]+/(.+)", url_stripped)
+    repo_slug = match.group(1) if match else url_stripped
+    placeholder = f"github://{repo_slug}"
 
     with get_connection() as conn:
         try:

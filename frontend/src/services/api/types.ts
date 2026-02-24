@@ -680,6 +680,7 @@ export interface Project {
   product_id?: string;
   product_name?: string;
   github_repo?: string;
+  github_host?: string;
   owner_team_id?: string;
   owner_team_name?: string;
   local_path?: string;
