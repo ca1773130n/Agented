@@ -1,0 +1,76 @@
+{
+  "model_profile": "quality",
+  "commit_docs": true,
+  "search_gitignored": false,
+  "phase_branch_template": "grd/{milestone}/{phase}-{slug}",
+  "milestone_branch_template": "grd/{milestone}-{slug}",
+  "workflow": {
+    "research": true,
+    "plan_check": true,
+    "verifier": true
+  },
+  "parallelization": true,
+  "autonomous_mode": true,
+  "git": {
+    "branching_strategy": "phase",
+    "worktree_dir": ".worktrees/",
+    "default_completion_action": "pr"
+  },
+  "execution": {
+    "use_teams": true,
+    "max_concurrent_teammates": 4
+  },
+  "code_review": {
+    "enabled": true,
+    "timing": "per_phase",
+    "severity_gate": "blocker",
+    "auto_fix_warnings": false
+  },
+  "research_gates": {
+    "verification_design": true,
+    "method_selection": true,
+    "baseline_review": false
+  },
+  "confirmation_gates": {
+    "commit_confirmation": false,
+    "file_deletion": false,
+    "phase_completion": false,
+    "target_adjustment": false,
+    "approach_change": false
+  },
+  "eval_config": {
+    "default_metrics": [
+      "PSNR",
+      "SSIM",
+      "LPIPS"
+    ],
+    "baseline_tracking": true
+  },
+  "ceremony": {
+    "default_level": "auto",
+    "phase_overrides": {}
+  },
+  "tracker": {
+    "provider": "none",
+    "auto_sync": true,
+    "github": {
+      "project_board": "",
+      "default_assignee": "",
+      "default_labels": [
+        "research",
+        "implementation",
+        "evaluation",
+        "integration"
+      ],
+      "auto_issues": true,
+      "pr_per_phase": false
+    },
+    "jira": {
+      "base_url": "",
+      "project_key": "",
+      "auth_method": "api_token",
+      "epic_issue_type": "Epic",
+      "task_issue_type": "Task"
+    }
+  }
+}
