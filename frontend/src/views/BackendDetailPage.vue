@@ -442,7 +442,6 @@ async function loadBackend() {
   backend.value = data;
   // Fire-and-forget: load supplementary data
   loadHealth();
-  checkStatus(true);
   if (data?.type === 'opencode') {
     loadOtherBackendAccounts();
   }
