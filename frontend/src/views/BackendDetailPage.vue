@@ -448,29 +448,6 @@ async function loadBackend() {
   return data;
 }
 
-async function checkStatus(silent = false) {
-  try {
-    const result = await backendApi.check(backendId.value);
-    if (result.capabilities) {
-      capabilities.value = result.capabilities;
-    }
-    if (result.cli_path) {
-      cliPath.value = result.cli_path;
-    }
-    await loadBackend();
-    if (!silent) {
-      if (result.installed) {
-        showToast?.(`Backend is installed. Version: ${result.version || 'unknown'}`, 'success');
-      } else {
-        showToast?.('Backend is not installed.', 'info');
-      }
-    }
-  } catch (err) {
-    if (!silent) {
-      showToast?.('Failed to check backend status', 'error');
-    }
-  }
-}
 
 function editAccount(account: BackendAccount) {
   editingAccount.value = account;
