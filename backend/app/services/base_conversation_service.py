@@ -4,6 +4,7 @@ import abc
 import datetime
 import json
 import logging
+import os
 import secrets
 import string
 import threading
@@ -22,8 +23,9 @@ from ..database import (
 
 logger = logging.getLogger(__name__)
 
-# Stale conversation cleanup threshold (30 minutes)
-STALE_CONVERSATION_THRESHOLD = 1800
+# Stale conversation cleanup threshold in seconds (default 30 minutes).
+# Override via STALE_CONVERSATION_THRESHOLD_SECS environment variable.
+STALE_CONVERSATION_THRESHOLD = int(os.environ.get("STALE_CONVERSATION_THRESHOLD_SECS", "1800"))
 
 
 class WordBoundaryAccumulator:
@@ -291,17 +293,16 @@ class BaseConversationService(abc.ABC):
         instead of buffered subprocess output. A WordBoundaryAccumulator reduces SSE
         event frequency to 5-20 events/sec at word-boundary intervals.
         """
-        if conv_id not in cls._conversations:
+        conv = cls._conversations.get(conv_id)
+        if conv is None:
             return
 
-        conv = cls._conversations[conv_id]
         conv["processing"] = True
 
-        cls._broadcast(
-            conv_id, "response_start", {"timestamp": datetime.datetime.now().isoformat()}
-        )
-
         try:
+            cls._broadcast(
+                conv_id, "response_start", {"timestamp": datetime.datetime.now().isoformat()}
+            )
             from .conversation_streaming import stream_llm_response
 
             # Build messages from conversation history
@@ -346,8 +347,11 @@ class BaseConversationService(abc.ABC):
             cls._persist_messages(conv_id)
 
         except Exception as e:
-            logger.error("Error processing with Claude: %s", e)
-            cls._broadcast(conv_id, "error", {"error": str(e)})
+            logger.exception("Error processing with Claude")
+            try:
+                cls._broadcast(conv_id, "error", {"error": str(e)})
+            except Exception:
+                logger.exception("Failed to broadcast error for conv %s", conv_id)
         finally:
             conv["processing"] = False
 

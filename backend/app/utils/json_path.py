@@ -1,6 +1,9 @@
 """Utility functions for extracting values from nested JSON structures."""
 
+import logging
 from typing import Any, Optional
+
+logger = logging.getLogger(__name__)
 
 
 def get_nested_value(data: dict, path: str) -> Optional[Any]:
@@ -40,7 +43,10 @@ def get_nested_value(data: dict, path: str) -> Optional[Any]:
             try:
                 index = int(key)
                 current = current[index] if 0 <= index < len(current) else None
-            except (ValueError, IndexError):
+            except ValueError:
+                logger.warning("Non-numeric array index %r in JSON path %r", key, path)
+                return None
+            except IndexError:
                 return None
         else:
             return None

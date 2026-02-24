@@ -196,13 +196,13 @@ def _cleanup_child(pid: int, master_fd: int):
     """Kill child process and close master fd."""
     try:
         os.close(master_fd)
-    except OSError:
-        pass
+    except OSError as e:
+        logger.debug("PTY master fd close failed (pid=%d): %s", pid, e)
     try:
         os.kill(pid, signal.SIGTERM)
     except ProcessLookupError:
-        pass
+        pass  # Process already exited — expected
     try:
         os.waitpid(pid, os.WNOHANG)
-    except ChildProcessError:
-        pass
+    except ChildProcessError as e:
+        logger.debug("PTY waitpid failed (pid=%d): %s", pid, e)

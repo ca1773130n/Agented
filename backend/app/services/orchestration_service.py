@@ -2,6 +2,8 @@
 
 import logging
 import os
+from dataclasses import dataclass
+from enum import Enum
 from typing import Optional
 
 from ..database import (
@@ -14,6 +16,31 @@ from .rate_limit_service import RateLimitService
 logger = logging.getLogger(__name__)
 
 
+class ExecutionStatus(str, Enum):
+    """Outcome of execute_with_fallback — discriminates the three non-success cases."""
+
+    DISPATCHED = "dispatched"  # Execution started; execution_id is populated
+    BUDGET_BLOCKED = "budget_blocked"  # Pre-execution budget check failed
+    CHAIN_EXHAUSTED = "chain_exhausted"  # All fallback chain entries exhausted
+    LAUNCH_FAILED = "launch_failed"  # Execution attempted but failed to launch
+
+
+@dataclass
+class ExecutionResult:
+    """Result of execute_with_fallback with a discriminated status.
+
+    Replaces Optional[str] so callers can distinguish why execution did not start.
+    - DISPATCHED: execution_id is populated; execution was launched
+    - BUDGET_BLOCKED: budget pre-check failed; detail contains spend / limit info
+    - CHAIN_EXHAUSTED: all fallback chain entries were rate-limited or unavailable
+    - LAUNCH_FAILED: run_trigger returned None (command not found, process error, etc.)
+    """
+
+    status: ExecutionStatus
+    execution_id: Optional[str] = None
+    detail: Optional[str] = None  # Human-readable context (e.g. budget error details)
+
+
 class OrchestrationService:
     """Service that wraps ExecutionService with fallback chain and account rotation."""
 
@@ -24,17 +51,17 @@ class OrchestrationService:
         message_text: str,
         event: dict = None,
         trigger_type: str = "webhook",
-    ) -> Optional[str]:
+    ) -> ExecutionResult:
         """Execute a trigger using its fallback chain, rotating accounts on rate limits.
 
         1. Get fallback chain for the trigger
         2. If no chain, fall through to default ExecutionService.run_trigger (backward compatible)
         3. For each chain entry, pick best account and attempt execution
         4. On rate limit, mark account and try next chain entry
-        5. On success/non-rate-limit failure, return execution_id
-        6. If all chain entries exhausted, return None
+        5. On success/non-rate-limit failure, return ExecutionResult(DISPATCHED)
+        6. If all chain entries exhausted, return ExecutionResult(CHAIN_EXHAUSTED)
 
-        Returns execution_id on success, None if all backends exhausted.
+        Returns an ExecutionResult; check .status to distinguish outcomes.
         """
         # Import here to avoid circular imports
         from .execution_service import ExecutionService
@@ -43,20 +70,35 @@ class OrchestrationService:
 
         if not chain:
             # No fallback chain configured -- backward compatible direct execution
-            return ExecutionService.run_trigger(trigger, message_text, event, trigger_type)
+            execution_id = ExecutionService.run_trigger(trigger, message_text, event, trigger_type)
+            if execution_id:
+                return ExecutionResult(status=ExecutionStatus.DISPATCHED, execution_id=execution_id)
+            return ExecutionResult(status=ExecutionStatus.LAUNCH_FAILED)
 
         logger.info(
             f"Executing trigger '{trigger['name']}' with fallback chain ({len(chain)} entries)"
         )
 
+        # Track rate-limit cooldowns so we can schedule a retry if all accounts are exhausted
+        rate_limited_cooldowns = []
+        # Track backends skipped due to no available accounts for CHAIN_EXHAUSTED detail
+        no_accounts_backends: list[str] = []
+
         # Pre-execution budget check
         budget_check = BudgetService.check_budget("trigger", trigger["id"])
         if not budget_check["allowed"]:
-            logger.warning(
-                f"Budget check blocked execution for trigger '{trigger['name']}': "
-                f"{budget_check['reason']} (spend: ${budget_check.get('current_spend', 0):.2f})"
+            limit_info = budget_check.get("limit") or {}
+            period = limit_info.get("period", "monthly")
+            hard_limit = limit_info.get("hard_limit_usd", "N/A")
+            detail = (
+                f"trigger '{trigger['name']}' (id={trigger['id']}): "
+                f"{budget_check['reason']}; "
+                f"spend=${budget_check.get('current_spend', 0):.4f}, "
+                f"hard_limit=${hard_limit}, "
+                f"period={period}"
             )
-            return None
+            logger.warning(f"Budget check blocked execution for {detail}")
+            return ExecutionResult(status=ExecutionStatus.BUDGET_BLOCKED, detail=detail)
 
         if budget_check.get("reason") == "soft_limit_warning":
             logger.warning(
@@ -114,6 +156,7 @@ class OrchestrationService:
                         f"No available accounts for backend {backend_type}, "
                         f"trying next chain entry"
                     )
+                    no_accounts_backends.append(backend_type)
                     continue
 
             # Build env overrides from account config
@@ -132,8 +175,12 @@ class OrchestrationService:
                 from .agent_scheduler_service import AgentSchedulerService
 
                 AgentSchedulerService.mark_running(account["id"])
-            except Exception as e:
-                logger.error(f"Failed to mark account {account['id']} running: {e}")
+            except (RuntimeError, AttributeError) as e:
+                logger.error(
+                    "Failed to mark account %s running: %s", account["id"], e, exc_info=True
+                )
+            except Exception:
+                logger.exception("Unexpected error marking account %s running", account["id"])
 
             # Execute with lifecycle hooks (mark_completed in finally block)
             try:
@@ -152,8 +199,12 @@ class OrchestrationService:
                     from .agent_scheduler_service import AgentSchedulerService
 
                     AgentSchedulerService.mark_completed(account["id"])
-                except Exception as e:
-                    logger.error(f"Failed to mark account {account['id']} completed: {e}")
+                except (RuntimeError, AttributeError) as e:
+                    logger.error(
+                        "Failed to mark account %s completed: %s", account["id"], e, exc_info=True
+                    )
+                except Exception:
+                    logger.exception("Unexpected error marking account %s completed", account["id"])
 
             # Check if execution was rate-limited
             cooldown = ExecutionService.was_rate_limited(execution_id)
@@ -163,17 +214,38 @@ class OrchestrationService:
                     f"(cooldown={cooldown}s), marking account {account['id']}"
                 )
                 RateLimitService.mark_rate_limited(account["id"], cooldown)
+                rate_limited_cooldowns.append(cooldown)
                 continue  # Try next chain entry
 
             # Execution succeeded or failed for non-rate-limit reason
             if execution_id:
                 increment_account_executions(account["id"])
-
-            return execution_id
+                return ExecutionResult(status=ExecutionStatus.DISPATCHED, execution_id=execution_id)
+            return ExecutionResult(status=ExecutionStatus.LAUNCH_FAILED)
 
         # All chain entries exhausted
         logger.warning(f"All fallback chain entries exhausted for trigger '{trigger['name']}'")
-        return None
+
+        # Build a human-readable detail for the caller
+        exhausted_parts = []
+        if no_accounts_backends:
+            exhausted_parts.append(
+                f"no available accounts for: {', '.join(sorted(set(no_accounts_backends)))}"
+            )
+        if rate_limited_cooldowns:
+            exhausted_parts.append("some backends were rate-limited")
+        chain_detail = (
+            "; ".join(exhausted_parts) if exhausted_parts else "all chain entries were skipped"
+        )
+
+        # Schedule a retry after the shortest rate-limit cooldown expires
+        if rate_limited_cooldowns:
+            min_cooldown = min(rate_limited_cooldowns)
+            ExecutionService.schedule_retry(
+                trigger, message_text, event, trigger_type, min_cooldown
+            )
+
+        return ExecutionResult(status=ExecutionStatus.CHAIN_EXHAUSTED, detail=chain_detail)
 
     @staticmethod
     def validate_fallback_chain_entries(entries: list) -> Optional[str]:
@@ -188,15 +260,21 @@ class OrchestrationService:
                 cursor = conn.execute(
                     "SELECT id FROM ai_backends WHERE type = ?", (entry.backend_type,)
                 )
-                if not cursor.fetchone():
+                backend_row = cursor.fetchone()
+                if not backend_row:
                     return f"Backend type '{entry.backend_type}' not found"
 
                 if entry.account_id is not None:
+                    # Verify account exists AND belongs to the specified backend type
                     cursor = conn.execute(
-                        "SELECT id FROM backend_accounts WHERE id = ?", (entry.account_id,)
+                        "SELECT id FROM backend_accounts WHERE id = ? AND backend_id = ?",
+                        (entry.account_id, backend_row[0]),
                     )
                     if not cursor.fetchone():
-                        return f"Account ID {entry.account_id} not found"
+                        return (
+                            f"Account ID {entry.account_id} not found or does not belong "
+                            f"to backend type '{entry.backend_type}'"
+                        )
         return None
 
     @classmethod

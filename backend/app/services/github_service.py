@@ -1,12 +1,15 @@
 """GitHub repository operations service."""
 
 import datetime
+import logging
 import os
 import re
 import shutil
 import subprocess
 import tempfile
 from typing import Optional, Tuple
+
+logger = logging.getLogger(__name__)
 
 
 class GitHubService:
@@ -73,12 +76,13 @@ class GitHubService:
             )
             if result.returncode != 0:
                 raise RuntimeError(f"gh repo clone failed: {result.stderr.strip()}")
-            print(f"Cloned {repo_url} to {target_dir}")
+            logger.info("Cloned %s to %s", repo_url, target_dir)
             return target_dir
         except subprocess.TimeoutExpired:
             shutil.rmtree(target_dir, ignore_errors=True)
             raise RuntimeError(f"gh repo clone timed out for {repo_url}")
         except RuntimeError:
+            shutil.rmtree(target_dir, ignore_errors=True)
             raise
         except Exception as e:
             shutil.rmtree(target_dir, ignore_errors=True)
@@ -90,10 +94,10 @@ class GitHubService:
         try:
             if clone_path and os.path.isdir(clone_path):
                 shutil.rmtree(clone_path)
-                print(f"Cleaned up clone: {clone_path}")
+                logger.info("Cleaned up clone: %s", clone_path)
                 return True
         except Exception as e:
-            print(f"Failed to clean up clone {clone_path}: {e}")
+            logger.error("Failed to clean up clone directory %s: %s", clone_path, e)
         return False
 
     @staticmethod
@@ -107,22 +111,26 @@ class GitHubService:
             timeout=GitHubService.GIT_OP_TIMEOUT,
         )
         if result.returncode != 0:
-            print(f"Failed to create branch {branch_name}: {result.stderr}")
+            logger.error("Failed to create branch %s: %s", branch_name, result.stderr)
             return False
-        print(f"Created branch: {branch_name}")
+        logger.info("Created branch: %s", branch_name)
         return True
 
     @staticmethod
     def commit_changes(repo_path: str, commit_message: str) -> bool:
         """Stage all changes and commit. Returns False if nothing to commit."""
         # Stage all changes
-        subprocess.run(
+        add_result = subprocess.run(
             ["git", "add", "-A"],
             cwd=repo_path,
             capture_output=True,
             text=True,
             timeout=GitHubService.GIT_OP_TIMEOUT,
         )
+        if add_result.returncode != 0:
+            logger.warning(
+                "git add -A failed (exit=%d): %s", add_result.returncode, add_result.stderr
+            )
 
         # Check if there are staged changes
         status = subprocess.run(
@@ -132,7 +140,7 @@ class GitHubService:
             timeout=GitHubService.GIT_OP_TIMEOUT,
         )
         if status.returncode == 0:
-            print("No changes to commit")
+            logger.info("No changes to commit")
             return False
 
         result = subprocess.run(
@@ -143,22 +151,25 @@ class GitHubService:
             timeout=GitHubService.GIT_OP_TIMEOUT,
         )
         if result.returncode != 0:
-            print(f"Failed to commit: {result.stderr}")
-            return False
-        print(f"Committed changes: {commit_message}")
+            raise RuntimeError(f"git commit failed: {result.stderr.strip()}")
+        logger.info("Committed changes: %s", commit_message)
         return True
 
     @staticmethod
     def push_branch(repo_path: str, branch_name: str) -> bool:
         """Push the branch to origin using gh auth for credentials."""
         # Configure gh as git credential helper for this repo
-        subprocess.run(
+        auth_result = subprocess.run(
             ["gh", "auth", "setup-git"],
             cwd=repo_path,
             capture_output=True,
             text=True,
             timeout=GitHubService.GIT_OP_TIMEOUT,
         )
+        if auth_result.returncode != 0:
+            logger.warning(
+                "gh auth setup-git failed (exit=%d): %s", auth_result.returncode, auth_result.stderr
+            )
         result = subprocess.run(
             ["git", "push", "origin", branch_name],
             cwd=repo_path,
@@ -167,9 +178,8 @@ class GitHubService:
             timeout=GitHubService.GIT_OP_TIMEOUT,
         )
         if result.returncode != 0:
-            print(f"Failed to push: {result.stderr}")
-            return False
-        print(f"Pushed branch: {branch_name}")
+            raise RuntimeError(f"git push failed: {result.stderr.strip()}")
+        logger.info("Pushed branch: %s", branch_name)
         return True
 
     @staticmethod
@@ -197,10 +207,10 @@ class GitHubService:
             timeout=GitHubService.GIT_OP_TIMEOUT,
         )
         if result.returncode != 0:
-            print(f"Failed to create PR: {result.stderr}")
+            logger.error("Failed to create PR: %s", result.stderr)
             return None
         pr_url = result.stdout.strip()
-        print(f"Created PR: {pr_url}")
+        logger.info("Created PR: %s", pr_url)
         return pr_url
 
     @staticmethod
@@ -210,8 +220,26 @@ class GitHubService:
         Accepts https://github.com/owner/repo and GitHub Enterprise URLs
         like https://github.acme.com/owner/repo.
         """
-        pattern = r"^https?://[a-zA-Z0-9._-]+(?:\.[a-zA-Z0-9._-]+)+/[a-zA-Z0-9._-]+/[a-zA-Z0-9._-]+/?$"
+        pattern = (
+            r"^https?://[a-zA-Z0-9._-]+(?:\.[a-zA-Z0-9._-]+)+/[a-zA-Z0-9._-]+/[a-zA-Z0-9._-]+/?$"
+        )
         return bool(re.match(pattern, url.strip()))
+
+    @staticmethod
+    def delete_remote_branch(repo_path: str, branch_name: str) -> bool:
+        """Delete a remote branch to roll back a partially created PR. Returns True on success."""
+        result = subprocess.run(
+            ["git", "push", "origin", "--delete", branch_name],
+            cwd=repo_path,
+            capture_output=True,
+            text=True,
+            timeout=GitHubService.GIT_OP_TIMEOUT,
+        )
+        if result.returncode != 0:
+            logger.error("Failed to delete remote branch %s: %s", branch_name, result.stderr)
+            return False
+        logger.info("Deleted remote branch: %s", branch_name)
+        return True
 
     @staticmethod
     def generate_branch_name() -> str:

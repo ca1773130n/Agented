@@ -45,5 +45,35 @@ def readiness():
         "active_execution_ids": ProcessManager.get_active_executions(),
     }
 
+    # CLIProxy check (optional component — absent when not using Claude Code accounts)
+    try:
+        from ..services.cliproxy_manager import CLIProxyManager
+
+        cli_proxy_healthy = CLIProxyManager.is_healthy()
+        health["components"]["cli_proxy"] = {
+            "status": "ok" if cli_proxy_healthy else "degraded",
+            "port": CLIProxyManager._port,
+        }
+        if not cli_proxy_healthy:
+            health["status"] = "degraded"
+    except Exception as e:
+        health["components"]["cli_proxy"] = {
+            "status": "unknown",
+            "error": str(e),
+        }
+
+    # Surface any non-fatal startup warnings
+    from .. import _startup_warnings
+
+    if _startup_warnings:
+        health["components"]["startup"] = {
+            "status": "degraded",
+            "warnings": list(_startup_warnings),
+        }
+        if health["status"] == "ok":
+            health["status"] = "degraded"
+    else:
+        health["components"]["startup"] = {"status": "ok"}
+
     status_code = 200 if health["status"] == "ok" else 503
     return health, status_code

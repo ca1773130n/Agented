@@ -2,8 +2,14 @@
 
 # stdlib
 import json
+import logging
 import subprocess
+import threading
+import uuid
 from http import HTTPStatus
+from typing import Optional
+
+logger = logging.getLogger(__name__)
 
 # third-party
 from flask import Response, request
@@ -28,6 +34,7 @@ from ..database import (
     get_all_teams,
     get_team,
     get_team_agent_assignments,
+    get_team_by_name,
     get_team_detail,
     get_team_edges,
     get_team_members,
@@ -46,6 +53,12 @@ from ..services.team_service import TeamService
 
 tag = Tag(name="teams", description="Team management operations")
 teams_bp = APIBlueprint("teams", __name__, url_prefix="/admin/teams", abp_tags=[tag])
+
+# In-memory job store for async team generation (job_id -> result dict).
+# Limited to 200 entries; oldest are evicted when full.
+_generation_jobs: dict = {}
+_jobs_lock = threading.Lock()
+_MAX_JOBS = 200
 
 
 class TeamPath(BaseModel):
@@ -77,6 +90,30 @@ class ConnectionPath(BaseModel):
     connection_id: int = Field(..., description="Connection ID")
 
 
+class GenerateJobPath(BaseModel):
+    job_id: str = Field(..., description="Job ID returned by POST /generate")
+
+
+class TeamConnectionBody(BaseModel):
+    target_team_id: str = Field(..., description="ID of the target team")
+    connection_type: str = Field("dependency", description="Type of connection")
+    description: str = Field(None, description="Optional description")
+
+
+class TeamTriggerBody(BaseModel):
+    trigger_source: Optional[str] = Field(None, description="Trigger source type")
+    trigger_config: Optional[object] = Field(None, description="Trigger match configuration")
+    enabled: Optional[int] = Field(None, description="Enable or disable team trigger")
+
+
+class TeamTopologyBody(BaseModel):
+    topology: Optional[str] = Field(None, description="Topology pattern")
+    topology_config: Optional[object] = Field(None, description="Topology configuration")
+
+
+_MAX_TOPOLOGY_MEMBERS = 50
+
+
 def _auto_generate_topology_edges(team_id: str, topology: str, topology_config=None):
     """Auto-generate edges based on topology type.
 
@@ -85,6 +122,16 @@ def _auto_generate_topology_edges(team_id: str, topology: str, topology_config=N
     """
     members = get_team_members(team_id)
     if not members or len(members) < 2:
+        return
+
+    if len(members) > _MAX_TOPOLOGY_MEMBERS:
+        logger.warning(
+            "Team %s has %d members, exceeding the topology edge generation limit of %d; "
+            "skipping auto-generate to prevent synchronous overload on the request thread",
+            team_id,
+            len(members),
+            _MAX_TOPOLOGY_MEMBERS,
+        )
         return
 
     # Parse config to find coordinator
@@ -149,6 +196,13 @@ def create_team():
     name = data.get("name")
     if not name:
         return {"error": "name is required"}, HTTPStatus.BAD_REQUEST
+    name = name.strip()
+    if len(name) < 1:
+        return {"error": "name must not be empty"}, HTTPStatus.BAD_REQUEST
+    if len(name) > 255:
+        return {"error": "name must not exceed 255 characters"}, HTTPStatus.BAD_REQUEST
+    if get_team_by_name(name):
+        return {"error": "A team with this name already exists"}, HTTPStatus.CONFLICT
 
     team_id = add_team(
         name=name,
@@ -174,7 +228,11 @@ def create_team():
 
 @teams_bp.post("/generate")
 def generate_team_config():
-    """Generate a team configuration from a natural language description using AI."""
+    """Generate a team configuration from a natural language description using AI.
+
+    Returns a job_id immediately (202 Accepted). Poll GET /generate/<job_id> for the result.
+    This avoids blocking a Flask worker thread for the full Claude CLI duration (up to 2 min).
+    """
     data = request.get_json()
     if not data:
         return {"error": "JSON body required"}, HTTPStatus.BAD_REQUEST
@@ -185,17 +243,56 @@ def generate_team_config():
             "error": "description is required and must be at least 10 characters"
         }, HTTPStatus.BAD_REQUEST
 
-    try:
-        result = TeamGenerationService.generate(description)
-        return result, HTTPStatus.OK
-    except subprocess.TimeoutExpired:
-        return {
-            "error": "Team generation timed out. The AI service took too long to respond. Please try again."
-        }, HTTPStatus.SERVICE_UNAVAILABLE
-    except RuntimeError as e:
-        return {"error": str(e)}, HTTPStatus.SERVICE_UNAVAILABLE
-    except Exception as e:
-        return {"error": f"Team generation failed: {str(e)}"}, HTTPStatus.INTERNAL_SERVER_ERROR
+    job_id = f"gen-{uuid.uuid4().hex[:8]}"
+
+    with _jobs_lock:
+        # Evict oldest entries when the store is full
+        if len(_generation_jobs) >= _MAX_JOBS:
+            oldest_key = next(iter(_generation_jobs))
+            del _generation_jobs[oldest_key]
+        _generation_jobs[job_id] = {"status": "pending"}
+
+    def _run():
+        try:
+            result = TeamGenerationService.generate(description)
+            with _jobs_lock:
+                _generation_jobs[job_id] = {"status": "complete", **result}
+        except subprocess.TimeoutExpired:
+            with _jobs_lock:
+                _generation_jobs[job_id] = {
+                    "status": "error",
+                    "error": "Team generation timed out. The AI service took too long to respond. Please try again.",
+                }
+        except RuntimeError as e:
+            with _jobs_lock:
+                _generation_jobs[job_id] = {"status": "error", "error": str(e)}
+        except Exception as e:
+            with _jobs_lock:
+                _generation_jobs[job_id] = {
+                    "status": "error",
+                    "error": f"Team generation failed: {str(e)}",
+                }
+
+    threading.Thread(target=_run, daemon=True).start()
+    return {"job_id": job_id}, HTTPStatus.ACCEPTED
+
+
+@teams_bp.get("/generate/<job_id>")
+def get_generation_job(path: GenerateJobPath):
+    """Poll the result of a team generation job started by POST /generate."""
+    with _jobs_lock:
+        job = dict(_generation_jobs.get(path.job_id, {}))
+    if not job:
+        return {"error": "Job not found"}, HTTPStatus.NOT_FOUND
+    if job["status"] == "error":
+        error_msg = job.get("error", "Unknown error")
+        status_code = (
+            HTTPStatus.SERVICE_UNAVAILABLE
+            if "timed out" in error_msg or "not found" in error_msg.lower()
+            else HTTPStatus.INTERNAL_SERVER_ERROR
+        )
+        return {"error": error_msg}, status_code
+    return job, HTTPStatus.OK
 
 
 @teams_bp.post("/generate/stream")
@@ -241,9 +338,20 @@ def update_team_endpoint(path: TeamPath):
     if not data:
         return {"error": "JSON body required"}, HTTPStatus.BAD_REQUEST
 
+    new_name = data.get("name")
+    if new_name is not None:
+        new_name = new_name.strip()
+        if len(new_name) < 1:
+            return {"error": "name must not be empty"}, HTTPStatus.BAD_REQUEST
+        if len(new_name) > 255:
+            return {"error": "name must not exceed 255 characters"}, HTTPStatus.BAD_REQUEST
+        existing = get_team_by_name(new_name)
+        if existing and existing["id"] != path.team_id:
+            return {"error": "A team with this name already exists"}, HTTPStatus.CONFLICT
+
     if not update_team(
         path.team_id,
-        name=data.get("name"),
+        name=new_name,
         description=data.get("description"),
         color=data.get("color"),
         leader_id=data.get("leader_id"),
@@ -351,21 +459,15 @@ def list_team_connections(path: TeamPath):
 
 
 @teams_bp.post("/<team_id>/connections")
-def create_team_connection(path: TeamPath):
+def create_team_connection(path: TeamPath, body: TeamConnectionBody):
     """Create an inter-team connection."""
     from ..db.rotations import add_team_connection
 
-    data = request.get_json()
-    if not data:
-        return {"error": "JSON body required"}, HTTPStatus.BAD_REQUEST
-    target_team_id = data.get("target_team_id")
-    if not target_team_id:
-        return {"error": "target_team_id is required"}, HTTPStatus.BAD_REQUEST
     conn_id = add_team_connection(
         source_team_id=path.team_id,
-        target_team_id=target_team_id,
-        connection_type=data.get("connection_type", "dependency"),
-        description=data.get("description"),
+        target_team_id=body.target_team_id,
+        connection_type=body.connection_type,
+        description=body.description,
     )
     if not conn_id:
         return {"error": "Failed to create connection"}, HTTPStatus.BAD_REQUEST
@@ -544,19 +646,16 @@ def bulk_delete_edges(path: TeamPath):
 
 
 @teams_bp.put("/<team_id>/topology")
-def update_topology(path: TeamPath):
+def update_topology(path: TeamPath, body: TeamTopologyBody):
     """Update team topology configuration."""
     team = get_team(path.team_id)
     if not team:
         return {"error": "Team not found"}, HTTPStatus.NOT_FOUND
 
-    data = request.get_json()
-    if not data:
-        return {"error": "JSON body required"}, HTTPStatus.BAD_REQUEST
-
     _UNSET = object()
-    topology = data.get("topology", _UNSET)
-    topology_config = data.get("topology_config", _UNSET)
+    # Use model_fields_set to distinguish "not provided" from "explicitly null"
+    topology = body.topology if "topology" in body.model_fields_set else _UNSET
+    topology_config = body.topology_config if "topology_config" in body.model_fields_set else _UNSET
 
     # Validate topology value (allow None to clear)
     if topology is not _UNSET and topology is not None and topology not in VALID_TOPOLOGIES:
@@ -607,19 +706,15 @@ def update_topology(path: TeamPath):
 
 
 @teams_bp.put("/<team_id>/trigger")
-def update_trigger(path: TeamPath):
+def update_trigger(path: TeamPath, body: TeamTriggerBody):
     """Update team trigger configuration."""
     team = get_team(path.team_id)
     if not team:
         return {"error": "Team not found"}, HTTPStatus.NOT_FOUND
 
-    data = request.get_json()
-    if not data:
-        return {"error": "JSON body required"}, HTTPStatus.BAD_REQUEST
-
-    trigger_source = data.get("trigger_source")
-    trigger_config = data.get("trigger_config")
-    enabled = data.get("enabled")
+    trigger_source = body.trigger_source
+    trigger_config = body.trigger_config
+    enabled = body.enabled
 
     # Validate trigger_source
     if trigger_source is not None and trigger_source not in VALID_TRIGGER_SOURCES:

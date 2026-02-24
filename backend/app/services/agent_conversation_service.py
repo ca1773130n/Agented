@@ -277,13 +277,18 @@ class AgentConversationService:
                 cls._subscribers[conv_id] = []
                 cls._start_times[conv_id] = datetime.datetime.now()
 
-            # Send existing messages
-            for msg in cls._conversations[conv_id]["messages"]:
-                if msg.role != "system":  # Don't send system prompt to client
-                    yield cls._format_sse("message", asdict(msg))
-
-            # Register subscriber
+            # Snapshot existing messages and register subscriber while still holding the lock
+            # so new messages queued after this point are not missed.
+            initial_msgs = [
+                cls._format_sse("message", asdict(msg))
+                for msg in cls._conversations[conv_id]["messages"]
+                if msg.role != "system"  # Don't send system prompt to client
+            ]
             cls._subscribers[conv_id].append(queue)
+
+        # Yield existing messages outside the lock to avoid holding it during I/O
+        for msg_sse in initial_msgs:
+            yield msg_sse
 
         try:
             while True:
@@ -319,8 +324,8 @@ class AgentConversationService:
             try:
                 msg_data = json.loads(conv["messages"])
                 messages = [ConversationMessage(**m) for m in msg_data]
-            except (json.JSONDecodeError, TypeError):
-                pass
+            except (json.JSONDecodeError, TypeError) as e:
+                logger.warning("Failed to parse messages for conversation %s: %s", conv_id, e)
 
         # Find the agent config in the last assistant message
         agent_config = None
@@ -401,8 +406,8 @@ class AgentConversationService:
         if conv.get("messages"):
             try:
                 messages = json.loads(conv["messages"])
-            except json.JSONDecodeError:
-                pass
+            except json.JSONDecodeError as e:
+                logger.warning("Failed to parse messages for conversation %s: %s", conv_id, e)
 
         conv["messages_parsed"] = messages
         return conv, HTTPStatus.OK

@@ -409,11 +409,26 @@ def send_chat_message(path: SessionPath):
         from ..db.backends import get_all_backends
 
         all_backends = get_all_backends()
+        unavailable_backends = (
+            [b["type"] for b in all_backends if not b.get("is_installed")] if all_backends else []
+        )
         backend_names = (
             [b["type"] for b in all_backends if b.get("is_installed")] if all_backends else []
         )
         if not backend_names:
+            logger.warning(
+                "No installed backends found for '%s' mode; falling back to ['claude']. "
+                "Unavailable backends: %s",
+                mode,
+                unavailable_backends or "none detected",
+            )
             backend_names = ["claude"]  # Fallback
+        elif unavailable_backends:
+            logger.info(
+                "Some backends unavailable for '%s' mode (not installed): %s",
+                mode,
+                unavailable_backends,
+            )
 
         # Build messages for LLM (same as single-mode assembly)
         system_prompt = SuperAgentSessionService.assemble_system_prompt(
@@ -521,7 +536,7 @@ def send_chat_message(path: SessionPath):
 
                         update_backend_last_used(effective_backend)
                     except Exception:
-                        pass
+                        logger.error("Unexpected error in super agent operation", exc_info=True)
 
             # Push finish with full content and resolved backend so frontend
             # can store per-message backend attribution
@@ -532,8 +547,13 @@ def send_chat_message(path: SessionPath):
 
         except Exception as e:
             logger.exception("Streaming error for session %s", _session_id)
-            ChatStateService.push_delta(_session_id, "error", {"error": str(e)})
-            ChatStateService.push_status(_session_id, "error")
+            try:
+                ChatStateService.push_delta(_session_id, "error", {"error": str(e)})
+                ChatStateService.push_status(_session_id, "error")
+            except Exception:
+                logger.exception(
+                    "Failed to propagate streaming error to client for session %s", _session_id
+                )
 
     thread = threading.Thread(target=_stream_response, daemon=True)
     thread.start()

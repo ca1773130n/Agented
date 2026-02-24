@@ -87,15 +87,43 @@ def add_trigger(
     model: str = None,
     execution_mode: str = "direct",
     team_id: str = None,
+    timeout_seconds: int = None,
+    webhook_secret: str = None,
+    allowed_tools: str = None,
+    sigterm_grace_seconds: int = None,
 ) -> Optional[str]:
     """Add a new trigger. Returns trigger_id (string) on success, None on failure."""
     if backend_type not in VALID_BACKENDS:
+        logger.warning(
+            "Invalid backend_type %r for trigger %r; falling back to 'claude'. " "Valid values: %s",
+            backend_type,
+            name,
+            VALID_BACKENDS,
+        )
         backend_type = "claude"
     if trigger_source not in VALID_TRIGGER_SOURCES:
+        logger.warning(
+            "Invalid trigger_source %r for trigger %r; falling back to 'webhook'. "
+            "Valid values: %s",
+            trigger_source,
+            name,
+            VALID_TRIGGER_SOURCES,
+        )
         trigger_source = "webhook"
     if schedule_type and schedule_type not in VALID_SCHEDULE_TYPES:
+        logger.warning(
+            "Invalid schedule_type %r for trigger %r; setting to None. Valid values: %s",
+            schedule_type,
+            name,
+            VALID_SCHEDULE_TYPES,
+        )
         schedule_type = None
     if execution_mode not in ("direct", "team"):
+        logger.warning(
+            "Invalid execution_mode %r for trigger %r; falling back to 'direct'.",
+            execution_mode,
+            name,
+        )
         execution_mode = "direct"
 
     with get_connection() as conn:
@@ -106,8 +134,9 @@ def add_trigger(
                 INSERT INTO triggers (id, name, group_id, detection_keyword, prompt_template, backend_type, trigger_source,
                                       match_field_path, match_field_value, text_field_path,
                                       schedule_type, schedule_time, schedule_day, schedule_timezone, skill_command, model,
-                                      execution_mode, team_id)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                      execution_mode, team_id, timeout_seconds, webhook_secret, allowed_tools,
+                                      sigterm_grace_seconds)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
                 (
                     trigger_id,
@@ -128,6 +157,10 @@ def add_trigger(
                     model,
                     execution_mode,
                     team_id,
+                    timeout_seconds,
+                    webhook_secret,
+                    allowed_tools,
+                    sigterm_grace_seconds,
                 ),
             )
             conn.commit()
@@ -156,6 +189,10 @@ def update_trigger(
     model: str = None,
     execution_mode: str = None,
     team_id: str = None,
+    timeout_seconds: int = None,
+    webhook_secret: str = None,
+    allowed_tools: str = None,
+    sigterm_grace_seconds: int = None,
 ) -> bool:
     """Update trigger fields. Returns True on success."""
     updates = []
@@ -242,6 +279,30 @@ def update_trigger(
         else:
             updates.append("team_id = ?")
             values.append(team_id)
+    if timeout_seconds is not None:
+        if timeout_seconds <= 0:
+            updates.append("timeout_seconds = NULL")
+        else:
+            updates.append("timeout_seconds = ?")
+            values.append(timeout_seconds)
+    if webhook_secret is not None:
+        if webhook_secret == "":
+            updates.append("webhook_secret = NULL")
+        else:
+            updates.append("webhook_secret = ?")
+            values.append(webhook_secret)
+    if allowed_tools is not None:
+        if allowed_tools == "":
+            updates.append("allowed_tools = NULL")
+        else:
+            updates.append("allowed_tools = ?")
+            values.append(allowed_tools)
+    if sigterm_grace_seconds is not None:
+        if sigterm_grace_seconds <= 0:
+            updates.append("sigterm_grace_seconds = NULL")
+        else:
+            updates.append("sigterm_grace_seconds = ?")
+            values.append(sigterm_grace_seconds)
 
     if not updates:
         return False
@@ -268,6 +329,14 @@ def get_trigger(trigger_id: str) -> Optional[dict]:
     """Get a single trigger by ID."""
     with get_connection() as conn:
         cursor = conn.execute("SELECT * FROM triggers WHERE id = ?", (trigger_id,))
+        row = cursor.fetchone()
+        return dict(row) if row else None
+
+
+def get_trigger_by_name(name: str) -> Optional[dict]:
+    """Get a trigger by its exact name (case-insensitive). Returns first match or None."""
+    with get_connection() as conn:
+        cursor = conn.execute("SELECT * FROM triggers WHERE LOWER(name) = LOWER(?)", (name,))
         row = cursor.fetchone()
         return dict(row) if row else None
 
@@ -365,10 +434,19 @@ def _create_symlink(symlink_name: str, target_path: str) -> bool:
     symlink_path = os.path.join(config.SYMLINK_DIR, symlink_name)
     try:
         os.symlink(target_path, symlink_path)
-        print(f"Created symlink: {symlink_path} -> {target_path}")
+        if not os.path.exists(symlink_path):
+            logger.debug(
+                "Created broken symlink: %s -> %s (target not readable)", symlink_path, target_path
+            )
+            try:
+                os.unlink(symlink_path)
+            except OSError as unlink_err:
+                logger.warning("Failed to clean up broken symlink %s: %s", symlink_path, unlink_err)
+            return False
+        logger.debug("Created symlink: %s -> %s", symlink_path, target_path)
         return True
     except OSError as e:
-        print(f"Failed to create symlink: {e}")
+        logger.debug("Failed to create symlink: %s", e)
         return False
 
 
@@ -380,11 +458,11 @@ def _remove_symlink(symlink_name: str) -> bool:
     try:
         if os.path.islink(symlink_path):
             os.unlink(symlink_path)
-            print(f"Removed symlink: {symlink_path}")
+            logger.debug("Removed symlink: %s", symlink_path)
             return True
         return False
     except OSError as e:
-        print(f"Failed to remove symlink: {e}")
+        logger.debug("Failed to remove symlink: %s", e)
         return False
 
 
@@ -553,6 +631,40 @@ def get_paths_for_trigger_detailed(trigger_id: str) -> List[Dict]:
             """SELECT local_project_path, path_type, github_repo_url
                FROM project_paths WHERE trigger_id = ?""",
             (trigger_id,),
+        )
+        return [dict(row) for row in cursor.fetchall()]
+
+
+def log_prompt_template_change(trigger_id: str, old_template: str, new_template: str) -> bool:
+    """Record a prompt template change in trigger_template_history. Returns True on success."""
+    with get_connection() as conn:
+        try:
+            conn.execute(
+                """
+                INSERT INTO trigger_template_history (trigger_id, old_template, new_template)
+                VALUES (?, ?, ?)
+                """,
+                (trigger_id, old_template, new_template),
+            )
+            conn.commit()
+            return True
+        except Exception as e:
+            logger.warning("Failed to log template change for trigger %s: %s", trigger_id, e)
+            return False
+
+
+def get_prompt_template_history(trigger_id: str, limit: int = 50) -> List[dict]:
+    """Get prompt template change history for a trigger, newest first."""
+    with get_connection() as conn:
+        cursor = conn.execute(
+            """
+            SELECT id, trigger_id, old_template, new_template, changed_at
+            FROM trigger_template_history
+            WHERE trigger_id = ?
+            ORDER BY changed_at DESC
+            LIMIT ?
+            """,
+            (trigger_id, limit),
         )
         return [dict(row) for row in cursor.fetchall()]
 
@@ -775,6 +887,25 @@ def get_latest_execution_for_trigger(trigger_id: str) -> Optional[dict]:
         )
         row = cursor.fetchone()
         return dict(row) if row else None
+
+
+def count_execution_logs_for_trigger(trigger_id: str, status: str = None) -> int:
+    """Count execution logs for a trigger with optional status filter."""
+    with get_connection() as conn:
+        query = "SELECT COUNT(*) FROM execution_logs WHERE trigger_id = ?"
+        params: list = [trigger_id]
+        if status:
+            query += " AND status = ?"
+            params.append(status)
+        cursor = conn.execute(query, params)
+        return cursor.fetchone()[0]
+
+
+def count_all_execution_logs() -> int:
+    """Count all execution logs."""
+    with get_connection() as conn:
+        cursor = conn.execute("SELECT COUNT(*) FROM execution_logs")
+        return cursor.fetchone()[0]
 
 
 def get_active_execution_count() -> int:

@@ -14,13 +14,16 @@ from ..database import (
     get_all_triggers,
     get_project,
     get_trigger,
+    get_trigger_by_name,
     list_paths_for_trigger,
+    log_prompt_template_change,
     remove_github_repo,
     remove_project_from_trigger,
     remove_project_path,
     update_trigger,
     update_trigger_auto_resolve,
 )
+from .audit_log_service import AuditLogService
 from .execution_service import ExecutionService
 from .github_service import GitHubService
 from .scheduler_service import SchedulerService
@@ -69,6 +72,11 @@ class TriggerService:
         if not name or not prompt_template:
             return {"error": "name and prompt_template required"}, HTTPStatus.BAD_REQUEST
 
+        # Reject duplicate trigger names
+        existing = get_trigger_by_name(name)
+        if existing:
+            return {"error": f"A trigger named '{name}' already exists"}, HTTPStatus.CONFLICT
+
         # For webhook trigger, validate that match_field_path and match_field_value are provided together
         if trigger_source == "webhook":
             if bool(match_field_path) != bool(match_field_value):
@@ -106,6 +114,44 @@ class TriggerService:
                     "error": "schedule_type and schedule_time required for scheduled trigger"
                 }, HTTPStatus.BAD_REQUEST
 
+            # Validate schedule_time is HH:MM format
+            import re as _re
+            if not _re.match(r"^\d{2}:\d{2}$", schedule_time):
+                return {
+                    "error": "schedule_time must be in HH:MM format (e.g. '09:00')"
+                }, HTTPStatus.BAD_REQUEST
+            _hour, _minute = int(schedule_time[:2]), int(schedule_time[3:])
+            if not (0 <= _hour <= 23 and 0 <= _minute <= 59):
+                return {
+                    "error": "schedule_time has invalid hour or minute value"
+                }, HTTPStatus.BAD_REQUEST
+
+            # Validate day value per schedule_type
+            if schedule_type == "weekly":
+                if schedule_day is None or not (0 <= int(schedule_day) <= 6):
+                    return {
+                        "error": "schedule_day for weekly triggers must be 0–6 (0=Monday, 6=Sunday)"
+                    }, HTTPStatus.BAD_REQUEST
+            elif schedule_type == "monthly":
+                if schedule_day is None or not (1 <= int(schedule_day) <= 28):
+                    return {
+                        "error": "schedule_day for monthly triggers must be 1–28"
+                    }, HTTPStatus.BAD_REQUEST
+
+            # Validate timezone
+            try:
+                import zoneinfo as _zi
+                _zi.ZoneInfo(schedule_timezone)
+            except (KeyError, Exception):
+                return {
+                    "error": f"Invalid timezone: '{schedule_timezone}'"
+                }, HTTPStatus.BAD_REQUEST
+
+        timeout_seconds = data.get("timeout_seconds")
+        webhook_secret = data.get("webhook_secret")
+        allowed_tools = data.get("allowed_tools")
+        sigterm_grace_seconds = data.get("sigterm_grace_seconds")
+
         trigger_id = add_trigger(
             name=name,
             prompt_template=prompt_template,
@@ -124,8 +170,23 @@ class TriggerService:
             model=model,
             execution_mode=execution_mode,
             team_id=team_id,
+            timeout_seconds=timeout_seconds,
+            webhook_secret=webhook_secret,
+            allowed_tools=allowed_tools,
+            sigterm_grace_seconds=sigterm_grace_seconds,
         )
         if trigger_id:
+            AuditLogService.log(
+                action="trigger.create",
+                entity_type="trigger",
+                entity_id=trigger_id,
+                outcome="created",
+                details={
+                    "name": name,
+                    "backend_type": backend_type,
+                    "trigger_source": trigger_source,
+                },
+            )
             # Register with scheduler if scheduled
             if trigger_source == "scheduled":
                 trigger = get_trigger(trigger_id)
@@ -154,12 +215,15 @@ class TriggerService:
             except (ValueError, TypeError):
                 return {"error": "group_id must be a number"}, HTTPStatus.BAD_REQUEST
 
+        new_prompt_template = data.get("prompt_template")
+        old_prompt_template = trigger.get("prompt_template")
+
         success = update_trigger(
             trigger_id,
             name=data.get("name"),
             group_id=group_id,
             detection_keyword=data.get("detection_keyword"),
-            prompt_template=data.get("prompt_template"),
+            prompt_template=new_prompt_template,
             backend_type=data.get("backend_type"),
             trigger_source=data.get("trigger_source"),
             match_field_path=data.get("match_field_path"),
@@ -174,8 +238,25 @@ class TriggerService:
             model=data.get("model"),
             execution_mode=data.get("execution_mode"),
             team_id=data.get("team_id"),
+            timeout_seconds=data.get("timeout_seconds"),
+            webhook_secret=data.get("webhook_secret"),
+            allowed_tools=data.get("allowed_tools"),
+            sigterm_grace_seconds=data.get("sigterm_grace_seconds"),
         )
         if success:
+            new_trigger = get_trigger(trigger_id) or {}
+            AuditLogService.log_field_changes(
+                action="trigger.update",
+                entity_type="trigger",
+                entity_id=trigger_id,
+                old_entity=trigger,
+                new_entity=new_trigger,
+            )
+            # Log prompt template change for regression traceability
+            if new_prompt_template and new_prompt_template != old_prompt_template:
+                log_prompt_template_change(
+                    trigger_id, old_prompt_template or "", new_prompt_template
+                )
             # Reschedule if schedule-related fields changed
             SchedulerService.reschedule_trigger(trigger_id)
             return {"message": "Trigger updated"}, HTTPStatus.OK
@@ -197,6 +278,16 @@ class TriggerService:
 
         success = delete_trigger(trigger_id)
         if success:
+            AuditLogService.log(
+                action="trigger.delete",
+                entity_type="trigger",
+                entity_id=trigger_id,
+                outcome="deleted",
+                details={
+                    "name": trigger.get("name"),
+                    "trigger_source": trigger.get("trigger_source"),
+                },
+            )
             return {"message": "Trigger deleted"}, HTTPStatus.OK
         else:
             return {"error": "Failed to delete trigger"}, HTTPStatus.INTERNAL_SERVER_ERROR
@@ -377,6 +468,50 @@ class TriggerService:
             "status": "running",
             "execution_id": execution_result.get("execution_id"),
         }, HTTPStatus.ACCEPTED
+
+    @staticmethod
+    def preview_prompt(trigger_id: str, sample_data: dict) -> Tuple[dict, HTTPStatus]:
+        """Render a trigger's prompt template with sample data for dry-run preview."""
+        trigger = get_trigger(trigger_id)
+        if not trigger:
+            return {"error": "Trigger not found"}, HTTPStatus.NOT_FOUND
+
+        prompt = trigger["prompt_template"]
+
+        # Replace standard placeholders with sample data (fall back to placeholder labels)
+        prompt = prompt.replace("{trigger_id}", sample_data.get("trigger_id", trigger_id))
+        prompt = prompt.replace("{bot_id}", sample_data.get("trigger_id", trigger_id))
+        prompt = prompt.replace("{paths}", sample_data.get("paths", "/path/to/project"))
+        prompt = prompt.replace("{message}", sample_data.get("message", "(sample message)"))
+
+        # GitHub PR placeholders
+        prompt = prompt.replace(
+            "{pr_url}", sample_data.get("pr_url", "https://github.com/owner/repo/pull/1")
+        )
+        prompt = prompt.replace("{pr_number}", str(sample_data.get("pr_number", "1")))
+        prompt = prompt.replace("{pr_title}", sample_data.get("pr_title", "Sample PR Title"))
+        prompt = prompt.replace("{pr_author}", sample_data.get("pr_author", "author"))
+        prompt = prompt.replace(
+            "{repo_url}", sample_data.get("repo_url", "https://github.com/owner/repo")
+        )
+        prompt = prompt.replace("{repo_full_name}", sample_data.get("repo_full_name", "owner/repo"))
+
+        # Prepend skill_command if configured
+        skill_command = trigger.get("skill_command", "")
+        if skill_command and not prompt.lstrip().startswith(skill_command):
+            prompt = f"{skill_command} {prompt}"
+
+        # Identify any remaining unreplaced placeholders
+        import re
+
+        remaining = re.findall(r"\{[^}]+\}", prompt)
+
+        return {
+            "rendered_prompt": prompt,
+            "trigger_id": trigger_id,
+            "trigger_name": trigger["name"],
+            "unresolved_placeholders": remaining,
+        }, HTTPStatus.OK
 
     @staticmethod
     def update_auto_resolve(trigger_id: str, auto_resolve: bool) -> Tuple[dict, HTTPStatus]:

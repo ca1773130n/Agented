@@ -20,6 +20,14 @@ class MonitoringService:
     _recent_alerts: list = []
     _last_polled_at: Optional[str] = None
 
+    # Adaptive backoff: track consecutive provider-API failures and cap
+    _consecutive_poll_failures: int = 0
+    _MAX_BACKOFF_MINUTES: int = 60
+
+    # Set to True when the scheduler is unavailable and monitoring jobs could not be registered.
+    # Exposed via get_status() so callers (health checks, UI) can surface this to users.
+    _scheduler_unavailable: bool = False
+
     # Threshold level ordering for comparison
     _LEVEL_ORDER = {"normal": 0, "info": 1, "warning": 2, "critical": 3}
 
@@ -44,7 +52,7 @@ class MonitoringService:
                 key = f"{snap['account_id']}_{snap['window_type']}"
                 cls._last_threshold_levels[key] = snap.get("threshold_level", "normal")
         except Exception as e:
-            logger.warning(f"Could not initialize threshold levels from DB: {e}")
+            logger.warning(f"Could not initialize threshold levels from DB: {e}", exc_info=True)
 
         # Load config and auto-enable if accounts exist
         try:
@@ -62,8 +70,8 @@ class MonitoringService:
                         logger.info(
                             "Monitoring auto-enabled: %d backend accounts found", len(accounts)
                         )
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.warning("Monitoring auto-enable failed: %s", e, exc_info=True)
 
             if config.get("enabled"):
                 polling_minutes = config.get("polling_minutes", 5)
@@ -74,7 +82,9 @@ class MonitoringService:
 
                 threading.Thread(target=cls._poll_usage, daemon=True).start()
         except Exception as e:
-            logger.warning(f"Could not load monitoring config: {e}")
+            logger.error(
+                f"Could not load monitoring config, monitoring will be disabled: {e}", exc_info=True
+            )
 
         # Register daily cleanup job
         cls._register_cleanup_job()
@@ -102,8 +112,13 @@ class MonitoringService:
         from .scheduler_service import SchedulerService
 
         if not SchedulerService._scheduler:
-            logger.warning("Scheduler not available, cannot register monitoring job")
+            cls._scheduler_unavailable = True
+            logger.error(
+                "Scheduler not available — monitoring job not registered; "
+                "automated rate-limit monitoring is DISABLED until the scheduler is running"
+            )
             return
+        cls._scheduler_unavailable = False
 
         existing = SchedulerService._scheduler.get_job(cls._job_id)
         if existing:
@@ -165,7 +180,7 @@ class MonitoringService:
         try:
             config = get_monitoring_config()
         except Exception as e:
-            logger.error(f"Monitoring poll: failed to load config: {e}")
+            logger.error(f"Monitoring poll: failed to load config: {e}", exc_info=True)
             return
 
         accounts_config = config.get("accounts", {})
@@ -174,7 +189,7 @@ class MonitoringService:
         try:
             all_accounts = get_all_accounts_with_health()
         except Exception as e:
-            logger.error(f"Monitoring poll: failed to load accounts: {e}")
+            logger.error(f"Monitoring poll: failed to load accounts: {e}", exc_info=True)
             return
 
         if not all_accounts:
@@ -198,6 +213,11 @@ class MonitoringService:
 
         # Track fetched tokens to deduplicate accounts sharing the same credentials
         fetched_tokens: dict[str, list[dict]] = {}  # fingerprint -> windows
+
+        # Track whether at least one provider API call succeeded for backoff logic
+        any_fetch_succeeded = False
+        # Count enabled, non-deduplicated accounts attempted so we can detect total failure
+        fetch_attempted = 0
 
         for acct_id_str, acct_cfg in accounts_config.items():
             if not acct_cfg.get("enabled", False):
@@ -225,11 +245,14 @@ class MonitoringService:
                     f"(fingerprint {fingerprint}), reusing cached data"
                 )
             else:
+                fetch_attempted += 1
                 try:
                     windows = ProviderUsageClient.fetch_usage(account, backend_type)
+                    any_fetch_succeeded = True
                 except Exception as e:
                     logger.error(
-                        f"Monitoring poll: provider API failed for account {account_id}: {e}"
+                        f"Monitoring poll: provider API failed for account {account_id}: {e}",
+                        exc_info=True,
                     )
                     continue
 
@@ -258,7 +281,7 @@ class MonitoringService:
                         resets_at=window_data.get("resets_at"),
                     )
                 except Exception as e:
-                    logger.error(f"Monitoring poll: snapshot insert failed: {e}")
+                    logger.error(f"Monitoring poll: snapshot insert failed: {e}", exc_info=True)
                     continue
 
                 # Check threshold transition
@@ -267,6 +290,15 @@ class MonitoringService:
                 )
                 if transition:
                     cls._recent_alerts.append(transition)
+
+        # Apply adaptive backoff when all provider API calls fail
+        if fetch_attempted > 0 and not any_fetch_succeeded:
+            cls._consecutive_poll_failures += 1
+            cls._apply_poll_backoff(config)
+        elif any_fetch_succeeded and cls._consecutive_poll_failures > 0:
+            # Recovered — restore configured polling interval
+            cls._consecutive_poll_failures = 0
+            cls._restore_poll_schedule(config)
 
         # Record last successful poll timestamp
         cls._last_polled_at = now.isoformat()
@@ -277,7 +309,36 @@ class MonitoringService:
 
             AgentSchedulerService.evaluate_all_accounts(now)
         except Exception as e:
-            logger.error(f"Scheduler evaluation failed: {e}")
+            logger.error(f"Scheduler evaluation failed: {e}", exc_info=True)
+
+    @classmethod
+    def _apply_poll_backoff(cls, config: dict) -> None:
+        """Re-register the polling job at an exponentially increasing interval.
+
+        Backoff formula: min(base * 2^(failures-1), MAX_BACKOFF_MINUTES).
+        Called when all provider API calls fail in a single poll cycle.
+        """
+        base_minutes = config.get("polling_minutes", 5)
+        backoff_minutes = min(
+            base_minutes * (2 ** (cls._consecutive_poll_failures - 1)),
+            cls._MAX_BACKOFF_MINUTES,
+        )
+        logger.warning(
+            "Monitoring poll: all provider APIs failed (%d consecutive failure(s)); "
+            "backing off to %d min interval",
+            cls._consecutive_poll_failures,
+            backoff_minutes,
+        )
+        cls._register_job(int(backoff_minutes))
+
+    @classmethod
+    def _restore_poll_schedule(cls, config: dict) -> None:
+        """Restore polling to the configured base interval after recovering from failures."""
+        base_minutes = config.get("polling_minutes", 5)
+        logger.info(
+            "Monitoring poll: provider API recovered; restoring %d min interval", base_minutes
+        )
+        cls._register_job(base_minutes)
 
     @classmethod
     def _compute_threshold_level(cls, percentage: float) -> str:
@@ -419,8 +480,8 @@ class MonitoringService:
                             rate_per_min = delta / time_delta_min
                             result[label] = round(rate_per_min * 60, 1)
                             continue
-                except (ValueError, TypeError):
-                    pass
+                except (ValueError, TypeError) as e:
+                    logger.debug("Failed to compute consumption rate for %s: %s", label, e)
             result[label] = None
 
         result["unit"] = "%/hr" if is_pct_only else "tok/hr"
@@ -473,8 +534,8 @@ class MonitoringService:
                         "message": "Window resets before limit",
                         "resets_at": resets_at_str,
                     }
-            except (ValueError, TypeError):
-                pass
+            except (ValueError, TypeError) as e:
+                logger.debug("Invalid resets_at timestamp %r: %s", resets_at_str, e)
 
         return {
             "status": "projected",
@@ -511,7 +572,7 @@ class MonitoringService:
             account_names = {a["id"]: a.get("account_name", "") for a in all_accounts}
             account_plans = {a["id"]: a.get("plan", "") for a in all_accounts}
         except Exception as e:
-            logger.warning("Account data fetch error: %s", e)
+            logger.warning("Account data fetch error: %s", e, exc_info=True)
             all_accounts = []
             account_names = {}
             account_plans = {}
@@ -533,7 +594,7 @@ class MonitoringService:
                     for aid in ids:
                         shared_credential_groups[aid] = [x for x in ids if x != aid]
         except Exception as e:
-            logger.debug("Credential fingerprint detection: %s", e)
+            logger.debug("Credential fingerprint detection: %s", e, exc_info=True)
 
         # Get latest snapshots (exclude data older than 3x polling interval)
         polling_min = config.get("polling_minutes", 5)
@@ -624,4 +685,5 @@ class MonitoringService:
             "windows": windows,
             "threshold_alerts": cls._recent_alerts.copy(),
             "last_polled_at": cls._last_polled_at,
+            "scheduler_unavailable": cls._scheduler_unavailable,
         }

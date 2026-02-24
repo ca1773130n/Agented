@@ -6,6 +6,7 @@ from flask import request
 from flask_openapi3 import APIBlueprint, Tag
 from pydantic import BaseModel, Field
 
+from ..services.audit_log_service import AuditLogService
 from ..services.audit_service import AuditService
 
 tag = Tag(name="audit", description="Security audit operations")
@@ -70,3 +71,15 @@ def get_weekly_report(path: AuditWeekPath):
     """Get detailed report for a specific audit week."""
     result, status = AuditService.get_weekly_report(path.audit_week)
     return result, status
+
+
+@audit_bp.get("/events")
+def get_audit_events():
+    """Return recent structured audit log events (in-memory, newest first).
+
+    These events are emitted by AuditLogService.log() and reflect execution
+    starts/completions, trigger/workflow updates, and other platform operations.
+    """
+    limit = min(request.args.get("limit", 100, type=int), 500)
+    events = AuditLogService.get_recent_events(limit=limit)
+    return {"events": events, "total": len(events)}, HTTPStatus.OK

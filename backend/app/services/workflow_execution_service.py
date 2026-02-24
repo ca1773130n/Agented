@@ -5,11 +5,12 @@ import graphlib
 import json
 import logging
 import os
+import shlex
 import subprocess
 import tempfile
 import threading
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional
 
 from ..models.workflow import NodeErrorMode, WorkflowMessage
@@ -46,12 +47,48 @@ class WorkflowExecutionService:
         "transform": "_execute_transform_node",
     }
 
+    @staticmethod
+    def _validate_graph(graph_parsed: dict) -> None:
+        """Validate workflow graph structure before execution.
+
+        Raises ValueError with a descriptive message for:
+        - Edges missing source or target fields
+        - Edges referencing node IDs not defined in the graph
+        - Circular dependencies (cycle detection via topological sort)
+        """
+        nodes_list = graph_parsed.get("nodes", [])
+        edges_list = graph_parsed.get("edges", [])
+
+        node_ids = set()
+        for node in nodes_list:
+            if "id" not in node:
+                raise ValueError("Graph contains a node without an 'id' field")
+            node_ids.add(node["id"])
+
+        predecessors: Dict[str, set] = {nid: set() for nid in node_ids}
+        for edge in edges_list:
+            if "source" not in edge or "target" not in edge:
+                raise ValueError(f"Edge missing 'source' or 'target': {edge}")
+            src, tgt = edge["source"], edge["target"]
+            if src not in node_ids:
+                raise ValueError(f"Edge source references undefined node: '{src}'")
+            if tgt not in node_ids:
+                raise ValueError(f"Edge target references undefined node: '{tgt}'")
+            predecessors[tgt].add(src)
+
+        # Detect cycles via topological sort
+        try:
+            list(graphlib.TopologicalSorter(predecessors).static_order())
+        except graphlib.CycleError as e:
+            raise ValueError(f"Graph contains a circular dependency: {e}") from e
+
     @classmethod
     def execute_workflow(
         cls,
         workflow_id: str,
         input_json: Optional[str] = None,
         trigger_type: str = "manual",
+        timeout_seconds: Optional[int] = None,
     ) -> str:
         """Start executing a workflow in a background thread.
 
@@ -94,9 +131,13 @@ class WorkflowExecutionService:
         except (json.JSONDecodeError, TypeError) as e:
             raise ValueError(f"Invalid graph JSON: {e}")
 
-        # Extract settings
+        # Validate graph structure before committing to execution
+        cls._validate_graph(graph_parsed)
+
+        # Extract settings — per-run override takes precedence over graph settings
         settings = graph_parsed.get("settings") or {}
-        timeout_seconds = settings.get("timeout_seconds", cls.DEFAULT_TIMEOUT_SECONDS)
+        graph_timeout = settings.get("timeout_seconds", cls.DEFAULT_TIMEOUT_SECONDS)
+        effective_timeout = timeout_seconds if timeout_seconds is not None else graph_timeout
 
         # Create DB execution record (status=running)
         execution_id = add_workflow_execution(
@@ -127,7 +168,7 @@ class WorkflowExecutionService:
                 graph_parsed,
                 input_json,
                 trigger_type,
-                timeout_seconds,
+                effective_timeout,
             ),
             daemon=True,
         )
@@ -135,7 +176,7 @@ class WorkflowExecutionService:
 
         logger.info(
             f"Workflow execution started: {execution_id} "
-            f"(workflow={workflow_id}, trigger={trigger_type})"
+            f"(workflow={workflow_id}, trigger={trigger_type}, timeout={effective_timeout}s)"
         )
         return execution_id
 
@@ -149,7 +190,7 @@ class WorkflowExecutionService:
                     "execution_id": execution_id,
                     "workflow_id": mem["workflow_id"],
                     "status": mem["status"],
-                    "node_states": mem.get("node_states", {}),
+                    "node_states": dict(mem.get("node_states", {})),
                     "error": mem.get("error"),
                 }
 
@@ -200,6 +241,29 @@ class WorkflowExecutionService:
             entry = cls._executions.get(execution_id)
             if entry:
                 entry.setdefault("node_states", {})[node_id] = status
+
+    @classmethod
+    def cleanup_stale_executions(cls):
+        """Mark any DB-persisted 'running' executions as failed.
+
+        Called once at server startup to recover from unclean shutdowns where
+        in-memory execution state was lost but DB records were left as 'running'.
+        """
+        from ..db.workflows import get_running_workflow_executions, update_workflow_execution
+
+        stale = get_running_workflow_executions()
+        if not stale:
+            return
+        now = datetime.now(timezone.utc).isoformat()
+        for execution in stale:
+            execution_id = execution["id"]
+            update_workflow_execution(
+                execution_id,
+                status="failed",
+                error="Server restarted while execution was running",
+                ended_at=now,
+            )
+            logger.warning("Marked stale workflow execution as failed on startup: %s", execution_id)
 
     @classmethod
     def _cleanup_execution(cls, execution_id: str):
@@ -366,6 +430,9 @@ class WorkflowExecutionService:
 
             cls._update_node_state(execution_id, node_id, "running")
 
+            # Per-node timeout (independent of global workflow timeout)
+            node_timeout_seconds = node_config.get("node_timeout_seconds")
+
             # Dispatch with retry
             output_msg = None
             last_error = None
@@ -375,14 +442,20 @@ class WorkflowExecutionService:
             while attempts < max_attempts:
                 attempts += 1
                 try:
-                    output_msg = cls._dispatch_node(node_id, node_type, node_config, input_msg)
+                    if node_timeout_seconds:
+                        output_msg = cls._dispatch_node_with_timeout(
+                            node_id, node_type, node_config, input_msg, node_timeout_seconds
+                        )
+                    else:
+                        output_msg = cls._dispatch_node(node_id, node_type, node_config, input_msg)
                     last_error = None
                     break  # Success
                 except Exception as e:
                     last_error = str(e)
                     logger.warning(
                         f"Workflow {execution_id}, node {node_id}: "
-                        f"attempt {attempts}/{max_attempts} failed: {e}"
+                        f"attempt {attempts}/{max_attempts} failed: {e}",
+                        exc_info=True,
                     )
                     if attempts < max_attempts:
                         # Exponential backoff
@@ -520,13 +593,34 @@ class WorkflowExecutionService:
                 "workflow", workflow_id, final_status, output=output_data
             )
         except Exception as e:
-            logger.error(f"Error firing completion triggers for {execution_id}: {e}")
+            logger.error(f"Error firing completion triggers for {execution_id}: {e}", exc_info=True)
 
         cls._schedule_cleanup(execution_id)
 
     @classmethod
     def _schedule_cleanup(cls, execution_id: str):
-        """Schedule removal of in-memory tracking after 5 minutes."""
+        """Schedule removal of in-memory tracking after 5 minutes.
+
+        Uses APScheduler when available so the job survives daemon-thread teardown.
+        Falls back to a daemon threading.Timer when the scheduler is not running
+        (e.g. during tests).
+        """
+        try:
+            from .scheduler_service import SchedulerService
+
+            if SchedulerService._scheduler:
+                SchedulerService._scheduler.add_job(
+                    func=cls._cleanup_execution,
+                    trigger="date",
+                    run_date=datetime.now() + timedelta(seconds=300),
+                    args=[execution_id],
+                    id=f"wf_ttl_{execution_id}",
+                    replace_existing=True,
+                )
+                return
+        except Exception:
+            pass
+        # Fallback: daemon timer (used when scheduler is unavailable)
         timer = threading.Timer(300, cls._cleanup_execution, args=[execution_id])
         timer.daemon = True
         timer.start()
@@ -597,6 +691,40 @@ class WorkflowExecutionService:
         return handler(node_id, node_config, input_msg)
 
     @classmethod
+    def _dispatch_node_with_timeout(
+        cls,
+        node_id: str,
+        node_type: str,
+        node_config: dict,
+        input_msg: WorkflowMessage,
+        timeout_seconds: float,
+    ) -> WorkflowMessage:
+        """Dispatch a node with a per-node wall-clock timeout.
+
+        Runs the handler in a daemon thread and joins it with the given timeout.
+        Raises RuntimeError if the node does not complete within the timeout.
+        """
+        result: list = [None, None]  # [output_msg, exception]
+
+        def _run():
+            try:
+                result[0] = cls._dispatch_node(node_id, node_type, node_config, input_msg)
+            except Exception as exc:
+                result[1] = exc
+
+        thread = threading.Thread(target=_run, daemon=True)
+        thread.start()
+        thread.join(timeout=timeout_seconds)
+
+        if thread.is_alive():
+            raise RuntimeError(
+                f"Node {node_id} (type={node_type}) timed out after {timeout_seconds}s"
+            )
+        if result[1] is not None:
+            raise result[1]
+        return result[0]
+
+    @classmethod
     def _execute_trigger_node(
         cls, node_id: str, node_config: dict, input_msg: WorkflowMessage
     ) -> WorkflowMessage:
@@ -651,8 +779,8 @@ class WorkflowExecutionService:
 
         try:
             result = subprocess.run(
-                command,
-                shell=True,
+                shlex.split(command),
+                shell=False,
                 capture_output=True,
                 text=True,
                 timeout=timeout,
@@ -746,7 +874,10 @@ class WorkflowExecutionService:
         finally:
             # Clean up temp file
             if tmp_file and os.path.exists(tmp_file.name):
-                os.unlink(tmp_file.name)
+                try:
+                    os.unlink(tmp_file.name)
+                except OSError as e:
+                    logger.warning("Failed to delete temp script file %s: %s", tmp_file.name, e)
 
     @classmethod
     def _execute_conditional_node(

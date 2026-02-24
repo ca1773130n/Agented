@@ -164,8 +164,20 @@ def init_db():
             for version, name, func in VERSIONED_MIGRATIONS:
                 if version > current_version:
                     logger.info(f"Running migration {version}: {name}")
-                    func(conn)
-                    _record_version(conn, version, name)
+                    try:
+                        func(conn)
+                        _record_version(conn, version, name)
+                    except Exception as e:
+                        logger.error(
+                            "Migration %d (%s) failed: %s — database will be rolled back to "
+                            "version %d. Fix the migration before restarting.",
+                            version,
+                            name,
+                            e,
+                            current_version,
+                            exc_info=True,
+                        )
+                        raise RuntimeError(f"Migration {version} ({name}) failed: {e}") from e
 
             conn.commit()
 
@@ -2857,6 +2869,86 @@ def _migrate_v46_project_github_host(conn):
         conn.execute("ALTER TABLE projects ADD COLUMN github_host TEXT DEFAULT 'github.com'")
 
 
+def _migrate_v47_trigger_timeout_and_webhook_secret(conn):
+    """Add timeout_seconds and webhook_secret to triggers table."""
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(triggers)")}
+    if "timeout_seconds" not in cols:
+        conn.execute("ALTER TABLE triggers ADD COLUMN timeout_seconds INTEGER")
+    if "webhook_secret" not in cols:
+        conn.execute("ALTER TABLE triggers ADD COLUMN webhook_secret TEXT")
+
+
+def _migrate_v49_trigger_allowed_tools(conn):
+    """Add allowed_tools column to triggers table for per-trigger tool scoping."""
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(triggers)")}
+    if "allowed_tools" not in cols:
+        conn.execute("ALTER TABLE triggers ADD COLUMN allowed_tools TEXT")
+
+
+def _migrate_v50_trigger_template_history(conn):
+    """Add trigger_template_history table for prompt template change tracking."""
+    cursor = conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='trigger_template_history'"
+    )
+    if cursor.fetchone() is None:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS trigger_template_history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                trigger_id TEXT NOT NULL,
+                old_template TEXT NOT NULL,
+                new_template TEXT NOT NULL,
+                changed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (trigger_id) REFERENCES triggers(id) ON DELETE CASCADE
+            )
+        """)
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_trigger_template_history_trigger_id "
+            "ON trigger_template_history(trigger_id)"
+        )
+        conn.commit()
+        print("Created table: trigger_template_history")
+
+
+def _migrate_v48_pending_retries_table(conn):
+    """Add pending_retries table for durable rate-limit retry storage."""
+    cursor = conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='pending_retries'"
+    )
+    if cursor.fetchone() is None:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS pending_retries (
+                trigger_id TEXT PRIMARY KEY,
+                trigger_json TEXT NOT NULL,
+                message_text TEXT NOT NULL DEFAULT '',
+                event_json TEXT NOT NULL DEFAULT '{}',
+                trigger_type TEXT NOT NULL DEFAULT 'webhook',
+                cooldown_seconds INTEGER NOT NULL DEFAULT 0,
+                retry_at TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        conn.commit()
+        print("Created table: pending_retries")
+
+
+def _migrate_v52_trigger_sigterm_grace_seconds(conn):
+    """Add sigterm_grace_seconds to triggers for per-trigger SIGTERM grace period config."""
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(triggers)")}
+    if "sigterm_grace_seconds" not in cols:
+        conn.execute("ALTER TABLE triggers ADD COLUMN sigterm_grace_seconds INTEGER")
+        conn.commit()
+        print("Added sigterm_grace_seconds column to triggers")
+
+
+def _migrate_v51_workflow_version_draft(conn):
+    """Add is_draft column to workflow_versions for staging workflow changes."""
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(workflow_versions)")}
+    if "is_draft" not in cols:
+        conn.execute("ALTER TABLE workflow_versions ADD COLUMN is_draft INTEGER NOT NULL DEFAULT 0")
+        conn.commit()
+        print("Added is_draft column to workflow_versions")
+
+
 # =============================================================================
 # Versioned migration registry
 # =============================================================================
@@ -2910,6 +3002,12 @@ VERSIONED_MIGRATIONS = [
     (44, "product_owner_columns", _migrate_v44_product_owner_columns),
     (45, "project_clone_fields", _migrate_v45_project_clone_fields),
     (46, "project_github_host", _migrate_v46_project_github_host),
+    (47, "trigger_timeout_and_webhook_secret", _migrate_v47_trigger_timeout_and_webhook_secret),
+    (48, "pending_retries_table", _migrate_v48_pending_retries_table),
+    (49, "trigger_allowed_tools", _migrate_v49_trigger_allowed_tools),
+    (50, "trigger_template_history", _migrate_v50_trigger_template_history),
+    (51, "workflow_version_draft", _migrate_v51_workflow_version_draft),
+    (52, "trigger_sigterm_grace_seconds", _migrate_v52_trigger_sigterm_grace_seconds),
 ]
 
 

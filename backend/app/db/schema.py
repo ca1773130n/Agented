@@ -43,6 +43,10 @@ def create_fresh_schema(conn):
             model TEXT,
             execution_mode TEXT DEFAULT 'direct',
             team_id TEXT REFERENCES teams(id) ON DELETE SET NULL,
+            timeout_seconds INTEGER,
+            webhook_secret TEXT,
+            allowed_tools TEXT,
+            sigterm_grace_seconds INTEGER,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """)
@@ -96,6 +100,21 @@ def create_fresh_schema(conn):
         "CREATE INDEX IF NOT EXISTS idx_execution_logs_started_at ON execution_logs(started_at DESC)"
     )
     conn.execute("CREATE INDEX IF NOT EXISTS idx_execution_logs_status ON execution_logs(status)")
+
+    # Trigger template change history
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS trigger_template_history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            trigger_id TEXT NOT NULL,
+            old_template TEXT NOT NULL,
+            new_template TEXT NOT NULL,
+            changed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (trigger_id) REFERENCES triggers(id) ON DELETE CASCADE
+        )
+    """)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_trigger_template_history_trigger_id ON trigger_template_history(trigger_id)"
+    )
 
     # PR review data table
     conn.execute("""
@@ -821,6 +840,7 @@ def create_fresh_schema(conn):
             workflow_id TEXT NOT NULL,
             version INTEGER NOT NULL DEFAULT 1,
             graph_json TEXT NOT NULL,
+            is_draft INTEGER NOT NULL DEFAULT 0,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (workflow_id) REFERENCES workflows(id) ON DELETE CASCADE,
             UNIQUE(workflow_id, version)
@@ -1258,5 +1278,19 @@ def create_fresh_schema(conn):
         "CREATE INDEX IF NOT EXISTS idx_eth_type ON execution_type_handlers(execution_type)"
     )
     conn.execute("CREATE INDEX IF NOT EXISTS idx_eth_enabled ON execution_type_handlers(enabled)")
+
+    # Pending rate-limit retries - durable storage so retries survive server restarts
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS pending_retries (
+            trigger_id TEXT PRIMARY KEY,
+            trigger_json TEXT NOT NULL,
+            message_text TEXT NOT NULL DEFAULT '',
+            event_json TEXT NOT NULL DEFAULT '{}',
+            trigger_type TEXT NOT NULL DEFAULT 'webhook',
+            cooldown_seconds INTEGER NOT NULL DEFAULT 0,
+            retry_at TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
 
     conn.commit()

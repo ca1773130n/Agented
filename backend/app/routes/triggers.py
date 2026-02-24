@@ -140,3 +140,15 @@ def run_trigger(path: TriggerPath):
     message = data.get("message", "")
     result, status = TriggerService.run(path.trigger_id, message)
     return result, status
+
+
+@triggers_bp.post("/<trigger_id>/preview-prompt")
+def preview_trigger_prompt(path: TriggerPath):
+    """Dry-run preview: render the prompt template with sample data.
+
+    Accepts an optional JSON body with sample placeholder values:
+      paths, message, pr_url, pr_number, pr_title, pr_author, repo_url, repo_full_name
+    """
+    sample_data = request.get_json() or {}
+    result, status = TriggerService.preview_prompt(path.trigger_id, sample_data)
+    return result, status

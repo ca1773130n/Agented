@@ -245,3 +245,83 @@ def get_setup_executions_for_project(project_id: str, limit: int = 20) -> List[d
             (project_id, limit),
         )
         return [dict(row) for row in cursor.fetchall()]
+
+
+# =============================================================================
+# Pending rate-limit retry persistence
+# =============================================================================
+
+
+def upsert_pending_retry(
+    trigger_id: str,
+    trigger_json: str,
+    message_text: str,
+    event_json: str,
+    trigger_type: str,
+    cooldown_seconds: int,
+    retry_at: str,
+) -> bool:
+    """Insert or replace a pending rate-limit retry record. Returns True on success."""
+    with get_connection() as conn:
+        try:
+            conn.execute(
+                """
+                INSERT INTO pending_retries
+                    (trigger_id, trigger_json, message_text, event_json, trigger_type,
+                     cooldown_seconds, retry_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(trigger_id) DO UPDATE SET
+                    trigger_json = excluded.trigger_json,
+                    message_text = excluded.message_text,
+                    event_json = excluded.event_json,
+                    trigger_type = excluded.trigger_type,
+                    cooldown_seconds = excluded.cooldown_seconds,
+                    retry_at = excluded.retry_at
+                """,
+                (
+                    trigger_id,
+                    trigger_json,
+                    message_text,
+                    event_json,
+                    trigger_type,
+                    cooldown_seconds,
+                    retry_at,
+                ),
+            )
+            conn.commit()
+            return True
+        except sqlite3.Error as e:
+            logger.error("Database error in upsert_pending_retry: %s", e)
+            return False
+
+
+def delete_pending_retry(trigger_id: str) -> bool:
+    """Remove a pending retry record once executed. Returns True on success."""
+    with get_connection() as conn:
+        try:
+            conn.execute("DELETE FROM pending_retries WHERE trigger_id = ?", (trigger_id,))
+            conn.commit()
+            return True
+        except sqlite3.Error as e:
+            logger.error("Database error in delete_pending_retry: %s", e)
+            return False
+
+
+def get_pending_retries_due(now_iso: str) -> List[dict]:
+    """Return all pending retries whose retry_at is in the past (i.e. due for execution).
+
+    Used on server startup to restore in-flight retries that survived a restart.
+    """
+    with get_connection() as conn:
+        cursor = conn.execute(
+            "SELECT * FROM pending_retries WHERE retry_at <= ?",
+            (now_iso,),
+        )
+        return [dict(row) for row in cursor.fetchall()]
+
+
+def get_all_pending_retries() -> List[dict]:
+    """Return all pending retries (for status reporting)."""
+    with get_connection() as conn:
+        cursor = conn.execute("SELECT * FROM pending_retries ORDER BY retry_at")
+        return [dict(row) for row in cursor.fetchall()]

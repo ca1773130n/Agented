@@ -122,6 +122,19 @@ class Trigger(BaseModel):
     model: Optional[str] = None
     execution_mode: str = Field(default="direct")
     team_id: Optional[str] = None
+    timeout_seconds: Optional[int] = Field(
+        None,
+        ge=1,
+        le=3600,
+        description="Per-trigger execution timeout in seconds (1–3600). Overrides the default 600s.",
+    )
+    allowed_tools: Optional[str] = Field(
+        None,
+        description="Comma-separated list of tools for claude backend (e.g. 'Read,Glob,Grep,Bash'). Defaults to 'Read,Glob,Grep,Bash'.",
+    )
+    webhook_secret: Optional[str] = Field(
+        None, description="HMAC-SHA256 shared secret for validating incoming webhook payloads."
+    )
     created_at: Optional[str] = None
     path_count: Optional[int] = None
     execution_status: Optional[ExecutionStatus] = None
@@ -164,6 +177,9 @@ class CreateTriggerRequest(BaseModel):
     model: Optional[str] = None
     execution_mode: Optional[str] = Field(default="direct")
     team_id: Optional[str] = None
+    timeout_seconds: Optional[int] = Field(None, ge=1, le=3600)
+    allowed_tools: Optional[str] = None
+    webhook_secret: Optional[str] = None
 
 
 class CreateTriggerResponse(BaseModel):
@@ -201,6 +217,9 @@ class UpdateTriggerRequest(BaseModel):
     model: Optional[str] = None
     execution_mode: Optional[str] = None
     team_id: Optional[str] = None
+    timeout_seconds: Optional[int] = Field(None, ge=1, le=3600)
+    allowed_tools: Optional[str] = None
+    webhook_secret: Optional[str] = None
 
 
 class PathListResponse(BaseModel):

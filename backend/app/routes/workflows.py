@@ -169,17 +169,34 @@ def get_latest_version_endpoint(path: WorkflowPath):
 
 @workflows_bp.post("/<workflow_id>/run")
 def run_workflow(path: WorkflowPath):
-    """Run a workflow — dispatches to WorkflowExecutionService for DAG execution."""
+    """Run a workflow — dispatches to WorkflowExecutionService for DAG execution.
+
+    Optional request body fields:
+    - input_json (str): Initial input data for the workflow.
+    - timeout_seconds (int): Per-run timeout override. Overrides the timeout
+      set in the workflow graph settings for this execution only.
+    """
     from ..services.workflow_execution_service import WorkflowExecutionService
 
     data = request.get_json(silent=True) or {}
     input_json = data.get("input_json")
+    timeout_seconds = data.get("timeout_seconds")
+    if timeout_seconds is not None:
+        try:
+            timeout_seconds = int(timeout_seconds)
+            if timeout_seconds <= 0:
+                return {
+                    "error": "timeout_seconds must be a positive integer"
+                }, HTTPStatus.BAD_REQUEST
+        except (TypeError, ValueError):
+            return {"error": "timeout_seconds must be an integer"}, HTTPStatus.BAD_REQUEST
 
     try:
         execution_id = WorkflowExecutionService.execute_workflow(
             workflow_id=path.workflow_id,
             input_json=input_json,
             trigger_type="manual",
+            timeout_seconds=timeout_seconds,
         )
     except ValueError as e:
         error_msg = str(e)

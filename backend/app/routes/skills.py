@@ -279,5 +279,6 @@ def install_skills_sh():
         return {"error": "source is required"}, HTTPStatus.BAD_REQUEST
     from ..services.skills_sh_service import SkillsShService
 
-    result, status = SkillsShService.install_skill(data["source"])
+    client_ip = request.remote_addr or "unknown"
+    result, status = SkillsShService.install_skill(data["source"], client_ip=client_ip)
     return result, status

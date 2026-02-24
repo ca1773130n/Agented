@@ -23,9 +23,17 @@ class _WorkflowFileWatchHandler:
 
     DEBOUNCE_SECONDS = 1.0
 
-    def __init__(self, workflow_id: str, patterns: Optional[List[str]] = None):
+    def __init__(
+        self,
+        workflow_id: str,
+        patterns: Optional[List[str]] = None,
+        debounce_seconds: Optional[float] = None,
+    ):
         self.workflow_id = workflow_id
         self.patterns = patterns
+        self._debounce_seconds = (
+            debounce_seconds if debounce_seconds is not None else self.DEBOUNCE_SECONDS
+        )
         self._pending: Dict[str, float] = {}
         self._lock = threading.Lock()
         self._timer: Optional[threading.Timer] = None
@@ -57,7 +65,7 @@ class _WorkflowFileWatchHandler:
         """Cancel existing timer and schedule a new debounced processing run."""
         if self._timer is not None:
             self._timer.cancel()
-        self._timer = threading.Timer(self.DEBOUNCE_SECONDS, self._process_pending)
+        self._timer = threading.Timer(self._debounce_seconds, self._process_pending)
         self._timer.daemon = True
         self._timer.start()
 
@@ -625,6 +633,7 @@ class WorkflowTriggerService:
         watch_path: str,
         patterns: Optional[List[str]] = None,
         recursive: bool = True,
+        debounce_seconds: Optional[float] = None,
     ):
         """Register a file system watch trigger using watchdog.
 
@@ -635,6 +644,8 @@ class WorkflowTriggerService:
             watch_path: Directory path to watch.
             patterns: Optional list of glob patterns for file matching (e.g., ["*.py", "*.json"]).
             recursive: Whether to watch subdirectories.
+            debounce_seconds: Debounce window in seconds; defaults to
+                _WorkflowFileWatchHandler.DEBOUNCE_SECONDS (1.0).
         """
         import os
 
@@ -646,7 +657,9 @@ class WorkflowTriggerService:
         # Stop existing watcher if any
         cls.unregister_file_watch_trigger(workflow_id)
 
-        handler = _WorkflowFileWatchHandler(workflow_id, patterns=patterns)
+        handler = _WorkflowFileWatchHandler(
+            workflow_id, patterns=patterns, debounce_seconds=debounce_seconds
+        )
         observer = Observer()
         observer.schedule(handler, watch_path, recursive=recursive)
         observer.daemon = True

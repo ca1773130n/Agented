@@ -150,8 +150,8 @@ class CredentialResolver:
             if raw:
                 try:
                     cred_data = json.loads(raw)
-                except (json.JSONDecodeError, TypeError):
-                    pass
+                except (json.JSONDecodeError, TypeError) as e:
+                    logger.debug("Failed to parse Gemini credentials from Keychain: %s", e)
 
         # File-based fallback (default location)
         if not cred_data:
@@ -175,14 +175,14 @@ class CredentialResolver:
             try:
                 exp_dt = datetime.fromtimestamp(int(expiry_date) / 1000, tz=timezone.utc)
                 is_expired = exp_dt < datetime.now(timezone.utc)
-            except (ValueError, TypeError, OSError):
-                pass
+            except (ValueError, TypeError, OSError) as e:
+                logger.debug("Failed to parse Gemini expiry_date %r: %s", expiry_date, e)
         elif expiry:
             try:
                 exp_dt = datetime.fromisoformat(str(expiry).replace("Z", "+00:00"))
                 is_expired = exp_dt < datetime.now(timezone.utc)
-            except (ValueError, TypeError):
-                pass
+            except (ValueError, TypeError) as e:
+                logger.debug("Failed to parse Gemini expiry %r: %s", expiry, e)
 
         # Refresh if expired
         if is_expired and refresh_token:
@@ -305,8 +305,8 @@ class ProviderUsageClient:
                         resets_at_str = datetime.fromtimestamp(
                             float(reset_at), tz=timezone.utc
                         ).strftime("%Y-%m-%dT%H:%M:%SZ")
-                    except (ValueError, TypeError, OSError):
-                        pass
+                    except (ValueError, TypeError, OSError) as e:
+                        logger.debug("Failed to parse Codex reset_at %r: %s", reset_at, e)
                 window_type = f"{prefix}_{key}" if prefix else key
                 windows.append(
                     {

@@ -175,7 +175,7 @@ def delete_workflow(workflow_id: str) -> bool:
 # =============================================================================
 
 
-def add_workflow_version(workflow_id: str, graph_json: str) -> Optional[int]:
+def add_workflow_version(workflow_id: str, graph_json: str, is_draft: bool = False) -> Optional[int]:
     """Add a new workflow version with auto-incrementing version number.
 
     Validates graph_json is valid JSON and a valid DAG before inserting.
@@ -183,6 +183,7 @@ def add_workflow_version(workflow_id: str, graph_json: str) -> Optional[int]:
     Args:
         workflow_id: The workflow to add a version for.
         graph_json: JSON string of the workflow graph.
+        is_draft: If True, save as a draft that won't be picked up for execution.
 
     Returns:
         The new version number on success, None on failure.
@@ -209,10 +210,10 @@ def add_workflow_version(workflow_id: str, graph_json: str) -> Optional[int]:
 
             conn.execute(
                 """
-                INSERT INTO workflow_versions (workflow_id, version, graph_json)
-                VALUES (?, ?, ?)
+                INSERT INTO workflow_versions (workflow_id, version, graph_json, is_draft)
+                VALUES (?, ?, ?, ?)
             """,
-                (workflow_id, version, graph_json),
+                (workflow_id, version, graph_json, 1 if is_draft else 0),
             )
             conn.commit()
             return version
@@ -220,7 +221,9 @@ def add_workflow_version(workflow_id: str, graph_json: str) -> Optional[int]:
             return None
 
 
-def add_workflow_version_raw(workflow_id: str, graph_json: str) -> Tuple[Optional[int], str]:
+def add_workflow_version_raw(
+    workflow_id: str, graph_json: str, is_draft: bool = False
+) -> Tuple[Optional[int], str]:
     """Add a new workflow version, returning (version, error) for detailed error reporting.
 
     This variant returns the validation error message so routes can forward it to clients.
@@ -228,6 +231,7 @@ def add_workflow_version_raw(workflow_id: str, graph_json: str) -> Tuple[Optiona
     Args:
         workflow_id: The workflow to add a version for.
         graph_json: JSON string of the workflow graph.
+        is_draft: If True, save as a draft that won't be picked up for execution.
 
     Returns:
         Tuple of (version_number, error_message). version_number is None on failure.
@@ -254,15 +258,26 @@ def add_workflow_version_raw(workflow_id: str, graph_json: str) -> Tuple[Optiona
 
             conn.execute(
                 """
-                INSERT INTO workflow_versions (workflow_id, version, graph_json)
-                VALUES (?, ?, ?)
+                INSERT INTO workflow_versions (workflow_id, version, graph_json, is_draft)
+                VALUES (?, ?, ?, ?)
             """,
-                (workflow_id, version, graph_json),
+                (workflow_id, version, graph_json, 1 if is_draft else 0),
             )
             conn.commit()
             return version, ""
         except sqlite3.IntegrityError as e:
             return None, f"Database error: {e}"
+
+
+def publish_workflow_version(workflow_id: str, version: int) -> bool:
+    """Promote a draft version to published (is_draft=0). Returns True on success."""
+    with get_connection() as conn:
+        cursor = conn.execute(
+            "UPDATE workflow_versions SET is_draft = 0 WHERE workflow_id = ? AND version = ?",
+            (workflow_id, version),
+        )
+        conn.commit()
+        return cursor.rowcount > 0
 
 
 def get_workflow_versions(workflow_id: str) -> List[dict]:
@@ -276,10 +291,12 @@ def get_workflow_versions(workflow_id: str) -> List[dict]:
 
 
 def get_latest_workflow_version(workflow_id: str) -> Optional[dict]:
-    """Get the latest version for a workflow."""
+    """Get the latest published (non-draft) version for a workflow."""
     with get_connection() as conn:
         cursor = conn.execute(
-            "SELECT * FROM workflow_versions WHERE workflow_id = ? ORDER BY version DESC LIMIT 1",
+            """SELECT * FROM workflow_versions
+               WHERE workflow_id = ? AND is_draft = 0
+               ORDER BY version DESC LIMIT 1""",
             (workflow_id,),
         )
         row = cursor.fetchone()
@@ -365,6 +382,15 @@ def get_workflow_executions(workflow_id: str) -> List[dict]:
         cursor = conn.execute(
             "SELECT * FROM workflow_executions WHERE workflow_id = ? ORDER BY started_at DESC",
             (workflow_id,),
+        )
+        return [dict(row) for row in cursor.fetchall()]
+
+
+def get_running_workflow_executions() -> List[dict]:
+    """Get all workflow executions currently marked as 'running' in the DB."""
+    with get_connection() as conn:
+        cursor = conn.execute(
+            "SELECT * FROM workflow_executions WHERE status = 'running'",
         )
         return [dict(row) for row in cursor.fetchall()]
 

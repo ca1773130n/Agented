@@ -175,8 +175,9 @@ class ChatStateService:
                         break  # Poison pill -- session removed
                     yield event
                 except Empty:
-                    # Send heartbeat to keep connection alive
-                    yield ": heartbeat\n\n"
+                    # Send SSE comment heartbeat so proxies keep the connection open.
+                    # The timestamp lets operators verify liveness in debug logs.
+                    yield f": heartbeat {datetime.datetime.now().isoformat()}\n\n"
         finally:
             # Cleanup: remove queue from subscribers
             with cls._lock:

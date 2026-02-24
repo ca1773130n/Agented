@@ -94,8 +94,8 @@ class SessionCollectionService:
                         expanded = Path(os.path.expanduser(row["config_path"]))
                         if expanded not in bases:
                             bases.append(expanded)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("Failed to load config paths from DB: %s", e)
 
         # Merge all stats-cache.json files
         merged: Optional[dict] = None
@@ -511,8 +511,8 @@ class SessionCollectionService:
                 row = cursor.fetchone()
                 if row and row["value"]:
                     return set(json.loads(row["value"]))
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("Failed to load imported session IDs from DB: %s", e, exc_info=True)
         return set()
 
     @classmethod

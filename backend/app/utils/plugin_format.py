@@ -334,6 +334,54 @@ def generate_agented_manifest(
     return manifest
 
 
+import logging as _logging
+
+_fm_logger = _logging.getLogger(__name__)
+
+# Known valid string fields per entity type used in YAML frontmatter
+_FRONTMATTER_STRING_FIELDS = frozenset(
+    {"name", "description", "type", "version", "author", "model", "color", "icon"}
+)
+_FRONTMATTER_LIST_FIELDS = frozenset({"tools", "tags", "triggers", "examples", "allowed_tools"})
+_FRONTMATTER_BOOL_FIELDS = frozenset({"enabled", "pinned", "visible"})
+
+
+def validate_frontmatter(frontmatter: dict) -> list:
+    """Validate a parsed YAML frontmatter dict and return a list of warning strings.
+
+    Checks for:
+    - Wrong types for known fields (e.g. ``name`` must be a string, not a list)
+    - Empty required string fields (``name``, ``description``)
+
+    Returns a (possibly empty) list of human-readable warning messages so callers
+    can log or surface them without raising exceptions.
+    """
+    warnings = []
+    for field in _FRONTMATTER_STRING_FIELDS & set(frontmatter):
+        val = frontmatter[field]
+        if not isinstance(val, str):
+            warnings.append(
+                f"Frontmatter field '{field}' expected str, got {type(val).__name__!r}: {val!r}"
+            )
+    for field in _FRONTMATTER_LIST_FIELDS & set(frontmatter):
+        val = frontmatter[field]
+        if not isinstance(val, list):
+            warnings.append(
+                f"Frontmatter field '{field}' expected list, got {type(val).__name__!r}: {val!r}"
+            )
+    for field in _FRONTMATTER_BOOL_FIELDS & set(frontmatter):
+        val = frontmatter[field]
+        if not isinstance(val, bool):
+            warnings.append(
+                f"Frontmatter field '{field}' expected bool, got {type(val).__name__!r}: {val!r}"
+            )
+    # Warn on empty name/description
+    for required in ("name", "description"):
+        if required in frontmatter and not frontmatter[required]:
+            warnings.append(f"Frontmatter field '{required}' is empty.")
+    return warnings
+
+
 def parse_yaml_frontmatter(content: str) -> tuple:
     """Parse a markdown file with YAML frontmatter delimited by ---.
 
@@ -365,6 +413,16 @@ def parse_yaml_frontmatter(content: str) -> tuple:
         frontmatter = yaml.safe_load(frontmatter_text) or {}
     except yaml.YAMLError:
         return {}, content
+
+    if not isinstance(frontmatter, dict):
+        _fm_logger.warning(
+            "parse_yaml_frontmatter: expected mapping, got %s — treating as empty",
+            type(frontmatter).__name__,
+        )
+        return {}, body
+
+    for warning in validate_frontmatter(frontmatter):
+        _fm_logger.warning("parse_yaml_frontmatter: %s", warning)
 
     return frontmatter, body
 

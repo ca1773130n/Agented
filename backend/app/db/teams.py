@@ -2,6 +2,7 @@
 
 import logging
 import sqlite3
+import threading
 from typing import List, Optional
 
 from .connection import get_connection
@@ -12,6 +13,23 @@ logger = logging.getLogger(__name__)
 # --- Constants ---
 
 VALID_ENTITY_TYPES = ("skill", "command", "hook", "rule")
+
+# Cache for team_members schema to avoid repeated PRAGMA queries on every team fetch.
+_team_members_columns: Optional[set] = None
+_team_members_schema_lock = threading.Lock()
+
+
+def _get_team_members_columns(conn) -> set:
+    """Return the set of column names for team_members, cached after first call."""
+    global _team_members_columns
+    if _team_members_columns is not None:
+        return _team_members_columns
+    with _team_members_schema_lock:
+        if _team_members_columns is None:
+            _team_members_columns = {
+                c[1] for c in conn.execute("PRAGMA table_info(team_members)").fetchall()
+            }
+    return _team_members_columns
 
 
 # =============================================================================
@@ -195,8 +213,7 @@ def get_team_detail(team_id: str) -> Optional[dict]:
         team = dict(row)
         # Get members with agent and super_agent info
         # Use a fallback query if super_agent_id column hasn't been migrated yet
-        col_names = {c[1] for c in conn.execute("PRAGMA table_info(team_members)").fetchall()}
-        has_sa = "super_agent_id" in col_names
+        has_sa = "super_agent_id" in _get_team_members_columns(conn)
         if has_sa:
             cursor = conn.execute(
                 """
@@ -289,13 +306,12 @@ def add_team_member(
                 else:
                     name = "Unknown SuperAgent"
 
-            col_names = {c[1] for c in conn.execute("PRAGMA table_info(team_members)").fetchall()}
             columns = ["team_id", "name", "email", "role", "layer", "description", "agent_id"]
             values_list = [team_id, name, email, role, layer, description, agent_id]
-            if "super_agent_id" in col_names:
+            if "super_agent_id" in _get_team_members_columns(conn):
                 columns.append("super_agent_id")
                 values_list.append(super_agent_id)
-            if "tier" in col_names and tier is not None:
+            if "tier" in _get_team_members_columns(conn) and tier is not None:
                 columns.append("tier")
                 values_list.append(tier)
             placeholders = ", ".join("?" for _ in columns)
@@ -364,8 +380,7 @@ def remove_team_member(member_id: int) -> bool:
 def get_team_members(team_id: str) -> List[dict]:
     """Get all members of a team with agent and super_agent info."""
     with get_connection() as conn:
-        col_names = {c[1] for c in conn.execute("PRAGMA table_info(team_members)").fetchall()}
-        has_sa = "super_agent_id" in col_names
+        has_sa = "super_agent_id" in _get_team_members_columns(conn)
         if has_sa:
             cursor = conn.execute(
                 """

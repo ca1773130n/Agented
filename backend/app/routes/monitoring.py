@@ -33,11 +33,21 @@ def post_config():
             "error": "polling_minutes must be one of [1, 5, 15, 30, 60]"
         }, HTTPStatus.BAD_REQUEST
 
+    # Validate accounts structure — must be a dict of str → dict
+    accounts = data.get("accounts", {})
+    if not isinstance(accounts, dict):
+        return {"error": "accounts must be a JSON object"}, HTTPStatus.BAD_REQUEST
+    for k, v in accounts.items():
+        if not isinstance(k, str):
+            return {"error": f"accounts keys must be strings, got {type(k).__name__}"}, HTTPStatus.BAD_REQUEST
+        if not isinstance(v, dict):
+            return {"error": f"accounts[{k!r}] must be a JSON object, got {type(v).__name__}"}, HTTPStatus.BAD_REQUEST
+
     # Build config dict
     config = {
         "enabled": bool(data.get("enabled", False)),
         "polling_minutes": polling_minutes,
-        "accounts": data.get("accounts", {}),
+        "accounts": accounts,
     }
 
     # Reconfigure the monitoring service (saves to DB + re-registers job)

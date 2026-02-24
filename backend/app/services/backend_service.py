@@ -1,5 +1,6 @@
 """Backend management service."""
 
+import logging
 from dataclasses import asdict
 from http import HTTPStatus
 from typing import Tuple
@@ -19,7 +20,10 @@ from ..db.backends import (
     update_backend_models,
     verify_account_exists,
 )
+from ..services.audit_log_service import AuditLogService
 from ..services.backend_detection_service import detect_backend, get_capabilities
+
+logger = logging.getLogger(__name__)
 
 
 def _resolve_backend_id(backend_id: str) -> str:
@@ -113,6 +117,14 @@ class BackendService:
         # Auto-enable monitoring if global monitoring is on
         auto_enable_monitoring_for_account(account_id)
 
+        AuditLogService.log(
+            action="backend_account.create",
+            entity_type="backend_account",
+            entity_id=str(account_id),
+            outcome="created",
+            details={"backend_id": backend_id, "email": body.email, "plan": body.plan},
+        )
+
         # Ensure global CLIProxyAPI is running for Claude Code accounts
         backend_type = get_backend_type(backend_id)
         if backend_type == "claude":
@@ -121,8 +133,8 @@ class BackendService:
 
                 if CLIProxyManager.install_if_needed():
                     CLIProxyManager.start()
-            except Exception:
-                pass  # Non-fatal — proxy is optional
+            except Exception as e:
+                logger.warning("CLIProxy start failed: %s", e)  # Non-fatal — proxy is optional
 
         return {"message": "Account created", "account_id": account_id}, HTTPStatus.CREATED
 
@@ -159,6 +171,29 @@ class BackendService:
         if not has_updates:
             return {"message": "No updates provided"}, HTTPStatus.OK
 
+        AuditLogService.log(
+            action="backend_account.update",
+            entity_type="backend_account",
+            entity_id=str(account_id),
+            outcome="updated",
+            details={
+                "backend_id": backend_id,
+                "changed_fields": [
+                    f
+                    for f in [
+                        "account_name",
+                        "email",
+                        "config_path",
+                        "api_key_env",
+                        "is_default",
+                        "plan",
+                        "usage_data",
+                    ]
+                    if getattr(body, f) is not None
+                ],
+            },
+        )
+
         return {"message": "Account updated"}, HTTPStatus.OK
 
     @staticmethod
@@ -167,6 +202,14 @@ class BackendService:
         deleted = delete_backend_account(account_id, backend_id)
         if not deleted:
             return {"error": "Account not found"}, HTTPStatus.NOT_FOUND
+
+        AuditLogService.log(
+            action="backend_account.delete",
+            entity_type="backend_account",
+            entity_id=str(account_id),
+            outcome="deleted",
+            details={"backend_id": backend_id},
+        )
 
         return {"message": "Account deleted"}, HTTPStatus.OK
 

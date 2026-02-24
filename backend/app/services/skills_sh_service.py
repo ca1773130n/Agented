@@ -22,8 +22,13 @@ _SKILLS_SH_API_URL = "https://skills.sh/api/search"
 
 
 class SkillsShService:
-    _semaphore = threading.Semaphore(2)  # Max 2 concurrent CLI calls
+    _semaphore = threading.Semaphore(2)  # Max 2 concurrent CLI calls globally
     _npx_available: bool | None = None  # Cached npx availability check
+
+    # Per-IP rate limiting for install: track last install time per source IP
+    _install_timestamps: dict = {}  # {ip: last_install_epoch}
+    _install_lock = threading.Lock()
+    INSTALL_MIN_INTERVAL = 30  # Seconds between install calls per IP
 
     @classmethod
     def search(cls, query: str = "") -> Tuple[dict, int]:
@@ -48,20 +53,40 @@ class SkillsShService:
             installed_names = {s["name"].lower() for s in installed_skills}
             for result in results:
                 result["installed"] = result["name"].lower() in installed_names
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("Failed to discover installed skills for cross-reference: %s", e)
 
         _skills_sh_cache[cache_key] = {"data": results, "fetched_at": time.time()}
         return {"results": results, "source": "skills.sh", "npx_available": True}, HTTPStatus.OK
 
     @classmethod
-    def install_skill(cls, source: str) -> Tuple[dict, int]:
+    def install_skill(cls, source: str, client_ip: str = "unknown") -> Tuple[dict, int]:
         """Install a skill via npx skills add."""
         if not source or not source.strip():
             return {"error": "source is required"}, HTTPStatus.BAD_REQUEST
 
         if not cls._is_npx_available():
             return {"error": "npx is not available"}, HTTPStatus.SERVICE_UNAVAILABLE
+
+        # Per-IP rate limiting: prevent one caller from monopolizing the semaphore
+        with cls._install_lock:
+            last = cls._install_timestamps.get(client_ip, 0)
+            now = time.time()
+            elapsed = now - last
+            if elapsed < cls.INSTALL_MIN_INTERVAL:
+                retry_after = int(cls.INSTALL_MIN_INTERVAL - elapsed) + 1
+                return {
+                    "error": "Too many install requests. Please wait before trying again.",
+                    "retry_after": retry_after,
+                }, HTTPStatus.TOO_MANY_REQUESTS
+            cls._install_timestamps[client_ip] = now
+
+        # Acquire global concurrency slot
+        acquired = cls._semaphore.acquire(blocking=False)
+        if not acquired:
+            return {
+                "error": "Server busy. Too many concurrent installations. Please try again shortly.",
+            }, HTTPStatus.SERVICE_UNAVAILABLE
 
         install_cmd = f"npx -y skills add {source} --global --yes"
         cmd = ["npx", "-y", "skills", "add", source, "--global", "--yes"]
@@ -82,6 +107,7 @@ class SkillsShService:
 
             if result.returncode == 0:
                 # Register the skill in user_skills table
+                registration_warning = None
                 try:
                     from ..database import add_user_skill, get_user_skill_by_name
 
@@ -103,14 +129,22 @@ class SkillsShService:
                         )
                 except Exception as e:
                     logger.warning("Failed to register skill in user_skills: %s", e)
+                    registration_warning = (
+                        "Skill files were installed successfully, but registration in the "
+                        "database failed — the skill may not appear in listings until the "
+                        "server is restarted."
+                    )
 
                 # Clear the search cache
                 _skills_sh_cache.clear()
 
-                return {
+                response: dict = {
                     "message": f"Skill installed from {source}",
                     "output": stdout_cleaned,
-                }, HTTPStatus.OK
+                }
+                if registration_warning:
+                    response["warning"] = registration_warning
+                return response, HTTPStatus.OK
             else:
                 return {"error": f"Install failed: {stderr_cleaned}"}, HTTPStatus.BAD_REQUEST
 
@@ -118,6 +152,8 @@ class SkillsShService:
             return {"error": "Installation timed out"}, HTTPStatus.GATEWAY_TIMEOUT
         except Exception as e:
             return {"error": f"Install error: {str(e)}"}, HTTPStatus.INTERNAL_SERVER_ERROR
+        finally:
+            cls._semaphore.release()
 
     @classmethod
     def _search_via_api(cls, query: str) -> list:

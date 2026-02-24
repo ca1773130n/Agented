@@ -300,6 +300,11 @@ from .monitoring import (  # noqa: F401
     insert_rate_limit_snapshot,
     save_monitoring_config,
     update_setup_execution,
+    # Pending rate-limit retries
+    delete_pending_retry,
+    get_all_pending_retries,
+    get_pending_retries_due,
+    upsert_pending_retry,
 )
 
 # Plugins (includes components, marketplaces, sync state, exports)
@@ -532,6 +537,8 @@ from .triggers import (  # noqa: F401
     # Trigger CRUD
     add_trigger,
     # Execution log operations
+    count_all_execution_logs,
+    count_execution_logs_for_trigger,
     create_execution_log,
     delete_old_execution_logs,
     delete_pr_review,
@@ -553,9 +560,12 @@ from .triggers import (  # noqa: F401
     get_running_execution_for_trigger,
     get_symlink_paths_for_trigger,
     get_trigger,
+    get_trigger_by_name,
     get_triggers_by_trigger_source,
     get_webhook_triggers,
+    get_prompt_template_history,
     list_paths_for_trigger,
+    log_prompt_template_change,
     mark_stale_executions_interrupted,
     remove_github_repo,
     remove_project_from_trigger,
@@ -582,8 +592,10 @@ from .workflows import (  # noqa: F401
     get_workflow,
     get_workflow_execution,
     get_workflow_executions,
+    get_running_workflow_executions,
     get_workflow_node_executions,
     get_workflow_versions,
+    publish_workflow_version,
     update_workflow,
     update_workflow_execution,
     update_workflow_node_execution,

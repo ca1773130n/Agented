@@ -354,7 +354,28 @@ class RotationService:
                 f"(account {account_id} -> {target_account_id})"
             )
 
-            # Step 11: Return continuation execution ID
+            # Step 11: Write audit log entry so rotation is visible in the UI
+            try:
+                from .audit_log_service import AuditLogService
+
+                AuditLogService.log(
+                    action="account.rotation",
+                    entity_type="execution",
+                    entity_id=execution_id,
+                    outcome="completed",
+                    details={
+                        "from_account_id": account_id,
+                        "to_account_id": target_account_id,
+                        "continuation_execution_id": continuation_execution_id,
+                        "utilization_pct": utilization_pct,
+                        "reason": decision["reason"],
+                        "rotation_event_id": rotation_event_id,
+                    },
+                )
+            except Exception as audit_err:
+                logger.warning(f"Failed to write rotation audit log: {audit_err}")
+
+            # Step 12: Return continuation execution ID
             return continuation_execution_id
 
         except Exception as e:
@@ -368,6 +389,18 @@ class RotationService:
                     )
                 except Exception as update_err:
                     logger.error(f"Failed to update rotation event status: {update_err}")
+            try:
+                from .audit_log_service import AuditLogService
+
+                AuditLogService.log(
+                    action="account.rotation",
+                    entity_type="execution",
+                    entity_id=execution_id,
+                    outcome="failed",
+                    details={"error": str(e), "rotation_event_id": rotation_event_id},
+                )
+            except Exception:
+                pass
             return None
 
     @classmethod

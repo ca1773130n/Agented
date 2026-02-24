@@ -361,7 +361,12 @@ def resume_session(path: SessionPath):
 @grd_bp.post("/<project_id>/sessions/<session_id>/input")
 def send_session_input(path: SessionPath, body: SessionInputBody):
     """Send input text to a session's PTY stdin."""
-    success = ProjectSessionManager.send_input(path.session_id, body.text)
+    # Strip ASCII control characters (0-8, 11-31, 127) to prevent unintended PTY signals.
+    # Tab (9), newline (10), and carriage return (13) are preserved as harmless whitespace.
+    sanitized = "".join(
+        ch for ch in body.text if ch == "\t" or ch == "\n" or ch == "\r" or (32 <= ord(ch) < 127)
+    )
+    success = ProjectSessionManager.send_input(path.session_id, sanitized)
     if not success:
         return {"error": "Session not found or not active"}, HTTPStatus.NOT_FOUND
     return {"message": "Input sent", "session_id": path.session_id}, HTTPStatus.OK

@@ -330,7 +330,7 @@ class BudgetService:
         if hard_limit is not None and current_spend >= hard_limit:
             return {
                 "allowed": False,
-                "reason": "hard_limit_reached",
+                "reason": f"hard_limit_reached: spent ${current_spend:.2f} of ${hard_limit:.2f} {period} limit",
                 "remaining_usd": 0,
                 "current_spend": current_spend,
                 "limit": limits,

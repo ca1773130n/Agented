@@ -109,6 +109,16 @@ class CLIProxyManager:
                 time.sleep(0.5)
 
             logger.warning("CLIProxyAPI did not become ready within 10s")
+            # Clean up the orphaned process to avoid leaving it running unmanaged
+            with cls._lock:
+                proc = cls._process
+                cls._process = None
+            if proc is not None:
+                try:
+                    proc.terminate()
+                    proc.wait(timeout=3)
+                except Exception as e:
+                    logger.debug("Failed to terminate unready CLIProxyAPI process: %s", e)
             return False
 
         except FileNotFoundError:
@@ -134,12 +144,12 @@ class CLIProxyManager:
             proc.wait(timeout=5)
             logger.info("Stopped CLIProxyAPI (pid=%d)", proc.pid)
         except ProcessLookupError:
-            pass
+            logger.debug("CLIProxyAPI process already exited (pid=%d)", proc.pid)
         except subprocess.TimeoutExpired:
             try:
                 os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
             except ProcessLookupError:
-                pass
+                logger.debug("CLIProxyAPI process already exited during SIGKILL (pid=%d)", proc.pid)
         except Exception as exc:
             logger.error("Error stopping CLIProxyAPI: %s", exc)
 
@@ -356,8 +366,8 @@ class CLIProxyManager:
                             result["refreshed"].append(email)
                             expired_emails.discard(email)
                             logger.info("Successfully refreshed token for %s", email)
-                    except (ValueError, TypeError):
-                        pass
+                    except (ValueError, TypeError) as e:
+                        logger.debug("Failed to parse refreshed expiry for %s: %s", email, e)
 
             # Also check for newly created credential files
             for email_key, new_expiry in post_snapshots.items():
