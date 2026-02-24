@@ -2,6 +2,9 @@
 
 Verifies that ALTER TABLE migrations work correctly on databases created
 before specific features were added (e.g., super_agent_id on team_members).
+
+Also verifies that init_db() on a fresh database creates all expected tables
+and is idempotent (safe to call multiple times).
 """
 
 import sqlite3
@@ -271,3 +274,115 @@ class TestTeamMembersMigration:
             assert rows[0]["super_agent_id"] is None
             assert rows[1]["name"] == "Carol"
             assert rows[1]["super_agent_id"] is None
+
+
+class TestFreshDbMigrations:
+    """Verify that init_db() on a fresh database is correct and idempotent."""
+
+    # Core tables that must exist after init_db() on a fresh database.
+    CORE_TABLES = [
+        "triggers",
+        "execution_logs",
+        "agents",
+        "teams",
+        "team_members",
+        "products",
+        "projects",
+        "plugins",
+        "workflows",
+        "super_agents",
+        "mcp_servers",
+        "schema_version",
+        "settings",
+        "ai_backends",
+    ]
+
+    def _get_tables(self, conn) -> set:
+        cursor = conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
+        return {row[0] for row in cursor.fetchall()}
+
+    def test_fresh_db_creates_all_core_tables(self, isolated_db):
+        """init_db() on a fresh DB creates all expected core tables."""
+        from app.db.connection import get_connection
+
+        with get_connection() as conn:
+            tables = self._get_tables(conn)
+            for table in self.CORE_TABLES:
+                assert table in tables, f"Expected table '{table}' missing after init_db()"
+
+    def test_fresh_db_schema_version_populated(self, isolated_db):
+        """init_db() records all migrations in schema_version."""
+        from app.db.connection import get_connection
+        from app.db.migrations import VERSIONED_MIGRATIONS
+
+        expected_max = max(v for v, _, _ in VERSIONED_MIGRATIONS)
+
+        with get_connection() as conn:
+            row = conn.execute("SELECT MAX(version) FROM schema_version").fetchone()
+            assert row[0] == expected_max, (
+                f"schema_version max={row[0]}, expected {expected_max}"
+            )
+
+            count = conn.execute("SELECT COUNT(*) FROM schema_version").fetchone()[0]
+            assert count == len(VERSIONED_MIGRATIONS), (
+                f"schema_version has {count} rows, expected {len(VERSIONED_MIGRATIONS)}"
+            )
+
+    def test_init_db_idempotent(self, tmp_path, monkeypatch):
+        """Calling init_db() twice on the same DB does not raise or corrupt data."""
+        db_file = str(tmp_path / "idempotent_full.db")
+        monkeypatch.setattr("app.config.DB_PATH", db_file)
+
+        from app.database import init_db
+
+        # First call — fresh database
+        init_db()
+
+        from app.db.connection import get_connection
+
+        with get_connection() as conn:
+            tables_after_first = self._get_tables(conn)
+            version_after_first = conn.execute(
+                "SELECT MAX(version) FROM schema_version"
+            ).fetchone()[0]
+
+        # Second call — existing database
+        init_db()
+
+        with get_connection() as conn:
+            tables_after_second = self._get_tables(conn)
+            version_after_second = conn.execute(
+                "SELECT MAX(version) FROM schema_version"
+            ).fetchone()[0]
+
+        assert tables_after_first == tables_after_second
+        assert version_after_first == version_after_second
+
+    def test_init_db_preserves_existing_data(self, tmp_path, monkeypatch):
+        """Running init_db() on an existing DB does not delete user data."""
+        db_file = str(tmp_path / "preserve_data.db")
+        monkeypatch.setattr("app.config.DB_PATH", db_file)
+
+        from app.database import init_db, seed_predefined_triggers
+        from app.db.connection import get_connection
+
+        init_db()
+        seed_predefined_triggers()
+
+        # Insert a team and an agent
+        with get_connection() as conn:
+            conn.execute("INSERT INTO teams (id, name) VALUES ('team-test1', 'Preserved Team')")
+            conn.execute(
+                "INSERT INTO agents (id, name, backend_type) VALUES ('agent-test1', 'Preserved Agent', 'claude')"
+            )
+            conn.commit()
+
+        # Run init_db() again (simulates restart)
+        init_db()
+
+        with get_connection() as conn:
+            team = conn.execute("SELECT name FROM teams WHERE id='team-test1'").fetchone()
+            agent = conn.execute("SELECT name FROM agents WHERE id='agent-test1'").fetchone()
+
+        assert team is not None and team[0] == "Preserved Team"
+        assert agent is not None and agent[0] == "Preserved Agent"

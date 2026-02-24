@@ -181,11 +181,11 @@ def test_run_trigger_no_usage_data_no_crash(isolated_db, monkeypatch):
 
 
 def test_budget_precheck_blocks_hard_limit(isolated_db, monkeypatch):
-    """When hard budget limit is reached, execute_with_fallback returns None
+    """When hard budget limit is reached, execute_with_fallback returns BUDGET_BLOCKED
     without calling run_trigger."""
     from app.database import create_token_usage_record, set_budget_limit, set_fallback_chain
     from app.services.execution_service import ExecutionService
-    from app.services.orchestration_service import OrchestrationService
+    from app.services.orchestration_service import ExecutionStatus, OrchestrationService
 
     trigger = _get_test_trigger()
 
@@ -234,7 +234,10 @@ def test_budget_precheck_blocks_hard_limit(isolated_db, monkeypatch):
         trigger, "test message", trigger_type="manual"
     )
 
-    assert result is None, "execute_with_fallback should return None when hard limit reached"
+    assert (
+        result.status == ExecutionStatus.BUDGET_BLOCKED
+    ), "execute_with_fallback should return BUDGET_BLOCKED when hard limit reached"
+    assert result.execution_id is None
     assert len(run_trigger_called) == 0, "run_trigger should not have been called"
 
 
@@ -329,7 +332,9 @@ def test_budget_precheck_allows_soft_limit(isolated_db, monkeypatch):
         trigger, "test message", trigger_type="manual"
     )
 
-    assert result is not None, "execute_with_fallback should proceed when only soft limit exceeded"
+    assert (
+        result.execution_id is not None
+    ), "execute_with_fallback should proceed when only soft limit exceeded"
     assert len(run_trigger_called) == 1, "run_trigger should have been called exactly once"
 
 

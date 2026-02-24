@@ -811,7 +811,7 @@ class TestOrchestrationSchedulerIntegration:
         ):
             result = OrchestrationService.execute_with_fallback(bot, "test msg")
 
-        assert result == "exec-001"
+        assert result.execution_id == "exec-001"
         assert used_accounts == [2], f"Expected account 2, got {used_accounts}"
 
     def test_orchestration_proceeds_when_eligible(self, isolated_db):
@@ -851,7 +851,7 @@ class TestOrchestrationSchedulerIntegration:
         ):
             result = OrchestrationService.execute_with_fallback(bot, "test msg")
 
-        assert result == "exec-002"
+        assert result.execution_id == "exec-002"
         assert run_bot_called == [1]
 
     def test_orchestration_marks_running_before_execution(self, isolated_db):

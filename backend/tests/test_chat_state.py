@@ -190,7 +190,9 @@ class TestHeartbeatOnTimeout:
         gen = ChatStateService.subscribe("sess-abc", heartbeat_timeout=1)
         # The first event should be a heartbeat (no deltas pushed)
         event = next(gen)
-        assert event == ": heartbeat\n\n"
+        # Format: ": heartbeat <ISO-timestamp>\n\n"
+        assert event.startswith(": heartbeat ")
+        assert event.endswith("\n\n")
 
         # Cleanup
         ChatStateService.remove_session("sess-abc")

@@ -2,9 +2,21 @@
 
 import json
 import subprocess
+import time
 from unittest.mock import MagicMock, patch
 
 import pytest
+
+
+def _poll_job(client, job_id, max_retries=50, delay=0.02):
+    """Poll GET /admin/teams/generate/<job_id> until the job is no longer pending."""
+    for _ in range(max_retries):
+        resp = client.get(f"/admin/teams/generate/{job_id}")
+        data = resp.get_json()
+        if data.get("status") != "pending":
+            return resp
+        time.sleep(delay)
+    return resp  # return last response even if still pending
 
 
 class TestGenerateEndpoint:
@@ -33,14 +45,19 @@ class TestGenerateEndpoint:
         mock_result.stdout = json.dumps(mock_config)
         mock_result.stderr = ""
 
+        # Keep patch active while background thread runs
         with patch("app.services.team_generation_service.subprocess.run", return_value=mock_result):
             response = client.post(
                 "/admin/teams/generate",
                 json={"description": "Create a security team that audits code for vulnerabilities"},
             )
+            assert response.status_code == 202
+            post_data = response.get_json()
+            assert "job_id" in post_data
+            result_resp = _poll_job(client, post_data["job_id"])
 
-        assert response.status_code == 200
-        data = response.get_json()
+        assert result_resp.status_code == 200
+        data = result_resp.get_json()
         assert "config" in data
         assert data["config"]["name"] == "Security Team"
         assert data["config"]["topology"] == "sequential"
@@ -73,9 +90,13 @@ class TestGenerateEndpoint:
                 "/admin/teams/generate",
                 json={"description": "A test team with agents that do not exist"},
             )
+            assert response.status_code == 202
+            post_data = response.get_json()
+            assert "job_id" in post_data
+            result_resp = _poll_job(client, post_data["job_id"])
 
-        assert response.status_code == 200
-        data = response.get_json()
+        assert result_resp.status_code == 200
+        data = result_resp.get_json()
         assert "warnings" in data
         assert any("agent-nonexistent" in w for w in data["warnings"])
         # The agent should be marked as invalid
@@ -100,7 +121,7 @@ class TestGenerateEndpoint:
         assert response.status_code == 400
 
     def test_generate_handles_subprocess_timeout(self, client, isolated_db):
-        """Mock subprocess.run to raise TimeoutExpired, verify 503 response."""
+        """Mock subprocess.run to raise TimeoutExpired, verify 503 response on poll."""
         with patch(
             "app.services.team_generation_service.subprocess.run",
             side_effect=subprocess.TimeoutExpired(cmd="claude", timeout=120),
@@ -109,13 +130,17 @@ class TestGenerateEndpoint:
                 "/admin/teams/generate",
                 json={"description": "Create a team that takes forever to generate"},
             )
+            assert response.status_code == 202
+            post_data = response.get_json()
+            assert "job_id" in post_data
+            result_resp = _poll_job(client, post_data["job_id"])
 
-        assert response.status_code == 503
-        data = response.get_json()
+        assert result_resp.status_code == 503
+        data = result_resp.get_json()
         assert "timed out" in data["error"].lower()
 
     def test_generate_handles_cli_not_found(self, client, isolated_db):
-        """Mock subprocess.run to raise FileNotFoundError, verify 503 response."""
+        """Mock subprocess.run to raise FileNotFoundError, verify 503 response on poll."""
         with patch(
             "app.services.team_generation_service.subprocess.run",
             side_effect=FileNotFoundError("claude not found"),
@@ -124,9 +149,13 @@ class TestGenerateEndpoint:
                 "/admin/teams/generate",
                 json={"description": "Create a team but claude cli is missing"},
             )
+            assert response.status_code == 202
+            post_data = response.get_json()
+            assert "job_id" in post_data
+            result_resp = _poll_job(client, post_data["job_id"])
 
-        assert response.status_code == 503
-        data = response.get_json()
+        assert result_resp.status_code == 503
+        data = result_resp.get_json()
         assert "not found" in data["error"].lower()
 
     def test_prompt_includes_available_entities(self, client, isolated_db):
@@ -162,11 +191,22 @@ class TestGenerateEndpoint:
                 "/admin/teams/generate",
                 json={"description": "Create a code review team with available agents"},
             )
+            assert response.status_code == 202
+            post_data = response.get_json()
+            assert "job_id" in post_data
+            result_resp = _poll_job(client, post_data["job_id"])
 
-        assert response.status_code == 200
+        assert result_resp.status_code == 200
         prompt = captured_prompt.get("value", "")
         assert "Test Agent Alpha" in prompt
         assert "code-review" in prompt
+
+    def test_poll_unknown_job_returns_404(self, client, isolated_db):
+        """GET /generate/nonexistent-job should return 404."""
+        response = client.get("/admin/teams/generate/gen-notexist")
+        assert response.status_code == 404
+        data = response.get_json()
+        assert "error" in data
 
 
 class TestTeamGenerationService:

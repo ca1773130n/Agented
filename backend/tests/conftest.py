@@ -56,3 +56,21 @@ def app():
 def client(app):
     """Flask test client."""
     return app.test_client()
+
+
+@pytest.fixture(autouse=True)
+def reset_github_webhook_rate_limit():
+    """Clear per-repo rate limit state between tests to prevent cross-test interference."""
+    try:
+        from app.routes.github_webhook import _repo_last_event
+
+        _repo_last_event.clear()
+    except ImportError:
+        pass
+    yield
+    try:
+        from app.routes.github_webhook import _repo_last_event
+
+        _repo_last_event.clear()
+    except ImportError:
+        pass
