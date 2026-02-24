@@ -1,9 +1,14 @@
 """Trigger execution service with database-only status tracking and real-time logging."""
 
 import datetime
+import hashlib
+import hmac
 import json
 import logging
 import os
+import random
+import re
+import shutil
 import signal
 import subprocess
 import threading
@@ -13,12 +18,16 @@ from app.config import PROJECT_ROOT
 
 from ..database import (
     PREDEFINED_TRIGGER_ID,
+    delete_pending_retry,
+    get_all_pending_retries,
     get_latest_execution_for_trigger,
     get_paths_for_trigger_detailed,
     get_triggers_by_trigger_source,
     get_webhook_triggers,
+    upsert_pending_retry,
 )
 from ..utils.json_path import get_nested_value
+from .audit_log_service import AuditLogService
 from .budget_service import BudgetService
 from .execution_log_service import ExecutionLogService
 from .github_service import GitHubService
@@ -27,7 +36,59 @@ from .rate_limit_service import RateLimitService
 
 logger = logging.getLogger(__name__)
 
+
+def _trace_logger(execution_id: str) -> logging.LoggerAdapter:
+    """Return a LoggerAdapter that tags every log record with the execution trace ID.
+
+    Usage::
+
+        tlog = _trace_logger(execution_id)
+        tlog.info("subprocess started: %s", cmd)
+
+    To surface the trace_id in log output, include ``%(trace_id)s`` in the
+    root logging format, e.g.::
+
+        logging.basicConfig(format="[%(trace_id)s] %(levelname)s %(message)s")
+
+    The adapter always provides ``trace_id`` via ``extra``, so it is safe even
+    when the root formatter does not reference it.
+    """
+    return logging.LoggerAdapter(logger, {"trace_id": execution_id})
+
+
 TRIGGER_LOG_DIR = os.path.join(PROJECT_ROOT, ".claude/skills/weekly-security-audit/reports")
+
+# Validate write access to TRIGGER_LOG_DIR at import time so misconfiguration is
+# surfaced immediately rather than silently swallowed at first trigger save.
+try:
+    os.makedirs(TRIGGER_LOG_DIR, exist_ok=True)
+    if not os.access(TRIGGER_LOG_DIR, os.W_OK):
+        logger.warning(
+            "TRIGGER_LOG_DIR is not writable: %s — trigger reports will fail to save",
+            TRIGGER_LOG_DIR,
+        )
+except Exception as _dir_err:
+    logger.warning(
+        "Could not create TRIGGER_LOG_DIR %s: %s — trigger reports will fail to save",
+        TRIGGER_LOG_DIR,
+        _dir_err,
+    )
+
+
+class ExecutionState:
+    """String constants for execution status values.
+
+    Using a class of constants (rather than scattered string literals) means a
+    typo in a status name is caught at import time instead of silently producing
+    an invalid state in the database.
+    """
+
+    RUNNING = "running"
+    SUCCESS = "success"
+    FAILED = "failed"
+    TIMEOUT = "timeout"
+    CANCELLED = "cancelled"
+    IDLE = "idle"
 
 
 class ExecutionService:
@@ -35,7 +96,27 @@ class ExecutionService:
 
     # Thread-safe dict tracking rate limit detections: {execution_id: cooldown_seconds}
     _rate_limit_detected: Dict[str, int] = {}
+    # _rate_limit_lock guards _rate_limit_detected, _pending_retries, _retry_timers, and _retry_counts.
+    # Acquire before any read or write to those dicts.
     _rate_limit_lock = threading.Lock()
+
+    # Webhook deduplication: {(trigger_id, payload_hash): last_dispatch_epoch}
+    # Prevents duplicate executions from rapid successive identical webhooks.
+    _webhook_dedup: Dict[str, float] = {}
+    _webhook_dedup_lock = threading.Lock()
+    # Seconds within which identical (trigger, payload) pairs are suppressed
+    WEBHOOK_DEDUP_WINDOW = 10
+
+    # Pending rate-limit retries: {trigger_id: {"retry_at": str, "cooldown_seconds": int, ...}}
+    _pending_retries: Dict[str, dict] = {}
+    # Active retry timers: {trigger_id: threading.Timer}
+    _retry_timers: Dict[str, threading.Timer] = {}
+    # Per-trigger consecutive retry attempt counter: {trigger_id: int}
+    _retry_counts: Dict[str, int] = {}
+    # Maximum consecutive rate-limit retries before giving up
+    MAX_RETRY_ATTEMPTS = 5
+    # Cap on backoff delay (seconds) to avoid extremely long waits
+    MAX_RETRY_DELAY = 3600
 
     @classmethod
     def was_rate_limited(cls, execution_id: str) -> Optional[int]:
@@ -49,17 +130,262 @@ class ExecutionService:
             return cls._rate_limit_detected.pop(execution_id, None)
 
     @classmethod
+    def schedule_retry(
+        cls,
+        trigger: dict,
+        message_text: str,
+        event: Optional[dict],
+        trigger_type: str,
+        cooldown_seconds: int,
+    ) -> None:
+        """Schedule a retry execution after rate-limit cooldown expires.
+
+        Replaces any existing pending retry for the same trigger.
+        Called by OrchestrationService when all fallback accounts are exhausted
+        and at least one was rate-limited.
+        """
+        trigger_id = trigger["id"]
+
+        # Cancel existing timer for this trigger
+        with cls._rate_limit_lock:
+            existing = cls._retry_timers.pop(trigger_id, None)
+            attempt_count = cls._retry_counts.get(trigger_id, 0) + 1
+            cls._retry_counts[trigger_id] = attempt_count
+        if existing:
+            existing.cancel()
+
+        if attempt_count > cls.MAX_RETRY_ATTEMPTS:
+            logger.error(
+                "Rate-limit retry for trigger %s has exceeded max attempts (%d/%d) — "
+                "giving up to prevent infinite retry loop",
+                trigger_id,
+                attempt_count,
+                cls.MAX_RETRY_ATTEMPTS,
+            )
+            AuditLogService.log(
+                action="retry.exhausted",
+                entity_type="trigger",
+                entity_id=trigger_id,
+                outcome="terminal_failure",
+                details={
+                    "attempt_count": attempt_count,
+                    "max_attempts": cls.MAX_RETRY_ATTEMPTS,
+                    "trigger_type": trigger_type,
+                },
+            )
+            # Create a failed execution record so the terminal state is observable in the UI
+            terminal_exec_id = ExecutionLogService.start_execution(
+                trigger_id=trigger_id,
+                trigger_type=trigger_type,
+                prompt="[rate-limit retry exhausted]",
+                backend_type=trigger.get("backend_type", "claude"),
+            )
+            if terminal_exec_id:
+                ExecutionLogService.append_log(
+                    terminal_exec_id,
+                    "stderr",
+                    f"[TERMINAL] Rate-limit retry exhausted after {attempt_count} attempts "
+                    f"(max={cls.MAX_RETRY_ATTEMPTS}). No further retries will be scheduled.",
+                )
+                ExecutionLogService.finish_execution(
+                    execution_id=terminal_exec_id,
+                    status=ExecutionState.FAILED,
+                    exit_code=-1,
+                    error_message=(
+                        f"Rate-limit retry exhausted: {attempt_count}/{cls.MAX_RETRY_ATTEMPTS} attempts"
+                    ),
+                )
+            with cls._rate_limit_lock:
+                cls._retry_counts.pop(trigger_id, None)
+            delete_pending_retry(trigger_id)
+            return
+
+        retry_at = (
+            datetime.datetime.now() + datetime.timedelta(seconds=cooldown_seconds)
+        ).isoformat()
+
+        with cls._rate_limit_lock:
+            cls._pending_retries[trigger_id] = {
+                "trigger_id": trigger_id,
+                "cooldown_seconds": cooldown_seconds,
+                "retry_at": retry_at,
+                "scheduled_at": datetime.datetime.now().isoformat(),
+                "attempt": attempt_count,
+            }
+
+        # Persist to DB so the retry survives a server restart
+        upsert_pending_retry(
+            trigger_id=trigger_id,
+            trigger_json=json.dumps(trigger, default=str),
+            message_text=message_text,
+            event_json=json.dumps(event, default=str) if event else "{}",
+            trigger_type=trigger_type,
+            cooldown_seconds=cooldown_seconds,
+            retry_at=retry_at,
+        )
+
+        def _retry():
+            with cls._rate_limit_lock:
+                cls._retry_timers.pop(trigger_id, None)
+                cls._pending_retries.pop(trigger_id, None)
+                cls._retry_counts.pop(trigger_id, None)
+            delete_pending_retry(trigger_id)
+            logger.info(
+                "Executing rate-limit retry for trigger %s (attempt %d)", trigger_id, attempt_count
+            )
+            from .orchestration_service import OrchestrationService
+
+            OrchestrationService.execute_with_fallback(trigger, message_text, event, trigger_type)
+
+        # Exponential backoff: base * 2^(attempt-1), capped at MAX_RETRY_DELAY, plus random jitter
+        # to reduce thundering herd when multiple executions hit rate limits simultaneously.
+        jitter = random.uniform(0, min(10, cooldown_seconds))
+        backoff_delay = (
+            min(cooldown_seconds * (2 ** (attempt_count - 1)), cls.MAX_RETRY_DELAY) + jitter
+        )
+
+        timer = threading.Timer(backoff_delay, _retry)
+        timer.daemon = True
+        timer.start()
+        with cls._rate_limit_lock:
+            cls._retry_timers[trigger_id] = timer
+
+        logger.info(
+            "Rate-limit retry scheduled: trigger=%s, attempt=%d/%d, base_cooldown=%ds, "
+            "backoff_delay=%.1fs, retry_at=%s",
+            trigger_id,
+            attempt_count,
+            cls.MAX_RETRY_ATTEMPTS,
+            cooldown_seconds,
+            backoff_delay,
+            retry_at,
+        )
+
+    @classmethod
+    def get_pending_retries(cls) -> dict:
+        """Return a snapshot of all pending rate-limit retries keyed by trigger_id.
+
+        Merges in-memory state with the DB so callers see all pending retries regardless
+        of whether the in-memory timer was restored after a restart.
+        """
+        with cls._rate_limit_lock:
+            result = dict(cls._pending_retries)
+        # Supplement with DB rows not currently tracked in memory
+        try:
+            for row in get_all_pending_retries():
+                tid = row["trigger_id"]
+                if tid not in result:
+                    result[tid] = {
+                        "trigger_id": tid,
+                        "cooldown_seconds": row.get("cooldown_seconds", 0),
+                        "retry_at": row.get("retry_at", ""),
+                        "scheduled_at": row.get("created_at", ""),
+                    }
+        except Exception as e:
+            logger.warning("Could not load pending retries from DB: %s", e, exc_info=True)
+        return result
+
+    @classmethod
+    def restore_pending_retries(cls) -> int:
+        """Re-schedule any pending retries persisted in the DB. Returns the count restored.
+
+        Called once at app startup to recover retries that were in-flight when the server
+        was last restarted.
+        """
+        restored = 0
+        try:
+            rows = get_all_pending_retries()
+        except Exception as e:
+            logger.error("Failed to load pending retries from DB for restore: %s", e, exc_info=True)
+            return 0
+
+        now = datetime.datetime.now()
+        for row in rows:
+            trigger_id = row["trigger_id"]
+            try:
+                trigger = json.loads(row["trigger_json"])
+                message_text = row.get("message_text", "")
+                event_raw = row.get("event_json") or "{}"
+                event = json.loads(event_raw) if event_raw != "{}" else None
+                trigger_type = row.get("trigger_type", "webhook")
+                retry_at_str = row["retry_at"]
+                retry_at = datetime.datetime.fromisoformat(retry_at_str)
+
+                # Compute remaining delay; fire immediately if already past due
+                remaining = max(0.0, (retry_at - now).total_seconds())
+
+                # Remove stale in-memory entry so schedule_retry can re-add it cleanly.
+                # Cancel is called inside the lock to close the window between the pop
+                # and the cancel where a timer could fire and cause double-execution.
+                with cls._rate_limit_lock:
+                    cls._pending_retries.pop(trigger_id, None)
+                    old_timer = cls._retry_timers.pop(trigger_id, None)
+                    if old_timer:
+                        old_timer.cancel()
+
+                def _retry(
+                    _trigger=trigger,
+                    _message=message_text,
+                    _event=event,
+                    _type=trigger_type,
+                    _tid=trigger_id,
+                ):
+                    with cls._rate_limit_lock:
+                        cls._retry_timers.pop(_tid, None)
+                        cls._pending_retries.pop(_tid, None)
+                    delete_pending_retry(_tid)
+                    logger.info("Executing restored rate-limit retry for trigger %s", _tid)
+                    from .orchestration_service import OrchestrationService
+
+                    OrchestrationService.execute_with_fallback(_trigger, _message, _event, _type)
+
+                with cls._rate_limit_lock:
+                    cls._pending_retries[trigger_id] = {
+                        "trigger_id": trigger_id,
+                        "cooldown_seconds": row.get("cooldown_seconds", 0),
+                        "retry_at": retry_at_str,
+                        "scheduled_at": row.get("created_at", ""),
+                    }
+
+                timer = threading.Timer(remaining, _retry)
+                timer.daemon = True
+                timer.start()
+
+                with cls._rate_limit_lock:
+                    cls._retry_timers[trigger_id] = timer
+
+                logger.info(
+                    "Restored pending retry for trigger %s (fires in %.1fs)",
+                    trigger_id,
+                    remaining,
+                )
+                restored += 1
+            except Exception as e:
+                logger.error(
+                    "Failed to restore pending retry for trigger %s: %s",
+                    trigger_id,
+                    e,
+                    exc_info=True,
+                )
+
+        if restored:
+            logger.warning(
+                "Restored %d rate-limit retry/retries from DB after server restart", restored
+            )
+        return restored
+
+    @classmethod
     def get_status(cls, trigger_id: str) -> dict:
         """Get execution status for a trigger from database."""
         execution = get_latest_execution_for_trigger(trigger_id)
         if not execution:
-            return {"status": "idle"}
+            return {"status": ExecutionState.IDLE}
         return {
-            "status": execution["status"],
+            "status": execution.get("status", ExecutionState.IDLE),
             "started_at": execution.get("started_at"),
             "finished_at": execution.get("finished_at"),
             "error_message": execution.get("error_message"),
-            "execution_id": execution["execution_id"],
+            "execution_id": execution.get("execution_id"),
         }
 
     @staticmethod
@@ -80,9 +406,9 @@ class ExecutionService:
         try:
             with open(trigger_file, "w", encoding="utf-8") as f:
                 json.dump(trigger_data, f, indent=2, ensure_ascii=False)
-            print(f"Saved trigger event: {trigger_file}")
+            logger.debug("Saved trigger event: %s", trigger_file)
         except Exception as e:
-            print(f"Failed to save trigger event: {e}")
+            logger.warning("Failed to save trigger event: %s", e, exc_info=True)
 
         return trigger_id
 
@@ -97,8 +423,13 @@ class ExecutionService:
         with open(filepath, "w", encoding="utf-8") as f:
             f.write(message_text)
 
-        print(f"Saved threat report: {filepath}")
+        logger.info("Saved threat report: %s", filepath)
         return filepath
+
+    # Execution timeout bounds (seconds)
+    TIMEOUT_MIN = 60  # 1 minute minimum
+    TIMEOUT_MAX = 3600  # 1 hour maximum
+    TIMEOUT_DEFAULT = 600  # 10 minutes default
 
     @staticmethod
     def build_command(
@@ -107,6 +438,7 @@ class ExecutionService:
         allowed_paths: list = None,
         model: str = None,
         codex_settings: dict = None,
+        allowed_tools: str = None,
     ) -> list:
         """Build the CLI command for the specified backend."""
         if backend == "opencode":
@@ -134,6 +466,7 @@ class ExecutionService:
             return cmd
         else:
             # claude (default)
+            tools = allowed_tools or "Read,Glob,Grep,Bash"
             cmd = [
                 "claude",
                 "-p",
@@ -142,7 +475,7 @@ class ExecutionService:
                 "--output-format",
                 "json",
                 "--allowedTools",
-                "Read,Glob,Grep,Bash",
+                tools,
             ]
             if model:
                 cmd.extend(["--model", model])
@@ -150,6 +483,63 @@ class ExecutionService:
                 for path in allowed_paths:
                     cmd.extend(["--add-dir", path])
             return cmd
+
+    @classmethod
+    def _budget_monitor(
+        cls,
+        execution_id: str,
+        trigger_id: str,
+        entity_type: str,
+        entity_id: str,
+        process: "subprocess.Popen",
+        interval_seconds: int = 30,
+    ) -> None:
+        """Periodically check budget during execution and kill process if hard limit exceeded."""
+        import time as _time
+
+        while process.poll() is None:
+            _time.sleep(interval_seconds)
+            if process.poll() is not None:
+                break
+            try:
+                budget_check = BudgetService.check_budget(entity_type, entity_id)
+                if not budget_check["allowed"]:
+                    reason = budget_check.get("reason", "hard limit reached")
+                    logger.warning(
+                        "Budget hard limit exceeded during execution %s (%s/%s) — terminating process. %s",
+                        execution_id,
+                        entity_type,
+                        entity_id,
+                        reason,
+                    )
+                    try:
+                        import os as _os
+
+                        _os.killpg(_os.getpgid(process.pid), signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass
+                    except Exception as kill_err:
+                        logger.error(
+                            "Failed to kill over-budget process for execution %s: %s",
+                            execution_id,
+                            kill_err,
+                            exc_info=True,
+                        )
+                    ExecutionLogService.append_log(
+                        execution_id,
+                        "stderr",
+                        f"[BUDGET] Execution terminated: {reason}",
+                    )
+                    AuditLogService.log(
+                        action="execution.budget_exceeded",
+                        entity_type=entity_type,
+                        entity_id=entity_id,
+                        outcome="killed",
+                        details={"execution_id": execution_id, "reason": reason},
+                    )
+                    break
+            except Exception as monitor_err:
+                logger.debug("Budget monitor check failed for %s: %s", execution_id, monitor_err)
 
     @classmethod
     def _stream_pipe(cls, execution_id: str, stream_name: str, pipe, backend_type: str = None):
@@ -163,7 +553,7 @@ class ExecutionService:
                 if line:
                     content = line.rstrip("\n\r")
                     ExecutionLogService.append_log(execution_id, stream_name, content)
-                    print(f"[{stream_name}] {content}")
+                    logger.debug("[%s] %s", stream_name, content)
 
                     # Check for rate limit patterns in stderr
                     if stream_name == "stderr" and backend_type:
@@ -171,12 +561,31 @@ class ExecutionService:
                         if cooldown is not None:
                             with cls._rate_limit_lock:
                                 cls._rate_limit_detected[execution_id] = cooldown
-                            print(
-                                f"[rate-limit] Detected for execution {execution_id}, "
-                                f"cooldown={cooldown}s"
+                            logger.warning(
+                                "Rate limit detected for execution %s, cooldown=%ds",
+                                execution_id,
+                                cooldown,
                             )
-        except Exception as e:
-            print(f"Error reading {stream_name}: {e}")
+                            AuditLogService.log(
+                                action="rate_limit.detected",
+                                entity_type="execution",
+                                entity_id=execution_id,
+                                outcome="rate_limited",
+                                details={
+                                    "backend_type": backend_type,
+                                    "cooldown_seconds": cooldown,
+                                },
+                            )
+        except (OSError, ValueError) as e:
+            logger.error(
+                "Error reading %s stream for execution %s: %s",
+                stream_name,
+                execution_id,
+                e,
+                exc_info=True,
+            )
+        except Exception:
+            logger.exception("Unexpected error reading %s stream for execution %s", stream_name, execution_id)
         finally:
             pipe.close()
 
@@ -205,7 +614,7 @@ class ExecutionService:
             for entry in path_entries:
                 if entry["path_type"] == "github":
                     repo_url = entry["github_repo_url"]
-                    print(f"Cloning GitHub repo: {repo_url}")
+                    logger.info("Cloning GitHub repo: %s", repo_url)
                     clone_dir = GitHubService.clone_repo(repo_url)
                     cloned_dirs.append(clone_dir)
                     effective_paths.append(clone_dir)
@@ -233,6 +642,28 @@ class ExecutionService:
                     prompt = prompt.replace("{repo_url}", event.get("repo_url", ""))
                     prompt = prompt.replace("{repo_full_name}", event.get("repo_full_name", ""))
 
+            # Warn about any unresolved {placeholder} patterns remaining in the prompt
+            _KNOWN_PLACEHOLDERS = {
+                "trigger_id",
+                "bot_id",
+                "paths",
+                "message",
+                "pr_url",
+                "pr_number",
+                "pr_title",
+                "pr_author",
+                "repo_url",
+                "repo_full_name",
+            }
+            remaining = re.findall(r"\{(\w+)\}", prompt)
+            unknown = [p for p in remaining if p not in _KNOWN_PLACEHOLDERS]
+            if unknown:
+                logger.warning(
+                    "Prompt template for trigger '%s' contains unresolved placeholders: %s",
+                    trigger.get("name", trigger_id),
+                    unknown,
+                )
+
             # Prepend skill_command if configured and not already in prompt
             skill_command = trigger.get("skill_command", "")
             if skill_command and not prompt.lstrip().startswith(skill_command):
@@ -247,22 +678,26 @@ class ExecutionService:
 
             backend = trigger["backend_type"]
             model = trigger.get("model")
-            cmd = cls.build_command(backend, prompt, effective_paths, model)
+            allowed_tools = trigger.get("allowed_tools")
+            cmd = cls.build_command(
+                backend, prompt, effective_paths, model, allowed_tools=allowed_tools
+            )
 
             # Wrap with stdbuf to force line-buffered output for real-time streaming
             # -oL = line buffer stdout, -eL = line buffer stderr
-            cmd = ["stdbuf", "-oL", "-eL"] + cmd
+            # stdbuf is only available on Linux (GNU coreutils); skip on macOS/Windows
+            if shutil.which("stdbuf"):
+                cmd = ["stdbuf", "-oL", "-eL"] + cmd
 
             cmd_str = " ".join(cmd)
 
             effective_cwd = working_directory or PROJECT_ROOT
-            print(f"Executing trigger '{trigger['name']}': {cmd_str[:200]}...")
-            print(f"Working directory: {effective_cwd}")
 
             # Snapshot trigger config for audit trail
             trigger_config_snapshot = json.dumps(trigger, default=str)
 
-            # Start execution logging
+            # Start execution logging — execution_id serves as the trace ID for
+            # all subsequent log statements in this execution's pipeline.
             execution_id = ExecutionLogService.start_execution(
                 trigger_id=trigger_id,
                 trigger_type=trigger_type,
@@ -272,27 +707,66 @@ class ExecutionService:
                 trigger_config_snapshot=trigger_config_snapshot,
                 account_id=account_id,
             )
+            # Trace logger — prefixes all subsequent log lines with the execution ID
+            # so that trigger receipt → subprocess output → completion can be correlated.
+            tlog = _trace_logger(execution_id)
+            tlog.info(
+                "Execution started: trigger='%s' backend=%s cwd=%s cmd=%s...",
+                trigger["name"],
+                backend,
+                effective_cwd,
+                cmd_str[:200],
+            )
+
+            AuditLogService.log(
+                action="execution.start",
+                entity_type="trigger",
+                entity_id=trigger_id,
+                outcome="started",
+                details={
+                    "execution_id": execution_id,
+                    "trigger_type": trigger_type,
+                    "backend_type": backend,
+                    "account_id": account_id,
+                },
+            )
 
             # Pre-execution budget check (wrapped in try/except -- never crash execution flow)
             try:
                 budget_check = BudgetService.check_budget("trigger", trigger_id)
                 if not budget_check["allowed"]:
-                    logger.warning(
-                        f"Budget check blocked execution for trigger "
-                        f"'{trigger.get('name', trigger_id)}': "
-                        f"{budget_check.get('reason', 'unknown')}"
+                    limit_info = budget_check.get("limit") or {}
+                    period = limit_info.get("period", "monthly")
+                    hard_limit = limit_info.get("hard_limit_usd", "N/A")
+                    budget_detail = (
+                        f"{budget_check.get('reason', 'hard limit reached')}; "
+                        f"spend=${budget_check.get('current_spend', 0):.4f}, "
+                        f"hard_limit=${hard_limit}, "
+                        f"period={period}"
+                    )
+                    tlog.warning(
+                        "Budget check blocked execution for trigger '%s': %s",
+                        trigger.get("name", trigger_id),
+                        budget_detail,
+                    )
+                    ExecutionLogService.append_log(
+                        execution_id,
+                        "stderr",
+                        f"Execution aborted: budget limit exceeded. {budget_detail}",
                     )
                     ExecutionLogService.finish_execution(
                         execution_id=execution_id,
-                        status="failed",
+                        status=ExecutionState.FAILED,
                         exit_code=-1,
-                        error_message=f"Budget limit exceeded: "
-                        f"{budget_check.get('reason', 'hard limit reached')}",
+                        error_message=f"Budget limit exceeded: {budget_detail}",
                     )
                     return execution_id
             except Exception as e:
-                logger.error(
-                    f"Budget pre-check failed for trigger '{trigger.get('name', trigger_id)}': {e}"
+                tlog.error(
+                    "Budget pre-check failed for trigger '%s': %s",
+                    trigger.get("name", trigger_id),
+                    e,
+                    exc_info=True,
                 )
 
             # Build process environment with optional overrides
@@ -325,37 +799,96 @@ class ExecutionService:
             stdout_thread.start()
             stderr_thread.start()
 
+            # Start budget monitor thread — kills process if hard limit is exceeded mid-run
+            entity_type = trigger.get("_entity_type", "trigger")
+            entity_id = trigger.get("_entity_id", trigger_id)
+            budget_monitor_thread = threading.Thread(
+                target=cls._budget_monitor,
+                args=(execution_id, trigger_id, entity_type, entity_id, process),
+                daemon=True,
+            )
+            budget_monitor_thread.start()
+
+            # Use per-trigger timeout if configured, clamped to [TIMEOUT_MIN, TIMEOUT_MAX]
+            raw_timeout = trigger.get("timeout_seconds") or cls.TIMEOUT_DEFAULT
+            effective_timeout = max(cls.TIMEOUT_MIN, min(cls.TIMEOUT_MAX, int(raw_timeout)))
+            timeout_label = (
+                f"{effective_timeout // 60} minutes"
+                if effective_timeout >= 60
+                else f"{effective_timeout} seconds"
+            )
+
             # Wait for process with timeout
             try:
-                exit_code = process.wait(timeout=600)  # 10 minute timeout
+                exit_code = process.wait(timeout=effective_timeout)
             except subprocess.TimeoutExpired:
                 try:
                     os.killpg(os.getpgid(process.pid), signal.SIGKILL)
-                except ProcessLookupError as e:
-                    logger.debug("Process already exited during timeout cleanup: %s", e)
+                except OSError as e:
+                    tlog.debug("Process already exited during timeout cleanup: %s", e)
                 stdout_thread.join(timeout=5)
                 stderr_thread.join(timeout=5)
-                print(f"Trigger '{trigger['name']}' timed out")
+                if stdout_thread.is_alive():
+                    tlog.warning("stdout reader thread still alive after kill")
+                if stderr_thread.is_alive():
+                    tlog.warning("stderr reader thread still alive after kill")
+                tlog.warning("Trigger '%s' timed out after %s", trigger["name"], timeout_label)
+                ExecutionLogService.append_log(
+                    execution_id,
+                    "stderr",
+                    f"[TIMEOUT] Trigger '{trigger['name']}' timed out after {timeout_label}",
+                )
                 ExecutionLogService.finish_execution(
                     execution_id=execution_id,
-                    status="timeout",
-                    error_message="Command timed out after 10 minutes",
+                    status=ExecutionState.TIMEOUT,
+                    error_message=f"Command timed out after {timeout_label}",
+                )
+                AuditLogService.log(
+                    action="execution.finish",
+                    entity_type="trigger",
+                    entity_id=trigger_id,
+                    outcome="timeout",
+                    details={"execution_id": execution_id},
                 )
                 return execution_id
 
             # Wait for pipe readers to finish
             stdout_thread.join(timeout=10)
             stderr_thread.join(timeout=10)
+            if stdout_thread.is_alive():
+                tlog.error("stdout reader thread still alive after process exit — output may be incomplete")
+                ExecutionLogService.append_log(
+                    execution_id,
+                    "stderr",
+                    "[WARNING] stdout reader did not exit cleanly — output may be incomplete",
+                )
+            if stderr_thread.is_alive():
+                tlog.error("stderr reader thread still alive after process exit — output may be incomplete")
+                ExecutionLogService.append_log(
+                    execution_id,
+                    "stderr",
+                    "[WARNING] stderr reader did not exit cleanly — output may be incomplete",
+                )
 
-            print(f"{backend} exit code: {exit_code}")
+            tlog.info("%s exit code: %d", backend, exit_code)
+            ExecutionLogService.append_log(
+                execution_id, "stderr", f"[EXIT] {backend} exit code: {exit_code}"
+            )
 
             # Check if this execution was cancelled via the cancel endpoint
             if ProcessManager.is_cancelled(execution_id):
                 ExecutionLogService.finish_execution(
                     execution_id=execution_id,
-                    status="cancelled",
+                    status=ExecutionState.CANCELLED,
                     exit_code=exit_code,
                     error_message="Cancelled by user",
+                )
+                AuditLogService.log(
+                    action="execution.finish",
+                    entity_type="trigger",
+                    entity_id=trigger_id,
+                    outcome="cancelled",
+                    details={"execution_id": execution_id, "exit_code": exit_code},
                 )
             elif exit_code == 0:
                 # Auto-resolve + PR flow for security trigger with GitHub repos
@@ -368,7 +901,14 @@ class ExecutionService:
                     scan_output = ExecutionLogService.get_stdout_log(execution_id)
                     cls._auto_resolve_and_pr(trigger, github_repo_map, scan_output)
                 ExecutionLogService.finish_execution(
-                    execution_id=execution_id, status="success", exit_code=exit_code
+                    execution_id=execution_id, status=ExecutionState.SUCCESS, exit_code=exit_code
+                )
+                AuditLogService.log(
+                    action="execution.finish",
+                    entity_type="trigger",
+                    entity_id=trigger_id,
+                    outcome="success",
+                    details={"execution_id": execution_id, "exit_code": exit_code},
                 )
 
                 # Extract and record token usage after successful execution
@@ -386,36 +926,56 @@ class ExecutionService:
                             account_id=account_id,
                             usage_data=usage_data,
                         )
-                except Exception as e:
-                    print(f"Failed to record token usage for {execution_id}: {e}")
+                except (TypeError, ValueError) as e:
+                    tlog.error("Failed to record token usage: %s", e, exc_info=True)
+                except Exception:
+                    tlog.exception("Unexpected error recording token usage")
             else:
                 error_msg = f"Exit code: {exit_code}"
                 ExecutionLogService.finish_execution(
                     execution_id=execution_id,
-                    status="failed",
+                    status=ExecutionState.FAILED,
                     exit_code=exit_code,
                     error_message=error_msg,
+                )
+                AuditLogService.log(
+                    action="execution.finish",
+                    entity_type="trigger",
+                    entity_id=trigger_id,
+                    outcome="failed",
+                    details={
+                        "execution_id": execution_id,
+                        "exit_code": exit_code,
+                        "error": error_msg,
+                    },
                 )
 
         except FileNotFoundError:
             backend = trigger.get("backend_type", "claude")
             error_msg = f"{backend} command not found"
-            print(f"{error_msg}. Is {backend} CLI installed?")
+            logger.error("%s. Is %s CLI installed?", error_msg, backend)
             if execution_id:
                 ExecutionLogService.finish_execution(
-                    execution_id=execution_id, status="failed", error_message=error_msg
+                    execution_id=execution_id, status=ExecutionState.FAILED, error_message=error_msg
                 )
         except Exception as e:
             error_msg = str(e)
-            print(f"Error running trigger '{trigger['name']}': {error_msg}")
+            logger.exception("Error running trigger '%s'", trigger["name"])
             if execution_id:
                 ExecutionLogService.finish_execution(
-                    execution_id=execution_id, status="failed", error_message=error_msg
+                    execution_id=execution_id, status=ExecutionState.FAILED, error_message=error_msg
                 )
         finally:
-            # Clean up all cloned directories
+            # Clean up all cloned directories (each wrapped independently to ensure all are attempted)
             for d in cloned_dirs:
-                GitHubService.cleanup_clone(d)
+                try:
+                    GitHubService.cleanup_clone(d)
+                except OSError as e:
+                    logger.error(
+                        "Failed to clean up cloned directory %s: %s", d, e, exc_info=True
+                    )
+                except Exception:
+                    logger.exception("Unexpected error cleaning up cloned directory: %s", d)
             # Remove from ProcessManager tracking
             if execution_id:
                 ProcessManager.cleanup(execution_id)
@@ -435,7 +995,7 @@ class ExecutionService:
 
                 # Create a new branch
                 if not GitHubService.create_branch(clone_dir, branch_name):
-                    print(f"Skipping PR for {repo_url}: branch creation failed")
+                    logger.warning("Skipping PR for %s: branch creation failed", repo_url)
                     continue
 
                 # Run resolve command with Edit/Write permissions
@@ -462,8 +1022,8 @@ class ExecutionService:
                     "--add-dir",
                     clone_dir,
                 ]
-                print(f"Running resolve on {repo_url}...")
-                subprocess.run(
+                logger.info("Running resolve on %s...", repo_url)
+                resolve_result = subprocess.run(
                     cmd,
                     cwd=clone_dir,
                     capture_output=True,
@@ -471,42 +1031,80 @@ class ExecutionService:
                     timeout=900,  # 15 minute timeout
                     start_new_session=True,  # Process group for clean cleanup
                 )
+                if resolve_result.returncode != 0:
+                    logger.warning(
+                        "Auto-resolve command failed for %s (exit=%d): %s",
+                        repo_url,
+                        resolve_result.returncode,
+                        resolve_result.stderr[:500] if resolve_result.stderr else "(no stderr)",
+                    )
+                    continue
 
                 # Commit changes
                 committed = GitHubService.commit_changes(
                     clone_dir,
-                    "fix(security): resolve vulnerabilities\n\n" "Automatic security fix by Agented",
+                    "fix(security): resolve vulnerabilities\n\n"
+                    "Automatic security fix by Agented",
                 )
 
                 if committed:
-                    if GitHubService.push_branch(clone_dir, branch_name):
+                    pushed = GitHubService.push_branch(clone_dir, branch_name)
+                    if pushed:
                         pr_url = GitHubService.create_pull_request(
                             repo_path=clone_dir,
                             branch_name=branch_name,
                             title="fix(security): resolve vulnerabilities",
                             body=(
                                 "## Security Fix\n\n"
-                                "This PR was automatically generated by Agented"
+                                "This PR was automatically generated by Agented "
                                 "to resolve detected security vulnerabilities.\n\n"
                                 "Please review the changes carefully before merging."
                             ),
                         )
                         if pr_url:
                             pr_urls.append(pr_url)
+                        else:
+                            # PR creation failed after branch was pushed — roll back the remote branch
+                            logger.warning(
+                                "PR creation failed for %s; rolling back remote branch '%s'",
+                                repo_url,
+                                branch_name,
+                            )
+                            GitHubService.delete_remote_branch(clone_dir, branch_name)
                 else:
-                    print(f"No changes to resolve for {repo_url}")
+                    logger.info("No changes to resolve for %s", repo_url)
 
-            except Exception as e:
-                print(f"Auto-resolve failed for {repo_url}: {e}")
+            except Exception:
+                logger.exception("Auto-resolve failed for %s", repo_url)
 
         return pr_urls
 
+    @staticmethod
+    def _verify_webhook_hmac(raw_payload: bytes, signature_header: str, secret: str) -> bool:
+        """Verify HMAC-SHA256 signature for a webhook payload.
+
+        Signature header format: sha256=<hex-digest>
+        Returns True if the signature is valid, False otherwise.
+        """
+        if not signature_header or not signature_header.startswith("sha256="):
+            return False
+        expected = signature_header[7:]
+        computed = hmac.new(secret.encode("utf-8"), raw_payload, hashlib.sha256).hexdigest()
+        return hmac.compare_digest(computed, expected)
+
     @classmethod
-    def dispatch_webhook_event(cls, payload: dict) -> bool:
+    def dispatch_webhook_event(
+        cls,
+        payload: dict,
+        raw_payload: bytes = None,
+        signature_header: str = None,
+    ) -> bool:
         """Dispatch a webhook event to matching triggers and teams based on configurable field matching.
 
         Args:
-            payload: The JSON webhook payload
+            payload: The JSON webhook payload (parsed dict)
+            raw_payload: Raw request body bytes, used for HMAC validation
+            signature_header: Value of the X-Webhook-Signature-256 header
 
         Returns:
             True if at least one trigger or team was triggered
@@ -520,6 +1118,20 @@ class ExecutionService:
             match_field_value = trigger.get("match_field_value")
             text_field_path = trigger.get("text_field_path", "text")
             detection_keyword = trigger.get("detection_keyword", "")
+
+            # HMAC validation: if this trigger has a webhook_secret configured,
+            # require a valid signature. Skip trigger if signature is missing or invalid.
+            webhook_secret = trigger.get("webhook_secret")
+            if webhook_secret:
+                if raw_payload is None or not cls._verify_webhook_hmac(
+                    raw_payload, signature_header or "", webhook_secret
+                ):
+                    logger.warning(
+                        "Webhook HMAC validation failed for trigger '%s' (%s); skipping dispatch",
+                        trigger["name"],
+                        trigger["id"],
+                    )
+                    continue
 
             # Check if payload matches the trigger's field criteria
             if match_field_path and match_field_value:
@@ -538,7 +1150,29 @@ class ExecutionService:
             if detection_keyword and detection_keyword not in text:
                 continue  # Keyword not found in text
 
-            print(f"Trigger '{trigger['name']}' triggered by webhook")
+            # Deduplication: skip if an identical (trigger, payload) pair was dispatched
+            # within the dedup window to prevent thundering-herd from rapid successive webhooks.
+            payload_hash = hashlib.sha256(
+                json.dumps(payload, sort_keys=True, default=str).encode()
+            ).hexdigest()[:16]
+            dedup_key = f"{trigger['id']}:{payload_hash}"
+            now_epoch = datetime.datetime.now().timestamp()
+            with cls._webhook_dedup_lock:
+                last_seen = cls._webhook_dedup.get(dedup_key, 0)
+                if now_epoch - last_seen < cls.WEBHOOK_DEDUP_WINDOW:
+                    logger.info(
+                        "Webhook dedup: skipping duplicate dispatch for trigger '%s' "
+                        "(same payload seen %.1fs ago)",
+                        trigger["name"],
+                        now_epoch - last_seen,
+                    )
+                    continue
+                cls._webhook_dedup[dedup_key] = now_epoch
+                # Evict old entries to prevent unbounded growth
+                cutoff = now_epoch - cls.WEBHOOK_DEDUP_WINDOW
+                cls._webhook_dedup = {k: v for k, v in cls._webhook_dedup.items() if v > cutoff}
+
+            logger.info("Trigger '%s' triggered by webhook", trigger["name"])
             cls.save_trigger_event(trigger, payload)
 
             # Delegate to team execution if execution_mode is 'team'
@@ -574,7 +1208,13 @@ class ExecutionService:
             if trigger_config and isinstance(trigger_config, str):
                 try:
                     trigger_config = json.loads(trigger_config)
-                except (json.JSONDecodeError, TypeError):
+                except (json.JSONDecodeError, TypeError) as e:
+                    logger.warning(
+                        "Failed to parse trigger_config JSON for team '%s' (%s): %s — using empty config",
+                        team.get("name", ""),
+                        team.get("id", ""),
+                        e,
+                    )
                     trigger_config = {}
             if not trigger_config:
                 trigger_config = {}
@@ -601,7 +1241,7 @@ class ExecutionService:
             if detection_keyword and detection_keyword not in text:
                 continue
 
-            print(f"Team '{team['name']}' triggered by webhook")
+            logger.info("Team '%s' triggered by webhook", team["name"])
 
             from .team_execution_service import TeamExecutionService
 
@@ -609,7 +1249,7 @@ class ExecutionService:
             triggered = True
 
         if not triggered:
-            print("No webhook-triggered triggers or teams matched")
+            logger.debug("No webhook-triggered triggers or teams matched")
 
         return triggered
 
@@ -635,9 +1275,9 @@ class ExecutionService:
         cmd = cls.build_resolve_command(audit_summary, project_paths)
 
         try:
-            print(f"Executing resolve command: {' '.join(cmd[:10])}...")
-            print(f"Working directory: {PROJECT_ROOT}")
-            print(f"Project paths: {project_paths}")
+            logger.info("Executing resolve command: %s...", " ".join(cmd[:10]))
+            logger.info("Working directory: %s", PROJECT_ROOT)
+            logger.info("Project paths: %s", project_paths)
             result = subprocess.run(
                 cmd,
                 cwd=PROJECT_ROOT,
@@ -645,16 +1285,16 @@ class ExecutionService:
                 text=True,
                 timeout=900,  # 15 minute timeout
             )
-            print(f"Resolve output (stdout): {result.stdout}")
+            logger.info("Resolve output (stdout): %s", result.stdout)
             if result.stderr:
-                print(f"Resolve output (stderr): {result.stderr}")
-            print(f"Resolve exit code: {result.returncode}")
+                logger.info("Resolve output (stderr): %s", result.stderr)
+            logger.info("Resolve exit code: %d", result.returncode)
         except subprocess.TimeoutExpired:
-            print("Resolve command timed out after 15 minutes")
+            logger.error("Resolve command timed out after 15 minutes")
         except FileNotFoundError:
-            print("Claude command not found. Is Claude CLI installed?")
-        except Exception as e:
-            print(f"Error running resolve command: {e}")
+            logger.error("Claude command not found. Is Claude CLI installed?")
+        except Exception:
+            logger.exception("Error running resolve command")
 
     @classmethod
     def dispatch_github_event(cls, repo_url: str, pr_data: dict) -> bool:
@@ -678,7 +1318,7 @@ class ExecutionService:
         # --- Trigger dispatch ---
         triggers = get_triggers_by_trigger_source("github")
         for trigger in triggers:
-            print(f"Triggering '{trigger['name']}' for GitHub PR event")
+            logger.info("Triggering '%s' for GitHub PR event", trigger["name"])
 
             # Build message text from PR data
             message_text = (
@@ -724,7 +1364,7 @@ class ExecutionService:
 
         teams = get_teams_by_trigger_source("github")
         for team in teams:
-            print(f"Triggering team '{team['name']}' for GitHub PR event")
+            logger.info("Triggering team '%s' for GitHub PR event", team["name"])
 
             message_text = (
                 f"PR #{pr_data.get('pr_number', '')}: {pr_data.get('pr_title', '')}\n"
@@ -742,7 +1382,6 @@ class ExecutionService:
             triggered = True
 
         if not triggered:
-            print("No GitHub-triggered triggers or teams found")
+            logger.debug("No GitHub-triggered triggers or teams found")
 
         return triggered
-

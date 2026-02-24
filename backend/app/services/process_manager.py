@@ -31,11 +31,17 @@ class ProcessManager:
     @classmethod
     def register(cls, execution_id: str, process: subprocess.Popen, trigger_id: str):
         """Register a running process for tracking."""
-        try:
-            pgid = os.getpgid(process.pid)
-        except ProcessLookupError:
-            pgid = process.pid  # Fallback if process already exited
         with cls._lock:
+            try:
+                pgid = os.getpgid(process.pid)
+            except ProcessLookupError:
+                pgid = process.pid  # Fallback if process already exited between Popen and register
+                logger.warning(
+                    "Process %d exited before pgid lookup for execution %s; "
+                    "using pid as pgid fallback — kill signals to this pgid may fail silently",
+                    process.pid,
+                    execution_id,
+                )
             cls._processes[execution_id] = ProcessInfo(
                 process=process,
                 pgid=pgid,
@@ -62,7 +68,51 @@ class ProcessManager:
             logger.info(f"Process group {info.pgid} already dead for execution {execution_id}")
             return True  # Already dead counts as success
         except Exception as e:
-            logger.error(f"Failed to kill process group {info.pgid}: {e}")
+            logger.error(f"Failed to kill process group {info.pgid}: {e}", exc_info=True)
+            return False
+
+    @classmethod
+    def cancel_graceful(cls, execution_id: str, sigterm_timeout: float = 10.0) -> bool:
+        """Gracefully cancel: send SIGTERM then SIGKILL after timeout. Returns True if signal sent."""
+        with cls._lock:
+            info = cls._processes.get(execution_id)
+            cls._cancelled.add(execution_id)
+        if not info:
+            return False
+        try:
+            os.killpg(info.pgid, signal.SIGTERM)
+            logger.info(f"Sent SIGTERM to process group {info.pgid} for execution {execution_id}")
+
+            # Schedule SIGKILL fallback if process does not exit within sigterm_timeout
+            def _force_kill():
+                try:
+                    if info.process.poll() is None:
+                        os.killpg(info.pgid, signal.SIGKILL)
+                        logger.info(
+                            f"SIGTERM timed out; force-killed process group "
+                            f"{info.pgid} for execution {execution_id}"
+                        )
+                except ProcessLookupError:
+                    pass  # Process already gone — expected, safe to ignore
+                except OSError as e:
+                    logger.error(
+                        "Force-kill of process group %d failed (OS error) for execution %s: %s",
+                        info.pgid,
+                        execution_id,
+                        e,
+                    )
+                except Exception as e:
+                    logger.error(f"Force-kill failed for execution {execution_id}: {e}")
+
+            timer = threading.Timer(sigterm_timeout, _force_kill)
+            timer.daemon = True
+            timer.start()
+            return True
+        except ProcessLookupError:
+            logger.info(f"Process group {info.pgid} already dead for execution {execution_id}")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to send SIGTERM to process group {info.pgid}: {e}", exc_info=True)
             return False
 
     @classmethod

@@ -3,6 +3,7 @@
 import datetime
 import json
 import logging
+import os
 import threading
 from dataclasses import asdict, dataclass
 from queue import Empty, Queue
@@ -10,10 +11,18 @@ from typing import Dict, Generator, List, Optional
 
 logger = logging.getLogger(__name__)
 
-# Stale execution cleanup threshold in seconds (15 minutes)
-STALE_EXECUTION_THRESHOLD = 900
+# Stale execution cleanup threshold in seconds (default 15 minutes).
+# Override via STALE_EXECUTION_THRESHOLD_SECS environment variable.
+STALE_EXECUTION_THRESHOLD = int(os.environ.get("STALE_EXECUTION_THRESHOLD_SECS", "900"))
+
+# Maximum number of buffered log lines replayed to new SSE subscribers on connect.
+# Prevents flooding clients that connect to long-running executions with thousands of events.
+# Override via SSE_REPLAY_LIMIT environment variable.
+SSE_REPLAY_LIMIT = int(os.environ.get("SSE_REPLAY_LIMIT", "500"))
 
 from ..database import (
+    count_all_execution_logs,
+    count_execution_logs_for_trigger,
     create_execution_log,
     generate_execution_id,
     get_all_execution_logs,
@@ -42,7 +51,8 @@ class ExecutionLogService:
     _subscribers: Dict[str, List[Queue]] = {}
     # Track execution start times for cleanup: {execution_id: datetime}
     _start_times: Dict[str, datetime.datetime] = {}
-    # Lock for thread-safe operations
+    # _lock guards all access to _log_buffers, _subscribers, and _start_times.
+    # Acquire before any read or write to those three dicts.
     _lock = threading.Lock()
 
     @classmethod
@@ -170,9 +180,26 @@ class ExecutionLogService:
         queue: Queue = Queue()
 
         with cls._lock:
-            # Send existing buffered logs first
+            # Replay buffered logs up to SSE_REPLAY_LIMIT lines to avoid flooding the client.
+            # When there are more lines than the limit, only the most recent ones are sent and
+            # a synthetic notice is prepended so clients know they missed earlier output.
             if execution_id in cls._log_buffers:
-                for line in cls._log_buffers[execution_id]:
+                buffered = cls._log_buffers[execution_id]
+                if len(buffered) > SSE_REPLAY_LIMIT:
+                    skipped = len(buffered) - SSE_REPLAY_LIMIT
+                    notice = cls._format_sse(
+                        "log",
+                        {
+                            "timestamp": datetime.datetime.now().isoformat(),
+                            "stream": "stdout",
+                            "content": f"[{skipped} earlier log lines omitted — connect sooner or increase SSE_REPLAY_LIMIT]",
+                        },
+                    )
+                    yield notice
+                    replay_lines = buffered[-SSE_REPLAY_LIMIT:]
+                else:
+                    replay_lines = buffered
+                for line in replay_lines:
                     yield cls._format_sse("log", asdict(line))
 
             # Register subscriber
@@ -203,8 +230,9 @@ class ExecutionLogService:
                         break  # End of stream
                     yield event
                 except Empty:
-                    # Send keepalive comment
-                    yield ": keepalive\n\n"
+                    # Send SSE comment heartbeat so proxies keep the connection open.
+                    # The timestamp lets operators verify liveness in debug logs.
+                    yield f": heartbeat {datetime.datetime.now().isoformat()}\n\n"
         finally:
             # Unsubscribe
             with cls._lock:
@@ -212,7 +240,9 @@ class ExecutionLogService:
                     try:
                         cls._subscribers[execution_id].remove(queue)
                     except ValueError:
-                        pass
+                        logger.debug(
+                            "Queue not found when unsubscribing from execution %s", execution_id
+                        )
 
     @classmethod
     def _broadcast(cls, execution_id: str, event_type: str, data: dict):
@@ -240,6 +270,17 @@ class ExecutionLogService:
         if trigger_id:
             return get_execution_logs_for_trigger(trigger_id, limit, offset, status)
         return get_all_execution_logs(limit, offset)
+
+    @classmethod
+    def count_history(
+        cls,
+        trigger_id: Optional[str] = None,
+        status: Optional[str] = None,
+    ) -> int:
+        """Count total execution logs (ignores pagination). Useful for total_count responses."""
+        if trigger_id:
+            return count_execution_logs_for_trigger(trigger_id, status)
+        return count_all_execution_logs()
 
     @classmethod
     def get_execution(cls, execution_id: str) -> Optional[dict]:
