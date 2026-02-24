@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, markRaw, onMounted, onUnmounted, nextTick, toRef, provide } from 'vue'
+import { toPng } from 'html-to-image'
 import { VueFlow, useVueFlow } from '@vue-flow/core'
 import type { NodeTypesObject, EdgeTypesObject } from '@vue-flow/core'
 import { Background } from '@vue-flow/background'
@@ -409,6 +410,37 @@ function handleSave() {
   emit('save', { ...result, positions: getPositions() })
 }
 
+async function handleExportPng() {
+  const el = document.querySelector<HTMLElement>('.team-flow')
+  if (!el) return
+  try {
+    const dataUrl = await toPng(el)
+    const a = document.createElement('a')
+    a.href = dataUrl
+    a.download = `team-${props.team?.name || 'canvas'}.png`
+    a.click()
+  } catch {
+    showToast('Failed to export PNG', 'error')
+  }
+}
+
+function handleExportJson() {
+  const payload = {
+    team_id: props.team?.id,
+    team_name: props.team?.name,
+    topology: props.team?.topology,
+    nodes: nodes.value.map(n => ({ id: n.id, type: n.type, position: n.position, data: n.data })),
+    edges: edges.value.map(e => ({ id: e.id, source: e.source, target: e.target, data: e.data })),
+  }
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `team-${props.team?.name || 'canvas'}.json`
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
 function handleDeleteSelected() {
   const selNodes = getSelectedNodes.value
   const selEdges = getSelectedEdges.value
@@ -482,6 +514,8 @@ defineExpose({ resyncFromTeam: syncFromTeam, fitView })
         @zoom-in="zoomIn"
         @zoom-out="zoomOut"
         @set-topology="handleSetTopology"
+        @export-png="handleExportPng"
+        @export-json="handleExportJson"
       />
       <div class="canvas-wrapper" @dragover="onDragOver" @drop="onDrop">
         <VueFlow

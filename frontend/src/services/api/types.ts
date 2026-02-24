@@ -63,6 +63,9 @@ export interface Trigger {
   model?: string;
   execution_mode?: 'direct' | 'team';
   team_id?: string | null;
+  timeout_seconds?: number | null;
+  webhook_secret?: string | null;
+  sigterm_grace_seconds?: number | null;
   created_at?: string;
   path_count?: number;
   execution_status?: ExecutionStatus;
@@ -89,6 +92,15 @@ export interface Finding {
   cve_link?: string;
   recommended_version?: string;
   description?: string;
+}
+
+export interface AuditEvent {
+  ts: string;
+  action: string;
+  entity_type: string;
+  entity_id: string;
+  outcome: string;
+  details?: Record<string, unknown>;
 }
 
 export interface AuditRecord {
@@ -455,7 +467,7 @@ export interface TeamMember {
   name: string;
   email?: string;
   role: string;
-  layer: string;
+  layer?: string;
   description?: string;
   agent_id?: string;
   super_agent_id?: string;
@@ -523,7 +535,7 @@ export interface TopologyConfig {
   approval_nodes?: string[];  // human_in_loop
   sub_groups?: {              // composite
     topology: TopologyType;
-    config: Record<string, any>;
+    config: Record<string, unknown>;
     members?: string[];
   }[];
   positions?: CanvasPositions; // Canvas node positions
@@ -1392,6 +1404,7 @@ export interface WorkflowVersion {
   workflow_id: string;
   version: number;
   graph_json: string;
+  is_draft: number;
   created_at?: string;
 }
 

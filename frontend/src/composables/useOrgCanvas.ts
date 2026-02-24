@@ -1,7 +1,7 @@
 import { ref, type Ref } from 'vue'
 import type { Node, Edge } from '@vue-flow/core'
 import { projectApi, teamApi } from '../services/api'
-import type { ProjectTeamEdge, CanvasEdgeType } from '../services/api'
+import type { ProjectTeamEdge, CanvasEdgeType, TeamMember } from '../services/api'
 
 export interface TeamNodeData {
   label: string
@@ -18,14 +18,14 @@ export function useOrgCanvas(projectId: Ref<string>) {
   const savedEdges = ref<ProjectTeamEdge[]>([])
   const isLoading = ref(false)
 
-  function buildNodes(teams: { id: string; name: string; color: string; members?: any[] }[]) {
+  function buildNodes(teams: { id: string; name: string; color: string; members?: TeamMember[] }[]) {
     nodes.value = teams.map((team, i) => {
       const members = team.members || []
-      const leader = members.find((m: any) => m.tier === 'leader' || m.role === 'lead')
+      const leader = members.find((m: TeamMember) => m.tier === 'leader' || m.role === 'lead')
       const tierCounts = {
-        leader: members.filter((m: any) => m.tier === 'leader').length,
-        senior: members.filter((m: any) => m.tier === 'senior').length,
-        member: members.filter((m: any) => !m.tier || m.tier === 'member').length,
+        leader: members.filter((m: TeamMember) => m.tier === 'leader').length,
+        senior: members.filter((m: TeamMember) => m.tier === 'senior').length,
+        member: members.filter((m: TeamMember) => !m.tier || m.tier === 'member').length,
       }
       return {
         id: team.id,
@@ -70,10 +70,16 @@ export function useOrgCanvas(projectId: Ref<string>) {
   }
 
   async function saveEdges() {
-    // Delete old edges
     const existing = savedEdges.value
-    for (const e of existing) {
-      await projectApi.deleteTeamEdge(projectId.value, e.id)
+    try {
+      // Delete old edges
+      for (const e of existing) {
+        await projectApi.deleteTeamEdge(projectId.value, e.id)
+      }
+    } catch (err) {
+      // Resync local state with server to prevent divergence
+      await loadEdges()
+      throw err
     }
 
     // Also clean up old team_connections (best-effort)

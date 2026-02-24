@@ -118,6 +118,23 @@ function closeLogs() {
   selectedExecution.value = null;
 }
 
+const RETRYABLE_STATUSES = new Set(['failed', 'timeout', 'cancelled', 'interrupted']);
+const retryingId = ref<string | null>(null);
+
+async function handleRetryExecution(execution: Execution) {
+  if (retryingId.value) return;
+  retryingId.value = execution.execution_id;
+  try {
+    await triggerApi.run(execution.trigger_id);
+    showToast('Execution retry started', 'success');
+    await loadData();
+  } catch (err: any) {
+    showToast(err.message || 'Failed to retry execution', 'error');
+  } finally {
+    retryingId.value = null;
+  }
+}
+
 const cancellingId = ref<string | null>(null);
 
 async function handleCancelExecution(executionId: string) {
@@ -258,6 +275,18 @@ onMounted(loadData);
                 >
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <rect x="3" y="3" width="18" height="18" rx="2"/>
+                  </svg>
+                </button>
+                <button
+                  v-if="RETRYABLE_STATUSES.has(execution.status)"
+                  class="btn-icon btn-retry"
+                  :disabled="retryingId === execution.execution_id"
+                  @click="handleRetryExecution(execution)"
+                  title="Retry execution"
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M1 4v6h6M23 20v-6h-6"/>
+                    <path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/>
                   </svg>
                 </button>
               </td>
@@ -632,6 +661,22 @@ onMounted(loadData);
   background: rgba(239, 68, 68, 0.15);
   color: #ef4444;
   border-color: rgba(239, 68, 68, 0.5);
+}
+
+.btn-icon.btn-retry {
+  color: var(--accent-cyan);
+  border-color: rgba(0, 212, 255, 0.3);
+}
+
+.btn-icon.btn-retry:hover:not(:disabled) {
+  background: var(--accent-cyan-dim);
+  color: var(--accent-cyan);
+  border-color: var(--accent-cyan);
+}
+
+.btn-icon.btn-retry:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .btn-icon.btn-cancel:disabled {

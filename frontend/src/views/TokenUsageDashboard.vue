@@ -179,6 +179,13 @@ const chartTimeRangeEnd = computed(() => {
 
 function getTrendKey(accountId: number, windowType: string) { return `${accountId}_${windowType}`; }
 
+const highUsageWindows = computed(() => {
+  if (!monitoringStatus.value?.windows) return [];
+  return monitoringStatus.value.windows.filter(
+    w => w.threshold_level === 'warning' || w.threshold_level === 'critical'
+  );
+});
+
 function checkAndNotifyThresholds() {
   if (!monitoringStatus.value?.windows) return;
   const levels = ['normal', 'info', 'warning', 'critical'];
@@ -361,6 +368,26 @@ onUnmounted(() => {
     </div>
     <div v-if="customDateError" class="date-error">{{ customDateError }}</div>
     <div v-if="selectedPeriod !== 'custom'" class="period-range-display">{{ dateRange.start_date }} &mdash; {{ dateRange.end_date }}</div>
+    <!-- Rate limit proximity warnings -->
+    <div v-if="highUsageWindows.length > 0" class="rate-limit-alerts">
+      <div
+        v-for="w in highUsageWindows"
+        :key="`${w.account_id}_${w.window_type}`"
+        class="rate-limit-alert"
+        :class="w.threshold_level"
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+          <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+          <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+        </svg>
+        <span>
+          <strong>{{ w.threshold_level === 'critical' ? 'Critical' : 'Warning' }}:</strong>
+          {{ w.account_name || 'Account ' + w.account_id }} is at {{ Math.round(w.percentage) }}% of {{ w.window_type }} rate limit.
+          <template v-if="w.eta?.status === 'projected'"> Limit reached in {{ w.eta.message }}.</template>
+        </span>
+      </div>
+    </div>
+
     <LoadingState v-if="sessionCollecting" message="Scanning local CLI sessions..." />
     <LoadingState v-else-if="isLoading" message="Loading usage data..." />
 
@@ -396,6 +423,11 @@ onUnmounted(() => {
 
 <style scoped>
 .token-usage-dashboard { display: flex; flex-direction: column; gap: 24px; width: 100%; animation: fadeIn 0.4s ease; }
+.rate-limit-alerts { display: flex; flex-direction: column; gap: 8px; }
+.rate-limit-alert { display: flex; align-items: flex-start; gap: 10px; padding: 10px 14px; border-radius: 8px; font-size: 0.875rem; line-height: 1.4; }
+.rate-limit-alert.warning { background: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.3); color: #f59e0b; }
+.rate-limit-alert.critical { background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.35); color: #ef4444; }
+.rate-limit-alert svg { flex-shrink: 0; margin-top: 2px; }
 @keyframes fadeIn { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
 .period-selector { display: flex; gap: 4px; background: var(--bg-secondary); border: 1px solid var(--border-subtle); border-radius: 8px; padding: 4px; }
 .period-btn { padding: 8px 14px; border: none; border-radius: 6px; background: transparent; color: var(--text-tertiary); font-size: 0.8rem; font-weight: 500; cursor: pointer; transition: all var(--transition-fast); white-space: nowrap; }

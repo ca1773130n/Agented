@@ -210,7 +210,7 @@ function handleFormCreated() {
 async function finalizeCommand() {
   const result = await conversation.finalize();
   if (result) {
-    showToast(`Command "${result.command.name}" created successfully!`, 'success');
+    showToast(`Command "${(result.command as { name: string }).name}" created successfully!`, 'success');
     router.push({ name: 'commands' });
   }
 }

@@ -60,8 +60,8 @@ const AGENT_ICON_PATHS = [
 async function finalizeAgent() {
   const result = await conversation.finalize();
   if (result) {
-    showToast(`Agent "${result.agent.name}" created successfully!`, 'success');
-    router.push({ name: 'agent-design', params: { agentId: result.agent_id } });
+    showToast(`Agent "${(result.agent as { name: string }).name}" created successfully!`, 'success');
+    router.push({ name: 'agent-design', params: { agentId: result.agent_id as string } });
   }
 }
 

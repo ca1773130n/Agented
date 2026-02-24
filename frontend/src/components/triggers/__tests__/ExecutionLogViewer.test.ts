@@ -148,7 +148,7 @@ describe('ExecutionLogViewer', () => {
       mountComponent({ executionId: 'exec-1', isLive: true })
       await flushPromises()
 
-      expect(executionApi.streamLogs).toHaveBeenCalledWith('exec-1')
+      expect(executionApi.streamLogs).toHaveBeenCalledWith('exec-1', expect.objectContaining({ onQueueOverflow: expect.any(Function) }))
     })
 
     it('does not start streaming when isLive is false', async () => {

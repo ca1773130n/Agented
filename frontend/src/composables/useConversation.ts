@@ -11,10 +11,10 @@ import { useToast } from './useToast';
 export interface ConversationApi {
   list?: () => Promise<{ conversations: { id: string; entity_type: string; status: string; updated_at: string }[] }>;
   start: () => Promise<{ conversation_id: string; message: string }>;
-  get?: (convId: string) => Promise<{ id: string; status: string; messages_parsed?: any[] }>;
+  get?: (convId: string) => Promise<{ id: string; status: string; messages_parsed?: ConversationMessage[] }>;
   sendMessage: (convId: string, message: string, options?: { backend?: string; account_id?: string; model?: string }) => Promise<{ message_id: string; status: string }>;
   stream: (convId: string) => EventSource;
-  finalize: (convId: string) => Promise<any>;
+  finalize: (convId: string) => Promise<Record<string, unknown>>;
   resume?: (convId: string) => Promise<{ message: string; conversation_id: string }>;
   abandon: (convId: string) => Promise<{ message: string }>;
 }
@@ -228,7 +228,7 @@ export function useConversation<TConfig>(
     }
   }
 
-  async function finalize(): Promise<any> {
+  async function finalize(): Promise<Record<string, unknown> | null> {
     if (!conversationId.value || isFinalizing.value) return null;
 
     isFinalizing.value = true;

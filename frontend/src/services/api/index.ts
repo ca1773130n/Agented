@@ -52,6 +52,7 @@ export type {
   GitHubValidation,
 
   // Audit types
+  AuditEvent,
   Finding,
   AuditRecord,
   SeverityTotals,

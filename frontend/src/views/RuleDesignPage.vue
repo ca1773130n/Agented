@@ -214,7 +214,7 @@ const RULE_ICON_PATHS = [
 async function finalizeRule() {
   const result = await conversation.finalize();
   if (result) {
-    showToast(`Rule "${result.rule.name}" created successfully!`, 'success');
+    showToast(`Rule "${(result.rule as { name: string }).name}" created successfully!`, 'success');
     router.push({ name: 'rules' });
   }
 }

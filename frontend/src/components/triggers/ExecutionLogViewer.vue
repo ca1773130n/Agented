@@ -27,6 +27,7 @@ const eventSource = ref<EventSource | null>(null);
 const logContainer = ref<HTMLElement | null>(null);
 const elapsedTime = ref(0);
 const elapsedInterval = ref<number | null>(null);
+const queueOverflowWarning = ref(false);
 
 const formattedDuration = computed(() => {
   const ms = execution.value?.duration_ms || elapsedTime.value;
@@ -104,7 +105,10 @@ function startStreaming() {
     eventSource.value.close();
   }
 
-  eventSource.value = executionApi.streamLogs(props.executionId);
+  queueOverflowWarning.value = false;
+  eventSource.value = executionApi.streamLogs(props.executionId, {
+    onQueueOverflow: () => { queueOverflowWarning.value = true; },
+  });
 
   eventSource.value.addEventListener('log', (event) => {
     const data = JSON.parse(event.data) as LogLine;
@@ -272,6 +276,17 @@ watch(() => props.executionId, () => {
     <!-- Log content -->
     <div
       v-else
+      class="log-content-wrapper"
+    >
+      <!-- Queue overflow warning -->
+      <div v-if="queueOverflowWarning" class="queue-overflow-banner">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+          <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+          <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+        </svg>
+        Some log lines were dropped — output may be incomplete.
+      </div>
+    <div
       ref="logContainer"
       class="log-content"
       @scroll="handleScroll"
@@ -306,6 +321,7 @@ watch(() => props.executionId, () => {
       </svg>
       <span>{{ execution.error_message }}</span>
     </div>
+    </div>
   </div>
 </template>
 
@@ -318,6 +334,26 @@ watch(() => props.executionId, () => {
   border-radius: 10px;
   overflow: hidden;
   font-family: var(--font-mono);
+}
+
+.log-content-wrapper {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  overflow: hidden;
+}
+
+.queue-overflow-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  background: rgba(245, 158, 11, 0.1);
+  border-bottom: 1px solid rgba(245, 158, 11, 0.3);
+  color: #f59e0b;
+  font-size: 0.78rem;
+  font-family: var(--font-sans, sans-serif);
+  flex-shrink: 0;
 }
 
 .log-header {

@@ -58,8 +58,8 @@ const SKILL_ICON_PATHS = [
 async function finalizeSkill() {
   const result = await conversation.finalize();
   if (result) {
-    showToast(`Skill "${result.skill.skill_name}" created successfully!`, 'success');
-    router.push({ name: 'skill-detail', params: { skillId: result.skill_id } });
+    showToast(`Skill "${(result.skill as { skill_name: string }).skill_name}" created successfully!`, 'success');
+    router.push({ name: 'skill-detail', params: { skillId: result.skill_id as string } });
   }
 }
 

@@ -1,8 +1,21 @@
 import { ref, onUnmounted, type Ref } from 'vue';
 import type { ConversationMessage, SuperAgent, SuperAgentSession } from '../services/api';
 import { superAgentSessionApi, superAgentApi } from '../services/api';
-import { useProcessGroups, type ToolCallDelta } from './useProcessGroups';
+import { useProcessGroups } from './useProcessGroups';
 import { useAllMode } from './useAllMode';
+
+/**
+ * Discriminated union of all state_delta SSE event payloads.
+ * Enables type-safe narrowing in handleStateDelta without double-casting.
+ */
+type StateDelta =
+  | { type: 'message'; role?: string; content?: string; timestamp?: string; seq?: number; backend?: string }
+  | { type: 'content_delta'; content?: string }
+  | { type: 'tool_call'; id: string; name?: string; arguments?: string }
+  | { type: 'finish'; content?: string; backend?: string }
+  | { type: 'status_change'; status?: string }
+  | { type: 'error'; message?: string }
+  | { type: 'full_sync'; messages?: ConversationMessage[] };
 
 /**
  * Single source of truth composable for ALL AI chat panel UIs.
@@ -39,6 +52,32 @@ export function useAiChat(superAgentId: Ref<string>) {
   let onStreamingChunkCallback: ((text: string) => void) | null = null;
 
   let eventSource: EventSource | null = null;
+
+  // Reconnect watchdog — SSE comment keepalives are invisible to EventSource,
+  // so the client tracks named-event activity instead. If no named event arrives
+  // within HEARTBEAT_TIMEOUT_MS (server sends keepalives every 30 s, so 65 s gives
+  // ample margin), the connection is assumed stale and the stream is restarted.
+  // On reconnect, EventSource automatically sends Last-Event-ID; the server replays
+  // missed events from that seq so no messages are lost.
+  const HEARTBEAT_TIMEOUT_MS = 65_000;
+  let _heartbeatTimer: ReturnType<typeof setTimeout> | null = null;
+
+  function _resetHeartbeat() {
+    if (_heartbeatTimer) clearTimeout(_heartbeatTimer);
+    _heartbeatTimer = setTimeout(() => {
+      if (sessionId.value && eventSource) {
+        console.warn('[useAiChat] No SSE activity for 65 s — reconnecting');
+        connectStream();
+      }
+    }, HEARTBEAT_TIMEOUT_MS);
+  }
+
+  function _clearHeartbeat() {
+    if (_heartbeatTimer) {
+      clearTimeout(_heartbeatTimer);
+      _heartbeatTimer = null;
+    }
+  }
 
   function setOnStreamingChunk(cb: (text: string) => void) {
     onStreamingChunkCallback = cb;
@@ -89,7 +128,9 @@ export function useAiChat(superAgentId: Ref<string>) {
         try {
           const parsed = JSON.parse(sess.conversation_log);
           messages.value = Array.isArray(parsed) ? parsed : [];
-        } catch {
+        } catch (e) {
+          console.warn('Failed to parse conversation_log:', e);
+          error.value = 'Chat history could not be loaded (corrupt data)';
           messages.value = [];
         }
       } else {
@@ -206,11 +247,15 @@ export function useAiChat(superAgentId: Ref<string>) {
       sessionId.value,
     );
 
+    // Start watchdog — will reconnect if no named event arrives within timeout
+    _resetHeartbeat();
+
     // Listen for the named "state_delta" event from the SSE protocol
     eventSource.addEventListener('state_delta', (event: Event) => {
       const msgEvent = event as MessageEvent;
       try {
-        const data = JSON.parse(msgEvent.data);
+        _resetHeartbeat(); // any named event resets the stale-connection timer
+        const data = JSON.parse(msgEvent.data) as StateDelta;
 
         // Track seq for de-duplication
         const seq = parseInt(msgEvent.lastEventId || '0', 10);
@@ -222,8 +267,8 @@ export function useAiChat(superAgentId: Ref<string>) {
         }
 
         handleStateDelta(data);
-      } catch {
-        // Ignore unparseable events (e.g., heartbeats)
+      } catch (e) {
+        console.warn('[useAiChat] Failed to parse state_delta event:', e, msgEvent.data);
       }
     });
 
@@ -247,8 +292,8 @@ export function useAiChat(superAgentId: Ref<string>) {
             });
           }
         }
-      } catch {
-        // Ignore
+      } catch (e) {
+        console.warn('[useAiChat] Failed to parse message event:', e, msgEvent.data);
       }
     });
 
@@ -259,12 +304,13 @@ export function useAiChat(superAgentId: Ref<string>) {
 
   /**
    * Dispatch state_delta events by type.
+   * Switches on data.type so TypeScript narrows each case automatically.
    */
-  function handleStateDelta(data: Record<string, unknown>) {
+  function handleStateDelta(data: StateDelta) {
     // Multi-backend event interception for All/Compound modes
     if (allMode.isAllModeActive.value) {
       const wasActive = allMode.isAllModeActive.value;
-      const handled = allMode.handleMultiBackendDelta(data);
+      const handled = allMode.handleMultiBackendDelta(data as unknown as Record<string, unknown>);
       if (handled) {
         // Clear processing state when all-mode finishes
         // (backend_complete for all backends or synthesis_complete)
@@ -275,34 +321,25 @@ export function useAiChat(superAgentId: Ref<string>) {
       }
     }
 
-    const type = data.type as string;
-
-    switch (type) {
+    switch (data.type) {
       case 'message': {
         // Push complete message with de-duplication by seq
-        const msg = data as {
-          role?: string;
-          content?: string;
-          timestamp?: string;
-          seq?: number;
-          backend?: string;
-        };
-        if (msg.role && msg.content) {
+        if (data.role && data.content) {
           // De-duplicate by content + role only (not timestamp).
           // The optimistic user message added in sendMessage() has a
           // client-generated timestamp, while the server echo arrives
           // without one, so timestamp comparison always fails.
           const isDuplicate = messages.value.some(
-            (m) => m.content === msg.content && m.role === msg.role,
+            (m) => m.content === data.content && m.role === data.role,
           );
           if (!isDuplicate) {
             const entry: ConversationMessage = {
-              role: msg.role as 'user' | 'assistant' | 'system',
-              content: msg.content,
-              timestamp: msg.timestamp || new Date().toISOString(),
+              role: data.role as 'user' | 'assistant' | 'system',
+              content: data.content,
+              timestamp: data.timestamp || new Date().toISOString(),
             };
-            if (msg.backend) {
-              entry.backend = msg.backend;
+            if (data.backend) {
+              entry.backend = data.backend;
             }
             messages.value.push(entry);
           }
@@ -312,20 +349,19 @@ export function useAiChat(superAgentId: Ref<string>) {
 
       case 'content_delta': {
         // Accumulate streaming content
-        const delta = data as { content?: string };
-        if (delta.content) {
-          streamingContent.value += delta.content;
+        if (data.content) {
+          streamingContent.value += data.content;
           if (onStreamingChunkCallback) {
-            onStreamingChunkCallback(delta.content);
+            onStreamingChunkCallback(data.content);
           }
         }
         break;
       }
 
       case 'tool_call': {
-        // Process tool call deltas through process groups
-        const toolCall = data as unknown as ToolCallDelta;
-        processGroups.processToolCallDelta(toolCall);
+        // data is narrowed to { type: 'tool_call'; id: string; name?: string; arguments?: string }
+        // which is structurally compatible with ToolCallDelta (type: 'tool_call' ∈ ProcessGroupType)
+        processGroups.processToolCallDelta(data);
         break;
       }
 
@@ -334,9 +370,8 @@ export function useAiChat(superAgentId: Ref<string>) {
         // Use the server-resolved backend (from the finish event) so each
         // message permanently records which backend produced it, regardless
         // of later dropdown changes.
-        const finish = data as { content?: string; backend?: string };
-        const finalContent = finish.content || streamingContent.value;
-        const resolvedBackend = finish.backend || _currentBackend;
+        const finalContent = data.content || streamingContent.value;
+        const resolvedBackend = data.backend || _currentBackend;
         if (finalContent) {
           messages.value.push({
             role: 'assistant',
@@ -353,10 +388,9 @@ export function useAiChat(superAgentId: Ref<string>) {
 
       case 'status_change': {
         // Update processing state based on status
-        const status = data as { status?: string };
-        if (status.status === 'streaming' || status.status === 'processing') {
+        if (data.status === 'streaming' || data.status === 'processing') {
           isProcessing.value = true;
-        } else if (status.status === 'idle' || status.status === 'error') {
+        } else if (data.status === 'idle' || data.status === 'error') {
           isProcessing.value = false;
         }
         break;
@@ -364,17 +398,15 @@ export function useAiChat(superAgentId: Ref<string>) {
 
       case 'error': {
         // Display error
-        const errData = data as { message?: string };
-        error.value = errData.message || 'Stream error';
+        error.value = data.message || 'Stream error';
         isProcessing.value = false;
         break;
       }
 
       case 'full_sync': {
         // Replace all state with synced data
-        const sync = data as { messages?: ConversationMessage[] };
-        if (sync.messages) {
-          messages.value = sync.messages;
+        if (data.messages) {
+          messages.value = data.messages;
         }
         streamingContent.value = '';
         processGroups.clearGroups();
@@ -388,6 +420,7 @@ export function useAiChat(superAgentId: Ref<string>) {
   }
 
   function closeStream() {
+    _clearHeartbeat();
     if (eventSource) {
       eventSource.close();
       eventSource = null;
@@ -396,6 +429,7 @@ export function useAiChat(superAgentId: Ref<string>) {
 
   function cleanup() {
     closeStream();
+    _clearHeartbeat();
     allMode.reset();
   }
 

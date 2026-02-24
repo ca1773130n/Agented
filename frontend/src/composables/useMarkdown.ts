@@ -117,6 +117,8 @@ export function attachCodeCopyHandlers(container: HTMLElement): void {
           setTimeout(() => {
             btn.textContent = 'Copy';
           }, 1500);
+        }).catch((err) => {
+          console.warn('Clipboard write failed:', err);
         });
       }
     });

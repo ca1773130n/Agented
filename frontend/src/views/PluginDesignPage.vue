@@ -105,8 +105,8 @@ async function copyComponentContent() {
 async function finalizePlugin() {
   const result = await conversation.finalize();
   if (result) {
-    showToast(`Plugin "${result.plugin.name}" created successfully!`, 'success');
-    router.push({ name: 'plugin-detail', params: { pluginId: result.plugin_id } });
+    showToast(`Plugin "${(result.plugin as { name: string }).name}" created successfully!`, 'success');
+    router.push({ name: 'plugin-detail', params: { pluginId: result.plugin_id as string } });
   }
 }
 

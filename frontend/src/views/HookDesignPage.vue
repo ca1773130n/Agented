@@ -229,7 +229,7 @@ const HOOK_ICON_PATHS = [
 async function finalizeHook() {
   const result = await conversation.finalize();
   if (result) {
-    showToast(`Hook "${result.hook.name}" created successfully!`, 'success');
+    showToast(`Hook "${(result.hook as { name: string }).name}" created successfully!`, 'success');
     router.push({ name: 'hooks' });
   }
 }

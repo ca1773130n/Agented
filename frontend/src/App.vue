@@ -61,8 +61,8 @@ async function loadTriggers() {
   try {
     const data = await triggerApi.list();
     triggers.value = data.triggers || [];
-  } catch {
-    // Silent fail — sidebar submenus will just be empty
+  } catch (err) {
+    console.warn('[Sidebar] Failed to load triggers:', err);
   }
 }
 
@@ -70,8 +70,8 @@ async function loadProjects() {
   try {
     const data = await projectApi.list();
     projects.value = data.projects || [];
-  } catch {
-    // Silent fail — sidebar submenus will just be empty
+  } catch (err) {
+    console.warn('[Sidebar] Failed to load projects:', err);
   }
 }
 
@@ -79,8 +79,8 @@ async function loadProducts() {
   try {
     const data = await productApi.list();
     products.value = data.products || [];
-  } catch {
-    // Silent fail — sidebar submenus will just be empty
+  } catch (err) {
+    console.warn('[Sidebar] Failed to load products:', err);
   }
 }
 
@@ -88,8 +88,8 @@ async function loadTeams() {
   try {
     const data = await teamApi.list();
     teams.value = data.teams || [];
-  } catch {
-    // Silent fail — sidebar submenus will just be empty
+  } catch (err) {
+    console.warn('[Sidebar] Failed to load teams:', err);
   }
 }
 
@@ -97,8 +97,8 @@ async function loadPlugins() {
   try {
     const data = await pluginApi.list();
     plugins.value = data.plugins || [];
-  } catch {
-    // Silent fail — sidebar submenus will just be empty
+  } catch (err) {
+    console.warn('[Sidebar] Failed to load plugins:', err);
   }
 }
 
@@ -106,8 +106,8 @@ async function loadSidebarBackends() {
   try {
     const data = await backendApi.list();
     sidebarBackends.value = data.backends || [];
-  } catch {
-    // Silent fail — sidebar submenus will just be empty
+  } catch (err) {
+    console.warn('[Sidebar] Failed to load backends:', err);
   }
 }
 

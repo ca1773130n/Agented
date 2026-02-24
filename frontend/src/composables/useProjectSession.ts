@@ -145,8 +145,8 @@ export function useProjectSession(projectId: Ref<string>) {
       try {
         const data = JSON.parse((event as MessageEvent).data);
         onOutputCb?.(data.line);
-      } catch {
-        // Ignore unparseable output events
+      } catch (e) {
+        console.warn('[useProjectSession] Failed to parse output event:', e, (event as MessageEvent).data);
       }
     });
 
@@ -160,8 +160,8 @@ export function useProjectSession(projectId: Ref<string>) {
           sessions.value[idx] = { ...sessions.value[idx], status: data.status };
         }
         onCompleteCb?.(data.status, data.exit_code);
-      } catch {
-        // Ignore unparseable complete events
+      } catch (e) {
+        console.warn('[useProjectSession] Failed to parse complete event:', e, (event as MessageEvent).data);
       }
     });
 
@@ -183,8 +183,8 @@ export function useProjectSession(projectId: Ref<string>) {
           maxIterations: data.max_iterations ?? 0,
           circuitBreakerTriggered: false,
         };
-      } catch {
-        /* ignore */
+      } catch (e) {
+        console.warn('[useProjectSession] Failed to parse ralph_iteration event:', e, (event as MessageEvent).data);
       }
     });
 
@@ -196,8 +196,8 @@ export function useProjectSession(projectId: Ref<string>) {
           ralphState.value.circuitBreakerTriggered = true;
         }
         onErrorCb?.(`Circuit breaker: ${data.reason}`);
-      } catch {
-        /* ignore */
+      } catch (e) {
+        console.warn('[useProjectSession] Failed to parse circuit_breaker event:', e, (event as MessageEvent).data);
       }
     });
 
@@ -225,8 +225,8 @@ export function useProjectSession(projectId: Ref<string>) {
             teamState.value.tasks.push(data.data);
           }
         }
-      } catch {
-        /* ignore */
+      } catch (e) {
+        console.warn('[useProjectSession] Failed to parse team_update event:', e, (event as MessageEvent).data);
       }
     });
   }

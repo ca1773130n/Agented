@@ -21,6 +21,8 @@ defineEmits<{
   'zoom-in': []
   'zoom-out': []
   'set-topology': [topology: string | null]
+  'export-png': []
+  'export-json': []
 }>()
 
 function topologyColorClass(t: string | null): string {
@@ -108,6 +110,22 @@ function topologyColorClass(t: string | null): string {
         </svg>
         Fit View
       </button>
+      <button class="toolbar-btn" title="Export canvas as PNG" @click="$emit('export-png')">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="1" y="1" width="14" height="11" rx="1"/>
+          <path d="M1 9l3-3 3 3 3-4 4 5"/>
+        </svg>
+        PNG
+      </button>
+      <button class="toolbar-btn" title="Export topology as JSON" @click="$emit('export-json')">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M4 2H2a1 1 0 00-1 1v10a1 1 0 001 1h2"/>
+          <path d="M12 2h2a1 1 0 011 1v10a1 1 0 01-1 1h-2"/>
+          <line x1="5" y1="8" x2="11" y2="8"/>
+        </svg>
+        JSON
+      </button>
+      <div class="toolbar-separator"></div>
       <button class="toolbar-btn primary" title="Save canvas state" @click="$emit('save')">
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
           <path d="M13 15H3a1 1 0 01-1-1V2a1 1 0 011-1h7l4 4v9a1 1 0 01-1 1z" />

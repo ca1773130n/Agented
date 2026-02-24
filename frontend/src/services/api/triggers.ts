@@ -1,13 +1,15 @@
 /**
  * Trigger, audit, resolve, execution, and PR review API modules.
  */
-import { API_BASE, apiFetch } from './client';
+import { API_BASE, apiFetch, createBackoffEventSource } from './client';
+import type { BackoffEventSourceOptions } from './client';
 import type {
   Trigger,
   ExecutionStatus,
   ProjectPath,
   PathType,
   TriggerSource,
+  AuditEvent,
   AuditRecord,
   AuditStats,
   ProjectInfo,
@@ -45,6 +47,8 @@ export const triggerApi = {
     schedule_time?: string;
     schedule_day?: number;
     schedule_timezone?: string;
+    timeout_seconds?: number | null;
+    webhook_secret?: string | null;
   }) => apiFetch<{ message: string; trigger_id: string; name: string }>('/admin/triggers', {
     method: 'POST',
     body: JSON.stringify(data),
@@ -65,6 +69,8 @@ export const triggerApi = {
     model: string;
     execution_mode: 'direct' | 'team';
     team_id: string | null;
+    timeout_seconds: number | null;
+    webhook_secret: string | null;
   }>) => apiFetch<{ message: string }>(`/admin/triggers/${triggerId}`, {
     method: 'PUT',
     body: JSON.stringify(data),
@@ -123,6 +129,25 @@ export const triggerApi = {
       method: 'PUT',
       body: JSON.stringify({ auto_resolve: autoResolve }),
     }),
+
+  previewPrompt: (triggerId: string, sampleData?: {
+    paths?: string;
+    message?: string;
+    pr_url?: string;
+    pr_number?: string | number;
+    pr_title?: string;
+    pr_author?: string;
+    repo_url?: string;
+    repo_full_name?: string;
+  }) => apiFetch<{
+    rendered_prompt: string;
+    trigger_id: string;
+    trigger_name: string;
+    unresolved_placeholders: string[];
+  }>(`/admin/triggers/${triggerId}/preview-prompt`, {
+    method: 'POST',
+    body: JSON.stringify(sampleData || {}),
+  }),
 };
 
 // Audit API
@@ -152,7 +177,12 @@ export const auditApi = {
 
   getDetail: (auditId: string) => apiFetch<AuditRecord>(`/api/audit/${auditId}`),
 
-  getWeeklyReport: (auditWeek: string) => apiFetch<any>(`/api/audit/reports/${auditWeek}`),
+  getWeeklyReport: (auditWeek: string) => apiFetch<AuditRecord>(`/api/audit/reports/${auditWeek}`),
+
+  getEvents: (limit?: number) => {
+    const query = limit ? `?limit=${limit}` : '';
+    return apiFetch<{ events: AuditEvent[]; total: number }>(`/api/audit/events${query}`);
+  },
 };
 
 // Resolve API
@@ -202,9 +232,9 @@ export const executionApi = {
       method: 'DELETE',
     }),
 
-  // Create SSE connection for real-time log streaming
-  streamLogs: (executionId: string): EventSource => {
-    return new EventSource(`${API_BASE}/admin/executions/${executionId}/stream`);
+  // Create SSE connection for real-time log streaming with exponential backoff reconnection
+  streamLogs: (executionId: string, options?: BackoffEventSourceOptions): EventSource => {
+    return createBackoffEventSource(`${API_BASE}/admin/executions/${executionId}/stream`, options);
   },
 };
 

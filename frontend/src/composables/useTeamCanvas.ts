@@ -2,6 +2,7 @@ import { ref, type Ref } from 'vue'
 import type { Node, Edge } from '@vue-flow/core'
 import type {
   Team,
+  TeamMember,
   TeamAgentAssignment,
   TopologyType,
   TopologyConfig,
@@ -35,7 +36,7 @@ export interface SyncToTeamResult {
 
 export function useTeamCanvas(
   team: Ref<Team | null>,
-  members: Ref<any[]>,
+  members: Ref<TeamMember[]>,
   assignments: Ref<TeamAgentAssignment[]>,
 ) {
   const nodes = ref<Node<AgentNodeData | SuperAgentNodeData>[]>([])
@@ -83,7 +84,7 @@ export function useTeamCanvas(
         }
 
         // Regular agent member or manual member
-        const agentId = member.agent_id || member.id || `member-${idx}`
+        const agentId = member.agent_id || String(member.id) || `member-${idx}`
         const memberAssignments = assignments.value
           .filter((a) => a.agent_id === agentId)
           .map((a) => ({ type: a.entity_type, name: a.entity_name || a.entity_id, id: a.entity_id }))
@@ -112,8 +113,8 @@ export function useTeamCanvas(
       if (topologyConfig?.edges && topologyConfig.edges.length > 0) {
         const nodeIds = new Set(newNodes.map((n) => n.id))
         newEdges = topologyConfig.edges
-          .filter((e: any) => nodeIds.has(e.source) && nodeIds.has(e.target))
-          .map((e: any) => ({
+          .filter((e) => nodeIds.has(e.source) && nodeIds.has(e.target))
+          .map((e) => ({
             id: e.id || `e-${e.source}-${e.target}`,
             source: e.source,
             target: e.target,
