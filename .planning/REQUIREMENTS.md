@@ -73,31 +73,32 @@
 
 ## Traceability
 
-<!-- Updated by roadmapper -->
+<!-- Updated by roadmapper — 2026-02-25 -->
 
 | REQ-ID | Phase | Status |
 |--------|-------|--------|
-| ENV-01 | - | Pending |
-| ENV-02 | - | Pending |
-| ENV-03 | - | Pending |
-| DEP-01 | - | Pending |
-| DEP-02 | - | Pending |
-| DEP-03 | - | Pending |
-| DEP-04 | - | Pending |
-| AUTH-01 | - | Pending |
-| AUTH-02 | - | Pending |
-| AUTH-03 | - | Pending |
-| AUTH-04 | - | Pending |
-| AUTH-05 | - | Pending |
-| SEC-01 | - | Pending |
-| SEC-02 | - | Pending |
-| SEC-03 | - | Pending |
-| OBS-01 | - | Pending |
-| OBS-02 | - | Pending |
-| OBS-03 | - | Pending |
-| QUAL-01 | - | Pending |
-| QUAL-02 | - | Pending |
-| QUAL-03 | - | Pending |
+| ENV-01 | Phase 1 — Environment and WSGI Foundation | Pending |
+| ENV-02 | Phase 1 — Environment and WSGI Foundation | Pending |
+| ENV-03 | Phase 1 — Environment and WSGI Foundation | Pending |
+| DEP-01 | Phase 1 — Environment and WSGI Foundation | Pending |
+| DEP-02 | Phase 1 — Environment and WSGI Foundation | Pending |
+| DEP-03 | Phase 1 — Environment and WSGI Foundation | Pending |
+| DEP-04 | Phase 1 — Environment and WSGI Foundation | Pending |
+| AUTH-01 | Phase 2 — API Authentication | Pending |
+| AUTH-02 | Phase 2 — API Authentication | Pending |
+| AUTH-03 | Phase 2 — API Authentication | Pending |
+| AUTH-04 | Phase 2 — API Authentication | Pending |
+| AUTH-05 | Phase 2 — API Authentication | Pending |
+| SEC-01 | Phase 3 — Security Hardening | Pending |
+| SEC-02 | Phase 3 — Security Hardening | Pending |
+| SEC-03 | Phase 3 — Security Hardening | Pending |
+| OBS-01 | Phase 4 — Observability and Process Reliability | Pending |
+| OBS-02 | Phase 4 — Observability and Process Reliability | Pending |
+| OBS-03 | Phase 4 — Observability and Process Reliability | Pending |
+| QUAL-01 | Phase 5 — Code Quality and Maintainability | Pending |
+| QUAL-02 | Phase 5 — Code Quality and Maintainability | Pending |
+| QUAL-03 | Phase 5 — Code Quality and Maintainability | Pending |
 
 ---
 *Created: 2026-02-25 (auto mode — all table stakes included)*
+*Traceability updated: 2026-02-25 (roadmapper)*
