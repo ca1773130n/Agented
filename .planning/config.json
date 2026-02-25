@@ -27,8 +27,8 @@
     "auto_fix_warnings": false
   },
   "research_gates": {
-    "verification_design": true,
-    "method_selection": true,
+    "verification_design": false,
+    "method_selection": false,
     "baseline_review": false
   },
   "confirmation_gates": {
