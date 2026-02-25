@@ -24,12 +24,12 @@
 
 **Progress:**
 ```
-[          ] Phase 1: Environment and WSGI Foundation
-[          ] Phase 2: API Authentication
-[          ] Phase 3: Security Hardening
-[          ] Phase 4: Observability and Process Reliability
-[          ] Phase 5: Code Quality and Maintainability
-[          ] Phase 6: Web UI Roadmapping Feature
+[          ] Phase 1: Web UI Roadmapping Feature
+[          ] Phase 2: Environment and WSGI Foundation
+[          ] Phase 3: API Authentication
+[          ] Phase 4: Security Hardening
+[          ] Phase 5: Observability and Process Reliability
+[          ] Phase 6: Code Quality and Maintainability
 ```
 
 Overall: 0/6 phases complete (0%)
@@ -83,6 +83,7 @@ None — this milestone uses proxy verification throughout. No deferred (Level 3
 ### Roadmap Evolution
 
 - Phase 6 added: Web UI Roadmapping Feature — full GRD project planning functionality in web UI frontend
+- Phases reordered: Web UI Roadmapping moved to Phase 1; previous Phases 1-5 shifted to 2-6
 
 ### Todos
 
@@ -93,7 +94,7 @@ None — this milestone uses proxy verification throughout. No deferred (Level 3
 
 ## Session Continuity
 
-**Next action:** Plan Phase 1 via `/grd:plan-phase 1`
+**Next action:** Plan Phase 1 (Web UI Roadmapping Feature) via `/grd:plan-phase 1`
 
 **To resume:** Read ROADMAP.md and this STATE.md, then proceed to Phase 1 planning.
 
