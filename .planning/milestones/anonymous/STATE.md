@@ -29,9 +29,10 @@
 [          ] Phase 3: Security Hardening
 [          ] Phase 4: Observability and Process Reliability
 [          ] Phase 5: Code Quality and Maintainability
+[          ] Phase 6: Web UI Roadmapping Feature
 ```
 
-Overall: 0/5 phases complete (0%)
+Overall: 0/6 phases complete (0%)
 
 ---
 
@@ -78,6 +79,10 @@ None — this milestone uses proxy verification throughout. No deferred (Level 3
 - SSE auth pattern final selection: short-lived query-string tokens vs. cookie auth vs. `@microsoft/fetch-event-source` — decide at Phase 2 planning
 - Deployment target: systemd unit file vs. Docker Compose — PTY service uses `os.fork()` which has Docker UID mapping implications; confirm before Phase 4
 - Gevent + APScheduler compatibility: validate in Phase 1 spike before committing to gevent workers
+
+### Roadmap Evolution
+
+- Phase 6 added: Web UI Roadmapping Feature — full GRD project planning functionality in web UI frontend
 
 ### Todos
 

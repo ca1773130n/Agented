@@ -169,5 +169,15 @@ Mapped: 21/21. No orphaned requirements.
 - QUAL-03 (ExecutionService split) requires integration test coverage of `run_trigger` before splitting begins — assess coverage at Phase 5 planning time
 - Gevent monkey patching: use `monkey.patch_all(thread=False)` or validate APScheduler job firing rates before deploying gevent workers
 
+### Phase 6: Web UI Roadmapping Feature
+
+**Goal:** Web UI Roadmapping Feature
+**Depends on:** Phase 5
+**Duration:** 7d
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /grd:plan-phase 6 to break down)
+
 ---
 *Created: 2026-02-25*
