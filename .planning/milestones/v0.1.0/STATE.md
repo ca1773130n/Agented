@@ -2,7 +2,7 @@
 
 **Project:** Agented — Agentic Development Platform
 **Milestone:** v0.1.0 — Production Hardening
-**Last Updated:** 2026-02-28T03:00:00
+**Last Updated:** 2026-02-28T12:00:00
 
 ---
 
@@ -12,20 +12,20 @@
 
 **Milestone Goal:** Harden the existing feature-complete platform for safe internal deployment: stable configuration, production WSGI runtime, API authentication, security headers, observability, and code quality.
 
-**Current Focus:** Phase 2 — Environment and WSGI Foundation — Plan 01 complete.
+**Current Focus:** Phase 2 — Environment and WSGI Foundation — Plan 02 complete.
 
 ---
 
 ## Current Position
 
 **Active Phase:** Phase 2 — Environment and WSGI Foundation (in progress)
-**Active Plan:** Plan 01 complete — dependencies, SECRET_KEY persistence, gunicorn.conf.py
-**Status:** Phase 2 Plan 01 complete
+**Active Plan:** Plan 02 complete — .env.example, deploy target, process supervisor configs
+**Status:** Phase 2 Plan 02 complete
 
 **Progress:**
 ```
 [==========] Phase 1: Web UI Roadmapping Feature (ALL 5 plans complete)
-[===       ] Phase 2: Environment and WSGI Foundation (Plan 01 complete)
+[======    ] Phase 2: Environment and WSGI Foundation (Plan 02 complete)
 [          ] Phase 3: API Authentication
 [          ] Phase 4: Security Hardening
 [          ] Phase 5: Observability and Process Reliability
@@ -75,6 +75,8 @@ None — this milestone uses proxy verification throughout. No deferred (Level 3
 | Short-lived query-string tokens for SSE auth (recommended) | Three valid approaches exist; query-string tokens are simplest with no new frontend dependency; final selection at Phase 2 planning | Phase 2 |
 | Accept default monkey.patch_all() from GeventWorker | Custom thread=False adds complexity; validate APScheduler compatibility in integration testing if issues arise | Phase 2 Plan 01 |
 | .secret_key file in backend/ directory | Locality with run.py and app factory; .gitignore prevents committing | Phase 2 Plan 01 |
+| Added 3 extra env vars to .env.example | CODEX_HOME, GEMINI_CLI_HOME, OPENCODE_HOME found in codebase audit; included for completeness | Phase 2 Plan 02 |
+| RestartSec=3 in systemd unit | Within the 5-second restart constraint; matches research recommendation | Phase 2 Plan 02 |
 
 ### Critical Pitfalls (From Research)
 
@@ -103,9 +105,9 @@ None — this milestone uses proxy verification throughout. No deferred (Level 3
 
 ## Session Continuity
 
-**Next action:** Execute Phase 2 Plan 02 (justfile, process supervisor, .env.example).
+**Next action:** Execute Phase 2 Plan 03 (if exists) or complete Phase 2.
 
-**To resume:** Read ROADMAP.md and this STATE.md. Phase 2 Plan 01 summary in `phases/02-environment-and-wsgi-foundation/02-01-SUMMARY.md`.
+**To resume:** Read ROADMAP.md and this STATE.md. Phase 2 summaries in `phases/02-environment-and-wsgi-foundation/02-01-SUMMARY.md` and `02-02-SUMMARY.md`.
 
 ---
 *Initialized: 2026-02-25*
