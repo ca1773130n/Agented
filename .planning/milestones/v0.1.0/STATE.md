@@ -2,7 +2,7 @@
 
 **Project:** Agented — Agentic Development Platform
 **Milestone:** v0.1.0 — Production Hardening
-**Last Updated:** 2026-02-28T02:00:00
+**Last Updated:** 2026-02-28T03:00:00
 
 ---
 
@@ -12,27 +12,27 @@
 
 **Milestone Goal:** Harden the existing feature-complete platform for safe internal deployment: stable configuration, production WSGI runtime, API authentication, security headers, observability, and code quality.
 
-**Current Focus:** Phase 1 — Web UI Roadmapping Feature — COMPLETED. Ready for Phase 2.
+**Current Focus:** Phase 2 — Environment and WSGI Foundation — Plan 01 complete.
 
 ---
 
 ## Current Position
 
-**Active Phase:** Phase 2 — Environment and WSGI Foundation (not started)
-**Active Plan:** None — Phase 1 complete, Phase 2 planning needed
-**Status:** Phase 1 complete
+**Active Phase:** Phase 2 — Environment and WSGI Foundation (in progress)
+**Active Plan:** Plan 01 complete — dependencies, SECRET_KEY persistence, gunicorn.conf.py
+**Status:** Phase 2 Plan 01 complete
 
 **Progress:**
 ```
 [==========] Phase 1: Web UI Roadmapping Feature (ALL 5 plans complete)
-[          ] Phase 2: Environment and WSGI Foundation
+[===       ] Phase 2: Environment and WSGI Foundation (Plan 01 complete)
 [          ] Phase 3: API Authentication
 [          ] Phase 4: Security Hardening
 [          ] Phase 5: Observability and Process Reliability
 [          ] Phase 6: Code Quality and Maintainability
 ```
 
-Overall: 1/6 phases complete (17%)
+Overall: 1/6 phases complete, Phase 2 in progress
 
 ---
 
@@ -73,6 +73,8 @@ None — this milestone uses proxy verification throughout. No deferred (Level 3
 | Planning button placed left of Management per CONTEXT.md | Consistent with user journey: plan first, then manage | Phase 1 Plan 05 |
 | Init status polling at 5s interval with watch lifecycle | Balances responsiveness with server load; auto-cleans on unmount | Phase 1 Plan 05 |
 | Short-lived query-string tokens for SSE auth (recommended) | Three valid approaches exist; query-string tokens are simplest with no new frontend dependency; final selection at Phase 2 planning | Phase 2 |
+| Accept default monkey.patch_all() from GeventWorker | Custom thread=False adds complexity; validate APScheduler compatibility in integration testing if issues arise | Phase 2 Plan 01 |
+| .secret_key file in backend/ directory | Locality with run.py and app factory; .gitignore prevents committing | Phase 2 Plan 01 |
 
 ### Critical Pitfalls (From Research)
 
@@ -101,9 +103,9 @@ None — this milestone uses proxy verification throughout. No deferred (Level 3
 
 ## Session Continuity
 
-**Next action:** Phase 1 complete. Plan and execute Phase 2 (Environment and WSGI Foundation).
+**Next action:** Execute Phase 2 Plan 02 (justfile, process supervisor, .env.example).
 
-**To resume:** Read ROADMAP.md and this STATE.md. Phase 1 summaries in `phases/01-web-ui-roadmapping-feature/`.
+**To resume:** Read ROADMAP.md and this STATE.md. Phase 2 Plan 01 summary in `phases/02-environment-and-wsgi-foundation/02-01-SUMMARY.md`.
 
 ---
 *Initialized: 2026-02-25*
