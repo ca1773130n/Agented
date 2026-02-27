@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, watch, onUnmounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import type { Project, HarnessStatusResult, ProjectSkill, Hook, Command, Rule, Agent, ProjectInstallation } from '../services/api';
-import { projectApi, hookApi, commandApi, ruleApi, agentApi, teamApi, ApiError } from '../services/api';
+import { projectApi, grdApi, hookApi, commandApi, ruleApi, agentApi, teamApi, ApiError } from '../services/api';
 import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import EntityLayout from '../layouts/EntityLayout.vue';
 import InteractiveSetup from '../components/projects/InteractiveSetup.vue';
@@ -52,6 +52,10 @@ const isLoadingLibrary = ref(false);
 // Installation state
 const installations = ref<ProjectInstallation[]>([]);
 const isInstallingComponent = ref<Record<string, boolean>>({});
+
+// GRD init status
+const grdInitStatus = ref<string>('none');
+let initPollInterval: ReturnType<typeof setInterval> | null = null;
 
 // Interactive Setup state
 const showSetup = ref(false);
@@ -153,8 +157,37 @@ async function loadData() {
   if (project.value?.github_repo) await checkHarnessStatus();
   // Fire and forget library items load (non-critical)
   loadLibraryItems();
+  loadGrdStatus();
   return project.value;
 }
+
+async function loadGrdStatus() {
+  if (!projectId.value) return;
+  try {
+    const result = await grdApi.getPlanningStatus(projectId.value);
+    grdInitStatus.value = result.grd_init_status;
+  } catch {
+    grdInitStatus.value = 'none';
+  }
+}
+
+watch(grdInitStatus, (newVal, oldVal) => {
+  if (newVal === 'initializing' && !initPollInterval) {
+    initPollInterval = setInterval(loadGrdStatus, 5000);
+  } else if (newVal !== 'initializing' && initPollInterval) {
+    clearInterval(initPollInterval);
+    initPollInterval = null;
+  }
+  if (oldVal === 'initializing' && newVal === 'ready') {
+    showToast('GRD planning initialized successfully', 'success');
+  } else if (oldVal === 'initializing' && newVal === 'failed') {
+    showToast('GRD planning initialization failed', 'error');
+  }
+});
+
+onUnmounted(() => {
+  if (initPollInterval) clearInterval(initPollInterval);
+});
 
 async function addSkill() {
   if (!newSkillName.value.trim()) { showToast('Skill name is required', 'error'); return; }
@@ -350,6 +383,13 @@ function onSetupCompleted() {
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
           Edit Project
         </button>
+        <button class="action-btn planning-btn" @click="router.push({ name: 'project-planning', params: { projectId: projectId } })">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+          Planning
+          <span v-if="grdInitStatus === 'initializing'" class="init-badge init-badge--loading" title="GRD initializing...">...</span>
+          <span v-else-if="grdInitStatus === 'ready'" class="init-badge init-badge--ready" title="Planning ready">&#10003;</span>
+          <span v-else-if="grdInitStatus === 'failed'" class="init-badge init-badge--failed" title="Initialization failed">!</span>
+        </button>
         <button class="action-btn secondary" @click="router.push({ name: 'project-management', params: { projectId: projectId } })">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
           Management
@@ -462,8 +502,15 @@ function onSetupCompleted() {
 .action-btn.primary:hover { background: #00c4ee; border-color: #00c4ee; }
 .action-btn.harness-btn { background: var(--accent-violet-dim); color: var(--accent-violet); border: 1px solid transparent; }
 .action-btn.harness-btn:hover:not(:disabled) { border-color: var(--accent-violet); }
+.action-btn.planning-btn { background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid transparent; }
+.action-btn.planning-btn:hover { border-color: #10b981; }
 .action-btn.setup-btn { background: var(--accent-amber-dim, rgba(255, 170, 0, 0.15)); color: var(--accent-amber, #ffaa00); border: 1px solid transparent; }
 .action-btn.setup-btn:hover:not(:disabled) { border-color: var(--accent-amber, #ffaa00); }
+.init-badge { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: 50%; font-size: 10px; margin-left: 2px; }
+.init-badge--loading { background: var(--color-warning, #f59e0b); color: #000; animation: pulse 1.5s ease-in-out infinite; }
+.init-badge--ready { background: var(--color-success, #10b981); color: #fff; }
+.init-badge--failed { background: var(--color-error, #ef4444); color: #fff; }
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
 .action-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .spinner-icon { animation: spin 1s linear infinite; }
 .modal { background: var(--bg-secondary); border: 1px solid var(--border-default); border-radius: 12px; width: 90%; max-width: 450px; max-height: 90vh; display: flex; flex-direction: column; }
