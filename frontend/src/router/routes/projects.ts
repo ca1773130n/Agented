@@ -28,4 +28,11 @@ export const projectRoutes: RouteRecordRaw[] = [
     props: true,
     meta: { title: 'Project Management', requiresEntity: 'projectId' },
   },
+  {
+    path: '/projects/:projectId/planning',
+    name: 'project-planning',
+    component: () => import('../../views/ProjectPlanningPage.vue'),
+    props: true,
+    meta: { title: 'Project Planning', requiresEntity: 'projectId' },
+  },
 ];

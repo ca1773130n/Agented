@@ -195,6 +195,10 @@ export type {
   HistoryStatsResponse,
   SessionStatsSummary,
 
+  // Planning types
+  PlanningStatus,
+  InvokePlanningCommandRequest,
+
   // Setup types
   SetupQuestion,
   SetupLogEntry,

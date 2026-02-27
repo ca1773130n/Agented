@@ -700,6 +700,7 @@ export interface Project {
   clone_error?: string;
   clone_status?: 'none' | 'cloning' | 'cloned' | 'error';
   last_synced_at?: string;
+  manager_super_agent_id?: string;
   team_count: number;
   team_topology_config?: string;
   created_at?: string;
@@ -1142,6 +1143,20 @@ export interface SessionStatsSummary {
   total_cost_usd: number;
   models: Record<string, { input_tokens: number; output_tokens: number; cache_read_tokens: number; cache_creation_tokens: number; cost_usd: number }>;
   daily_activity: { date: string; messageCount: number; sessionCount: number; toolCallCount: number }[];
+}
+
+// =============================================================================
+// Planning Types
+// =============================================================================
+
+export interface PlanningStatus {
+  grd_init_status: 'none' | 'initializing' | 'ready' | 'failed';
+  active_session_id: string | null;
+}
+
+export interface InvokePlanningCommandRequest {
+  command: string;
+  args?: Record<string, string>;
 }
 
 // =============================================================================

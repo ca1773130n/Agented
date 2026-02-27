@@ -153,6 +153,15 @@ export const grdApi = {
     return apiFetch<{ phases: GrdPhase[] }>(`/api/projects/${projectId}/phases${qs}`);
   },
 
+  createPhase: (
+    projectId: string,
+    data: { milestone_id: string; name: string; goal?: string; status?: string },
+  ) =>
+    apiFetch<{ message: string; phase: GrdPhase }>(`/api/projects/${projectId}/phases`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
   listPlans: (projectId: string, phaseId?: string) => {
     const qs = phaseId ? `?phase_id=${phaseId}` : '';
     return apiFetch<{ plans: GrdPlan[] }>(`/api/projects/${projectId}/plans${qs}`);
@@ -166,6 +175,30 @@ export const grdApi = {
         body: JSON.stringify({ status }),
       }
     ),
+
+  createPlan: (
+    projectId: string,
+    data: { phase_id: string; title: string; description?: string; status?: string; tasks_json?: string },
+  ) =>
+    apiFetch<{ message: string; plan: GrdPlan }>(`/api/projects/${projectId}/plans`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  updatePlan: (
+    projectId: string,
+    planId: string,
+    data: { title?: string; description?: string; status?: string; tasks_json?: string },
+  ) =>
+    apiFetch<{ message: string; plan: GrdPlan }>(`/api/projects/${projectId}/plans/${planId}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+
+  deletePlan: (projectId: string, planId: string) =>
+    apiFetch<{ message: string }>(`/api/projects/${projectId}/plans/${planId}`, {
+      method: 'DELETE',
+    }),
 
   // Session management
   createSession: (projectId: string, request: CreateSessionRequest) =>
@@ -232,4 +265,37 @@ export const grdApi = {
    */
   streamSession: (projectId: string, sessionId: string): EventSource =>
     new EventSource(`/api/projects/${projectId}/sessions/${sessionId}/stream`),
+
+  // Project AI Chat
+  sendProjectChat: (
+    projectId: string,
+    data: { content: string; milestone_id?: string },
+  ) =>
+    apiFetch<{ status: string; session_id: string; super_agent_id: string }>(
+      `/api/projects/${projectId}/chat`,
+      { method: 'POST', body: JSON.stringify(data) },
+    ),
+
+  streamProjectChat: (projectId: string): EventSource =>
+    new EventSource(`/api/projects/${projectId}/chat/stream`),
+
+  // Planning command invocation
+  invokePlanningCommand: (
+    projectId: string,
+    command: string,
+    args?: Record<string, string>,
+  ) =>
+    apiFetch<{ session_id: string; status: string }>(
+      `/api/projects/${projectId}/planning/invoke`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ command, args }),
+      },
+    ),
+
+  // Planning initialization status
+  getPlanningStatus: (projectId: string) =>
+    apiFetch<{ grd_init_status: string; active_session_id: string | null }>(
+      `/api/projects/${projectId}/planning/status`,
+    ),
 };
