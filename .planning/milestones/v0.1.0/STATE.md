@@ -2,7 +2,7 @@
 
 **Project:** Agented — Agentic Development Platform
 **Milestone:** v0.1.0 — Production Hardening
-**Last Updated:** 2026-02-28
+**Last Updated:** 2026-02-28T02:00:00
 
 ---
 
@@ -12,19 +12,19 @@
 
 **Milestone Goal:** Harden the existing feature-complete platform for safe internal deployment: stable configuration, production WSGI runtime, API authentication, security headers, observability, and code quality.
 
-**Current Focus:** Phase 1 — Web UI Roadmapping Feature — Wave 2 plans executing.
+**Current Focus:** Phase 1 — Web UI Roadmapping Feature — COMPLETED. Ready for Phase 2.
 
 ---
 
 ## Current Position
 
-**Active Phase:** Phase 1 — Web UI Roadmapping Feature
-**Active Plan:** Plans 01/02/03/04 completed, Plan 05 in progress
-**Status:** Phase 1 Wave 2 executing
+**Active Phase:** Phase 2 — Environment and WSGI Foundation (not started)
+**Active Plan:** None — Phase 1 complete, Phase 2 planning needed
+**Status:** Phase 1 complete
 
 **Progress:**
 ```
-[======    ] Phase 1: Web UI Roadmapping Feature (Plans 01, 02, 03, 04 done)
+[==========] Phase 1: Web UI Roadmapping Feature (ALL 5 plans complete)
 [          ] Phase 2: Environment and WSGI Foundation
 [          ] Phase 3: API Authentication
 [          ] Phase 4: Security Hardening
@@ -32,7 +32,7 @@
 [          ] Phase 6: Code Quality and Maintainability
 ```
 
-Overall: 0/6 phases complete (0%)
+Overall: 1/6 phases complete (17%)
 
 ---
 
@@ -40,9 +40,9 @@ Overall: 0/6 phases complete (0%)
 
 | Metric | Target | Current | Status |
 |--------|--------|---------|--------|
-| Backend test pass rate | 100% | Unknown | Not measured |
-| Frontend build (vue-tsc) | 0 errors | Unknown | Not measured |
-| Frontend test pass rate | 100% | Unknown | Not measured |
+| Backend test pass rate | 100% | 911/911 (100%) | Passing |
+| Frontend build (vue-tsc) | 0 errors | 0 errors | Passing |
+| Frontend test pass rate | 100% | 344/344 (100%) | Passing |
 | API response time (p95) | <200ms | Unknown | Not measured |
 | SSE latency | <500ms | Unknown | Not measured |
 
@@ -69,6 +69,9 @@ None — this milestone uses proxy verification throughout. No deferred (Level 3
 | Session-completion sync runs before SSE broadcast | Prevents TOCTOU race where frontend refreshes before DB is updated; sync is synchronous and guarded by grd_init_status | Phase 1 Plan 04 |
 | Auto-init uses polling (not callback) for PTY completion | PTY sessions have no callback mechanism; 2s poll with 10min timeout is simple and reliable | Phase 1 Plan 04 |
 | Clone-wait uses background thread with DB polling | clone_async has no completion callback; background thread polls clone_status every 2s (4min timeout) | Phase 1 Plan 04 |
+| GrdSettings uses settingsApi key-value store with grd.* prefix | Simpler than dedicated endpoint; leverages existing settings infrastructure | Phase 1 Plan 05 |
+| Planning button placed left of Management per CONTEXT.md | Consistent with user journey: plan first, then manage | Phase 1 Plan 05 |
+| Init status polling at 5s interval with watch lifecycle | Balances responsiveness with server load; auto-cleans on unmount | Phase 1 Plan 05 |
 | Short-lived query-string tokens for SSE auth (recommended) | Three valid approaches exist; query-string tokens are simplest with no new frontend dependency; final selection at Phase 2 planning | Phase 2 |
 
 ### Critical Pitfalls (From Research)
@@ -98,9 +101,9 @@ None — this milestone uses proxy verification throughout. No deferred (Level 3
 
 ## Session Continuity
 
-**Next action:** Complete remaining Wave 2 plan (05), then proceed to Wave 3.
+**Next action:** Phase 1 complete. Plan and execute Phase 2 (Environment and WSGI Foundation).
 
-**To resume:** Read ROADMAP.md and this STATE.md, check plan summaries in `phases/01-web-ui-roadmapping-feature/`.
+**To resume:** Read ROADMAP.md and this STATE.md. Phase 1 summaries in `phases/01-web-ui-roadmapping-feature/`.
 
 ---
 *Initialized: 2026-02-25*
