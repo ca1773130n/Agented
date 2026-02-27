@@ -19,12 +19,12 @@
 ## Current Position
 
 **Active Phase:** Phase 1 — Web UI Roadmapping Feature
-**Active Plan:** Plans 01/02/03 completed, Plans 04/05 in progress
+**Active Plan:** Plans 01/02/03/04 completed, Plan 05 in progress
 **Status:** Phase 1 Wave 2 executing
 
 **Progress:**
 ```
-[=====     ] Phase 1: Web UI Roadmapping Feature (Plans 01, 02, 03 done)
+[======    ] Phase 1: Web UI Roadmapping Feature (Plans 01, 02, 03, 04 done)
 [          ] Phase 2: Environment and WSGI Foundation
 [          ] Phase 3: API Authentication
 [          ] Phase 4: Security Hardening
@@ -66,6 +66,9 @@ None — this milestone uses proxy verification throughout. No deferred (Level 3
 | QUAL-03 after Phase 4 | ExecutionService split has regression risk; requires integration test coverage of run_trigger before splitting; structured logging from Phase 4 makes tracing easier | Phase 5 |
 | workers=1 enforced in gunicorn.conf.py | In-memory SSE state (_subscribers, _log_buffers, _processes) is class-level; multiple workers produce split state and silent SSE failures | Phase 1 |
 | Reused renderMarkdown + useAutoScroll for session panel | Existing composables provide markdown rendering with highlight.js and smart auto-scroll; no need for streaming-markdown for initial implementation | Phase 1 Plan 03 |
+| Session-completion sync runs before SSE broadcast | Prevents TOCTOU race where frontend refreshes before DB is updated; sync is synchronous and guarded by grd_init_status | Phase 1 Plan 04 |
+| Auto-init uses polling (not callback) for PTY completion | PTY sessions have no callback mechanism; 2s poll with 10min timeout is simple and reliable | Phase 1 Plan 04 |
+| Clone-wait uses background thread with DB polling | clone_async has no completion callback; background thread polls clone_status every 2s (4min timeout) | Phase 1 Plan 04 |
 | Short-lived query-string tokens for SSE auth (recommended) | Three valid approaches exist; query-string tokens are simplest with no new frontend dependency; final selection at Phase 2 planning | Phase 2 |
 
 ### Critical Pitfalls (From Research)
@@ -95,7 +98,7 @@ None — this milestone uses proxy verification throughout. No deferred (Level 3
 
 ## Session Continuity
 
-**Next action:** Complete remaining Wave 2 plans (04, 05), then proceed to Wave 3.
+**Next action:** Complete remaining Wave 2 plan (05), then proceed to Wave 3.
 
 **To resume:** Read ROADMAP.md and this STATE.md, check plan summaries in `phases/01-web-ui-roadmapping-feature/`.
 
