@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Agented Backend — launchd plist for macOS
+  Install: cp deploy/com.agented.backend.plist ~/Library/LaunchAgents/
+  Load:    launchctl load ~/Library/LaunchAgents/com.agented.backend.plist
+  Unload:  launchctl unload ~/Library/LaunchAgents/com.agented.backend.plist
+  Logs:    tail -f /var/log/agented/backend.log
+
+  Adjust ProgramArguments and WorkingDirectory for your environment.
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.agented.backend</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/opt/agented/backend/.venv/bin/gunicorn</string>
+        <string>-c</string>
+        <string>gunicorn.conf.py</string>
+    </array>
+    <key>WorkingDirectory</key>
+    <string>/opt/agented/backend</string>
+    <key>KeepAlive</key>
+    <true/>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>/var/log/agented/backend.log</string>
+    <key>StandardErrorPath</key>
+    <string>/var/log/agented/backend-error.log</string>
+</dict>
+</plist>

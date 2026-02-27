@@ -66,14 +66,14 @@ dev-backend: ensure-backend
 dev-frontend: ensure-frontend
     cd frontend && npm run dev
 
-# Deploy: build frontend, then start both servers
+# Deploy: build frontend, then start both servers via Gunicorn
 # Frontend: http://localhost:3000 | Backend API: http://localhost:20000
 deploy: kill ensure-backend build
-    @echo "Starting backend on port 20000 and frontend on port 3000..."
+    @echo "Starting backend via Gunicorn on port 20000..."
     @echo "Frontend: http://localhost:3000"
     @echo "Backend API: http://localhost:20000"
     @echo ""
-    cd backend && uv run python run.py &
+    cd backend && uv run gunicorn -c gunicorn.conf.py &
     cd frontend && npm run dev
 
 # Run both dev servers (requires terminal multiplexer)
