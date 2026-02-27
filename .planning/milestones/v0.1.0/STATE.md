@@ -12,19 +12,19 @@
 
 **Milestone Goal:** Harden the existing feature-complete platform for safe internal deployment: stable configuration, production WSGI runtime, API authentication, security headers, observability, and code quality.
 
-**Current Focus:** Phase 1 — Web UI Roadmapping Feature — Wave 1 plans executing.
+**Current Focus:** Phase 1 — Web UI Roadmapping Feature — Wave 2 plans executing.
 
 ---
 
 ## Current Position
 
 **Active Phase:** Phase 1 — Web UI Roadmapping Feature
-**Active Plan:** Plans 01/02 completed, Plans 03/04/05 in progress
-**Status:** Phase 1 Wave 1 executing
+**Active Plan:** Plans 01/02/03 completed, Plans 04/05 in progress
+**Status:** Phase 1 Wave 2 executing
 
 **Progress:**
 ```
-[===       ] Phase 1: Web UI Roadmapping Feature (Plans 01, 02 done)
+[=====     ] Phase 1: Web UI Roadmapping Feature (Plans 01, 02, 03 done)
 [          ] Phase 2: Environment and WSGI Foundation
 [          ] Phase 3: API Authentication
 [          ] Phase 4: Security Hardening
@@ -65,6 +65,7 @@ None — this milestone uses proxy verification throughout. No deferred (Level 3
 | Phases 3 and 4 independent after Phase 2 | SEC (flask-talisman, flask-limiter) and OBS (Sentry, structured logging) have no dependency on each other | Phases 3-4 |
 | QUAL-03 after Phase 4 | ExecutionService split has regression risk; requires integration test coverage of run_trigger before splitting; structured logging from Phase 4 makes tracing easier | Phase 5 |
 | workers=1 enforced in gunicorn.conf.py | In-memory SSE state (_subscribers, _log_buffers, _processes) is class-level; multiple workers produce split state and silent SSE failures | Phase 1 |
+| Reused renderMarkdown + useAutoScroll for session panel | Existing composables provide markdown rendering with highlight.js and smart auto-scroll; no need for streaming-markdown for initial implementation | Phase 1 Plan 03 |
 | Short-lived query-string tokens for SSE auth (recommended) | Three valid approaches exist; query-string tokens are simplest with no new frontend dependency; final selection at Phase 2 planning | Phase 2 |
 
 ### Critical Pitfalls (From Research)
@@ -94,7 +95,7 @@ None — this milestone uses proxy verification throughout. No deferred (Level 3
 
 ## Session Continuity
 
-**Next action:** Complete remaining Wave 1 plans (03, 04, 05), then proceed to Wave 2.
+**Next action:** Complete remaining Wave 2 plans (04, 05), then proceed to Wave 3.
 
 **To resume:** Read ROADMAP.md and this STATE.md, check plan summaries in `phases/01-web-ui-roadmapping-feature/`.
 
