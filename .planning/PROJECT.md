@@ -2,7 +2,7 @@
 
 ## What This Is
 
-Agented is a bot automation platform for Harness engineering that organizes teams, agents, and automation into a working structure. It provides a dashboard to define products, projects, and teams, then wire up AI agents, bots, skills, and webhooks to automate work — from PR reviews to security audits to scheduled tasks.
+Agented is a agentic development platform for Harness engineering that organizes teams, agents, and automation into a working structure. It provides a dashboard to define products, projects, and teams, then wire up AI agents, bots, skills, and webhooks to automate work — from PR reviews to security audits to scheduled tasks.
 
 ## Core Value
 

@@ -1,6 +1,6 @@
 # Roadmap — v0.1.0 — Production Hardening Milestone
 
-**Project:** Agented — AI Bot Automation Platform
+**Project:** Agented — Agentic Development Platform
 **Milestone:** v0.1.0 — Production Hardening
 **Created:** 2026-02-25
 **Total v1 Requirements:** 21

@@ -4,7 +4,7 @@
 
 ## High-Level Architecture
 
-Agented is a full-stack AI bot automation platform with a clear backend/frontend split:
+Agented is a full-stack agentic development platform with a clear backend/frontend split:
 
 ```
 ┌─────────────────────────────────────────────────────┐
