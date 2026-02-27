@@ -34,6 +34,15 @@ Agented is feature-complete but not production-safe. This milestone starts by bu
 
 **Verification Level:** proxy
 
+**Plans:** 5 plans
+
+Plans:
+- [ ] 01-01-PLAN.md — Backend GRD Planning Service + DB schema (grd_init_status, planning endpoints)
+- [ ] 01-02-PLAN.md — Frontend planning session composable + API extensions + route registration
+- [ ] 01-03-PLAN.md — Planning page view + command bar + session panel + MilestoneOverview extension
+- [ ] 01-04-PLAN.md — Background auto-init on project creation + session-completion DB sync
+- [ ] 01-05-PLAN.md — Navigation wiring (dashboard button, settings tab, sidebar)
+
 ---
 
 ### Phase 2: Environment and WSGI Foundation
