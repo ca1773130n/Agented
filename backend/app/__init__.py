@@ -9,7 +9,10 @@ from pathlib import Path
 
 from flask import jsonify, request
 from flask_cors import CORS
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 from flask_openapi3 import Info, OpenAPI
+from flask_talisman import Talisman
 
 from . import config as app_config
 
@@ -84,6 +87,37 @@ def create_app(config=None):
         },
         allow_headers=["Content-Type", "X-API-Key"],
     )
+
+    # Security headers (SEC-01) — OWASP-aligned via flask-talisman
+    # Initialize AFTER CORS so CORS headers are set first (no conflict — different headers)
+    Talisman(
+        app,
+        force_https=os.environ.get("FORCE_HTTPS", "false").lower() == "true",
+        frame_options="DENY",
+        strict_transport_security=True,
+        strict_transport_security_max_age=31536000,  # 1 year
+        strict_transport_security_include_subdomains=True,
+        content_security_policy={
+            "default-src": "'self'",
+            "script-src": ["'self'", "'unsafe-inline'"],  # Swagger UI needs inline scripts
+            "style-src": ["'self'", "'unsafe-inline'"],  # Swagger UI needs inline styles
+            "img-src": ["'self'", "data:"],
+            "connect-src": ["'self'"],
+        },
+        content_security_policy_report_only=False,
+        referrer_policy="strict-origin-when-cross-origin",
+    )
+
+    # Rate limiting (SEC-02) — in-memory storage safe for workers=1 (see gunicorn.conf.py)
+    limiter = Limiter(
+        get_remote_address,
+        app=app,
+        default_limits=[],  # No global default — limits applied per-blueprint in Plan 02
+        storage_uri="memory://",
+        strategy="fixed-window",
+    )
+    # Store on app.extensions for blueprint-level access in register_blueprints()
+    app.extensions["limiter"] = limiter
 
     # API key authentication middleware
     api_key = os.environ.get("AGENTED_API_KEY", "")
@@ -318,6 +352,10 @@ def create_app(config=None):
     @app.errorhandler(413)
     def payload_too_large(e):
         return {"error": "Payload too large"}, 413
+
+    @app.errorhandler(429)
+    def ratelimit_handler(e):
+        return {"error": f"Rate limit exceeded: {e.description}"}, 429
 
     @app.errorhandler(500)
     def internal_error(e):
