@@ -127,6 +127,13 @@ Plans:
 
 **Verification Level:** proxy
 
+**Plans:** 3 plans
+
+Plans:
+- [ ] 05-01-PLAN.md — Structured JSON logging with request ID correlation (python-json-logger + contextvars middleware)
+- [ ] 05-02-PLAN.md — Sentry SDK integration for error tracking and performance monitoring
+- [ ] 05-03-PLAN.md — DB-backed webhook deduplication replacing in-memory dict (SQLite INSERT OR IGNORE)
+
 ---
 
 ### Phase 6: Code Quality and Maintainability
@@ -161,7 +168,7 @@ Plans:
 | 2 - Environment and WSGI Foundation | Stable config + Gunicorn runtime | ENV-01, ENV-02, ENV-03, DEP-01, DEP-02, DEP-03, DEP-04 | sanity | Complete (2026-02-28) |
 | 3 - API Authentication | Auth gate + SSE auth + CORS lockdown | AUTH-01, AUTH-02, AUTH-03, AUTH-04, AUTH-05 | proxy | Planned (2026-02-28) |
 | 4 - Security Hardening | Security headers + rate limiting | SEC-01, SEC-02, SEC-03 | proxy | Pending |
-| 5 - Observability and Process Reliability | Structured logging + Sentry + DB dedup | OBS-01, OBS-02, OBS-03 | proxy | Pending |
+| 5 - Observability and Process Reliability | Structured logging + Sentry + DB dedup | OBS-01, OBS-02, OBS-03 | proxy | Planned (2026-02-28) |
 | 6 - Code Quality and Maintainability | Ruff + seeds.py + ExecutionService split | QUAL-01, QUAL-02, QUAL-03 | proxy | Planned (2026-02-28) |
 
 ---
