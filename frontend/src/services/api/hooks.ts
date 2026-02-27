@@ -1,7 +1,8 @@
 /**
  * Hook and hook conversation API modules.
  */
-import { API_BASE, apiFetch } from './client';
+import { API_BASE, apiFetch, createAuthenticatedEventSource } from './client';
+import type { AuthenticatedEventSource } from './client';
 import type {
   Hook,
   HookEvent,
@@ -65,7 +66,7 @@ export const hookConversationApi = {
   start: () => apiFetch<{ conversation_id: string; message: string }>('/api/hooks/conversations/start', { method: 'POST' }),
   get: (convId: string) => apiFetch<HookConversation>(`/api/hooks/conversations/${convId}`),
   sendMessage: (convId: string, message: string, options?: { backend?: string; account_id?: string; model?: string }) => apiFetch<{ message_id: string; status: string }>(`/api/hooks/conversations/${convId}/message`, { method: 'POST', body: JSON.stringify({ message, ...options }) }),
-  stream: (convId: string): EventSource => new EventSource(`${API_BASE}/api/hooks/conversations/${convId}/stream`),
+  stream: (convId: string): AuthenticatedEventSource => createAuthenticatedEventSource(`${API_BASE}/api/hooks/conversations/${convId}/stream`),
   finalize: (convId: string) => apiFetch<{ message: string; hook_id: number; hook: Hook }>(`/api/hooks/conversations/${convId}/finalize`, { method: 'POST' }),
   resume: (convId: string) => apiFetch<{ message: string; conversation_id: string }>(`/api/hooks/conversations/${convId}/resume`, { method: 'POST' }),
   abandon: (convId: string) => apiFetch<{ message: string }>(`/api/hooks/conversations/${convId}/abandon`, { method: 'POST' }),

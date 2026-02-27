@@ -6,7 +6,8 @@
  */
 
 // Client infrastructure
-export { API_BASE, ApiError, apiFetch } from './client';
+export { API_BASE, ApiError, apiFetch, createAuthenticatedEventSource, createBackoffEventSource } from './client';
+export type { AuthenticatedEventSource, AuthenticatedEventSourceOptions, BackoffEventSource, BackoffEventSourceOptions } from './client';
 
 // Domain API objects (value exports)
 export { triggerApi, auditApi, resolveApi, executionApi, prReviewApi } from './triggers';

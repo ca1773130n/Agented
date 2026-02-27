@@ -4,7 +4,8 @@
  * Provides typed methods for syncing GRD .planning/ data, listing milestones,
  * phases, plans, and updating plan status.
  */
-import { apiFetch } from './client';
+import { apiFetch, createAuthenticatedEventSource } from './client';
+import type { AuthenticatedEventSource } from './client';
 
 export interface GrdMilestone {
   id: string;
@@ -263,8 +264,8 @@ export const grdApi = {
    * this returns an EventSource instance. Caller manages lifecycle
    * by attaching onmessage/onerror handlers and calling .close().
    */
-  streamSession: (projectId: string, sessionId: string): EventSource =>
-    new EventSource(`/api/projects/${projectId}/sessions/${sessionId}/stream`),
+  streamSession: (projectId: string, sessionId: string): AuthenticatedEventSource =>
+    createAuthenticatedEventSource(`/api/projects/${projectId}/sessions/${sessionId}/stream`),
 
   // Project AI Chat
   sendProjectChat: (
@@ -276,8 +277,8 @@ export const grdApi = {
       { method: 'POST', body: JSON.stringify(data) },
     ),
 
-  streamProjectChat: (projectId: string): EventSource =>
-    new EventSource(`/api/projects/${projectId}/chat/stream`),
+  streamProjectChat: (projectId: string): AuthenticatedEventSource =>
+    createAuthenticatedEventSource(`/api/projects/${projectId}/chat/stream`),
 
   // Planning command invocation
   invokePlanningCommand: (

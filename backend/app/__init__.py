@@ -1,11 +1,13 @@
 """Flask application factory with OpenAPI/Swagger UI configuration."""
 
 import atexit
+import hmac
 import os
 import secrets
 import sqlite3
 from pathlib import Path
 
+from flask import jsonify, request
 from flask_cors import CORS
 from flask_openapi3 import Info, OpenAPI
 
@@ -68,10 +70,10 @@ def create_app(config=None):
 
     testing = app.config.get("TESTING", False)
 
-    # Enable CORS
+    # Enable CORS (fail-closed: empty list blocks all cross-origin when unset)
     allowed_origins = os.environ.get("CORS_ALLOWED_ORIGINS", "").split(",")
     allowed_origins = [o.strip() for o in allowed_origins if o.strip()]
-    cors_config = {"origins": allowed_origins} if allowed_origins else {"origins": "*"}
+    cors_config = {"origins": allowed_origins} if allowed_origins else {"origins": []}
     CORS(
         app,
         resources={
@@ -80,7 +82,40 @@ def create_app(config=None):
             r"/health/*": {"origins": "*"},
             r"/docs/*": {"origins": "*"},
         },
+        allow_headers=["Content-Type", "X-API-Key"],
     )
+
+    # API key authentication middleware
+    api_key = os.environ.get("AGENTED_API_KEY", "")
+
+    # Paths that bypass authentication (public endpoints)
+    _AUTH_BYPASS_PREFIXES = ("/health", "/docs", "/openapi", "/api/webhooks/github")
+
+    @app.before_request
+    def _require_api_key():
+        # Auth disabled when AGENTED_API_KEY is not set (backward compatibility)
+        if not api_key:
+            return None
+
+        # Allow CORS preflight requests through
+        if request.method == "OPTIONS":
+            return None
+
+        # Root path bypass
+        if request.path == "/":
+            return None
+
+        # Bypass paths
+        for prefix in _AUTH_BYPASS_PREFIXES:
+            if request.path == prefix or request.path.startswith(prefix + "/"):
+                return None
+
+        # Validate X-API-Key header
+        provided_key = request.headers.get("X-API-Key", "")
+        if not provided_key or not hmac.compare_digest(provided_key, api_key):
+            return jsonify({"error": "Unauthorized"}), 401
+
+        return None
 
     # In testing mode, DB init is handled by the isolated_db fixture and
     # background services are not needed.

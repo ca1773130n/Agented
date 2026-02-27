@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue';
-import type { AgentMessage } from '../../services/api';
-import { agentMessageApi, API_BASE } from '../../services/api';
+import type { AgentMessage, AuthenticatedEventSource } from '../../services/api';
+import { agentMessageApi, createAuthenticatedEventSource, API_BASE } from '../../services/api';
 import SendMessageForm from './SendMessageForm.vue';
 import { useToast } from '../../composables/useToast';
 
@@ -21,7 +21,7 @@ const activeView = ref<'inbox' | 'outbox'>('inbox');
 const showSendForm = ref(false);
 const sseError = ref(false);
 const sseRetryCount = ref(0);
-let eventSource: EventSource | null = null;
+let eventSource: AuthenticatedEventSource | null = null;
 
 const currentMessages = computed(() =>
   activeView.value === 'inbox' ? inbox.value : outbox.value,
@@ -75,7 +75,7 @@ async function deleteMessage(msg: AgentMessage, event: Event) {
 
 function connectSSE() {
   closeSSE();
-  eventSource = new EventSource(
+  eventSource = createAuthenticatedEventSource(
     `${API_BASE}/admin/super-agents/${props.superAgentId}/messages/stream`,
   );
   eventSource.addEventListener('message', () => {

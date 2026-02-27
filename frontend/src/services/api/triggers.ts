@@ -1,8 +1,8 @@
 /**
  * Trigger, audit, resolve, execution, and PR review API modules.
  */
-import { API_BASE, apiFetch, createBackoffEventSource } from './client';
-import type { BackoffEventSourceOptions } from './client';
+import { API_BASE, apiFetch, createAuthenticatedEventSource } from './client';
+import type { AuthenticatedEventSource, AuthenticatedEventSourceOptions } from './client';
 import type {
   Trigger,
   ExecutionStatus,
@@ -233,8 +233,8 @@ export const executionApi = {
     }),
 
   // Create SSE connection for real-time log streaming with exponential backoff reconnection
-  streamLogs: (executionId: string, options?: BackoffEventSourceOptions): EventSource => {
-    return createBackoffEventSource(`${API_BASE}/admin/executions/${executionId}/stream`, options);
+  streamLogs: (executionId: string, options?: AuthenticatedEventSourceOptions): AuthenticatedEventSource => {
+    return createAuthenticatedEventSource(`${API_BASE}/admin/executions/${executionId}/stream`, options);
   },
 };
 

@@ -1,7 +1,8 @@
 /**
  * Plugin, plugin export, and plugin conversation API modules.
  */
-import { API_BASE, apiFetch } from './client';
+import { API_BASE, apiFetch, createAuthenticatedEventSource } from './client';
+import type { AuthenticatedEventSource } from './client';
 import type {
   Plugin,
   PluginComponent,
@@ -153,8 +154,8 @@ export const pluginConversationApi = {
       body: JSON.stringify({ message, ...options }),
     }),
 
-  stream: (convId: string): EventSource => {
-    return new EventSource(`${API_BASE}/api/plugins/conversations/${convId}/stream`);
+  stream: (convId: string): AuthenticatedEventSource => {
+    return createAuthenticatedEventSource(`${API_BASE}/api/plugins/conversations/${convId}/stream`);
   },
 
   finalize: (convId: string) =>

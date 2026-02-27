@@ -1,5 +1,6 @@
 import { ref, onUnmounted, type Ref } from 'vue';
 import { grdApi } from '../services/api/grd';
+import type { AuthenticatedEventSource } from '../services/api/client';
 
 export interface PlanningQuestion {
   interaction_id: string;
@@ -24,7 +25,7 @@ export function usePlanningSession(projectId: Ref<string>) {
   const exitCode = ref<number | null>(null);
 
   // Private state
-  let eventSource: EventSource | null = null;
+  let eventSource: AuthenticatedEventSource | null = null;
   let errorCount = 0;
   const MAX_ERRORS = 3;
 

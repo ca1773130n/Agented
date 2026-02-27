@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed, watch, nextTick } from 'vue';
 import { useRouter } from 'vue-router';
-import type { FileNode } from '../services/api';
+import type { FileNode, AuthenticatedEventSource } from '../services/api';
 import { skillsApi, userSkillsApi, ApiError } from '../services/api';
 import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import { useToast } from '../composables/useToast';
@@ -17,7 +17,7 @@ const isLoading = ref(true);
 const isRunning = ref(false);
 const testOutput = ref<string[]>([]);
 const testStatus = ref<'idle' | 'running' | 'completed' | 'failed'>('idle');
-const eventSource = ref<EventSource | null>(null);
+const eventSource = ref<AuthenticatedEventSource | null>(null);
 const searchQuery = ref('');
 const outputRef = ref<HTMLElement | null>(null);
 const currentTestId = ref<string | null>(null);

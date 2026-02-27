@@ -1,5 +1,5 @@
 import { ref, onUnmounted, type Ref } from 'vue';
-import type { ConversationMessage, SuperAgent, SuperAgentSession } from '../services/api';
+import type { ConversationMessage, SuperAgent, SuperAgentSession, AuthenticatedEventSource } from '../services/api';
 import { superAgentSessionApi, superAgentApi } from '../services/api';
 import { useProcessGroups } from './useProcessGroups';
 import { useAllMode } from './useAllMode';
@@ -51,7 +51,7 @@ export function useAiChat(superAgentId: Ref<string>) {
   // Callback for streaming chunks (set by AiChatPanel when smd.js is initialized)
   let onStreamingChunkCallback: ((text: string) => void) | null = null;
 
-  let eventSource: EventSource | null = null;
+  let eventSource: AuthenticatedEventSource | null = null;
 
   // Reconnect watchdog — SSE comment keepalives are invisible to EventSource,
   // so the client tracks named-event activity instead. If no named event arrives

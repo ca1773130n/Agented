@@ -1,6 +1,6 @@
 import { ref, onUnmounted } from 'vue';
 import type { Ref } from 'vue';
-import type { NodeExecutionStatus } from '../services/api';
+import type { NodeExecutionStatus, AuthenticatedEventSource } from '../services/api';
 import { workflowExecutionApi } from '../services/api';
 
 /**
@@ -20,7 +20,7 @@ export function useWorkflowExecution() {
   const isMonitoring = ref(false);
   const error = ref<string | null>(null);
 
-  let eventSource: EventSource | null = null;
+  let eventSource: AuthenticatedEventSource | null = null;
 
   // -- Functions --
 
