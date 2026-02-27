@@ -78,7 +78,7 @@ function autoExpandForRoute() {
   if (['mcp-servers', 'mcp-server-detail', 'explore-mcp-servers'].includes(name)) {
     expandedSections.value.mcpServers = true;
   }
-  if (['projects', 'project-dashboard', 'project-settings', 'project-management'].includes(name)) {
+  if (['projects', 'project-dashboard', 'project-settings', 'project-management', 'project-planning'].includes(name)) {
     expandedSections.value.projects = true;
   }
   if (['products', 'product-dashboard', 'product-settings'].includes(name)) {
@@ -166,7 +166,7 @@ function isPluginsSectionActive(): boolean {
 }
 
 function isProjectsSectionActive(): boolean {
-  return ['projects', 'project-dashboard', 'project-settings', 'project-management'].includes(currentRouteName.value);
+  return ['projects', 'project-dashboard', 'project-settings', 'project-management', 'project-planning'].includes(currentRouteName.value);
 }
 
 function isProductsSectionActive(): boolean {
@@ -428,10 +428,15 @@ function handleSidebarKeydown(e: KeyboardEvent) {
         </button>
         <div v-for="project in props.projects" :key="project.id" class="submenu-item-row">
           <button type="button" class="submenu-item"
-            :class="{ active: (currentRouteName === 'project-dashboard' || currentRouteName === 'project-settings') && route.params.projectId === project.id }"
-            :aria-current="((currentRouteName === 'project-dashboard' || currentRouteName === 'project-settings') && route.params.projectId === project.id) ? 'page' : undefined"
+            :class="{ active: (currentRouteName === 'project-dashboard' || currentRouteName === 'project-settings' || currentRouteName === 'project-planning') && route.params.projectId === project.id }"
+            :aria-current="((currentRouteName === 'project-dashboard' || currentRouteName === 'project-settings' || currentRouteName === 'project-planning') && route.params.projectId === project.id) ? 'page' : undefined"
             @click="navToProjectDashboard(project.id)">
             {{ project.name }}
+          </button>
+          <button type="button" class="submenu-settings-btn" title="Planning" @click="router.push({ name: 'project-planning', params: { projectId: project.id } })">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>
+            </svg>
           </button>
           <button type="button" class="submenu-settings-btn" title="Settings" @click="navToProjectSettings(project.id)">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">

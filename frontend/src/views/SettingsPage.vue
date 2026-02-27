@@ -8,23 +8,25 @@ import GeneralSettings from '../components/settings/GeneralSettings.vue';
 import MarketplaceSettings from '../components/settings/MarketplaceSettings.vue';
 import HarnessSettings from '../components/settings/HarnessSettings.vue';
 import McpSettings from '../components/settings/McpSettings.vue';
+import GrdSettings from '../components/settings/GrdSettings.vue';
 import { useToast } from '../composables/useToast';
 import { useFocusTrap } from '../composables/useFocusTrap';
 import { useWebMcpTool } from '../composables/useWebMcpTool';
 
 const showToast = useToast();
 
-const TAB_NAMES = ['general', 'marketplaces', 'harness', 'mcp'] as const;
+const TAB_NAMES = ['general', 'marketplaces', 'harness', 'mcp', 'grd'] as const;
+type TabName = (typeof TAB_NAMES)[number];
 
-function getTabFromHash(): 'general' | 'marketplaces' | 'harness' | 'mcp' {
+function getTabFromHash(): TabName {
   const hash = window.location.hash.replace('#', '');
   if ((TAB_NAMES as readonly string[]).includes(hash)) {
-    return hash as 'general' | 'marketplaces' | 'harness' | 'mcp';
+    return hash as TabName;
   }
   return 'general';
 }
 
-const activeTab = ref<'general' | 'marketplaces' | 'harness' | 'mcp'>('general');
+const activeTab = ref<TabName>('general');
 const marketplaces = ref<Marketplace[]>([]);
 const isLoading = ref(true);
 const showAddModal = ref(false);
@@ -55,11 +57,11 @@ useWebMcpTool({
   name: 'agented_settings_switch_tab',
   description: 'Switches the active tab on the Settings page',
   page: 'SettingsPage',
-  inputSchema: { type: 'object', properties: { tab: { type: 'string', description: 'Tab name: general, marketplaces, harness, or mcp' } }, required: ['tab'] },
+  inputSchema: { type: 'object', properties: { tab: { type: 'string', description: 'Tab name: general, marketplaces, harness, mcp, or grd' } }, required: ['tab'] },
   execute: async (args: Record<string, unknown>) => {
     const tab = args.tab as string;
-    if (['general', 'marketplaces', 'harness', 'mcp'].includes(tab)) {
-      activeTab.value = tab as 'general' | 'marketplaces' | 'harness' | 'mcp';
+    if ((TAB_NAMES as readonly string[]).includes(tab)) {
+      activeTab.value = tab as TabName;
       return { content: [{ type: 'text' as const, text: JSON.stringify({ success: true, activeTab: activeTab.value }) }] };
     }
     return { content: [{ type: 'text' as const, text: JSON.stringify({ success: false, error: 'Invalid tab name' }) }] };
@@ -158,6 +160,12 @@ onUnmounted(() => {
       >
         MCP Servers
       </button>
+      <button
+        :class="['tab', { active: activeTab === 'grd' }]"
+        @click="activeTab = 'grd'"
+      >
+        GRD Planning
+      </button>
     </div>
 
     <!-- Tab Content -->
@@ -170,6 +178,7 @@ onUnmounted(() => {
     />
     <HarnessSettings v-if="activeTab === 'harness'" :marketplaces="marketplaces" />
     <McpSettings v-if="activeTab === 'mcp'" />
+    <GrdSettings v-if="activeTab === 'grd'" />
 
     <!-- Add Marketplace Modal -->
     <Teleport to="body">
