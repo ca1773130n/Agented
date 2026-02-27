@@ -10,6 +10,8 @@ from ..database import (
     add_project,
     add_project_skill,
     add_project_team_edge,
+    add_super_agent,
+    add_super_agent_document,
     assign_team_to_project,
     count_projects,
     delete_project,
@@ -21,6 +23,7 @@ from ..database import (
     get_project_skills,
     get_project_team_edges,
     get_project_teams,
+    get_super_agent,
     get_team_detail,
     unassign_team_from_project,
     update_project,
@@ -28,6 +31,7 @@ from ..database import (
 )
 from ..models.common import PaginationQuery
 from ..services.github_service import GitHubService
+from ..services.grd_planning_service import GrdPlanningService
 from ..services.harness_service import HarnessService
 from ..services.project_deploy_service import ProjectDeployService
 from ..services.project_install_service import ProjectInstallService
@@ -106,10 +110,48 @@ def create_project():
     if github_repo:
         ProjectWorkspaceService.clone_async(project_id)
 
+    # Trigger GRD auto-init
+    if local_path and not github_repo:
+        # Local path provided directly -- init GRD immediately
+        GrdPlanningService.auto_init_project(project_id, local_path)
+    elif github_repo:
+        # Clone runs in background -- wait for it, then init
+        import threading
+
+        def _wait_for_clone_and_init(proj_id):
+            """Wait for clone to complete, then trigger GRD auto-init."""
+            import time
+
+            for _ in range(120):  # Wait up to 4 minutes
+                time.sleep(2)
+                p = get_project(proj_id)
+                if not p:
+                    return
+                status = p.get("clone_status", "none")
+                if status == "cloned":
+                    lp = p.get("local_path")
+                    if lp:
+                        GrdPlanningService.auto_init_project(proj_id, lp)
+                    return
+                if status == "failed":
+                    return
+            # Timeout -- don't init
+
+        t = threading.Thread(
+            target=_wait_for_clone_and_init,
+            args=(project_id,),
+            daemon=True,
+            name=f"grd-clone-wait-{project_id}",
+        )
+        t.start()
+
     project = get_project(project_id)
     response = {"message": "Project created", "project": project}
     if github_repo:
         response["clone_status"] = "cloning"
+        response["grd_init_status"] = "pending"
+    elif local_path:
+        response["grd_init_status"] = "initializing"
     return response, HTTPStatus.CREATED
 
 
@@ -498,3 +540,59 @@ def get_clone_status(path: ProjectPath):
         "clone_error": project.get("clone_error"),
         "last_synced_at": project.get("last_synced_at"),
     }, HTTPStatus.OK
+
+
+@projects_bp.get("/<project_id>/manager")
+def get_or_create_manager(path: ProjectPath):
+    """Resolve or auto-create the manager super agent for a project.
+
+    If the project already has a manager_super_agent_id, returns it.
+    Otherwise, creates a new super agent with a ROLE document describing
+    its kanban management capabilities, links it, and returns it.
+    """
+    project = get_project(path.project_id)
+    if not project:
+        return {"error": "Project not found"}, HTTPStatus.NOT_FOUND
+
+    sa_id = project.get("manager_super_agent_id")
+
+    # Check if linked agent still exists
+    if sa_id:
+        sa = get_super_agent(sa_id)
+        if sa:
+            return {"super_agent_id": sa_id, "created": False}, HTTPStatus.OK
+        # Linked agent was deleted -- fall through to re-create
+
+    # Auto-create manager super agent
+    project_name = project.get("name", "Unnamed Project")
+    sa_id = add_super_agent(
+        name=f"{project_name} Manager",
+        description=f"AI manager for project '{project_name}'. Manages kanban plans via chat.",
+        backend_type="claude",
+    )
+    if not sa_id:
+        return {"error": "Failed to create manager agent"}, HTTPStatus.INTERNAL_SERVER_ERROR
+
+    role_content = (
+        f"You are the project manager for '{project_name}'.\n\n"
+        "You help users manage their kanban board by creating, updating, moving, and deleting plan cards.\n\n"
+        "## Available Actions\n\n"
+        "When the user asks you to modify the kanban board, emit action markers in your response.\n"
+        "Each action must be wrapped in markers exactly like this:\n\n"
+        "---PLAN_ACTION---\n"
+        '{"action": "create", "phase_id": "...", "title": "...", "description": "...", "status": "pending"}\n'
+        "---END_PLAN_ACTION---\n\n"
+        "Supported actions:\n"
+        '- create: {"action": "create", "phase_id": "...", "title": "...", "description": "...", "status": "pending|in_progress|completed|failed|in_review"}\n'
+        '- update: {"action": "update", "plan_id": "...", "title": "...", "description": "...", "status": "..."}\n'
+        '- move: {"action": "move", "plan_id": "...", "status": "pending|in_progress|completed|failed|in_review"}\n'
+        '- delete: {"action": "delete", "plan_id": "..."}\n\n'
+        "Always confirm what you did after emitting actions. Be conversational and helpful.\n"
+        "When listing plans or giving status updates, use the project context provided to you.\n"
+    )
+    add_super_agent_document(sa_id, "ROLE", "Project Manager Role", role_content)
+
+    # Link to project
+    update_project(path.project_id, manager_super_agent_id=sa_id)
+
+    return {"super_agent_id": sa_id, "created": True}, HTTPStatus.CREATED
