@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 """Entry point for Agented backend API server."""
 
+from dotenv import load_dotenv
+
+load_dotenv()  # Load .env before anything else — override=False by default
+
 import argparse
 import atexit
 import logging

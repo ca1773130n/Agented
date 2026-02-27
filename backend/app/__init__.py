@@ -4,6 +4,7 @@ import atexit
 import os
 import secrets
 import sqlite3
+from pathlib import Path
 
 from flask_cors import CORS
 from flask_openapi3 import Info, OpenAPI
@@ -21,6 +22,36 @@ API_INFO = Info(
 )
 
 
+def _get_secret_key() -> str:
+    """Load SECRET_KEY from env, persisted file, or generate and persist.
+
+    Priority:
+    1. SECRET_KEY environment variable (set in .env or shell)
+    2. .secret_key file in backend/ directory (auto-generated on first run)
+    3. Generate new key, persist to .secret_key, return it
+    """
+    # 1. Environment variable (highest priority)
+    key = os.environ.get("SECRET_KEY")
+    if key:
+        return key
+
+    # 2. Persisted file fallback
+    key_file = Path(__file__).parent.parent / ".secret_key"
+    if key_file.exists():
+        stored = key_file.read_text().strip()
+        if stored:
+            return stored
+
+    # 3. Generate and persist for future restarts
+    key = secrets.token_hex(32)
+    try:
+        key_file.write_text(key)
+        key_file.chmod(0o600)  # Owner-readable only
+    except OSError:
+        pass  # Fallback: ephemeral key (not ideal but won't crash)
+    return key
+
+
 def create_app(config=None):
     """Create and configure the Flask application."""
     app = OpenAPI(__name__, info=API_INFO, doc_prefix="/docs")
@@ -28,7 +59,7 @@ def create_app(config=None):
 
     # Load configuration
     app.config.from_mapping(
-        SECRET_KEY=os.environ.get("SECRET_KEY") or secrets.token_hex(32),
+        SECRET_KEY=_get_secret_key(),
         DATABASE=app_config.DB_PATH,
     )
 
