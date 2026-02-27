@@ -2,7 +2,7 @@
 
 **Project:** Agented — Agentic Development Platform
 **Milestone:** v0.1.0 — Production Hardening
-**Last Updated:** 2026-02-28T12:00:00
+**Last Updated:** 2026-02-27T19:30:00Z
 
 ---
 
@@ -12,27 +12,27 @@
 
 **Milestone Goal:** Harden the existing feature-complete platform for safe internal deployment: stable configuration, production WSGI runtime, API authentication, security headers, observability, and code quality.
 
-**Current Focus:** Phase 2 complete. Next: Phase 3 — API Authentication.
+**Current Focus:** Phase 4 Plan 01 complete. Next: Phase 4 Plan 02 — Per-Blueprint Rate Limits.
 
 ---
 
 ## Current Position
 
-**Active Phase:** Phase 3 — API Authentication (not started)
-**Active Plan:** None — Phase 3 not yet planned
-**Status:** Phase 2 complete, verified, eval passed (12/12 sanity checks)
+**Active Phase:** Phase 4 — Security Hardening
+**Active Plan:** 04-01 complete, 04-02 next
+**Status:** Phase 3 merged, Phase 4 Plan 01 complete
 
 **Progress:**
 ```
 [==========] Phase 1: Web UI Roadmapping Feature (ALL 5 plans complete)
 [==========] Phase 2: Environment and WSGI Foundation (COMPLETE — 2026-02-28)
-[          ] Phase 3: API Authentication
-[          ] Phase 4: Security Hardening
+[==========] Phase 3: API Authentication (merged — 2026-02-28)
+[=====     ] Phase 4: Security Hardening (Plan 01 complete)
 [          ] Phase 5: Observability and Process Reliability
 [          ] Phase 6: Code Quality and Maintainability
 ```
 
-Overall: 2/6 phases complete
+Overall: 3/6 phases complete, Phase 4 in progress
 
 ---
 
@@ -77,6 +77,9 @@ None — this milestone uses proxy verification throughout. No deferred (Level 3
 | .secret_key file in backend/ directory | Locality with run.py and app factory; .gitignore prevents committing | Phase 2 Plan 01 |
 | Added 3 extra env vars to .env.example | CODEX_HOME, GEMINI_CLI_HOME, OPENCODE_HOME found in codebase audit; included for completeness | Phase 2 Plan 02 |
 | RestartSec=3 in systemd unit | Within the 5-second restart constraint; matches research recommendation | Phase 2 Plan 02 |
+| In-memory limiter storage (memory://) | Safe for workers=1 Gunicorn deployment; avoids Redis dependency for single-process architecture | Phase 4 Plan 01 |
+| CSP allows 'unsafe-inline' for script-src/style-src | Required for Swagger UI at /docs; without it, docs page renders blank | Phase 4 Plan 01 |
+| HSTS only over HTTPS (flask-talisman default) | Per RFC 6797; header sent when X-Forwarded-Proto: https detected from reverse proxy | Phase 4 Plan 01 |
 
 ### Critical Pitfalls (From Research)
 
@@ -105,9 +108,9 @@ None — this milestone uses proxy verification throughout. No deferred (Level 3
 
 ## Session Continuity
 
-**Next action:** Plan and execute Phase 3 — API Authentication.
+**Next action:** Execute Phase 4 Plan 02 — Per-Blueprint Rate Limits.
 
-**To resume:** Read ROADMAP.md and this STATE.md. Phase 2 complete — summaries in `phases/02-environment-and-wsgi-foundation/`.
+**To resume:** Read ROADMAP.md and this STATE.md. Phase 4 Plan 01 complete — summary in `phases/04-security-hardening/04-01-SUMMARY.md`.
 
 ---
 *Initialized: 2026-02-25*
