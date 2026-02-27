@@ -2949,6 +2949,24 @@ def _migrate_v51_workflow_version_draft(conn):
         print("Added is_draft column to workflow_versions")
 
 
+def _migrate_v53_project_manager_super_agent(conn):
+    """Add manager_super_agent_id to projects for AI-managed project chat."""
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(projects)")}
+    if "manager_super_agent_id" not in cols:
+        conn.execute("ALTER TABLE projects ADD COLUMN manager_super_agent_id TEXT")
+        conn.commit()
+        print("Added manager_super_agent_id column to projects")
+
+
+def _migrate_v54_project_grd_init_status(conn):
+    """Add grd_init_status column to projects for GRD initialization tracking."""
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(projects)")}
+    if "grd_init_status" not in cols:
+        conn.execute("ALTER TABLE projects ADD COLUMN grd_init_status TEXT DEFAULT 'none'")
+        conn.commit()
+        print("Added grd_init_status column to projects")
+
+
 # =============================================================================
 # Versioned migration registry
 # =============================================================================
@@ -3008,6 +3026,8 @@ VERSIONED_MIGRATIONS = [
     (50, "trigger_template_history", _migrate_v50_trigger_template_history),
     (51, "workflow_version_draft", _migrate_v51_workflow_version_draft),
     (52, "trigger_sigterm_grace_seconds", _migrate_v52_trigger_sigterm_grace_seconds),
+    (53, "project_manager_super_agent", _migrate_v53_project_manager_super_agent),
+    (54, "project_grd_init_status", _migrate_v54_project_grd_init_status),
 ]
 
 

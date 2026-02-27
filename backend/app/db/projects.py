@@ -63,6 +63,8 @@ def update_project(
     local_path: str = None,
     grd_sync_at: str = None,
     github_host: str = None,
+    manager_super_agent_id: str = None,
+    grd_init_status: str = None,
 ) -> bool:
     """Update project fields. Returns True on success."""
     updates = []
@@ -95,6 +97,12 @@ def update_project(
     if github_host is not None:
         updates.append("github_host = ?")
         values.append(github_host if github_host else "github.com")
+    if manager_super_agent_id is not None:
+        updates.append("manager_super_agent_id = ?")
+        values.append(manager_super_agent_id if manager_super_agent_id else None)
+    if grd_init_status is not None:
+        updates.append("grd_init_status = ?")
+        values.append(grd_init_status)
 
     if not updates:
         return False
