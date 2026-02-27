@@ -1,5 +1,5 @@
 import { ref, shallowRef, nextTick, onUnmounted } from 'vue';
-import type { ConversationMessage } from '../services/api';
+import type { ConversationMessage, AuthenticatedEventSource } from '../services/api';
 import { ApiError } from '../services/api';
 import { useStreamingParser } from './useStreamingParser';
 import { useToast } from './useToast';
@@ -13,7 +13,7 @@ export interface ConversationApi {
   start: () => Promise<{ conversation_id: string; message: string }>;
   get?: (convId: string) => Promise<{ id: string; status: string; messages_parsed?: ConversationMessage[] }>;
   sendMessage: (convId: string, message: string, options?: { backend?: string; account_id?: string; model?: string }) => Promise<{ message_id: string; status: string }>;
-  stream: (convId: string) => EventSource;
+  stream: (convId: string) => AuthenticatedEventSource;
   finalize: (convId: string) => Promise<Record<string, unknown>>;
   resume?: (convId: string) => Promise<{ message: string; conversation_id: string }>;
   abandon: (convId: string) => Promise<{ message: string }>;
@@ -70,7 +70,7 @@ export function useConversation<TConfig>(
   const isProcessing = ref(false);
   const streamingContent = shallowRef('');
   const chatContainer = ref<HTMLElement | null>(null);
-  const eventSourceRef = ref<EventSource | null>(null);
+  const eventSourceRef = ref<AuthenticatedEventSource | null>(null);
   const canFinalize = ref(false);
   const chatStarted = ref(false);
   const detectedConfig = ref<TConfig | null>(null) as ReturnType<typeof ref<TConfig | null>>;

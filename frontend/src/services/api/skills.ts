@@ -1,7 +1,8 @@
 /**
  * Skills, user skills, skills.sh, harness, and skill conversation API modules.
  */
-import { API_BASE, apiFetch } from './client';
+import { API_BASE, apiFetch, createAuthenticatedEventSource } from './client';
+import type { AuthenticatedEventSource } from './client';
 import type {
   SkillInfo,
   UserSkill,
@@ -33,8 +34,8 @@ export const skillsApi = {
       body: JSON.stringify({ skill_name: skillName, input: input || '' }),
     }),
 
-  streamTest: (testId: string): EventSource => {
-    return new EventSource(`${API_BASE}/api/skills/test/${testId}/stream`);
+  streamTest: (testId: string): AuthenticatedEventSource => {
+    return createAuthenticatedEventSource(`${API_BASE}/api/skills/test/${testId}/stream`);
   },
 
   stopTest: (testId: string) =>
@@ -130,8 +131,8 @@ export const skillConversationApi = {
       body: JSON.stringify({ message, ...options }),
     }),
 
-  stream: (convId: string): EventSource => {
-    return new EventSource(`${API_BASE}/api/skills/conversations/${convId}/stream`);
+  stream: (convId: string): AuthenticatedEventSource => {
+    return createAuthenticatedEventSource(`${API_BASE}/api/skills/conversations/${convId}/stream`);
   },
 
   finalize: (convId: string) =>

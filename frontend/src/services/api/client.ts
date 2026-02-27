@@ -5,9 +5,23 @@
  * - Configurable request timeout (default 30s) via AbortController
  * - Retry with exponential backoff for transient failures (429, 502, 503, 504)
  * - Safe empty response handling (null instead of {} as T)
+ * - API key authentication via X-API-Key header (read from localStorage)
+ * - Authenticated SSE streams via @microsoft/fetch-event-source
  */
 
+import { fetchEventSource } from '@microsoft/fetch-event-source';
+
 export const API_BASE = '';  // Use proxy in development, same origin in production
+
+/** Read the API key from localStorage. Returns null when unset. */
+export function getApiKey(): string | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    return localStorage.getItem('agented-api-key');
+  } catch {
+    return null;
+  }
+}
 
 const DEFAULT_TIMEOUT_MS = 30000;
 const DEFAULT_MAX_RETRIES = 3;
@@ -49,11 +63,16 @@ async function apiFetchSingle<T>(url: string, options?: ApiFetchOptions): Promis
   const { timeout: _timeout, retries: _retries, retryOn: _retryOn, ...fetchOptions } = options ?? {};
 
   try {
+    const apiKey = getApiKey();
+    const authHeaders: Record<string, string> = {};
+    if (apiKey) authHeaders['X-API-Key'] = apiKey;
+
     const response = await fetch(`${API_BASE}${url}`, {
       ...fetchOptions,
       signal: controller.signal,
       headers: {
         'Content-Type': 'application/json',
+        ...authHeaders,
         ...fetchOptions?.headers,
       },
     });
@@ -117,108 +136,75 @@ const SSE_QUEUE_WARN_INTERVAL_MS = 5000;
 // Fraction of SSE_MAX_QUEUE_SIZE at which a pre-saturation warning is emitted
 const SSE_QUEUE_WARN_THRESHOLD = 0.75;
 
-/** EventSource extended with a queue depth accessor for debugging backpressure. */
-export interface BackoffEventSource extends EventSource {
-  /** Current number of events waiting to be dispatched to UI handlers. */
+/**
+ * Authenticated SSE connection with backoff, backpressure, and API key injection.
+ * Replaces native EventSource to support custom headers (X-API-Key).
+ * Supports property-assignment callbacks (.onmessage, .onerror, .onopen)
+ * and addEventListener for named SSE events.
+ */
+/** Handler type for SSE addEventListener - always receives MessageEvent. */
+export type SSEEventListener = (event: MessageEvent) => void;
+
+export interface AuthenticatedEventSource {
+  onmessage: ((event: MessageEvent) => void) | null;
+  onerror: ((event: Event) => void) | null;
+  onopen: (() => void) | null;
+  addEventListener(type: string, listener: SSEEventListener): void;
+  removeEventListener(type: string, listener: SSEEventListener): void;
+  close(): void;
   readonly queueDepth: number;
 }
 
-/** Options for createBackoffEventSource. */
-export interface BackoffEventSourceOptions {
-  /**
-   * Called when all SSE_MAX_ATTEMPTS reconnection attempts have been exhausted.
-   * Use this to surface a "connection lost" message in the UI and offer a manual retry.
-   */
+/** Backward-compatible alias. */
+export type BackoffEventSource = AuthenticatedEventSource;
+
+/** Options for createAuthenticatedEventSource. */
+export interface AuthenticatedEventSourceOptions {
   onGiveUp?: () => void;
-  /**
-   * Called when the backpressure queue is full and events are being dropped.
-   * Receives the current drop count (number of events dropped in this overflow window).
-   * Use this to surface a warning in the UI that log entries may be missing.
-   */
   onQueueOverflow?: (dropCount: number) => void;
 }
 
+/** Backward-compatible alias. */
+export type BackoffEventSourceOptions = AuthenticatedEventSourceOptions;
+
+/** Fatal error that stops SSE reconnection (e.g. 401 Unauthorized). */
+class FatalSSEError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'FatalSSEError';
+  }
+}
+
 /**
- * Creates an EventSource with exponential backoff reconnection and backpressure.
+ * Creates an authenticated SSE connection using @microsoft/fetch-event-source.
  *
- * The browser's native EventSource reconnects immediately by default, which can
- * flood a backend that is under load or restarting.  This wrapper instead:
- *   1. Closes the EventSource on the first onerror callback.
- *   2. Waits with exponential backoff + jitter before opening a new EventSource.
+ * Unlike native EventSource, this supports custom headers (X-API-Key) for
+ * authenticated SSE streams. Features:
+ *   1. Injects X-API-Key from localStorage on every connection/reconnection.
+ *   2. Exponential backoff with jitter on connection failures.
  *   3. Stops reconnecting after SSE_MAX_ATTEMPTS consecutive failures.
- *   4. Queues incoming events and drains them in batches via requestAnimationFrame
- *      so that slow UI rendering cannot cause unbounded memory accumulation.
- *      When the queue exceeds SSE_MAX_QUEUE_SIZE the oldest events are dropped.
- *
- * The returned object mirrors the EventSource interface so callers can swap
- * `new EventSource(url)` with `createBackoffEventSource(url)` transparently.
- * The extra `queueDepth` property exposes current queue size for debugging.
- *
- * @param options.onGiveUp - Called when all reconnection attempts are exhausted.
- * @param options.onQueueOverflow - Called when events are dropped due to queue saturation.
+ *   4. Fatal 401 responses stop retrying immediately.
+ *   5. Backpressure queue drains events in rAF batches.
+ *   6. Property-assignment compatibility (.onmessage, .onerror, .onopen).
  */
-export function createBackoffEventSource(url: string, options?: BackoffEventSourceOptions): BackoffEventSource {
-  let attempt = 0;
-  let retryTimeout: ReturnType<typeof setTimeout> | null = null;
+export function createAuthenticatedEventSource(
+  url: string,
+  options?: AuthenticatedEventSourceOptions,
+): AuthenticatedEventSource {
   let closed = false;
+  let attempt = 0;
+  let abortController = new AbortController();
+  let retryTimeout: ReturnType<typeof setTimeout> | null = null;
 
-  // We return the first EventSource directly so the caller can attach listeners
-  // synchronously — the wrapper replaces it transparently on reconnection.
-  let current = new EventSource(url);
+  // Property-assigned callbacks (like native EventSource)
+  let _onmessage: ((event: MessageEvent) => void) | null = null;
+  let _onerror: ((event: Event) => void) | null = null;
+  let _onopen: (() => void) | null = null;
 
-  function reconnect() {
-    if (closed) return;
-    attempt++;
-    if (attempt > SSE_MAX_ATTEMPTS) {
-      // Give up — prevent thundering-herd on a permanently unavailable server.
-      if (options?.onGiveUp) {
-        try { options.onGiveUp(); } catch { /* ignore callback errors */ }
-      }
-      return;
-    }
-    const base = Math.min(SSE_INITIAL_DELAY_MS * Math.pow(2, attempt - 1), SSE_MAX_DELAY_MS);
-    const delay = base + Math.random() * SSE_JITTER_MS;
-
-    retryTimeout = setTimeout(() => {
-      retryTimeout = null;  // Timer has fired; clear the handle so close() won't double-cancel.
-      if (closed) return;
-      // Re-open and re-attach all listeners that were registered on the proxy.
-      const next = new EventSource(url);
-      // Copy all named-event listeners (via their queue wrappers) to the new source.
-      for (const [type, handlers] of registeredListeners) {
-        for (const handler of handlers) {
-          const wrapper = handlerWrappers.get(handler);
-          next.addEventListener(type, wrapper ?? (handler as EventListener));
-        }
-      }
-      next.onerror = current.onerror;
-      next.onopen = current.onopen;
-      next.onmessage = current.onmessage;
-      current = next;
-      // Attach backoff error handler to new source.
-      attachBackoff(next);
-    }, delay);
-  }
-
-  function attachBackoff(es: EventSource) {
-    const originalOnerror = es.onerror;
-    es.onerror = (ev: Event) => {
-      es.close();
-      if (originalOnerror) originalOnerror.call(es, ev);
-      reconnect();
-    };
-    es.onopen = () => {
-      // Reset backoff counter on a successful connection.
-      attempt = 0;
-    };
-  }
-
-  // Track addEventListener calls so we can re-attach them after reconnection.
-  const registeredListeners = new Map<string, Set<EventListenerOrEventListenerObject>>();
+  // addEventListener registry
+  const registeredListeners = new Map<string, Set<(event: MessageEvent) => void>>();
 
   // ---- Backpressure queue ----
-  // Events are pushed here and drained in batches via requestAnimationFrame.
-  // This prevents slow UI rendering from causing unbounded memory accumulation.
   interface QueuedEvent { type: string; event: Event }
   const eventQueue: QueuedEvent[] = [];
   let drainScheduled = false;
@@ -233,8 +219,7 @@ export function createBackoffEventSource(url: string, options?: BackoffEventSour
       const handlers = registeredListeners.get(type);
       if (handlers) {
         for (const h of handlers) {
-          if (typeof h === 'function') h(event);
-          else h.handleEvent(event);
+          h(event as MessageEvent);
         }
       }
     }
@@ -247,7 +232,6 @@ export function createBackoffEventSource(url: string, options?: BackoffEventSour
   function enqueueEvent(type: string, event: Event) {
     const queueSize = eventQueue.length;
 
-    // Warn before saturation to allow proactive intervention
     if (queueSize >= SSE_MAX_QUEUE_SIZE * SSE_QUEUE_WARN_THRESHOLD && queueSize < SSE_MAX_QUEUE_SIZE) {
       const now = Date.now();
       if (now - lastQueueThresholdWarnAt >= SSE_QUEUE_WARN_INTERVAL_MS) {
@@ -259,7 +243,6 @@ export function createBackoffEventSource(url: string, options?: BackoffEventSour
     }
 
     if (eventQueue.length >= SSE_MAX_QUEUE_SIZE) {
-      // Drop the oldest event to bound memory usage
       eventQueue.shift();
       overflowDropCount++;
       const now = Date.now();
@@ -282,68 +265,128 @@ export function createBackoffEventSource(url: string, options?: BackoffEventSour
   }
   // ---- end backpressure queue ----
 
-  attachBackoff(current);
+  function scheduleReconnect() {
+    if (closed) return;
+    attempt++;
+    if (attempt > SSE_MAX_ATTEMPTS) {
+      if (options?.onGiveUp) {
+        try { options.onGiveUp(); } catch { /* ignore */ }
+      }
+      return;
+    }
+    const base = Math.min(SSE_INITIAL_DELAY_MS * Math.pow(2, attempt - 1), SSE_MAX_DELAY_MS);
+    const delay = base + Math.random() * SSE_JITTER_MS;
+    retryTimeout = setTimeout(() => {
+      retryTimeout = null;
+      connect();
+    }, delay);
+  }
 
-  // Map from caller-supplied handler → queuing wrapper, so removeEventListener can clean up.
-  const handlerWrappers = new Map<EventListenerOrEventListenerObject, EventListener>();
+  function connect() {
+    if (closed) return;
+    abortController = new AbortController();
 
-  // Return a proxy that intercepts addEventListener/removeEventListener so that
-  // listeners registered before the first reconnection are preserved across reconnects,
-  // and routes events through the backpressure queue.
-  const proxy = new Proxy(current, {
-    get(_, prop) {
-      if (prop === 'addEventListener') {
-        return (type: string, handler: EventListenerOrEventListenerObject, opts?: boolean | AddEventListenerOptions) => {
-          if (!registeredListeners.has(type)) registeredListeners.set(type, new Set());
-          const listeners = registeredListeners.get(type)!;
-          // Skip if already registered to prevent duplicate listeners and memory leaks on reconnect
-          if (listeners.has(handler)) return;
-          listeners.add(handler);
-          // Wrap the handler to go through the backpressure queue
-          const wrapper: EventListener = (event: Event) => enqueueEvent(type, event);
-          handlerWrappers.set(handler, wrapper);
-          current.addEventListener(type, wrapper, opts);
-        };
-      }
-      if (prop === 'removeEventListener') {
-        return (type: string, handler: EventListenerOrEventListenerObject, opts?: boolean | EventListenerOptions) => {
-          registeredListeners.get(type)?.delete(handler);
-          const wrapper = handlerWrappers.get(handler);
-          if (wrapper) {
-            handlerWrappers.delete(handler);
-            current.removeEventListener(type, wrapper, opts);
-          } else {
-            current.removeEventListener(type, handler, opts);
-          }
-        };
-      }
-      if (prop === 'close') {
-        return () => {
-          closed = true;
-          if (retryTimeout !== null) {
-            clearTimeout(retryTimeout);
-            retryTimeout = null;
-          }
-          registeredListeners.clear();
-          handlerWrappers.clear();
-          eventQueue.length = 0;
-          current.close();
-        };
-      }
-      if (prop === 'queueDepth') {
-        return eventQueue.length;
-      }
-      const val = (current as unknown as Record<string | symbol, unknown>)[prop];
-      return typeof val === 'function' ? val.bind(current) : val;
+    const apiKey = getApiKey();
+    const headers: Record<string, string> = {};
+    if (apiKey) headers['X-API-Key'] = apiKey;
+
+    const fullUrl = url.startsWith('http') ? url : `${API_BASE}${url}`;
+
+    fetchEventSource(fullUrl, {
+      signal: abortController.signal,
+      headers,
+      openWhenHidden: true,
+      async onopen(response) {
+        if (response.ok) {
+          attempt = 0;
+          _onopen?.();
+          return;
+        }
+        if (response.status === 401) {
+          throw new FatalSSEError('Unauthorized');
+        }
+        throw new Error(`HTTP ${response.status}`);
+      },
+      onmessage(ev) {
+        const eventType = ev.event || 'message';
+        const msgEvent = new MessageEvent(eventType, {
+          data: ev.data,
+          lastEventId: ev.id ?? '',
+        });
+
+        // Property-assigned onmessage: fires for default/message events only
+        if (!ev.event || ev.event === 'message') {
+          _onmessage?.(msgEvent);
+        }
+
+        // addEventListener handlers via backpressure queue
+        if (registeredListeners.has(eventType)) {
+          enqueueEvent(eventType, msgEvent);
+        }
+      },
+      onerror(err) {
+        if (err instanceof FatalSSEError) {
+          _onerror?.(new Event('error'));
+          throw err; // Stop retrying
+        }
+        // Stop fetchEventSource's built-in retry; we manage our own backoff.
+        throw err;
+      },
+      onclose() {
+        if (!closed) {
+          // Server closed the connection — schedule reconnect with backoff.
+          throw new Error('Connection closed by server');
+        }
+      },
+    }).catch((err) => {
+      if (err instanceof FatalSSEError || closed) return;
+      _onerror?.(new Event('error'));
+      scheduleReconnect();
+    });
+  }
+
+  // Start the initial connection
+  connect();
+
+  // Build the public interface object with property-assignment support
+  const source: AuthenticatedEventSource = {
+    get onmessage() { return _onmessage; },
+    set onmessage(fn) { _onmessage = fn; },
+    get onerror() { return _onerror; },
+    set onerror(fn) { _onerror = fn; },
+    get onopen() { return _onopen; },
+    set onopen(fn) { _onopen = fn; },
+
+    addEventListener(type: string, handler: SSEEventListener) {
+      if (!registeredListeners.has(type)) registeredListeners.set(type, new Set());
+      const listeners = registeredListeners.get(type)!;
+      if (listeners.has(handler)) return; // Prevent duplicate registration
+      listeners.add(handler);
     },
-    set(_, prop, value) {
-      (current as unknown as Record<string | symbol, unknown>)[prop] = value;
-      return true;
-    },
-  }) as BackoffEventSource;
 
-  return proxy;
+    removeEventListener(type: string, handler: SSEEventListener) {
+      registeredListeners.get(type)?.delete(handler);
+    },
+
+    close() {
+      closed = true;
+      abortController.abort();
+      if (retryTimeout !== null) {
+        clearTimeout(retryTimeout);
+        retryTimeout = null;
+      }
+      registeredListeners.clear();
+      eventQueue.length = 0;
+    },
+
+    get queueDepth() { return eventQueue.length; },
+  };
+
+  return source;
 }
+
+/** Backward-compatible alias. */
+export const createBackoffEventSource = createAuthenticatedEventSource;
 
 /**
  * Fetch wrapper with retry logic for transient failures.

@@ -6,6 +6,7 @@ import {
   type RalphConfig,
   type TeamConfig,
 } from '../services/api/grd';
+import type { AuthenticatedEventSource } from '../services/api/client';
 
 /**
  * Composable for managing project session lifecycle, SSE streaming,
@@ -37,7 +38,7 @@ export function useProjectSession(projectId: Ref<string>) {
   } | null>(null);
 
   // Private state
-  let eventSource: EventSource | null = null;
+  let eventSource: AuthenticatedEventSource | null = null;
   let errorCount = 0;
 
   // Callback registrations

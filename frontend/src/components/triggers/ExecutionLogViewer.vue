@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue';
-import type { Execution, LogLine } from '../../services/api';
+import type { Execution, LogLine, AuthenticatedEventSource } from '../../services/api';
 import { executionApi } from '../../services/api';
 import { useToast } from '../../composables/useToast';
 
@@ -23,7 +23,7 @@ const execution = ref<Execution | null>(null);
 const isLoading = ref(true);
 const error = ref<string | null>(null);
 const autoScroll = ref(true);
-const eventSource = ref<EventSource | null>(null);
+const eventSource = ref<AuthenticatedEventSource | null>(null);
 const logContainer = ref<HTMLElement | null>(null);
 const elapsedTime = ref(0);
 const elapsedInterval = ref<number | null>(null);

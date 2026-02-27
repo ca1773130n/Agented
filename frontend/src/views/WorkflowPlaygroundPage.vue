@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, nextTick, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router';
-import type { ConversationMessage } from '../services/api';
+import type { ConversationMessage, AuthenticatedEventSource } from '../services/api';
 import { workflowApi, superAgentApi, superAgentSessionApi } from '../services/api';
 import AiChatPanel from '../components/ai/AiChatPanel.vue';
 import WorkflowCanvas from '../components/workflow/WorkflowCanvas.vue';
@@ -49,7 +49,7 @@ const aiSessionId = ref<string | null>(null);
 const selectedBackend = ref('auto');
 const selectedAccountId = ref<string | null>(null);
 const selectedModel = ref<string | null>(null);
-let chatEventSource: EventSource | null = null;
+let chatEventSource: AuthenticatedEventSource | null = null;
 
 // Chat panel configuration
 const assistantIconPaths = [

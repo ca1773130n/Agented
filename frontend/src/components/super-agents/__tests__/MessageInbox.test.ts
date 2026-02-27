@@ -41,6 +41,16 @@ const mockOutboxMessages = [
   },
 ]
 
+const mockEventSource = {
+  addEventListener: vi.fn(),
+  removeEventListener: vi.fn(),
+  close: vi.fn(),
+  onmessage: null as ((event: MessageEvent) => void) | null,
+  onerror: null as ((event: Event) => void) | null,
+  onopen: null as (() => void) | null,
+  queueDepth: 0,
+}
+
 vi.mock('../../../services/api', () => ({
   agentMessageApi: {
     listInbox: vi.fn().mockResolvedValue({ messages: [] }),
@@ -52,16 +62,8 @@ vi.mock('../../../services/api', () => ({
     list: vi.fn().mockResolvedValue({ super_agents: [] }),
   },
   API_BASE: '',
+  createAuthenticatedEventSource: vi.fn(() => mockEventSource),
 }))
-
-const mockEventSource = {
-  addEventListener: vi.fn(),
-  close: vi.fn(),
-  onmessage: null as ((event: MessageEvent) => void) | null,
-  onerror: null as ((event: Event) => void) | null,
-}
-const MockEventSourceCtor = vi.fn(function() { return mockEventSource })
-vi.stubGlobal('EventSource', MockEventSourceCtor)
 
 describe('MessageInbox', () => {
   const mockShowToast = vi.fn()
@@ -84,10 +86,10 @@ describe('MessageInbox', () => {
 
   beforeEach(async () => {
     vi.clearAllMocks()
-    MockEventSourceCtor.mockClear()
     mockEventSource.addEventListener.mockReset()
     mockEventSource.close.mockReset()
-    const { agentMessageApi } = await import('../../../services/api')
+    const { agentMessageApi, createAuthenticatedEventSource } = await import('../../../services/api')
+    vi.mocked(createAuthenticatedEventSource).mockReturnValue(mockEventSource as any)
     vi.mocked(agentMessageApi.listInbox).mockResolvedValue({ messages: mockInboxMessages as any })
     vi.mocked(agentMessageApi.listOutbox).mockResolvedValue({ messages: mockOutboxMessages as any })
   })
@@ -171,7 +173,8 @@ describe('MessageInbox', () => {
     mountComponent()
     await flushPromises()
 
-    expect(MockEventSourceCtor).toHaveBeenCalledWith('/admin/super-agents/super-test01/messages/stream')
+    const { createAuthenticatedEventSource } = await import('../../../services/api')
+    expect(createAuthenticatedEventSource).toHaveBeenCalledWith('/admin/super-agents/super-test01/messages/stream')
   })
 
   it('closes EventSource on unmount', async () => {

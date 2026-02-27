@@ -1,7 +1,8 @@
 /**
  * Agent and agent conversation API modules.
  */
-import { API_BASE, apiFetch } from './client';
+import { API_BASE, apiFetch, createAuthenticatedEventSource } from './client';
+import type { AuthenticatedEventSource } from './client';
 import type {
   Agent,
   AgentConversation,
@@ -84,8 +85,8 @@ export const agentConversationApi = {
       body: JSON.stringify({ message, ...options }),
     }),
 
-  stream: (convId: string): EventSource => {
-    return new EventSource(`${API_BASE}/api/agents/conversations/${convId}/stream`);
+  stream: (convId: string): AuthenticatedEventSource => {
+    return createAuthenticatedEventSource(`${API_BASE}/api/agents/conversations/${convId}/stream`);
   },
 
   finalize: (convId: string) =>

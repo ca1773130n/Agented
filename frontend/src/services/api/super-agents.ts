@@ -1,7 +1,8 @@
 /**
  * SuperAgent, Document, Session, and Message API modules.
  */
-import { API_BASE, apiFetch } from './client';
+import { API_BASE, apiFetch, createAuthenticatedEventSource } from './client';
+import type { AuthenticatedEventSource } from './client';
 import type {
   SuperAgent,
   SuperAgentDocument,
@@ -58,11 +59,11 @@ export const superAgentSessionApi = {
       method: 'POST',
     }),
   /** Legacy stream endpoint (session-level events). */
-  stream: (superAgentId: string, sessionId: string): EventSource =>
-    new EventSource(`${API_BASE}/admin/super-agents/${superAgentId}/sessions/${sessionId}/stream`),
+  stream: (superAgentId: string, sessionId: string): AuthenticatedEventSource =>
+    createAuthenticatedEventSource(`${API_BASE}/admin/super-agents/${superAgentId}/sessions/${sessionId}/stream`),
   /** Chat-specific SSE stream for state_delta events (37-02 protocol). */
-  chatStream: (superAgentId: string, sessionId: string): EventSource =>
-    new EventSource(`${API_BASE}/admin/super-agents/${superAgentId}/sessions/${sessionId}/chat/stream`),
+  chatStream: (superAgentId: string, sessionId: string): AuthenticatedEventSource =>
+    createAuthenticatedEventSource(`${API_BASE}/admin/super-agents/${superAgentId}/sessions/${sessionId}/chat/stream`),
   /** Legacy send message endpoint. */
   sendMessage: (superAgentId: string, sessionId: string, message: string) =>
     apiFetch<{ message: string }>(`/admin/super-agents/${superAgentId}/sessions/${sessionId}/message`, {

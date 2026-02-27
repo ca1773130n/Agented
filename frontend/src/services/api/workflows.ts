@@ -1,7 +1,8 @@
 /**
  * Workflow and workflow execution API modules.
  */
-import { API_BASE, apiFetch } from './client';
+import { API_BASE, apiFetch, createAuthenticatedEventSource } from './client';
+import type { AuthenticatedEventSource } from './client';
 import type {
   Workflow,
   WorkflowVersion,
@@ -52,8 +53,8 @@ export const workflowExecutionApi = {
     apiFetch<{ message: string }>(`/admin/workflows/${workflowId}/executions/${executionId}/cancel`, {
       method: 'POST',
     }),
-  stream: (workflowId: string, executionId: string): EventSource =>
-    new EventSource(`${API_BASE}/admin/workflows/${workflowId}/executions/${executionId}/stream`),
+  stream: (workflowId: string, executionId: string): AuthenticatedEventSource =>
+    createAuthenticatedEventSource(`${API_BASE}/admin/workflows/${workflowId}/executions/${executionId}/stream`),
   getNodeExecutions: async (_workflowId: string, executionId: string) => {
     const data = await apiFetch<{ execution: WorkflowExecution; node_executions: WorkflowNodeExecution[] }>(
       `/admin/workflows/executions/${executionId}`

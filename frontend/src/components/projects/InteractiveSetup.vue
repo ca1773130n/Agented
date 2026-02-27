@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onUnmounted, nextTick } from 'vue';
-import { setupApi, ApiError } from '../../services/api';
-import type { SetupQuestion } from '../../services/api';
+import { setupApi, ApiError, createAuthenticatedEventSource } from '../../services/api';
+import type { SetupQuestion, AuthenticatedEventSource } from '../../services/api';
 import { useToast } from '../../composables/useToast';
 
 const props = defineProps<{
@@ -28,7 +28,7 @@ const isSubmitting = ref(false);
 const isCancelling = ref(false);
 const exitCode = ref<number | null>(null);
 const errorMessage = ref<string | null>(null);
-let eventSource: EventSource | null = null;
+let eventSource: AuthenticatedEventSource | null = null;
 let retryCount = 0;
 const MAX_RETRIES = 3;
 const logContainer = ref<HTMLElement | null>(null);
@@ -65,7 +65,7 @@ async function startSetup() {
 function connectSSE() {
   if (!executionId.value) return;
 
-  eventSource = new EventSource(setupApi.streamUrl(executionId.value));
+  eventSource = createAuthenticatedEventSource(setupApi.streamUrl(executionId.value));
 
   eventSource.addEventListener('log', (e: MessageEvent) => {
     try {

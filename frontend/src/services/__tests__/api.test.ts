@@ -513,13 +513,12 @@ describe('API Service', () => {
     })
 
     describe('streamLogs', () => {
-      it('should create EventSource for log streaming', () => {
-        const mockEventSource = vi.fn()
-        vi.stubGlobal('EventSource', mockEventSource)
+      it('should create authenticated event source for log streaming', () => {
+        const source = executionApi.streamLogs('exec-1')
 
-        executionApi.streamLogs('exec-1')
-
-        expect(mockEventSource).toHaveBeenCalledWith('/admin/executions/exec-1/stream')
+        expect(source).toBeDefined()
+        expect(typeof source.addEventListener).toBe('function')
+        expect(typeof source.close).toBe('function')
       })
     })
   })
