@@ -104,6 +104,12 @@ Plans:
 
 **Verification Level:** proxy
 
+**Plans:** 2 plans
+
+Plans:
+- [ ] 04-01-PLAN.md — Install flask-talisman + flask-limiter, initialize security headers and rate limiter in create_app()
+- [ ] 04-02-PLAN.md — Apply blueprint-level rate limits and redact health endpoint for unauthenticated callers
+
 ---
 
 ### Phase 5: Observability and Process Reliability
