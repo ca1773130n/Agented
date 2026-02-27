@@ -336,6 +336,36 @@ class ProjectSessionManager:
             if session_info:
                 session_info.status = status
 
+        # Sync GRD .planning/ files to DB on session completion (only for GRD-initialized projects)
+        try:
+            from .grd_planning_service import GrdPlanningService
+            from .grd_sync_service import GrdSyncService
+
+            # Look up project_id from the DB session record
+            project_id = None
+            try:
+                with get_connection() as conn:
+                    row = conn.execute(
+                        "SELECT project_id FROM project_sessions WHERE id = ?",
+                        (session_id,),
+                    ).fetchone()
+                    if row:
+                        project_id = row["project_id"]
+            except Exception:
+                pass
+
+            if project_id:
+                # Unregister from planning session tracker (no-op if not a planning session)
+                GrdPlanningService.unregister_session(session_id)
+                # Only sync if this project has GRD initialized
+                from ..database import get_project
+
+                project = get_project(project_id)
+                if project and project.get("grd_init_status") in ("initializing", "ready"):
+                    GrdSyncService.sync_on_session_complete(project_id, session_id)
+        except Exception as e:
+            logger.warning("GRD sync on session complete failed: %s", e)
+
         # Broadcast completion
         cls._broadcast(
             session_id,

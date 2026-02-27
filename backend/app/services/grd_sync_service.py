@@ -405,3 +405,37 @@ class GrdSyncService:
         except Exception as e:
             logger.error(f"Error syncing summary file {summary_file}: {e}")
             results["errors"].append(f"{summary_file.name}: {e}")
+
+    @classmethod
+    def sync_on_session_complete(cls, project_id: str, session_id: str):
+        """Sync .planning/ files to DB after a planning session completes.
+
+        Called by ProjectSessionManager._handle_session_exit() for GRD-related sessions.
+        Runs synchronously BEFORE the complete event is broadcast to ensure
+        the frontend sees fresh data when it refreshes.
+        """
+        from app.database import get_project as _get_project
+
+        project = _get_project(project_id)
+        if not project:
+            logger.warning("sync_on_session_complete: project %s not found", project_id)
+            return
+
+        local_path = project.get("local_path")
+        if not local_path:
+            return
+
+        planning_dir = str(Path(local_path).expanduser().resolve() / ".planning")
+        if not Path(planning_dir).is_dir():
+            return
+
+        try:
+            result = cls.sync_project(project_id, planning_dir)
+            logger.info(
+                "Session-completion sync for project %s: synced=%d, skipped=%d",
+                project_id,
+                result["synced"],
+                result["skipped"],
+            )
+        except Exception as e:
+            logger.error("Session-completion sync failed for project %s: %s", project_id, e)

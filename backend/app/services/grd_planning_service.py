@@ -11,9 +11,11 @@ manages session lifecycle.
 """
 
 import logging
+import time
+from pathlib import Path
 from typing import Optional
 
-from ..database import get_project
+from ..database import get_project, update_project
 from .execution_type_handler import get_handler
 from .project_session_manager import ProjectSessionManager
 
@@ -155,3 +157,119 @@ class GrdPlanningService:
         if not project:
             return "none"
         return project.get("grd_init_status") or "none"
+
+    @classmethod
+    def auto_init_project(cls, project_id: str, local_path: str):
+        """Background GRD initialization after project clone.
+
+        Checks if .planning/ already exists. If so, syncs directly.
+        If not, runs map-codebase then new-project via sequential PTY sessions.
+        Updates grd_init_status throughout the process.
+        """
+        import threading
+
+        from .grd_sync_service import GrdSyncService
+
+        def _run_init():
+            try:
+                update_project(project_id, grd_init_status="initializing")
+                planning_dir = str(Path(local_path) / ".planning")
+
+                # Case 1: .planning/ already exists -- just sync
+                if Path(planning_dir).is_dir():
+                    logger.info(
+                        "Project %s has existing .planning/, syncing directly", project_id
+                    )
+                    GrdSyncService.sync_project(project_id, planning_dir)
+                    update_project(project_id, grd_init_status="ready")
+                    return
+
+                # Case 2: No .planning/ -- run map-codebase, then new-project
+                logger.info("Project %s: starting GRD auto-init", project_id)
+
+                # Step 1: map-codebase
+                result1 = cls._run_init_session(
+                    project_id, local_path, ["claude", "-p", "/grd:map-codebase"]
+                )
+                if not result1:
+                    update_project(project_id, grd_init_status="failed")
+                    return
+
+                # Step 2: new-project --auto @README.md
+                result2 = cls._run_init_session(
+                    project_id,
+                    local_path,
+                    ["claude", "-p", "/grd:new-project --auto @README.md"],
+                )
+                if not result2:
+                    update_project(project_id, grd_init_status="failed")
+                    return
+
+                # Step 3: Sync .planning/ to DB
+                if Path(planning_dir).is_dir():
+                    GrdSyncService.sync_project(project_id, planning_dir)
+
+                update_project(project_id, grd_init_status="ready")
+                logger.info("Project %s: GRD auto-init complete", project_id)
+
+            except Exception as e:
+                logger.error(
+                    "GRD auto-init failed for project %s: %s", project_id, e, exc_info=True
+                )
+                try:
+                    update_project(project_id, grd_init_status="failed")
+                except Exception:
+                    pass
+
+        thread = threading.Thread(
+            target=_run_init, daemon=True, name=f"grd-init-{project_id}"
+        )
+        thread.start()
+
+    @classmethod
+    def _run_init_session(cls, project_id: str, local_path: str, cmd: list) -> bool:
+        """Run a single init PTY session and wait for completion.
+
+        Creates a PTY session via the direct handler with autonomous execution mode.
+        Polls for completion every 2 seconds with a 10-minute timeout.
+
+        Returns:
+            True if session completed with exit code 0, False otherwise.
+        """
+        handler = get_handler("direct")
+        if not handler:
+            logger.error("Direct execution handler not registered")
+            return False
+
+        session_config = {
+            "project_id": project_id,
+            "cmd": cmd,
+            "cwd": local_path,
+            "execution_type": "direct",
+            "execution_mode": "autonomous",
+        }
+        result = handler.start(session_config)
+        session_id = result.get("session_id")
+        if not session_id:
+            logger.error("Failed to create PTY session for auto-init: %s", result)
+            return False
+
+        # Poll for completion (10-minute timeout)
+        for _ in range(300):  # 300 * 2s = 600s = 10 minutes
+            time.sleep(2)
+            info = ProjectSessionManager.get_session_info(session_id)
+            if not info:
+                logger.info("Init session %s: no info (process exited)", session_id)
+                return True  # Session cleaned up, assume success
+            status = info.get("status")
+            if status == "completed":
+                logger.info("Init session %s completed successfully", session_id)
+                return True
+            if status == "failed":
+                logger.warning("Init session %s failed", session_id)
+                return False
+
+        # Timeout
+        logger.warning("Init session %s timed out after 10 minutes", session_id)
+        ProjectSessionManager.stop_session(session_id)
+        return False
