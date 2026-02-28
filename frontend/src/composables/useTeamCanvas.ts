@@ -38,7 +38,15 @@ export function useTeamCanvas(
   team: Ref<Team | null>,
   members: Ref<TeamMember[]>,
   assignments: Ref<TeamAgentAssignment[]>,
-) {
+): {
+  nodes: Ref<Node<AgentNodeData | SuperAgentNodeData>[]>
+  edges: Ref<Edge[]>
+  isSyncing: Ref<boolean>
+  syncFromTeam: () => void
+  syncToTeam: () => SyncToTeamResult
+  getPositions: () => CanvasPositions
+  buildEdgesFromTopology: typeof buildEdgesFromTopology
+} {
   const nodes = ref<Node<AgentNodeData | SuperAgentNodeData>[]>([])
   const edges = ref<Edge[]>([])
   const isSyncing = ref(false)

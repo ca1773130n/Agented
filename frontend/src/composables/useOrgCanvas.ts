@@ -12,7 +12,18 @@ export interface TeamNodeData {
   tierCounts?: { leader: number; senior: number; member: number }
 }
 
-export function useOrgCanvas(projectId: Ref<string>) {
+export function useOrgCanvas(projectId: Ref<string>): {
+  nodes: Ref<Node<TeamNodeData>[]>
+  edges: Ref<Edge[]>
+  savedEdges: Ref<ProjectTeamEdge[]>
+  isLoading: Ref<boolean>
+  buildNodes: (teams: { id: string; name: string; color: string; members?: TeamMember[] }[]) => void
+  buildEdgesFromSaved: () => void
+  loadEdges: () => Promise<void>
+  saveEdges: () => Promise<void>
+  savePositions: () => Promise<void>
+  loadPositions: () => Promise<boolean>
+} {
   const nodes = ref<Node<TeamNodeData>[]>([])
   const edges = ref<Edge[]>([])
   const savedEdges = ref<ProjectTeamEdge[]>([])

@@ -60,7 +60,21 @@ const DEFAULT_LABELS: Record<string, string> = {
 // Composable
 // ---------------------------------------------------------------------------
 
-export function useWorkflowCanvas(workflowId: Ref<string>) {
+export function useWorkflowCanvas(workflowId: Ref<string>): {
+  nodes: Ref<Node<WorkflowNodeData>[]>
+  edges: Ref<Edge[]>
+  isDirty: Ref<boolean>
+  currentVersion: Ref<number | null>
+  isLoading: Ref<boolean>
+  loadLatestVersion: () => Promise<void>
+  saveVersion: () => Promise<void>
+  addNode: (type: string, position: { x: number; y: number }, config?: Record<string, unknown>) => void
+  removeNode: (nodeId: string) => void
+  removeEdge: (edgeId: string) => void
+  getPositions: () => Record<string, { x: number; y: number }>
+  updateNodeConfig: (nodeId: string, config: Record<string, unknown>) => void
+  updateNodeLabel: (nodeId: string, label: string) => void
+} {
   const nodes = ref<Node<WorkflowNodeData>[]>([])
   const edges = ref<Edge[]>([])
   const isDirty = ref(false)
