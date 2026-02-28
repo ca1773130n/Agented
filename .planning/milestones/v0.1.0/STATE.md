@@ -2,7 +2,7 @@
 
 **Project:** Agented — Agentic Development Platform
 **Milestone:** v0.1.0 — Production Hardening
-**Last Updated:** 2026-02-27T19:30:00Z
+**Last Updated:** 2026-02-28T01:43:00Z
 
 ---
 
@@ -12,27 +12,27 @@
 
 **Milestone Goal:** Harden the existing feature-complete platform for safe internal deployment: stable configuration, production WSGI runtime, API authentication, security headers, observability, and code quality.
 
-**Current Focus:** Phase 4 Plan 01 complete. Next: Phase 4 Plan 02 — Per-Blueprint Rate Limits.
+**Current Focus:** Phase 4 complete (Plans 01 + 02). Next: Phase 4 evaluation or Phase 5.
 
 ---
 
 ## Current Position
 
-**Active Phase:** Phase 4 — Security Hardening
-**Active Plan:** 04-01 complete, 04-02 next
-**Status:** Phase 3 merged, Phase 4 Plan 01 complete
+**Active Phase:** Phase 4 — Security Hardening (COMPLETE)
+**Active Plan:** 04-02 complete (all plans done)
+**Status:** Phase 4 complete (Plans 01 + 02)
 
 **Progress:**
 ```
 [==========] Phase 1: Web UI Roadmapping Feature (ALL 5 plans complete)
 [==========] Phase 2: Environment and WSGI Foundation (COMPLETE — 2026-02-28)
 [==========] Phase 3: API Authentication (merged — 2026-02-28)
-[=====     ] Phase 4: Security Hardening (Plan 01 complete)
+[==========] Phase 4: Security Hardening (COMPLETE — 2026-02-28)
 [          ] Phase 5: Observability and Process Reliability
 [          ] Phase 6: Code Quality and Maintainability
 ```
 
-Overall: 3/6 phases complete, Phase 4 in progress
+Overall: 4/6 phases complete
 
 ---
 
@@ -80,6 +80,10 @@ None — this milestone uses proxy verification throughout. No deferred (Level 3
 | In-memory limiter storage (memory://) | Safe for workers=1 Gunicorn deployment; avoids Redis dependency for single-process architecture | Phase 4 Plan 01 |
 | CSP allows 'unsafe-inline' for script-src/style-src | Required for Swagger UI at /docs; without it, docs page renders blank | Phase 4 Plan 01 |
 | HSTS only over HTTPS (flask-talisman default) | Per RFC 6797; header sent when X-Forwarded-Proto: https detected from reverse proxy | Phase 4 Plan 01 |
+| Rate limits applied before blueprint registration | Flask-limiter official pattern; post-registration limits may silently fail | Phase 4 Plan 02 |
+| Admin rate limit at 120/minute | Accommodates SPA loads, AJAX, and SSE reconnects; tighter limits break frontend | Phase 4 Plan 02 |
+| Health readiness uses self-contained auth check | Independent of Phase 3 middleware chain; same AGENTED_API_KEY env var | Phase 4 Plan 02 |
+| Unauthenticated readiness returns fixed "ok" | Prevents information leakage about degraded components to external probers | Phase 4 Plan 02 |
 
 ### Critical Pitfalls (From Research)
 
@@ -108,9 +112,12 @@ None — this milestone uses proxy verification throughout. No deferred (Level 3
 
 ## Session Continuity
 
-**Next action:** Execute Phase 4 Plan 02 — Per-Blueprint Rate Limits.
+**Next action:** Phase 4 evaluation (04-EVAL.md) or begin Phase 5 — Observability and Process Reliability.
 
-**To resume:** Read ROADMAP.md and this STATE.md. Phase 4 Plan 01 complete — summary in `phases/04-security-hardening/04-01-SUMMARY.md`.
+**To resume:** Read ROADMAP.md and this STATE.md. Phase 4 complete — summaries in `phases/04-security-hardening/04-01-SUMMARY.md` and `04-02-SUMMARY.md`.
+
+**Last session:** 2026-02-28T01:43:00Z
+**Stopped at:** Completed 04-02-PLAN.md (Per-Blueprint Rate Limits and Health Redaction)
 
 ---
 *Initialized: 2026-02-25*
