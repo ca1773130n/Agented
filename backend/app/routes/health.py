@@ -1,11 +1,33 @@
 """Health check endpoints."""
 
+import hmac
+import os
+from datetime import datetime, timezone
 from http import HTTPStatus
 
+from flask import request
 from flask_openapi3 import APIBlueprint, Tag
 
 tag = Tag(name="health", description="Health check endpoints")
 health_bp = APIBlueprint("health", __name__, url_prefix="/health", abp_tags=[tag])
+
+
+def _is_authenticated_request() -> bool:
+    """Check if request carries a valid API key.
+
+    Self-contained auth check for the health endpoint (SEC-03).
+    Compares X-API-Key header against AGENTED_API_KEY env var -- the same
+    env var used by Phase 3's auth middleware in create_app().
+
+    Returns False if AGENTED_API_KEY is not set (safe default: redact).
+    """
+    api_key = request.headers.get("X-API-Key")
+    if not api_key:
+        return False
+    secret = os.environ.get("AGENTED_API_KEY", "")
+    if not secret:
+        return False
+    return hmac.compare_digest(api_key, secret)
 
 
 @health_bp.get("/liveness")
@@ -16,7 +38,19 @@ def liveness():
 
 @health_bp.get("/readiness")
 def readiness():
-    """Readiness probe with system health details."""
+    """Readiness probe with system health details.
+
+    Unauthenticated callers receive a minimal response (SEC-03).
+    Authenticated callers (valid X-API-Key header) receive full component health details.
+    """
+    # SEC-03: Unauthenticated callers get minimal response
+    if not _is_authenticated_request():
+        return {
+            "status": "ok",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }, 200
+
+    # Full response for authenticated callers (existing logic below)
     from ..database import get_connection
     from ..services.process_manager import ProcessManager
 
