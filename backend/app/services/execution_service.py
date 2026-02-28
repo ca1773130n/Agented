@@ -26,6 +26,7 @@ from ..database import (
     get_webhook_triggers,
     upsert_pending_retry,
 )
+from ..db.webhook_dedup import check_and_insert_dedup_key
 from ..utils.json_path import get_nested_value
 from .audit_log_service import AuditLogService
 from .budget_service import BudgetService
@@ -94,17 +95,16 @@ class ExecutionState:
 class ExecutionService:
     """Service for trigger execution and status tracking via database."""
 
+    # Webhook deduplication TTL in seconds (DB-backed via webhook_dedup_keys table)
+    WEBHOOK_DEDUP_WINDOW = 10
+
     # Thread-safe dict tracking rate limit detections: {execution_id: cooldown_seconds}
     _rate_limit_detected: Dict[str, int] = {}
     # _rate_limit_lock guards _rate_limit_detected, _pending_retries, _retry_timers, and _retry_counts.
     # Acquire before any read or write to those dicts.
     _rate_limit_lock = threading.Lock()
 
-    # Webhook deduplication: {(trigger_id, payload_hash): last_dispatch_epoch}
-    # Prevents duplicate executions from rapid successive identical webhooks.
-    _webhook_dedup: Dict[str, float] = {}
-    _webhook_dedup_lock = threading.Lock()
-    # Seconds within which identical (trigger, payload) pairs are suppressed
+    # Seconds within which identical (trigger, payload) pairs are suppressed (DB-backed)
     WEBHOOK_DEDUP_WINDOW = 10
 
     # Pending rate-limit retries: {trigger_id: {"retry_at": str, "cooldown_seconds": int, ...}}
@@ -1150,27 +1150,21 @@ class ExecutionService:
             if detection_keyword and detection_keyword not in text:
                 continue  # Keyword not found in text
 
-            # Deduplication: skip if an identical (trigger, payload) pair was dispatched
-            # within the dedup window to prevent thundering-herd from rapid successive webhooks.
+            # DB-backed deduplication: skip if identical payload was dispatched within TTL
             payload_hash = hashlib.sha256(
                 json.dumps(payload, sort_keys=True, default=str).encode()
             ).hexdigest()[:16]
-            dedup_key = f"{trigger['id']}:{payload_hash}"
-            now_epoch = datetime.datetime.now().timestamp()
-            with cls._webhook_dedup_lock:
-                last_seen = cls._webhook_dedup.get(dedup_key, 0)
-                if now_epoch - last_seen < cls.WEBHOOK_DEDUP_WINDOW:
-                    logger.info(
-                        "Webhook dedup: skipping duplicate dispatch for trigger '%s' "
-                        "(same payload seen %.1fs ago)",
-                        trigger["name"],
-                        now_epoch - last_seen,
-                    )
-                    continue
-                cls._webhook_dedup[dedup_key] = now_epoch
-                # Evict old entries to prevent unbounded growth
-                cutoff = now_epoch - cls.WEBHOOK_DEDUP_WINDOW
-                cls._webhook_dedup = {k: v for k, v in cls._webhook_dedup.items() if v > cutoff}
+            is_new = check_and_insert_dedup_key(
+                trigger_id=trigger["id"],
+                payload_hash=payload_hash,
+                ttl_seconds=cls.WEBHOOK_DEDUP_WINDOW,
+            )
+            if not is_new:
+                logger.info(
+                    "Webhook dedup: skipping duplicate dispatch for trigger '%s' (DB-backed)",
+                    trigger["name"],
+                )
+                continue
 
             logger.info("Trigger '%s' triggered by webhook", trigger["name"])
             cls.save_trigger_event(trigger, payload)
