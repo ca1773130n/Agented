@@ -222,7 +222,7 @@ def stream_llm_response(
     if proxy_result:
         proxy_base, proxy_key = proxy_result
         logger.info(
-            "Streaming via CLIProxyAPI at %s (backend=%s, account=%s, " "msg_count=%d, roles=%s)",
+            "Streaming via CLIProxyAPI at %s (backend=%s, account=%s, msg_count=%d, roles=%s)",
             proxy_base,
             effective_backend,
             account_email,

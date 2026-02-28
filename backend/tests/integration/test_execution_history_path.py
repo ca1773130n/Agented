@@ -75,9 +75,9 @@ def test_trigger_executions_response_structure(client, isolated_db):
     resp = client.get("/admin/triggers/bot-security/executions")
     data = resp.get_json()
     assert "executions" in data, f"Missing 'executions' key. Got: {sorted(data.keys())}"
-    assert (
-        "running_execution" in data
-    ), f"Missing 'running_execution' key. Got: {sorted(data.keys())}"
+    assert "running_execution" in data, (
+        f"Missing 'running_execution' key. Got: {sorted(data.keys())}"
+    )
     assert "total" in data, f"Missing 'total' key. Got: {sorted(data.keys())}"
 
 

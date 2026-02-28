@@ -314,9 +314,9 @@ class TestDropdownThenSaveSequence:
             f"/admin/teams/{team_id}/topology",
             json={"topology": "sequential"},
         )
-        assert (
-            resp.status_code == 200
-        ), f"Dropdown topology change should succeed. Got: {resp.get_json()}"
+        assert resp.status_code == 200, (
+            f"Dropdown topology change should succeed. Got: {resp.get_json()}"
+        )
 
         # Step 2: Canvas save (config only, no topology)
         config = json.dumps(

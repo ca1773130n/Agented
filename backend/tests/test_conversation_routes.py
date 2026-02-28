@@ -121,9 +121,9 @@ class TestAgentConversationRoutes:
             },
         )
         # Should be 202 (accepted) or similar, NOT 500/TypeError
-        assert (
-            resp.status_code != 500
-        ), f"send_message crashed with kwargs. Response: {resp.get_json()}"
+        assert resp.status_code != 500, (
+            f"send_message crashed with kwargs. Response: {resp.get_json()}"
+        )
 
     def test_send_message_without_kwargs_works(self, client, isolated_db):
         """POST with just message (no backend kwargs) should work."""
@@ -175,9 +175,9 @@ class TestSkillConversationRoutes:
                 "model": "claude-sonnet-4-20250514",
             },
         )
-        assert (
-            resp.status_code != 500
-        ), f"SkillConversation send_message crashed. Response: {resp.get_json()}"
+        assert resp.status_code != 500, (
+            f"SkillConversation send_message crashed. Response: {resp.get_json()}"
+        )
 
 
 # ===========================================================================
@@ -210,9 +210,9 @@ class TestPluginConversationRoutes:
                 "model": "claude-sonnet-4-20250514",
             },
         )
-        assert (
-            resp.status_code != 500
-        ), f"PluginConversation send_message crashed. Response: {resp.get_json()}"
+        assert resp.status_code != 500, (
+            f"PluginConversation send_message crashed. Response: {resp.get_json()}"
+        )
 
 
 # ===========================================================================
@@ -245,9 +245,9 @@ class TestHookConversationRoutes:
                 "model": "claude-sonnet-4-20250514",
             },
         )
-        assert (
-            resp.status_code != 500
-        ), f"HookConversation send_message crashed. Response: {resp.get_json()}"
+        assert resp.status_code != 500, (
+            f"HookConversation send_message crashed. Response: {resp.get_json()}"
+        )
 
 
 # ===========================================================================
@@ -280,9 +280,9 @@ class TestCommandConversationRoutes:
                 "model": "claude-sonnet-4-20250514",
             },
         )
-        assert (
-            resp.status_code != 500
-        ), f"CommandConversation send_message crashed. Response: {resp.get_json()}"
+        assert resp.status_code != 500, (
+            f"CommandConversation send_message crashed. Response: {resp.get_json()}"
+        )
 
 
 # ===========================================================================
@@ -315,6 +315,6 @@ class TestRuleConversationRoutes:
                 "model": "claude-sonnet-4-20250514",
             },
         )
-        assert (
-            resp.status_code != 500
-        ), f"RuleConversation send_message crashed. Response: {resp.get_json()}"
+        assert resp.status_code != 500, (
+            f"RuleConversation send_message crashed. Response: {resp.get_json()}"
+        )

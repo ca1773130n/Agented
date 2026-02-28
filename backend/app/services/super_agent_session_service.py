@@ -338,8 +338,7 @@ class SuperAgentSessionService:
         session["last_compacted_at"] = iso_now
 
         logger.info(
-            "Compacted session %s: %d old messages summarized, %d recent kept, "
-            "new token_count=%d",
+            "Compacted session %s: %d old messages summarized, %d recent kept, new token_count=%d",
             session_id,
             len(old_messages),
             len(recent_messages),

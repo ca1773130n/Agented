@@ -90,7 +90,7 @@ class _WorkflowFileWatchHandler:
                     trigger_type="file_watch",
                 )
                 logger.info(
-                    f"File watch trigger fired workflow {self.workflow_id} " f"for path {src_path}"
+                    f"File watch trigger fired workflow {self.workflow_id} for path {src_path}"
                 )
         except Exception as e:
             logger.error(f"Error firing file watch trigger for workflow {self.workflow_id}: {e}")

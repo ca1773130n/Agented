@@ -7,7 +7,6 @@ from .base_generation_service import BaseGenerationService
 
 
 class CommandGenerationService(BaseGenerationService):
-
     @classmethod
     def _gather_context(cls) -> dict:
         return {"commands": get_all_commands()}

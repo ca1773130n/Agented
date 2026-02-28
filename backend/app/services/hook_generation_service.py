@@ -19,7 +19,6 @@ VALID_EVENTS = [
 
 
 class HookGenerationService(BaseGenerationService):
-
     @classmethod
     def _gather_context(cls) -> dict:
         return {"hooks": get_all_hooks()}

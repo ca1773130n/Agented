@@ -7,7 +7,6 @@ from .base_generation_service import BaseGenerationService
 
 
 class PluginGenerationService(BaseGenerationService):
-
     @classmethod
     def _gather_context(cls) -> dict:
         return {"plugins": get_all_plugins()}

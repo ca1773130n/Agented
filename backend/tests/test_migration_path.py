@@ -240,8 +240,7 @@ class TestTeamMembersMigration:
             " VALUES ('team-xyz', 'Bob', 'bob@test.com', 'lead')"
         )
         conn.execute(
-            "INSERT INTO team_members (team_id, name, role)"
-            " VALUES ('team-xyz', 'Carol', 'member')"
+            "INSERT INTO team_members (team_id, name, role) VALUES ('team-xyz', 'Carol', 'member')"
         )
         conn.commit()
         conn.close()

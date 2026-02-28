@@ -1764,9 +1764,9 @@ def _migrate_bots_to_triggers(conn):
     post_paths = conn.execute("SELECT COUNT(*) FROM project_paths").fetchone()[0]
     post_logs = conn.execute("SELECT COUNT(*) FROM execution_logs").fetchone()[0]
 
-    assert (
-        post_triggers == pre_bots
-    ), f"Row count mismatch: triggers {post_triggers} != bots {pre_bots}"
+    assert post_triggers == pre_bots, (
+        f"Row count mismatch: triggers {post_triggers} != bots {pre_bots}"
+    )
     assert post_paths == pre_paths, f"Row count mismatch: project_paths {post_paths} != {pre_paths}"
     assert post_logs == pre_logs, f"Row count mismatch: execution_logs {post_logs} != {pre_logs}"
 
@@ -2128,7 +2128,7 @@ def _migrate_add_team_members_super_agent_id(conn):
     columns = {row[1] for row in cursor.fetchall()}
     if "super_agent_id" not in columns:
         conn.execute(
-            "ALTER TABLE team_members ADD COLUMN super_agent_id TEXT" " REFERENCES super_agents(id)"
+            "ALTER TABLE team_members ADD COLUMN super_agent_id TEXT REFERENCES super_agents(id)"
         )
         logger.info("Added super_agent_id column to team_members")
 

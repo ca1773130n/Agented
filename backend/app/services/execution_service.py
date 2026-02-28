@@ -1043,8 +1043,7 @@ class ExecutionService:
                 # Commit changes
                 committed = GitHubService.commit_changes(
                     clone_dir,
-                    "fix(security): resolve vulnerabilities\n\n"
-                    "Automatic security fix by Agented",
+                    "fix(security): resolve vulnerabilities\n\nAutomatic security fix by Agented",
                 )
 
                 if committed:
