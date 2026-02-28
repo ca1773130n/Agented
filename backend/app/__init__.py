@@ -119,14 +119,14 @@ def create_app(config=None):
     # Store on app.extensions for blueprint-level access in register_blueprints()
     app.extensions["limiter"] = limiter
 
-    # API key authentication middleware
-    api_key = os.environ.get("AGENTED_API_KEY", "")
-
     # Paths that bypass authentication (public endpoints)
     _AUTH_BYPASS_PREFIXES = ("/health", "/docs", "/openapi", "/api/webhooks/github")
 
     @app.before_request
     def _require_api_key():
+        # Read API key per-request so changes take effect without restart
+        api_key = os.environ.get("AGENTED_API_KEY", "")
+
         # Auth disabled when AGENTED_API_KEY is not set (backward compatibility)
         if not api_key:
             return None
@@ -135,11 +135,11 @@ def create_app(config=None):
         if request.method == "OPTIONS":
             return None
 
-        # Root path bypass
-        if request.path == "/":
+        # Only enforce auth on /admin and /api routes
+        if not (request.path.startswith("/admin") or request.path.startswith("/api")):
             return None
 
-        # Bypass paths
+        # Bypass paths (specific /api sub-paths that are public)
         for prefix in _AUTH_BYPASS_PREFIXES:
             if request.path == prefix or request.path.startswith(prefix + "/"):
                 return None
