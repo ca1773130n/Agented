@@ -1295,4 +1295,17 @@ def create_fresh_schema(conn):
         )
     """)
 
+    # --- Webhook deduplication keys ---
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS webhook_dedup_keys (
+            trigger_id TEXT NOT NULL,
+            payload_hash TEXT NOT NULL,
+            created_at REAL NOT NULL,
+            PRIMARY KEY (trigger_id, payload_hash)
+        )
+    """)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_webhook_dedup_created ON webhook_dedup_keys(created_at)"
+    )
+
     conn.commit()

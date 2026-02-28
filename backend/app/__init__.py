@@ -236,6 +236,18 @@ def create_app(config=None):
                 replace_existing=True,
             )
 
+        # Schedule periodic webhook dedup key cleanup (every 60 seconds)
+        from .db.webhook_dedup import cleanup_expired_keys
+
+        if SchedulerService._scheduler:
+            SchedulerService._scheduler.add_job(
+                func=cleanup_expired_keys,
+                trigger="interval",
+                seconds=60,
+                id="webhook_dedup_cleanup",
+                replace_existing=True,
+            )
+
         # Initialize agent execution scheduler (depends on MonitoringService)
         from .services.agent_scheduler_service import AgentSchedulerService
 
@@ -339,6 +351,12 @@ def create_app(config=None):
     from .routes import register_blueprints
 
     register_blueprints(app)
+
+    # Request ID middleware — generates UUID per request, propagates via
+    # contextvars for structured logging, returns X-Request-ID header.
+    from .middleware import init_request_middleware
+
+    init_request_middleware(app)
 
     # Global JSON error handlers
     @app.errorhandler(404)

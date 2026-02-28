@@ -2967,6 +2967,21 @@ def _migrate_v54_project_grd_init_status(conn):
         print("Added grd_init_status column to projects")
 
 
+def _migrate_v47_webhook_dedup_keys(conn):
+    """v0.4.0: Add webhook_dedup_keys table for DB-backed webhook deduplication."""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS webhook_dedup_keys (
+            trigger_id TEXT NOT NULL,
+            payload_hash TEXT NOT NULL,
+            created_at REAL NOT NULL,
+            PRIMARY KEY (trigger_id, payload_hash)
+        )
+    """)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_webhook_dedup_created ON webhook_dedup_keys(created_at)"
+    )
+
+
 # =============================================================================
 # Versioned migration registry
 # =============================================================================
@@ -3028,6 +3043,7 @@ VERSIONED_MIGRATIONS = [
     (52, "trigger_sigterm_grace_seconds", _migrate_v52_trigger_sigterm_grace_seconds),
     (53, "project_manager_super_agent", _migrate_v53_project_manager_super_agent),
     (54, "project_grd_init_status", _migrate_v54_project_grd_init_status),
+    (55, "webhook_dedup_keys", _migrate_v47_webhook_dedup_keys),
 ]
 
 
