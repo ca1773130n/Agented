@@ -81,11 +81,13 @@ Plans:
 
 **Verification Level:** proxy
 
+**Status:** COMPLETE (2026-02-28)
+
 **Plans:** 2 plans
 
 Plans:
-- [ ] 03-01-PLAN.md — Backend auth middleware (before_request API key validation) + CORS fail-closed lockdown
-- [ ] 03-02-PLAN.md — Frontend auth header injection + SSE migration to @microsoft/fetch-event-source
+- [x] 03-01-PLAN.md — Backend auth middleware (before_request API key validation) + CORS fail-closed lockdown
+- [x] 03-02-PLAN.md — Frontend auth header injection + SSE migration to @microsoft/fetch-event-source
 
 ---
 
