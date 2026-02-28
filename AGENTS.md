@@ -37,7 +37,7 @@ cd frontend && npm test                      # Watch mode
 cd frontend && npm run test:coverage         # With coverage
 
 # Formatting
-cd backend && uv run black .                 # Format Python (line-length=100)
+cd backend && uv run ruff format .           # Format Python (line-length=100)
 ```
 
 API docs available at http://localhost:20000/docs (Swagger UI via flask-openapi3).
@@ -106,7 +106,7 @@ All three must pass with zero errors. Do not skip the build step — type errors
 
 ## Conventions
 
-- Python formatting: Black with `line-length=100`, target `py310`
+- Python formatting: Ruff with `line-length=100`, target `py310`
 - Backend tests use `isolated_db` fixture (auto-patches `DB_PATH` to temp file per test)
 - Frontend uses Geist font family and a dark theme with CSS custom properties defined in `App.vue`
 
