@@ -39,9 +39,13 @@ def post_config():
         return {"error": "accounts must be a JSON object"}, HTTPStatus.BAD_REQUEST
     for k, v in accounts.items():
         if not isinstance(k, str):
-            return {"error": f"accounts keys must be strings, got {type(k).__name__}"}, HTTPStatus.BAD_REQUEST
+            return {
+                "error": f"accounts keys must be strings, got {type(k).__name__}"
+            }, HTTPStatus.BAD_REQUEST
         if not isinstance(v, dict):
-            return {"error": f"accounts[{k!r}] must be a JSON object, got {type(v).__name__}"}, HTTPStatus.BAD_REQUEST
+            return {
+                "error": f"accounts[{k!r}] must be a JSON object, got {type(v).__name__}"
+            }, HTTPStatus.BAD_REQUEST
 
     # Build config dict
     config = {

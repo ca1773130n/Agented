@@ -7,7 +7,6 @@ import json
 import logging
 import os
 import random
-import re
 import shutil
 import signal
 import subprocess
@@ -448,9 +447,8 @@ class ExecutionService:
         call sites (including test mocks) continue to resolve.
         """
         return CommandBuilder.build(
-            backend, prompt, allowed_paths, model, codex_settings
+            backend, prompt, allowed_paths, model, codex_settings, allowed_tools
         )
-
 
     @classmethod
     def _budget_monitor(
@@ -553,7 +551,9 @@ class ExecutionService:
                 exc_info=True,
             )
         except Exception:
-            logger.exception("Unexpected error reading %s stream for execution %s", stream_name, execution_id)
+            logger.exception(
+                "Unexpected error reading %s stream for execution %s", stream_name, execution_id
+            )
         finally:
             pipe.close()
 
@@ -595,7 +595,6 @@ class ExecutionService:
             # Render prompt from template (delegated to PromptRenderer)
             prompt = PromptRenderer.render(trigger, trigger_id, message_text, paths_str, event)
             PromptRenderer.warn_unresolved(prompt, trigger.get("name", trigger_id), logger)
-
 
             # For security audit skill, save message as threat report and prepend path
             if "/weekly-security-audit" in prompt:
@@ -784,14 +783,18 @@ class ExecutionService:
             stdout_thread.join(timeout=10)
             stderr_thread.join(timeout=10)
             if stdout_thread.is_alive():
-                tlog.error("stdout reader thread still alive after process exit — output may be incomplete")
+                tlog.error(
+                    "stdout reader thread still alive after process exit — output may be incomplete"
+                )
                 ExecutionLogService.append_log(
                     execution_id,
                     "stderr",
                     "[WARNING] stdout reader did not exit cleanly — output may be incomplete",
                 )
             if stderr_thread.is_alive():
-                tlog.error("stderr reader thread still alive after process exit — output may be incomplete")
+                tlog.error(
+                    "stderr reader thread still alive after process exit — output may be incomplete"
+                )
                 ExecutionLogService.append_log(
                     execution_id,
                     "stderr",
@@ -899,9 +902,7 @@ class ExecutionService:
                 try:
                     GitHubService.cleanup_clone(d)
                 except OSError as e:
-                    logger.error(
-                        "Failed to clean up cloned directory %s: %s", d, e, exc_info=True
-                    )
+                    logger.error("Failed to clean up cloned directory %s: %s", d, e, exc_info=True)
                 except Exception:
                     logger.exception("Unexpected error cleaning up cloned directory: %s", d)
             # Remove from ProcessManager tracking

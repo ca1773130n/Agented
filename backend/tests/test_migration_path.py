@@ -318,9 +318,7 @@ class TestFreshDbMigrations:
 
         with get_connection() as conn:
             row = conn.execute("SELECT MAX(version) FROM schema_version").fetchone()
-            assert row[0] == expected_max, (
-                f"schema_version max={row[0]}, expected {expected_max}"
-            )
+            assert row[0] == expected_max, f"schema_version max={row[0]}, expected {expected_max}"
 
             count = conn.execute("SELECT COUNT(*) FROM schema_version").fetchone()[0]
             assert count == len(VERSIONED_MIGRATIONS), (

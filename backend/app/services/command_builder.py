@@ -67,7 +67,7 @@ class CommandBuilder:
                 "--output-format",
                 "json",
                 "--allowedTools",
-                "Read,Glob,Grep,Bash",
+                allowed_tools or "Read,Glob,Grep,Bash",
             ]
             if model:
                 cmd.extend(["--model", model])

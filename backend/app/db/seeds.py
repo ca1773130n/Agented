@@ -14,7 +14,6 @@ Functions:
 """
 
 import logging
-import os
 import sqlite3
 
 import app.config as config

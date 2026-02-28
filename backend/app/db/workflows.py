@@ -175,7 +175,9 @@ def delete_workflow(workflow_id: str) -> bool:
 # =============================================================================
 
 
-def add_workflow_version(workflow_id: str, graph_json: str, is_draft: bool = False) -> Optional[int]:
+def add_workflow_version(
+    workflow_id: str, graph_json: str, is_draft: bool = False
+) -> Optional[int]:
     """Add a new workflow version with auto-incrementing version number.
 
     Validates graph_json is valid JSON and a valid DAG before inserting.

@@ -8,7 +8,6 @@ Seed functions and preset data have been moved to seeds.py.
 
 import logging
 import os
-import sqlite3
 
 import app.config as config
 

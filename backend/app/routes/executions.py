@@ -139,7 +139,7 @@ def cancel_execution(path: ExecutionPath):
         return {"error": "Execution not found"}, HTTPStatus.NOT_FOUND
     if execution["status"] != "running":
         return {
-            "error": f"Can only cancel running executions. Current status is \"{execution['status']}\". Wait until execution starts."
+            "error": f'Can only cancel running executions. Current status is "{execution["status"]}". Wait until execution starts.'
         }, HTTPStatus.CONFLICT
 
     grace = _get_sigterm_grace(execution)
@@ -160,7 +160,7 @@ def cancel_execution_graceful(path: ExecutionPath):
         return {"error": "Execution not found"}, HTTPStatus.NOT_FOUND
     if execution["status"] != "running":
         return {
-            "error": f"Can only cancel running executions. Current status is \"{execution['status']}\". Wait until execution starts."
+            "error": f'Can only cancel running executions. Current status is "{execution["status"]}". Wait until execution starts.'
         }, HTTPStatus.CONFLICT
 
     grace = _get_sigterm_grace(execution)

@@ -7,6 +7,7 @@ load_dotenv()  # Load .env before anything else — override=False by default
 
 import argparse
 import atexit
+import logging
 import os
 import signal
 import sys
