@@ -45,7 +45,69 @@ def register_blueprints(app):
     from .webhook import webhook_bp
     from .workflows import workflows_bp
 
-    # Register blueprints
+    # --- Rate limiting (SEC-02) ---
+    # Apply rate limits BEFORE blueprint registration (flask-limiter official pattern).
+    # Retrieve limiter from app extensions (initialized in create_app by Plan 01)
+    limiter = app.extensions.get("limiter")
+    if limiter:
+        # Webhook ingestion: 20 requests per 10 seconds per IP
+        # Success criteria: 21st request within 10s returns HTTP 429
+        limiter.limit("20/10seconds")(webhook_bp)
+
+        # GitHub webhook: 30 requests per minute per IP
+        limiter.limit("30/minute")(github_webhook_bp)
+
+        # Admin routes: 120 requests per minute per IP
+        # Generous limit to accommodate SPA page loads, AJAX calls, and SSE reconnects
+        # (See 04-RESEARCH.md Pitfall 4: tight limits break SSE EventSource reconnect)
+        admin_blueprints = [
+            triggers_bp,
+            audit_bp,
+            utility_bp,
+            executions_bp,
+            pr_reviews_bp,
+            agents_bp,
+            agent_conversations_bp,
+            skills_bp,
+            teams_bp,
+            products_bp,
+            projects_bp,
+            plugins_bp,
+            marketplace_bp,
+            settings_bp,
+            hooks_bp,
+            commands_bp,
+            rules_bp,
+            skill_conversations_bp,
+            plugin_conversations_bp,
+            hook_conversations_bp,
+            command_conversations_bp,
+            rule_conversations_bp,
+            backends_bp,
+            orchestration_bp,
+            budgets_bp,
+            plugin_exports_bp,
+            monitoring_bp,
+            scheduler_bp,
+            setup_bp,
+            super_agents_bp,
+            super_agent_exports_bp,
+            workflows_bp,
+            sketches_bp,
+            grd_bp,
+            rotation_bp,
+            mcp_servers_bp,
+            project_mcp_bp,
+            product_owner_bp,
+        ]
+        for bp in admin_blueprints:
+            limiter.limit("120/minute")(bp)
+
+        # Exempt health from rate limiting
+        # (04-RESEARCH.md: health probes must always respond)
+        limiter.exempt(health_bp)
+
+    # Register blueprints (AFTER rate limit decoration)
     app.register_api(health_bp)
     app.register_api(webhook_bp)
     app.register_api(github_webhook_bp)
