@@ -276,9 +276,9 @@ from .messages import (  # noqa: F401
 )
 
 # Schema and migrations
-from .migrations import (  # noqa: F401
+from .migrations import init_db  # noqa: F401
+from .seeds import (  # noqa: F401
     auto_register_project_root,
-    init_db,
     migrate_existing_paths,
     seed_predefined_triggers,
     seed_preset_mcp_servers,
