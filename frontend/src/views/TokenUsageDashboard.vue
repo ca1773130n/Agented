@@ -219,6 +219,17 @@ async function loadMonitoringStatus() {
     const status = await monitoringApi.getStatus();
     monitoringStatus.value = status;
     checkAndNotifyThresholds();
+    // Auto-expand all account cards and set default projection windows
+    if (status.windows) {
+      const accountIds = new Set(status.windows.map(w => w.account_id));
+      for (const id of accountIds) {
+        expandedCards.value.add(id);
+        if (!selectedProjectionWindow.value[id]) {
+          const defaultWin = getDefaultProjectionWindow(id);
+          if (defaultWin) selectedProjectionWindow.value[id] = defaultWin;
+        }
+      }
+    }
     await Promise.all([collectSessionUsage(), loadSessionStats(), loadAllTimeSpend(), status.windows ? loadTrendHistories(status.windows) : Promise.resolve()]);
   } catch { monitoringStatus.value = null; }
   finally { monitoringLoading.value = false; monitoringRefreshing.value = false; }

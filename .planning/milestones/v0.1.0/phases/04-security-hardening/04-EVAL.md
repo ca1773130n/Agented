@@ -64,7 +64,7 @@ No paper-derived metrics apply — the requirements come from OWASP Secure Heade
 ### S2: Security Headers on Admin Endpoint
 
 - **What:** Security headers are present on an authenticated admin route — confirms Talisman applies headers globally, not just to health endpoints
-- **Command:** `curl -s -I -H "X-API-Key: $(cat backend/.secret_key 2>/dev/null || echo test)" http://localhost:20000/admin/triggers`
+- **Command:** `curl -s -I -H "X-API-Key: ${AGENTED_API_KEY:-test-key-12345}" http://localhost:20000/admin/triggers`
 - **Expected:** Response includes `Content-Security-Policy`, `Strict-Transport-Security`, `X-Frame-Options: DENY`, and `X-Content-Type-Options: nosniff` (this directly satisfies ROADMAP success criteria #1)
 - **Failure means:** Admin blueprints are somehow exempt from Talisman, or the API key is wrong for the test environment
 
@@ -166,15 +166,13 @@ No paper-derived metrics apply — the requirements come from OWASP Secure Heade
 ### P3: Authenticated Health Response Contains Full Component Details
 
 - **What:** `/health/readiness` with a valid `X-API-Key` header still returns the full component health object — confirms the redaction logic does not accidentally strip data from authenticated callers
-- **How:** Call the endpoint with the `SECRET_KEY` value as the API key; verify the response contains `components` with `database` and `process_manager` sub-objects
+- **How:** Call the endpoint with the `AGENTED_API_KEY` value as the API key; verify the response contains `components` with `database` and `process_manager` sub-objects. **NOTE:** The backend must be started with `AGENTED_API_KEY` set (e.g., `AGENTED_API_KEY=test-key-12345 just dev-backend`). The health readiness auth check compares against `AGENTED_API_KEY` env var (consistent with Phase 3 auth middleware), NOT the Flask `SECRET_KEY`.
 - **Command:**
   ```bash
-  SECRET=$(cat /Users/edward.seo/dev/private/project/harness/Agented/backend/.secret_key 2>/dev/null || echo "")
-  if [ -z "$SECRET" ]; then
-    echo "SKIP — no .secret_key file; set SECRET_KEY env var and retest"
-  else
-    curl -s -H "X-API-Key: $SECRET" http://localhost:20000/health/readiness | \
-    python3 -c "
+  # Requires backend started with: AGENTED_API_KEY=test-key-12345 just dev-backend
+  API_KEY="${AGENTED_API_KEY:-test-key-12345}"
+  curl -s -H "X-API-Key: $API_KEY" http://localhost:20000/health/readiness | \
+  python3 -c "
   import sys, json
   d = json.load(sys.stdin)
   assert 'components' in d, f'components missing from: {list(d.keys())}'
@@ -185,7 +183,6 @@ No paper-derived metrics apply — the requirements come from OWASP Secure Heade
   print('Keys:', sorted(d.keys()))
   print('Component keys:', sorted(d['components'].keys()))
   "
-  fi
   ```
 - **Target:** Response contains `status`, `components.database`, and `components.process_manager` (confirms existing readiness functionality is preserved for authenticated callers)
 - **Evidence:** health.py lines 23-79 (existing readiness logic that must remain intact in the authenticated branch); 04-RESEARCH.md Pattern 4

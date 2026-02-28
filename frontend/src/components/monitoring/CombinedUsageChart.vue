@@ -48,6 +48,23 @@ function getColor(windowType: string, passedColor?: string): string {
   return assignedColors[windowType];
 }
 
+// Compute rate from recent data slope (last 60 min or last 10 points)
+function computeRecentRate(data: { x: number; y: number }[]): number | null {
+  if (data.length < 2) return null;
+  const last = data[data.length - 1];
+  const windowMs = 60 * 60000; // 60 min
+  let recentPoints = data.filter(d => d.x >= last.x - windowMs);
+  if (recentPoints.length < 2) {
+    recentPoints = data.slice(-10);
+  }
+  if (recentPoints.length < 2) return null;
+  const first = recentPoints[0];
+  const dx = last.x - first.x;
+  if (dx <= 0) return null;
+  const dy = last.y - first.y;
+  return (dy / dx) * 3600000; // convert to %/hr
+}
+
 function renderChart() {
   if (!chartRef.value) return;
   if (chartInstance) {
@@ -83,8 +100,10 @@ function renderChart() {
       spanGaps: true,
     });
 
-    // Projected dotted line (if rate available)
-    if (wh.ratePerHour != null && data.length >= 2) {
+    // Projected dotted line: prefer slope from actual data, fall back to backend rate
+    const localRate = computeRecentRate(data);
+    const effectiveRate = localRate ?? wh.ratePerHour;
+    if (effectiveRate != null && Math.abs(effectiveRate) > 0.01 && data.length >= 2) {
       const lastPt = data[data.length - 1];
       const projectionDuration = 2 * 3600000; // project 2 hours forward
       const steps = 12;
@@ -92,19 +111,18 @@ function renderChart() {
       const projData: { x: number; y: number }[] = [{ x: lastPt.x, y: lastPt.y }];
       for (let i = 1; i <= steps; i++) {
         const t = lastPt.x + stepMs * i;
-        const y = lastPt.y + (wh.ratePerHour * (stepMs * i) / 3600000);
-        // Clamp to 0-100 range
+        const y = lastPt.y + (effectiveRate * (stepMs * i) / 3600000);
         if (y > 100) {
-          if (wh.ratePerHour > 0) {
+          if (effectiveRate > 0) {
             const remainPct = 100 - lastPt.y;
-            const msTo100 = (remainPct / wh.ratePerHour) * 3600000;
+            const msTo100 = (remainPct / effectiveRate) * 3600000;
             projData.push({ x: lastPt.x + msTo100, y: 100 });
           }
           break;
         }
         if (y < 0) {
-          if (wh.ratePerHour < 0) {
-            const msToZero = (lastPt.y / Math.abs(wh.ratePerHour)) * 3600000;
+          if (effectiveRate < 0) {
+            const msToZero = (lastPt.y / Math.abs(effectiveRate)) * 3600000;
             projData.push({ x: lastPt.x + msToZero, y: 0 });
           }
           break;

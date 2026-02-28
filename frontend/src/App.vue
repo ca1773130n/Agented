@@ -1164,8 +1164,12 @@ body {
   border: 1px solid var(--border-default);
   border-radius: 12px;
   padding: 24px;
-  max-width: 500px;
+  max-width: 600px;
   width: 90%;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .modal h2 {
@@ -1189,10 +1193,14 @@ body {
   align-items: center;
   justify-content: space-between;
   margin-bottom: 20px;
+  flex-shrink: 0;
 }
 
 .modal-body {
   margin-bottom: 20px;
+  overflow-y: auto;
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .modal-footer,
@@ -1201,6 +1209,7 @@ body {
   justify-content: flex-end;
   gap: 12px;
   margin-top: 24px;
+  flex-shrink: 0;
 }
 
 /* --- 5. Forms --- */

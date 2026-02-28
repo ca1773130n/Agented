@@ -1,0 +1,16 @@
+{
+  "trigger_id": "trig-k5tjyx",
+  "timestamp": "2026-02-28T03:50:30.510620",
+  "trigger_name": "Test Trigger",
+  "trigger_source": "github",
+  "original_event": {
+    "type": "github_pr",
+    "repo_url": "https://github.com/test/repo",
+    "pr_number": 42,
+    "pr_title": "Test PR",
+    "pr_url": "https://github.com/test/repo/pull/42",
+    "pr_author": "testuser",
+    "repo_full_name": "test/repo",
+    "action": "opened"
+  }
+}

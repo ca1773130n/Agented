@@ -12,6 +12,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   planStatusChanged: [planId: string, newStatus: string];
+  quickAdd: [title: string, status: string];
 }>();
 
 // Column configuration
@@ -105,6 +106,7 @@ function onPlanMoved(planId: string, newStatus: string) {
       :phases="phases"
       :phase-lookup="phaseLookup"
       @plan-moved="onPlanMoved"
+      @quick-add="(title: string, status: string) => emit('quickAdd', title, status)"
     />
   </div>
 </template>

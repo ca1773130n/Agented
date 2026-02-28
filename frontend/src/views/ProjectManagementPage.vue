@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue';
+import { ref, computed, watch, onUnmounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import type { Project, GrdMilestone, GrdPhase, GrdPlan } from '../services/api';
+import type { Project, GrdMilestone, GrdPhase, GrdPlan, ConversationMessage, AuthenticatedEventSource } from '../services/api';
 import { projectApi, grdApi } from '../services/api';
 import { useToast } from '../composables/useToast';
 import { useWebMcpTool } from '../composables/useWebMcpTool';
@@ -11,6 +11,7 @@ import EntityLayout from '../layouts/EntityLayout.vue';
 import MilestoneOverview from '../components/grd/MilestoneOverview.vue';
 import KanbanBoard from '../components/grd/KanbanBoard.vue';
 import ProjectSessionPanel from '../components/sessions/ProjectSessionPanel.vue';
+import AiChatPanel from '../components/ai/AiChatPanel.vue';
 
 const props = defineProps<{
   projectId?: string;
@@ -30,6 +31,17 @@ const phases = ref<GrdPhase[]>([]);
 const plans = ref<GrdPlan[]>([]);
 const selectedMilestoneId = ref<string | null>(null);
 const isLoading = ref(true);
+
+// Chat panel state
+const showChatPanel = ref(false);
+const chatMessages = ref<ConversationMessage[]>([]);
+const chatInput = ref('');
+const chatIsProcessing = ref(false);
+const chatStreamingContent = ref('');
+const chatSessionId = ref<string | null>(null);
+const chatSuperAgentId = ref<string | null>(null);
+let chatEventSource: AuthenticatedEventSource | null = null;
+let planChangedDebounce: ReturnType<typeof setTimeout> | null = null;
 
 // Computed
 const selectedMilestone = computed(() =>
@@ -136,6 +148,44 @@ async function handlePlanStatusChanged(planId: string, newStatus: string) {
   }
 }
 
+async function handleQuickAdd(title: string, status: string) {
+  // Use first phase as default target
+  const targetPhase = filteredPhases.value[0];
+  if (!targetPhase) {
+    showToast('No phase available to add card to', 'error');
+    return;
+  }
+  try {
+    await grdApi.createPlan(projectId.value, {
+      phase_id: targetPhase.id,
+      title,
+      status,
+    });
+    showToast('Card created', 'success');
+    await loadPhasesAndPlans();
+  } catch (err) {
+    showToast('Failed to create card', 'error');
+  }
+}
+
+async function handleCreatePhase(name: string, goal: string) {
+  if (!selectedMilestoneId.value) {
+    showToast('No milestone selected', 'error');
+    return;
+  }
+  try {
+    await grdApi.createPhase(projectId.value, {
+      milestone_id: selectedMilestoneId.value,
+      name,
+      goal: goal || undefined,
+    });
+    showToast('Phase created', 'success');
+    await loadPhasesAndPlans();
+  } catch (err) {
+    showToast('Failed to create phase', 'error');
+  }
+}
+
 // Reload phases/plans when milestone changes
 watch(selectedMilestoneId, () => {
   if (!isLoading.value) {
@@ -143,6 +193,142 @@ watch(selectedMilestoneId, () => {
   }
 });
 
+// --- Chat panel logic ---
+
+function toggleChatPanel() {
+  showChatPanel.value = !showChatPanel.value;
+}
+
+function closeChatStream() {
+  if (chatEventSource) {
+    chatEventSource.close();
+    chatEventSource = null;
+  }
+}
+
+function connectChatStream() {
+  closeChatStream();
+  chatEventSource = grdApi.streamProjectChat(projectId.value);
+
+  chatEventSource.addEventListener('state_delta', (event: Event) => {
+    const msgEvent = event as MessageEvent;
+    try {
+      const data = JSON.parse(msgEvent.data);
+      handleChatDelta(data);
+    } catch (e) {
+      console.warn('[ProjectChat] Failed to parse state_delta:', e);
+    }
+  });
+
+  chatEventSource.addEventListener('error', () => {
+    // EventSource auto-reconnects
+  });
+}
+
+function handleChatDelta(data: { type: string; [key: string]: unknown }) {
+  switch (data.type) {
+    case 'message': {
+      if (data.role && data.content) {
+        const isDuplicate = chatMessages.value.some(
+          (m) => m.content === data.content && m.role === data.role,
+        );
+        if (!isDuplicate) {
+          chatMessages.value.push({
+            role: data.role as 'user' | 'assistant',
+            content: data.content as string,
+            timestamp: (data.timestamp as string) || new Date().toISOString(),
+          });
+        }
+      }
+      break;
+    }
+    case 'content_delta': {
+      if (data.content) {
+        chatStreamingContent.value += data.content as string;
+      }
+      break;
+    }
+    case 'finish': {
+      const finalContent = (data.content as string) || chatStreamingContent.value;
+      if (finalContent) {
+        chatMessages.value.push({
+          role: 'assistant',
+          content: finalContent,
+          timestamp: new Date().toISOString(),
+        });
+      }
+      chatStreamingContent.value = '';
+      chatIsProcessing.value = false;
+      break;
+    }
+    case 'status_change': {
+      if (data.status === 'streaming' || data.status === 'processing') {
+        chatIsProcessing.value = true;
+      } else if (data.status === 'idle' || data.status === 'error') {
+        chatIsProcessing.value = false;
+      }
+      break;
+    }
+    case 'error': {
+      chatIsProcessing.value = false;
+      showToast((data.message as string) || 'Chat error', 'error');
+      break;
+    }
+    case 'plan_changed': {
+      // Debounced kanban refresh when AI modifies plans
+      if (planChangedDebounce) clearTimeout(planChangedDebounce);
+      planChangedDebounce = setTimeout(() => {
+        loadPhasesAndPlans();
+      }, 300);
+      break;
+    }
+  }
+}
+
+async function handleChatSend() {
+  const content = chatInput.value.trim();
+  if (!content) return;
+
+  // Optimistic user message
+  chatMessages.value.push({
+    role: 'user',
+    content,
+    timestamp: new Date().toISOString(),
+  });
+  chatInput.value = '';
+  chatIsProcessing.value = true;
+  chatStreamingContent.value = '';
+
+  try {
+    const res = await grdApi.sendProjectChat(projectId.value, {
+      content,
+      milestone_id: selectedMilestoneId.value ?? undefined,
+    });
+    chatSessionId.value = res.session_id;
+    chatSuperAgentId.value = res.super_agent_id;
+
+    // Connect SSE stream if not already connected
+    if (!chatEventSource) {
+      connectChatStream();
+    }
+  } catch (err) {
+    chatMessages.value.pop(); // Remove optimistic message
+    chatIsProcessing.value = false;
+    showToast('Failed to send chat message', 'error');
+  }
+}
+
+function handleChatKeydown(event: KeyboardEvent) {
+  if (event.key === 'Enter' && !event.shiftKey) {
+    event.preventDefault();
+    handleChatSend();
+  }
+}
+
+onUnmounted(() => {
+  closeChatStream();
+  if (planChangedDebounce) clearTimeout(planChangedDebounce);
+});
 </script>
 
 <template>
@@ -163,6 +349,17 @@ watch(selectedMilestoneId, () => {
               {{ ms.title }} ({{ ms.version }})
             </option>
           </select>
+          <button
+            v-if="activeTab === 'kanban'"
+            class="btn btn-sm"
+            :class="{ 'btn-active': showChatPanel }"
+            @click="toggleChatPanel"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+            </svg>
+            Chat
+          </button>
           <button class="btn btn-sm" @click="router.push({ name: 'project-dashboard', params: { projectId: projectId } })">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M19 12H5M12 19l-7-7 7-7" />
@@ -204,15 +401,52 @@ watch(selectedMilestoneId, () => {
           :milestone="selectedMilestone"
           :phases="filteredPhases"
           :plans="filteredPlans"
+          @create-phase="handleCreatePhase"
         />
 
-        <KanbanBoard
-          :project-id="projectId"
-          :milestone-id="selectedMilestoneId"
-          :phases="filteredPhases"
-          :plans="filteredPlans"
-          @plan-status-changed="handlePlanStatusChanged"
-        />
+        <div class="kanban-chat-layout" :class="{ 'chat-open': showChatPanel }">
+          <div class="kanban-main">
+            <KanbanBoard
+              :project-id="projectId"
+              :milestone-id="selectedMilestoneId"
+              :phases="filteredPhases"
+              :plans="filteredPlans"
+              @plan-status-changed="handlePlanStatusChanged"
+              @quick-add="handleQuickAdd"
+            />
+          </div>
+
+          <div v-if="showChatPanel" class="chat-side-panel">
+            <div class="chat-panel-header">
+              <span class="chat-panel-title">AI Manager</span>
+              <button class="chat-panel-close" @click="showChatPanel = false">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
+            </div>
+            <AiChatPanel
+              :messages="chatMessages"
+              :is-processing="chatIsProcessing"
+              :streaming-content="chatStreamingContent"
+              :input-message="chatInput"
+              :conversation-id="chatSessionId"
+              :can-finalize="false"
+              :is-finalizing="false"
+              :assistant-icon-paths="['M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z']"
+              input-placeholder="Ask the AI to manage your kanban board..."
+              entity-label="project"
+              banner-title=""
+              banner-button-label=""
+              :read-only="false"
+              :use-smart-scroll="true"
+              @update:input-message="chatInput = $event"
+              @send="handleChatSend"
+              @keydown="handleChatKeydown"
+            />
+          </div>
+        </div>
       </template>
 
       <ProjectSessionPanel
@@ -291,5 +525,78 @@ watch(selectedMilestoneId, () => {
 
 .tab-btn svg {
   flex-shrink: 0;
+}
+
+.btn-active {
+  color: var(--accent-cyan) !important;
+  border-color: var(--accent-cyan) !important;
+}
+
+/* Kanban + Chat layout */
+.kanban-chat-layout {
+  display: flex;
+  gap: 16px;
+  min-height: 0;
+}
+
+.kanban-main {
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+}
+
+.chat-side-panel {
+  width: 340px;
+  min-width: 340px;
+  max-width: 340px;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  overflow: hidden;
+  height: calc(100vh - 280px);
+}
+
+.chat-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border-subtle);
+  flex-shrink: 0;
+}
+
+.chat-panel-title {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.chat-panel-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.chat-panel-close:hover {
+  color: var(--text-primary);
+  background: var(--bg-tertiary);
+}
+
+.chat-side-panel :deep(.ai-chat-panel) {
+  flex: 1;
+  min-height: 0;
+  border: none;
+  border-radius: 0;
 }
 </style>

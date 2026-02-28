@@ -169,4 +169,7 @@ export const projectApi = {
 
   getCloneStatus: (projectId: string) =>
     apiFetch<{ clone_status: string; clone_error?: string; last_synced_at?: string }>(`/admin/projects/${projectId}/clone-status`),
+
+  getOrCreateManager: (projectId: string) =>
+    apiFetch<{ super_agent_id: string; created: boolean }>(`/admin/projects/${projectId}/manager`),
 };

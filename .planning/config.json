@@ -9,7 +9,7 @@
     "plan_check": true,
     "verifier": true
   },
-  "parallelization": true,
+  "parallelization": false,
   "autonomous_mode": true,
   "git": {
     "branching_strategy": "phase",
@@ -17,7 +17,7 @@
     "default_completion_action": "pr"
   },
   "execution": {
-    "use_teams": true,
+    "use_teams": false,
     "max_concurrent_teammates": 4
   },
   "code_review": {

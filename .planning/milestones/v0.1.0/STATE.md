@@ -2,7 +2,7 @@
 
 **Project:** Agented — Agentic Development Platform
 **Milestone:** v0.1.0 — Production Hardening
-**Last Updated:** 2026-02-28T01:43:00Z
+**Last Updated:** 2026-02-28T03:08:00Z
 
 ---
 
@@ -12,15 +12,15 @@
 
 **Milestone Goal:** Harden the existing feature-complete platform for safe internal deployment: stable configuration, production WSGI runtime, API authentication, security headers, observability, and code quality.
 
-**Current Focus:** Phase 4 complete (Plans 01 + 02). Next: Phase 4 evaluation or Phase 5.
+**Current Focus:** All 6 phases complete. Milestone v0.1.0 done.
 
 ---
 
 ## Current Position
 
-**Active Phase:** Phase 4 — Security Hardening (COMPLETE)
-**Active Plan:** 04-02 complete (all plans done)
-**Status:** Phase 4 complete (Plans 01 + 02)
+**Active Phase:** COMPLETE
+**Active Plan:** None
+**Status:** All phases complete. Milestone v0.1.0 done.
 
 **Progress:**
 ```
@@ -28,11 +28,11 @@
 [==========] Phase 2: Environment and WSGI Foundation (COMPLETE — 2026-02-28)
 [==========] Phase 3: API Authentication (merged — 2026-02-28)
 [==========] Phase 4: Security Hardening (COMPLETE — 2026-02-28)
-[          ] Phase 5: Observability and Process Reliability
-[          ] Phase 6: Code Quality and Maintainability
+[==========] Phase 5: Observability and Process Reliability (COMPLETE — 2026-02-28)
+[==========] Phase 6: Code Quality and Maintainability (COMPLETE — 2026-02-28)
 ```
 
-Overall: 4/6 phases complete
+Overall: 6/6 phases complete
 
 ---
 
@@ -40,7 +40,7 @@ Overall: 4/6 phases complete
 
 | Metric | Target | Current | Status |
 |--------|--------|---------|--------|
-| Backend test pass rate | 100% | 911/911 (100%) | Passing |
+| Backend test pass rate | 100% | 906/906 (100%) | Passing |
 | Frontend build (vue-tsc) | 0 errors | 0 errors | Passing |
 | Frontend test pass rate | 100% | 344/344 (100%) | Passing |
 | API response time (p95) | <200ms | Unknown | Not measured |
@@ -84,6 +84,22 @@ None — this milestone uses proxy verification throughout. No deferred (Level 3
 | Admin rate limit at 120/minute | Accommodates SPA loads, AJAX, and SSE reconnects; tighter limits break frontend | Phase 4 Plan 02 |
 | Health readiness uses self-contained auth check | Independent of Phase 3 middleware chain; same AGENTED_API_KEY env var | Phase 4 Plan 02 |
 | Unauthenticated readiness returns fixed "ok" | Prevents information leakage about degraded components to external probers | Phase 4 Plan 02 |
+| RequestIdFilter on handler, not root logger | Python logging filters on loggers skip propagated child events; handler-level filters capture all records | Phase 5 Plan 01 |
+| Gunicorn accesslog=None | Request lifecycle now logged by middleware in JSON format; prevents garbled mixed-format output | Phase 5 Plan 01 |
+| request_id_var cleared in teardown_request | Defense-in-depth against greenlet context leakage even though contextvars should be per-greenlet | Phase 5 Plan 01 |
+| Migration v47 instead of v55 for webhook_dedup_keys | Last migration was v46; sequential ordering maintained | Phase 5 Plan 03 |
+| DB-backed dedup added as new functionality (no in-memory dict to replace) | In-memory _webhook_dedup dict did not exist in codebase; implemented DB-only dedup from scratch | Phase 5 Plan 03 |
+| Sentry init at module level in run.py (not in create_app or post_fork) | With preload_app=False, run.py loads fresh per worker after monkey patching; module-level init is correct per Sentry docs | Phase 5 Plan 02 |
+| SSE transaction filter matches /stream and /sessions/ | Long-lived SSE connections create multi-minute Sentry transactions that distort metrics and waste quota | Phase 5 Plan 02 |
+| send_default_pii=False for Sentry | Privacy-first default; no user IPs or cookies sent to third-party error tracker | Phase 5 Plan 02 |
+| seeds.py imports from .triggers (canonical source) | Avoids duplicating PREDEFINED_TRIGGERS; imports from triggers.py where they are canonically defined | Phase 6 Plan 01 |
+| migrations.py constants left in place | Migration functions reference them directly; cross-module imports would violate migration isolation | Phase 6 Plan 01 |
+| Removed Black entirely (no fallback) | Ruff formatter is Black-compatible for 99.9% of cases; keeping both tools would be redundant | Phase 6 Plan 02 |
+| per-file-ignores for __init__.py (F401/F403) | Barrel files use wildcard imports and re-exports by design; suppressing prevents false positives | Phase 6 Plan 02 |
+| fixable = ["ALL"] in ruff.lint | Enables auto-fix for all fixable categories including import sorting | Phase 6 Plan 02 |
+| Facade pattern on build_command | Tests mock ExecutionService.build_command; keeping the method as thin delegate preserves all mock paths without test modifications | Phase 6 Plan 03 |
+| warn_unresolved as new functionality | _KNOWN_PLACEHOLDERS did not exist in current codebase; implemented as correctness enhancement | Phase 6 Plan 03 |
+| Security audit threat report stays in run_trigger | Side effects (file I/O via save_threat_report) cannot be extracted to stateless helper | Phase 6 Plan 03 |
 
 ### Critical Pitfalls (From Research)
 
@@ -112,12 +128,12 @@ None — this milestone uses proxy verification throughout. No deferred (Level 3
 
 ## Session Continuity
 
-**Next action:** Phase 4 evaluation (04-EVAL.md) or begin Phase 5 — Observability and Process Reliability.
+**Next action:** Milestone v0.1.0 complete. All 6 phases done.
 
-**To resume:** Read ROADMAP.md and this STATE.md. Phase 4 complete — summaries in `phases/04-security-hardening/04-01-SUMMARY.md` and `04-02-SUMMARY.md`.
+**To resume:** Read ROADMAP.md and this STATE.md. All phases complete — summaries in `phases/` subdirectories.
 
-**Last session:** 2026-02-28T01:43:00Z
-**Stopped at:** Completed 04-02-PLAN.md (Per-Blueprint Rate Limits and Health Redaction)
+**Last session:** 2026-02-28T03:08:00Z
+**Stopped at:** Completed 06-03-PLAN.md (ExecutionService Extract Class refactoring) -- final plan of milestone
 
 ---
 *Initialized: 2026-02-25*

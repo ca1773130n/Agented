@@ -805,8 +805,8 @@ onMounted(() => {
 /* Modal styles */
 
 .modal-create {
-  max-width: 560px;
-  max-height: 85vh;
+  max-width: 640px;
+  max-height: 90vh;
   padding: 0 !important;
   display: flex;
   flex-direction: column;

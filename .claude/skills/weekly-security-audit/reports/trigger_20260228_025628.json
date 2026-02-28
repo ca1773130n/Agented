@@ -1,0 +1,16 @@
+{
+  "trigger_id": "bot-pr-review",
+  "timestamp": "2026-02-28T02:56:28.972865",
+  "trigger_name": "PR Review",
+  "trigger_source": "github",
+  "original_event": {
+    "type": "github_pr",
+    "repo_url": "https://github.com/owner/repo",
+    "pr_number": 456,
+    "pr_title": "Update feature",
+    "pr_url": "https://github.com/owner/repo/pull/456",
+    "pr_author": "developer",
+    "repo_full_name": "owner/repo",
+    "action": "synchronize"
+  }
+}

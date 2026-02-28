@@ -23,6 +23,24 @@ const props = withDefaults(defineProps<{
 const chartRef = ref<HTMLCanvasElement | null>(null);
 let chartInstance: Chart | null = null;
 
+// Compute rate from recent data slope (last 60 min or last 10 points)
+// For remaining chart, data y = 100 - percentage, so slope is negative when usage increases
+function computeRecentRate(data: { x: number; y: number }[]): number | null {
+  if (data.length < 2) return null;
+  const last = data[data.length - 1];
+  const windowMs = 60 * 60000; // 60 min
+  let recentPoints = data.filter(d => d.x >= last.x - windowMs);
+  if (recentPoints.length < 2) {
+    recentPoints = data.slice(-10);
+  }
+  if (recentPoints.length < 2) return null;
+  const first = recentPoints[0];
+  const dx = last.x - first.x;
+  if (dx <= 0) return null;
+  const dy = last.y - first.y;
+  return (dy / dx) * 3600000; // %/hr (negative means remaining is decreasing)
+}
+
 function renderChart() {
   if (!chartRef.value) return;
   if (chartInstance) {
@@ -54,8 +72,13 @@ function renderChart() {
     },
   ];
 
-  // Projected dotted line (rate is usage %/hr, so remaining decreases when rate > 0)
-  if (props.ratePerHour != null && data.length >= 2) {
+  // Projected dotted line: prefer slope from actual data, fall back to backend rate
+  const localRate = computeRecentRate(data);
+  // localRate is in remaining %/hr (negative when draining)
+  // props.ratePerHour is consumption rate (positive when draining), so negate it
+  const backendRate = props.ratePerHour != null ? -props.ratePerHour : null;
+  const effectiveRate = localRate ?? backendRate;
+  if (effectiveRate != null && Math.abs(effectiveRate) > 0.01 && data.length >= 2) {
     const lastPt = data[data.length - 1];
     const projectionDuration = 2 * 3600000; // 2 hours
     const steps = 12;
@@ -63,19 +86,17 @@ function renderChart() {
     const projData: { x: number; y: number }[] = [{ x: lastPt.x, y: lastPt.y }];
     for (let i = 1; i <= steps; i++) {
       const t = lastPt.x + stepMs * i;
-      // remaining = 100 - usage, so remaining drops when usage rate is positive
-      const y = lastPt.y - (props.ratePerHour * (stepMs * i) / 3600000);
-      // Clamp to 0-100 range
+      const y = lastPt.y + (effectiveRate * (stepMs * i) / 3600000);
       if (y <= 0) {
-        if (props.ratePerHour > 0) {
-          const msToZero = (lastPt.y / props.ratePerHour) * 3600000;
+        if (effectiveRate < 0) {
+          const msToZero = (lastPt.y / Math.abs(effectiveRate)) * 3600000;
           projData.push({ x: lastPt.x + msToZero, y: 0 });
         }
         break;
       }
       if (y > 100) {
-        if (props.ratePerHour < 0) {
-          const msTo100 = ((100 - lastPt.y) / Math.abs(props.ratePerHour)) * 3600000;
+        if (effectiveRate > 0) {
+          const msTo100 = ((100 - lastPt.y) / effectiveRate) * 3600000;
           projData.push({ x: lastPt.x + msTo100, y: 100 });
         }
         break;
