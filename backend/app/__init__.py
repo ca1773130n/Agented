@@ -340,6 +340,12 @@ def create_app(config=None):
 
     register_blueprints(app)
 
+    # Request ID middleware — generates UUID per request, propagates via
+    # contextvars for structured logging, returns X-Request-ID header.
+    from .middleware import init_request_middleware
+
+    init_request_middleware(app)
+
     # Global JSON error handlers
     @app.errorhandler(404)
     def not_found(e):

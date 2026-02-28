@@ -7,16 +7,17 @@ load_dotenv()  # Load .env before anything else — override=False by default
 
 import argparse
 import atexit
-import logging
 import os
 import signal
 import sys
 
-# Configure root logger so all app.* loggers output to console
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S",
+from app.logging_config import configure_logging
+
+# Configure structured logging BEFORE app creation so all startup logs
+# are formatted consistently.  Reads LOG_LEVEL and LOG_FORMAT env vars.
+configure_logging(
+    log_level=os.environ.get("LOG_LEVEL", "INFO"),
+    log_format=os.environ.get("LOG_FORMAT", "json"),
 )
 
 from app import create_app

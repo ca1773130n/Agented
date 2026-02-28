@@ -52,7 +52,8 @@ graceful_timeout = 30
 # references. See 02-RESEARCH.md Pitfall 3.
 
 # Logging
-accesslog = "-"  # stdout
+# Disabled: request lifecycle logged by app middleware in JSON format (see middleware.py)
+accesslog = None
 errorlog = "-"   # stderr
 loglevel = os.environ.get("LOG_LEVEL", "info")
 
