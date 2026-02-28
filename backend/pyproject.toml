@@ -22,6 +22,7 @@ dependencies = [
     "flask-talisman>=1.1.0",
     "flask-limiter>=3.0.0",
     "python-json-logger>=3.2.0",
+    "sentry-sdk[flask]>=2.0.0",
 ]
 
 [project.optional-dependencies]
