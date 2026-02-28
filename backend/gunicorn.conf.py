@@ -54,7 +54,7 @@ graceful_timeout = 30
 # Logging
 # Disabled: request lifecycle logged by app middleware in JSON format (see middleware.py)
 accesslog = None
-errorlog = "-"   # stderr
+errorlog = "-"  # stderr
 loglevel = os.environ.get("LOG_LEVEL", "info")
 
 # WSGI application — references the `application` object in run.py

@@ -222,7 +222,7 @@ class BaseConversationService(abc.ABC):
     def subscribe(cls, conv_id: str) -> Generator[str, None, None]:
         """Subscribe to SSE events for a conversation."""
         if conv_id not in cls._conversations:
-            yield (f"event: error\ndata:" f" {json.dumps({'error': 'Conversation not found'})}\n\n")
+            yield (f"event: error\ndata: {json.dumps({'error': 'Conversation not found'})}\n\n")
             return
 
         queue: Queue = Queue()

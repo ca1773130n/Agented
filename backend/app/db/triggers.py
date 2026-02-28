@@ -95,7 +95,7 @@ def add_trigger(
     """Add a new trigger. Returns trigger_id (string) on success, None on failure."""
     if backend_type not in VALID_BACKENDS:
         logger.warning(
-            "Invalid backend_type %r for trigger %r; falling back to 'claude'. " "Valid values: %s",
+            "Invalid backend_type %r for trigger %r; falling back to 'claude'. Valid values: %s",
             backend_type,
             name,
             VALID_BACKENDS,
@@ -103,8 +103,7 @@ def add_trigger(
         backend_type = "claude"
     if trigger_source not in VALID_TRIGGER_SOURCES:
         logger.warning(
-            "Invalid trigger_source %r for trigger %r; falling back to 'webhook'. "
-            "Valid values: %s",
+            "Invalid trigger_source %r for trigger %r; falling back to 'webhook'. Valid values: %s",
             trigger_source,
             name,
             VALID_TRIGGER_SOURCES,

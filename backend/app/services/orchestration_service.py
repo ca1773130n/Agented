@@ -153,8 +153,7 @@ class OrchestrationService:
                 account = RateLimitService.pick_best_account(backend_type)
                 if not account:
                     logger.info(
-                        f"No available accounts for backend {backend_type}, "
-                        f"trying next chain entry"
+                        f"No available accounts for backend {backend_type}, trying next chain entry"
                     )
                     no_accounts_backends.append(backend_type)
                     continue

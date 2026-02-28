@@ -9,7 +9,6 @@ VALID_RULE_TYPES = ["pre_check", "post_check", "validation"]
 
 
 class RuleGenerationService(BaseGenerationService):
-
     @classmethod
     def _gather_context(cls) -> dict:
         return {"rules": get_all_rules()}

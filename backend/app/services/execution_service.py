@@ -7,7 +7,6 @@ import json
 import logging
 import os
 import random
-import re
 import shutil
 import signal
 import subprocess
@@ -30,9 +29,11 @@ from ..db.webhook_dedup import check_and_insert_dedup_key
 from ..utils.json_path import get_nested_value
 from .audit_log_service import AuditLogService
 from .budget_service import BudgetService
+from .command_builder import CommandBuilder
 from .execution_log_service import ExecutionLogService
 from .github_service import GitHubService
 from .process_manager import ProcessManager
+from .prompt_renderer import PromptRenderer
 from .rate_limit_service import RateLimitService
 
 logger = logging.getLogger(__name__)
@@ -440,49 +441,14 @@ class ExecutionService:
         codex_settings: dict = None,
         allowed_tools: str = None,
     ) -> list:
-        """Build the CLI command for the specified backend."""
-        if backend == "opencode":
-            cmd = ["opencode", "run", "--format", "json", prompt]
-            if model:
-                cmd.extend(["--model", model])
-            return cmd
-        elif backend == "gemini":
-            cmd = ["gemini", "-p", prompt, "--output-format", "json"]
-            if model:
-                cmd.extend(["--model", model])
-            if allowed_paths:
-                for path in allowed_paths:
-                    cmd.extend(["--include-directories", path])
-            return cmd
-        elif backend == "codex":
-            cmd = ["codex", "exec", "--json", "--full-auto"]
-            if model:
-                cmd.extend(["--model", model])
-            if codex_settings:
-                reasoning = codex_settings.get("reasoning_level")
-                if reasoning and reasoning in ("low", "medium", "high"):
-                    cmd.extend(["--reasoning-effort", reasoning])
-            cmd.append(prompt)
-            return cmd
-        else:
-            # claude (default)
-            tools = allowed_tools or "Read,Glob,Grep,Bash"
-            cmd = [
-                "claude",
-                "-p",
-                prompt,
-                "--verbose",
-                "--output-format",
-                "json",
-                "--allowedTools",
-                tools,
-            ]
-            if model:
-                cmd.extend(["--model", model])
-            if allowed_paths:
-                for path in allowed_paths:
-                    cmd.extend(["--add-dir", path])
-            return cmd
+        """Build the CLI command for the specified backend.
+
+        Delegates to ``CommandBuilder.build()`` -- kept as a facade so existing
+        call sites (including test mocks) continue to resolve.
+        """
+        return CommandBuilder.build(
+            backend, prompt, allowed_paths, model, codex_settings, allowed_tools
+        )
 
     @classmethod
     def _budget_monitor(
@@ -585,7 +551,9 @@ class ExecutionService:
                 exc_info=True,
             )
         except Exception:
-            logger.exception("Unexpected error reading %s stream for execution %s", stream_name, execution_id)
+            logger.exception(
+                "Unexpected error reading %s stream for execution %s", stream_name, execution_id
+            )
         finally:
             pipe.close()
 
@@ -624,50 +592,9 @@ class ExecutionService:
 
             paths_str = ", ".join(effective_paths) if effective_paths else "no paths configured"
 
-            # Build prompt from template
-            prompt = trigger["prompt_template"]
-            prompt = prompt.replace("{trigger_id}", trigger_id)
-            prompt = prompt.replace("{bot_id}", trigger_id)  # Legacy placeholder support
-            prompt = prompt.replace("{paths}", paths_str)
-            prompt = prompt.replace("{message}", message_text)
-
-            # Add trigger context if available
-            if event:
-                # Handle GitHub PR placeholders
-                if event.get("type") == "github_pr":
-                    prompt = prompt.replace("{pr_url}", event.get("pr_url", ""))
-                    prompt = prompt.replace("{pr_number}", str(event.get("pr_number", "")))
-                    prompt = prompt.replace("{pr_title}", event.get("pr_title", ""))
-                    prompt = prompt.replace("{pr_author}", event.get("pr_author", ""))
-                    prompt = prompt.replace("{repo_url}", event.get("repo_url", ""))
-                    prompt = prompt.replace("{repo_full_name}", event.get("repo_full_name", ""))
-
-            # Warn about any unresolved {placeholder} patterns remaining in the prompt
-            _KNOWN_PLACEHOLDERS = {
-                "trigger_id",
-                "bot_id",
-                "paths",
-                "message",
-                "pr_url",
-                "pr_number",
-                "pr_title",
-                "pr_author",
-                "repo_url",
-                "repo_full_name",
-            }
-            remaining = re.findall(r"\{(\w+)\}", prompt)
-            unknown = [p for p in remaining if p not in _KNOWN_PLACEHOLDERS]
-            if unknown:
-                logger.warning(
-                    "Prompt template for trigger '%s' contains unresolved placeholders: %s",
-                    trigger.get("name", trigger_id),
-                    unknown,
-                )
-
-            # Prepend skill_command if configured and not already in prompt
-            skill_command = trigger.get("skill_command", "")
-            if skill_command and not prompt.lstrip().startswith(skill_command):
-                prompt = f"{skill_command} {prompt}"
+            # Render prompt from template (delegated to PromptRenderer)
+            prompt = PromptRenderer.render(trigger, trigger_id, message_text, paths_str, event)
+            PromptRenderer.warn_unresolved(prompt, trigger.get("name", trigger_id), logger)
 
             # For security audit skill, save message as threat report and prepend path
             if "/weekly-security-audit" in prompt:
@@ -856,14 +783,18 @@ class ExecutionService:
             stdout_thread.join(timeout=10)
             stderr_thread.join(timeout=10)
             if stdout_thread.is_alive():
-                tlog.error("stdout reader thread still alive after process exit — output may be incomplete")
+                tlog.error(
+                    "stdout reader thread still alive after process exit — output may be incomplete"
+                )
                 ExecutionLogService.append_log(
                     execution_id,
                     "stderr",
                     "[WARNING] stdout reader did not exit cleanly — output may be incomplete",
                 )
             if stderr_thread.is_alive():
-                tlog.error("stderr reader thread still alive after process exit — output may be incomplete")
+                tlog.error(
+                    "stderr reader thread still alive after process exit — output may be incomplete"
+                )
                 ExecutionLogService.append_log(
                     execution_id,
                     "stderr",
@@ -971,9 +902,7 @@ class ExecutionService:
                 try:
                     GitHubService.cleanup_clone(d)
                 except OSError as e:
-                    logger.error(
-                        "Failed to clean up cloned directory %s: %s", d, e, exc_info=True
-                    )
+                    logger.error("Failed to clean up cloned directory %s: %s", d, e, exc_info=True)
                 except Exception:
                     logger.exception("Unexpected error cleaning up cloned directory: %s", d)
             # Remove from ProcessManager tracking
@@ -1043,8 +972,7 @@ class ExecutionService:
                 # Commit changes
                 committed = GitHubService.commit_changes(
                     clone_dir,
-                    "fix(security): resolve vulnerabilities\n\n"
-                    "Automatic security fix by Agented",
+                    "fix(security): resolve vulnerabilities\n\nAutomatic security fix by Agented",
                 )
 
                 if committed:

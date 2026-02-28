@@ -154,9 +154,9 @@ Plans:
 **Plans:** 3 plans
 
 Plans:
-- [ ] 06-01-PLAN.md — Extract seed functions and PRESET_MCP_SERVERS from migrations.py into seeds.py
-- [ ] 06-02-PLAN.md — Replace Black with Ruff as sole linter/formatter
-- [ ] 06-03-PLAN.md — Split ExecutionService into facade + PromptRenderer + CommandBuilder helpers
+- [x] 06-01-PLAN.md — Extract seed functions and PRESET_MCP_SERVERS from migrations.py into seeds.py
+- [x] 06-02-PLAN.md — Replace Black with Ruff as sole linter/formatter
+- [x] 06-03-PLAN.md — Split ExecutionService into facade + PromptRenderer + CommandBuilder helpers
 
 ---
 
@@ -169,7 +169,7 @@ Plans:
 | 3 - API Authentication | Auth gate + SSE auth + CORS lockdown | AUTH-01, AUTH-02, AUTH-03, AUTH-04, AUTH-05 | proxy | Planned (2026-02-28) |
 | 4 - Security Hardening | Security headers + rate limiting | SEC-01, SEC-02, SEC-03 | proxy | Pending |
 | 5 - Observability and Process Reliability | Structured logging + Sentry + DB dedup | OBS-01, OBS-02, OBS-03 | proxy | Planned (2026-02-28) |
-| 6 - Code Quality and Maintainability | Ruff + seeds.py + ExecutionService split | QUAL-01, QUAL-02, QUAL-03 | proxy | Planned (2026-02-28) |
+| 6 - Code Quality and Maintainability | Ruff + seeds.py + ExecutionService split | QUAL-01, QUAL-02, QUAL-03 | proxy | Complete (2026-02-28) |
 
 ---
 

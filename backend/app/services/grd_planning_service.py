@@ -133,11 +133,7 @@ class GrdPlanningService:
 
         Called when a session completes to free the project for new sessions.
         """
-        to_remove = [
-            pid
-            for pid, sid in cls._active_planning_sessions.items()
-            if sid == session_id
-        ]
+        to_remove = [pid for pid, sid in cls._active_planning_sessions.items() if sid == session_id]
         for pid in to_remove:
             del cls._active_planning_sessions[pid]
             logger.info(
@@ -177,9 +173,7 @@ class GrdPlanningService:
 
                 # Case 1: .planning/ already exists -- just sync
                 if Path(planning_dir).is_dir():
-                    logger.info(
-                        "Project %s has existing .planning/, syncing directly", project_id
-                    )
+                    logger.info("Project %s has existing .planning/, syncing directly", project_id)
                     GrdSyncService.sync_project(project_id, planning_dir)
                     update_project(project_id, grd_init_status="ready")
                     return
@@ -221,9 +215,7 @@ class GrdPlanningService:
                 except Exception:
                     pass
 
-        thread = threading.Thread(
-            target=_run_init, daemon=True, name=f"grd-init-{project_id}"
-        )
+        thread = threading.Thread(target=_run_init, daemon=True, name=f"grd-init-{project_id}")
         thread.start()
 
     @classmethod

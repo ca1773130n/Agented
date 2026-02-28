@@ -240,8 +240,7 @@ class TestTeamMembersMigration:
             " VALUES ('team-xyz', 'Bob', 'bob@test.com', 'lead')"
         )
         conn.execute(
-            "INSERT INTO team_members (team_id, name, role)"
-            " VALUES ('team-xyz', 'Carol', 'member')"
+            "INSERT INTO team_members (team_id, name, role) VALUES ('team-xyz', 'Carol', 'member')"
         )
         conn.commit()
         conn.close()
@@ -319,9 +318,7 @@ class TestFreshDbMigrations:
 
         with get_connection() as conn:
             row = conn.execute("SELECT MAX(version) FROM schema_version").fetchone()
-            assert row[0] == expected_max, (
-                f"schema_version max={row[0]}, expected {expected_max}"
-            )
+            assert row[0] == expected_max, f"schema_version max={row[0]}, expected {expected_max}"
 
             count = conn.execute("SELECT COUNT(*) FROM schema_version").fetchone()[0]
             assert count == len(VERSIONED_MIGRATIONS), (

@@ -28,8 +28,8 @@ from app.database import (
 from app.utils.plugin_format import (
     content_hash,
     generate_agent_md,
-    generate_command_md,
     generate_agented_manifest,
+    generate_command_md,
     generate_hooks_json,
     generate_plugin_manifest,
     generate_rule_script,

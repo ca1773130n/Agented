@@ -15,9 +15,7 @@ from .connection import get_connection
 logger = logging.getLogger(__name__)
 
 
-def check_and_insert_dedup_key(
-    trigger_id: str, payload_hash: str, ttl_seconds: int = 10
-) -> bool:
+def check_and_insert_dedup_key(trigger_id: str, payload_hash: str, ttl_seconds: int = 10) -> bool:
     """Atomically check-and-insert a dedup key. Returns True if NEW (not duplicate).
 
     Uses INSERT OR IGNORE to avoid race conditions:

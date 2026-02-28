@@ -292,9 +292,9 @@ class TestChatStreamingUnifiedPath:
                 if session:
                     events = session["event_log"]
                     content_deltas = [e for e in events if e["type"] == "content_delta"]
-                    assert (
-                        len(content_deltas) >= 2
-                    ), f"Expected 2+ content_delta events, got {len(content_deltas)}"
+                    assert len(content_deltas) >= 2, (
+                        f"Expected 2+ content_delta events, got {len(content_deltas)}"
+                    )
                     for cd in content_deltas:
                         assert "content" in cd
                         assert "text" not in cd

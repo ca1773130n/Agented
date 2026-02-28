@@ -116,6 +116,7 @@ class TriggerService:
 
             # Validate schedule_time is HH:MM format
             import re as _re
+
             if not _re.match(r"^\d{2}:\d{2}$", schedule_time):
                 return {
                     "error": "schedule_time must be in HH:MM format (e.g. '09:00')"
@@ -141,11 +142,10 @@ class TriggerService:
             # Validate timezone
             try:
                 import zoneinfo as _zi
+
                 _zi.ZoneInfo(schedule_timezone)
             except (KeyError, Exception):
-                return {
-                    "error": f"Invalid timezone: '{schedule_timezone}'"
-                }, HTTPStatus.BAD_REQUEST
+                return {"error": f"Invalid timezone: '{schedule_timezone}'"}, HTTPStatus.BAD_REQUEST
 
         timeout_seconds = data.get("timeout_seconds")
         webhook_secret = data.get("webhook_secret")

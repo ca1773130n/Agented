@@ -143,7 +143,7 @@ class TestConcurrentSessionLimit:
         # Create 10 sessions (should all succeed)
         for i in range(10):
             session_id, error = SuperAgentSessionService.create_session(sa_id)
-            assert session_id is not None, f"Session {i+1} failed: {error}"
+            assert session_id is not None, f"Session {i + 1} failed: {error}"
             assert error is None
 
         # 11th should fail

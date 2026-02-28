@@ -577,7 +577,7 @@ class WorkflowExecutionService:
             )
 
         final_status = "failed" if workflow_failed else "completed"
-        logger.info(f"Workflow execution finished: {execution_id} " f"(status={final_status})")
+        logger.info(f"Workflow execution finished: {execution_id} (status={final_status})")
 
         # Fire completion triggers (lazy import to avoid circular dependency)
         try:

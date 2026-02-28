@@ -504,9 +504,7 @@ def project_chat(path: ProjectIdPath, body: ProjectChatBody):
         return {"error": msg_error}, HTTPStatus.BAD_REQUEST
 
     # Push user message delta
-    ChatStateService.push_delta(
-        session_id, "message", {"role": "user", "content": body.content}
-    )
+    ChatStateService.push_delta(session_id, "message", {"role": "user", "content": body.content})
 
     # Capture values for background thread
     _session_id = session_id
@@ -554,9 +552,7 @@ def project_chat(path: ProjectIdPath, body: ProjectChatBody):
 
         except Exception as e:
             logger.error("Project chat streaming error: %s", e, exc_info=True)
-            ChatStateService.push_delta(
-                _session_id, "error", {"message": str(e)}
-            )
+            ChatStateService.push_delta(_session_id, "error", {"message": str(e)})
             ChatStateService.push_status(_session_id, "idle")
 
     thread = threading.Thread(target=_stream_and_execute, daemon=True)
@@ -627,7 +623,9 @@ def invoke_planning(path: ProjectIdPath, body: InvokePlanningBody):
     """Invoke a GRD planning command in a new PTY session."""
     result = GrdPlanningService.invoke_command(path.project_id, body.command, body.args)
     if "error" in result:
-        status = HTTPStatus.CONFLICT if "already active" in result["error"] else HTTPStatus.BAD_REQUEST
+        status = (
+            HTTPStatus.CONFLICT if "already active" in result["error"] else HTTPStatus.BAD_REQUEST
+        )
         return result, status
     return result, HTTPStatus.CREATED
 

@@ -234,9 +234,9 @@ def test_budget_precheck_blocks_hard_limit(isolated_db, monkeypatch):
         trigger, "test message", trigger_type="manual"
     )
 
-    assert (
-        result.status == ExecutionStatus.BUDGET_BLOCKED
-    ), "execute_with_fallback should return BUDGET_BLOCKED when hard limit reached"
+    assert result.status == ExecutionStatus.BUDGET_BLOCKED, (
+        "execute_with_fallback should return BUDGET_BLOCKED when hard limit reached"
+    )
     assert result.execution_id is None
     assert len(run_trigger_called) == 0, "run_trigger should not have been called"
 
@@ -332,9 +332,9 @@ def test_budget_precheck_allows_soft_limit(isolated_db, monkeypatch):
         trigger, "test message", trigger_type="manual"
     )
 
-    assert (
-        result.execution_id is not None
-    ), "execute_with_fallback should proceed when only soft limit exceeded"
+    assert result.execution_id is not None, (
+        "execute_with_fallback should proceed when only soft limit exceeded"
+    )
     assert len(run_trigger_called) == 1, "run_trigger should have been called exactly once"
 
 
