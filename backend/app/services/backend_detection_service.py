@@ -1,8 +1,10 @@
 """Backend detection service for CLI backend discovery and capability flags."""
 
+import os
 import shutil
 import subprocess
 from dataclasses import asdict, dataclass
+from pathlib import Path
 from typing import Optional, Tuple
 
 
@@ -54,21 +56,34 @@ BACKEND_CAPABILITIES = {
 }
 
 
+# Well-known install locations per backend (checked when not on PATH)
+_FALLBACK_PATHS = {
+    "opencode": [Path.home() / ".opencode" / "bin" / "opencode"],
+    "claude": [Path.home() / ".local" / "bin" / "claude"],
+}
+
+
 def detect_backend(backend_type: str) -> Tuple[bool, Optional[str], Optional[str]]:
     """Detect if a CLI backend is installed.
 
-    Uses shutil.which() for cross-platform PATH lookup, then subprocess.run()
-    with --version for version extraction.
+    Uses shutil.which() for cross-platform PATH lookup, falling back to
+    well-known install locations, then subprocess.run() with --version
+    for version extraction.
 
     Returns: (is_installed, version, cli_path)
     """
     cli_path = shutil.which(backend_type)
     if not cli_path:
+        for fallback in _FALLBACK_PATHS.get(backend_type, []):
+            if fallback.is_file() and os.access(fallback, os.X_OK):
+                cli_path = str(fallback)
+                break
+    if not cli_path:
         return False, None, None
 
     try:
         result = subprocess.run(
-            [backend_type, "--version"],
+            [cli_path, "--version"],
             capture_output=True,
             text=True,
             timeout=5,

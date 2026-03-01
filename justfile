@@ -1,3 +1,5 @@
+set shell := ["bash", "-lc"]
+
 # Default recipe - show available commands
 default:
     @just --list
@@ -74,6 +76,7 @@ deploy: kill ensure-backend build
     @echo "Backend API: http://localhost:20000"
     @echo ""
     cd backend && OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES uv run gunicorn -c gunicorn.conf.py &
+    @while ! curl -sf http://127.0.0.1:20000/health/readiness >/dev/null 2>&1; do sleep 1; done; echo "Backend ready."
     cd frontend && npm run dev
 
 # Run both dev servers (requires terminal multiplexer)
