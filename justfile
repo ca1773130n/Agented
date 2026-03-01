@@ -73,7 +73,7 @@ deploy: kill ensure-backend build
     @echo "Frontend: http://localhost:3000"
     @echo "Backend API: http://localhost:20000"
     @echo ""
-    cd backend && uv run gunicorn -c gunicorn.conf.py &
+    cd backend && OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES uv run gunicorn -c gunicorn.conf.py &
     cd frontend && npm run dev
 
 # Run both dev servers (requires terminal multiplexer)
