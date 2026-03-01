@@ -41,29 +41,19 @@ class BackendService:
 
     @staticmethod
     def list_backends() -> Tuple[dict, HTTPStatus]:
-        """List all backends, returning immediately with cached models.
-
-        Model discovery is kicked off in background greenlets so the
-        response isn't blocked by slow subprocess/PTY calls.
-        """
-        import gevent
-
+        """List all backends with auto-refreshed model lists."""
         from ..services.model_discovery_service import ModelDiscoveryService
 
         backends = get_all_backends()
 
-        def _refresh_models(backend_id: str, backend_type: str) -> None:
-            try:
-                models = ModelDiscoveryService.discover_models(backend_type)
-                if models:
-                    update_backend_models(backend_id, models)
-            except Exception:
-                pass
-
+        # Auto-refresh model lists (uses discovery cache so this is fast after first call)
         for backend in backends:
             backend_type = backend.get("type")
             if backend_type:
-                gevent.spawn(_refresh_models, backend["id"], backend_type)
+                models = ModelDiscoveryService.discover_models(backend_type)
+                if models:
+                    backend["models"] = models
+                    update_backend_models(backend["id"], models)
 
         return {"backends": backends}, HTTPStatus.OK
 

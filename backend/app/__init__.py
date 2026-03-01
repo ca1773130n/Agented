@@ -185,11 +185,6 @@ def create_app(config=None):
                 "Configure grd_binary_path in Agented settings or set CLAUDE_PLUGIN_ROOT env var."
             )
 
-        # Clear model discovery cache on every startup — always rediscover fresh
-        from .services.model_discovery_service import ModelDiscoveryService
-
-        ModelDiscoveryService.clear_cache()
-
         # Initialize scheduler for scheduled triggers
         from .services.scheduler_service import SchedulerService
 
