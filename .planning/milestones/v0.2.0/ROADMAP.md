@@ -17,7 +17,7 @@ Phases 7-12 are largely independent of each other and can be executed in any ord
 
 ## Phases
 
-### Phase 7 -- Workflow Automation & Pipeline Intelligence
+### Phase 7: Workflow Automation & Pipeline Intelligence
 
 **Goal:** Users can visually compose multi-step bot/agent pipelines with conditional logic, approval gates, fallback chains, and per-node resilience -- all from a drag-and-drop canvas.
 
@@ -26,6 +26,13 @@ Phases 7-12 are largely independent of each other and can be executed in any ord
 **Requirements:** WF-01, WF-02, WF-03, WF-04, WF-05, WF-06
 
 **Verification Level:** proxy
+
+**Plans:** 3 plans
+
+Plans:
+- [ ] 07-01-PLAN.md -- Conditional logic, edge-aware branching, and approval gate backend engine
+- [ ] 07-02-PLAN.md -- Multi-model fallback agent nodes and comprehensive backend tests
+- [ ] 07-03-PLAN.md -- Frontend node types, canvas updates, and approval UX
 
 **Success Criteria:**
 
@@ -38,7 +45,7 @@ Phases 7-12 are largely independent of each other and can be executed in any ord
 
 ---
 
-### Phase 8 -- Execution Intelligence & Replay
+### Phase 8: Execution Intelligence & Replay
 
 **Goal:** Users can replay executions for A/B comparison, automatically feed bots only the relevant diff context, chunk large contexts intelligently, branch conversation histories, and collaboratively watch live runs.
 
@@ -58,7 +65,7 @@ Phases 7-12 are largely independent of each other and can be executed in any ord
 
 ---
 
-### Phase 9 -- Bot Authoring & Template Ecosystem
+### Phase 9: Bot Authoring & Template Ecosystem
 
 **Goal:** Users can discover and deploy pre-built bot templates, create new bots via natural language description, build a shared prompt snippet library, track prompt template history with rollback, and test webhook payloads before committing.
 
@@ -78,7 +85,7 @@ Phases 7-12 are largely independent of each other and can be executed in any ord
 
 ---
 
-### Phase 10 -- Analytics & Monitoring Dashboards
+### Phase 10: Analytics & Monitoring Dashboards
 
 **Goal:** Users have full visibility into execution costs, bot effectiveness, trend analytics, health alerts, team impact reports, scheduling optimization, and per-bot budget enforcement.
 
@@ -100,7 +107,7 @@ Phases 7-12 are largely independent of each other and can be executed in any ord
 
 ---
 
-### Phase 11 -- Enterprise Integrations & Governance
+### Phase 11: Enterprise Integrations & Governance
 
 **Goal:** The platform integrates with external collaboration tools (Slack, JIRA), supports configuration-as-code via GitOps, enforces role-based access control, maintains a full audit trail, provides encrypted secrets management, enables multi-repo campaigns, and supports execution bookmarking.
 
@@ -123,7 +130,7 @@ Phases 7-12 are largely independent of each other and can be executed in any ord
 
 ---
 
-### Phase 12 -- Specialized Automation Bots
+### Phase 12: Specialized Automation Bots
 
 **Goal:** The platform ships pre-built specialized bots for common engineering automation needs: vulnerability triage, code tours, test coverage analysis, incident postmortems, changelog generation, PR summaries, and natural language log search.
 
@@ -145,7 +152,7 @@ Phases 7-12 are largely independent of each other and can be executed in any ord
 
 ---
 
-### Phase 13 -- Execution Resilience & Infrastructure
+### Phase 13: Execution Resilience & Infrastructure
 
 **Goal:** The execution engine is hardened with circuit breakers, configurable retries, execution queuing, persistent state, pause/resume, cancellation, webhook validation, and durable history -- eliminating the fragility of in-memory-only execution tracking.
 
@@ -169,7 +176,7 @@ Phases 7-12 are largely independent of each other and can be executed in any ord
 
 ---
 
-### Phase 14 -- API Hardening & Developer Experience
+### Phase 14: API Hardening & Developer Experience
 
 **Goal:** Every API endpoint has dry-run support where applicable, returns consistent error responses, supports pagination and filtering, offers bulk operations, enforces rate limits, propagates request IDs for tracing, provides cost estimation, validates workflow DAGs at submission, and supports standard cron expressions.
 
@@ -194,7 +201,7 @@ Phases 7-12 are largely independent of each other and can be executed in any ord
 
 ---
 
-### Phase 15 -- Code Consistency & Standards
+### Phase 15: Code Consistency & Standards
 
 **Goal:** The backend codebase follows consistent patterns for logging, error handling, return types, ID generation, naming conventions, and configuration constants; the frontend has unified types and composable patterns.
 
@@ -218,7 +225,7 @@ Phases 7-12 are largely independent of each other and can be executed in any ord
 
 ---
 
-### Phase 16 -- Frontend Quality & User Experience
+### Phase 16: Frontend Quality & User Experience
 
 **Goal:** Every async view has loading/error states, the SPA cannot crash from component errors, SSE connections are managed by a shared composable, API errors surface as consistent toast notifications, and developer documentation covers all protocols and formats.
 
