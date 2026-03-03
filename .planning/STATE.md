@@ -1,25 +1,25 @@
 # GRD Execution State
 
 **Milestone:** v0.2.0 -- Miscellaneous
-**Current Phase:** Not started
-**Current Plan:** --
-**Status:** roadmap-complete
+**Current Phase:** 07-workflow-automation-and-pipeline-intelligence
+**Current Plan:** 03 (completed)
+**Status:** phase-complete
 
-**Progress:** `[..........] 0/10 phases`
+**Progress:** `[#.........] 1/10 phases` (Phase 7: 3/3 plans complete)
 
 ---
 
 ## Position
 
-- **Last completed:** v0.1.0 milestone (Phases 01-06)
-- **Next up:** Plan and execute Phase 7 (Workflow Automation & Pipeline Intelligence)
+- **Last completed:** Phase 7 Plan 03 (frontend approval gate, conditional expression UI, approval modal)
+- **Next up:** Phase 8 (Execution Intelligence & Replay) or any other Tier 1 phase
 - **Blocked by:** Nothing
 
 ## Phase Summary
 
 | Phase | Name | Status | Verification |
 |-------|------|--------|--------------|
-| 7 | Workflow Automation & Pipeline Intelligence | Pending | proxy |
+| 7 | Workflow Automation & Pipeline Intelligence | Complete (3/3) — Verified | proxy |
 | 8 | Execution Intelligence & Replay | Pending | proxy |
 | 9 | Bot Authoring & Template Ecosystem | Pending | proxy |
 | 10 | Analytics & Monitoring Dashboards | Pending | proxy |
@@ -42,6 +42,10 @@
 - 2026-03-04: Product-ideation phases (7-12) prioritized first, infrastructure (13-14) second, quality (15-16) third
 - 2026-03-04: All Tier 1/2 phases use proxy verification; Tier 3 phases use sanity verification
 - 2026-03-04: No Integration Phase needed -- no deferred validations in this milestone
+- 2026-03-04: Reuse OrchestrationService.execute_with_fallback() for agent nodes instead of building parallel fallback logic
+- 2026-03-04: Tier-based routing filters fallback chain pre-call with graceful degradation on empty filter
+- 2026-03-04: Used Teleport-based modal for ApprovalModal following existing ConfirmModal pattern
+- 2026-03-04: Handle pending_approval from both dedicated SSE event type and generic status/node_start events
 
 ## Blockers
 
@@ -55,8 +59,10 @@ None -- no phases have deferred verification level in this milestone.
 
 | Phase | Plan | Duration | Tasks | Files |
 |-------|------|----------|-------|-------|
+| 07 | 02 | 14min | 2 | 3 |
+| 07 | 03 | 6min | 2 | 12 |
 
 ## Session Log
 
 - **Last session:** 2026-03-04
-- **Stopped at:** Roadmap created for v0.2.0 milestone (10 phases, 89 requirements)
+- **Stopped at:** Phase 7 execution complete — verified (12/12 sanity, 9/9 proxy), code review passed (warnings only, no blockers)
