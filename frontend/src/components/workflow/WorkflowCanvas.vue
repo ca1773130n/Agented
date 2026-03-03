@@ -18,6 +18,7 @@ import WorkflowAgentNode from './nodes/AgentNode.vue'
 import ScriptNode from './nodes/ScriptNode.vue'
 import ConditionalNode from './nodes/ConditionalNode.vue'
 import TransformNode from './nodes/TransformNode.vue'
+import ApprovalGateNode from './nodes/ApprovalGateNode.vue'
 
 import { useWorkflowCanvas } from '../../composables/useWorkflowCanvas'
 import { useCanvasLayout } from '../../composables/useCanvasLayout'
@@ -34,6 +35,7 @@ const nodeTypes: NodeTypesObject = {
   script: markRaw(ScriptNode) as NodeTypesObject[string],
   conditional: markRaw(ConditionalNode) as NodeTypesObject[string],
   transform: markRaw(TransformNode) as NodeTypesObject[string],
+  approval_gate: markRaw(ApprovalGateNode) as NodeTypesObject[string],
 }
 
 // ---------------------------------------------------------------------------

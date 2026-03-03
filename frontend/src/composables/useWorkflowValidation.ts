@@ -32,6 +32,7 @@ const NODE_OUTPUT_TYPES: Record<string, string> = {
   script: 'text',
   conditional: 'any',
   transform: 'json',
+  approval_gate: 'any',
 }
 
 const NODE_INPUT_TYPES: Record<string, string> = {
@@ -42,6 +43,7 @@ const NODE_INPUT_TYPES: Record<string, string> = {
   script: 'text',
   conditional: 'any',
   transform: 'any',
+  approval_gate: 'any',
 }
 
 /**
@@ -229,6 +231,33 @@ export function useWorkflowValidation() {
             })
           }
           break
+        case 'approval_gate': {
+          const timeout = config.timeout_seconds
+          if (timeout !== undefined && (typeof timeout !== 'number' || timeout <= 0)) {
+            results.push({
+              level: 'warning',
+              message: `Approval gate "${nodeData?.label || node.id}" has an invalid timeout value`,
+              nodeIds: [node.id],
+            })
+          }
+          break
+        }
+      }
+    }
+
+    // -----------------------------------------------------------------------
+    // 5b. Approval gate must have at least one input edge (cannot be root)
+    // -----------------------------------------------------------------------
+    const approvalNodes = nodes.filter((n) => n.type === 'approval_gate')
+    for (const agNode of approvalNodes) {
+      const hasInput = edges.some((e) => e.target === agNode.id)
+      if (!hasInput) {
+        const nodeData = agNode.data as WorkflowNodeData
+        results.push({
+          level: 'error',
+          message: `Approval gate "${nodeData?.label || agNode.id}" must have at least one input connection`,
+          nodeIds: [agNode.id],
+        })
       }
     }
 

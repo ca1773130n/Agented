@@ -31,6 +31,10 @@
 .workflow-node.status-skipped {
   opacity: 0.4;
 }
+.workflow-node.status-pending_approval {
+  border-color: #f59e0b;
+  box-shadow: 0 0 8px rgba(245, 158, 11, 0.4);
+}
 .node-header {
   padding: 8px 12px;
   border-bottom: 1px solid var(--border-default);

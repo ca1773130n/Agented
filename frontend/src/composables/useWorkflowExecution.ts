@@ -1,4 +1,4 @@
-import { ref, onUnmounted } from 'vue';
+import { ref, computed, onUnmounted } from 'vue';
 import type { Ref } from 'vue';
 import type { NodeExecutionStatus, AuthenticatedEventSource } from '../services/api';
 import { workflowExecutionApi } from '../services/api';
@@ -19,6 +19,18 @@ export function useWorkflowExecution() {
   const nodeStates = ref<Record<string, string>>({});
   const isMonitoring = ref(false);
   const error = ref<string | null>(null);
+
+  // Approval gate state
+  const showApprovalModal = ref(false);
+  const pendingApprovalNodeId = ref<string | null>(null);
+  const pendingApprovalNodeLabel = ref<string>('');
+
+  // Computed: nodes currently in pending_approval state
+  const pendingApprovals = computed(() => {
+    return Object.entries(nodeStates.value)
+      .filter(([, status]) => status === 'pending_approval')
+      .map(([nodeId]) => nodeId);
+  });
 
   let eventSource: AuthenticatedEventSource | null = null;
 
@@ -75,13 +87,30 @@ export function useWorkflowExecution() {
           executionStatus.value = data.status;
         }
         if (data.node_states) {
+          // Detect newly pending_approval nodes
+          const prevStates = nodeStates.value;
+          const newStates = data.node_states;
+          for (const [nodeId, status] of Object.entries(newStates)) {
+            if (status === 'pending_approval' && prevStates[nodeId] !== 'pending_approval') {
+              pendingApprovalNodeId.value = nodeId;
+              pendingApprovalNodeLabel.value = nodeId;
+              showApprovalModal.value = true;
+            }
+          }
           nodeStates.value = { ...nodeStates.value, ...data.node_states };
         }
         break;
 
       case 'node_start':
         if (data.node_id) {
-          nodeStates.value = { ...nodeStates.value, [data.node_id]: 'running' };
+          const nodeStatus = data.status === 'pending_approval' ? 'pending_approval' : 'running';
+          nodeStates.value = { ...nodeStates.value, [data.node_id]: nodeStatus };
+          // If this is a pending_approval status, trigger the approval modal
+          if (data.status === 'pending_approval') {
+            pendingApprovalNodeId.value = data.node_id;
+            pendingApprovalNodeLabel.value = (data.node_label as string) || data.node_id;
+            showApprovalModal.value = true;
+          }
         }
         break;
 
@@ -94,6 +123,15 @@ export function useWorkflowExecution() {
       case 'node_failed':
         if (data.node_id) {
           nodeStates.value = { ...nodeStates.value, [data.node_id]: 'failed' };
+        }
+        break;
+
+      case 'node_pending_approval':
+        if (data.node_id) {
+          nodeStates.value = { ...nodeStates.value, [data.node_id]: 'pending_approval' };
+          pendingApprovalNodeId.value = data.node_id;
+          pendingApprovalNodeLabel.value = (data.node_label as string) || data.node_id;
+          showApprovalModal.value = true;
         }
         break;
 
@@ -144,6 +182,9 @@ export function useWorkflowExecution() {
     nodeStates.value = {};
     isMonitoring.value = false;
     error.value = null;
+    showApprovalModal.value = false;
+    pendingApprovalNodeId.value = null;
+    pendingApprovalNodeLabel.value = '';
   }
 
   /**
@@ -186,6 +227,12 @@ export function useWorkflowExecution() {
     nodeStates,
     isMonitoring,
     error,
+
+    // Approval gate state
+    showApprovalModal,
+    pendingApprovalNodeId,
+    pendingApprovalNodeLabel,
+    pendingApprovals,
 
     // Functions
     startMonitoring,

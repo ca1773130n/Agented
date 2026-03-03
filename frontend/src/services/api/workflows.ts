@@ -61,4 +61,30 @@ export const workflowExecutionApi = {
     );
     return { node_executions: data.node_executions };
   },
+  approveNode: (executionId: string, nodeId: string, resolvedBy?: string) =>
+    apiFetch<{ message: string; execution_id: string }>(
+      `/admin/workflows/executions/${executionId}/nodes/${nodeId}/approve`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ resolved_by: resolvedBy }),
+      },
+    ),
+  rejectNode: (executionId: string, nodeId: string, resolvedBy?: string) =>
+    apiFetch<{ message: string; execution_id: string }>(
+      `/admin/workflows/executions/${executionId}/nodes/${nodeId}/reject`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ resolved_by: resolvedBy }),
+      },
+    ),
+  listPendingApprovals: () =>
+    apiFetch<{
+      pending_approvals: Array<{
+        execution_id: string;
+        node_id: string;
+        status: string;
+        requested_at: string;
+        timeout_seconds: number;
+      }>;
+    }>('/admin/workflows/pending-approvals'),
 };
