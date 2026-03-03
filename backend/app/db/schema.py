@@ -854,7 +854,7 @@ def create_fresh_schema(conn):
             id TEXT PRIMARY KEY,
             workflow_id TEXT NOT NULL,
             version INTEGER NOT NULL,
-            status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'running', 'completed', 'failed', 'cancelled')),
+            status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'running', 'completed', 'failed', 'cancelled', 'pending_approval')),
             input_json TEXT,
             output_json TEXT,
             error TEXT,
@@ -870,7 +870,7 @@ def create_fresh_schema(conn):
             execution_id TEXT NOT NULL,
             node_id TEXT NOT NULL,
             node_type TEXT NOT NULL,
-            status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'running', 'completed', 'failed', 'skipped')),
+            status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'running', 'completed', 'failed', 'skipped', 'pending_approval')),
             input_json TEXT,
             output_json TEXT,
             error TEXT,
@@ -879,6 +879,24 @@ def create_fresh_schema(conn):
             FOREIGN KEY (execution_id) REFERENCES workflow_executions(id) ON DELETE CASCADE
         )
     """)
+
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS workflow_approval_states (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            execution_id TEXT NOT NULL,
+            node_id TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'pending',
+            timeout_seconds INTEGER DEFAULT 1800,
+            requested_at TEXT NOT NULL,
+            resolved_at TEXT,
+            resolved_by TEXT,
+            UNIQUE(execution_id, node_id)
+        )
+    """)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_approval_states_execution "
+        "ON workflow_approval_states(execution_id)"
+    )
 
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_workflow_versions_wf ON workflow_versions(workflow_id)"

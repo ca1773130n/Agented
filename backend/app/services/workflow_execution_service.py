@@ -183,6 +183,13 @@ class WorkflowExecutionService:
     _executions: Dict[str, dict] = {}
     _lock = threading.Lock()
 
+    # In-memory approval events: {(execution_id, node_id): threading.Event}
+    _approval_events: Dict[tuple, threading.Event] = {}
+    _approval_lock = threading.Lock()
+
+    # Rejection flags: {(execution_id, node_id): True}
+    _rejection_flags: Dict[tuple, bool] = {}
+
     DEFAULT_TIMEOUT_SECONDS = 1800  # 30 minutes
 
     # Node type dispatcher map
@@ -194,6 +201,7 @@ class WorkflowExecutionService:
         "script": "_execute_script_node",
         "conditional": "_execute_conditional_node",
         "transform": "_execute_transform_node",
+        "approval_gate": "_execute_approval_gate_node",
     }
 
     @staticmethod
@@ -393,26 +401,43 @@ class WorkflowExecutionService:
 
     @classmethod
     def cleanup_stale_executions(cls):
-        """Mark any DB-persisted 'running' executions as failed.
+        """Mark any DB-persisted 'running' or 'pending_approval' executions as failed.
 
         Called once at server startup to recover from unclean shutdowns where
-        in-memory execution state was lost but DB records were left as 'running'.
+        in-memory execution state was lost but DB records were left as 'running'
+        or 'pending_approval'. Also cleans up stale approval states whose
+        in-memory Events are lost (per research Pitfall 2).
         """
         from ..db.workflows import get_running_workflow_executions, update_workflow_execution
 
         stale = get_running_workflow_executions()
         if not stale:
-            return
-        now = datetime.now(timezone.utc).isoformat()
-        for execution in stale:
-            execution_id = execution["id"]
-            update_workflow_execution(
-                execution_id,
-                status="failed",
-                error="Server restarted while execution was running",
-                ended_at=now,
-            )
-            logger.warning("Marked stale workflow execution as failed on startup: %s", execution_id)
+            pass
+        else:
+            now = datetime.now(timezone.utc).isoformat()
+            for execution in stale:
+                execution_id = execution["id"]
+                update_workflow_execution(
+                    execution_id,
+                    status="failed",
+                    error="Server restarted while execution was running",
+                    ended_at=now,
+                )
+                logger.warning(
+                    "Marked stale workflow execution as failed on startup: %s", execution_id
+                )
+
+        # Clean up stale pending approval states (in-memory Events are lost on restart)
+        try:
+            from ..db.workflows import cleanup_stale_approval_states
+
+            count = cleanup_stale_approval_states()
+            if count > 0:
+                logger.warning(
+                    "Marked %d stale pending approval states as timed_out on startup", count
+                )
+        except Exception as e:
+            logger.error("Failed to cleanup stale approval states: %s", e)
 
     @classmethod
     def _cleanup_execution(cls, execution_id: str):
@@ -578,6 +603,11 @@ class WorkflowExecutionService:
                 update_workflow_node_execution(node_exec_id, status="running", started_at=now)
 
             cls._update_node_state(execution_id, node_id, "running")
+
+            # Inject execution_id so node executors can access it via input_msg
+            if input_msg.metadata is None:
+                input_msg.metadata = {}
+            input_msg.metadata["_execution_id"] = execution_id
 
             # Per-node timeout (independent of global workflow timeout)
             node_timeout_seconds = node_config.get("node_timeout_seconds")
@@ -1173,3 +1203,156 @@ class WorkflowExecutionService:
                 stdout=input_msg.stdout,
                 stderr=input_msg.stderr,
             )
+
+    # =========================================================================
+    # Approval Gate Node
+    # =========================================================================
+
+    @classmethod
+    def _execute_approval_gate_node(
+        cls, node_id: str, node_config: dict, input_msg: WorkflowMessage
+    ) -> WorkflowMessage:
+        """Execute an approval gate node.
+
+        Pauses workflow execution via threading.Event.wait() until an approve or
+        reject API call is made, or the timeout expires. Follows the proven
+        TeamExecutionService._execute_human_in_loop pattern.
+
+        The execution_id is obtained from input_msg.metadata["_execution_id"],
+        which is injected by _run_workflow before dispatch.
+        """
+        from ..db.workflows import add_workflow_approval_state, update_workflow_approval_state
+
+        timeout = node_config.get("timeout", 1800)
+
+        # Get execution_id from metadata (injected by _run_workflow Part B)
+        execution_id = (input_msg.metadata or {}).get("_execution_id")
+        if not execution_id:
+            raise RuntimeError(
+                "execution_id not available in input_msg.metadata -- "
+                "_run_workflow must inject it"
+            )
+
+        # Create approval event
+        approval_event = threading.Event()
+        approval_key = (execution_id, node_id)
+
+        # Register in class-level approval events dict
+        with cls._approval_lock:
+            cls._approval_events[approval_key] = approval_event
+
+        # Persist to DB
+        add_workflow_approval_state(execution_id, node_id, timeout)
+
+        # Update node state to pending_approval (triggers SSE via existing mechanism)
+        cls._update_node_state(execution_id, node_id, "pending_approval")
+
+        # Also update overall execution status to pending_approval
+        cls._update_status(execution_id, "pending_approval")
+
+        logger.info(
+            f"Approval gate: waiting for approval on execution={execution_id}, "
+            f"node={node_id}, timeout={timeout}s"
+        )
+
+        # Wait for approval or timeout
+        approved = approval_event.wait(timeout=timeout)
+
+        # Clean up event from registry
+        with cls._approval_lock:
+            cls._approval_events.pop(approval_key, None)
+
+        if not approved:
+            # Timeout
+            update_workflow_approval_state(execution_id, node_id, "timed_out")
+            cls._update_status(execution_id, "running")
+            raise RuntimeError(
+                f"Approval gate timed out after {timeout}s "
+                f"(execution={execution_id}, node={node_id})"
+            )
+
+        # Check if rejected
+        with cls._approval_lock:
+            was_rejected = cls._rejection_flags.pop(approval_key, False)
+
+        if was_rejected:
+            cls._update_status(execution_id, "running")
+            raise RuntimeError(
+                f"Approval gate rejected (execution={execution_id}, node={node_id})"
+            )
+
+        # Approved -- restore running status and pass through
+        cls._update_status(execution_id, "running")
+        logger.info(
+            f"Approval gate: approved for execution={execution_id}, node={node_id}"
+        )
+
+        return WorkflowMessage(
+            content_type=input_msg.content_type or "approval_gate",
+            text=input_msg.text,
+            data=input_msg.data,
+            metadata={
+                **(input_msg.metadata or {}),
+                "source_node_id": node_id,
+                "approval_status": "approved",
+            },
+            exit_code=input_msg.exit_code,
+            stdout=input_msg.stdout,
+            stderr=input_msg.stderr,
+        )
+
+    # =========================================================================
+    # Approve / Reject API
+    # =========================================================================
+
+    @classmethod
+    def approve_node(
+        cls, execution_id: str, node_id: str, resolved_by: str = None
+    ) -> bool:
+        """Approve a pending approval gate node.
+
+        Sets the threading.Event to resume workflow execution and updates DB
+        state to 'approved'. Returns True if the approval was successful.
+        """
+        from ..db.workflows import update_workflow_approval_state
+
+        approval_key = (execution_id, node_id)
+
+        with cls._approval_lock:
+            event = cls._approval_events.get(approval_key)
+            if not event:
+                return False
+
+        # Update DB state
+        update_workflow_approval_state(execution_id, node_id, "approved", resolved_by)
+
+        # Set the event to resume the waiting thread
+        event.set()
+        return True
+
+    @classmethod
+    def reject_node(
+        cls, execution_id: str, node_id: str, resolved_by: str = None
+    ) -> bool:
+        """Reject a pending approval gate node.
+
+        Sets a rejection flag and the threading.Event so the approval gate node
+        sees the rejection and raises an error, aborting downstream nodes.
+        Returns True if the rejection was successful.
+        """
+        from ..db.workflows import update_workflow_approval_state
+
+        approval_key = (execution_id, node_id)
+
+        with cls._approval_lock:
+            event = cls._approval_events.get(approval_key)
+            if not event:
+                return False
+            cls._rejection_flags[approval_key] = True
+
+        # Update DB state
+        update_workflow_approval_state(execution_id, node_id, "rejected", resolved_by)
+
+        # Set the event to resume the waiting thread (it will check rejection flag)
+        event.set()
+        return True

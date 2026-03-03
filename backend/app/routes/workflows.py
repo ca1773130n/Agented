@@ -12,6 +12,7 @@ from ..database import (
     delete_workflow,
     get_all_workflows,
     get_latest_workflow_version,
+    get_pending_approval_states,
     get_workflow,
     get_workflow_execution,
     get_workflow_executions,
@@ -43,6 +44,11 @@ class WorkflowExecutionPath(BaseModel):
 class WorkflowExecutionIdPath(BaseModel):
     workflow_id: str = Field(..., description="Workflow ID")
     execution_id: str = Field(..., description="Workflow execution ID")
+
+
+class ApprovalNodePath(BaseModel):
+    execution_id: str = Field(..., description="Workflow execution ID")
+    node_id: str = Field(..., description="Node ID within the workflow")
 
 
 # =============================================================================
@@ -321,6 +327,56 @@ def stream_workflow_execution(path: WorkflowExecutionIdPath):
             "X-Accel-Buffering": "no",
         },
     )
+
+
+# =============================================================================
+# Approval Gate Endpoints
+# =============================================================================
+
+
+@workflows_bp.post("/executions/<execution_id>/nodes/<node_id>/approve")
+def approve_workflow_node(path: ApprovalNodePath):
+    """Approve a pending approval gate node to resume workflow execution."""
+    from ..services.workflow_execution_service import WorkflowExecutionService
+
+    data = request.get_json(silent=True) or {}
+    resolved_by = data.get("resolved_by")
+
+    success = WorkflowExecutionService.approve_node(
+        path.execution_id, path.node_id, resolved_by=resolved_by
+    )
+    if not success:
+        return {
+            "error": "Approval not found or node is not pending approval"
+        }, HTTPStatus.NOT_FOUND
+
+    return {"message": "Node approved", "execution_id": path.execution_id}, HTTPStatus.OK
+
+
+@workflows_bp.post("/executions/<execution_id>/nodes/<node_id>/reject")
+def reject_workflow_node(path: ApprovalNodePath):
+    """Reject a pending approval gate node to abort downstream execution."""
+    from ..services.workflow_execution_service import WorkflowExecutionService
+
+    data = request.get_json(silent=True) or {}
+    resolved_by = data.get("resolved_by")
+
+    success = WorkflowExecutionService.reject_node(
+        path.execution_id, path.node_id, resolved_by=resolved_by
+    )
+    if not success:
+        return {
+            "error": "Approval not found or node is not pending approval"
+        }, HTTPStatus.NOT_FOUND
+
+    return {"message": "Node rejected", "execution_id": path.execution_id}, HTTPStatus.OK
+
+
+@workflows_bp.get("/pending-approvals")
+def list_pending_approvals():
+    """List all pending approval gate states across all workflow executions."""
+    approvals = get_pending_approval_states()
+    return {"pending_approvals": approvals}, HTTPStatus.OK
 
 
 # =============================================================================
