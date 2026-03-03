@@ -1,18 +1,18 @@
 # GRD Execution State
 
-**Milestone:** v0.2.0 -- Miscellaneous
-**Current Phase:** 07-workflow-automation-and-pipeline-intelligence
+**Milestone:** v0.1.0 -- Production Hardening (active) / v0.2.0 -- Miscellaneous
+**Current Phase:** Phase 5 -- Complete, verified
 **Current Plan:** 03 (completed)
-**Status:** phase-complete
+**Status:** phase-verified
 
-**Progress:** `[#.........] 1/10 phases` (Phase 7: 3/3 plans complete)
+**Progress:** `[#.........] 1/10 phases` (v0.2.0 Phase 7: 3/3) + v0.1.0 Phases 2,3,5,6: complete
 
 ---
 
 ## Position
 
-- **Last completed:** Phase 7 Plan 03 (frontend approval gate, conditional expression UI, approval modal)
-- **Next up:** Phase 8 (Execution Intelligence & Replay) or any other Tier 1 phase
+- **Last completed:** v0.1.0 Phase 5 (observability and process reliability) -- verified passed
+- **Next up:** v0.1.0 Phase 4 (Security Hardening) or v0.2.0 Phase 8
 - **Blocked by:** Nothing
 
 ## Phase Summary
@@ -49,6 +49,10 @@
 - 2026-03-04: Tier-based routing filters fallback chain pre-call with graceful degradation on empty filter
 - 2026-03-04: Used Teleport-based modal for ApprovalModal following existing ConfirmModal pattern
 - 2026-03-04: Handle pending_approval from both dedicated SSE event type and generic status/node_start events
+- 2026-03-04: API key stored in localStorage under 'agented-api-key' with getApiKey() helper
+- 2026-03-04: fetchEventSource with openWhenHidden:true to prevent SSE disconnection on tab background
+- 2026-03-04: 401 throws FatalSSEError to prevent infinite retry loop on expired/invalid keys
+- 2026-03-04: Property-assignment callbacks (onmessage/onerror/onopen) via getter/setter for EventSource compat
 
 ## Blockers
 
@@ -65,8 +69,10 @@ None -- no phases have deferred verification level in this milestone.
 | 07 | 01 | 7m 18s | 2 | 7 |
 | 07 | 02 | 14min | 2 | 3 |
 | 07 | 03 | 6min | 2 | 12 |
+| 03 (v0.1.0) | 01 | 3min | 2 | 2 |
+| 03 (v0.1.0) | 02 | 4min | 2 | 25 |
 
 ## Session Log
 
 - **Last session:** 2026-03-04
-- **Stopped at:** Phase 7 execution complete — verified (12/12 sanity, 9/9 proxy), code review passed (warnings only, no blockers)
+- **Stopped at:** v0.1.0 Phase 5 verified -- all 3 plans executed and merged, verification passed (9/9 sanity, 7/7 proxy)
