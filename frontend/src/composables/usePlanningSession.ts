@@ -143,6 +143,30 @@ export function usePlanningSession(projectId: Ref<string>) {
   }
 
   /**
+   * Reconnect to an existing active session (e.g., after page reload).
+   * Fetches buffered output and connects to the SSE stream.
+   */
+  async function reconnectSession(existingSessionId: string) {
+    sessionId.value = existingSessionId;
+    status.value = 'running';
+    exitCode.value = null;
+    currentQuestion.value = null;
+    outputLines.value = [];
+
+    // Fetch existing buffered output
+    try {
+      const result = await grdApi.getSessionOutput(projectId.value, existingSessionId, 10000);
+      if (result.lines && result.lines.length > 0) {
+        outputLines.value = result.lines;
+      }
+    } catch {
+      // Best-effort — SSE will deliver future lines anyway
+    }
+
+    connectSSE();
+  }
+
+  /**
    * Send an answer to a pending question in the active session.
    */
   async function sendAnswer(answer: string) {
@@ -202,6 +226,7 @@ export function usePlanningSession(projectId: Ref<string>) {
     currentQuestion,
     exitCode,
     invokeCommand,
+    reconnectSession,
     sendAnswer,
     stopSession,
     clearOutput,

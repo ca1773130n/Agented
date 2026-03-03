@@ -71,6 +71,13 @@ async function loadData() {
     milestones.value = msRes.milestones || [];
     grdInitStatus.value = statusRes.grd_init_status || 'none';
 
+    // Auto-reconnect to an existing active planning session
+    const activeSessionId = statusRes.active_session_id;
+    if (activeSessionId && !planning.sessionId.value) {
+      planning.reconnectSession(activeSessionId);
+      showSessionPanel.value = true;
+    }
+
     if (!selectedMilestoneId.value && milestones.value.length > 0) {
       selectedMilestoneId.value = milestones.value[0].id;
     }

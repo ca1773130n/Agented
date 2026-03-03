@@ -77,7 +77,7 @@ class GrdPlanningService:
             args_str = " ".join(f"{v}" for v in args.values())
             prompt = f"{prompt} {args_str}"
 
-        cmd = ["claude", "-p", prompt]
+        cmd = ["claude", "-p", "--output-format", "stream-json", "--verbose", prompt]
 
         # Create session via the direct execution handler
         handler = get_handler("direct")
@@ -90,6 +90,7 @@ class GrdPlanningService:
             "cwd": local_path,
             "execution_type": "direct",
             "execution_mode": "interactive",
+            "stream_json": True,
         }
         result = handler.start(session_config)
 

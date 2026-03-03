@@ -94,6 +94,7 @@ class DirectExecutionHandler(ExecutionTypeHandler):
             worktree_path=session_config.get("worktree_path"),
             execution_type="direct",
             execution_mode=session_config.get("execution_mode", "autonomous"),
+            stream_json=session_config.get("stream_json", False),
         )
         info = ProjectSessionManager.get_session_info(session_id)
         return {

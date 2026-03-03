@@ -133,7 +133,7 @@ function handleTextKeydown(event: KeyboardEvent) {
           Waiting for output...
         </div>
 
-        <!-- Question widget -->
+        <!-- Structured question widget (from question SSE events) -->
         <div v-if="currentQuestion" class="question-widget">
           <div class="question-prompt">{{ currentQuestion.prompt }}</div>
 
@@ -184,6 +184,27 @@ function handleTextKeydown(event: KeyboardEvent) {
           </div>
         </div>
       </div>
+    </div>
+
+    <!-- Persistent input bar: always visible when session is active -->
+    <div
+      v-if="status === 'running' || status === 'waiting_input'"
+      class="session-input-bar"
+    >
+      <input
+        v-model="textAnswer"
+        type="text"
+        class="text-input"
+        placeholder="Type a response..."
+        @keydown="handleTextKeydown"
+      />
+      <button
+        class="submit-btn"
+        :disabled="!textAnswer.trim()"
+        @click="handleSendText"
+      >
+        Send
+      </button>
     </div>
   </div>
 </template>
@@ -515,5 +536,19 @@ function handleTextKeydown(event: KeyboardEvent) {
 .submit-btn:disabled {
   opacity: 0.4;
   cursor: not-allowed;
+}
+
+/* Persistent input bar at the bottom of the panel */
+.session-input-bar {
+  display: flex;
+  gap: 8px;
+  padding: 10px 16px;
+  border-top: 1px solid var(--border-subtle);
+  background: var(--bg-secondary);
+  flex-shrink: 0;
+}
+
+.session-input-bar .text-input {
+  flex: 1;
 }
 </style>

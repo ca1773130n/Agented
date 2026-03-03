@@ -34,12 +34,66 @@ from ..db import (
     get_connection,
     update_project_session,
 )
+from ..db.backends import get_accounts_for_backend_type
 
 logger = logging.getLogger(__name__)
 
 # Compiled regex to strip ANSI escape codes from PTY output.
 # Handles CSI sequences (\x1b[...X), OSC sequences (\x1b]...BEL), and other common escapes.
 _ANSI_RE = re.compile(r"\x1b\[[0-9;]*[a-zA-Z]|\x1b\].*?\x07|\x1b\[.*?[@-~]")
+
+
+def _extract_stream_json_text(line: str) -> Optional[str]:
+    """Extract displayable text from a claude --output-format stream-json event.
+
+    Returns a human-readable string for display, or None to skip the event.
+    """
+    try:
+        event = json.loads(line)
+    except (json.JSONDecodeError, ValueError):
+        return line  # Not JSON — pass through as plain text
+
+    event_type = event.get("type")
+
+    if event_type == "assistant":
+        msg = event.get("message", {})
+        parts = []
+        for block in msg.get("content", []):
+            block_type = block.get("type")
+            if block_type == "text":
+                parts.append(block["text"])
+            elif block_type == "tool_use":
+                name = block.get("name", "unknown")
+                inp = block.get("input", {})
+                # Show file path for file operations, or first arg for others
+                detail = inp.get("file_path") or inp.get("command") or ""
+                if detail:
+                    parts.append(f"**{name}**: `{detail[:120]}`")
+                else:
+                    parts.append(f"**{name}**")
+            elif block_type == "tool_result":
+                content = block.get("content", "")
+                if isinstance(content, str) and content:
+                    parts.append(content[:500])
+        return "\n".join(parts) if parts else None
+
+    # Streaming delta events (partial text during long responses)
+    if event_type == "content_block_delta":
+        delta = event.get("delta", {})
+        if delta.get("type") == "text_delta":
+            return delta.get("text")
+        return None
+
+    if event_type == "result":
+        result_val = event.get("result")
+        if isinstance(result_val, str):
+            return result_val
+        if isinstance(result_val, dict):
+            return result_val.get("text") or result_val.get("content")
+        return None
+
+    # Skip noise: system/init, hooks, rate_limit_event, etc.
+    return None
 
 
 @dataclass
@@ -61,6 +115,7 @@ class SessionInfo:
     idle_timeout_seconds: int = 3600
     max_lifetime_seconds: int = 14400
     paused: bool = False  # When True, output buffers but SSE broadcast is suppressed
+    stream_json: bool = False  # When True, parse claude stream-json events for display
 
 
 class ProjectSessionManager:
@@ -89,6 +144,7 @@ class ProjectSessionManager:
         execution_type: str = "direct",
         execution_mode: str = "autonomous",
         env: dict = None,
+        stream_json: bool = False,
     ) -> str:
         """Create a persistent PTY session.
 
@@ -114,6 +170,25 @@ class ProjectSessionManager:
         # Generate session_id from DB to ensure uniqueness
         with get_connection() as conn:
             session_id = _get_unique_project_session_id(conn)
+
+        # Auto-inject CLAUDE_CONFIG_DIR for claude CLI sessions so the spawned
+        # process inherits the user's auth and plugins (e.g. GRD skill provider).
+        if cmd and cmd[0] == "claude" and not (env or {}).get("CLAUDE_CONFIG_DIR"):
+            try:
+                accounts = get_accounts_for_backend_type("claude")
+                if accounts and accounts[0].get("config_path"):
+                    if env is None:
+                        env = {}
+                    expanded = os.path.expanduser(accounts[0]["config_path"])
+                    env["CLAUDE_CONFIG_DIR"] = expanded
+                    logger.info("Auto-injecting CLAUDE_CONFIG_DIR=%s for claude session", expanded)
+                else:
+                    logger.warning(
+                        "No claude account with config_path found (accounts=%d)",
+                        len(accounts) if accounts else 0,
+                    )
+            except Exception:
+                logger.warning("Could not resolve CLAUDE_CONFIG_DIR from backend accounts", exc_info=True)
 
         # Create PTY pair
         master_fd, slave_fd = pty.openpty()
@@ -173,6 +248,7 @@ class ProjectSessionManager:
             worktree_path=worktree_path,
             execution_type=execution_type,
             execution_mode=execution_mode,
+            stream_json=stream_json,
         )
 
         with cls._lock:
@@ -220,12 +296,49 @@ class ProjectSessionManager:
 
     @classmethod
     def _reader_loop(cls, session_id: str, master_fd: int):
-        """Read PTY output line by line, append to ring buffer, broadcast via SSE.
+        """Read PTY output, strip ANSI, append to ring buffer, broadcast via SSE.
 
-        Runs in a dedicated daemon thread. Uses select() with 1s timeout for
-        non-blocking reads. Handles partial lines via byte buffer accumulation.
+        Runs in a dedicated daemon thread. Uses select() with 0.5s timeout for
+        non-blocking reads. Splits output on line delimiters (\r\n, \r, \n) and
+        also flushes buffered content periodically when no delimiters appear
+        (CLI tools like claude use cursor-movement escapes instead of \r/\n).
         """
         buffer = b""
+        last_flush_time = time.monotonic()
+        FLUSH_INTERVAL = 1.0  # seconds — flush buffer even if no line delimiters
+
+        # Check if this session uses stream-json mode
+        with cls._lock:
+            si = cls._sessions.get(session_id)
+            _stream_json = si.stream_json if si else False
+
+        def _emit_line(line_text: str):
+            """Strip ANSI, optionally parse stream-json, broadcast non-empty lines."""
+            cleaned = _ANSI_RE.sub("", line_text).strip()
+            if not cleaned:
+                return
+
+            # In stream-json mode, extract human-readable text from JSON events
+            if _stream_json:
+                extracted = _extract_stream_json_text(cleaned)
+                if not extracted:
+                    return  # Skip non-displayable events (hooks, rate limits, etc.)
+                cleaned = extracted
+            with cls._lock:
+                si = cls._sessions.get(session_id)
+                if si:
+                    si.ring_buffer.append(cleaned)
+                    si.last_activity_at = datetime.now()
+                    is_paused = si.paused
+                else:
+                    return
+            if not is_paused:
+                cls._broadcast(
+                    session_id,
+                    "output",
+                    {"line": cleaned, "timestamp": datetime.now().isoformat()},
+                )
+
         try:
             while True:
                 with cls._lock:
@@ -234,51 +347,41 @@ class ProjectSessionManager:
                     break
 
                 try:
-                    ready, _, _ = select.select([master_fd], [], [], 1.0)
+                    ready, _, _ = select.select([master_fd], [], [], 0.5)
                 except (ValueError, OSError):
                     break  # fd closed or invalid
 
-                if not ready:
-                    continue
+                if ready:
+                    try:
+                        data = os.read(master_fd, 4096)
+                    except OSError:
+                        break  # PTY closed
+                    if not data:
+                        break  # EOF
+                    buffer += data
 
-                try:
-                    data = os.read(master_fd, 4096)
-                except OSError:
-                    break  # PTY closed
+                # Extract lines delimited by \r\n, \r, or \n
+                lines_found = False
+                while b"\n" in buffer or b"\r" in buffer:
+                    parts = re.split(b"\r\n|\r|\n", buffer, maxsplit=1)
+                    if len(parts) < 2:
+                        break
+                    line_bytes = parts[0]
+                    buffer = parts[1]
+                    lines_found = True
+                    _emit_line(line_bytes.decode("utf-8", errors="replace"))
 
-                if not data:
-                    break  # EOF
+                if lines_found:
+                    last_flush_time = time.monotonic()
 
-                buffer += data
-
-                # Process complete lines
-                while b"\n" in buffer:
-                    line, buffer = buffer.split(b"\n", 1)
-                    decoded = line.decode("utf-8", errors="replace")
-                    decoded = _ANSI_RE.sub("", decoded)
-
-                    with cls._lock:
-                        session_info = cls._sessions.get(session_id)
-                        if session_info:
-                            session_info.ring_buffer.append(decoded)
-                            session_info.last_activity_at = datetime.now()
-                            is_paused = session_info.paused
-                        else:
-                            break
-
-                    if not is_paused:
-                        cls._broadcast(
-                            session_id,
-                            "output",
-                            {
-                                "line": decoded,
-                                "timestamp": datetime.now().isoformat(),
-                            },
-                        )
-
-                # Handle any remaining partial data (no newline) -- keep in buffer
-                # Also process lines that don't end with newline (e.g., prompts)
-                # We only buffer; the next read will complete the line.
+                # Time-based flush: if the buffer has content but no line delimiters
+                # were found for FLUSH_INTERVAL seconds, flush it anyway.
+                # This handles CLI tools that use cursor-movement escape sequences
+                # (e.g. \x1b[1G) instead of \r or \n for progress updates.
+                if buffer and (time.monotonic() - last_flush_time) >= FLUSH_INTERVAL:
+                    _emit_line(buffer.decode("utf-8", errors="replace"))
+                    buffer = b""
+                    last_flush_time = time.monotonic()
 
         finally:
             # Close master fd

@@ -157,6 +157,15 @@ class BackendService:
             except Exception as e:
                 logger.warning("CLIProxy start failed: %s", e)  # Non-fatal — proxy is optional
 
+        # Install harness plugins into the Claude account's config directory
+        if backend_type == "claude" and body.config_path:
+            try:
+                from .harness_plugin_installer import HarnessPluginInstaller
+
+                HarnessPluginInstaller.ensure_plugins_installed(body.config_path)
+            except Exception as e:
+                logger.warning("Harness plugin install failed: %s", e)
+
         return {"message": "Account created", "account_id": account_id}, HTTPStatus.CREATED
 
     @staticmethod
@@ -214,6 +223,17 @@ class BackendService:
                 ],
             },
         )
+
+        # Install harness plugins if config_path was updated on a Claude backend
+        if body.config_path is not None:
+            btype = get_backend_type(backend_id)
+            if btype == "claude":
+                try:
+                    from .harness_plugin_installer import HarnessPluginInstaller
+
+                    HarnessPluginInstaller.ensure_plugins_installed(body.config_path)
+                except Exception as e:
+                    logger.warning("Harness plugin install failed: %s", e)
 
         return {"message": "Account updated"}, HTTPStatus.OK
 
