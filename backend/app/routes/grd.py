@@ -33,6 +33,7 @@ from ..services.grd_cli_service import GrdCliService
 from ..services.grd_planning_service import GrdPlanningService
 from ..services.grd_sync_service import GrdSyncService
 from ..services.project_session_manager import ProjectSessionManager
+from ..services.project_workspace_service import ProjectWorkspaceService
 
 tag = Tag(name="grd", description="GRD project management sync and data endpoints")
 grd_bp = APIBlueprint("grd", __name__, url_prefix="/api/projects", abp_tags=[tag])
@@ -176,9 +177,10 @@ def trigger_sync(path: ProjectIdPath):
     if not project:
         return {"error": "Project not found"}, HTTPStatus.NOT_FOUND
 
-    local_path = project.get("local_path")
-    if not local_path:
-        return {"error": "Project has no local_path configured"}, HTTPStatus.BAD_REQUEST
+    try:
+        local_path = ProjectWorkspaceService.resolve_working_directory(path.project_id)
+    except ValueError as e:
+        return {"error": str(e)}, HTTPStatus.BAD_REQUEST
 
     planning_dir = str(Path(local_path).expanduser().resolve() / ".planning")
     result = GrdSyncService.sync_project(path.project_id, planning_dir)
@@ -306,7 +308,10 @@ def update_plan_status(path: PlanStatusPath, body: UpdatePlanStatusBody):
     update_project_plan(path.plan_id, status=body.status)
 
     # Attempt GRD CLI file write (non-blocking -- DB update already done)
-    local_path = project.get("local_path")
+    try:
+        local_path = ProjectWorkspaceService.resolve_working_directory(path.project_id)
+    except ValueError:
+        local_path = None
     if local_path and GrdCliService._binary_available:
         try:
             states = get_project_sync_states(path.project_id)
@@ -661,11 +666,12 @@ def create_session(path: ProjectIdPath, body: CreateSessionBody):
     if not handler:
         return {"error": f"Unknown execution_type: {body.execution_type}"}, HTTPStatus.BAD_REQUEST
 
-    cwd = body.cwd or project.get("local_path")
+    cwd = body.cwd
     if not cwd:
-        return {
-            "error": "No working directory: set cwd in request body or local_path on project"
-        }, HTTPStatus.BAD_REQUEST
+        try:
+            cwd = ProjectWorkspaceService.resolve_working_directory(path.project_id)
+        except ValueError as e:
+            return {"error": str(e)}, HTTPStatus.BAD_REQUEST
 
     session_config = {
         "project_id": path.project_id,
@@ -772,11 +778,12 @@ def create_ralph_session(path: ProjectIdPath, body: CreateRalphSessionBody):
     if not project:
         return {"error": "Project not found"}, HTTPStatus.NOT_FOUND
 
-    cwd = body.cwd or project.get("local_path")
+    cwd = body.cwd
     if not cwd:
-        return {
-            "error": "No working directory: set cwd in request body or local_path on project"
-        }, HTTPStatus.BAD_REQUEST
+        try:
+            cwd = ProjectWorkspaceService.resolve_working_directory(path.project_id)
+        except ValueError as e:
+            return {"error": str(e)}, HTTPStatus.BAD_REQUEST
 
     handler = get_handler("ralph_loop")
     if not handler:
@@ -806,11 +813,12 @@ def create_team_session(path: ProjectIdPath, body: CreateTeamSessionBody):
     if not project:
         return {"error": "Project not found"}, HTTPStatus.NOT_FOUND
 
-    cwd = body.cwd or project.get("local_path")
+    cwd = body.cwd
     if not cwd:
-        return {
-            "error": "No working directory: set cwd in request body or local_path on project"
-        }, HTTPStatus.BAD_REQUEST
+        try:
+            cwd = ProjectWorkspaceService.resolve_working_directory(path.project_id)
+        except ValueError as e:
+            return {"error": str(e)}, HTTPStatus.BAD_REQUEST
 
     handler = get_handler("team_spawn")
     if not handler:

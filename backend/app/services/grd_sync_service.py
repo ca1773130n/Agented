@@ -36,6 +36,7 @@ from app.database import (
     update_project_plan,
     upsert_project_sync_state,
 )
+from app.services.project_workspace_service import ProjectWorkspaceService
 from app.utils.plugin_format import parse_yaml_frontmatter
 
 logger = logging.getLogger(__name__)
@@ -421,8 +422,9 @@ class GrdSyncService:
             logger.warning("sync_on_session_complete: project %s not found", project_id)
             return
 
-        local_path = project.get("local_path")
-        if not local_path:
+        try:
+            local_path = ProjectWorkspaceService.resolve_working_directory(project_id)
+        except ValueError:
             return
 
         planning_dir = str(Path(local_path).expanduser().resolve() / ".planning")

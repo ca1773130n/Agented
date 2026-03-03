@@ -28,6 +28,7 @@ from ..models.mcp_server import (
     UpdateProjectMcpAssignmentRequest,
 )
 from ..services.mcp_sync_service import McpSyncService
+from ..services.project_workspace_service import ProjectWorkspaceService
 
 tag = Tag(name="mcp-servers", description="MCP server configuration management")
 mcp_servers_bp = APIBlueprint(
@@ -159,12 +160,10 @@ def sync_mcp_to_project(path: SyncProjectPath):
     if not project:
         return {"error": "Project not found"}, HTTPStatus.NOT_FOUND
 
-    local_path = project.get("local_path")
-    if not local_path:
-        return {
-            "error": "Project has no local_path configured. "
-            "Set a local path in project settings before syncing."
-        }, HTTPStatus.BAD_REQUEST
+    try:
+        local_path = ProjectWorkspaceService.resolve_working_directory(path.project_id)
+    except ValueError as e:
+        return {"error": str(e)}, HTTPStatus.BAD_REQUEST
 
     result = McpSyncService.sync_project(path.project_id, local_path, dry_run=False)
     if "error" in result:
@@ -179,12 +178,10 @@ def preview_mcp_sync(path: SyncProjectPath):
     if not project:
         return {"error": "Project not found"}, HTTPStatus.NOT_FOUND
 
-    local_path = project.get("local_path")
-    if not local_path:
-        return {
-            "error": "Project has no local_path configured. "
-            "Set a local path in project settings before syncing."
-        }, HTTPStatus.BAD_REQUEST
+    try:
+        local_path = ProjectWorkspaceService.resolve_working_directory(path.project_id)
+    except ValueError as e:
+        return {"error": str(e)}, HTTPStatus.BAD_REQUEST
 
     result = McpSyncService.sync_project(path.project_id, local_path, dry_run=True)
     if "error" in result:

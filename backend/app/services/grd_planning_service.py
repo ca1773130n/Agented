@@ -18,6 +18,7 @@ from typing import Optional
 from ..database import get_project, update_project
 from .execution_type_handler import get_handler
 from .project_session_manager import ProjectSessionManager
+from .project_workspace_service import ProjectWorkspaceService
 
 logger = logging.getLogger(__name__)
 
@@ -53,9 +54,10 @@ class GrdPlanningService:
         if not project:
             return {"error": "Project not found"}
 
-        local_path = project.get("local_path")
-        if not local_path:
-            return {"error": "Project has no local_path configured"}
+        try:
+            local_path = ProjectWorkspaceService.resolve_working_directory(project_id)
+        except ValueError as e:
+            return {"error": str(e)}
 
         # Check for existing active planning session
         existing_id = cls._active_planning_sessions.get(project_id)
