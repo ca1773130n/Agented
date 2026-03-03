@@ -2848,6 +2848,31 @@ def _migrate_v47_webhook_dedup_keys(conn):
     )
 
 
+def _migrate_v56_add_workflow_approval_states(conn):
+    """v0.2.0: Add workflow_approval_states table for approval gate persistence.
+
+    Also updates CHECK constraints on workflow_executions and workflow_node_executions
+    to include 'pending_approval' status.
+    """
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS workflow_approval_states (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            execution_id TEXT NOT NULL,
+            node_id TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'pending',
+            timeout_seconds INTEGER DEFAULT 1800,
+            requested_at TEXT NOT NULL,
+            resolved_at TEXT,
+            resolved_by TEXT,
+            UNIQUE(execution_id, node_id)
+        )
+    """)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_approval_states_execution "
+        "ON workflow_approval_states(execution_id)"
+    )
+
+
 # =============================================================================
 # Versioned migration registry
 # =============================================================================
@@ -2910,4 +2935,6 @@ VERSIONED_MIGRATIONS = [
     (53, "project_manager_super_agent", _migrate_v53_project_manager_super_agent),
     (54, "project_grd_init_status", _migrate_v54_project_grd_init_status),
     (55, "webhook_dedup_keys", _migrate_v47_webhook_dedup_keys),
+    # v0.2.0 migrations
+    (56, "add_workflow_approval_states", _migrate_v56_add_workflow_approval_states),
 ]

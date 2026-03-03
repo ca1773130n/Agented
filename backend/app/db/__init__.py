@@ -579,24 +579,29 @@ from .triggers import (  # noqa: F401
     update_trigger_next_run,
 )
 
-# Workflows (workflows, versions, executions, node executions)
+# Workflows (workflows, versions, executions, node executions, approval states)
 from .workflows import (  # noqa: F401
     add_workflow,
+    add_workflow_approval_state,
     add_workflow_execution,
     add_workflow_node_execution,
     add_workflow_version,
     add_workflow_version_raw,
+    cleanup_stale_approval_states,
     delete_workflow,
     get_all_workflows,
     get_latest_workflow_version,
+    get_pending_approval_states,
     get_running_workflow_executions,
     get_workflow,
+    get_workflow_approval_state,
     get_workflow_execution,
     get_workflow_executions,
     get_workflow_node_executions,
     get_workflow_versions,
     publish_workflow_version,
     update_workflow,
+    update_workflow_approval_state,
     update_workflow_execution,
     update_workflow_node_execution,
     validate_workflow_graph,

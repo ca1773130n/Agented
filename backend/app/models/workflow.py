@@ -25,6 +25,7 @@ class WorkflowNodeType(str, Enum):
     SCRIPT = "script"
     CONDITIONAL = "conditional"
     TRANSFORM = "transform"
+    APPROVAL_GATE = "approval_gate"
 
 
 class NodeErrorMode(str, Enum):
@@ -43,6 +44,7 @@ class WorkflowExecutionStatus(str, Enum):
     COMPLETED = "completed"
     FAILED = "failed"
     CANCELLED = "cancelled"
+    PENDING_APPROVAL = "pending_approval"
 
 
 class NodeExecutionStatus(str, Enum):
@@ -53,6 +55,7 @@ class NodeExecutionStatus(str, Enum):
     COMPLETED = "completed"
     FAILED = "failed"
     SKIPPED = "skipped"
+    PENDING_APPROVAL = "pending_approval"
 
 
 class Workflow(BaseModel):
@@ -139,6 +142,7 @@ class WorkflowEdge(BaseModel):
 
     source: str
     target: str
+    sourceHandle: Optional[str] = None
 
 
 class WorkflowGraph(BaseModel):

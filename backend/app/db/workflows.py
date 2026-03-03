@@ -474,3 +474,94 @@ def get_workflow_node_executions(execution_id: str) -> List[dict]:
             (execution_id,),
         )
         return [dict(row) for row in cursor.fetchall()]
+
+
+# =============================================================================
+# Approval State Persistence
+# =============================================================================
+
+
+def add_workflow_approval_state(
+    execution_id: str, node_id: str, timeout_seconds: int = 1800
+) -> Optional[int]:
+    """Insert a pending approval state record. Returns the row id on success."""
+    from datetime import datetime, timezone
+
+    now = datetime.now(timezone.utc).isoformat()
+    with get_connection() as conn:
+        try:
+            cursor = conn.execute(
+                """
+                INSERT INTO workflow_approval_states
+                    (execution_id, node_id, status, timeout_seconds, requested_at)
+                VALUES (?, ?, 'pending', ?, ?)
+            """,
+                (execution_id, node_id, timeout_seconds, now),
+            )
+            conn.commit()
+            return cursor.lastrowid
+        except sqlite3.IntegrityError:
+            return None
+
+
+def update_workflow_approval_state(
+    execution_id: str, node_id: str, status: str, resolved_by: str = None
+) -> bool:
+    """Update an approval state to approved/rejected/timed_out. Returns True on success."""
+    from datetime import datetime, timezone
+
+    now = datetime.now(timezone.utc).isoformat()
+    with get_connection() as conn:
+        cursor = conn.execute(
+            """
+            UPDATE workflow_approval_states
+            SET status = ?, resolved_at = ?, resolved_by = ?
+            WHERE execution_id = ? AND node_id = ?
+        """,
+            (status, now, resolved_by, execution_id, node_id),
+        )
+        conn.commit()
+        return cursor.rowcount > 0
+
+
+def get_workflow_approval_state(execution_id: str, node_id: str) -> Optional[dict]:
+    """Fetch current approval state for a specific execution/node pair."""
+    with get_connection() as conn:
+        cursor = conn.execute(
+            "SELECT * FROM workflow_approval_states WHERE execution_id = ? AND node_id = ?",
+            (execution_id, node_id),
+        )
+        row = cursor.fetchone()
+        return dict(row) if row else None
+
+
+def get_pending_approval_states() -> List[dict]:
+    """Fetch all pending approval states (for UI display)."""
+    with get_connection() as conn:
+        cursor = conn.execute(
+            "SELECT * FROM workflow_approval_states WHERE status = 'pending' "
+            "ORDER BY requested_at ASC"
+        )
+        return [dict(row) for row in cursor.fetchall()]
+
+
+def cleanup_stale_approval_states() -> int:
+    """Mark timed-out pending approval states as timed_out.
+
+    Called on server startup to clean up approvals whose in-memory Events are lost.
+    Returns the number of records updated.
+    """
+    from datetime import datetime, timezone
+
+    now = datetime.now(timezone.utc).isoformat()
+    with get_connection() as conn:
+        cursor = conn.execute(
+            """
+            UPDATE workflow_approval_states
+            SET status = 'timed_out', resolved_at = ?
+            WHERE status = 'pending'
+        """,
+            (now,),
+        )
+        conn.commit()
+        return cursor.rowcount
