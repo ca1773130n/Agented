@@ -42,6 +42,9 @@
 - 2026-03-04: Product-ideation phases (7-12) prioritized first, infrastructure (13-14) second, quality (15-16) third
 - 2026-03-04: All Tier 1/2 phases use proxy verification; Tier 3 phases use sanity verification
 - 2026-03-04: No Integration Phase needed -- no deferred validations in this milestone
+- 2026-03-04: Used AST-based expression evaluator (ast.parse + recursive walker) instead of eval/exec for security
+- 2026-03-04: Approval gate uses threading.Event.wait() following TeamExecutionService pattern
+- 2026-03-04: Edge-aware branching preserves backward compatibility via None sourceHandle = unconditional
 - 2026-03-04: Reuse OrchestrationService.execute_with_fallback() for agent nodes instead of building parallel fallback logic
 - 2026-03-04: Tier-based routing filters fallback chain pre-call with graceful degradation on empty filter
 - 2026-03-04: Used Teleport-based modal for ApprovalModal following existing ConfirmModal pattern
@@ -59,6 +62,7 @@ None -- no phases have deferred verification level in this milestone.
 
 | Phase | Plan | Duration | Tasks | Files |
 |-------|------|----------|-------|-------|
+| 07 | 01 | 7m 18s | 2 | 7 |
 | 07 | 02 | 14min | 2 | 3 |
 | 07 | 03 | 6min | 2 | 12 |
 
