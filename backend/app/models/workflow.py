@@ -125,6 +125,34 @@ class WorkflowMessage(BaseModel):
     stderr: Optional[str] = None
 
 
+class FallbackChainEntry(BaseModel):
+    """A single entry in a fallback chain for agent node execution."""
+
+    backend_id: str
+    account_id: str
+    priority: int = 0
+    tier: str = Field(default="default", description="Model tier: cheap, expensive, or default")
+
+
+class RoutingRules(BaseModel):
+    """Routing rules for selecting model tier based on diff size."""
+
+    diff_size_threshold: int = Field(
+        default=500, description="Line count threshold for cheap vs expensive model"
+    )
+    small_diff_tier: str = Field(default="cheap")
+    large_diff_tier: str = Field(default="expensive")
+
+
+class AgentNodeConfig(BaseModel):
+    """Configuration for agent node execution with fallback chain and routing."""
+
+    agent_id: Optional[str] = None
+    trigger_id: Optional[str] = None
+    fallback_chain: List[FallbackChainEntry] = Field(default_factory=list)
+    routing_rules: Optional[RoutingRules] = None
+
+
 class WorkflowNode(BaseModel):
     """A node in a workflow graph."""
 
@@ -135,6 +163,10 @@ class WorkflowNode(BaseModel):
     error_mode: NodeErrorMode = NodeErrorMode.STOP
     retry_max: int = Field(default=0, ge=0)
     retry_backoff_seconds: int = Field(default=1, ge=0)
+    backoff_strategy: str = Field(
+        default="exponential",
+        description="Backoff strategy: fixed, linear, exponential",
+    )
 
 
 class WorkflowEdge(BaseModel):

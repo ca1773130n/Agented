@@ -575,6 +575,7 @@ class WorkflowExecutionService:
             error_mode = node.get("error_mode", NodeErrorMode.STOP)
             retry_max = node.get("retry_max", 0)
             retry_backoff = node.get("retry_backoff_seconds", 1)
+            backoff_strategy = node.get("backoff_strategy", "exponential")
 
             # Gather input from predecessor nodes
             preds = predecessors.get(node_id, set())
@@ -637,8 +638,14 @@ class WorkflowExecutionService:
                         exc_info=True,
                     )
                     if attempts < max_attempts:
-                        # Exponential backoff
-                        delay = retry_backoff * (2 ** (attempts - 1))
+                        # Compute delay based on backoff strategy
+                        if backoff_strategy == "fixed":
+                            delay = retry_backoff
+                        elif backoff_strategy == "linear":
+                            delay = retry_backoff * attempts
+                        else:
+                            # exponential (default)
+                            delay = retry_backoff * (2 ** (attempts - 1))
                         time.sleep(delay)
 
             # Handle result
@@ -1009,15 +1016,104 @@ class WorkflowExecutionService:
     def _execute_agent_node(
         cls, node_id: str, node_config: dict, input_msg: WorkflowMessage
     ) -> WorkflowMessage:
-        """Execute an agent node (stub).
+        """Execute an agent node via OrchestrationService with fallback chain.
 
-        Real agent invocation would call ExecutionService. Deferred to agent integration.
+        Reads fallback_chain and routing_rules from node_config to determine which
+        model/account to use. Delegates execution to OrchestrationService.execute_with_fallback()
+        which handles rate limits, budget checks, and account rotation.
+
+        If routing_rules are configured and diff size is available, the fallback chain
+        is filtered to the appropriate tier (cheap vs expensive) before execution.
         """
+        from .orchestration_service import ExecutionStatus, OrchestrationService
+
         agent_id = node_config.get("agent_id", "unknown")
+        trigger_id = node_config.get("trigger_id")
+
+        # Read fallback chain and routing rules from config
+        fallback_chain = node_config.get("fallback_chain", [])
+        routing_rules = node_config.get("routing_rules")
+
+        # Determine diff size from input message data
+        input_data = input_msg.data or {}
+        diff_size = input_data.get("diff_size", 0)
+        pr_data = input_data.get("pr", {})
+        if isinstance(pr_data, dict):
+            diff_size = diff_size or pr_data.get("lines_changed", 0)
+
+        # Apply routing rules to filter fallback chain by tier
+        effective_chain = list(fallback_chain)
+        if routing_rules and diff_size and effective_chain:
+            threshold = routing_rules.get("diff_size_threshold", 500)
+            if diff_size < threshold:
+                target_tier = routing_rules.get("small_diff_tier", "cheap")
+            else:
+                target_tier = routing_rules.get("large_diff_tier", "expensive")
+
+            filtered = [e for e in effective_chain if e.get("tier") == target_tier]
+            if filtered:
+                effective_chain = filtered
+            # If filter produces empty list, use full chain (graceful fallback)
+
+        # Build message text from input
+        message_text = input_msg.text or ""
+        if not message_text and input_data:
+            message_text = json.dumps(input_data, default=str)[:5000]
+
+        # Build synthetic trigger dict for OrchestrationService
+        trigger_dict = {
+            "id": trigger_id or f"wf-agent-{node_id}",
+            "name": f"workflow-agent-{agent_id}",
+            "backend_type": "claude",  # default, overridden by chain entries
+            "agent_id": agent_id,
+        }
+
+        # Build event data from input message
+        event_data = {
+            "node_id": node_id,
+            "agent_id": agent_id,
+            **(input_data or {}),
+        }
+
+        # If we have an explicit fallback chain, override the default chain lookup
+        # by setting the chain entries on the trigger dict
+        if effective_chain:
+            trigger_dict["_fallback_chain_override"] = effective_chain
+
+        result = OrchestrationService.execute_with_fallback(
+            trigger_dict, message_text, event_data, "workflow"
+        )
+
+        if result.status == ExecutionStatus.CHAIN_EXHAUSTED:
+            raise RuntimeError(
+                f"Agent node {node_id}: all fallback chain providers exhausted "
+                f"({result.detail or 'no detail'})"
+            )
+
+        if result.status == ExecutionStatus.BUDGET_BLOCKED:
+            raise RuntimeError(
+                f"Agent node {node_id}: budget blocked ({result.detail or 'no detail'})"
+            )
+
+        if result.status == ExecutionStatus.LAUNCH_FAILED:
+            raise RuntimeError(
+                f"Agent node {node_id}: execution launch failed"
+            )
+
+        # DISPATCHED: execution started successfully
         return WorkflowMessage(
-            content_type="text",
-            text=f"[agent:{agent_id}] executed",
-            metadata={"source_node_id": node_id},
+            content_type="agent_output",
+            text=f"Agent {agent_id} execution dispatched: {result.execution_id}",
+            data={
+                "execution_id": result.execution_id,
+                "agent_id": agent_id,
+                "status": result.status.value,
+            },
+            metadata={
+                "source_node_id": node_id,
+                "execution_id": result.execution_id or "",
+                "agent_id": agent_id,
+            },
         )
 
     @classmethod
