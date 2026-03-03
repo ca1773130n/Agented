@@ -3,7 +3,7 @@
 import logging
 from dataclasses import asdict
 from http import HTTPStatus
-from typing import Tuple
+from typing import Optional, Tuple
 
 from ..db.backends import (
     auto_enable_monitoring_for_account,
@@ -21,7 +21,7 @@ from ..db.backends import (
     verify_account_exists,
 )
 from ..services.audit_log_service import AuditLogService
-from ..services.backend_detection_service import detect_backend, get_capabilities
+from ..services.backend_detection_service import detect_backend, get_capabilities, install_cli
 
 logger = logging.getLogger(__name__)
 
@@ -41,19 +41,40 @@ class BackendService:
 
     @staticmethod
     def list_backends() -> Tuple[dict, HTTPStatus]:
-        """List all backends with auto-refreshed model lists."""
+        """List all backends with live-discovered model lists.
+
+        Runs model discovery for all backends concurrently on every request.
+        No caching — always returns fresh models from CLI introspection.
+        """
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+
         from ..services.model_discovery_service import ModelDiscoveryService
 
         backends = get_all_backends()
 
-        # Auto-refresh model lists (uses discovery cache so this is fast after first call)
+        # Build map of backend_type -> backend dict(s) for overlay
+        type_to_backends: dict[str, list[dict]] = {}
         for backend in backends:
-            backend_type = backend.get("type")
-            if backend_type:
-                models = ModelDiscoveryService.discover_models(backend_type)
-                if models:
-                    backend["models"] = models
-                    update_backend_models(backend["id"], models)
+            btype = backend.get("type")
+            if btype:
+                type_to_backends.setdefault(btype, []).append(backend)
+
+        # Discover models for all backend types concurrently
+        def _discover(btype: str) -> tuple[str, list[str]]:
+            try:
+                return btype, ModelDiscoveryService.discover_models(btype)
+            except Exception as e:
+                logger.warning("Model discovery for %s failed: %s", btype, e)
+                return btype, []
+
+        with ThreadPoolExecutor(max_workers=len(type_to_backends)) as pool:
+            futures = {pool.submit(_discover, bt): bt for bt in type_to_backends}
+            for future in as_completed(futures):
+                btype, models = future.result()
+                for backend in type_to_backends.get(btype, []):
+                    if models:
+                        backend["models"] = models
+                        update_backend_models(backend["id"], models)
 
         return {"backends": backends}, HTTPStatus.OK
 
@@ -214,7 +235,36 @@ class BackendService:
         return {"message": "Account deleted"}, HTTPStatus.OK
 
     @staticmethod
-    def start_connect(backend_id: str) -> Tuple[dict, HTTPStatus]:
+    def install_backend_cli(backend_id: str) -> Tuple[dict, HTTPStatus]:
+        """Install a missing CLI for a backend."""
+        backend_id = _resolve_backend_id(backend_id)
+        btype = get_backend_type(backend_id)
+        if not btype:
+            return {"error": "Backend not found"}, HTTPStatus.NOT_FOUND
+
+        # Check if already installed
+        installed, version, _ = detect_backend(btype)
+        if installed:
+            return {
+                "message": f"{btype} CLI is already installed",
+                "version": version,
+            }, HTTPStatus.OK
+
+        result = install_cli(btype)
+        if result["success"]:
+            check_and_update_backend_installed(backend_id, True, result["version"])
+            return {
+                "message": f"{btype} CLI installed successfully",
+                "version": result["version"],
+            }, HTTPStatus.OK
+        return {
+            "error": f"Failed to install {btype} CLI: {result['error']}",
+        }, HTTPStatus.INTERNAL_SERVER_ERROR
+
+    @staticmethod
+    def start_connect(
+        backend_id: str, config_path: Optional[str] = None
+    ) -> Tuple[dict, HTTPStatus]:
         """Start an OAuth login session for a backend CLI."""
         from ..services.backend_cli_service import BACKEND_CLI_COMMANDS, BackendCLIService
 
@@ -238,6 +288,7 @@ class BackendService:
                 backend_id=backend_id,
                 backend_type=btype,
                 action="login",
+                config_path=config_path,
             )
         except ValueError as e:
             return {"error": str(e)}, HTTPStatus.BAD_REQUEST
@@ -264,22 +315,14 @@ class BackendService:
             return {"error": f"Provider API error: {e}"}, HTTPStatus.BAD_GATEWAY
 
         if not windows:
-            default_paths = {"claude": "~/.claude", "gemini": "~/.gemini"}
+            default_paths = {"claude": "~/.claude", "codex": "~/.codex", "gemini": "~/.gemini"}
             config_path = account.get("config_path", default_paths.get(backend_type, ""))
-            hint = f"No credentials found at {config_path}."
-            if backend_type == "claude" and config_path and config_path != "~/.claude":
-                hint += f" Run: CLAUDE_CONFIG_DIR={config_path} claude"
-            elif backend_type == "claude":
-                hint += " Run `claude` in your terminal to authenticate."
-            elif backend_type == "codex":
-                hint += " Run `codex login` to authenticate."
-            elif backend_type == "gemini" and config_path and config_path != "~/.gemini":
-                hint += f" Run: GEMINI_CLI_HOME={config_path} gemini"
-            elif backend_type == "gemini":
-                hint += " Run `gemini` to authenticate."
+            hint = f"No credentials found at {config_path}. Use the Login button to authenticate."
             return {
                 "windows": [],
                 "message": hint,
+                "needs_login": True,
+                "account_id": account.get("id"),
             }, HTTPStatus.OK
 
         return {"windows": windows}, HTTPStatus.OK
@@ -349,17 +392,10 @@ class BackendService:
                 }
             )
 
-        # Terminal instructions per backend type
-        instructions = {
-            "claude": "Run `claude` in your terminal to trigger the OAuth login flow.",
-            "codex": "Run `codex login` in your terminal to authenticate.",
-            "gemini": "Run `gemini` in your terminal to trigger the OAuth login flow.",
-        }
-
         return {
             "backend_type": btype,
             "accounts": accounts,
-            "login_instruction": instructions.get(btype, f"Run the {btype} CLI to authenticate."),
+            "login_instruction": "Use the Login button on each account to authenticate.",
         }, HTTPStatus.OK
 
     @staticmethod

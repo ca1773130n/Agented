@@ -1,12 +1,12 @@
-"""Model discovery service — detects available models via PTY, local files, and APIs.
+"""Model discovery service — detects available models via CLI introspection.
 
 Discovery strategy per backend:
-  - Claude:   local stats-cache.json (PTY fails inside nested Claude sessions)
-  - Codex:    PTY `/model` command (returns curated list), local files as fallback
-  - OpenCode: CLI `opencode models` command, local config files as fallback
-  - Gemini:   Google Cloud Code quota API (returns per-model buckets)
+  - Claude:   Non-interactive CLI probes (claude -p . --model <alias>), local stats-cache
+  - Codex:    Binary slug extraction, PTY /model, local files
+  - OpenCode: CLI `opencode models` command, local config files
+  - Gemini:   NPM package introspection, CLI probe, quota API, local files
 
-Never uses hardcoded model lists.
+Always discovers fresh — no caching.
 """
 
 import json
@@ -14,20 +14,14 @@ import logging
 import os
 import re
 import subprocess
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
 logger = logging.getLogger(__name__)
 
-_CACHE_KEY = "model_discovery_cache"
-_CACHE_MAX_AGE_DAYS = 7
-# Bump this version whenever normalization logic changes to invalidate stale caches
-_CACHE_SCHEMA_VERSION = 14
-
 
 class ModelDiscoveryService:
-    """Discovers model lists from local CLI config/cache files with DB-backed weekly cache."""
+    """Discovers model lists from CLI tools and local config files."""
 
     @classmethod
     def _discover_raw(cls, backend_type: str) -> list[str]:
@@ -50,7 +44,9 @@ class ModelDiscoveryService:
                             existing.add(m)
             return models or []
         elif backend_type == "codex":
-            models = cls._discover_codex_models_pty()
+            models = cls._discover_codex_models_binary()
+            if not models:
+                models = cls._discover_codex_models_pty()
             if not models:
                 models = cls._discover_codex_models_local()
             if not models:
@@ -62,7 +58,11 @@ class ModelDiscoveryService:
                 models = cls._discover_opencode_models_local()
             return models or []
         elif backend_type == "gemini":
-            models = cls._discover_gemini_models_api()
+            models = cls._discover_gemini_models_package()
+            if not models:
+                models = cls._discover_gemini_models_cli()
+            if not models:
+                models = cls._discover_gemini_models_api()
             if not models:
                 models = cls._discover_gemini_models_local()
             if not models:
@@ -109,30 +109,16 @@ class ModelDiscoveryService:
     def discover_models(cls, backend_type: str) -> list[str]:
         """Discover models for a backend type.
 
-        1. Check DB cache — if fresh (< 7 days), return cached list
-        2. Claude: local files first (PTY fails inside nested sessions)
-           Codex: PTY `/model` first (returns curated list), local files as fallback
-        3. Normalize and cache results
-        4. Return empty list if nothing found (no hardcoded fallbacks)
+        Always runs live discovery (no caching).  Falls back to empty list
+        when nothing is found.
         """
-        cached = cls._get_cached_models(backend_type)
-        if cached is not None:
-            return cached
-
         models = cls._discover_raw(backend_type)
-        from_pty = False  # PTY state tracking for normalization
-        if backend_type == "codex" and models:
-            # Check if models came from PTY (discover_raw tries PTY first)
-            pty_models = cls._discover_codex_models_pty()
-            from_pty = pty_models is not None and len(pty_models) > 0
 
         if models:
-            models = cls._normalize_models(backend_type, models, from_pty=from_pty)
+            models = cls._normalize_models(backend_type, models)
         else:
             models = []
 
-        if models:
-            cls._set_cached_models(backend_type, models)
         return models
 
     # ----- Local file discovery (preferred) -----
@@ -308,6 +294,50 @@ class ModelDiscoveryService:
     # ----- Gemini API discovery -----
 
     @classmethod
+    def _discover_gemini_models_cli(cls) -> Optional[list[str]]:
+        """Discover Gemini models via ``gemini -p "." --output-format json``.
+
+        The JSON response contains ``stats.models`` with actual model IDs
+        used during the request (e.g. ``gemini-2.5-flash-lite``,
+        ``gemini-3-flash-preview``).
+        """
+        import shutil
+
+        cli_path = shutil.which("gemini")
+        if not cli_path:
+            return None
+
+        # Build env with account-specific config dir if available
+        env = {**os.environ, "CLAUDECODE": "", "CLAUDE_CODE_ENTRYPOINT": ""}
+        for gemini_home in cls._get_gemini_config_dirs():
+            if (gemini_home / ".gemini" / "oauth_creds.json").exists():
+                env["GEMINI_CLI_HOME"] = str(gemini_home)
+                break
+
+        try:
+            result = subprocess.run(
+                [cli_path, "-p", ".", "--output-format", "json"],
+                capture_output=True,
+                text=True,
+                timeout=30,
+                env=env,
+            )
+            if result.returncode != 0 or not result.stdout.strip():
+                return None
+
+            data = json.loads(result.stdout)
+            stats_models = data.get("stats", {}).get("models", {})
+            if stats_models:
+                models = list(stats_models.keys())
+                logger.info("Gemini models from CLI probe: %s", models)
+                return models
+        except subprocess.TimeoutExpired:
+            logger.warning("Gemini CLI probe timed out")
+        except Exception as e:
+            logger.debug("Gemini CLI model discovery failed: %s", e)
+        return None
+
+    @classmethod
     def _discover_gemini_models_api(cls) -> Optional[list[str]]:
         """Discover Gemini models via the quota API using the first available account."""
         try:
@@ -478,9 +508,21 @@ class ModelDiscoveryService:
         This non-interactive command outputs one model per line in
         provider/model-id format (e.g. "anthropic/claude-opus-4-6").
         """
+        import shutil
+
+        cli_path = shutil.which("opencode")
+        if not cli_path:
+            # Fallback to well-known install location
+            fallback = Path.home() / ".opencode" / "bin" / "opencode"
+            if fallback.is_file() and os.access(fallback, os.X_OK):
+                cli_path = str(fallback)
+        if not cli_path:
+            logger.debug("opencode not found in PATH or fallback locations")
+            return None
+
         try:
             result = subprocess.run(
-                ["opencode", "models"],
+                [cli_path, "models"],
                 capture_output=True,
                 text=True,
                 timeout=15,
@@ -496,8 +538,6 @@ class ModelDiscoveryService:
             if models:
                 logger.info(f"OpenCode models from CLI: {len(models)} models found")
                 return models
-        except FileNotFoundError:
-            logger.debug("opencode not found in PATH")
         except subprocess.TimeoutExpired:
             logger.warning("opencode models command timed out")
         except Exception as e:
@@ -521,33 +561,92 @@ class ModelDiscoveryService:
                 models.append(m.split("/", 1)[1])
         return models if models else None
 
-    # ----- PTY discovery (fallback) -----
+    # ----- CLI probe discovery (fallback) -----
 
     @classmethod
     def _discover_claude_models_pty(cls) -> Optional[list[str]]:
-        """Discover Claude models via interactive PTY session."""
+        """Discover Claude models via non-interactive CLI probes.
+
+        Runs ``claude -p "." --output-format json --model <alias>`` for each
+        known model family (opus, sonnet, haiku) concurrently.  Extracts exact
+        model IDs from the ``modelUsage`` key in the JSON response.
+
+        Falls back to PTY welcome-screen parsing if the non-interactive probe
+        fails (e.g. no API key / offline).
+        """
+        import shutil
+        from concurrent.futures import ThreadPoolExecutor
+
+        cli_path = shutil.which("claude")
+        if not cli_path:
+            fallback = Path.home() / ".local" / "bin" / "claude"
+            if fallback.is_file() and os.access(fallback, os.X_OK):
+                cli_path = str(fallback)
+        if not cli_path:
+            return None
+
+        # Env without nesting-detection vars so claude doesn't refuse to start
+        env = {**os.environ, "CLAUDECODE": "", "CLAUDE_CODE_ENTRYPOINT": ""}
+
+        def _probe(alias: str) -> Optional[str]:
+            try:
+                result = subprocess.run(
+                    [cli_path, "-p", ".", "--output-format", "json", "--model", alias],
+                    capture_output=True,
+                    text=True,
+                    timeout=30,
+                    env=env,
+                )
+                if result.returncode == 0 and result.stdout.strip():
+                    data = json.loads(result.stdout)
+                    ids = list(data.get("modelUsage", {}).keys())
+                    return ids[0] if ids else None
+            except Exception as e:
+                logger.debug("Claude model probe for '%s' failed: %s", alias, e)
+            return None
+
+        aliases = ["opus", "sonnet", "haiku"]
+        try:
+            with ThreadPoolExecutor(max_workers=len(aliases)) as pool:
+                results = list(pool.map(_probe, aliases))
+            models = [m for m in results if m]
+            if models:
+                logger.info("Claude models from CLI probe: %s", models)
+                return models
+        except Exception as e:
+            logger.warning("Claude concurrent model probe failed: %s", e)
+
+        # Fallback: PTY welcome-screen parsing for current model name
+        return cls._discover_claude_models_welcome_screen(cli_path)
+
+    @classmethod
+    def _discover_claude_models_welcome_screen(cls, cli_path: str) -> Optional[list[str]]:
+        """Extract model info from Claude CLI welcome screen via PTY."""
         try:
             from .pty_service import PtyRunner
 
             output = PtyRunner.run_interactive(
-                cmd_list=["claude"],
-                input_lines=["/model"],
-                timeout=15,
-                ready_pattern=r"(>|claude|prompt)",
-                settle_time=2.0,
+                cmd_list=[cli_path],
+                input_lines=[],  # Just read the welcome screen
+                timeout=8,
+                ready_pattern=r"(>|claude|prompt|Try)",
+                settle_time=3.0,
             )
             if not output:
                 return None
 
-            models = set()
-            id_pattern = re.compile(r"claude-(?:opus|sonnet|haiku)-[\d][\w.-]*")
-            for match in id_pattern.finditer(output):
-                models.add(match.group(0))
-
-            if models:
-                return sorted(models)
+            # Welcome screen shows e.g. "Opus 4.6 · Claude Max ·"
+            # Extract model family + version
+            model_re = re.compile(r"(Opus|Sonnet|Haiku)\s+(\d+\.\d+)", re.IGNORECASE)
+            match = model_re.search(output)
+            if match:
+                family = match.group(1).lower()
+                version = match.group(2)
+                model_id = f"claude-{family}-{version.replace('.', '-')}"
+                logger.info("Claude model from welcome screen: %s", model_id)
+                return [model_id]
         except Exception as e:
-            logger.warning(f"Claude model discovery via PTY failed: {e}")
+            logger.warning("Claude welcome screen parsing failed: %s", e)
         return None
 
     @classmethod
@@ -606,26 +705,183 @@ class ModelDiscoveryService:
                 models.append(model_id)
         return models if models else None
 
+    @classmethod
+    def _discover_codex_models_binary(cls) -> Optional[list[str]]:
+        """Extract model slugs embedded in the Codex Rust binary.
+
+        The Codex CLI ships a native binary at:
+          <npm_prefix>/lib/node_modules/@openai/codex/node_modules/
+          @openai/codex-<platform>/vendor/<arch>/codex/codex
+
+        Model slugs are stored as JSON ``"slug": "<id>"`` entries in the
+        binary.  We extract them via the ``strings`` command.
+        """
+        import shutil
+
+        cli_path = shutil.which("codex")
+        if not cli_path:
+            return None
+
+        # Resolve the actual Rust binary from the npm package structure
+        try:
+            real = Path(cli_path).resolve()
+            # Walk up to find the @openai/codex package root
+            pkg_root = real.parent
+            for _ in range(10):
+                if (pkg_root / "package.json").exists():
+                    break
+                pkg_root = pkg_root.parent
+            else:
+                pkg_root = None
+
+            # Search for the native vendor binary
+            binary_path = None
+            if pkg_root:
+                for candidate in pkg_root.rglob("vendor/*/codex/codex"):
+                    if candidate.is_file():
+                        binary_path = candidate
+                        break
+
+            if not binary_path:
+                # Try common platform-specific paths from the npm global dir
+                npm_root = real.parent
+                while npm_root.name and npm_root.name != "node_modules":
+                    npm_root = npm_root.parent
+                if npm_root.name == "node_modules":
+                    for candidate in npm_root.rglob(
+                        "@openai/codex-*/vendor/*/codex/codex"
+                    ):
+                        if candidate.is_file():
+                            binary_path = candidate
+                            break
+
+            if not binary_path:
+                logger.debug("Codex native binary not found")
+                return None
+
+            result = subprocess.run(
+                ["strings", str(binary_path)],
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            if result.returncode != 0:
+                return None
+
+            # Extract "slug": "model-id" patterns
+            slug_re = re.compile(r'"slug":\s*"([^"]+)"')
+            slugs = sorted(set(slug_re.findall(result.stdout)))
+
+            if slugs:
+                logger.info("Codex models from binary: %s", slugs)
+                return slugs
+        except Exception as e:
+            logger.debug("Codex binary model extraction failed: %s", e)
+        return None
+
+    @classmethod
+    def _discover_gemini_models_package(cls) -> Optional[list[str]]:
+        """Extract model names from the @google/gemini-cli-core npm package.
+
+        The gemini-cli-core package contains model ID strings like
+        ``gemini-2.5-pro``, ``gemini-3-flash``, etc. in its compiled JS
+        source files.  We grep for them and filter to real model names.
+        """
+        import shutil
+
+        cli_path = shutil.which("gemini")
+        if not cli_path:
+            return None
+
+        try:
+            real = Path(cli_path).resolve()
+            # Find the node_modules root
+            nm_root = real.parent
+            while nm_root.name and nm_root.name != "node_modules":
+                nm_root = nm_root.parent
+
+            if nm_root.name != "node_modules":
+                # Try going up from the symlink target
+                target = Path(os.readlink(cli_path)) if os.path.islink(cli_path) else real
+                nm_root = target.parent
+                while nm_root.name and nm_root.name != "node_modules":
+                    nm_root = nm_root.parent
+
+            if nm_root.name != "node_modules":
+                logger.debug("Could not find node_modules for gemini CLI")
+                return None
+
+            # Look for @google/gemini-cli-core package
+            core_pkg = nm_root / "@google" / "gemini-cli-core"
+            if not core_pkg.exists():
+                # Might be nested under @google/gemini-cli/node_modules
+                for candidate in nm_root.rglob("@google/gemini-cli-core"):
+                    if candidate.is_dir() and (candidate / "package.json").exists():
+                        core_pkg = candidate
+                        break
+
+            if not core_pkg.exists():
+                logger.debug("@google/gemini-cli-core package not found")
+                return None
+
+            dist_src = core_pkg / "dist" / "src"
+            if not dist_src.exists():
+                dist_src = core_pkg / "dist"
+            if not dist_src.exists():
+                dist_src = core_pkg
+
+            result = subprocess.run(
+                ["grep", "-roh", r"gemini-[0-9][0-9a-z.-]*", str(dist_src)],
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            if result.returncode not in (0, 1) or not result.stdout.strip():
+                return None
+
+            # Filter to real model names (must match gemini-X.Y-<variant> pattern)
+            model_re = re.compile(
+                r"^gemini-\d+(?:\.\d+)?-[a-z][\w-]*$"
+            )
+            # Skip test/fake model strings and date-suffixed variants
+            skip_re = re.compile(
+                r"test|super-duper|custom(?:tools)?|base"
+                r"|-\d{2}-\d{4}$|-\d{2}-\d{2}$"
+            )
+            raw = sorted(set(result.stdout.strip().splitlines()))
+            clean = [
+                m for m in raw
+                if model_re.match(m) and not skip_re.search(m)
+            ]
+
+            if clean:
+                logger.info("Gemini models from package: %s", clean)
+                return clean
+            elif models:
+                logger.info("Gemini models from package (unfiltered): %s", models)
+                return models
+        except Exception as e:
+            logger.debug("Gemini package model extraction failed: %s", e)
+        return None
+
     # ----- Normalization -----
 
     @classmethod
-    def _normalize_models(
-        cls, backend_type: str, raw_models: list[str], *, from_pty: bool = False
-    ) -> list[str]:
+    def _normalize_models(cls, backend_type: str, raw_models: list[str]) -> list[str]:
         """Normalize and filter discovered models based on backend type.
 
         Claude: group by family, keep latest version per family -> friendly names.
-        Codex (PTY): just drop non-codex entries — the CLI already curates the list.
-        Codex (local files): filter to codex-only AND deduplicate by version.
+        Codex: return as-is (slugs from binary or PTY are already clean).
         OpenCode: group by provider — normalize each provider's models.
         """
         if backend_type == "claude":
             return cls._group_claude_models(raw_models)
         if backend_type == "codex":
-            # Both PTY /model and models_cache.json are maintained by the CLI — return as-is
-            return raw_models
+            return cls._filter_codex_models(raw_models)
         if backend_type == "opencode":
             return cls._normalize_opencode_models(raw_models)
+        if backend_type == "gemini":
+            return cls._filter_gemini_models(raw_models)
         return raw_models
 
     @classmethod
@@ -730,6 +986,43 @@ class ModelDiscoveryService:
         return result if result else codex_only
 
     @classmethod
+    def _filter_gemini_models(cls, models: list[str]) -> list[str]:
+        """Keep only the highest major version per Gemini variant.
+
+        Pattern: gemini-{major}[.{minor}]-{variant}[-qualifier...]
+        e.g. [gemini-1.5-pro, gemini-2.5-pro, gemini-3-pro] -> [gemini-3-pro]
+
+        The variant is the first word after the version (pro, flash, flash-lite).
+        Everything after the variant is a qualifier (preview, exp, 001, image,
+        experimental, etc.) which is stripped for grouping but preserved in output.
+        """
+        # Match: gemini-{major}[.{minor}]-{variant-word}[-anything...]
+        # Group 1: major, Group 2: minor (optional), Group 3: variant base word
+        version_re = re.compile(
+            r"^gemini-(\d+)(?:\.(\d+))?-([a-z]+(?:-lite)?)",
+            re.IGNORECASE,
+        )
+        # best per variant: variant -> (version_tuple, model_id)
+        best: dict[str, tuple[tuple[int, ...], str]] = {}
+        non_matching: list[str] = []
+
+        for m in models:
+            match = version_re.match(m)
+            if not match:
+                non_matching.append(m)
+                continue
+            major = int(match.group(1))
+            minor = int(match.group(2)) if match.group(2) else 0
+            variant = match.group(3).lower()  # e.g. pro, flash, flash-lite
+            version = (major, minor)
+            if variant not in best or version > best[variant][0]:
+                best[variant] = (version, m)
+
+        result = [best[v][1] for v in sorted(best.keys())]
+        result.extend(sorted(non_matching))
+        return result if result else models
+
+    @classmethod
     def _parse_codex_model_ids(cls, output: str) -> set[str]:
         """Extract Codex model IDs from CLI output text."""
         models = set()
@@ -745,82 +1038,3 @@ class ModelDiscoveryService:
                     models.add(model_id)
         return models
 
-    # ----- DB Cache -----
-
-    @classmethod
-    def clear_cache(cls):
-        """Delete all cached model lists from DB. Called on server startup."""
-        try:
-            from ..database import get_connection
-
-            with get_connection() as conn:
-                conn.execute("DELETE FROM settings WHERE key = ?", (_CACHE_KEY,))
-                conn.commit()
-                logger.info("Model discovery cache cleared")
-        except Exception as e:
-            logger.debug(f"Model discovery cache clear failed: {e}")
-
-    @classmethod
-    def _get_cached_models(cls, backend_type: str) -> Optional[list[str]]:
-        """Read cached models from DB settings. Returns None if cache is stale or missing."""
-        try:
-            from ..database import get_connection
-
-            with get_connection() as conn:
-                cursor = conn.execute("SELECT value FROM settings WHERE key = ?", (_CACHE_KEY,))
-                row = cursor.fetchone()
-                if not row or not row["value"]:
-                    return None
-
-                cache = json.loads(row["value"])
-                entry = cache.get(backend_type)
-                if not entry:
-                    return None
-
-                # Invalidate if schema version changed (normalization logic updated)
-                if entry.get("schema_version") != _CACHE_SCHEMA_VERSION:
-                    return None
-
-                cached_at = datetime.fromisoformat(entry["cached_at"])
-                age = datetime.now(timezone.utc) - cached_at
-                if age.days >= _CACHE_MAX_AGE_DAYS:
-                    return None  # Stale
-
-                return entry["models"]
-        except Exception as e:
-            logger.debug(f"Model discovery cache read failed: {e}")
-            return None
-
-    @classmethod
-    def _set_cached_models(cls, backend_type: str, models: list[str]):
-        """Write models to DB cache."""
-        try:
-            from ..database import get_connection
-
-            with get_connection() as conn:
-                cursor = conn.execute("SELECT value FROM settings WHERE key = ?", (_CACHE_KEY,))
-                row = cursor.fetchone()
-                cache = {}
-                if row and row["value"]:
-                    try:
-                        cache = json.loads(row["value"])
-                    except (json.JSONDecodeError, TypeError):
-                        pass
-
-                cache[backend_type] = {
-                    "models": models,
-                    "cached_at": datetime.now(timezone.utc).isoformat(),
-                    "schema_version": _CACHE_SCHEMA_VERSION,
-                }
-
-                conn.execute(
-                    """
-                    INSERT INTO settings (key, value, updated_at)
-                    VALUES (?, ?, CURRENT_TIMESTAMP)
-                    ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP
-                    """,
-                    (_CACHE_KEY, json.dumps(cache)),
-                )
-                conn.commit()
-        except Exception as e:
-            logger.debug(f"Model discovery cache write failed: {e}")

@@ -13,13 +13,22 @@
             <span v-if="backend.is_installed" class="status-badge installed">Installed</span>
             <span v-else class="status-badge not-installed">Not Installed</span>
           </div>
-          <button v-if="supportsConnect && backend.is_installed" class="btn btn-primary" @click="showConnect = !showConnect">
+          <button
+            v-if="!backend.is_installed"
+            class="btn btn-primary"
+            :disabled="isInstalling"
+            @click="installCli"
+          >
+            <div v-if="isInstalling" class="spinner-sm"></div>
+            {{ isInstalling ? 'Installing...' : 'Install CLI' }}
+          </button>
+          <button v-if="supportsConnect && backend.is_installed" class="btn btn-primary" @click="loginConfigPath = undefined; showLoginModal = true">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
               <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/>
               <polyline points="10 17 15 12 10 7"/>
               <line x1="15" y1="12" x2="3" y2="12"/>
             </svg>
-            {{ showConnect ? 'Hide Login' : 'Connect' }}
+            Login
           </button>
           <a v-if="backend.documentation_url" :href="backend.documentation_url" target="_blank" class="btn btn-outline">
             Documentation
@@ -149,6 +158,7 @@
                 type="text"
                 required
                 placeholder="e.g., Personal, Work"
+                @input="suggestConfigPath"
               />
             </div>
             <div class="form-group">
@@ -168,6 +178,7 @@
                 v-model="accountForm.config_path"
                 type="text"
                 placeholder="e.g., ~/.claude-work"
+                @input="configPathManuallyEdited = true"
               />
               <small>Path to the backend's config directory for this account</small>
             </div>
@@ -279,6 +290,13 @@
             </div>
             <div class="account-actions">
               <button
+                v-if="supportsConnect && backend.is_installed"
+                class="btn btn-sm btn-outline"
+                @click="loginConfigPath = account.config_path; showLoginModal = true"
+              >
+                Login
+              </button>
+              <button
                 v-if="backend.type !== 'opencode'"
                 class="btn btn-sm btn-outline"
                 :disabled="rateLimitState[account.id]?.loading"
@@ -326,6 +344,17 @@
       @confirm="confirmDeleteAccount"
       @cancel="showDeleteAccountConfirm = false"
     />
+
+    <AccountLoginModal
+      v-if="backend"
+      :open="showLoginModal"
+      :backend-id="backend.id"
+      :backend-type="backend.type"
+      :backend-name="backend.name"
+      :config-path="loginConfigPath"
+      @close="showLoginModal = false"
+      @success="onLoginModalSuccess"
+    />
   </div>
     </template>
   </EntityLayout>
@@ -339,6 +368,7 @@ import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import EntityLayout from '../layouts/EntityLayout.vue';
 import BackendConnect from '../components/monitoring/BackendConnect.vue';
+import AccountLoginModal from '../components/monitoring/AccountLoginModal.vue';
 import ConfirmModal from '../components/base/ConfirmModal.vue';
 import { useToast } from '../composables/useToast';
 import { useWebMcpTool } from '../composables/useWebMcpTool';
@@ -359,6 +389,28 @@ const showToast = useToast();
 const healthMap = ref<Map<number, AccountHealth>>(new Map());
 const now = ref(Date.now());
 let clockTimer: ReturnType<typeof setInterval> | null = null;
+
+// Login modal state
+const showLoginModal = ref(false);
+const loginConfigPath = ref<string | undefined>(undefined);
+
+// Install state
+const isInstalling = ref(false);
+
+async function installCli() {
+  if (isInstalling.value || !backend.value) return;
+  isInstalling.value = true;
+  showToast?.(`Installing ${backend.value.name} CLI...`, 'info');
+  try {
+    const result = await backendApi.installCli(backendId.value);
+    showToast?.(result.message || 'CLI installed', 'success');
+    await loadBackend();
+  } catch (e: any) {
+    showToast?.(e.message || 'Failed to install CLI', 'error');
+  } finally {
+    isInstalling.value = false;
+  }
+}
 
 // Connect state
 const showConnect = ref(false);
@@ -393,6 +445,22 @@ const accountForm = ref({
   plan: '',
   is_default: false,
 });
+const configPathManuallyEdited = ref(false);
+
+// Auto-suggest config_path when account name changes (new accounts only)
+function suggestConfigPath() {
+  if (editingAccount.value || configPathManuallyEdited.value) return;
+  const btype = backend.value?.type;
+  const name = accountForm.value.account_name.trim();
+  if (!btype || !name) {
+    accountForm.value.config_path = '';
+    return;
+  }
+  const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/-+$/, '');
+  const defaultDirs: Record<string, string> = { claude: '.claude', codex: '.codex', gemini: '.gemini' };
+  const base = defaultDirs[btype] || `.${btype}`;
+  accountForm.value.config_path = `~/${base}-${slug}`;
+}
 
 const codexSettings = ref({
   reasoning_level: '',
@@ -477,6 +545,7 @@ function closeModal() {
     plan: '',
     is_default: false,
   };
+  configPathManuallyEdited.value = false;
   codexSettings.value = { reasoning_level: '', summary_level: '' };
 }
 
@@ -498,6 +567,7 @@ async function saveAccount() {
       usage_data: Object.keys(usageData).length > 0 ? usageData : undefined,
     };
 
+    const isNew = !editingAccount.value;
     if (editingAccount.value) {
       await backendApi.updateAccount(backendId.value, editingAccount.value.id, data);
     } else {
@@ -507,6 +577,12 @@ async function saveAccount() {
     closeModal();
     showToast?.('Account saved successfully', 'success');
     await loadBackend();
+
+    // Auto-show login modal after creating a new account (not editing)
+    if (isNew && supportsConnect.value && backend.value?.is_installed) {
+      loginConfigPath.value = accountForm.value.config_path || undefined;
+      showLoginModal.value = true;
+    }
   } catch (err) {
     showToast?.('Failed to save account', 'error');
   } finally {
@@ -591,10 +667,26 @@ function onConnected() {
   loadBackend();
 }
 
+function onLoginModalSuccess() {
+  showLoginModal.value = false;
+  showToast?.('Login completed successfully', 'success');
+  loadBackend();
+}
+
 async function checkAccountRateLimits(accountId: number) {
   rateLimitState.value[accountId] = { loading: true, windows: [], error: null };
   try {
-    const result = await backendApi.checkRateLimits(backendId.value, accountId);
+    const result = await backendApi.checkRateLimits(backendId.value, accountId) as any;
+    if (result.needs_login && supportsConnect.value && backend.value?.is_installed) {
+      // Auto-trigger login for this account
+      const account = backend.value?.accounts?.find((a: BackendAccount) => a.id === accountId);
+      if (account) {
+        loginConfigPath.value = account.config_path || undefined;
+        showLoginModal.value = true;
+      }
+      rateLimitState.value[accountId] = { loading: false, windows: [], error: null };
+      return;
+    }
     rateLimitState.value[accountId] = {
       loading: false,
       windows: result.windows || [],
@@ -647,6 +739,20 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
+.spinner-sm {
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(255,255,255,0.3);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+  display: inline-block;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
 .backend-detail-page {
   display: flex;
   flex-direction: column;

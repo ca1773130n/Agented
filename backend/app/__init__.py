@@ -169,6 +169,14 @@ def create_app(config=None):
         migrate_existing_paths()
         auto_register_project_root()
 
+        # Detect backend CLIs and log any that are missing
+        from .services.backend_detection_service import BACKEND_CAPABILITIES, detect_backend
+
+        for _bt in BACKEND_CAPABILITIES:
+            _inst, _ver, _ = detect_backend(_bt)
+            if not _inst:
+                _startup_warnings.append(f"cli_missing:{_bt}")
+
         # Detect GRD binary for CLI write operations
         from .services.grd_cli_service import GrdCliService
 

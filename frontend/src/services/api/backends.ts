@@ -12,7 +12,7 @@ import type {
 export const BACKEND_LOGIN_INFO: Record<string, { url: string; label: string; description: string; loginCommand?: string }> = {
   claude: { url: 'https://console.anthropic.com', label: 'Anthropic Console', description: 'Manage your Claude account and billing', loginCommand: 'claude /login' },
   codex: { url: 'https://platform.openai.com', label: 'OpenAI Platform', description: 'Manage your OpenAI account and billing', loginCommand: 'codex login' },
-  gemini: { url: 'https://aistudio.google.com', label: 'Google AI Studio', description: 'Manage your Gemini account and billing' },
+  gemini: { url: 'https://aistudio.google.com', label: 'Google AI Studio', description: 'Manage your Gemini account and billing', loginCommand: 'gemini auth login' },
 };
 
 export const BACKEND_PLAN_OPTIONS: Record<string, { value: string; label: string }[]> = {
@@ -44,6 +44,14 @@ export const backendApi = {
   list: () => apiFetch<{ backends: AIBackend[] }>('/admin/backends'),
 
   get: (backendId: string) => apiFetch<AIBackendWithAccounts>(`/admin/backends/${backendId}`),
+
+  installCli: (backendId: string) => apiFetch<{
+    message: string;
+    version?: string;
+    error?: string;
+  }>(`/admin/backends/${backendId}/install`, {
+    method: 'POST',
+  }),
 
   check: (backendId: string) => apiFetch<{
     installed: boolean;
@@ -85,9 +93,10 @@ export const backendApi = {
     }),
 
   // Connect (OAuth login) operations
-  startConnect: (backendId: string) =>
+  startConnect: (backendId: string, configPath?: string) =>
     apiFetch<{ session_id: string; status: string }>(`/admin/backends/${backendId}/connect`, {
       method: 'POST',
+      body: configPath ? JSON.stringify({ config_path: configPath }) : undefined,
     }),
 
   streamConnectUrl: (backendId: string, sessionId: string): string =>
@@ -131,10 +140,23 @@ export const backendApi = {
     }),
 
   // CLIProxyAPI account management
-  proxyLogin: () =>
-    apiFetch<{ status: string; message: string; output?: string; error?: string }>('/admin/backends/proxy/login', {
+  proxyLogin: (backendType?: string, configPath?: string) =>
+    apiFetch<{ status: string; message: string; oauth_url?: string; device_code?: string; output?: string[] }>('/admin/backends/proxy/login', {
       method: 'POST',
+      body: JSON.stringify({
+        ...(backendType && { backend_type: backendType }),
+        ...(configPath && { config_path: configPath }),
+      }),
     }),
+
+  proxyCallbackForward: (callbackUrl: string) =>
+    apiFetch<{ status: string; message: string }>('/admin/backends/proxy/callback-forward', {
+      method: 'POST',
+      body: JSON.stringify({ callback_url: callbackUrl }),
+    }),
+
+  proxyStatus: () =>
+    apiFetch<{ available: boolean; account_count: number; accounts: Array<{ email: string; type: string; disabled: boolean; expired: string }> }>('/admin/backends/proxy/status'),
 
   listProxyAccounts: () =>
     apiFetch<{ accounts: Array<{ email: string; type: string; disabled: boolean; expired: string }> }>('/admin/backends/proxy/accounts'),

@@ -13,17 +13,46 @@ import signal
 import time
 from typing import Optional
 
+# Env vars that prevent CLI tools from launching (e.g. Claude nesting detection).
+# These are cleared in the child process before exec.
+_CHILD_ENV_CLEAR = ("CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT")
+
 logger = logging.getLogger(__name__)
 
-# Regex to strip ANSI escape codes from PTY output
+# Cursor positioning / forward-movement sequences — replaced with space to preserve word boundaries
+# H = cursor position, f = horizontal/vertical position, G = cursor horizontal absolute,
+# C = cursor forward (used by TUIs like Ink to space between words)
+_CURSOR_POS_RE = re.compile(r"\x1b\[\d*(?:;\d*)*[HfGC]")
+# Screen-erase sequences — replaced with newline
+_ERASE_SCREEN_RE = re.compile(r"\x1b\[\d*J")
+
+# Comprehensive regex for remaining ANSI/VT escape sequences (ECMA-48 + xterm/kitty)
 _ANSI_RE = re.compile(
-    r"\x1b\[[0-9;]*[A-Za-z]|\x1b\].*?\x07|\x1b[()][AB012]|\x1b\[[\?]?[0-9;]*[hlm]"
+    r"\x1b"
+    r"(?:"
+    r"\[[\x20-\x3f]*[\x40-\x7e]"  # CSI: ESC [ (params/intermediate) final
+    r"|\][^\x07\x1b]*(?:\x07|\x1b\\)"  # OSC: ESC ] ... BEL or ST
+    r"|[()][AB012]"  # Character set designators
+    r"|[\x40-\x5f]"  # Fe sequences (ESC + 0x40-0x5f)
+    r")"
+    r"|\x0f|\x0e"  # SI/SO (shift in/out)
 )
 
 
 def strip_ansi(text: str) -> str:
-    """Remove ANSI escape sequences from text."""
-    return _ANSI_RE.sub("", text)
+    """Remove ANSI escape sequences, preserving word spacing.
+
+    Cursor positioning (CSI H/f/G) is replaced with a space so that
+    TUI-rendered text doesn't lose word boundaries.
+    """
+    text = _CURSOR_POS_RE.sub(" ", text)
+    text = _ERASE_SCREEN_RE.sub("\n", text)
+    text = _ANSI_RE.sub("", text)
+    # Strip leftover control chars except newline, carriage return, tab
+    text = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f]", "", text)
+    # Collapse runs of spaces (not newlines)
+    text = re.sub(r" {2,}", " ", text)
+    return text
 
 
 class PtyRunner:
@@ -53,6 +82,8 @@ class PtyRunner:
                 os.dup2(slave_fd, 2)
                 if slave_fd > 2:
                     os.close(slave_fd)
+                for _k in _CHILD_ENV_CLEAR:
+                    os.environ.pop(_k, None)
                 os.execvp(cmd_list[0], cmd_list)
                 os._exit(1)
 
@@ -100,6 +131,8 @@ class PtyRunner:
                 os.dup2(slave_fd, 2)
                 if slave_fd > 2:
                     os.close(slave_fd)
+                for _k in _CHILD_ENV_CLEAR:
+                    os.environ.pop(_k, None)
                 os.execvp(cmd_list[0], cmd_list)
                 os._exit(1)
 

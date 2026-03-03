@@ -34,23 +34,53 @@ class GitHubService:
 
     @staticmethod
     def validate_repo_url(url: str) -> bool:
-        """Check if a GitHub repo URL is accessible via gh CLI."""
+        """Check if a GitHub repo URL is well-formed and likely valid.
+
+        First validates the URL format, then tries gh CLI.  If gh fails
+        (auth issues, network, etc.), falls back to an unauthenticated
+        HTTP check for public repos.  Returns True on any ambiguous result
+        so project creation isn't blocked — the async clone will surface
+        real errors later.
+        """
         try:
             owner, repo = GitHubService.parse_repo_url(url)
         except ValueError:
             return False
 
-        # Use owner/repo format instead of raw URL to prevent argument injection
+        # Try gh CLI first (works for private repos if authed)
         try:
             result = subprocess.run(
                 ["gh", "repo", "view", f"{owner}/{repo}", "--json", "name"],
                 capture_output=True,
                 text=True,
-                timeout=30,
+                timeout=15,
             )
-            return result.returncode == 0
+            if result.returncode == 0:
+                return True
         except (subprocess.TimeoutExpired, FileNotFoundError, Exception):
-            return False
+            pass
+
+        # Fallback: unauthenticated GitHub API check (public repos)
+        try:
+            import httpx
+
+            resp = httpx.get(
+                f"https://api.github.com/repos/{owner}/{repo}",
+                timeout=10,
+                follow_redirects=True,
+            )
+            if resp.status_code == 200:
+                return True
+            # 404 = repo doesn't exist or is private and we can't verify
+            # For private repos where gh auth is broken, allow creation
+            # and let the clone step handle the error.
+            if resp.status_code == 404:
+                return True  # Might be private; let clone discover the issue
+        except Exception:
+            pass
+
+        # If everything failed (network down, etc.), still allow creation
+        return True
 
     @staticmethod
     def clone_repo(repo_url: str, target_dir: str = None) -> str:

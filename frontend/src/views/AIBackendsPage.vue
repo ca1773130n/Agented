@@ -58,8 +58,19 @@
             <h3>{{ backend.name }}</h3>
             <span class="backend-type-label">{{ parseVersion(backend.version) || backend.type }}</span>
           </div>
-          <div class="backend-status" :class="{ installed: backend.is_installed }">
-            {{ backend.is_installed ? 'Installed' : 'Not Installed' }}
+          <div class="backend-status-area">
+            <span class="backend-status" :class="{ installed: backend.is_installed }">
+              {{ backend.is_installed ? 'Installed' : 'Not Installed' }}
+            </span>
+            <button
+              v-if="!backend.is_installed"
+              class="btn btn-install"
+              :disabled="installingBackend === backend.id"
+              @click.stop="installBackendCli(backend)"
+            >
+              <div v-if="installingBackend === backend.id" class="spinner-sm"></div>
+              {{ installingBackend === backend.id ? 'Installing...' : 'Install' }}
+            </button>
           </div>
         </div>
 
@@ -188,6 +199,22 @@ const isLoading = ref(true);
 const error = ref<string | null>(null);
 const backendCapabilities = ref<Map<string, BackendCapabilities>>(new Map());
 const isAddingAccount = ref(false);
+const installingBackend = ref<string | null>(null);
+
+async function installBackendCli(backend: AIBackend) {
+  if (installingBackend.value) return;
+  installingBackend.value = backend.id;
+  showToast(`Installing ${backend.name} CLI...`, 'info');
+  try {
+    const result = await backendApi.installCli(backend.id);
+    showToast(result.message || `${backend.name} installed`, 'success');
+    await loadBackends(true);
+  } catch (e: any) {
+    showToast(e.message || `Failed to install ${backend.name}`, 'error');
+  } finally {
+    installingBackend.value = null;
+  }
+}
 
 async function addProxyAccount() {
   if (isAddingAccount.value) return;
@@ -235,19 +262,9 @@ async function autoCheckBackends() {
       if (result.capabilities) {
         backendCapabilities.value.set(b.id, result.capabilities);
       }
-      // Discover models for installed backends
-      if (result.installed) {
-        try {
-          await backendApi.discoverModels(b.id);
-        } catch {
-          // Model discovery is best-effort
-        }
-      }
       return result;
     })
   );
-  // Silent reload — don't flash loading spinner
-  await loadBackends(true);
 }
 
 function getCapabilityTags(backendId: string): string[] {
@@ -444,18 +461,50 @@ onMounted(async () => {
   letter-spacing: 0.05em;
 }
 
+.backend-status-area {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
 .backend-status {
   font-size: 12px;
   padding: 4px 8px;
   border-radius: 4px;
   background: var(--accent-crimson-dim);
   color: var(--accent-crimson);
-  flex-shrink: 0;
 }
 
 .backend-status.installed {
   background: var(--accent-emerald-dim);
   color: var(--accent-emerald);
+}
+
+.btn-install {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  background: var(--accent-cyan);
+  color: #000;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s;
+}
+
+.btn-install:hover:not(:disabled) {
+  background: #00c4ee;
+}
+
+.btn-install:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
 }
 
 .backend-meta {
