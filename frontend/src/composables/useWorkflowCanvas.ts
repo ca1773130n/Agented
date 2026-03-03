@@ -54,6 +54,7 @@ const DEFAULT_LABELS: Record<string, string> = {
   script: 'New Script',
   conditional: 'New Condition',
   transform: 'New Transform',
+  approval_gate: 'New Approval Gate',
 }
 
 // ---------------------------------------------------------------------------

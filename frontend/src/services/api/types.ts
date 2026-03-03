@@ -1399,9 +1399,9 @@ export interface AgentMessage {
 // ========================================
 // Workflow types
 // ========================================
-export type WorkflowExecutionStatus = 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
-export type WorkflowNodeType = 'trigger' | 'skill' | 'command' | 'agent' | 'script' | 'conditional' | 'transform';
-export type NodeExecutionStatus = 'pending' | 'running' | 'completed' | 'failed' | 'skipped';
+export type WorkflowExecutionStatus = 'pending' | 'running' | 'completed' | 'failed' | 'cancelled' | 'pending_approval';
+export type WorkflowNodeType = 'trigger' | 'skill' | 'command' | 'agent' | 'script' | 'conditional' | 'transform' | 'approval_gate';
+export type NodeExecutionStatus = 'pending' | 'running' | 'completed' | 'failed' | 'skipped' | 'pending_approval';
 
 export interface Workflow {
   id: string;

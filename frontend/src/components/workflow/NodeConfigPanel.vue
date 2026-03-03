@@ -165,6 +165,7 @@ const nodeTypeLabel = computed(() => {
     script: 'Script',
     conditional: 'Conditional',
     transform: 'Transform',
+    approval_gate: 'Approval Gate',
   }
   return labels[nodeType.value] || 'Unknown'
 })
@@ -178,6 +179,7 @@ const nodeTypeIcon = computed(() => {
     script: '\uD83D\uDCC4',
     conditional: '\u25C7',
     transform: '\u21C4',
+    approval_gate: '\u23F8',
   }
   return icons[nodeType.value] || '?'
 })
@@ -187,6 +189,12 @@ const showConditionValue = computed(
   () =>
     nodeType.value === 'conditional' &&
     localConfig.value.condition_type === 'contains',
+)
+
+const showExpressionInput = computed(
+  () =>
+    nodeType.value === 'conditional' &&
+    localConfig.value.condition_type === 'expression',
 )
 
 // Dynamic transform operation dependent fields
@@ -581,6 +589,7 @@ function handleDelete() {
               <option value="has_text">Has Text</option>
               <option value="exit_code_zero">Exit Code Zero</option>
               <option value="contains">Contains</option>
+              <option value="expression">Expression</option>
             </select>
           </div>
           <div v-if="showConditionValue" class="field-group">
@@ -599,16 +608,17 @@ function handleDelete() {
               "
             />
           </div>
-          <div class="field-group">
+          <div v-if="showExpressionInput" class="field-group">
             <label class="field-label">Expression</label>
             <textarea
               class="field-textarea"
-              placeholder="e.g. output.status === 'success' && output.data.length > 0"
+              placeholder="pr.lines_changed > 500 and pr.draft == False"
               rows="3"
               :value="(localConfig.condition_expression as string) || ''"
               :disabled="readOnly"
               @input="setConfigField('condition_expression', ($event.target as HTMLTextAreaElement).value)"
             />
+            <span class="field-helper">Operators: ==, !=, &gt;, &lt;, &gt;=, &lt;=, in, not in, and, or</span>
           </div>
           <div class="field-group">
             <label class="field-label">Source Field</label>
@@ -619,6 +629,45 @@ function handleDelete() {
               :value="(localConfig.source_field as string) || ''"
               :disabled="readOnly"
               @input="setConfigField('source_field', ($event.target as HTMLInputElement).value)"
+            />
+          </div>
+        </template>
+
+        <!-- ==================== APPROVAL GATE ==================== -->
+        <template v-if="nodeType === 'approval_gate'">
+          <div class="field-group">
+            <label class="field-label">Timeout (seconds)</label>
+            <input
+              class="field-input field-number"
+              type="number"
+              min="60"
+              max="86400"
+              :value="(localConfig.timeout_seconds as number) || 1800"
+              :disabled="readOnly"
+              @input="setConfigField('timeout_seconds', Number(($event.target as HTMLInputElement).value))"
+            />
+            <span class="field-helper">Time before auto-timeout</span>
+          </div>
+          <div class="field-group">
+            <label class="field-label">Notification Message</label>
+            <textarea
+              class="field-textarea"
+              placeholder="Approval is required to continue this workflow..."
+              rows="3"
+              :value="(localConfig.notification_message as string) || ''"
+              :disabled="readOnly"
+              @input="setConfigField('notification_message', ($event.target as HTMLTextAreaElement).value)"
+            />
+          </div>
+          <div class="field-group">
+            <label class="field-label">Required Approver</label>
+            <input
+              class="field-input"
+              type="text"
+              placeholder="Optional: username or email"
+              :value="(localConfig.required_approver as string) || ''"
+              :disabled="readOnly"
+              @input="setConfigField('required_approver', ($event.target as HTMLInputElement).value)"
             />
           </div>
         </template>
@@ -858,6 +907,10 @@ function handleDelete() {
   background: rgba(167, 139, 250, 0.15);
   color: #a78bfa;
 }
+.type-badge.approval_gate {
+  background: rgba(245, 158, 11, 0.15);
+  color: #f59e0b;
+}
 
 .close-btn {
   background: none;
@@ -958,6 +1011,14 @@ function handleDelete() {
 
 .field-number {
   width: 100px;
+}
+
+.field-helper {
+  display: block;
+  font-size: 10px;
+  color: var(--text-tertiary, #606070);
+  margin-top: 3px;
+  line-height: 1.4;
 }
 
 /* Footer */

@@ -75,6 +75,12 @@ const nodeCategories: NodeCategory[] = [
         icon: '\u21C4',
         description: 'Transform data',
       },
+      {
+        type: 'approval_gate',
+        label: 'Approval Gate',
+        icon: '\u23F8',
+        description: 'Require manual approval',
+      },
     ],
   },
 ]
