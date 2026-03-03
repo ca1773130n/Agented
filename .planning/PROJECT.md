@@ -78,12 +78,17 @@ Enable engineering teams to orchestrate AI-powered automation (bots, agents, wor
 
 ### Active
 
-- [ ] Improve production readiness (deployment config, process management, log rotation)
-- [ ] Address security concerns (authentication, authorization, CORS hardening)
-- [ ] Improve code quality (reduce god modules, eliminate duplicate pricing, add DI)
-- [ ] Enhance scalability (externalize in-memory state, connection pooling)
-- [ ] Add comprehensive test coverage
-- [ ] Improve frontend type safety (reduce `any` usage)
+#### v0.2.0 — Miscellaneous
+- [ ] Visual workflow builder and pipeline automation (DAG canvas, conditional triggers, approval gates)
+- [ ] Execution intelligence and replay (output diff, context injection, smart chunking, branching)
+- [ ] Bot authoring and template ecosystem (marketplace, NL creator, snippet library, version control)
+- [ ] Analytics and monitoring dashboards (cost tracking, effectiveness, trends, health, impact reports)
+- [ ] Enterprise integrations and governance (Slack/JIRA, RBAC, audit trail, secrets vault, GitOps)
+- [ ] Specialized automation bots (vulnerability triage, code tours, test coverage, postmortem, changelog)
+- [ ] Execution resilience and infrastructure (circuit breakers, retry, queue, persistence, cancellation)
+- [ ] API hardening and developer experience (dry-run, error models, pagination, rate limiting, cron)
+- [ ] Code consistency and standards (logging, error responses, return types, naming, frontend types)
+- [ ] Frontend quality and user experience (loading states, error boundaries, shared composables, docs)
 
 ### Out of Scope
 
@@ -120,5 +125,13 @@ The codebase has grown organically and has accumulated technical debt documented
 | flask-openapi3 over Flask | Auto-generated OpenAPI spec + Swagger UI + Pydantic validation | Good |
 | No frontend state library | Simplicity for data-fetch-display pattern | Good for current scale |
 
+## Current Milestone
+
+**v0.2.0 — Miscellaneous**
+
+A broad milestone covering product ideation features, new backend capabilities, code consistency improvements, and frontend UX polish. Organized into 10 phases spanning workflow automation, execution intelligence, bot authoring, analytics, enterprise integrations, specialized bots, resilience, API quality, code standards, and frontend quality.
+
+**Source:** Discovered work groups from `/grd:evolve` analysis across product-ideation, new-features, consistency, and usability dimensions.
+
 ---
-*Last updated: 2026-02-25 after initialization (auto + YOLO mode)*
+*Last updated: 2026-03-04 — v0.2.0 Miscellaneous milestone initialized*
