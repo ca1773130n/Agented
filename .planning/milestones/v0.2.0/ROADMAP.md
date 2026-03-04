@@ -55,6 +55,15 @@ Plans:
 
 **Verification Level:** proxy
 
+**Plans:** 5 plans
+
+Plans:
+- [ ] 08-01-PLAN.md -- Execution replay service + diff-aware context injection backend (EXE-01, EXE-02)
+- [ ] 08-02-PLAN.md -- Smart chunking service + conversation branching backend (EXE-03, EXE-04)
+- [ ] 08-03-PLAN.md -- Collaborative viewer service with presence and inline comments backend (EXE-05)
+- [ ] 08-04-PLAN.md -- Replay comparison and diff viewer frontend components (EXE-01, EXE-02)
+- [ ] 08-05-PLAN.md -- Presence, comments, chunk results, and branch navigator frontend components (EXE-03, EXE-04, EXE-05)
+
 **Success Criteria:**
 
 1. Replaying an execution with identical inputs produces a new execution whose output can be viewed side-by-side with the original in a diff view -- output differences are highlighted at the line level
@@ -75,6 +84,14 @@ Plans:
 
 **Verification Level:** proxy
 
+**Plans:** 4 plans
+
+Plans:
+- [ ] 09-01-PLAN.md -- Bot template marketplace backend + NL bot creator service (TPL-01, TPL-02)
+- [ ] 09-02-PLAN.md -- Prompt snippet library + version history enhancement + preview endpoint (TPL-03, TPL-04, TPL-05)
+- [ ] 09-03-PLAN.md -- Frontend: template marketplace, NL creator, snippet library views + API clients
+- [ ] 09-04-PLAN.md -- Frontend: version history + webhook test console components + backend tests
+
 **Success Criteria:**
 
 1. Template marketplace displays at least 5 curated bot configurations (PR reviewer, dependency updater, security scanner, changelog generator, test writer) and one-click deploy creates a fully configured, runnable bot
@@ -94,6 +111,15 @@ Plans:
 **Requirements:** ANA-01, ANA-02, ANA-03, ANA-04, ANA-05, ANA-06, ANA-07
 
 **Verification Level:** proxy
+
+**Plans:** 5 plans
+
+Plans:
+- [ ] 10-01-PLAN.md -- Analytics DB queries, service, and API routes (ANA-01, ANA-02, ANA-03)
+- [ ] 10-02-PLAN.md -- Health monitoring service and weekly team impact reports (ANA-04, ANA-05)
+- [ ] 10-03-PLAN.md -- Scheduling suggestions and budget enforcement extensions (ANA-06, ANA-07)
+- [ ] 10-04-PLAN.md -- Analytics frontend dashboards with Chart.js charts (ANA-01, ANA-02, ANA-03)
+- [ ] 10-05-PLAN.md -- Health, reports, and budget frontend views (ANA-04, ANA-05, ANA-06, ANA-07)
 
 **Success Criteria:**
 
@@ -264,6 +290,14 @@ Plans:
 **Requirements:** UX-01, UX-02, UX-03, UX-04, UX-05, UX-06, UX-07, UX-08, UX-09
 
 **Verification Level:** sanity
+
+**Plans:** 4 plans
+
+Plans:
+- [ ] 16-01-PLAN.md -- ErrorBoundary component, centralized API error handler, and sidebar loading coordination (UX-02, UX-04, UX-06, UX-08)
+- [ ] 16-02-PLAN.md -- Shared useEventSource composable and SSE consumer refactoring (UX-03)
+- [ ] 16-03-PLAN.md -- Environment validation plugin and OpenAPI documentation completion (UX-07, UX-09)
+- [ ] 16-04-PLAN.md -- Unit tests for ErrorBoundary, error-handler, and useEventSource (UX-01, UX-05)
 
 **Success Criteria:**
 
