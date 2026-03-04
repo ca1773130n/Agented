@@ -6,9 +6,12 @@ import AiChatPanel from '../components/ai/AiChatPanel.vue';
 import SketchClassification from '../components/sketches/SketchClassification.vue';
 import SketchRouting from '../components/sketches/SketchRouting.vue';
 import SketchStatusTracker from '../components/sketches/SketchStatusTracker.vue';
+import LoadingState from '../components/base/LoadingState.vue';
+import ErrorState from '../components/base/ErrorState.vue';
 import type { Sketch } from '../services/api/types';
 import type { ConversationMessage } from '../services/api';
 import { useToast } from '../composables/useToast';
+import { handleApiError } from '../services/api/error-handler';
 import { useWebMcpTool } from '../composables/useWebMcpTool';
 
 const router = useRouter();
@@ -42,6 +45,8 @@ const {
 } = useSketchChat();
 
 const inputText = ref('');
+const isLoading = ref(true);
+const loadError = ref<string | null>(null);
 
 useWebMcpTool({
   name: 'agented_sketch_chat_get_state',
@@ -160,14 +165,31 @@ watch(error, (val) => {
   }
 });
 
+async function loadInitialData() {
+  isLoading.value = true;
+  loadError.value = null;
+  try {
+    await Promise.all([loadProjects(), loadSketches()]);
+    // useSketchChat swallows errors into error.value; surface via loadError for retry UI
+    if (error.value) {
+      loadError.value = error.value;
+    }
+  } catch (err) {
+    loadError.value = handleApiError(err, showToast, 'Failed to load sketch data');
+  } finally {
+    isLoading.value = false;
+  }
+}
+
 onMounted(() => {
-  loadProjects();
-  loadSketches();
+  loadInitialData();
 });
 </script>
 
 <template>
-  <div class="sketch-chat-page">
+  <LoadingState v-if="isLoading" message="Loading sketches..." />
+  <ErrorState v-else-if="loadError" :message="loadError" @retry="loadInitialData" />
+  <div v-else class="sketch-chat-page">
     <!-- Left: Chat via AiChatPanel -->
     <div class="left-panel">
       <AiChatPanel
