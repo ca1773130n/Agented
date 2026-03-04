@@ -72,6 +72,7 @@ def stream_conversation(path: ConversationPath):
     """
 
     def generate():
+        """Yield SSE events from the command conversation subscription."""
         for event in CommandConversationService.subscribe(path.conv_id):
             yield event
 

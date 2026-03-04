@@ -280,11 +280,15 @@ def end_session(path: SessionPath):
 def stream_session(path: SessionPath):
     """Stream session output via Server-Sent Events (SSE).
 
-    Stub implementation: sends heartbeat events every 5 seconds.
-    Real content streaming will be added with AI backend integration.
+    SSE Protocol:
+    - Event 'data': {"type": "output", "content": str} -- output line from session
+    - Event 'data': {"type": "heartbeat"} -- keepalive sent every 5 seconds
+
+    Polls session output lines and emits them as SSE data events.
     """
 
     def generate():
+        """Yield SSE output and heartbeat events for the session stream."""
         while True:
             # Check for output lines
             lines = SuperAgentSessionService.get_output_lines(path.session_id)
@@ -322,10 +326,16 @@ def _generate_message_id() -> str:
 def stream_chat_sse(path: SessionPath):
     """Stream chat events via versioned SSE with cursor-based reconnection.
 
-    Reads Last-Event-ID from request headers for reconnection recovery.
-    Replays missed events from the event log when last_seq is provided.
-    Falls back to full_sync when client cursor is too old (evicted from log).
-    Sends heartbeat comments every 30 seconds to keep connection alive.
+    SSE Protocol:
+    - Event 'state_delta': {"type": str, "data": dict, "seq": int}
+      Delta types: message, content_delta, tool_call, finish, status_change, error
+    - Event 'full_sync': {"events": [dict]} -- replays all log entries when cursor
+      is too old (evicted from the capped event log)
+    - Comment heartbeat: sent every 30 seconds to keep proxies from closing
+
+    Supports Last-Event-ID header for cursor-based reconnection. On reconnect,
+    missed events are replayed from the event log. If the client's cursor has been
+    evicted, a full_sync event is sent instead.
     """
     from ..services.chat_state_service import ChatStateService
 
@@ -336,6 +346,7 @@ def stream_chat_sse(path: SessionPath):
         last_seq = 0
 
     def generate():
+        """Yield SSE state_delta events from the chat state subscription."""
         yield from ChatStateService.subscribe(path.session_id, last_seq)
 
     return Response(
@@ -631,10 +642,16 @@ def mark_message_read(path: MessagePath):
 
 @super_agents_bp.get("/<super_agent_id>/messages/stream")
 def stream_messages(path: SuperAgentPath):
-    """Stream message notifications via Server-Sent Events (SSE)."""
+    """Stream message notifications via Server-Sent Events (SSE).
+
+    SSE Protocol:
+    - Event 'message': {"id": str, "from": str, "content": str, "timestamp": str}
+      Delivers real-time inter-agent messages from the message bus.
+    """
     from ..services.agent_message_bus_service import AgentMessageBusService
 
     def generate():
+        """Yield SSE events from the agent message bus subscription."""
         yield from AgentMessageBusService.subscribe(path.super_agent_id)
 
     return Response(

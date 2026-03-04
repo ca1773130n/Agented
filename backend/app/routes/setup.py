@@ -61,6 +61,7 @@ def stream_setup(path: SetupExecutionPath):
         return {"error": "Setup execution not found"}, HTTPStatus.NOT_FOUND
 
     def generate():
+        """Yield SSE events from the setup execution subscription."""
         for event in SetupExecutionService.subscribe(path.execution_id):
             yield event
 

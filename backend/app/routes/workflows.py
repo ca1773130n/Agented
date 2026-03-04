@@ -175,12 +175,19 @@ def get_latest_version_endpoint(path: WorkflowPath):
 
 @workflows_bp.post("/<workflow_id>/run")
 def run_workflow(path: WorkflowPath):
-    """Run a workflow — dispatches to WorkflowExecutionService for DAG execution.
+    """Run a workflow -- dispatches to WorkflowExecutionService for DAG execution.
 
-    Optional request body fields:
-    - input_json (str): Initial input data for the workflow.
-    - timeout_seconds (int): Per-run timeout override. Overrides the timeout
-      set in the workflow graph settings for this execution only.
+    Request body (JSON):
+    - input_json (str, optional): Initial input data for the workflow as a
+      JSON string. This value is passed as the input to the first node(s) in
+      the DAG. The format of input_json depends on the entry node's expected
+      input schema -- typically a JSON object with keys matching the node's
+      declared input parameters.
+    - timeout_seconds (int, optional): Per-run timeout override in seconds.
+      Overrides the timeout set in the workflow graph settings for this
+      execution only. Default: uses the workflow's configured timeout.
+
+    Response: {"execution_id": str, "status": "started"|"error", ...}
     """
     from ..services.workflow_execution_service import WorkflowExecutionService
 
@@ -253,13 +260,17 @@ def cancel_workflow_execution(path: WorkflowExecutionIdPath):
 def stream_workflow_execution(path: WorkflowExecutionIdPath):
     """SSE endpoint for real-time workflow execution monitoring.
 
-    Returns Server-Sent Events with the following event types:
-    - status: Initial execution status with node_states
-    - node_start: A node transitioned to running
-    - node_complete: A node transitioned to completed
-    - node_failed: A node transitioned to failed
-    - execution_complete: Execution finished (completed/failed/cancelled)
-    - error: Execution not found
+    SSE Protocol:
+    - Event 'status': {"execution_id": str, "status": str, "node_states": dict}
+    - Event 'node_start': {"node_id": str, "status": "running"}
+    - Event 'node_complete': {"node_id": str, "status": "completed"}
+    - Event 'node_failed': {"node_id": str, "status": "failed"}
+    - Event 'execution_complete': {"status": "completed"|"failed"|"cancelled"}
+    - Event 'error': {"message": str}
+
+    Polls every 0.5 seconds for up to 5 minutes. Emits node state transitions
+    as they occur and terminates with execution_complete when the workflow
+    reaches a terminal state.
     """
     import json
     import time
@@ -269,6 +280,7 @@ def stream_workflow_execution(path: WorkflowExecutionIdPath):
     from ..services.workflow_execution_service import WorkflowExecutionService
 
     def generate():
+        """Yield SSE events polling workflow execution status until completion."""
         # Get initial status
         status = WorkflowExecutionService.get_execution_status(path.execution_id)
         if status is None:

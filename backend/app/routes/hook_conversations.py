@@ -69,6 +69,7 @@ def stream_conversation(path: ConversationPath):
     """
 
     def generate():
+        """Yield SSE events from the hook conversation subscription."""
         for event in HookConversationService.subscribe(path.conv_id):
             yield event
 

@@ -135,7 +135,29 @@ def get_trigger_status(path: TriggerPath):
 
 @triggers_bp.post("/<trigger_id>/run")
 def run_trigger(path: TriggerPath):
-    """Manually trigger a trigger to run."""
+    """Manually trigger a trigger to run.
+
+    Request body (JSON):
+    - message (str, optional): Custom message for the bot prompt.
+
+    Prompt Placeholder Syntax:
+    Trigger prompt templates support curly-brace placeholders that are
+    resolved at execution time. Known placeholders:
+    - {trigger_id}: The trigger's unique ID (e.g., "trg-abc123")
+    - {bot_id}: The associated bot's unique ID
+    - {paths}: Newline-separated list of file paths from the trigger config
+    - {message}: The message text (from request body or webhook payload)
+    - {pr_url}: Full URL to the pull request (GitHub trigger only)
+    - {pr_number}: PR number (GitHub trigger only)
+    - {pr_title}: PR title text (GitHub trigger only)
+    - {pr_author}: PR author username (GitHub trigger only)
+    - {repo_url}: Repository clone URL (GitHub trigger only)
+    - {repo_full_name}: Repository full name, e.g. "owner/repo" (GitHub trigger only)
+
+    Placeholders not applicable to the trigger type are left empty (not
+    replaced). Unknown placeholders (not in the list above) trigger a
+    warning log but are left as-is in the rendered prompt.
+    """
     data = request.get_json() or {}
     message = data.get("message", "")
     result, status = TriggerService.run(path.trigger_id, message)

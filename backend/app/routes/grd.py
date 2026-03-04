@@ -576,6 +576,11 @@ def project_chat_stream(path: ProjectIdPath):
 
     Resolves the manager super agent and its active session, then delegates
     to ChatStateService.subscribe() for SSE event delivery.
+
+    SSE Protocol:
+    - Event 'state_delta': {"type": str, "data": dict, "seq": int}
+    - Event 'full_sync': {"events": [dict]} -- sent on cursor eviction
+    Supports Last-Event-ID for cursor-based reconnection.
     """
     from ..services.chat_state_service import ChatStateService
 
@@ -604,6 +609,7 @@ def project_chat_stream(path: ProjectIdPath):
         last_seq = 0
 
     def generate():
+        """Yield SSE events from the project chat state subscription."""
         for event in ChatStateService.subscribe(session_id, last_seq=last_seq):
             yield event
 
@@ -701,9 +707,15 @@ def list_sessions(path: ProjectIdPath):
 
 @grd_bp.get("/<project_id>/sessions/<session_id>/stream")
 def stream_session(path: SessionPath):
-    """SSE endpoint for real-time session output streaming."""
+    """SSE endpoint for real-time session output streaming.
+
+    SSE Protocol:
+    - Event 'output': session output lines as they arrive
+    - Event 'status': session status updates (running, completed, failed)
+    """
 
     def generate():
+        """Yield SSE events from the project session subscription."""
         for event in ProjectSessionManager.subscribe(path.session_id):
             yield event
 

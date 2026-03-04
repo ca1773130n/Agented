@@ -100,6 +100,7 @@ def stream_connect(path: BackendConnectSessionPath):
         return {"error": "Session not found"}, HTTPStatus.NOT_FOUND
 
     def generate():
+        """Yield SSE events from the backend CLI session subscription."""
         for event in BackendCLIService.subscribe(path.session_id):
             yield event
 
@@ -190,6 +191,7 @@ def stream_backend_test(path: TestStreamPath):
     from ..services.backend_test_service import BackendTestService
 
     def generate():
+        """Yield SSE events from the backend test subscription."""
         for event in BackendTestService.subscribe_test(path.test_id):
             yield event
 

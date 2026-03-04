@@ -235,6 +235,7 @@ def stream_test(path: TestPath):
     """
 
     def generate():
+        """Yield SSE events from the skill test subscription."""
         for event in SkillsService.subscribe_test(path.test_id):
             yield event
 

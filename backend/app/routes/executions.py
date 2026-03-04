@@ -97,16 +97,19 @@ def get_execution(path: ExecutionPath):
 def stream_execution(path: ExecutionPath):
     """SSE endpoint for real-time log streaming.
 
-    Returns Server-Sent Events with the following event types:
-    - log: A log line (stdout or stderr)
-    - status: Execution status update
-    - complete: Execution finished
+    SSE Protocol:
+    - Event 'log': {"line": str, "stream": "stdout"|"stderr", "timestamp": str}
+    - Event 'status': {"status": "running"|"completed"|"failed"|"cancelled"}
+    - Event 'complete': {"exit_code": int, "duration_seconds": float}
+
+    Supports Last-Event-ID for reconnection replay (up to 500 buffered lines).
     """
     execution = ExecutionLogService.get_execution(path.execution_id)
     if not execution:
         return {"error": "Execution not found"}, HTTPStatus.NOT_FOUND
 
     def generate():
+        """Yield SSE events from the execution log subscription."""
         for event in ExecutionLogService.subscribe(path.execution_id):
             yield event
 
