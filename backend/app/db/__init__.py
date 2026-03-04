@@ -9,6 +9,14 @@ For new code, prefer importing from specific sub-modules:
   from app.db.connection import get_connection
 """
 
+# Analytics (cost, execution, effectiveness aggregation)
+from .analytics import (  # noqa: F401
+    get_cost_analytics,
+    get_effectiveness_analytics,
+    get_effectiveness_over_time,
+    get_execution_analytics,
+)
+
 # Infrastructure
 # Agents (includes conversations and design conversations)
 from .agents import (  # noqa: F401
