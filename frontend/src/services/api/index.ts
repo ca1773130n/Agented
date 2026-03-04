@@ -34,7 +34,6 @@ export { workflowApi, workflowExecutionApi } from './workflows';
 export { sketchApi } from './sketches';
 export { grdApi } from './grd';
 export { mcpServerApi } from './mcp-servers';
-export { analyticsApi } from './analytics';
 
 // Constant exports from types
 export { CLAUDE_MODELS, OPENCODE_MODELS } from './types';

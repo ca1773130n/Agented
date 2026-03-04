@@ -64,7 +64,7 @@ function toggleSection(section: string) {
 // Auto-expand the section matching the current route on initial load and route changes
 function autoExpandForRoute() {
   const name = String(route.name || '');
-  if (['dashboards', 'security-dashboard', 'pr-review-dashboard', 'trigger-dashboard', 'token-usage', 'products-summary', 'projects-summary', 'teams-summary', 'agents-summary', 'rotation-dashboard', 'health-dashboard', 'team-impact-report'].includes(name)) {
+  if (['dashboards', 'security-dashboard', 'pr-review-dashboard', 'trigger-dashboard', 'token-usage', 'products-summary', 'projects-summary', 'teams-summary', 'agents-summary', 'rotation-dashboard', 'analytics-dashboard', 'health-dashboard', 'team-impact-report'].includes(name)) {
     expandedSections.value.dashboards = true;
     expandedSections.value.watchTower = true;
   }
@@ -155,7 +155,7 @@ function sidebarActive(page: string): boolean {
 }
 
 function isDashboardSectionActive(): boolean {
-  return ['dashboards', 'security-dashboard', 'pr-review-dashboard', 'trigger-dashboard', 'token-usage', 'products-summary', 'projects-summary', 'teams-summary', 'agents-summary', 'rotation-dashboard', 'health-dashboard', 'team-impact-report'].includes(currentRouteName.value);
+  return ['dashboards', 'security-dashboard', 'pr-review-dashboard', 'trigger-dashboard', 'token-usage', 'products-summary', 'projects-summary', 'teams-summary', 'agents-summary', 'rotation-dashboard', 'analytics-dashboard', 'health-dashboard', 'team-impact-report'].includes(currentRouteName.value);
 }
 
 function isHistorySectionActive(): boolean {
@@ -370,6 +370,12 @@ function handleSidebarKeydown(e: KeyboardEvent) {
           :aria-current="sidebarActive('rotation-dashboard') ? 'page' : undefined"
           @click="navTo('rotation-dashboard')">
           Scheduling
+        </button>
+        <button type="button" class="submenu-item"
+          :class="{ active: sidebarActive('analytics-dashboard') }"
+          :aria-current="sidebarActive('analytics-dashboard') ? 'page' : undefined"
+          @click="navTo('analytics-dashboard')">
+          Analytics
         </button>
         <button type="button" class="submenu-item"
           :class="{ active: sidebarActive('health-dashboard') }"
