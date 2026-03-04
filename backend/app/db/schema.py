@@ -1313,6 +1313,27 @@ def create_fresh_schema(conn):
         )
     """)
 
+    # --- Health alerts table (v0.2.0: bot health monitoring) ---
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS health_alerts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            alert_type TEXT NOT NULL,
+            trigger_id TEXT NOT NULL,
+            message TEXT NOT NULL,
+            details TEXT,
+            severity TEXT DEFAULT 'warning',
+            acknowledged INTEGER DEFAULT 0,
+            created_at TEXT DEFAULT (datetime('now')),
+            FOREIGN KEY (trigger_id) REFERENCES triggers(id)
+        )
+    """)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_health_alerts_trigger ON health_alerts(trigger_id)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_health_alerts_created ON health_alerts(created_at)"
+    )
+
     # --- Webhook deduplication keys ---
     conn.execute("""
         CREATE TABLE IF NOT EXISTS webhook_dedup_keys (

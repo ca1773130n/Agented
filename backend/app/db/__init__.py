@@ -149,6 +149,15 @@ from .grd import (  # noqa: F401
     upsert_project_sync_state,
 )
 
+# Health alerts
+from .health_alerts import (  # noqa: F401
+    acknowledge_alert,
+    create_health_alert,
+    delete_old_alerts,
+    get_alert_count,
+    get_recent_alerts,
+)
+
 # Hooks
 from .hooks import (  # noqa: F401
     add_hook,

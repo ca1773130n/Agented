@@ -2873,6 +2873,29 @@ def _migrate_v56_add_workflow_approval_states(conn):
     )
 
 
+def _migrate_v57_add_health_alerts_table(conn):
+    """Add health_alerts table for bot health monitoring."""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS health_alerts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            alert_type TEXT NOT NULL,
+            trigger_id TEXT NOT NULL,
+            message TEXT NOT NULL,
+            details TEXT,
+            severity TEXT DEFAULT 'warning',
+            acknowledged INTEGER DEFAULT 0,
+            created_at TEXT DEFAULT (datetime('now')),
+            FOREIGN KEY (trigger_id) REFERENCES triggers(id)
+        )
+    """)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_health_alerts_trigger ON health_alerts(trigger_id)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_health_alerts_created ON health_alerts(created_at)"
+    )
+
+
 # =============================================================================
 # Versioned migration registry
 # =============================================================================
@@ -2937,4 +2960,5 @@ VERSIONED_MIGRATIONS = [
     (55, "webhook_dedup_keys", _migrate_v47_webhook_dedup_keys),
     # v0.2.0 migrations
     (56, "add_workflow_approval_states", _migrate_v56_add_workflow_approval_states),
+    (57, "add_health_alerts_table", _migrate_v57_add_health_alerts_table),
 ]
