@@ -203,6 +203,11 @@ def create_app(config=None):
 
         MonitoringService.init()
 
+        # Initialize health monitor service (depends on SchedulerService)
+        from .services.health_monitor_service import HealthMonitorService
+
+        HealthMonitorService.init()
+
         # Schedule periodic session usage collection (every 10 minutes)
         from .services.session_collection_service import SessionCollectionService
 

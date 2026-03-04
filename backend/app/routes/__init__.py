@@ -14,6 +14,7 @@ def register_blueprints(app):
     from .github_webhook import github_webhook_bp
     from .grd import grd_bp
     from .health import health_bp
+    from .health_monitor import health_monitor_bp
     from .hook_conversations import hook_conversations_bp
     from .hooks import hooks_bp
     from .marketplace import marketplace_bp
@@ -99,6 +100,7 @@ def register_blueprints(app):
             mcp_servers_bp,
             project_mcp_bp,
             product_owner_bp,
+            health_monitor_bp,
         ]
         for bp in admin_blueprints:
             limiter.limit("120/minute")(bp)
@@ -149,6 +151,7 @@ def register_blueprints(app):
     app.register_api(mcp_servers_bp)
     app.register_api(project_mcp_bp)
     app.register_api(product_owner_bp)
+    app.register_api(health_monitor_bp)
 
     # SPA catch-all: MUST be registered LAST so API routes take priority
     app.register_blueprint(spa_bp)
