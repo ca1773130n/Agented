@@ -1,5 +1,6 @@
 import { defineConfig, loadEnv } from 'vite'
 import vue from '@vitejs/plugin-vue'
+import { ValidateEnv } from '@julr/vite-plugin-validate-env'
 
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
@@ -7,7 +8,7 @@ export default defineConfig(({ mode }) => {
   const allowedHosts = env.VITE_ALLOWED_HOSTS?.split(',').filter(Boolean) || []
 
   return {
-    plugins: [vue()],
+    plugins: [vue(), ValidateEnv({ configFile: 'src/env' })],
     server: {
       host: '0.0.0.0',
       port: 3000,

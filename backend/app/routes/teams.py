@@ -309,6 +309,7 @@ def generate_team_config_stream():
         }, HTTPStatus.BAD_REQUEST
 
     def generate():
+        """Yield SSE events from the team configuration generation stream."""
         yield from TeamGenerationService.generate_streaming(description)
 
     return Response(

@@ -62,6 +62,7 @@ def stream_conversation(path: ConversationPath):
     """
 
     def generate():
+        """Yield SSE events from the agent conversation subscription."""
         for event in AgentConversationService.subscribe(path.conv_id):
             yield event
 
