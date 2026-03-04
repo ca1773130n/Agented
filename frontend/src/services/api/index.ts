@@ -34,6 +34,7 @@ export { workflowApi, workflowExecutionApi } from './workflows';
 export { sketchApi } from './sketches';
 export { grdApi } from './grd';
 export { mcpServerApi } from './mcp-servers';
+export { analyticsApi } from './analytics';
 
 // Constant exports from types
 export { CLAUDE_MODELS, OPENCODE_MODELS } from './types';
@@ -273,6 +274,14 @@ export type {
   McpServer,
   ProjectMcpServerDetail,
   McpSyncResult,
+
+  // Health Monitor & Analytics types
+  HealthAlert,
+  HealthAlertsResponse,
+  HealthStatusResponse,
+  WeeklyReport,
+  SchedulingSuggestion,
+  SchedulingSuggestionsResponse,
 } from './types';
 
 // GRD types (from grd module, not types module)

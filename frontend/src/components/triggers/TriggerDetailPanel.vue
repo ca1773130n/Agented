@@ -3,6 +3,7 @@ import { ref, computed } from 'vue';
 import type { Trigger, ProjectPath, PathType, SkillInfo, Project, Team, BudgetLimit } from '../../services/api';
 import { triggerApi, utilityApi, budgetApi, ApiError } from '../../services/api';
 import FallbackChainEditor from './FallbackChainEditor.vue';
+import SchedulingSuggestions from '../analytics/SchedulingSuggestions.vue';
 
 const props = defineProps<{
   selectedTrigger: Trigger;
@@ -296,6 +297,7 @@ async function deleteTriggerBudget() {
           <div v-if="selectedTrigger.next_run_at" class="schedule-next">Next run: {{ formatDate(selectedTrigger.next_run_at) }}</div>
           <div v-if="selectedTrigger.last_run_at" class="schedule-last">Last run: {{ formatDate(selectedTrigger.last_run_at) }}</div>
         </div>
+        <SchedulingSuggestions :triggerId="selectedTrigger.id" />
       </div>
 
       <!-- Webhook-specific fields -->

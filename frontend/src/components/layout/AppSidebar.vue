@@ -64,7 +64,7 @@ function toggleSection(section: string) {
 // Auto-expand the section matching the current route on initial load and route changes
 function autoExpandForRoute() {
   const name = String(route.name || '');
-  if (['dashboards', 'security-dashboard', 'pr-review-dashboard', 'trigger-dashboard', 'token-usage', 'products-summary', 'projects-summary', 'teams-summary', 'agents-summary', 'rotation-dashboard'].includes(name)) {
+  if (['dashboards', 'security-dashboard', 'pr-review-dashboard', 'trigger-dashboard', 'token-usage', 'products-summary', 'projects-summary', 'teams-summary', 'agents-summary', 'rotation-dashboard', 'health-dashboard', 'team-impact-report'].includes(name)) {
     expandedSections.value.dashboards = true;
     expandedSections.value.watchTower = true;
   }
@@ -155,7 +155,7 @@ function sidebarActive(page: string): boolean {
 }
 
 function isDashboardSectionActive(): boolean {
-  return ['dashboards', 'security-dashboard', 'pr-review-dashboard', 'trigger-dashboard', 'token-usage', 'products-summary', 'projects-summary', 'teams-summary', 'agents-summary', 'rotation-dashboard'].includes(currentRouteName.value);
+  return ['dashboards', 'security-dashboard', 'pr-review-dashboard', 'trigger-dashboard', 'token-usage', 'products-summary', 'projects-summary', 'teams-summary', 'agents-summary', 'rotation-dashboard', 'health-dashboard', 'team-impact-report'].includes(currentRouteName.value);
 }
 
 function isHistorySectionActive(): boolean {
@@ -370,6 +370,18 @@ function handleSidebarKeydown(e: KeyboardEvent) {
           :aria-current="sidebarActive('rotation-dashboard') ? 'page' : undefined"
           @click="navTo('rotation-dashboard')">
           Scheduling
+        </button>
+        <button type="button" class="submenu-item"
+          :class="{ active: sidebarActive('health-dashboard') }"
+          :aria-current="sidebarActive('health-dashboard') ? 'page' : undefined"
+          @click="navTo('health-dashboard')">
+          Bot Health
+        </button>
+        <button type="button" class="submenu-item"
+          :class="{ active: sidebarActive('team-impact-report') }"
+          :aria-current="sidebarActive('team-impact-report') ? 'page' : undefined"
+          @click="navTo('team-impact-report')">
+          Impact Report
         </button>
         <button v-for="b in props.customTriggers" :key="b.id" type="button" class="submenu-item"
           :class="{ active: currentRouteName === 'trigger-dashboard' && route.params.triggerId === b.id }"

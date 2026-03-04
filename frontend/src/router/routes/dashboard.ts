@@ -65,4 +65,16 @@ export const dashboardRoutes: RouteRecordRaw[] = [
     component: () => import('../../views/AnalyticsDashboard.vue'),
     meta: { title: 'Analytics Dashboard' },
   },
+  {
+    path: '/dashboards/health',
+    name: 'health-dashboard',
+    component: () => import('../../views/BotHealthDashboard.vue'),
+    meta: { title: 'Bot Health Monitor' },
+  },
+  {
+    path: '/dashboards/team-report',
+    name: 'team-impact-report',
+    component: () => import('../../views/TeamImpactReport.vue'),
+    meta: { title: 'Weekly Impact Report' },
+  },
 ];
