@@ -2961,6 +2961,27 @@ def _migrate_v59_add_bookmarks_table(conn):
         print("Created bookmarks table")
 
 
+def _migrate_v60_add_integrations_table(conn):
+    """v0.2.0: Add integrations table for external service adapters."""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS integrations (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            type TEXT NOT NULL,
+            config TEXT NOT NULL DEFAULT '{}',
+            trigger_id TEXT,
+            enabled INTEGER DEFAULT 1,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (trigger_id) REFERENCES triggers(id) ON DELETE SET NULL
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_integrations_type ON integrations(type)")
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_integrations_trigger ON integrations(trigger_id)"
+    )
+
+
 # =============================================================================
 # Versioned migration registry
 # =============================================================================
@@ -3029,4 +3050,5 @@ VERSIONED_MIGRATIONS = [
     (57, "add_rbac_and_audit_tables", _migrate_v57_add_rbac_and_audit_tables),
     (58, "add_secrets_table", _migrate_v58_add_secrets_table),
     (59, "add_bookmarks_table", _migrate_v59_add_bookmarks_table),
+    (60, "add_integrations_table", _migrate_v60_add_integrations_table),
 ]

@@ -1403,4 +1403,23 @@ def create_fresh_schema(conn):
         "CREATE INDEX IF NOT EXISTS idx_bookmarks_execution ON bookmarks(execution_id)"
     )
 
+    # --- Integrations ---
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS integrations (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            type TEXT NOT NULL,
+            config TEXT NOT NULL DEFAULT '{}',
+            trigger_id TEXT,
+            enabled INTEGER DEFAULT 1,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (trigger_id) REFERENCES triggers(id) ON DELETE SET NULL
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_integrations_type ON integrations(type)")
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_integrations_trigger ON integrations(trigger_id)"
+    )
+
     conn.commit()

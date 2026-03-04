@@ -152,6 +152,16 @@ from .grd import (  # noqa: F401
     upsert_project_sync_state,
 )
 
+# Integrations (external service adapters)
+from .integrations import (  # noqa: F401
+    create_integration,
+    delete_integration,
+    get_integration,
+    list_integrations,
+    list_integrations_for_trigger,
+    update_integration,
+)
+
 # Hooks
 from .hooks import (  # noqa: F401
     add_hook,
@@ -202,6 +212,8 @@ from .ids import (  # noqa: F401
     BOOKMARK_ID_LENGTH,
     BOOKMARK_ID_PREFIX,
     CONVERSATION_ID_LENGTH,
+    INTEGRATION_ID_LENGTH,
+    INTEGRATION_ID_PREFIX,
     CONVERSATION_ID_PREFIX,
     MCP_SERVER_ID_LENGTH,
     MCP_SERVER_ID_PREFIX,
@@ -249,6 +261,7 @@ from .ids import (  # noqa: F401
     WORKFLOW_ID_PREFIX,
     _generate_short_id,
     _get_unique_bookmark_id,
+    _get_unique_integration_id,
     _get_unique_agent_id,
     _get_unique_conversation_id,
     _get_unique_mcp_server_id,
@@ -273,6 +286,7 @@ from .ids import (  # noqa: F401
     _get_unique_workflow_execution_id,
     _get_unique_workflow_id,
     generate_bookmark_id,
+    generate_integration_id,
     generate_agent_id,
     generate_conversation_id,
     generate_execution_id,

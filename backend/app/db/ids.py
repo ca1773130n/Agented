@@ -79,6 +79,9 @@ SECRET_ID_LENGTH = 6
 BOOKMARK_ID_PREFIX = "bm-"
 BOOKMARK_ID_LENGTH = 6
 
+INTEGRATION_ID_PREFIX = "intg-"
+INTEGRATION_ID_LENGTH = 6
+
 
 # --- Generic helper ---
 
@@ -498,3 +501,19 @@ def _get_unique_bookmark_id(conn) -> str:
         cursor = conn.execute("SELECT id FROM bookmarks WHERE id = ?", (bid,))
         if cursor.fetchone() is None:
             return bid
+
+
+def generate_integration_id() -> str:
+    """Generate a unique integration ID like 'intg-abc123'."""
+    chars = string.ascii_lowercase + string.digits
+    random_part = "".join(secrets.choice(chars) for _ in range(INTEGRATION_ID_LENGTH))
+    return f"{INTEGRATION_ID_PREFIX}{random_part}"
+
+
+def _get_unique_integration_id(conn) -> str:
+    """Generate an integration ID that doesn't exist in the database."""
+    while True:
+        iid = generate_integration_id()
+        cursor = conn.execute("SELECT id FROM integrations WHERE id = ?", (iid,))
+        if cursor.fetchone() is None:
+            return iid
