@@ -96,7 +96,7 @@ export function formatApiError(status: number, serverMessage?: string): string {
  */
 export function handleApiError(
   error: unknown,
-  showToast: (msg: string, type: string) => void,
+  showToast: (msg: string, type: 'success' | 'error' | 'info' | 'infrastructure') => void,
   fallbackMessage?: string,
 ): string {
   let formatted: string;

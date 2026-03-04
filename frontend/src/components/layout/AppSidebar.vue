@@ -21,14 +21,19 @@ const props = withDefaults(defineProps<{
   collapsed?: boolean;
   isMobile?: boolean;
   mobileOpen?: boolean;
+  sidebarLoading?: boolean;
+  sidebarErrors?: Record<string, string | null>;
 }>(), {
   collapsed: false,
   isMobile: false,
   mobileOpen: false,
+  sidebarLoading: false,
+  sidebarErrors: () => ({}),
 });
 
 const emit = defineEmits<{
   closeMobile: [];
+  retrySidebarSection: [key: string];
 }>();
 
 // Collapsible sidebar sections -- derived from route state
@@ -317,8 +322,19 @@ function handleSidebarKeydown(e: KeyboardEvent) {
       </div>
     </div>
 
+    <div v-if="sidebarLoading" class="sidebar-loading">
+      <div class="sidebar-loading-spinner" />
+      <span>Loading...</span>
+    </div>
+
     <div class="sidebar-nav">
-      <div class="nav-section-label">Watch Tower</div>
+      <div class="nav-section-label">
+        Watch Tower
+        <span v-if="sidebarErrors?.triggers" class="section-error-badge" :title="sidebarErrors.triggers">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          <button class="section-retry-btn" @click.stop="emit('retrySidebarSection', 'triggers')">Retry</button>
+        </span>
+      </div>
 
       <!-- Dashboards (expandable) -->
       <button type="button" class="nav-group-toggle" :class="{ active: isDashboardSectionActive() }" :aria-expanded="expandedSections.dashboards" :aria-current="isDashboardSectionActive() ? 'page' : undefined" :title="isCollapsedDesktop() ? 'Dashboards' : undefined" @click="toggleSection( 'dashboards')">
@@ -374,7 +390,15 @@ function handleSidebarKeydown(e: KeyboardEvent) {
         <span class="nav-indicator"></span>
       </button>
 
-      <div class="nav-section-label">Organization</div>
+      <div class="nav-section-label">
+        Organization
+        <span v-if="sidebarErrors?.products || sidebarErrors?.projects || sidebarErrors?.teams" class="section-error-badge" :title="[sidebarErrors?.products && 'Products', sidebarErrors?.projects && 'Projects', sidebarErrors?.teams && 'Teams'].filter(Boolean).join(', ') + ' failed to load'">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          <button v-if="sidebarErrors?.products" class="section-retry-btn" @click.stop="emit('retrySidebarSection', 'products')">Retry</button>
+          <button v-if="sidebarErrors?.projects" class="section-retry-btn" @click.stop="emit('retrySidebarSection', 'projects')">Retry</button>
+          <button v-if="sidebarErrors?.teams" class="section-retry-btn" @click.stop="emit('retrySidebarSection', 'teams')">Retry</button>
+        </span>
+      </div>
       <!-- Products (expandable) -->
       <button type="button" class="nav-group-toggle" :class="{ active: isProductsSectionActive() }" :aria-expanded="expandedSections.products" :aria-current="isProductsSectionActive() ? 'page' : undefined" :title="isCollapsedDesktop() ? 'Products' : undefined" @click="toggleSection( 'products')">
         <span class="nav-icon">
@@ -529,7 +553,13 @@ function handleSidebarKeydown(e: KeyboardEvent) {
         </button>
       </div>
 
-      <div class="nav-section-label">Forge</div>
+      <div class="nav-section-label">
+        Forge
+        <span v-if="sidebarErrors?.plugins" class="section-error-badge" :title="sidebarErrors.plugins">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          <button class="section-retry-btn" @click.stop="emit('retrySidebarSection', 'plugins')">Retry</button>
+        </span>
+      </div>
 
       <!-- Workflows (expandable) -->
       <button type="button" class="nav-group-toggle" :class="{ active: isWorkflowsSectionActive() }" :aria-expanded="expandedSections.workflows" :aria-current="isWorkflowsSectionActive() ? 'page' : undefined" :title="isCollapsedDesktop() ? 'Workflows' : undefined" @click="toggleSection( 'workflows')">
@@ -790,7 +820,13 @@ function handleSidebarKeydown(e: KeyboardEvent) {
         </svg>
       </a>
 
-      <div class="nav-section-label">System</div>
+      <div class="nav-section-label">
+        System
+        <span v-if="sidebarErrors?.backends" class="section-error-badge" :title="sidebarErrors.backends">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          <button class="section-retry-btn" @click.stop="emit('retrySidebarSection', 'backends')">Retry</button>
+        </span>
+      </div>
       <!-- AI Backends (expandable) -->
       <button type="button" class="nav-group-toggle" :class="{ active: currentRouteName === 'ai-backends' || currentRouteName === 'backend-detail' }" :aria-expanded="expandedSections.aiBackends" :aria-current="(currentRouteName === 'ai-backends' || currentRouteName === 'backend-detail') ? 'page' : undefined" :title="isCollapsedDesktop() ? 'AI Backends' : undefined" @click="toggleSection( 'aiBackends')">
         <span class="nav-icon">
@@ -831,3 +867,61 @@ function handleSidebarKeydown(e: KeyboardEvent) {
     </div>
   </nav>
 </template>
+
+<style scoped>
+.sidebar-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 16px;
+  color: var(--text-tertiary);
+  font-size: 0.8rem;
+}
+
+.sidebar-loading-spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--border-default);
+  border-top-color: var(--accent-cyan);
+  border-radius: 50%;
+  animation: sidebar-spin 0.8s linear infinite;
+}
+
+@keyframes sidebar-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.section-error-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 4px;
+  color: var(--accent-amber);
+  vertical-align: middle;
+}
+
+.section-error-badge svg {
+  flex-shrink: 0;
+}
+
+.section-retry-btn {
+  font-size: 0.6rem;
+  font-weight: 600;
+  color: var(--accent-cyan);
+  background: none;
+  border: 1px solid var(--accent-cyan);
+  border-radius: 3px;
+  padding: 1px 4px;
+  cursor: pointer;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  transition: background var(--transition-fast);
+}
+
+.section-retry-btn:hover {
+  background: rgba(0, 212, 255, 0.1);
+}
+</style>
