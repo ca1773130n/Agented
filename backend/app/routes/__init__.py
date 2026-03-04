@@ -14,6 +14,7 @@ def register_blueprints(app):
     from .commands import commands_bp
     from .executions import executions_bp
     from .github_webhook import github_webhook_bp
+    from .gitops import gitops_bp
     from .grd import grd_bp
     from .health import health_bp
     from .hook_conversations import hook_conversations_bp
@@ -102,6 +103,7 @@ def register_blueprints(app):
             super_agent_exports_bp,
             workflows_bp,
             sketches_bp,
+            gitops_bp,
             grd_bp,
             rotation_bp,
             mcp_servers_bp,
@@ -157,6 +159,7 @@ def register_blueprints(app):
     app.register_api(super_agent_exports_bp)
     app.register_api(workflows_bp)
     app.register_api(sketches_bp)
+    app.register_api(gitops_bp)
     app.register_api(grd_bp)
     app.register_api(rotation_bp)
     app.register_api(mcp_servers_bp)
