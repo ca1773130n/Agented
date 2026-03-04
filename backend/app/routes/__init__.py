@@ -9,6 +9,7 @@ def register_blueprints(app):
     from .backends import backends_bp
     from .bookmarks import bookmarks_bp
     from .budgets import budgets_bp
+    from .campaigns import campaigns_bp
     from .command_conversations import command_conversations_bp
     from .config_export import config_export_bp
     from .commands import commands_bp
@@ -114,6 +115,7 @@ def register_blueprints(app):
             config_export_bp,
             bookmarks_bp,
             integrations_bp,
+            campaigns_bp,
         ]
         for bp in admin_blueprints:
             limiter.limit("120/minute")(bp)
@@ -171,6 +173,7 @@ def register_blueprints(app):
     app.register_api(bookmarks_bp)
     app.register_api(integrations_bp)
     app.register_api(slack_command_bp)
+    app.register_api(campaigns_bp)
 
     # SPA catch-all: MUST be registered LAST so API routes take priority
     app.register_blueprint(spa_bp)

@@ -164,6 +164,25 @@ class ExecutionLogService:
             },
         )
 
+        # Post-execution notification hook (INT-01, INT-02)
+        # Deferred import to avoid circular imports. NotificationService may not
+        # exist yet (plans execute in parallel), so ImportError is expected and
+        # logged at DEBUG. Other exceptions are unexpected and logged at WARNING.
+        try:
+            from .notification_service import NotificationService
+
+            trigger_id = execution.get("trigger_id") if execution else None
+            NotificationService.on_execution_complete(
+                execution_id=execution_id,
+                trigger_id=trigger_id,
+                status=status,
+                duration_ms=duration_ms,
+            )
+        except ImportError:
+            logger.debug("NotificationService not available, skipping post-execution hook")
+        except Exception as e:
+            logger.warning("Post-execution hook failed: %s", e)
+
         # Cleanup buffers, subscribers, and start times
         with cls._lock:
             cls._log_buffers.pop(execution_id, None)
