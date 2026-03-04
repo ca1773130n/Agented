@@ -140,6 +140,13 @@ Plans:
 
 **Verification Level:** proxy
 
+**Plans:** 3 plans
+
+Plans:
+- [ ] 12-01-PLAN.md -- Predefined trigger definitions (7 bots), FTS5 schema + sync triggers, ExecutionSearchService + API
+- [ ] 12-02-PLAN.md -- Claude skill instruction files for all 7 bots + SpecializedBotService helpers
+- [ ] 12-03-PLAN.md -- Specialized bot API routes, frontend API client, ExecutionSearchPage + navigation
+
 **Success Criteria:**
 
 1. Dependency vulnerability bot scans at least one package manifest (package.json, requirements.txt, or Cargo.toml), cross-references against CVE databases, scores exploitability, and produces a prioritized finding list with fix recommendations
@@ -161,6 +168,14 @@ Plans:
 **Requirements:** RES-01, RES-02, RES-03, RES-04, RES-05, RES-06, RES-07, RES-08, RES-09
 
 **Verification Level:** proxy
+
+**Plans:** 4 plans
+
+Plans:
+- [ ] 13-01-PLAN.md -- Circuit breaker state machine and transient failure retry mechanism
+- [ ] 13-02-PLAN.md -- SQLite-backed execution queue with per-trigger concurrency caps
+- [ ] 13-03-PLAN.md -- Pause/resume via SIGSTOP/SIGCONT and bulk cancellation API
+- [ ] 13-04-PLAN.md -- Unified webhook validation service and workflow execution analytics
 
 **Success Criteria:**
 
@@ -186,6 +201,14 @@ Plans:
 
 **Verification Level:** proxy
 
+**Plans:** 4 plans
+
+Plans:
+- [ ] 14-01-PLAN.md -- Error response unification, rate limit 429 verification, request ID extension
+- [ ] 14-02-PLAN.md -- Universal pagination on all list endpoints and execution filtering
+- [ ] 14-03-PLAN.md -- Dry-run dispatch, cost estimation, and cron expression support
+- [ ] 14-04-PLAN.md -- Bulk operations for entities and enhanced DAG validation
+
 **Success Criteria:**
 
 1. Dry-run mode for trigger dispatch renders the prompt and shows the CLI command without spawning a subprocess -- response includes rendered prompt, target CLI, and estimated token count
@@ -210,6 +233,13 @@ Plans:
 **Requirements:** CON-01, CON-02, CON-03, CON-04, CON-05, CON-06, CON-07, CON-08, CON-09
 
 **Verification Level:** sanity
+
+**Plans:** 3 plans
+
+Plans:
+- [ ] 15-01-PLAN.md -- Backend logging, config constants, and ID factory consolidation (CON-01, CON-04, CON-07)
+- [ ] 15-02-PLAN.md -- Frontend type consolidation and useAsyncState composable (CON-08, CON-09)
+- [ ] 15-03-PLAN.md -- Route ErrorResponse adoption, DB naming, type annotations, and exception handling (CON-02, CON-03, CON-05, CON-06)
 
 **Success Criteria:**
 
