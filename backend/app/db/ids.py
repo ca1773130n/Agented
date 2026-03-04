@@ -70,6 +70,9 @@ PRODUCT_MILESTONE_ID_LENGTH = 6
 MCP_SERVER_ID_PREFIX = "mcp-"
 MCP_SERVER_ID_LENGTH = 6
 
+ROLE_ID_PREFIX = "role-"
+ROLE_ID_LENGTH = 6
+
 
 # --- Generic helper ---
 
@@ -368,6 +371,13 @@ def generate_mcp_server_id() -> str:
     return f"{MCP_SERVER_ID_PREFIX}{random_part}"
 
 
+def generate_role_id() -> str:
+    """Generate a unique role ID like 'role-abc123'."""
+    chars = string.ascii_lowercase + string.digits
+    random_part = "".join(secrets.choice(chars) for _ in range(ROLE_ID_LENGTH))
+    return f"{ROLE_ID_PREFIX}{random_part}"
+
+
 # --- v0.4.0 Collision-safe ID generators ---
 
 
@@ -441,3 +451,12 @@ def _get_unique_mcp_server_id(conn) -> str:
         cursor = conn.execute("SELECT id FROM mcp_servers WHERE id = ?", (mid,))
         if cursor.fetchone() is None:
             return mid
+
+
+def _get_unique_role_id(conn) -> str:
+    """Generate a role ID that doesn't exist in the database."""
+    while True:
+        rid = generate_role_id()
+        cursor = conn.execute("SELECT id FROM user_roles WHERE id = ?", (rid,))
+        if cursor.fetchone() is None:
+            return rid

@@ -2873,6 +2873,45 @@ def _migrate_v56_add_workflow_approval_states(conn):
     )
 
 
+def _migrate_v57_add_rbac_and_audit_tables(conn):
+    """Add user_roles table for RBAC and audit_events table for persistent audit trail."""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS user_roles (
+            id TEXT PRIMARY KEY,
+            api_key TEXT NOT NULL UNIQUE,
+            label TEXT NOT NULL DEFAULT '',
+            role TEXT NOT NULL DEFAULT 'viewer'
+                CHECK(role IN ('viewer', 'operator', 'editor', 'admin')),
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_user_roles_api_key ON user_roles(api_key)")
+
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS audit_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            action TEXT NOT NULL,
+            entity_type TEXT NOT NULL,
+            entity_id TEXT NOT NULL,
+            outcome TEXT NOT NULL,
+            actor TEXT NOT NULL DEFAULT 'system',
+            details TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_audit_events_entity "
+        "ON audit_events(entity_type, entity_id)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_audit_events_actor ON audit_events(actor)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_audit_events_created ON audit_events(created_at DESC)"
+    )
+
+
 # =============================================================================
 # Versioned migration registry
 # =============================================================================
@@ -2937,4 +2976,6 @@ VERSIONED_MIGRATIONS = [
     (55, "webhook_dedup_keys", _migrate_v47_webhook_dedup_keys),
     # v0.2.0 migrations
     (56, "add_workflow_approval_states", _migrate_v56_add_workflow_approval_states),
+    # v0.2.0 enterprise governance migrations
+    (57, "add_rbac_and_audit_tables", _migrate_v57_add_rbac_and_audit_tables),
 ]

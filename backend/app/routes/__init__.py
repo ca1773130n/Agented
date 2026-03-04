@@ -24,6 +24,7 @@ def register_blueprints(app):
     from .plugin_exports import plugin_exports_bp
     from .plugins import plugins_bp
     from .pr_reviews import pr_reviews_bp
+    from .rbac import rbac_bp
     from .product_owner import product_owner_bp
     from .products import products_bp
     from .projects import projects_bp
@@ -99,6 +100,7 @@ def register_blueprints(app):
             mcp_servers_bp,
             project_mcp_bp,
             product_owner_bp,
+            rbac_bp,
         ]
         for bp in admin_blueprints:
             limiter.limit("120/minute")(bp)
@@ -149,6 +151,7 @@ def register_blueprints(app):
     app.register_api(mcp_servers_bp)
     app.register_api(project_mcp_bp)
     app.register_api(product_owner_bp)
+    app.register_api(rbac_bp)
 
     # SPA catch-all: MUST be registered LAST so API routes take priority
     app.register_blueprint(spa_bp)

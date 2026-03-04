@@ -153,6 +153,18 @@ from .hooks import (  # noqa: F401
     update_hook,
 )
 
+# RBAC (user roles)
+from .rbac import (  # noqa: F401
+    VALID_ROLES,
+    count_user_roles,
+    create_user_role,
+    delete_user_role,
+    get_role_for_api_key,
+    get_user_role,
+    list_user_roles,
+    update_user_role,
+)
+
 # ID generators and constants
 from .ids import (  # noqa: F401
     AGENT_ID_LENGTH,
@@ -161,6 +173,8 @@ from .ids import (  # noqa: F401
     CONVERSATION_ID_PREFIX,
     MCP_SERVER_ID_LENGTH,
     MCP_SERVER_ID_PREFIX,
+    ROLE_ID_LENGTH,
+    ROLE_ID_PREFIX,
     MESSAGE_ID_LENGTH,
     MESSAGE_ID_PREFIX,
     MILESTONE_ID_LENGTH,
@@ -203,6 +217,7 @@ from .ids import (  # noqa: F401
     _get_unique_agent_id,
     _get_unique_conversation_id,
     _get_unique_mcp_server_id,
+    _get_unique_role_id,
     _get_unique_message_id,
     _get_unique_milestone_id,
     _get_unique_phase_id,
@@ -225,6 +240,7 @@ from .ids import (  # noqa: F401
     generate_conversation_id,
     generate_execution_id,
     generate_mcp_server_id,
+    generate_role_id,
     generate_message_id,
     generate_milestone_id,
     generate_phase_id,

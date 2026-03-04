@@ -1326,4 +1326,42 @@ def create_fresh_schema(conn):
         "CREATE INDEX IF NOT EXISTS idx_webhook_dedup_created ON webhook_dedup_keys(created_at)"
     )
 
+    # user_roles -- RBAC role assignments mapped to API keys
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS user_roles (
+            id TEXT PRIMARY KEY,
+            api_key TEXT NOT NULL UNIQUE,
+            label TEXT NOT NULL DEFAULT '',
+            role TEXT NOT NULL DEFAULT 'viewer'
+                CHECK(role IN ('viewer', 'operator', 'editor', 'admin')),
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_user_roles_api_key ON user_roles(api_key)")
+
+    # audit_events -- persistent audit trail for all configuration changes
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS audit_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            action TEXT NOT NULL,
+            entity_type TEXT NOT NULL,
+            entity_id TEXT NOT NULL,
+            outcome TEXT NOT NULL,
+            actor TEXT NOT NULL DEFAULT 'system',
+            details TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_audit_events_entity "
+        "ON audit_events(entity_type, entity_id)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_audit_events_actor ON audit_events(actor)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_audit_events_created ON audit_events(created_at DESC)"
+    )
+
     conn.commit()
