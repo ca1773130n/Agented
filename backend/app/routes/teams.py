@@ -49,6 +49,7 @@ from ..models.team import VALID_EDGE_TYPES, VALID_TOPOLOGIES
 from ..services.team_generation_service import TeamGenerationService
 
 # services
+from ..services.rbac_service import require_role
 from ..services.team_service import TeamService
 
 tag = Tag(name="teams", description="Team management operations")
@@ -179,6 +180,7 @@ def _auto_generate_topology_edges(team_id: str, topology: str, topology_config=N
 
 
 @teams_bp.get("/")
+@require_role("viewer", "operator", "editor", "admin")
 def list_teams(query: PaginationQuery):
     """List all teams with member counts and optional pagination."""
     total_count = count_teams()
@@ -187,6 +189,7 @@ def list_teams(query: PaginationQuery):
 
 
 @teams_bp.post("/")
+@require_role("admin")
 def create_team():
     """Create a new team."""
     data = request.get_json()
@@ -227,6 +230,7 @@ def create_team():
 
 
 @teams_bp.post("/generate")
+@require_role("editor", "admin")
 def generate_team_config():
     """Generate a team configuration from a natural language description using AI.
 
@@ -278,6 +282,7 @@ def generate_team_config():
 
 
 @teams_bp.get("/generate/<job_id>")
+@require_role("viewer", "operator", "editor", "admin")
 def get_generation_job(path: GenerateJobPath):
     """Poll the result of a team generation job started by POST /generate."""
     with _jobs_lock:
@@ -296,6 +301,7 @@ def get_generation_job(path: GenerateJobPath):
 
 
 @teams_bp.post("/generate/stream")
+@require_role("editor", "admin")
 def generate_team_config_stream():
     """Stream team configuration generation with real-time AI output via SSE."""
     data = request.get_json()
@@ -324,6 +330,7 @@ def generate_team_config_stream():
 
 
 @teams_bp.get("/<team_id>")
+@require_role("viewer", "operator", "editor", "admin")
 def get_team_detail_endpoint(path: TeamPath):
     """Get team details with members."""
     team = get_team_detail(path.team_id)
@@ -333,6 +340,7 @@ def get_team_detail_endpoint(path: TeamPath):
 
 
 @teams_bp.put("/<team_id>")
+@require_role("editor", "admin")
 def update_team_endpoint(path: TeamPath):
     """Update a team."""
     data = request.get_json()
@@ -364,6 +372,7 @@ def update_team_endpoint(path: TeamPath):
 
 
 @teams_bp.delete("/<team_id>")
+@require_role("admin")
 def delete_team_endpoint(path: TeamPath):
     """Delete a team."""
     if not delete_team(path.team_id):
@@ -373,6 +382,7 @@ def delete_team_endpoint(path: TeamPath):
 
 # Member routes
 @teams_bp.get("/<team_id>/members")
+@require_role("viewer", "operator", "editor", "admin")
 def list_members(path: TeamPath):
     """List team members."""
     members = get_team_members(path.team_id)
@@ -380,6 +390,7 @@ def list_members(path: TeamPath):
 
 
 @teams_bp.post("/<team_id>/members")
+@require_role("admin")
 def add_member(path: TeamPath):
     """Add a member to the team."""
     data = request.get_json()
@@ -415,6 +426,7 @@ def add_member(path: TeamPath):
 
 
 @teams_bp.put("/<team_id>/members/<int:member_id>")
+@require_role("admin")
 def update_member(path: MemberPath):
     """Update a team member."""
     data = request.get_json()
@@ -438,6 +450,7 @@ def update_member(path: MemberPath):
 
 
 @teams_bp.delete("/<team_id>/members/<int:member_id>")
+@require_role("admin")
 def delete_member(path: MemberPath):
     """Remove a member from the team."""
     if not remove_team_member(path.member_id):
@@ -451,6 +464,7 @@ def delete_member(path: MemberPath):
 
 
 @teams_bp.get("/<team_id>/connections")
+@require_role("viewer", "operator", "editor", "admin")
 def list_team_connections(path: TeamPath):
     """List inter-team connections for a team."""
     from ..db.rotations import get_team_connections
@@ -460,6 +474,7 @@ def list_team_connections(path: TeamPath):
 
 
 @teams_bp.post("/<team_id>/connections")
+@require_role("admin")
 def create_team_connection(path: TeamPath, body: TeamConnectionBody):
     """Create an inter-team connection."""
     from ..db.rotations import add_team_connection
@@ -476,6 +491,7 @@ def create_team_connection(path: TeamPath, body: TeamConnectionBody):
 
 
 @teams_bp.delete("/<team_id>/connections/<int:connection_id>")
+@require_role("admin")
 def remove_team_connection(path: ConnectionPath):
     """Delete an inter-team connection."""
     from ..db.rotations import delete_team_connection
@@ -491,6 +507,7 @@ def remove_team_connection(path: ConnectionPath):
 
 
 @teams_bp.post("/<team_id>/agents/<agent_id>/assignments")
+@require_role("admin")
 def add_agent_assignment(path: TeamAgentPath):
     """Add an entity assignment (skill/command/hook/rule) for an agent within a team."""
     team = get_team(path.team_id)
@@ -537,6 +554,7 @@ def add_agent_assignment(path: TeamAgentPath):
 
 
 @teams_bp.get("/<team_id>/agents/<agent_id>/assignments")
+@require_role("viewer", "operator", "editor", "admin")
 def list_agent_assignments(path: TeamAgentPath):
     """List assignments for an agent within a team."""
     assignments = get_team_agent_assignments(path.team_id, path.agent_id)
@@ -544,6 +562,7 @@ def list_agent_assignments(path: TeamAgentPath):
 
 
 @teams_bp.get("/<team_id>/assignments")
+@require_role("viewer", "operator", "editor", "admin")
 def list_team_assignments(path: TeamPath):
     """List all assignments for a team across all agents."""
     assignments = get_team_agent_assignments(path.team_id)
@@ -551,6 +570,7 @@ def list_team_assignments(path: TeamPath):
 
 
 @teams_bp.delete("/<team_id>/assignments/<int:assignment_id>")
+@require_role("admin")
 def delete_assignment(path: AssignmentPath):
     """Delete a single assignment."""
     if not delete_team_agent_assignment(path.assignment_id):
@@ -559,6 +579,7 @@ def delete_assignment(path: AssignmentPath):
 
 
 @teams_bp.delete("/<team_id>/agents/<agent_id>/assignments")
+@require_role("admin")
 def bulk_delete_agent_assignments(path: TeamAgentPath):
     """Bulk delete assignments for an agent in a team. Optional query param entity_type."""
     entity_type = request.args.get("entity_type")
@@ -579,6 +600,7 @@ def bulk_delete_agent_assignments(path: TeamAgentPath):
 
 
 @teams_bp.get("/<team_id>/edges")
+@require_role("viewer", "operator", "editor", "admin")
 def list_edges(path: TeamPath):
     """List all edges for a team."""
     edges = get_team_edges(path.team_id)
@@ -586,6 +608,7 @@ def list_edges(path: TeamPath):
 
 
 @teams_bp.post("/<team_id>/edges")
+@require_role("editor", "admin")
 def create_edge(path: TeamPath):
     """Create a directed edge between two team members."""
     data = request.get_json()
@@ -624,6 +647,7 @@ def create_edge(path: TeamPath):
 
 
 @teams_bp.delete("/<team_id>/edges/<int:edge_id>")
+@require_role("editor", "admin")
 def delete_edge(path: EdgePath):
     """Delete a single edge."""
     if not delete_team_edge(path.edge_id):
@@ -632,6 +656,7 @@ def delete_edge(path: EdgePath):
 
 
 @teams_bp.delete("/<team_id>/edges")
+@require_role("editor", "admin")
 def bulk_delete_edges(path: TeamPath):
     """Bulk delete all edges for a team."""
     deleted_count = delete_team_edges_by_team(path.team_id)
@@ -647,6 +672,7 @@ def bulk_delete_edges(path: TeamPath):
 
 
 @teams_bp.put("/<team_id>/topology")
+@require_role("editor", "admin")
 def update_topology(path: TeamPath, body: TeamTopologyBody):
     """Update team topology configuration."""
     team = get_team(path.team_id)
@@ -707,6 +733,7 @@ def update_topology(path: TeamPath, body: TeamTopologyBody):
 
 
 @teams_bp.put("/<team_id>/trigger")
+@require_role("editor", "admin")
 def update_trigger(path: TeamPath, body: TeamTriggerBody):
     """Update team trigger configuration."""
     team = get_team(path.team_id)
@@ -747,6 +774,7 @@ def update_trigger(path: TeamPath, body: TeamTriggerBody):
 
 
 @teams_bp.post("/<team_id>/run")
+@require_role("operator", "editor", "admin")
 def manual_run(path: TeamPath):
     """Manually trigger a team execution."""
     team = get_team(path.team_id)

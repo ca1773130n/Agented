@@ -226,3 +226,147 @@ class TestRequireRoleDecorator:
         rbac_events = [e for e in events if e.get("action") == "rbac.denied"]
         assert len(rbac_events) > 0
         assert rbac_events[0]["outcome"] == "denied"
+
+
+# =============================================================================
+# Integration tests: RBAC on existing trigger/team routes
+# =============================================================================
+
+
+class TestRBACOnTriggerRoutes:
+    """Test RBAC enforcement on existing trigger management routes."""
+
+    def test_viewer_cannot_create_trigger(self, client, isolated_db):
+        """Viewer blocked from POST /admin/triggers/."""
+        create_user_role("key-trig-viewer", "Viewer", "viewer")
+        resp = client.post(
+            "/admin/triggers/",
+            json={"name": "test", "prompt_template": "test"},
+            headers={"X-API-Key": "key-trig-viewer"},
+        )
+        assert resp.status_code == 403
+
+    def test_operator_cannot_update_trigger(self, client, isolated_db):
+        """Operator blocked from PUT /admin/triggers/<id>."""
+        create_user_role("key-trig-op", "Operator", "operator")
+        resp = client.put(
+            "/admin/triggers/trig-abc123",
+            json={"name": "updated"},
+            headers={"X-API-Key": "key-trig-op"},
+        )
+        assert resp.status_code == 403
+
+    def test_editor_can_create_trigger(self, client, isolated_db):
+        """Editor can POST /admin/triggers/."""
+        create_user_role("key-trig-editor", "Editor", "editor")
+        resp = client.post(
+            "/admin/triggers/",
+            json={"name": "test-trigger", "prompt_template": "test prompt"},
+            headers={"X-API-Key": "key-trig-editor"},
+        )
+        # Should not be 403 -- might be 201 or 400 depending on validation
+        assert resp.status_code != 403
+
+    def test_viewer_can_list_triggers(self, client, isolated_db):
+        """Viewer can GET /admin/triggers/."""
+        create_user_role("key-trig-viewer-list", "Viewer", "viewer")
+        resp = client.get(
+            "/admin/triggers/",
+            headers={"X-API-Key": "key-trig-viewer-list"},
+        )
+        assert resp.status_code == 200
+
+    def test_viewer_cannot_delete_trigger(self, client, isolated_db):
+        """Viewer blocked from DELETE /admin/triggers/<id>."""
+        create_user_role("key-trig-viewer-del", "Viewer", "viewer")
+        resp = client.delete(
+            "/admin/triggers/trig-abc123",
+            headers={"X-API-Key": "key-trig-viewer-del"},
+        )
+        assert resp.status_code == 403
+
+    def test_viewer_cannot_run_trigger(self, client, isolated_db):
+        """Viewer blocked from POST /admin/triggers/<id>/run (requires operator+)."""
+        create_user_role("key-trig-viewer-run", "Viewer", "viewer")
+        resp = client.post(
+            "/admin/triggers/bot-security/run",
+            json={},
+            headers={"X-API-Key": "key-trig-viewer-run"},
+        )
+        assert resp.status_code == 403
+
+    def test_no_roles_allows_all(self, client, isolated_db):
+        """When no roles exist (bootstrap mode), all requests pass through."""
+        assert count_user_roles() == 0
+        resp = client.get("/admin/triggers/")
+        assert resp.status_code == 200
+        resp = client.post(
+            "/admin/triggers/",
+            json={"name": "test", "prompt_template": "test"},
+        )
+        # Should not be 403 in bootstrap mode
+        assert resp.status_code != 403
+
+
+class TestRBACOnTeamRoutes:
+    """Test RBAC enforcement on existing team management routes."""
+
+    def test_viewer_cannot_create_team(self, client, isolated_db):
+        """Viewer blocked from POST /admin/teams/."""
+        create_user_role("key-team-viewer", "Viewer", "viewer")
+        resp = client.post(
+            "/admin/teams/",
+            json={"name": "Test Team"},
+            headers={"X-API-Key": "key-team-viewer"},
+        )
+        assert resp.status_code == 403
+
+    def test_editor_cannot_delete_team(self, client, isolated_db):
+        """Editor blocked from DELETE /admin/teams/<id> (admin only)."""
+        create_user_role("key-team-editor", "Editor", "editor")
+        resp = client.delete(
+            "/admin/teams/team-abc123",
+            headers={"X-API-Key": "key-team-editor"},
+        )
+        assert resp.status_code == 403
+
+    def test_editor_can_update_team(self, client, isolated_db):
+        """Editor can PUT /admin/teams/<id>."""
+        create_user_role("key-team-editor-up", "Editor", "editor")
+        resp = client.put(
+            "/admin/teams/team-abc123",
+            json={"name": "Updated"},
+            headers={"X-API-Key": "key-team-editor-up"},
+        )
+        # Not 403 -- might be 404 if team doesn't exist
+        assert resp.status_code != 403
+
+    def test_viewer_can_list_teams(self, client, isolated_db):
+        """Viewer can GET /admin/teams/."""
+        create_user_role("key-team-viewer-list", "Viewer", "viewer")
+        resp = client.get(
+            "/admin/teams/",
+            headers={"X-API-Key": "key-team-viewer-list"},
+        )
+        assert resp.status_code == 200
+
+    def test_editor_cannot_manage_members(self, client, isolated_db):
+        """Editor blocked from POST /admin/teams/<id>/members (admin only)."""
+        create_user_role("key-team-editor-mem", "Editor", "editor")
+        resp = client.post(
+            "/admin/teams/team-abc123/members",
+            json={"name": "New Member"},
+            headers={"X-API-Key": "key-team-editor-mem"},
+        )
+        assert resp.status_code == 403
+
+    def test_admin_can_manage_members(self, client, isolated_db):
+        """Admin can POST /admin/teams/<id>/members."""
+        create_user_role("key-team-admin", "Admin", "admin")
+        resp = client.post(
+            "/admin/teams/team-abc123/members",
+            json={"name": "New Member"},
+            headers={"X-API-Key": "key-team-admin"},
+        )
+        # Not 403 -- might be 500 if team doesn't exist, that's fine
+        assert resp.status_code != 403
