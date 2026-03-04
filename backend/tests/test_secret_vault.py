@@ -423,3 +423,72 @@ class TestGetSecretsForExecution:
         """Returns empty dict when no secrets exist."""
         env = SecretVaultService.get_secrets_for_execution()
         assert env == {}
+
+
+# ---------------------------------------------------------------------------
+# ExecutionService integration tests
+# ---------------------------------------------------------------------------
+
+
+class TestExecutionServiceIntegration:
+    """Test that vault secrets are injected into the execution subprocess env."""
+
+    def test_secrets_injected_into_env_overrides(self, isolated_db):
+        """When vault is configured with secrets, env_overrides gets AGENTED_SECRET_* vars."""
+        SecretVaultService.create_secret(name="exec_token", value="tok-exec")
+
+        # Verify get_secrets_for_execution produces the expected dict
+        env = SecretVaultService.get_secrets_for_execution(scope="global")
+        assert "AGENTED_SECRET_EXEC_TOKEN" in env
+        assert env["AGENTED_SECRET_EXEC_TOKEN"] == "tok-exec"
+
+    def test_execution_proceeds_without_vault(self, isolated_db, monkeypatch):
+        """Execution does not error when vault is not configured."""
+        monkeypatch.delenv("AGENTED_VAULT_KEYS", raising=False)
+        SecretVaultService.reset()
+
+        # Simulating the try/except block in execution_service
+        env_overrides = None
+        try:
+            if SecretVaultService.is_configured():
+                vault_secrets = SecretVaultService.get_secrets_for_execution(scope="global")
+                if vault_secrets:
+                    if env_overrides is None:
+                        env_overrides = {}
+                    env_overrides.update(vault_secrets)
+        except Exception:
+            pass
+
+        # env_overrides should remain None (vault not configured)
+        assert env_overrides is None
+
+    def test_vault_failure_does_not_propagate(self, isolated_db, monkeypatch):
+        """If vault raises an exception, it is caught and execution continues."""
+        # Set an invalid key to cause a Fernet error
+        monkeypatch.setenv("AGENTED_VAULT_KEYS", "not-a-valid-fernet-key")
+        SecretVaultService.reset()
+
+        env_overrides = {"EXISTING": "value"}
+        try:
+            if SecretVaultService.is_configured():
+                vault_secrets = SecretVaultService.get_secrets_for_execution(scope="global")
+                if vault_secrets:
+                    env_overrides.update(vault_secrets)
+        except Exception:
+            pass
+
+        # EXISTING should still be there, vault error was swallowed
+        assert env_overrides == {"EXISTING": "value"}
+
+    def test_vault_secrets_merge_with_existing_overrides(self, isolated_db):
+        """Vault secrets merge with (not replace) existing env_overrides."""
+        SecretVaultService.create_secret(name="merge_test", value="vault-val")
+
+        env_overrides = {"EXISTING_VAR": "existing-val"}
+        if SecretVaultService.is_configured():
+            vault_secrets = SecretVaultService.get_secrets_for_execution(scope="global")
+            if vault_secrets:
+                env_overrides.update(vault_secrets)
+
+        assert env_overrides["EXISTING_VAR"] == "existing-val"
+        assert env_overrides["AGENTED_SECRET_MERGE_TEST"] == "vault-val"

@@ -696,6 +696,19 @@ class ExecutionService:
                     exc_info=True,
                 )
 
+            # Inject secrets from vault into subprocess environment
+            try:
+                from app.services.secret_vault_service import SecretVaultService
+
+                if SecretVaultService.is_configured():
+                    vault_secrets = SecretVaultService.get_secrets_for_execution(scope="global")
+                    if vault_secrets:
+                        if env_overrides is None:
+                            env_overrides = {}
+                        env_overrides.update(vault_secrets)
+            except Exception as e:
+                logger.warning("Failed to inject vault secrets into execution env: %s", e)
+
             # Build process environment with optional overrides
             proc_env = {**os.environ, **env_overrides} if env_overrides else None
 
