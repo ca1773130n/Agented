@@ -59,4 +59,10 @@ export const dashboardRoutes: RouteRecordRaw[] = [
     component: () => import('../../views/TokenUsageDashboard.vue'),
     meta: { title: 'Token Usage' },
   },
+  {
+    path: '/dashboards/analytics',
+    name: 'analytics-dashboard',
+    component: () => import('../../views/AnalyticsDashboard.vue'),
+    meta: { title: 'Analytics Dashboard' },
+  },
 ];
