@@ -2873,6 +2873,25 @@ def _migrate_v56_add_workflow_approval_states(conn):
     )
 
 
+def _migrate_v57_add_secrets_table(conn):
+    """v0.2.0: Add secrets table for encrypted secrets vault."""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS secrets (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL UNIQUE,
+            encrypted_value TEXT NOT NULL,
+            description TEXT DEFAULT '',
+            scope TEXT DEFAULT 'global',
+            created_by TEXT DEFAULT 'system',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            last_accessed_at TIMESTAMP
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_secrets_name ON secrets(name)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_secrets_scope ON secrets(scope)")
+
+
 # =============================================================================
 # Versioned migration registry
 # =============================================================================
@@ -2937,4 +2956,5 @@ VERSIONED_MIGRATIONS = [
     (55, "webhook_dedup_keys", _migrate_v47_webhook_dedup_keys),
     # v0.2.0 migrations
     (56, "add_workflow_approval_states", _migrate_v56_add_workflow_approval_states),
+    (57, "add_secrets_table", _migrate_v57_add_secrets_table),
 ]

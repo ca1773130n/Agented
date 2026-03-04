@@ -70,6 +70,9 @@ PRODUCT_MILESTONE_ID_LENGTH = 6
 MCP_SERVER_ID_PREFIX = "mcp-"
 MCP_SERVER_ID_LENGTH = 6
 
+SECRET_ID_PREFIX = "sec-"
+SECRET_ID_LENGTH = 6
+
 
 # --- Generic helper ---
 
@@ -441,3 +444,19 @@ def _get_unique_mcp_server_id(conn) -> str:
         cursor = conn.execute("SELECT id FROM mcp_servers WHERE id = ?", (mid,))
         if cursor.fetchone() is None:
             return mid
+
+
+def generate_secret_id() -> str:
+    """Generate a unique secret ID like 'sec-abc123'."""
+    chars = string.ascii_lowercase + string.digits
+    random_part = "".join(secrets.choice(chars) for _ in range(SECRET_ID_LENGTH))
+    return f"{SECRET_ID_PREFIX}{random_part}"
+
+
+def _get_unique_secret_id(conn) -> str:
+    """Generate a secret ID that doesn't exist in the database."""
+    while True:
+        sid = generate_secret_id()
+        cursor = conn.execute("SELECT id FROM secrets WHERE id = ?", (sid,))
+        if cursor.fetchone() is None:
+            return sid
