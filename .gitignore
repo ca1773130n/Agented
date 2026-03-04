@@ -24,3 +24,4 @@ project_links/
 # Environment / secrets
 .env
 backend/.secret_key
+.serena/
