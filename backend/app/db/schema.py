@@ -1422,4 +1422,39 @@ def create_fresh_schema(conn):
         "CREATE INDEX IF NOT EXISTS idx_integrations_trigger ON integrations(trigger_id)"
     )
 
+    # --- v0.2.0: GitOps tables ---
+
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS gitops_repos (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            repo_url TEXT NOT NULL,
+            branch TEXT NOT NULL DEFAULT 'main',
+            config_path TEXT NOT NULL DEFAULT 'agented/',
+            poll_interval_seconds INTEGER DEFAULT 60,
+            last_sync_at TIMESTAMP,
+            last_commit_sha TEXT,
+            enabled INTEGER DEFAULT 1,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS gitops_sync_log (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            repo_id TEXT NOT NULL,
+            commit_sha TEXT,
+            files_changed INTEGER DEFAULT 0,
+            files_applied INTEGER DEFAULT 0,
+            files_conflicted INTEGER DEFAULT 0,
+            status TEXT DEFAULT 'pending',
+            details TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (repo_id) REFERENCES gitops_repos(id) ON DELETE CASCADE
+        )
+    """)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_gitops_sync_repo ON gitops_sync_log(repo_id)"
+    )
+
     conn.commit()

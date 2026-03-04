@@ -2986,6 +2986,42 @@ def _migrate_v60_add_integrations_table(conn):
 # Versioned migration registry
 # =============================================================================
 
+def _migrate_v57_add_gitops_tables(conn):
+    """Add gitops_repos and gitops_sync_log tables for GitOps sync engine."""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS gitops_repos (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            repo_url TEXT NOT NULL,
+            branch TEXT NOT NULL DEFAULT 'main',
+            config_path TEXT NOT NULL DEFAULT 'agented/',
+            poll_interval_seconds INTEGER DEFAULT 60,
+            last_sync_at TIMESTAMP,
+            last_commit_sha TEXT,
+            enabled INTEGER DEFAULT 1,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS gitops_sync_log (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            repo_id TEXT NOT NULL,
+            commit_sha TEXT,
+            files_changed INTEGER DEFAULT 0,
+            files_applied INTEGER DEFAULT 0,
+            files_conflicted INTEGER DEFAULT 0,
+            status TEXT DEFAULT 'pending',
+            details TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (repo_id) REFERENCES gitops_repos(id) ON DELETE CASCADE
+        )
+    """)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_gitops_sync_repo ON gitops_sync_log(repo_id)"
+    )
+    conn.commit()
+
+
 VERSIONED_MIGRATIONS = [
     (1, "add_github_columns", _migrate_add_github_columns),
     (2, "add_pr_reviews_table", _migrate_add_pr_reviews_table),
@@ -3051,4 +3087,5 @@ VERSIONED_MIGRATIONS = [
     (58, "add_secrets_table", _migrate_v58_add_secrets_table),
     (59, "add_bookmarks_table", _migrate_v59_add_bookmarks_table),
     (60, "add_integrations_table", _migrate_v60_add_integrations_table),
+    (61, "add_gitops_tables", _migrate_v57_add_gitops_tables),
 ]

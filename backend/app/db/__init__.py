@@ -122,6 +122,18 @@ from .commands import (  # noqa: F401
 )
 from .connection import get_connection  # noqa: F401
 
+# GitOps (repository config and sync state)
+from .gitops import (  # noqa: F401
+    add_sync_log,
+    create_gitops_repo,
+    delete_gitops_repo,
+    get_gitops_repo,
+    list_gitops_repos,
+    list_sync_logs,
+    update_gitops_repo,
+    update_sync_state,
+)
+
 # GRD (milestones, phases, plans, sessions, sync state)
 from .grd import (  # noqa: F401
     add_milestone,
