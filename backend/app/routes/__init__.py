@@ -5,6 +5,7 @@ def register_blueprints(app):
     """Register all route blueprints with the Flask app."""
     from .agent_conversations import agent_conversations_bp
     from .agents import agents_bp
+    from .analytics import analytics_bp
     from .audit import audit_bp
     from .backends import backends_bp
     from .budgets import budgets_bp
@@ -86,6 +87,7 @@ def register_blueprints(app):
             backends_bp,
             orchestration_bp,
             budgets_bp,
+            analytics_bp,
             plugin_exports_bp,
             monitoring_bp,
             scheduler_bp,
@@ -136,6 +138,7 @@ def register_blueprints(app):
     app.register_api(backends_bp)
     app.register_api(orchestration_bp)
     app.register_api(budgets_bp)
+    app.register_api(analytics_bp)
     app.register_api(plugin_exports_bp)
     app.register_api(monitoring_bp)
     app.register_api(scheduler_bp)
