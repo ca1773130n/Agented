@@ -153,6 +153,13 @@ from .hooks import (  # noqa: F401
     update_hook,
 )
 
+# Audit events (persistent trail)
+from .audit_events import (  # noqa: F401
+    add_audit_event,
+    count_audit_events,
+    query_audit_events,
+)
+
 # RBAC (user roles)
 from .rbac import (  # noqa: F401
     VALID_ROLES,
