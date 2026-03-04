@@ -24,6 +24,7 @@ export { marketplaceApi } from './marketplace';
 export { backendApi, BACKEND_LOGIN_INFO, BACKEND_PLAN_OPTIONS } from './backends';
 export { orchestrationApi } from './orchestration';
 export { budgetApi } from './budgets';
+export { analyticsApi } from './analytics';
 export { monitoringApi } from './monitoring';
 export { rotationApi } from './rotation';
 export { schedulerApi } from './scheduler';
@@ -255,6 +256,14 @@ export type {
   RotationDashboardStatus,
   RotationEvent,
   RotationHistoryResponse,
+
+  // Analytics types
+  CostDataPoint,
+  CostAnalyticsResponse,
+  ExecutionDataPoint,
+  ExecutionAnalyticsResponse,
+  EffectivenessOverTimePoint,
+  EffectivenessResponse,
 
   // Sketch types
   SketchStatus,
