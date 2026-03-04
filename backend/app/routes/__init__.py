@@ -18,6 +18,7 @@ def register_blueprints(app):
     from .health import health_bp
     from .hook_conversations import hook_conversations_bp
     from .hooks import hooks_bp
+    from .integrations import integrations_bp, slack_command_bp
     from .marketplace import marketplace_bp
     from .mcp_servers import mcp_servers_bp, project_mcp_bp
     from .monitoring import monitoring_bp
@@ -60,6 +61,9 @@ def register_blueprints(app):
 
         # GitHub webhook: 30 requests per minute per IP
         limiter.limit("30/minute")(github_webhook_bp)
+
+        # Slack slash commands: 30 requests per minute per IP
+        limiter.limit("30/minute")(slack_command_bp)
 
         # Admin routes: 120 requests per minute per IP
         # Generous limit to accommodate SPA page loads, AJAX calls, and SSE reconnects
@@ -107,6 +111,7 @@ def register_blueprints(app):
             secrets_bp,
             config_export_bp,
             bookmarks_bp,
+            integrations_bp,
         ]
         for bp in admin_blueprints:
             limiter.limit("120/minute")(bp)
@@ -161,6 +166,8 @@ def register_blueprints(app):
     app.register_api(secrets_bp)
     app.register_api(config_export_bp)
     app.register_api(bookmarks_bp)
+    app.register_api(integrations_bp)
+    app.register_api(slack_command_bp)
 
     # SPA catch-all: MUST be registered LAST so API routes take priority
     app.register_blueprint(spa_bp)
