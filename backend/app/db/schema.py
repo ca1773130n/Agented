@@ -1326,4 +1326,26 @@ def create_fresh_schema(conn):
         "CREATE INDEX IF NOT EXISTS idx_webhook_dedup_created ON webhook_dedup_keys(created_at)"
     )
 
+    # --- Bookmarks ---
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS bookmarks (
+            id TEXT PRIMARY KEY,
+            execution_id TEXT NOT NULL,
+            trigger_id TEXT NOT NULL,
+            title TEXT NOT NULL DEFAULT '',
+            notes TEXT DEFAULT '',
+            tags TEXT DEFAULT '',
+            line_number INTEGER,
+            deep_link TEXT NOT NULL,
+            created_by TEXT DEFAULT 'system',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_bookmarks_trigger ON bookmarks(trigger_id)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_bookmarks_execution ON bookmarks(execution_id)"
+    )
+
     conn.commit()

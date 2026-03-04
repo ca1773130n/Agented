@@ -77,6 +77,17 @@ from .backends import (  # noqa: F401
     verify_account_exists,
 )
 
+# Bookmarks
+from .bookmarks import (  # noqa: F401
+    create_bookmark,
+    delete_bookmark,
+    get_bookmark,
+    list_bookmarks_for_execution,
+    list_bookmarks_for_trigger,
+    search_bookmarks,
+    update_bookmark,
+)
+
 # Budgets (token usage, budget limits, execution token data)
 from .budgets import (  # noqa: F401
     # Token usage
@@ -157,6 +168,8 @@ from .hooks import (  # noqa: F401
 from .ids import (  # noqa: F401
     AGENT_ID_LENGTH,
     AGENT_ID_PREFIX,
+    BOOKMARK_ID_LENGTH,
+    BOOKMARK_ID_PREFIX,
     CONVERSATION_ID_LENGTH,
     CONVERSATION_ID_PREFIX,
     MCP_SERVER_ID_LENGTH,
@@ -200,6 +213,7 @@ from .ids import (  # noqa: F401
     WORKFLOW_ID_LENGTH,
     WORKFLOW_ID_PREFIX,
     _generate_short_id,
+    _get_unique_bookmark_id,
     _get_unique_agent_id,
     _get_unique_conversation_id,
     _get_unique_mcp_server_id,
@@ -221,6 +235,7 @@ from .ids import (  # noqa: F401
     _get_unique_trigger_id,
     _get_unique_workflow_execution_id,
     _get_unique_workflow_id,
+    generate_bookmark_id,
     generate_agent_id,
     generate_conversation_id,
     generate_execution_id,

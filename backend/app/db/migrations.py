@@ -2873,6 +2873,36 @@ def _migrate_v56_add_workflow_approval_states(conn):
     )
 
 
+def _migrate_v57_add_bookmarks_table(conn):
+    """Create bookmarks table for execution bookmarking with deep-links."""
+    cursor = conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='bookmarks'"
+    )
+    if cursor.fetchone() is None:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS bookmarks (
+                id TEXT PRIMARY KEY,
+                execution_id TEXT NOT NULL,
+                trigger_id TEXT NOT NULL,
+                title TEXT NOT NULL DEFAULT '',
+                notes TEXT DEFAULT '',
+                tags TEXT DEFAULT '',
+                line_number INTEGER,
+                deep_link TEXT NOT NULL,
+                created_by TEXT DEFAULT 'system',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_bookmarks_trigger ON bookmarks(trigger_id)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_bookmarks_execution ON bookmarks(execution_id)"
+        )
+        conn.commit()
+        print("Created bookmarks table")
+
+
 # =============================================================================
 # Versioned migration registry
 # =============================================================================
@@ -2937,4 +2967,5 @@ VERSIONED_MIGRATIONS = [
     (55, "webhook_dedup_keys", _migrate_v47_webhook_dedup_keys),
     # v0.2.0 migrations
     (56, "add_workflow_approval_states", _migrate_v56_add_workflow_approval_states),
+    (57, "add_bookmarks_table", _migrate_v57_add_bookmarks_table),
 ]
