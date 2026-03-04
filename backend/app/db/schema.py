@@ -557,6 +557,8 @@ def create_fresh_schema(conn):
             period TEXT NOT NULL DEFAULT 'monthly',
             soft_limit_usd REAL,
             hard_limit_usd REAL,
+            max_execution_time_seconds INTEGER,
+            max_monthly_runs INTEGER,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             UNIQUE(entity_type, entity_id)

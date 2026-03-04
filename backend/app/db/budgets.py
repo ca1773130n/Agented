@@ -354,12 +354,20 @@ def set_budget_limit(
     period: str = "monthly",
     soft_limit_usd: Optional[float] = None,
     hard_limit_usd: Optional[float] = None,
+    max_execution_time_seconds: Optional[int] = None,
+    max_monthly_runs: Optional[int] = None,
 ) -> bool:
     """Set or update a budget limit (upsert). Returns True on success.
 
-    Validates: at least one limit must be set. If both set, hard >= soft.
+    Validates: at least one limit must be set. If both USD set, hard >= soft.
     """
-    if soft_limit_usd is None and hard_limit_usd is None:
+    has_any = (
+        soft_limit_usd is not None
+        or hard_limit_usd is not None
+        or max_execution_time_seconds is not None
+        or max_monthly_runs is not None
+    )
+    if not has_any:
         return False
     if soft_limit_usd is not None and hard_limit_usd is not None:
         if hard_limit_usd < soft_limit_usd:
@@ -369,21 +377,54 @@ def set_budget_limit(
         try:
             conn.execute(
                 """
-                INSERT INTO budget_limits (entity_type, entity_id, period, soft_limit_usd, hard_limit_usd)
-                VALUES (?, ?, ?, ?, ?)
+                INSERT INTO budget_limits
+                    (entity_type, entity_id, period, soft_limit_usd, hard_limit_usd,
+                     max_execution_time_seconds, max_monthly_runs)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(entity_type, entity_id) DO UPDATE SET
                     period = excluded.period,
                     soft_limit_usd = excluded.soft_limit_usd,
                     hard_limit_usd = excluded.hard_limit_usd,
+                    max_execution_time_seconds = excluded.max_execution_time_seconds,
+                    max_monthly_runs = excluded.max_monthly_runs,
                     updated_at = CURRENT_TIMESTAMP
             """,
-                (entity_type, entity_id, period, soft_limit_usd, hard_limit_usd),
+                (
+                    entity_type,
+                    entity_id,
+                    period,
+                    soft_limit_usd,
+                    hard_limit_usd,
+                    max_execution_time_seconds,
+                    max_monthly_runs,
+                ),
             )
             conn.commit()
             return True
         except sqlite3.Error as e:
             logger.error(f"Database error in set_budget_limit: {e}")
             return False
+
+
+def get_monthly_run_count(entity_type: str, entity_id: str) -> int:
+    """Get the number of executions for this entity in the current calendar month.
+
+    Counts non-cancelled executions since the 1st of the current month.
+    For entity_type='trigger', matches on trigger_id.
+    """
+    now = datetime.datetime.now()
+    month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0).isoformat()
+
+    with get_connection() as conn:
+        cursor = conn.execute(
+            """
+            SELECT COUNT(*) as cnt FROM execution_logs
+            WHERE trigger_id = ? AND started_at >= ? AND status != 'cancelled'
+            """,
+            (entity_id, month_start),
+        )
+        row = cursor.fetchone()
+        return int(row["cnt"]) if row else 0
 
 
 def delete_budget_limit(entity_type: str, entity_id: str) -> bool:

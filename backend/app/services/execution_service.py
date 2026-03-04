@@ -25,6 +25,7 @@ from ..database import (
     get_webhook_triggers,
     upsert_pending_retry,
 )
+from ..db.health_alerts import create_health_alert
 from ..db.webhook_dedup import check_and_insert_dedup_key
 from ..utils.json_path import get_nested_value
 from .audit_log_service import AuditLogService
@@ -463,11 +464,14 @@ class ExecutionService:
         """Periodically check budget during execution and kill process if hard limit exceeded."""
         import time as _time
 
+        start_time = _time.time()
+
         while process.poll() is None:
             _time.sleep(interval_seconds)
             if process.poll() is not None:
                 break
             try:
+                # Check cost budget
                 budget_check = BudgetService.check_budget(entity_type, entity_id)
                 if not budget_check["allowed"]:
                     reason = budget_check.get("reason", "hard limit reached")
@@ -502,6 +506,59 @@ class ExecutionService:
                         entity_id=entity_id,
                         outcome="killed",
                         details={"execution_id": execution_id, "reason": reason},
+                    )
+                    break
+
+                # Check execution time limit
+                elapsed = _time.time() - start_time
+                if BudgetService.check_execution_time_limit(
+                    entity_type, entity_id, elapsed
+                ):
+                    from ..db.budgets import get_budget_limit
+
+                    limits = get_budget_limit(entity_type, entity_id)
+                    limit_seconds = (
+                        limits.get("max_execution_time_seconds") if limits else None
+                    )
+                    logger.warning(
+                        "Execution time limit exceeded (%ds > %ds) for execution %s — "
+                        "terminating via cancel_graceful",
+                        int(elapsed),
+                        limit_seconds,
+                        execution_id,
+                    )
+                    ProcessManager.cancel_graceful(execution_id)
+                    ExecutionLogService.append_log(
+                        execution_id,
+                        "stderr",
+                        f"[BUDGET] Execution cancelled: time limit exceeded "
+                        f"({int(elapsed)}s > {limit_seconds}s)",
+                    )
+                    AuditLogService.log(
+                        action="execution.budget_exceeded",
+                        entity_type=entity_type,
+                        entity_id=entity_id,
+                        outcome="killed",
+                        details={
+                            "execution_id": execution_id,
+                            "reason": "execution_time_limit_exceeded",
+                            "elapsed_seconds": int(elapsed),
+                            "limit_seconds": limit_seconds,
+                        },
+                    )
+                    create_health_alert(
+                        alert_type="budget_exceeded",
+                        trigger_id=trigger_id,
+                        message=(
+                            f"Execution cancelled: time limit exceeded "
+                            f"({int(elapsed)}s > {limit_seconds}s)"
+                        ),
+                        details={
+                            "execution_id": execution_id,
+                            "elapsed_seconds": int(elapsed),
+                            "limit_seconds": limit_seconds,
+                        },
+                        severity="critical",
                     )
                     break
             except Exception as monitor_err:
@@ -663,14 +720,28 @@ class ExecutionService:
                 budget_check = BudgetService.check_budget("trigger", trigger_id)
                 if not budget_check["allowed"]:
                     limit_info = budget_check.get("limit") or {}
-                    period = limit_info.get("period", "monthly")
-                    hard_limit = limit_info.get("hard_limit_usd", "N/A")
-                    budget_detail = (
-                        f"{budget_check.get('reason', 'hard limit reached')}; "
-                        f"spend=${budget_check.get('current_spend', 0):.4f}, "
-                        f"hard_limit=${hard_limit}, "
-                        f"period={period}"
-                    )
+                    reason = budget_check.get("reason", "hard limit reached")
+
+                    # Build detail string depending on violation type
+                    if "Monthly run limit" in reason:
+                        current_count = budget_check.get("monthly_run_count", "?")
+                        max_runs = budget_check.get("max_monthly_runs", "?")
+                        budget_detail = reason
+                        alert_msg = (
+                            f"Execution blocked: monthly run limit exceeded "
+                            f"({current_count}/{max_runs})"
+                        )
+                    else:
+                        period = limit_info.get("period", "monthly")
+                        hard_limit = limit_info.get("hard_limit_usd", "N/A")
+                        budget_detail = (
+                            f"{reason}; "
+                            f"spend=${budget_check.get('current_spend', 0):.4f}, "
+                            f"hard_limit=${hard_limit}, "
+                            f"period={period}"
+                        )
+                        alert_msg = f"Execution blocked: {budget_detail}"
+
                     tlog.warning(
                         "Budget check blocked execution for trigger '%s': %s",
                         trigger.get("name", trigger_id),
@@ -687,6 +758,23 @@ class ExecutionService:
                         exit_code=-1,
                         error_message=f"Budget limit exceeded: {budget_detail}",
                     )
+                    # Create health alert for budget breach
+                    try:
+                        create_health_alert(
+                            alert_type="budget_exceeded",
+                            trigger_id=trigger_id,
+                            message=alert_msg,
+                            details={
+                                "execution_id": execution_id,
+                                "reason": reason,
+                            },
+                            severity="critical",
+                        )
+                    except Exception:
+                        logger.debug(
+                            "Failed to create health alert for budget exceeded on %s",
+                            trigger_id,
+                        )
                     return execution_id
             except Exception as e:
                 tlog.error(

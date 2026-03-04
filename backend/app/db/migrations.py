@@ -2896,6 +2896,21 @@ def _migrate_v57_add_health_alerts_table(conn):
     )
 
 
+def _migrate_v58_budget_time_and_run_limits(conn):
+    """Add max_execution_time_seconds and max_monthly_runs to budget_limits."""
+    cursor = conn.execute("PRAGMA table_info(budget_limits)")
+    existing_cols = {row[1] for row in cursor.fetchall()}
+
+    if "max_execution_time_seconds" not in existing_cols:
+        conn.execute(
+            "ALTER TABLE budget_limits ADD COLUMN max_execution_time_seconds INTEGER"
+        )
+    if "max_monthly_runs" not in existing_cols:
+        conn.execute(
+            "ALTER TABLE budget_limits ADD COLUMN max_monthly_runs INTEGER"
+        )
+
+
 # =============================================================================
 # Versioned migration registry
 # =============================================================================
@@ -2961,4 +2976,5 @@ VERSIONED_MIGRATIONS = [
     # v0.2.0 migrations
     (56, "add_workflow_approval_states", _migrate_v56_add_workflow_approval_states),
     (57, "add_health_alerts_table", _migrate_v57_add_health_alerts_table),
+    (58, "budget_time_and_run_limits", _migrate_v58_budget_time_and_run_limits),
 ]

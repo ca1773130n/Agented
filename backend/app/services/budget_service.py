@@ -13,6 +13,7 @@ from ..database import (
     get_window_token_usage,
     update_execution_token_data,
 )
+from ..db.budgets import get_monthly_run_count
 
 logger = logging.getLogger(__name__)
 
@@ -320,6 +321,23 @@ class BudgetService:
                 "current_spend": None,
             }
 
+        # Check monthly run count limit first
+        max_monthly_runs = limits.get("max_monthly_runs")
+        if max_monthly_runs is not None:
+            current_count = get_monthly_run_count(entity_type, entity_id)
+            if current_count >= max_monthly_runs:
+                return {
+                    "allowed": False,
+                    "reason": (
+                        f"Monthly run limit exceeded ({current_count}/{max_monthly_runs})"
+                    ),
+                    "remaining_usd": None,
+                    "current_spend": None,
+                    "limit": limits,
+                    "monthly_run_count": current_count,
+                    "max_monthly_runs": max_monthly_runs,
+                }
+
         period = limits.get("period", "monthly")
         current_spend = get_current_period_spend(entity_type, entity_id, period)
 
@@ -358,6 +376,23 @@ class BudgetService:
             "current_spend": current_spend,
             "limit": limits,
         }
+
+    @classmethod
+    def check_execution_time_limit(
+        cls, entity_type: str, entity_id: str, elapsed_seconds: float
+    ) -> bool:
+        """Check if elapsed execution time exceeds the configured limit.
+
+        Returns True if the limit is exceeded. Returns False if no limit is set
+        or elapsed time is within the limit.
+        """
+        limits = get_budget_limit(entity_type, entity_id)
+        if not limits:
+            return False
+        max_time = limits.get("max_execution_time_seconds")
+        if max_time is None:
+            return False
+        return elapsed_seconds > max_time
 
     @classmethod
     def get_window_usage(cls) -> dict:
