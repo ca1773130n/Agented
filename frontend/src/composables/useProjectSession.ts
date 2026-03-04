@@ -6,7 +6,7 @@ import {
   type RalphConfig,
   type TeamConfig,
 } from '../services/api/grd';
-import type { AuthenticatedEventSource } from '../services/api/client';
+import { useEventSource } from './useEventSource';
 
 /**
  * Composable for managing project session lifecycle, SSE streaming,
@@ -14,6 +14,8 @@ import type { AuthenticatedEventSource } from '../services/api/client';
  *
  * Follows the same patterns as useAiChat.ts but tailored for PTY-based
  * project sessions with output/complete/error SSE events.
+ *
+ * SSE connection lifecycle is delegated to useEventSource.
  */
 export function useProjectSession(projectId: Ref<string>) {
   // Public state
@@ -38,13 +40,103 @@ export function useProjectSession(projectId: Ref<string>) {
   } | null>(null);
 
   // Private state
-  let eventSource: AuthenticatedEventSource | null = null;
   let errorCount = 0;
 
   // Callback registrations
   let onOutputCb: ((line: string) => void) | undefined;
   let onCompleteCb: ((status: string, exitCode: number) => void) | undefined;
   let onErrorCb: ((message: string) => void) | undefined;
+
+  // SSE lifecycle managed by useEventSource.
+  // sourceFactory will be set dynamically via connect() calls.
+  // We track the current session ID to build the correct factory at connect time.
+  let _streamSessionId: string | null = null;
+
+  const { connect: sseConnect, close: sseClose } = useEventSource({
+    sourceFactory: () => grdApi.streamSession(projectId.value, _streamSessionId!),
+    events: {
+      output: (event: MessageEvent) => {
+        try {
+          const data = JSON.parse(event.data);
+          onOutputCb?.(data.line);
+        } catch (e) {
+          console.warn('[useProjectSession] Failed to parse output event:', e, event.data);
+        }
+      },
+      complete: (event: MessageEvent) => {
+        try {
+          const data = JSON.parse(event.data);
+          isStreaming.value = false;
+          // Update session status in local list
+          const idx = sessions.value.findIndex((s) => s.id === _streamSessionId);
+          if (idx !== -1) {
+            sessions.value[idx] = { ...sessions.value[idx], status: data.status };
+          }
+          onCompleteCb?.(data.status, data.exit_code);
+        } catch (e) {
+          console.warn('[useProjectSession] Failed to parse complete event:', e, event.data);
+        }
+      },
+      ralph_iteration: (event: MessageEvent) => {
+        try {
+          const data = JSON.parse(event.data);
+          ralphState.value = {
+            iteration: data.iteration ?? 0,
+            maxIterations: data.max_iterations ?? 0,
+            circuitBreakerTriggered: false,
+          };
+        } catch (e) {
+          console.warn('[useProjectSession] Failed to parse ralph_iteration event:', e, event.data);
+        }
+      },
+      circuit_breaker: (event: MessageEvent) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (ralphState.value) {
+            ralphState.value.circuitBreakerTriggered = true;
+          }
+          onErrorCb?.(`Circuit breaker: ${data.reason}`);
+        } catch (e) {
+          console.warn('[useProjectSession] Failed to parse circuit_breaker event:', e, event.data);
+        }
+      },
+      team_update: (event: MessageEvent) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data.type === 'config') {
+            teamState.value = {
+              ...(teamState.value || { teamName: null, members: [], tasks: [] }),
+              teamName: data.data?.team_name || teamState.value?.teamName || null,
+              members: data.data?.members || teamState.value?.members || [],
+            };
+          } else if (data.type === 'task') {
+            if (!teamState.value) {
+              teamState.value = { teamName: null, members: [], tasks: [] };
+            }
+            // Upsert task in array
+            const taskIdx = teamState.value.tasks.findIndex(
+              (t) => t.id === data.data?.id,
+            );
+            if (taskIdx >= 0) {
+              teamState.value.tasks[taskIdx] = data.data;
+            } else if (data.data) {
+              teamState.value.tasks.push(data.data);
+            }
+          }
+        } catch (e) {
+          console.warn('[useProjectSession] Failed to parse team_update event:', e, event.data);
+        }
+      },
+    },
+    onError: () => {
+      errorCount++;
+      if (errorCount >= 3) {
+        closeStream();
+        error.value = 'Connection lost';
+        onErrorCb?.('Connection lost after 3 retries');
+      }
+    },
+  });
 
   /**
    * Load all sessions for the current project.
@@ -139,97 +231,8 @@ export function useProjectSession(projectId: Ref<string>) {
     closeStream();
     isStreaming.value = true;
     errorCount = 0;
-
-    eventSource = grdApi.streamSession(projectId.value, sessionId);
-
-    eventSource.addEventListener('output', (event: Event) => {
-      try {
-        const data = JSON.parse((event as MessageEvent).data);
-        onOutputCb?.(data.line);
-      } catch (e) {
-        console.warn('[useProjectSession] Failed to parse output event:', e, (event as MessageEvent).data);
-      }
-    });
-
-    eventSource.addEventListener('complete', (event: Event) => {
-      try {
-        const data = JSON.parse((event as MessageEvent).data);
-        isStreaming.value = false;
-        // Update session status in local list
-        const idx = sessions.value.findIndex((s) => s.id === sessionId);
-        if (idx !== -1) {
-          sessions.value[idx] = { ...sessions.value[idx], status: data.status };
-        }
-        onCompleteCb?.(data.status, data.exit_code);
-      } catch (e) {
-        console.warn('[useProjectSession] Failed to parse complete event:', e, (event as MessageEvent).data);
-      }
-    });
-
-    eventSource.onerror = () => {
-      errorCount++;
-      if (errorCount >= 3) {
-        closeStream();
-        error.value = 'Connection lost';
-        onErrorCb?.('Connection lost after 3 retries');
-      }
-    };
-
-    // Ralph iteration progress
-    eventSource.addEventListener('ralph_iteration', (event: Event) => {
-      try {
-        const data = JSON.parse((event as MessageEvent).data);
-        ralphState.value = {
-          iteration: data.iteration ?? 0,
-          maxIterations: data.max_iterations ?? 0,
-          circuitBreakerTriggered: false,
-        };
-      } catch (e) {
-        console.warn('[useProjectSession] Failed to parse ralph_iteration event:', e, (event as MessageEvent).data);
-      }
-    });
-
-    // Circuit breaker event
-    eventSource.addEventListener('circuit_breaker', (event: Event) => {
-      try {
-        const data = JSON.parse((event as MessageEvent).data);
-        if (ralphState.value) {
-          ralphState.value.circuitBreakerTriggered = true;
-        }
-        onErrorCb?.(`Circuit breaker: ${data.reason}`);
-      } catch (e) {
-        console.warn('[useProjectSession] Failed to parse circuit_breaker event:', e, (event as MessageEvent).data);
-      }
-    });
-
-    // Team update events
-    eventSource.addEventListener('team_update', (event: Event) => {
-      try {
-        const data = JSON.parse((event as MessageEvent).data);
-        if (data.type === 'config') {
-          teamState.value = {
-            ...(teamState.value || { teamName: null, members: [], tasks: [] }),
-            teamName: data.data?.team_name || teamState.value?.teamName || null,
-            members: data.data?.members || teamState.value?.members || [],
-          };
-        } else if (data.type === 'task') {
-          if (!teamState.value) {
-            teamState.value = { teamName: null, members: [], tasks: [] };
-          }
-          // Upsert task in array
-          const taskIdx = teamState.value.tasks.findIndex(
-            (t) => t.id === data.data?.id,
-          );
-          if (taskIdx >= 0) {
-            teamState.value.tasks[taskIdx] = data.data;
-          } else if (data.data) {
-            teamState.value.tasks.push(data.data);
-          }
-        }
-      } catch (e) {
-        console.warn('[useProjectSession] Failed to parse team_update event:', e, (event as MessageEvent).data);
-      }
-    });
+    _streamSessionId = sessionId;
+    sseConnect();
   }
 
   /**
@@ -304,10 +307,7 @@ export function useProjectSession(projectId: Ref<string>) {
    * Close the current SSE connection.
    */
   function closeStream() {
-    if (eventSource) {
-      eventSource.close();
-      eventSource = null;
-    }
+    sseClose();
     isStreaming.value = false;
     ralphState.value = null;
     teamState.value = null;
@@ -326,8 +326,13 @@ export function useProjectSession(projectId: Ref<string>) {
     onErrorCb = cb;
   }
 
-  // Cleanup on unmount
-  onUnmounted(closeStream);
+  // SSE connection cleanup is handled by useEventSource's onUnmounted.
+  // This separate onUnmounted resets streaming/ralph/team state on unmount.
+  onUnmounted(() => {
+    isStreaming.value = false;
+    ralphState.value = null;
+    teamState.value = null;
+  });
 
   return {
     // State

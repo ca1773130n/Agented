@@ -1,8 +1,9 @@
 import { ref, onUnmounted, type Ref } from 'vue';
-import type { ConversationMessage, SuperAgent, SuperAgentSession, AuthenticatedEventSource } from '../services/api';
+import type { ConversationMessage, SuperAgent, SuperAgentSession } from '../services/api';
 import { superAgentSessionApi, superAgentApi } from '../services/api';
 import { useProcessGroups } from './useProcessGroups';
 import { useAllMode } from './useAllMode';
+import { useEventSource } from './useEventSource';
 
 /**
  * Discriminated union of all state_delta SSE event payloads.
@@ -51,9 +52,7 @@ export function useAiChat(superAgentId: Ref<string>) {
   // Callback for streaming chunks (set by AiChatPanel when smd.js is initialized)
   let onStreamingChunkCallback: ((text: string) => void) | null = null;
 
-  let eventSource: AuthenticatedEventSource | null = null;
-
-  // Reconnect watchdog — SSE comment keepalives are invisible to EventSource,
+  // Reconnect watchdog -- SSE comment keepalives are invisible to EventSource,
   // so the client tracks named-event activity instead. If no named event arrives
   // within HEARTBEAT_TIMEOUT_MS (server sends keepalives every 30 s, so 65 s gives
   // ample margin), the connection is assumed stale and the stream is restarted.
@@ -65,8 +64,8 @@ export function useAiChat(superAgentId: Ref<string>) {
   function _resetHeartbeat() {
     if (_heartbeatTimer) clearTimeout(_heartbeatTimer);
     _heartbeatTimer = setTimeout(() => {
-      if (sessionId.value && eventSource) {
-        console.warn('[useAiChat] No SSE activity for 65 s — reconnecting');
+      if (sessionId.value && sseGetSource()) {
+        console.warn('[useAiChat] No SSE activity for 65 s -- reconnecting');
         connectStream();
       }
     }, HEARTBEAT_TIMEOUT_MS);
@@ -82,6 +81,65 @@ export function useAiChat(superAgentId: Ref<string>) {
   function setOnStreamingChunk(cb: (text: string) => void) {
     onStreamingChunkCallback = cb;
   }
+
+  // SSE lifecycle managed by useEventSource
+  const { connect: sseConnect, close: sseClose, getSource: sseGetSource } = useEventSource({
+    sourceFactory: () => superAgentSessionApi.chatStream(
+      superAgentId.value,
+      sessionId.value!,
+    ),
+    events: {
+      // Named "state_delta" event from the SSE protocol
+      state_delta: (event: MessageEvent) => {
+        try {
+          _resetHeartbeat(); // any named event resets the stale-connection timer
+          const data = JSON.parse(event.data) as StateDelta;
+
+          // Track seq for de-duplication
+          const seq = parseInt(event.lastEventId || '0', 10);
+          if (seq > 0 && seq <= lastSeq) {
+            return; // Duplicate from reconnection replay
+          }
+          if (seq > 0) {
+            lastSeq = seq;
+          }
+
+          handleStateDelta(data);
+        } catch (e) {
+          console.warn('[useAiChat] Failed to parse state_delta event:', e, event.data);
+        }
+      },
+      // Generic message events for backward compatibility
+      message: (event: MessageEvent) => {
+        try {
+          const data = JSON.parse(event.data);
+          // Heartbeat check
+          if (data.type === 'heartbeat') return;
+          // Legacy output format
+          if (data.type === 'output' && data.content) {
+            const isDuplicate = messages.value.some(
+              (m) => m.content === data.content && m.role === 'assistant',
+            );
+            if (!isDuplicate) {
+              messages.value.push({
+                role: 'assistant',
+                content: data.content,
+                timestamp: new Date().toISOString(),
+              });
+            }
+          }
+        } catch (e) {
+          console.warn('[useAiChat] Failed to parse message event:', e, event.data);
+        }
+      },
+      error: () => {
+        // EventSource auto-reconnects; no explicit error handling needed
+      },
+    },
+    onOpen: () => {
+      _resetHeartbeat();
+    },
+  });
 
   async function loadSuperAgent() {
     try {
@@ -242,64 +300,10 @@ export function useAiChat(superAgentId: Ref<string>) {
     if (!sessionId.value) return;
 
     closeStream();
-    eventSource = superAgentSessionApi.chatStream(
-      superAgentId.value,
-      sessionId.value,
-    );
+    sseConnect();
 
-    // Start watchdog — will reconnect if no named event arrives within timeout
+    // Start watchdog -- will reconnect if no named event arrives within timeout
     _resetHeartbeat();
-
-    // Listen for the named "state_delta" event from the SSE protocol
-    eventSource.addEventListener('state_delta', (event: Event) => {
-      const msgEvent = event as MessageEvent;
-      try {
-        _resetHeartbeat(); // any named event resets the stale-connection timer
-        const data = JSON.parse(msgEvent.data) as StateDelta;
-
-        // Track seq for de-duplication
-        const seq = parseInt(msgEvent.lastEventId || '0', 10);
-        if (seq > 0 && seq <= lastSeq) {
-          return; // Duplicate from reconnection replay
-        }
-        if (seq > 0) {
-          lastSeq = seq;
-        }
-
-        handleStateDelta(data);
-      } catch (e) {
-        console.warn('[useAiChat] Failed to parse state_delta event:', e, msgEvent.data);
-      }
-    });
-
-    // Also handle generic message events for backward compatibility
-    eventSource.addEventListener('message', (event: Event) => {
-      const msgEvent = event as MessageEvent;
-      try {
-        const data = JSON.parse(msgEvent.data);
-        // Heartbeat check
-        if (data.type === 'heartbeat') return;
-        // Legacy output format
-        if (data.type === 'output' && data.content) {
-          const isDuplicate = messages.value.some(
-            (m) => m.content === data.content && m.role === 'assistant',
-          );
-          if (!isDuplicate) {
-            messages.value.push({
-              role: 'assistant',
-              content: data.content,
-              timestamp: new Date().toISOString(),
-            });
-          }
-        }
-      } catch (e) {
-        console.warn('[useAiChat] Failed to parse message event:', e, msgEvent.data);
-      }
-    });
-
-    eventSource.addEventListener('error', () => {
-      // EventSource auto-reconnects; no explicit error handling needed
-    });
   }
 
   /**
@@ -360,7 +364,7 @@ export function useAiChat(superAgentId: Ref<string>) {
 
       case 'tool_call': {
         // data is narrowed to { type: 'tool_call'; id: string; name?: string; arguments?: string }
-        // which is structurally compatible with ToolCallDelta (type: 'tool_call' ∈ ProcessGroupType)
+        // which is structurally compatible with ToolCallDelta (type: 'tool_call' in ProcessGroupType)
         processGroups.processToolCallDelta(data);
         break;
       }
@@ -421,10 +425,7 @@ export function useAiChat(superAgentId: Ref<string>) {
 
   function closeStream() {
     _clearHeartbeat();
-    if (eventSource) {
-      eventSource.close();
-      eventSource = null;
-    }
+    sseClose();
   }
 
   function cleanup() {
@@ -433,6 +434,8 @@ export function useAiChat(superAgentId: Ref<string>) {
     allMode.reset();
   }
 
+  // SSE connection cleanup is handled by useEventSource's onUnmounted.
+  // This separate onUnmounted handles heartbeat timers and allMode reset.
   onUnmounted(cleanup);
 
   return {

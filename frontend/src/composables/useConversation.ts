@@ -1,7 +1,8 @@
-import { ref, shallowRef, nextTick, onUnmounted } from 'vue';
-import type { ConversationMessage, AuthenticatedEventSource } from '../services/api';
+import { ref, shallowRef, nextTick } from 'vue';
+import type { ConversationMessage } from '../services/api';
 import { ApiError } from '../services/api';
 import { useStreamingParser } from './useStreamingParser';
+import { useEventSource } from './useEventSource';
 import { useToast } from './useToast';
 
 /**
@@ -13,7 +14,7 @@ export interface ConversationApi {
   start: () => Promise<{ conversation_id: string; message: string }>;
   get?: (convId: string) => Promise<{ id: string; status: string; messages_parsed?: ConversationMessage[] }>;
   sendMessage: (convId: string, message: string, options?: { backend?: string; account_id?: string; model?: string }) => Promise<{ message_id: string; status: string }>;
-  stream: (convId: string) => AuthenticatedEventSource;
+  stream: (convId: string) => import('../services/api/client').AuthenticatedEventSource;
   finalize: (convId: string) => Promise<Record<string, unknown>>;
   resume?: (convId: string) => Promise<{ message: string; conversation_id: string }>;
   abandon: (convId: string) => Promise<{ message: string }>;
@@ -70,7 +71,6 @@ export function useConversation<TConfig>(
   const isProcessing = ref(false);
   const streamingContent = shallowRef('');
   const chatContainer = ref<HTMLElement | null>(null);
-  const eventSourceRef = ref<AuthenticatedEventSource | null>(null);
   const canFinalize = ref(false);
   const chatStarted = ref(false);
   const detectedConfig = ref<TConfig | null>(null) as ReturnType<typeof ref<TConfig | null>>;
@@ -96,86 +96,85 @@ export function useConversation<TConfig>(
     });
   }
 
-  function connectToStream() {
-    if (!conversationId.value) return;
-
-    eventSourceRef.value = api.stream(conversationId.value);
-
-    eventSourceRef.value.addEventListener('message', (event) => {
-      const data = JSON.parse(event.data);
-      if (data.role !== 'system') {
-        // De-duplicate: skip if a message with the same timestamp and content already exists
-        const isDuplicate = messages.value.some(
-          (m) => m.timestamp === data.timestamp && m.content === data.content,
-        );
-        if (!isDuplicate) {
-          messages.value.push(data);
-          scrollToBottom();
+  // SSE lifecycle managed by useEventSource
+  const { connect: sseConnect, close: sseClose } = useEventSource({
+    sourceFactory: () => api.stream(conversationId.value!),
+    events: {
+      message: (event) => {
+        const data = JSON.parse(event.data);
+        if (data.role !== 'system') {
+          // De-duplicate: skip if a message with the same timestamp and content already exists
+          const isDuplicate = messages.value.some(
+            (m) => m.timestamp === data.timestamp && m.content === data.content,
+          );
+          if (!isDuplicate) {
+            messages.value.push(data);
+            scrollToBottom();
+          }
         }
-      }
-    });
+      },
+      response_start: () => {
+        isProcessing.value = true;
+        streamingContent.value = '';
+      },
+      response_chunk: (event) => {
+        const data = JSON.parse(event.data);
+        // Accumulate raw text for response_complete fallback
+        streamingContent.value += data.content;
+        // Feed to smd.js via rAF batch
+        streamingParser.write(data.content);
+      },
+      response_complete: (event) => {
+        const data = JSON.parse(event.data);
+        isProcessing.value = false;
+        streamingParser.finalize();
 
-    eventSourceRef.value.addEventListener('response_start', () => {
-      isProcessing.value = true;
-      streamingContent.value = '';
-    });
+        if (data.content) {
+          const resolvedBackend = data.backend || (selectedBackend.value !== 'auto' ? selectedBackend.value : undefined);
+          const entry: ConversationMessage = {
+            role: 'assistant',
+            content: data.content,
+            timestamp: new Date().toISOString(),
+          };
+          if (resolvedBackend) {
+            entry.backend = resolvedBackend;
+          }
+          messages.value.push(entry);
 
-    eventSourceRef.value.addEventListener('response_chunk', (event) => {
-      const data = JSON.parse(event.data);
-      // Accumulate raw text for response_complete fallback
-      streamingContent.value += data.content;
-      // Feed to smd.js via rAF batch
-      streamingParser.write(data.content);
-    });
-
-    eventSourceRef.value.addEventListener('response_complete', (event) => {
-      const data = JSON.parse(event.data);
-      isProcessing.value = false;
-      streamingParser.finalize();
-
-      if (data.content) {
-        const resolvedBackend = data.backend || (selectedBackend.value !== 'auto' ? selectedBackend.value : undefined);
-        const entry: ConversationMessage = {
-          role: 'assistant',
-          content: data.content,
-          timestamp: new Date().toISOString(),
-        };
-        if (resolvedBackend) {
-          entry.backend = resolvedBackend;
+          // Update config only when a new one is detected in this response.
+          // If the response has no config marker, keep the previous config
+          // (the AI may be asking follow-up questions about the same config).
+          const config = parseConfig(data.content);
+          if (config) {
+            detectedConfig.value = config;
+            canFinalize.value = true;
+          }
         }
-        messages.value.push(entry);
 
-        // Update config only when a new one is detected in this response.
-        // If the response has no config marker, keep the previous config
-        // (the AI may be asking follow-up questions about the same config).
-        const config = parseConfig(data.content);
-        if (config) {
-          detectedConfig.value = config;
-          canFinalize.value = true;
+        streamingContent.value = '';
+        scrollToBottom();
+      },
+      error: (event) => {
+        try {
+          if (event.data) {
+            const data = JSON.parse(event.data);
+            showToast(data.error || 'Stream error', 'error');
+          }
+        } catch {
+          // Server-sent error event with unparseable data -- ignore
         }
-      }
-
-      streamingContent.value = '';
-      scrollToBottom();
-    });
-
-    eventSourceRef.value.addEventListener('error', (event) => {
-      try {
-        const msgEvent = event as MessageEvent;
-        if (msgEvent.data) {
-          const data = JSON.parse(msgEvent.data);
-          showToast(data.error || 'Stream error', 'error');
-        }
-      } catch {
-        // Server-sent error event with unparseable data -- ignore
-      }
-      isProcessing.value = false;
-    });
-
-    eventSourceRef.value.onerror = () => {
+        isProcessing.value = false;
+      },
+    },
+    onError: () => {
       // Native EventSource connection error (network drop, server close).
       // EventSource auto-reconnects by default; no toast needed.
-    };
+    },
+  });
+
+  function connectToStream() {
+    if (!conversationId.value) return;
+    sseConnect();
   }
 
   async function startConversation() {
@@ -313,12 +312,12 @@ export function useConversation<TConfig>(
 
   function cleanup() {
     streamingParser.finalize();
-    if (eventSourceRef.value) {
-      eventSourceRef.value.close();
-    }
+    sseClose();
   }
 
-  onUnmounted(cleanup);
+  // Note: onUnmounted SSE cleanup is handled by useEventSource.
+  // The cleanup() function is still exposed for explicit teardown (e.g., navigation)
+  // and handles the streaming parser finalization.
 
   return {
     conversationId,
