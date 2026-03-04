@@ -1,7 +1,7 @@
 # GRD Execution State
 
 **Milestone:** v0.1.0 -- Production Hardening (active) / v0.2.0 -- Miscellaneous
-**Current Phase:** Phase 16 (autopilot: executing)
+**Current Phase:** Phase 9 (autopilot: executing)
 **Current Plan:** 03 (completed)
 **Status:** phase-verified
 
@@ -22,13 +22,13 @@
 | 7 | Workflow Automation & Pipeline Intelligence | Complete (3/3) — Verified | proxy |
 | 8 | Execution Intelligence & Replay | Pending | proxy |
 | 9 | Bot Authoring & Template Ecosystem | Pending | proxy |
-| 10 | Analytics & Monitoring Dashboards | In Progress (2/5) | proxy |
+| 10 | Analytics & Monitoring Dashboards | In Progress (4/5) | proxy |
 | 11 | Enterprise Integrations & Governance | Pending | proxy |
 | 12 | Specialized Automation Bots | Pending | proxy |
 | 13 | Execution Resilience & Infrastructure | Pending | proxy |
 | 14 | API Hardening & Developer Experience | Pending | proxy |
 | 15 | Code Consistency & Standards | Pending | sanity |
-| 16 | Frontend Quality & User Experience | Pending | sanity |
+| 16 | Frontend Quality & User Experience | In Progress (4/4) | sanity |
 
 ## Priority Tiers
 
@@ -64,6 +64,13 @@
 - [Phase 16]: Kept separate onUnmounted in consumers for non-SSE cleanup (heartbeat timers, allMode reset)
 - [Phase 16]: Used Zod Standard Schema (validator: 'standard') for build-time env validation with @julr/vite-plugin-validate-env
 - [Phase 16]: Achieved 416/416 (100%) route handler docstring coverage for OpenAPI summaries
+- [Phase 16]: ErrorBoundary tests use $.setupState access (synchronous) to avoid happy-dom patchBlockChildren limitation with v-if/v-else after lifecycle errors
+- [Phase 10]: Scheduling suggestions use success_rate DESC + avg_duration_ms ASC ranking per 10-RESEARCH.md
+- [Phase 10]: Budget enforcement creates health alerts via create_health_alert() for in-app notification
+- [Phase 10]: Execution time limit uses ProcessManager.cancel_graceful() (SIGTERM then SIGKILL)
+- [Phase 10]: Used chartjs-adapter-date-fns time scale for analytics chart x-axes, matching CombinedUsageChart pattern
+- [Phase 10]: BotEffectivenessChart uses dual charts (doughnut + line) in single component for compact 2x2 grid layout
+- [Phase 10]: SuccessRateChart 80% baseline via custom Chart.js afterDraw plugin
 
 ## Blockers
 
@@ -86,9 +93,12 @@ None -- no phases have deferred verification level in this milestone.
 | Phase 16 P01 | 6min | 2 tasks | 5 files |
 | 16 | 02 | 5min | 2 | 4 |
 | 10 | 02 | 8min | 2 | 11 |
+| 10 | 03 | 13min | 2 | 14 |
 | 16 | 03 | 14min | 2 | 19 |
+| 10 | 04 | 5min | 2 | 10 |
+| 16 | 04 | ~20min | 3 | 4 |
 
 ## Session Log
 
 - **Last session:** 2026-03-04
-- **Stopped at:** Completed 16-03-PLAN.md (env validation plugin, 100% OpenAPI docstring coverage)
+- **Stopped at:** Completed 16-04-PLAN.md (unit tests for ErrorBoundary, error-handler, useEventSource, sidebar coordination)
