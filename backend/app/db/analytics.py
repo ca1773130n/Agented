@@ -6,7 +6,8 @@ Follows the pattern established in budgets.py get_usage_aggregated_summary().
 
 import logging
 import sqlite3
-from typing import List, Optional
+from datetime import datetime, timedelta
+from typing import List, Optional, Tuple
 
 from .connection import get_connection
 
@@ -246,3 +247,72 @@ def get_effectiveness_over_time(
         except sqlite3.Error as e:
             logger.error(f"Database error in get_effectiveness_over_time: {e}")
             return []
+
+
+def get_execution_time_patterns(
+    trigger_id: Optional[str] = None,
+    days: int = 90,
+) -> Tuple[List[dict], List[dict]]:
+    """Analyze hour-of-day and day-of-week patterns from execution_logs.
+
+    Returns two result sets:
+    1. Hour patterns: hour, total, success, avg_duration_ms
+    2. Day-of-week patterns: day_of_week, total, success, avg_duration_ms
+
+    Args:
+        trigger_id: Optional trigger filter.
+        days: Number of days to look back (default 90).
+
+    Returns:
+        Tuple of (hour_patterns, day_patterns).
+    """
+    since = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    hour_query = """
+        SELECT
+            strftime('%H', started_at) as hour,
+            COUNT(*) as total,
+            SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) as success,
+            AVG(
+                CASE WHEN status = 'success'
+                THEN CAST((julianday(finished_at) - julianday(started_at)) * 86400000 AS INTEGER)
+                END
+            ) as avg_duration_ms
+        FROM execution_logs
+        WHERE started_at >= ?
+    """
+    day_query = """
+        SELECT
+            strftime('%w', started_at) as day_of_week,
+            COUNT(*) as total,
+            SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) as success,
+            AVG(
+                CASE WHEN status = 'success'
+                THEN CAST((julianday(finished_at) - julianday(started_at)) * 86400000 AS INTEGER)
+                END
+            ) as avg_duration_ms
+        FROM execution_logs
+        WHERE started_at >= ?
+    """
+
+    params: list = [since]
+    if trigger_id:
+        hour_query += " AND trigger_id = ?"
+        day_query += " AND trigger_id = ?"
+        params.append(trigger_id)
+
+    hour_query += " GROUP BY hour ORDER BY hour"
+    day_query += " GROUP BY day_of_week ORDER BY day_of_week"
+
+    with get_connection() as conn:
+        try:
+            hour_cursor = conn.execute(hour_query, params)
+            hour_patterns = [dict(row) for row in hour_cursor.fetchall()]
+
+            day_cursor = conn.execute(day_query, params)
+            day_patterns = [dict(row) for row in day_cursor.fetchall()]
+
+            return hour_patterns, day_patterns
+        except sqlite3.Error as e:
+            logger.error(f"Database error in get_execution_time_patterns: {e}")
+            return [], []

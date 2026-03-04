@@ -65,3 +65,23 @@ class EffectivenessResponse(BaseModel):
     pending: int
     acceptance_rate: float
     over_time: List[dict]
+
+
+class SchedulingSuggestion(BaseModel):
+    """Single scheduling suggestion (hour or day)."""
+
+    type: Literal["hour", "day"]
+    value: str
+    success_rate: float
+    avg_duration_ms: Optional[float] = None
+    execution_count: int
+    rationale: str
+
+
+class SchedulingSuggestionsResponse(BaseModel):
+    """Response for scheduling suggestions endpoint."""
+
+    suggestions: List[SchedulingSuggestion]
+    total_executions_analyzed: int
+    analysis_period_days: int
+    message: Optional[str] = None

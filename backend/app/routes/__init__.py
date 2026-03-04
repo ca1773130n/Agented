@@ -31,6 +31,7 @@ def register_blueprints(app):
     from .projects import projects_bp
     from .rotation import rotation_bp
     from .rule_conversations import rule_conversations_bp
+    from .scheduling_suggestions import scheduling_bp
     from .rules import rules_bp
     from .scheduler import scheduler_bp
     from .settings import settings_bp
@@ -103,6 +104,7 @@ def register_blueprints(app):
             project_mcp_bp,
             product_owner_bp,
             health_monitor_bp,
+            scheduling_bp,
         ]
         for bp in admin_blueprints:
             limiter.limit("120/minute")(bp)
@@ -155,6 +157,7 @@ def register_blueprints(app):
     app.register_api(project_mcp_bp)
     app.register_api(product_owner_bp)
     app.register_api(health_monitor_bp)
+    app.register_api(scheduling_bp)
 
     # SPA catch-all: MUST be registered LAST so API routes take priority
     app.register_blueprint(spa_bp)
