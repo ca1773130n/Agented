@@ -82,6 +82,9 @@ BOOKMARK_ID_LENGTH = 6
 INTEGRATION_ID_PREFIX = "intg-"
 INTEGRATION_ID_LENGTH = 6
 
+CAMPAIGN_ID_PREFIX = "camp-"
+CAMPAIGN_ID_LENGTH = 6
+
 
 # --- Generic helper ---
 
@@ -517,3 +520,19 @@ def _get_unique_integration_id(conn) -> str:
         cursor = conn.execute("SELECT id FROM integrations WHERE id = ?", (iid,))
         if cursor.fetchone() is None:
             return iid
+
+
+def generate_campaign_id() -> str:
+    """Generate a unique campaign ID like 'camp-abc123'."""
+    chars = string.ascii_lowercase + string.digits
+    random_part = "".join(secrets.choice(chars) for _ in range(CAMPAIGN_ID_LENGTH))
+    return f"{CAMPAIGN_ID_PREFIX}{random_part}"
+
+
+def _get_unique_campaign_id(conn) -> str:
+    """Generate a campaign ID that doesn't exist in the database."""
+    while True:
+        cid = generate_campaign_id()
+        cursor = conn.execute("SELECT id FROM campaigns WHERE id = ?", (cid,))
+        if cursor.fetchone() is None:
+            return cid

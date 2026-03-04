@@ -88,6 +88,18 @@ from .bookmarks import (  # noqa: F401
     update_bookmark,
 )
 
+# Campaigns (multi-repo campaign orchestration)
+from .campaigns import (  # noqa: F401
+    add_campaign_execution,
+    create_campaign,
+    delete_campaign,
+    get_campaign,
+    list_campaign_executions,
+    list_campaigns,
+    update_campaign_execution,
+    update_campaign_status,
+)
+
 # Budgets (token usage, budget limits, execution token data)
 from .budgets import (  # noqa: F401
     # Token usage
@@ -223,6 +235,8 @@ from .ids import (  # noqa: F401
     AGENT_ID_PREFIX,
     BOOKMARK_ID_LENGTH,
     BOOKMARK_ID_PREFIX,
+    CAMPAIGN_ID_LENGTH,
+    CAMPAIGN_ID_PREFIX,
     CONVERSATION_ID_LENGTH,
     INTEGRATION_ID_LENGTH,
     INTEGRATION_ID_PREFIX,
@@ -275,6 +289,7 @@ from .ids import (  # noqa: F401
     _get_unique_bookmark_id,
     _get_unique_integration_id,
     _get_unique_agent_id,
+    _get_unique_campaign_id,
     _get_unique_conversation_id,
     _get_unique_mcp_server_id,
     _get_unique_role_id,
@@ -300,6 +315,7 @@ from .ids import (  # noqa: F401
     generate_bookmark_id,
     generate_integration_id,
     generate_agent_id,
+    generate_campaign_id,
     generate_conversation_id,
     generate_execution_id,
     generate_mcp_server_id,

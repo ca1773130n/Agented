@@ -2982,6 +2982,45 @@ def _migrate_v60_add_integrations_table(conn):
     )
 
 
+def _migrate_v62_add_campaign_tables(conn):
+    """Add campaigns and campaign_executions tables for multi-repo orchestration."""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS campaigns (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            trigger_id TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'pending',
+            repo_urls TEXT NOT NULL,
+            total_repos INTEGER DEFAULT 0,
+            completed_repos INTEGER DEFAULT 0,
+            failed_repos INTEGER DEFAULT 0,
+            started_at TIMESTAMP,
+            finished_at TIMESTAMP,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (trigger_id) REFERENCES triggers(id) ON DELETE CASCADE
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_campaigns_trigger ON campaigns(trigger_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_campaigns_status ON campaigns(status)")
+
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS campaign_executions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            campaign_id TEXT NOT NULL,
+            execution_id TEXT,
+            repo_url TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'pending',
+            started_at TIMESTAMP,
+            finished_at TIMESTAMP,
+            error_message TEXT,
+            FOREIGN KEY (campaign_id) REFERENCES campaigns(id) ON DELETE CASCADE
+        )
+    """)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_campaign_exec_campaign ON campaign_executions(campaign_id)"
+    )
+
+
 # =============================================================================
 # Versioned migration registry
 # =============================================================================
@@ -3088,4 +3127,5 @@ VERSIONED_MIGRATIONS = [
     (59, "add_bookmarks_table", _migrate_v59_add_bookmarks_table),
     (60, "add_integrations_table", _migrate_v60_add_integrations_table),
     (61, "add_gitops_tables", _migrate_v57_add_gitops_tables),
+    (62, "add_campaign_tables", _migrate_v62_add_campaign_tables),
 ]
