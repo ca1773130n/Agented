@@ -1,11 +1,11 @@
 # GRD Execution State
 
 **Milestone:** v0.1.0 -- Production Hardening (active) / v0.2.0 -- Miscellaneous
-**Current Phase:** Phase 9 (autopilot: planning)
+**Current Phase:** Phase 16 (autopilot: executing)
 **Current Plan:** 03 (completed)
 **Status:** phase-verified
 
-**Progress:** `[#.........] 1/10 phases` (v0.2.0 Phase 7: 3/3) + v0.1.0 Phases 2,3,5,6: complete
+**Progress:** [███░░░░░░░] 33%
 
 ---
 
@@ -22,7 +22,7 @@
 | 7 | Workflow Automation & Pipeline Intelligence | Complete (3/3) — Verified | proxy |
 | 8 | Execution Intelligence & Replay | Pending | proxy |
 | 9 | Bot Authoring & Template Ecosystem | Pending | proxy |
-| 10 | Analytics & Monitoring Dashboards | Pending | proxy |
+| 10 | Analytics & Monitoring Dashboards | In Progress (2/5) | proxy |
 | 11 | Enterprise Integrations & Governance | Pending | proxy |
 | 12 | Specialized Automation Bots | Pending | proxy |
 | 13 | Execution Resilience & Infrastructure | Pending | proxy |
@@ -53,6 +53,17 @@
 - 2026-03-04: fetchEventSource with openWhenHidden:true to prevent SSE disconnection on tab background
 - 2026-03-04: 401 throws FatalSSEError to prevent infinite retry loop on expired/invalid keys
 - 2026-03-04: Property-assignment callbacks (onmessage/onerror/onopen) via getter/setter for EventSource compat
+- 2026-03-04: Analytics uses strftime GROUP BY aggregation instead of window functions per 10-RESEARCH.md recommendation
+- 2026-03-04: Effectiveness acceptance_rate includes both 'approved' and 'fixed' statuses; ignored = changes_requested with fixes_applied=0
+- 2026-03-04: Health monitor uses simple Python loop for consecutive failure detection instead of window functions for speed
+- 2026-03-04: Missing fire detection only applies to scheduled triggers (not webhook/github) per 10-RESEARCH.md Pitfall 3
+- 2026-03-04: Alert deduplication via 30-min same-type+trigger_id window prevents alert spam
+- [Phase 16]: Used onErrorCaptured with return false for ErrorBoundary to prevent SPA crashes from child rendering errors
+- [Phase 16]: Typed handleApiError showToast with ToastType union for strict TS compat instead of generic string
+- [Phase 16]: Extended useEventSource with sourceFactory option for API modules that create EventSource internally
+- [Phase 16]: Kept separate onUnmounted in consumers for non-SSE cleanup (heartbeat timers, allMode reset)
+- [Phase 16]: Used Zod Standard Schema (validator: 'standard') for build-time env validation with @julr/vite-plugin-validate-env
+- [Phase 16]: Achieved 416/416 (100%) route handler docstring coverage for OpenAPI summaries
 
 ## Blockers
 
@@ -71,8 +82,13 @@ None -- no phases have deferred verification level in this milestone.
 | 07 | 03 | 6min | 2 | 12 |
 | 03 (v0.1.0) | 01 | 3min | 2 | 2 |
 | 03 (v0.1.0) | 02 | 4min | 2 | 25 |
+| 10 | 01 | 10min | 2 | 7 |
+| Phase 16 P01 | 6min | 2 tasks | 5 files |
+| 16 | 02 | 5min | 2 | 4 |
+| 10 | 02 | 8min | 2 | 11 |
+| 16 | 03 | 14min | 2 | 19 |
 
 ## Session Log
 
 - **Last session:** 2026-03-04
-- **Stopped at:** v0.1.0 Phase 5 verified -- all 3 plans executed and merged, verification passed (9/9 sanity, 7/7 proxy)
+- **Stopped at:** Completed 16-03-PLAN.md (env validation plugin, 100% OpenAPI docstring coverage)
