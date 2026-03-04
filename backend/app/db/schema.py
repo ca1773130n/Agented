@@ -1364,4 +1364,21 @@ def create_fresh_schema(conn):
         "CREATE INDEX IF NOT EXISTS idx_audit_events_created ON audit_events(created_at DESC)"
     )
 
+    # --- v0.2.0: Secrets vault ---
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS secrets (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL UNIQUE,
+            encrypted_value TEXT NOT NULL,
+            description TEXT DEFAULT '',
+            scope TEXT DEFAULT 'global',
+            created_by TEXT DEFAULT 'system',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            last_accessed_at TIMESTAMP
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_secrets_name ON secrets(name)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_secrets_scope ON secrets(scope)")
+
     conn.commit()

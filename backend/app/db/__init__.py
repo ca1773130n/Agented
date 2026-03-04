@@ -172,6 +172,18 @@ from .rbac import (  # noqa: F401
     update_user_role,
 )
 
+# Secrets (encrypted vault)
+from .secrets import (  # noqa: F401
+    count_secrets,
+    create_secret,
+    delete_secret as delete_secret_record,
+    get_secret,
+    get_secret_by_name,
+    list_secrets,
+    update_last_accessed,
+    update_secret as update_secret_record,
+)
+
 # ID generators and constants
 from .ids import (  # noqa: F401
     AGENT_ID_LENGTH,
@@ -183,6 +195,8 @@ from .ids import (  # noqa: F401
     ROLE_ID_LENGTH,
     ROLE_ID_PREFIX,
     MESSAGE_ID_LENGTH,
+    SECRET_ID_LENGTH,
+    SECRET_ID_PREFIX,
     MESSAGE_ID_PREFIX,
     MILESTONE_ID_LENGTH,
     # New v0.4.0 ID generators
@@ -225,6 +239,7 @@ from .ids import (  # noqa: F401
     _get_unique_conversation_id,
     _get_unique_mcp_server_id,
     _get_unique_role_id,
+    _get_unique_secret_id,
     _get_unique_message_id,
     _get_unique_milestone_id,
     _get_unique_phase_id,
@@ -248,6 +263,7 @@ from .ids import (  # noqa: F401
     generate_execution_id,
     generate_mcp_server_id,
     generate_role_id,
+    generate_secret_id,
     generate_message_id,
     generate_milestone_id,
     generate_phase_id,

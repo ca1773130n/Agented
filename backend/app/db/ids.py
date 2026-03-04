@@ -73,6 +73,9 @@ MCP_SERVER_ID_LENGTH = 6
 ROLE_ID_PREFIX = "role-"
 ROLE_ID_LENGTH = 6
 
+SECRET_ID_PREFIX = "sec-"
+SECRET_ID_LENGTH = 6
+
 
 # --- Generic helper ---
 
@@ -460,3 +463,19 @@ def _get_unique_role_id(conn) -> str:
         cursor = conn.execute("SELECT id FROM user_roles WHERE id = ?", (rid,))
         if cursor.fetchone() is None:
             return rid
+
+
+def generate_secret_id() -> str:
+    """Generate a unique secret ID like 'sec-abc123'."""
+    chars = string.ascii_lowercase + string.digits
+    random_part = "".join(secrets.choice(chars) for _ in range(SECRET_ID_LENGTH))
+    return f"{SECRET_ID_PREFIX}{random_part}"
+
+
+def _get_unique_secret_id(conn) -> str:
+    """Generate a secret ID that doesn't exist in the database."""
+    while True:
+        sid = generate_secret_id()
+        cursor = conn.execute("SELECT id FROM secrets WHERE id = ?", (sid,))
+        if cursor.fetchone() is None:
+            return sid
