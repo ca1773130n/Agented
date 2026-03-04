@@ -7,6 +7,7 @@ import PageLayout from '../components/base/PageLayout.vue';
 import EntityLayout from '../layouts/EntityLayout.vue';
 import ConfirmModal from '../components/base/ConfirmModal.vue';
 import { useToast } from '../composables/useToast';
+import { handleApiError } from '../services/api/error-handler';
 import { useUnsavedGuard } from '../composables/useUnsavedGuard';
 import { useWebMcpTool } from '../composables/useWebMcpTool';
 import { clearEntityCache } from '../router/guards';
@@ -148,12 +149,17 @@ function populateEditForm(data: Agent) {
 }
 
 async function loadAgent() {
-  const data = await agentApi.get(agentId.value);
-  agent.value = data;
-  populateEditForm(data);
-  // Fire-and-forget: load available skills for autocomplete
-  loadAvailableSkills();
-  return data;
+  try {
+    const data = await agentApi.get(agentId.value);
+    agent.value = data;
+    populateEditForm(data);
+    // Fire-and-forget: load available skills for autocomplete
+    loadAvailableSkills();
+    return data;
+  } catch (err) {
+    handleApiError(err, showToast, 'Failed to load agent');
+    throw err;
+  }
 }
 
 function startEditing() {

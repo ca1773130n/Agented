@@ -8,6 +8,7 @@ import PageHeader from '../components/base/PageHeader.vue';
 import ProjectMcpPanel from '../components/project/ProjectMcpPanel.vue';
 import EntityLayout from '../layouts/EntityLayout.vue';
 import { useToast } from '../composables/useToast';
+import { handleApiError } from '../services/api/error-handler';
 import { useWebMcpTool } from '../composables/useWebMcpTool';
 
 const props = defineProps<{
@@ -81,40 +82,45 @@ useWebMcpTool({
 });
 
 async function loadData() {
-  const [projectData, teamsData, productsData] = await Promise.all([
-    projectApi.get(projectId.value),
-    teamApi.list(),
-    productApi.list(),
-  ]);
-  project.value = projectData;
-  teams.value = teamsData.teams || [];
-  products.value = productsData.products || [];
-  // Initialize selected teams from project's current teams
-  const teamIds = project.value.teams?.map(t => t.id) || [];
-  selectedTeamIds.value = [...teamIds];
-  originalTeamIds.value = [...teamIds];
-  // Initialize selected product
-  selectedProductId.value = project.value.product_id || '';
-  originalProductId.value = project.value.product_id || '';
-  // Initialize owner team
-  selectedOwnerTeamId.value = project.value.owner_team_id || '';
-  originalOwnerTeamId.value = project.value.owner_team_id || '';
-  // Initialize local path
-  editLocalPath.value = project.value.local_path || '';
-  originalLocalPath.value = project.value.local_path || '';
-  // Initialize name and description
-  editName.value = project.value.name;
-  originalName.value = project.value.name;
-  editDescription.value = project.value.description || '';
-  originalDescription.value = project.value.description || '';
-  // Initialize clone status
-  cloneStatus.value = project.value.clone_status || 'none';
-  cloneError.value = project.value.clone_error || '';
-  lastSyncedAt.value = project.value.last_synced_at || '';
-  if (cloneStatus.value === 'cloning') {
-    startClonePoll();
+  try {
+    const [projectData, teamsData, productsData] = await Promise.all([
+      projectApi.get(projectId.value),
+      teamApi.list(),
+      productApi.list(),
+    ]);
+    project.value = projectData;
+    teams.value = teamsData.teams || [];
+    products.value = productsData.products || [];
+    // Initialize selected teams from project's current teams
+    const teamIds = project.value.teams?.map(t => t.id) || [];
+    selectedTeamIds.value = [...teamIds];
+    originalTeamIds.value = [...teamIds];
+    // Initialize selected product
+    selectedProductId.value = project.value.product_id || '';
+    originalProductId.value = project.value.product_id || '';
+    // Initialize owner team
+    selectedOwnerTeamId.value = project.value.owner_team_id || '';
+    originalOwnerTeamId.value = project.value.owner_team_id || '';
+    // Initialize local path
+    editLocalPath.value = project.value.local_path || '';
+    originalLocalPath.value = project.value.local_path || '';
+    // Initialize name and description
+    editName.value = project.value.name;
+    originalName.value = project.value.name;
+    editDescription.value = project.value.description || '';
+    originalDescription.value = project.value.description || '';
+    // Initialize clone status
+    cloneStatus.value = project.value.clone_status || 'none';
+    cloneError.value = project.value.clone_error || '';
+    lastSyncedAt.value = project.value.last_synced_at || '';
+    if (cloneStatus.value === 'cloning') {
+      startClonePoll();
+    }
+    return project.value;
+  } catch (err) {
+    handleApiError(err, showToast, 'Failed to load project settings');
+    throw err;
   }
-  return project.value;
 }
 
 async function saveSettings() {

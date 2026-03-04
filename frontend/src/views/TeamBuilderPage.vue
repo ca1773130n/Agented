@@ -9,6 +9,7 @@ import AgentAssignmentEditor from '../components/teams/AgentAssignmentEditor.vue
 import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import EntityLayout from '../layouts/EntityLayout.vue';
 import { useToast } from '../composables/useToast';
+import { handleApiError } from '../services/api/error-handler';
 import { useWebMcpTool } from '../composables/useWebMcpTool';
 
 const props = defineProps<{
@@ -74,29 +75,34 @@ useWebMcpTool({
 
 // Load all data
 async function loadData() {
-  const [teamData, agentsData, saData] = await Promise.all([
-    teamApi.get(teamId.value),
-    agentApi.list(),
-    superAgentApi.list().catch(() => ({ super_agents: [] })),
-  ]);
-
-  team.value = teamData;
-  members.value = teamData.members || [];
-  allAgents.value = agentsData.agents || [];
-  allSuperAgents.value = saData.super_agents || [];
-
-  // Load assignments
   try {
-    const assignData = await teamApi.getAllAssignments(teamId.value);
-    assignments.value = assignData.assignments || [];
-  } catch {
-    assignments.value = [];
-  }
+    const [teamData, agentsData, saData] = await Promise.all([
+      teamApi.get(teamId.value),
+      agentApi.list(),
+      superAgentApi.list().catch(() => ({ super_agents: [] })),
+    ]);
 
-  // Sync local topology state
-  localTopology.value = teamData.topology || null;
-  localTopologyConfig.value = teamData.topology_config || '{}';
-  return teamData;
+    team.value = teamData;
+    members.value = teamData.members || [];
+    allAgents.value = agentsData.agents || [];
+    allSuperAgents.value = saData.super_agents || [];
+
+    // Load assignments
+    try {
+      const assignData = await teamApi.getAllAssignments(teamId.value);
+      assignments.value = assignData.assignments || [];
+    } catch {
+      assignments.value = [];
+    }
+
+    // Sync local topology state
+    localTopology.value = teamData.topology || null;
+    localTopologyConfig.value = teamData.topology_config || '{}';
+    return teamData;
+  } catch (err) {
+    handleApiError(err, showToast, 'Failed to load team builder');
+    throw err;
+  }
 }
 
 // Handle topology update from TeamCanvas (includes dropdown changes)

@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router';
 import type { Project, GrdMilestone, GrdPhase, GrdPlan } from '../services/api';
 import { projectApi, grdApi } from '../services/api';
 import { useToast } from '../composables/useToast';
+import { handleApiError } from '../services/api/error-handler';
 import { usePlanningSession } from '../composables/usePlanningSession';
 import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
@@ -85,7 +86,7 @@ async function loadData() {
     await loadPhasesAndPlans();
     return project.value;
   } catch (err) {
-    showToast('Failed to load planning data', 'error');
+    handleApiError(err, showToast, 'Failed to load planning data');
     throw err;
   }
 }

@@ -10,6 +10,7 @@ import TeamTriggerCard from '../components/teams/TeamTriggerCard.vue';
 import TeamMembersList from '../components/teams/TeamMembersList.vue';
 import EntityLayout from '../layouts/EntityLayout.vue';
 import { useToast } from '../composables/useToast';
+import { handleApiError } from '../services/api/error-handler';
 import { useWebMcpTool } from '../composables/useWebMcpTool';
 
 const props = defineProps<{
@@ -92,9 +93,14 @@ function getTriggerLabel(t?: string): string {
 }
 
 async function loadData() {
-  const data = await teamApi.get(teamId.value);
-  team.value = data;
-  return data;
+  try {
+    const data = await teamApi.get(teamId.value);
+    team.value = data;
+    return data;
+  } catch (err) {
+    handleApiError(err, showToast, 'Failed to load team dashboard');
+    throw err;
+  }
 }
 
 // Manual run

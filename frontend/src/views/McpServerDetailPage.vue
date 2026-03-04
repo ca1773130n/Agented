@@ -7,6 +7,7 @@ import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import EntityLayout from '../layouts/EntityLayout.vue';
 import { useToast } from '../composables/useToast';
+import { handleApiError } from '../services/api/error-handler';
 import { useFocusTrap } from '../composables/useFocusTrap';
 import { useWebMcpTool } from '../composables/useWebMcpTool';
 
@@ -147,25 +148,30 @@ async function testConnection() {
 }
 
 async function loadServer() {
-  const data = await mcpServerApi.get(mcpServerId.value);
-  server.value = data;
-  if (data) {
-    editForm.value = {
-      name: data.name || '',
-      display_name: data.display_name || '',
-      description: data.description || '',
-      server_type: data.server_type || 'stdio',
-      command: data.command || '',
-      args: data.args || '',
-      url: data.url || '',
-      timeout_ms: data.timeout_ms || 30000,
-      documentation_url: data.documentation_url || '',
-      npm_package: data.npm_package || '',
-    };
+  try {
+    const data = await mcpServerApi.get(mcpServerId.value);
+    server.value = data;
+    if (data) {
+      editForm.value = {
+        name: data.name || '',
+        display_name: data.display_name || '',
+        description: data.description || '',
+        server_type: data.server_type || 'stdio',
+        command: data.command || '',
+        args: data.args || '',
+        url: data.url || '',
+        timeout_ms: data.timeout_ms || 30000,
+        documentation_url: data.documentation_url || '',
+        npm_package: data.npm_package || '',
+      };
+    }
+    // Fire-and-forget: load project assignments
+    loadAssignments();
+    return data;
+  } catch (err) {
+    handleApiError(err, showToast, 'Failed to load MCP server');
+    throw err;
   }
-  // Fire-and-forget: load project assignments
-  loadAssignments();
-  return data;
 }
 
 async function saveServerInfo() {

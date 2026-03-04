@@ -8,6 +8,7 @@ import PageHeader from '../components/base/PageHeader.vue';
 import ConfirmModal from '../components/base/ConfirmModal.vue';
 import EntityLayout from '../layouts/EntityLayout.vue';
 import { useToast } from '../composables/useToast';
+import { handleApiError } from '../services/api/error-handler';
 import { useFocusTrap } from '../composables/useFocusTrap';
 import { useWebMcpTool } from '../composables/useWebMcpTool';
 
@@ -73,18 +74,23 @@ useFocusTrap(addComponentModalRef, showAddComponentModal);
 useFocusTrap(editComponentModalRef, isEditingComponent);
 
 async function loadPlugin() {
-  const data = await pluginApi.get(pluginId.value);
-  plugin.value = data;
-  if (plugin.value) {
-    editForm.value = {
-      name: plugin.value.name,
-      description: plugin.value.description || '',
-      version: plugin.value.version,
-      status: plugin.value.status,
-      author: plugin.value.author || '',
-    };
+  try {
+    const data = await pluginApi.get(pluginId.value);
+    plugin.value = data;
+    if (plugin.value) {
+      editForm.value = {
+        name: plugin.value.name,
+        description: plugin.value.description || '',
+        version: plugin.value.version,
+        status: plugin.value.status,
+        author: plugin.value.author || '',
+      };
+    }
+    return data;
+  } catch (err) {
+    handleApiError(err, showToast, 'Failed to load plugin');
+    throw err;
   }
-  return data;
 }
 
 async function savePluginInfo() {

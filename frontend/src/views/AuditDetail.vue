@@ -7,6 +7,7 @@ import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import EntityLayout from '../layouts/EntityLayout.vue';
 import { useToast } from '../composables/useToast';
+import { handleApiError } from '../services/api/error-handler';
 import { useWebMcpTool } from '../composables/useWebMcpTool';
 
 const props = defineProps<{
@@ -38,9 +39,14 @@ useWebMcpTool({
 });
 
 async function loadAudit() {
-  const data = await auditApi.getDetail(auditId.value);
-  audit.value = data;
-  return data;
+  try {
+    const data = await auditApi.getDetail(auditId.value);
+    audit.value = data;
+    return data;
+  } catch (err) {
+    handleApiError(err, showToast, 'Failed to load audit');
+    throw err;
+  }
 }
 
 function formatDateShort(dateStr: string): string {

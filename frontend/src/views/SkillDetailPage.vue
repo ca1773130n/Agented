@@ -8,6 +8,7 @@ import PageHeader from '../components/base/PageHeader.vue';
 import ConfirmModal from '../components/base/ConfirmModal.vue';
 import EntityLayout from '../layouts/EntityLayout.vue';
 import { useToast } from '../composables/useToast';
+import { handleApiError } from '../services/api/error-handler';
 import { useWebMcpTool } from '../composables/useWebMcpTool';
 
 const props = defineProps<{
@@ -63,16 +64,21 @@ useWebMcpTool({
 });
 
 async function loadSkill() {
-  const data = await userSkillsApi.get(skillId.value);
-  skill.value = data.skill || null;
-  if (skill.value) {
-    editName.value = skill.value.skill_name;
-    editDescription.value = skill.value.description || '';
-    editPath.value = skill.value.skill_path;
-    editEnabled.value = !!skill.value.enabled;
-    editHarness.value = !!skill.value.selected_for_harness;
+  try {
+    const data = await userSkillsApi.get(skillId.value);
+    skill.value = data.skill || null;
+    if (skill.value) {
+      editName.value = skill.value.skill_name;
+      editDescription.value = skill.value.description || '';
+      editPath.value = skill.value.skill_path;
+      editEnabled.value = !!skill.value.enabled;
+      editHarness.value = !!skill.value.selected_for_harness;
+    }
+    return skill.value;
+  } catch (err) {
+    handleApiError(err, showToast, 'Failed to load skill');
+    throw err;
   }
-  return skill.value;
 }
 
 async function saveSkill() {

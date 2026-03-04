@@ -7,6 +7,7 @@ import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import EntityLayout from '../layouts/EntityLayout.vue';
 import { useToast } from '../composables/useToast';
+import { handleApiError } from '../services/api/error-handler';
 import { useWebMcpTool } from '../composables/useWebMcpTool';
 
 const props = defineProps<{
@@ -51,18 +52,23 @@ useWebMcpTool({
 });
 
 async function loadData() {
-  const [productData, teamsData] = await Promise.all([
-    productApi.get(productId.value),
-    teamApi.list(),
-  ]);
-  product.value = productData;
-  teams.value = teamsData.teams || [];
-  selectedOwnerTeamId.value = product.value.owner_team_id || '';
-  editName.value = product.value.name;
-  originalName.value = product.value.name;
-  editDescription.value = product.value.description || '';
-  originalDescription.value = product.value.description || '';
-  return product.value;
+  try {
+    const [productData, teamsData] = await Promise.all([
+      productApi.get(productId.value),
+      teamApi.list(),
+    ]);
+    product.value = productData;
+    teams.value = teamsData.teams || [];
+    selectedOwnerTeamId.value = product.value.owner_team_id || '';
+    editName.value = product.value.name;
+    originalName.value = product.value.name;
+    editDescription.value = product.value.description || '';
+    originalDescription.value = product.value.description || '';
+    return product.value;
+  } catch (err) {
+    handleApiError(err, showToast, 'Failed to load product settings');
+    throw err;
+  }
 }
 
 async function saveSettings() {

@@ -6,6 +6,8 @@ import { useStreamingParser } from '../composables/useStreamingParser';
 import { useAiChat } from '../composables/useAiChat';
 import EntityLayout from '../layouts/EntityLayout.vue';
 import AiChatPanel from '../components/ai/AiChatPanel.vue';
+import { useToast } from '../composables/useToast';
+import { handleApiError } from '../services/api/error-handler';
 import DocumentEditor from '../components/super-agents/DocumentEditor.vue';
 import SubagentComposition from '../components/super-agents/SubagentComposition.vue';
 import MessageInbox from '../components/super-agents/MessageInbox.vue';
@@ -14,6 +16,8 @@ import { useWebMcpTool } from '../composables/useWebMcpTool';
 
 const router = useRouter();
 const route = useRoute();
+
+const showToast = useToast();
 
 const superAgentId = computed(() => route.params.superAgentId as string);
 
@@ -121,11 +125,16 @@ function formatSessionDate(dateStr?: string): string {
 }
 
 async function loadData() {
-  const data = await superAgentApi.get(superAgentId.value);
-  superAgent.value = data;
-  // Fire-and-forget: load sessions
-  loadSessions();
-  return data;
+  try {
+    const data = await superAgentApi.get(superAgentId.value);
+    superAgent.value = data;
+    // Fire-and-forget: load sessions
+    loadSessions();
+    return data;
+  } catch (err) {
+    handleApiError(err, showToast, 'Failed to load super agent');
+    throw err;
+  }
 }
 </script>
 

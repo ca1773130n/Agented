@@ -371,6 +371,7 @@ import BackendConnect from '../components/monitoring/BackendConnect.vue';
 import AccountLoginModal from '../components/monitoring/AccountLoginModal.vue';
 import ConfirmModal from '../components/base/ConfirmModal.vue';
 import { useToast } from '../composables/useToast';
+import { handleApiError } from '../services/api/error-handler';
 import { useWebMcpTool } from '../composables/useWebMcpTool';
 
 const router = useRouter();
@@ -506,14 +507,19 @@ const planOptions = computed(() => {
 });
 
 async function loadBackend() {
-  const data = await backendApi.get(backendId.value);
-  backend.value = data;
-  // Fire-and-forget: load supplementary data
-  loadHealth();
-  if (data?.type === 'opencode') {
-    loadOtherBackendAccounts();
+  try {
+    const data = await backendApi.get(backendId.value);
+    backend.value = data;
+    // Fire-and-forget: load supplementary data
+    loadHealth();
+    if (data?.type === 'opencode') {
+      loadOtherBackendAccounts();
+    }
+    return data;
+  } catch (err) {
+    handleApiError(err, showToast, 'Failed to load backend');
+    throw err;
   }
-  return data;
 }
 
 

@@ -16,6 +16,7 @@ import ExecutionHistoryPanel from '../components/workflow/ExecutionHistoryPanel.
 import ExecutionMonitorPanel from '../components/workflow/ExecutionMonitorPanel.vue';
 import ConfirmModal from '../components/base/ConfirmModal.vue';
 import { useToast } from '../composables/useToast';
+import { handleApiError } from '../services/api/error-handler';
 import { useWorkflowExecution } from '../composables/useWorkflowExecution';
 import { useWebMcpTool } from '../composables/useWebMcpTool';
 
@@ -114,14 +115,19 @@ useWebMcpTool({
 // ---------------------------------------------------------------------------
 
 async function loadWorkflow() {
-  const data = await workflowApi.get(workflowId.value);
-  workflow.value = data;
-  metadataForm.value = {
-    name: data.name,
-    trigger_type: data.trigger_type || 'manual',
-    enabled: data.enabled ?? 1,
-  };
-  return data;
+  try {
+    const data = await workflowApi.get(workflowId.value);
+    workflow.value = data;
+    metadataForm.value = {
+      name: data.name,
+      trigger_type: data.trigger_type || 'manual',
+      enabled: data.enabled ?? 1,
+    };
+    return data;
+  } catch (err) {
+    handleApiError(err, showToast, 'Failed to load workflow');
+    throw err;
+  }
 }
 
 // ---------------------------------------------------------------------------

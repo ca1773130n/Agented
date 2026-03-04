@@ -10,6 +10,8 @@ import type { DataTableColumn } from '../components/base/DataTable.vue';
 import StatusBadge from '../components/base/StatusBadge.vue';
 import EmptyState from '../components/base/EmptyState.vue';
 import EntityLayout from '../layouts/EntityLayout.vue';
+import { useToast } from '../composables/useToast';
+import { handleApiError } from '../services/api/error-handler';
 import { useWebMcpTool } from '../composables/useWebMcpTool';
 
 const props = defineProps<{
@@ -19,6 +21,8 @@ const props = defineProps<{
 const route = useRoute();
 const router = useRouter();
 const triggerId = computed(() => (route.params.triggerId as string) || props.triggerId || '');
+
+const showToast = useToast();
 
 const trigger = ref<Trigger | null>(null);
 const audits = ref<AuditRecord[]>([]);
@@ -64,16 +68,21 @@ function applyFilter() {
 watch(selectedProject, applyFilter);
 
 async function loadData() {
-  const [botRes, historyRes, projectsRes] = await Promise.all([
-    triggerApi.get(triggerId.value).catch(() => null),
-    auditApi.getHistory({ trigger_id: triggerId.value }),
-    auditApi.getProjects(),
-  ]);
-  trigger.value = botRes;
-  audits.value = historyRes.audits || [];
-  projects.value = projectsRes.projects || [];
-  applyFilter();
-  return trigger.value;
+  try {
+    const [botRes, historyRes, projectsRes] = await Promise.all([
+      triggerApi.get(triggerId.value).catch(() => null),
+      auditApi.getHistory({ trigger_id: triggerId.value }),
+      auditApi.getProjects(),
+    ]);
+    trigger.value = botRes;
+    audits.value = historyRes.audits || [];
+    projects.value = projectsRes.projects || [];
+    applyFilter();
+    return trigger.value;
+  } catch (err) {
+    handleApiError(err, showToast, 'Failed to load trigger history');
+    throw err;
+  }
 }
 
 function formatDate(dateStr: string): string {

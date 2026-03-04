@@ -7,6 +7,7 @@ import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import EntityLayout from '../layouts/EntityLayout.vue';
 import { useToast } from '../composables/useToast';
+import { handleApiError } from '../services/api/error-handler';
 import { useWebMcpTool } from '../composables/useWebMcpTool';
 
 const props = defineProps<{
@@ -50,17 +51,22 @@ useWebMcpTool({
 });
 
 async function loadData() {
-  const [teamData, agentsData] = await Promise.all([
-    teamApi.get(teamId.value),
-    agentApi.list(),
-  ]);
-  team.value = teamData;
-  agents.value = agentsData.agents || [];
-  selectedLeaderId.value = team.value.leader_id || '';
-  editName.value = team.value.name;
-  editDescription.value = team.value.description || '';
-  editColor.value = team.value.color || '#00d4ff';
-  return team.value;
+  try {
+    const [teamData, agentsData] = await Promise.all([
+      teamApi.get(teamId.value),
+      agentApi.list(),
+    ]);
+    team.value = teamData;
+    agents.value = agentsData.agents || [];
+    selectedLeaderId.value = team.value.leader_id || '';
+    editName.value = team.value.name;
+    editDescription.value = team.value.description || '';
+    editColor.value = team.value.color || '#00d4ff';
+    return team.value;
+  } catch (err) {
+    handleApiError(err, showToast, 'Failed to load team settings');
+    throw err;
+  }
 }
 
 async function saveSettings() {

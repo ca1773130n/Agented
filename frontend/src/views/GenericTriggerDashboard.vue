@@ -7,6 +7,7 @@ import ExecutionLogViewer from '../components/triggers/ExecutionLogViewer.vue';
 import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import EntityLayout from '../layouts/EntityLayout.vue';
 import { useToast } from '../composables/useToast';
+import { handleApiError } from '../services/api/error-handler';
 import { useWebMcpTool } from '../composables/useWebMcpTool';
 
 const props = defineProps<{
@@ -51,23 +52,28 @@ useWebMcpTool({
 });
 
 async function loadData() {
-  const [botRes, historyRes, execRes] = await Promise.all([
-    triggerApi.get(triggerId.value),
-    auditApi.getHistory({ trigger_id: triggerId.value, limit: 5 }),
-    executionApi.listForBot(triggerId.value, { limit: 5 }),
-  ]);
-  trigger.value = botRes;
-  recentAudits.value = historyRes.audits || [];
-  recentExecutions.value = execRes.executions || [];
-  runningExecution.value = execRes.running_execution;
+  try {
+    const [botRes, historyRes, execRes] = await Promise.all([
+      triggerApi.get(triggerId.value),
+      auditApi.getHistory({ trigger_id: triggerId.value, limit: 5 }),
+      executionApi.listForBot(triggerId.value, { limit: 5 }),
+    ]);
+    trigger.value = botRes;
+    recentAudits.value = historyRes.audits || [];
+    recentExecutions.value = execRes.executions || [];
+    runningExecution.value = execRes.running_execution;
 
-  // If there's a running execution, show the live log
-  if (runningExecution.value) {
-    currentExecutionId.value = runningExecution.value.execution_id;
-    showLiveLog.value = true;
-    startStatusPolling();
+    // If there's a running execution, show the live log
+    if (runningExecution.value) {
+      currentExecutionId.value = runningExecution.value.execution_id;
+      showLiveLog.value = true;
+      startStatusPolling();
+    }
+    return trigger.value;
+  } catch (err) {
+    handleApiError(err, showToast, 'Failed to load trigger dashboard');
+    throw err;
   }
-  return trigger.value;
 }
 
 function startStatusPolling() {
