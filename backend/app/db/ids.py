@@ -76,6 +76,9 @@ ROLE_ID_LENGTH = 6
 SECRET_ID_PREFIX = "sec-"
 SECRET_ID_LENGTH = 6
 
+BOOKMARK_ID_PREFIX = "bm-"
+BOOKMARK_ID_LENGTH = 6
+
 
 # --- Generic helper ---
 
@@ -381,6 +384,13 @@ def generate_role_id() -> str:
     return f"{ROLE_ID_PREFIX}{random_part}"
 
 
+def generate_bookmark_id() -> str:
+    """Generate a unique bookmark ID like 'bm-abc123'."""
+    chars = string.ascii_lowercase + string.digits
+    random_part = "".join(secrets.choice(chars) for _ in range(BOOKMARK_ID_LENGTH))
+    return f"{BOOKMARK_ID_PREFIX}{random_part}"
+
+
 # --- v0.4.0 Collision-safe ID generators ---
 
 
@@ -479,3 +489,12 @@ def _get_unique_secret_id(conn) -> str:
         cursor = conn.execute("SELECT id FROM secrets WHERE id = ?", (sid,))
         if cursor.fetchone() is None:
             return sid
+
+
+def _get_unique_bookmark_id(conn) -> str:
+    """Generate a bookmark ID that doesn't exist in the database."""
+    while True:
+        bid = generate_bookmark_id()
+        cursor = conn.execute("SELECT id FROM bookmarks WHERE id = ?", (bid,))
+        if cursor.fetchone() is None:
+            return bid

@@ -2931,6 +2931,36 @@ def _migrate_v58_add_secrets_table(conn):
     conn.execute("CREATE INDEX IF NOT EXISTS idx_secrets_scope ON secrets(scope)")
 
 
+def _migrate_v59_add_bookmarks_table(conn):
+    """Create bookmarks table for execution bookmarking with deep-links."""
+    cursor = conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='bookmarks'"
+    )
+    if cursor.fetchone() is None:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS bookmarks (
+                id TEXT PRIMARY KEY,
+                execution_id TEXT NOT NULL,
+                trigger_id TEXT NOT NULL,
+                title TEXT NOT NULL DEFAULT '',
+                notes TEXT DEFAULT '',
+                tags TEXT DEFAULT '',
+                line_number INTEGER,
+                deep_link TEXT NOT NULL,
+                created_by TEXT DEFAULT 'system',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_bookmarks_trigger ON bookmarks(trigger_id)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_bookmarks_execution ON bookmarks(execution_id)"
+        )
+        conn.commit()
+        print("Created bookmarks table")
+
+
 # =============================================================================
 # Versioned migration registry
 # =============================================================================
@@ -2998,4 +3028,5 @@ VERSIONED_MIGRATIONS = [
     # v0.2.0 enterprise governance migrations
     (57, "add_rbac_and_audit_tables", _migrate_v57_add_rbac_and_audit_tables),
     (58, "add_secrets_table", _migrate_v58_add_secrets_table),
+    (59, "add_bookmarks_table", _migrate_v59_add_bookmarks_table),
 ]
