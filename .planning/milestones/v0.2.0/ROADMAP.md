@@ -143,6 +143,16 @@ Plans:
 
 **Verification Level:** proxy
 
+**Plans:** 6 plans
+
+Plans:
+- [ ] 11-01-PLAN.md -- RBAC decorator with permission matrix and audit trail SQLite persistence
+- [ ] 11-02-PLAN.md -- Encrypted secrets vault with Fernet encryption and audit logging
+- [ ] 11-03-PLAN.md -- Bot config export/import as YAML/JSON and execution bookmarking
+- [ ] 11-04-PLAN.md -- Integration adapter framework with Slack, Teams, JIRA, and Linear adapters
+- [ ] 11-05-PLAN.md -- GitOps sync engine with git polling and auto-apply
+- [ ] 11-06-PLAN.md -- Multi-repo campaign orchestration and post-execution notification hooks
+
 **Success Criteria:**
 
 1. Slack/Teams integration posts execution result summaries to configured channels within 30 seconds of completion, and a slash command (e.g., `/agented run security-audit on payments-service`) triggers bot execution and returns a confirmation
@@ -291,13 +301,14 @@ Plans:
 
 **Verification Level:** sanity
 
-**Plans:** 4 plans
+**Plans:** 5 plans
 
 Plans:
 - [ ] 16-01-PLAN.md -- ErrorBoundary component, centralized API error handler, and sidebar loading coordination (UX-02, UX-04, UX-06, UX-08)
 - [ ] 16-02-PLAN.md -- Shared useEventSource composable and SSE consumer refactoring (UX-03)
 - [ ] 16-03-PLAN.md -- Environment validation plugin and OpenAPI documentation completion (UX-07, UX-09)
-- [ ] 16-04-PLAN.md -- Unit tests for ErrorBoundary, error-handler, and useEventSource (UX-01, UX-05)
+- [ ] 16-04-PLAN.md -- Unit tests for ErrorBoundary, error-handler, useEventSource, and App error handling (UX-01, UX-05)
+- [ ] 16-05-PLAN.md -- Loading state rollout across all async views with handleApiError integration (UX-01)
 
 **Success Criteria:**
 
