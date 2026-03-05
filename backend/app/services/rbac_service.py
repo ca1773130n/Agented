@@ -6,7 +6,7 @@ per Flask community conventions to enforce role-based access on routes.
 
 import functools
 import logging
-from typing import Optional
+from typing import Callable, Optional
 
 from flask import request
 
@@ -53,7 +53,7 @@ def has_permission(api_key: str, permission: str) -> bool:
     return permission in ROLE_PERMISSIONS.get(role, set())
 
 
-def require_role(*allowed_roles):
+def require_role(*allowed_roles) -> Callable:
     """Decorator to enforce RBAC on a Flask route.
 
     When no roles exist in the database, RBAC is disabled and all requests
@@ -73,7 +73,7 @@ def require_role(*allowed_roles):
                         this route.
     """
 
-    def decorator(fn):
+    def decorator(fn: Callable) -> Callable:
         @functools.wraps(fn)
         def wrapper(*args, **kwargs):
             # Graceful bootstrap: if no roles configured, allow all requests

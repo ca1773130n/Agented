@@ -78,7 +78,7 @@ def validate_workflow_graph(graph_json_str: str) -> Tuple[bool, str]:
 # =============================================================================
 
 
-def add_workflow(
+def create_workflow(
     name: str,
     description: str = None,
     trigger_type: str = "manual",
@@ -639,9 +639,7 @@ def get_workflow_execution_timeline(execution_id: str) -> List[dict]:
         ]
 
 
-def get_workflow_execution_analytics(
-    workflow_id: Optional[str] = None, days: int = 30
-) -> dict:
+def get_workflow_execution_analytics(workflow_id: Optional[str] = None, days: int = 30) -> dict:
     """Get aggregate workflow execution analytics.
 
     Args:
@@ -702,8 +700,7 @@ def get_workflow_execution_analytics(
             most_failed_params,
         )
         most_failed = [
-            {"node_id": r[0], "node_type": r[1], "fail_count": r[2]}
-            for r in cursor2.fetchall()
+            {"node_id": r[0], "node_type": r[1], "fail_count": r[2]} for r in cursor2.fetchall()
         ]
 
         # Execution trend (daily counts)

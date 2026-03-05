@@ -7,7 +7,7 @@ from http import HTTPStatus
 from queue import Queue
 from typing import Dict, List, Tuple
 
-from ..database import add_rule, get_rule
+from ..database import create_rule, get_rule
 from .base_conversation_service import BaseConversationService
 
 logger = logging.getLogger(__name__)
@@ -96,7 +96,7 @@ class RuleConversationService(BaseConversationService):
         enabled = config.get("enabled", True)
 
         try:
-            rule_id = add_rule(
+            rule_id = create_rule(
                 name=name,
                 rule_type=rule_type,
                 description=description,

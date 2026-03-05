@@ -1,8 +1,8 @@
 """PR review management service."""
 
+import logging
 from http import HTTPStatus
 from typing import Tuple
-import logging
 
 from ..database import (
     add_pr_review,

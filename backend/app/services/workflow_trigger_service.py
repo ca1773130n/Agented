@@ -28,7 +28,7 @@ class _WorkflowFileWatchHandler:
         workflow_id: str,
         patterns: Optional[List[str]] = None,
         debounce_seconds: Optional[float] = None,
-    ):
+    ) -> None:
         self.workflow_id = workflow_id
         self.patterns = patterns
         self._debounce_seconds = (
@@ -38,7 +38,7 @@ class _WorkflowFileWatchHandler:
         self._lock = threading.Lock()
         self._timer: Optional[threading.Timer] = None
 
-    def dispatch(self, event):
+    def dispatch(self, event) -> None:
         """Dispatch incoming watchdog event with pattern matching and debounce."""
         if event.is_directory:
             return
@@ -61,7 +61,7 @@ class _WorkflowFileWatchHandler:
 
         self._schedule_process()
 
-    def _schedule_process(self):
+    def _schedule_process(self) -> None:
         """Cancel existing timer and schedule a new debounced processing run."""
         if self._timer is not None:
             self._timer.cancel()
@@ -69,7 +69,7 @@ class _WorkflowFileWatchHandler:
         self._timer.daemon = True
         self._timer.start()
 
-    def _process_pending(self):
+    def _process_pending(self) -> None:
         """Process all pending file changes after debounce window."""
         with self._lock:
             paths = dict(self._pending)
@@ -95,7 +95,7 @@ class _WorkflowFileWatchHandler:
         except Exception as e:
             logger.error(f"Error firing file watch trigger for workflow {self.workflow_id}: {e}")
 
-    def stop(self):
+    def stop(self) -> None:
         """Cancel any pending timer."""
         if self._timer is not None:
             self._timer.cancel()
@@ -131,7 +131,7 @@ class WorkflowTriggerService:
     # =========================================================================
 
     @classmethod
-    def init(cls):
+    def init(cls) -> None:
         """Initialize trigger service — load all trigger configs from DB.
 
         Called from SchedulerService.init() after scheduler is started.
@@ -150,7 +150,7 @@ class WorkflowTriggerService:
             logger.error(f"Error initializing workflow triggers: {e}")
 
     @classmethod
-    def shutdown(cls):
+    def shutdown(cls) -> None:
         """Stop all file watchers. Cron/polling jobs stopped by SchedulerService."""
         with cls._lock:
             for wf_id, watcher_info in list(cls._file_watchers.items()):
@@ -169,7 +169,7 @@ class WorkflowTriggerService:
         logger.info("Workflow trigger service shutdown")
 
     @classmethod
-    def reset(cls):
+    def reset(cls) -> None:
         """Reset all in-memory state. Used for testing."""
         with cls._lock:
             cls._completion_callbacks.clear()
@@ -194,7 +194,9 @@ class WorkflowTriggerService:
     # =========================================================================
 
     @classmethod
-    def register_completion_trigger(cls, source_type: str, source_id: str, target_workflow_id: str):
+    def register_completion_trigger(
+        cls, source_type: str, source_id: str, target_workflow_id: str
+    ) -> None:
         """Register a callback: when (source_type, source_id) completes, fire target workflow.
 
         Args:
@@ -215,7 +217,7 @@ class WorkflowTriggerService:
     @classmethod
     def unregister_completion_trigger(
         cls, source_type: str, source_id: str, target_workflow_id: str
-    ):
+    ) -> None:
         """Remove a specific completion callback registration."""
         key = (source_type, source_id)
         with cls._lock:
@@ -237,7 +239,7 @@ class WorkflowTriggerService:
         status: str,
         output: dict = None,
         chain_depth: int = 0,
-    ):
+    ) -> None:
         """Called when any execution completes. Fires registered completion triggers.
 
         Args:
@@ -287,7 +289,7 @@ class WorkflowTriggerService:
                 logger.error(f"Error firing completion trigger for workflow {wf_id}: {e}")
 
     @classmethod
-    def _load_completion_triggers(cls):
+    def _load_completion_triggers(cls) -> None:
         """Load completion triggers from DB on startup."""
         try:
             from ..db.workflows import get_all_workflows
@@ -319,7 +321,7 @@ class WorkflowTriggerService:
     @classmethod
     def register_cron_trigger(
         cls, workflow_id: str, cron_expression: str, timezone_str: str = "UTC"
-    ):
+    ) -> None:
         """Register a cron-based workflow trigger using APScheduler.
 
         Uses CronTrigger.from_crontab() for full cron expression support.
@@ -379,7 +381,7 @@ class WorkflowTriggerService:
         )
 
     @classmethod
-    def unregister_cron_trigger(cls, workflow_id: str):
+    def unregister_cron_trigger(cls, workflow_id: str) -> None:
         """Remove a cron trigger from the scheduler."""
         from .scheduler_service import SchedulerService
 
@@ -393,7 +395,7 @@ class WorkflowTriggerService:
             logger.info(f"Unregistered cron trigger for workflow {workflow_id}")
 
     @classmethod
-    def _fire_cron_workflow(cls, workflow_id: str):
+    def _fire_cron_workflow(cls, workflow_id: str) -> None:
         """Execute a cron-triggered workflow. Called by APScheduler."""
         try:
             from .workflow_execution_service import WorkflowExecutionService
@@ -404,7 +406,7 @@ class WorkflowTriggerService:
             logger.error(f"Error firing cron workflow {workflow_id}: {e}")
 
     @classmethod
-    def _load_cron_triggers(cls):
+    def _load_cron_triggers(cls) -> None:
         """Load cron triggers from DB on startup."""
         try:
             from ..db.workflows import get_all_workflows
@@ -447,7 +449,7 @@ class WorkflowTriggerService:
         method: str = "GET",
         headers: dict = None,
         condition: str = "status_changed",
-    ):
+    ) -> None:
         """Register an API polling trigger that fires workflow when response changes.
 
         Args:
@@ -506,7 +508,7 @@ class WorkflowTriggerService:
         method: str,
         headers: dict,
         condition: str,
-    ):
+    ) -> None:
         """Poll an API endpoint and fire workflow if response changed.
 
         Uses SHA-256 hash comparison for deduplication.
@@ -572,7 +574,7 @@ class WorkflowTriggerService:
                 logger.error(f"Error firing polling trigger for workflow {workflow_id}: {e}")
 
     @classmethod
-    def unregister_polling_trigger(cls, workflow_id: str):
+    def unregister_polling_trigger(cls, workflow_id: str) -> None:
         """Remove a polling trigger from the scheduler."""
         from .scheduler_service import SchedulerService
 
@@ -588,7 +590,7 @@ class WorkflowTriggerService:
         logger.info(f"Unregistered polling trigger for workflow {workflow_id}")
 
     @classmethod
-    def _load_polling_triggers(cls):
+    def _load_polling_triggers(cls) -> None:
         """Load polling triggers from DB on startup."""
         try:
             from ..db.workflows import get_all_workflows
@@ -634,7 +636,7 @@ class WorkflowTriggerService:
         patterns: Optional[List[str]] = None,
         recursive: bool = True,
         debounce_seconds: Optional[float] = None,
-    ):
+    ) -> None:
         """Register a file system watch trigger using watchdog.
 
         Follows the PluginFileWatcher pattern with debouncing.
@@ -678,7 +680,7 @@ class WorkflowTriggerService:
         )
 
     @classmethod
-    def unregister_file_watch_trigger(cls, workflow_id: str):
+    def unregister_file_watch_trigger(cls, workflow_id: str) -> None:
         """Stop and remove a file watch trigger."""
         with cls._lock:
             watcher_info = cls._file_watchers.pop(workflow_id, None)
@@ -694,7 +696,7 @@ class WorkflowTriggerService:
             logger.info(f"Unregistered file watch trigger for workflow {workflow_id}")
 
     @classmethod
-    def _load_file_watch_triggers(cls):
+    def _load_file_watch_triggers(cls) -> None:
         """Load file watch triggers from DB on startup."""
         try:
             from ..db.workflows import get_all_workflows
@@ -733,7 +735,7 @@ class WorkflowTriggerService:
     # =========================================================================
 
     @classmethod
-    def register_trigger(cls, workflow_id: str, trigger_type: str, trigger_config: dict):
+    def register_trigger(cls, workflow_id: str, trigger_type: str, trigger_config: dict) -> None:
         """Register a trigger based on type and config.
 
         Called by the trigger management API endpoint.
@@ -788,7 +790,7 @@ class WorkflowTriggerService:
             raise ValueError(f"Unknown trigger type: {trigger_type}")
 
     @classmethod
-    def unregister_trigger(cls, workflow_id: str, trigger_type: str):
+    def unregister_trigger(cls, workflow_id: str, trigger_type: str) -> None:
         """Unregister a trigger based on type.
 
         Args:

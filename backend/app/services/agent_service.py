@@ -1,18 +1,20 @@
 """Agent management service."""
 
 import json
+import logging
 import threading
 from http import HTTPStatus
 from typing import Optional, Tuple
-import logging
 
 from ..database import (
-    add_agent,
     count_agents,
     delete_agent,
     get_agent,
     get_all_agents,
     update_agent,
+)
+from ..database import (
+    create_agent as db_create_agent,
 )
 from ..db.agents import VALID_BACKENDS
 from .execution_service import ExecutionService
@@ -73,7 +75,7 @@ class AgentService:
         if documents and isinstance(documents, list):
             documents = json.dumps(documents)
 
-        agent_id = add_agent(
+        agent_id = db_create_agent(
             name=name,
             description=description,
             role=role,
@@ -175,7 +177,7 @@ class AgentService:
         # Shared mutable container to capture execution_id from background thread
         result = {"execution_id": None}
 
-        def _run_agent_trigger():
+        def _run_agent_trigger() -> None:
             result["execution_id"] = ExecutionService.run_trigger(
                 pseudo_trigger, message, event=None, trigger_type="manual"
             )

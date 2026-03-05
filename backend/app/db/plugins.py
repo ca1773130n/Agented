@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 # =============================================================================
 
 
-def add_plugin(
+def create_plugin(
     name: str,
     description: str = None,
     version: str = "1.0.0",
@@ -225,7 +225,7 @@ def get_plugin_components(plugin_id: str) -> List[dict]:
 # =============================================================================
 
 
-def add_marketplace(
+def create_marketplace(
     name: str,
     url: str,
     marketplace_type: str = "git",
@@ -245,7 +245,7 @@ def add_marketplace(
             conn.commit()
             return marketplace_id
         except sqlite3.Error as e:
-            logger.error(f"Database error in add_marketplace: {e}")
+            logger.error(f"Database error in create_marketplace: {e}")
             return None
 
 

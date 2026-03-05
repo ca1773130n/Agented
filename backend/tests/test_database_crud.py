@@ -6,7 +6,7 @@ seed_predefined_triggers() inserts 2 predefined triggers (bot-security, bot-pr-r
 
 Note: The fresh DB schema is missing 5 agent columns (layer, detected_role,
 matched_skills, preferred_model, effort_level) that are only added via migration.
-The apply_migrations fixture below adds them so that add_agent() works correctly.
+The apply_migrations fixture below adds them so that create_agent() works correctly.
 """
 
 import sqlite3
@@ -15,26 +15,26 @@ import pytest
 
 from app.database import (
     # Agent functions
-    add_agent,
+    create_agent,
     # Command functions
-    add_command,
+    create_command,
     # Hook functions
-    add_hook,
+    create_hook,
     # Plugin functions
-    add_plugin,
+    create_plugin,
     add_plugin_component,
     # Product functions
-    add_product,
+    create_product,
     # Project functions
-    add_project,
+    create_project,
     # Rule functions
-    add_rule,
+    create_rule,
     # Team functions
-    add_team,
+    create_team,
     add_team_agent_assignment,
     add_team_member,
     # Trigger functions
-    add_trigger,
+    create_trigger,
     # Skill (user_skills) functions
     add_user_skill,
     assign_team_to_project,
@@ -121,7 +121,7 @@ def apply_migrations(isolated_db):
 
     The fresh-schema init_db() path does not create 5 agent columns that the
     migration path adds (layer, detected_role, matched_skills, preferred_model,
-    effort_level). Since add_agent() references these columns, we add them here.
+    effort_level). Since create_agent() references these columns, we add them here.
     """
     conn = sqlite3.connect(isolated_db)
     cursor = conn.execute("PRAGMA table_info(agents)")
@@ -147,7 +147,7 @@ def apply_migrations(isolated_db):
 
 class TestTriggerCRUD:
     def test_add_and_get(self):
-        trigger_id = add_trigger(name="Test Trigger", prompt_template="test {paths}")
+        trigger_id = create_trigger(name="Test Trigger", prompt_template="test {paths}")
         assert trigger_id is not None
         assert trigger_id.startswith("trig-")
         trigger = get_trigger(trigger_id)
@@ -158,7 +158,7 @@ class TestTriggerCRUD:
         assert trigger["trigger_source"] == "webhook"
 
     def test_add_with_all_params(self):
-        trigger_id = add_trigger(
+        trigger_id = create_trigger(
             name="Full Trigger",
             prompt_template="full {paths}",
             backend_type="opencode",
@@ -183,14 +183,14 @@ class TestTriggerCRUD:
         assert trigger["execution_mode"] == "team"
 
     def test_update(self):
-        trigger_id = add_trigger(name="Original", prompt_template="orig")
+        trigger_id = create_trigger(name="Original", prompt_template="orig")
         result = update_trigger(trigger_id, name="Updated")
         assert result is True
         trigger = get_trigger(trigger_id)
         assert trigger["name"] == "Updated"
 
     def test_update_multiple_fields(self):
-        trigger_id = add_trigger(name="Multi", prompt_template="multi")
+        trigger_id = create_trigger(name="Multi", prompt_template="multi")
         result = update_trigger(
             trigger_id,
             name="Multi Updated",
@@ -204,12 +204,12 @@ class TestTriggerCRUD:
         assert trigger["trigger_source"] == "manual"
 
     def test_update_no_fields(self):
-        trigger_id = add_trigger(name="NoChange", prompt_template="nc")
+        trigger_id = create_trigger(name="NoChange", prompt_template="nc")
         result = update_trigger(trigger_id)
         assert result is False
 
     def test_delete(self):
-        trigger_id = add_trigger(name="To Delete", prompt_template="del")
+        trigger_id = create_trigger(name="To Delete", prompt_template="del")
         result = delete_trigger(trigger_id)
         assert result is True
         assert get_trigger(trigger_id) is None
@@ -228,14 +228,14 @@ class TestTriggerCRUD:
         assert get_trigger("trig-nonexist") is None
 
     def test_get_all(self):
-        add_trigger(name="Trigger A", prompt_template="a")
-        add_trigger(name="Trigger B", prompt_template="b")
+        create_trigger(name="Trigger A", prompt_template="a")
+        create_trigger(name="Trigger B", prompt_template="b")
         triggers = get_all_triggers()
         # 2 predefined + 2 new = at least 4
         assert len(triggers) >= 4
 
     def test_get_by_source(self):
-        add_trigger(
+        create_trigger(
             name="Webhook Trigger",
             prompt_template="wh",
             trigger_source="webhook",
@@ -245,7 +245,7 @@ class TestTriggerCRUD:
         assert "Webhook Trigger" in names
 
     def test_get_by_source_manual(self):
-        add_trigger(
+        create_trigger(
             name="Manual Trigger",
             prompt_template="man",
             trigger_source="manual",
@@ -255,21 +255,21 @@ class TestTriggerCRUD:
         assert "Manual Trigger" in names
 
     def test_update_next_run(self):
-        trigger_id = add_trigger(name="Schedule Test", prompt_template="sched")
+        trigger_id = create_trigger(name="Schedule Test", prompt_template="sched")
         result = update_trigger_next_run(trigger_id, "2026-01-01T00:00:00")
         assert result is True
         trigger = get_trigger(trigger_id)
         assert trigger["next_run_at"] == "2026-01-01T00:00:00"
 
     def test_update_last_run(self):
-        trigger_id = add_trigger(name="Last Run Test", prompt_template="lr")
+        trigger_id = create_trigger(name="Last Run Test", prompt_template="lr")
         result = update_trigger_last_run(trigger_id, "2026-01-01T12:00:00")
         assert result is True
         trigger = get_trigger(trigger_id)
         assert trigger["last_run_at"] == "2026-01-01T12:00:00"
 
     def test_update_auto_resolve(self):
-        trigger_id = add_trigger(name="Auto Resolve Test", prompt_template="ar")
+        trigger_id = create_trigger(name="Auto Resolve Test", prompt_template="ar")
         result = update_trigger_auto_resolve(trigger_id, True)
         assert result is True
         trigger = get_trigger(trigger_id)
@@ -283,7 +283,7 @@ class TestTriggerCRUD:
 
 class TestAgentCRUD:
     def test_add_and_get(self):
-        agent_id = add_agent(name="Test Agent", description="desc", system_prompt="prompt")
+        agent_id = create_agent(name="Test Agent", description="desc", system_prompt="prompt")
         assert agent_id is not None
         assert agent_id.startswith("agent-")
         agent = get_agent(agent_id)
@@ -294,7 +294,7 @@ class TestAgentCRUD:
         assert agent["backend_type"] == "claude"
 
     def test_add_with_optional_params(self):
-        agent_id = add_agent(
+        agent_id = create_agent(
             name="Full Agent",
             description="full desc",
             role="reviewer",
@@ -314,14 +314,14 @@ class TestAgentCRUD:
         assert agent["effort_level"] == "high"
 
     def test_update(self):
-        agent_id = add_agent(name="Original Agent", description="d", system_prompt="p")
+        agent_id = create_agent(name="Original Agent", description="d", system_prompt="p")
         result = update_agent(agent_id, name="Updated Agent")
         assert result is True
         agent = get_agent(agent_id)
         assert agent["name"] == "Updated Agent"
 
     def test_update_multiple_fields(self):
-        agent_id = add_agent(name="MultiAgent", description="d", system_prompt="p")
+        agent_id = create_agent(name="MultiAgent", description="d", system_prompt="p")
         result = update_agent(agent_id, name="Updated", description="new desc", role="tester")
         assert result is True
         agent = get_agent(agent_id)
@@ -330,12 +330,12 @@ class TestAgentCRUD:
         assert agent["role"] == "tester"
 
     def test_update_no_fields(self):
-        agent_id = add_agent(name="NoUpdate", description="d", system_prompt="p")
+        agent_id = create_agent(name="NoUpdate", description="d", system_prompt="p")
         result = update_agent(agent_id)
         assert result is False
 
     def test_delete(self):
-        agent_id = add_agent(name="To Delete", description="d", system_prompt="p")
+        agent_id = create_agent(name="To Delete", description="d", system_prompt="p")
         result = delete_agent(agent_id)
         assert result is True
         assert get_agent(agent_id) is None
@@ -348,7 +348,7 @@ class TestAgentCRUD:
         assert get_agent("agent-nonexistent") is None
 
     def test_get_by_name(self):
-        add_agent(name="UniqueTestAgent", description="d", system_prompt="p")
+        create_agent(name="UniqueTestAgent", description="d", system_prompt="p")
         agent = get_agent_by_name("UniqueTestAgent")
         assert agent is not None
         assert agent["name"] == "UniqueTestAgent"
@@ -357,8 +357,8 @@ class TestAgentCRUD:
         assert get_agent_by_name("NonexistentAgent") is None
 
     def test_get_all(self):
-        add_agent(name="Agent 1", description="d1", system_prompt="p1")
-        add_agent(name="Agent 2", description="d2", system_prompt="p2")
+        create_agent(name="Agent 1", description="d1", system_prompt="p1")
+        create_agent(name="Agent 2", description="d2", system_prompt="p2")
         agents = get_all_agents()
         assert len(agents) >= 2
 
@@ -373,7 +373,7 @@ class TestAgentCRUD:
 
     def test_update_conversation(self):
         conv_id = create_agent_conversation()
-        agent_id = add_agent(name="ConvAgent", description="d", system_prompt="p")
+        agent_id = create_agent(name="ConvAgent", description="d", system_prompt="p")
         result = update_agent_conversation(conv_id, agent_id=agent_id, messages='[{"text":"hi"}]')
         assert result is True
         conv = get_agent_conversation(conv_id)
@@ -402,7 +402,7 @@ class TestAgentCRUD:
 
 class TestTeamCRUD:
     def test_add_and_get(self):
-        team_id = add_team(name="Test Team", description="team desc")
+        team_id = create_team(name="Test Team", description="team desc")
         assert team_id is not None
         assert team_id.startswith("team-")
         team = get_team(team_id)
@@ -412,7 +412,7 @@ class TestTeamCRUD:
         assert team["color"] == "#00d4ff"
 
     def test_add_with_params(self):
-        team_id = add_team(
+        team_id = create_team(
             name="Full Team",
             description="desc",
             color="#ff0000",
@@ -426,14 +426,14 @@ class TestTeamCRUD:
         assert team["trigger_source"] == "webhook"
 
     def test_update(self):
-        team_id = add_team(name="Original Team", description="d")
+        team_id = create_team(name="Original Team", description="d")
         result = update_team(team_id, name="Updated Team")
         assert result is True
         team = get_team(team_id)
         assert team["name"] == "Updated Team"
 
     def test_update_multiple_fields(self):
-        team_id = add_team(name="MultiTeam", description="d")
+        team_id = create_team(name="MultiTeam", description="d")
         result = update_team(team_id, name="Updated", color="#00ff00", topology="parallel")
         assert result is True
         team = get_team(team_id)
@@ -442,12 +442,12 @@ class TestTeamCRUD:
         assert team["topology"] == "parallel"
 
     def test_update_no_fields(self):
-        team_id = add_team(name="NoUpdate", description="d")
+        team_id = create_team(name="NoUpdate", description="d")
         result = update_team(team_id)
         assert result is False
 
     def test_delete(self):
-        team_id = add_team(name="To Delete", description="d")
+        team_id = create_team(name="To Delete", description="d")
         result = delete_team(team_id)
         assert result is True
         assert get_team(team_id) is None
@@ -460,7 +460,7 @@ class TestTeamCRUD:
         assert get_team("team-nonexist") is None
 
     def test_get_by_name(self):
-        add_team(name="UniqueTeam", description="d")
+        create_team(name="UniqueTeam", description="d")
         team = get_team_by_name("UniqueTeam")
         assert team is not None
         assert team["name"] == "UniqueTeam"
@@ -469,13 +469,13 @@ class TestTeamCRUD:
         assert get_team_by_name("NonexistentTeam") is None
 
     def test_get_all(self):
-        add_team(name="Team A", description="a")
-        add_team(name="Team B", description="b")
+        create_team(name="Team A", description="a")
+        create_team(name="Team B", description="b")
         teams = get_all_teams()
         assert len(teams) >= 2
 
     def test_get_detail(self):
-        team_id = add_team(name="Detail Team", description="d")
+        team_id = create_team(name="Detail Team", description="d")
         detail = get_team_detail(team_id)
         assert detail is not None
         assert detail["name"] == "Detail Team"
@@ -485,7 +485,7 @@ class TestTeamCRUD:
         assert get_team_detail("team-nonexist") is None
 
     def test_add_member(self):
-        team_id = add_team(name="Member Team", description="d")
+        team_id = create_team(name="Member Team", description="d")
         member_id = add_team_member(team_id, name="Alice", role="lead", email="alice@test.com")
         assert member_id is not None
         members = get_team_members(team_id)
@@ -494,27 +494,27 @@ class TestTeamCRUD:
         assert "Alice" in names
 
     def test_add_member_with_agent(self):
-        team_id = add_team(name="Agent Team", description="d")
-        agent_id = add_agent(name="TeamAgent", description="d", system_prompt="p")
+        team_id = create_team(name="Agent Team", description="d")
+        agent_id = create_agent(name="TeamAgent", description="d", system_prompt="p")
         member_id = add_team_member(team_id, agent_id=agent_id, role="member")
         assert member_id is not None
         members = get_team_members(team_id)
         assert len(members) >= 1
 
     def test_update_member(self):
-        team_id = add_team(name="Update Member Team", description="d")
+        team_id = create_team(name="Update Member Team", description="d")
         member_id = add_team_member(team_id, name="Bob", role="member")
         result = update_team_member(member_id, name="Bobby", role="lead")
         assert result is True
 
     def test_get_members_empty(self):
-        team_id = add_team(name="Empty Team", description="d")
+        team_id = create_team(name="Empty Team", description="d")
         members = get_team_members(team_id)
         assert members == []
 
     def test_add_agent_assignment(self):
-        team_id = add_team(name="Assign Team", description="d")
-        agent_id = add_agent(name="Assign Agent", description="d", system_prompt="p")
+        team_id = create_team(name="Assign Team", description="d")
+        agent_id = create_agent(name="Assign Agent", description="d", system_prompt="p")
         assignment_id = add_team_agent_assignment(
             team_id, agent_id, entity_type="skill", entity_id="skill-1", entity_name="test skill"
         )
@@ -523,8 +523,8 @@ class TestTeamCRUD:
         assert len(assignments) >= 1
 
     def test_get_agent_assignments_filtered(self):
-        team_id = add_team(name="Filter Team", description="d")
-        agent_id = add_agent(name="Filter Agent", description="d", system_prompt="p")
+        team_id = create_team(name="Filter Team", description="d")
+        agent_id = create_agent(name="Filter Agent", description="d", system_prompt="p")
         add_team_agent_assignment(
             team_id, agent_id, entity_type="skill", entity_id="s1", entity_name="skill1"
         )
@@ -532,8 +532,8 @@ class TestTeamCRUD:
         assert len(assignments) >= 1
 
     def test_delete_agent_assignment(self):
-        team_id = add_team(name="Del Assign Team", description="d")
-        agent_id = add_agent(name="Del Assign Agent", description="d", system_prompt="p")
+        team_id = create_team(name="Del Assign Team", description="d")
+        agent_id = create_agent(name="Del Assign Agent", description="d", system_prompt="p")
         assignment_id = add_team_agent_assignment(
             team_id, agent_id, entity_type="command", entity_id="c1", entity_name="cmd1"
         )
@@ -548,7 +548,7 @@ class TestTeamCRUD:
 
 class TestProjectCRUD:
     def test_add_and_get(self):
-        project_id = add_project(name="Test Project", description="proj desc")
+        project_id = create_project(name="Test Project", description="proj desc")
         assert project_id is not None
         assert project_id.startswith("proj-")
         project = get_project(project_id)
@@ -558,9 +558,9 @@ class TestProjectCRUD:
         assert project["status"] == "active"
 
     def test_add_with_params(self):
-        team_id = add_team(name="Owner Team", description="d")
-        product_id = add_product(name="Owner Product", description="d")
-        project_id = add_project(
+        team_id = create_team(name="Owner Team", description="d")
+        product_id = create_product(name="Owner Product", description="d")
+        project_id = create_project(
             name="Full Project",
             description="d",
             status="active",
@@ -576,14 +576,14 @@ class TestProjectCRUD:
         assert project["product_id"] == product_id
 
     def test_update(self):
-        project_id = add_project(name="Original Proj", description="d")
+        project_id = create_project(name="Original Proj", description="d")
         result = update_project(project_id, name="Updated Proj")
         assert result is True
         project = get_project(project_id)
         assert project["name"] == "Updated Proj"
 
     def test_update_multiple_fields(self):
-        project_id = add_project(name="MultiProj", description="d")
+        project_id = create_project(name="MultiProj", description="d")
         result = update_project(
             project_id, name="Updated", description="new desc", status="archived"
         )
@@ -594,12 +594,12 @@ class TestProjectCRUD:
         assert project["status"] == "archived"
 
     def test_update_no_fields(self):
-        project_id = add_project(name="NoUpdate", description="d")
+        project_id = create_project(name="NoUpdate", description="d")
         result = update_project(project_id)
         assert result is False
 
     def test_delete(self):
-        project_id = add_project(name="To Delete", description="d")
+        project_id = create_project(name="To Delete", description="d")
         result = delete_project(project_id)
         assert result is True
         assert get_project(project_id) is None
@@ -612,13 +612,13 @@ class TestProjectCRUD:
         assert get_project("proj-nonexist") is None
 
     def test_get_all(self):
-        add_project(name="Proj A", description="a")
-        add_project(name="Proj B", description="b")
+        create_project(name="Proj A", description="a")
+        create_project(name="Proj B", description="b")
         projects = get_all_projects()
         assert len(projects) >= 2
 
     def test_get_detail(self):
-        project_id = add_project(name="Detail Proj", description="d")
+        project_id = create_project(name="Detail Proj", description="d")
         detail = get_project_detail(project_id)
         assert detail is not None
         assert detail["name"] == "Detail Proj"
@@ -628,8 +628,8 @@ class TestProjectCRUD:
         assert get_project_detail("proj-nonexist") is None
 
     def test_assign_and_get_teams(self):
-        project_id = add_project(name="Team Proj", description="d")
-        team_id = add_team(name="Assigned Team", description="d")
+        project_id = create_project(name="Team Proj", description="d")
+        team_id = create_team(name="Assigned Team", description="d")
         result = assign_team_to_project(project_id, team_id)
         assert result is True
         teams = get_project_teams(project_id)
@@ -638,8 +638,8 @@ class TestProjectCRUD:
         assert team_id in team_ids
 
     def test_unassign_team(self):
-        project_id = add_project(name="Unassign Proj", description="d")
-        team_id = add_team(name="Unassign Team", description="d")
+        project_id = create_project(name="Unassign Proj", description="d")
+        team_id = create_team(name="Unassign Team", description="d")
         assign_team_to_project(project_id, team_id)
         result = unassign_team_from_project(project_id, team_id)
         assert result is True
@@ -648,7 +648,7 @@ class TestProjectCRUD:
         assert team_id not in team_ids
 
     def test_get_teams_empty(self):
-        project_id = add_project(name="Empty Proj", description="d")
+        project_id = create_project(name="Empty Proj", description="d")
         teams = get_project_teams(project_id)
         assert teams == []
 
@@ -660,7 +660,7 @@ class TestProjectCRUD:
 
 class TestProductCRUD:
     def test_add_and_get(self):
-        product_id = add_product(name="Test Product", description="prod desc")
+        product_id = create_product(name="Test Product", description="prod desc")
         assert product_id is not None
         assert product_id.startswith("prod-")
         product = get_product(product_id)
@@ -670,8 +670,8 @@ class TestProductCRUD:
         assert product["status"] == "active"
 
     def test_add_with_params(self):
-        team_id = add_team(name="Product Owner Team", description="d")
-        product_id = add_product(
+        team_id = create_team(name="Product Owner Team", description="d")
+        product_id = create_product(
             name="Full Product",
             description="full",
             status="active",
@@ -682,14 +682,14 @@ class TestProductCRUD:
         assert product["owner_team_id"] == team_id
 
     def test_update(self):
-        product_id = add_product(name="Original Product", description="d")
+        product_id = create_product(name="Original Product", description="d")
         result = update_product(product_id, name="Updated Product")
         assert result is True
         product = get_product(product_id)
         assert product["name"] == "Updated Product"
 
     def test_update_multiple_fields(self):
-        product_id = add_product(name="MultiProd", description="d")
+        product_id = create_product(name="MultiProd", description="d")
         result = update_product(
             product_id, name="Updated", description="new desc", status="archived"
         )
@@ -700,12 +700,12 @@ class TestProductCRUD:
         assert product["status"] == "archived"
 
     def test_update_no_fields(self):
-        product_id = add_product(name="NoUpdate", description="d")
+        product_id = create_product(name="NoUpdate", description="d")
         result = update_product(product_id)
         assert result is False
 
     def test_delete(self):
-        product_id = add_product(name="To Delete", description="d")
+        product_id = create_product(name="To Delete", description="d")
         result = delete_product(product_id)
         assert result is True
         assert get_product(product_id) is None
@@ -718,13 +718,13 @@ class TestProductCRUD:
         assert get_product("prod-nonexist") is None
 
     def test_get_all(self):
-        add_product(name="Prod A", description="a")
-        add_product(name="Prod B", description="b")
+        create_product(name="Prod A", description="a")
+        create_product(name="Prod B", description="b")
         products = get_all_products()
         assert len(products) >= 2
 
     def test_get_detail(self):
-        product_id = add_product(name="Detail Product", description="d")
+        product_id = create_product(name="Detail Product", description="d")
         detail = get_product_detail(product_id)
         assert detail is not None
         assert detail["name"] == "Detail Product"
@@ -734,8 +734,8 @@ class TestProductCRUD:
         assert get_product_detail("prod-nonexist") is None
 
     def test_get_detail_with_projects(self):
-        product_id = add_product(name="Proj Product", description="d")
-        add_project(name="Child Proj", description="d", product_id=product_id)
+        product_id = create_product(name="Proj Product", description="d")
+        create_project(name="Child Proj", description="d", product_id=product_id)
         detail = get_product_detail(product_id)
         assert detail is not None
         assert len(detail["projects"]) >= 1
@@ -748,7 +748,7 @@ class TestProductCRUD:
 
 class TestPluginCRUD:
     def test_add_and_get(self):
-        plugin_id = add_plugin(name="Test Plugin", description="plugin desc")
+        plugin_id = create_plugin(name="Test Plugin", description="plugin desc")
         assert plugin_id is not None
         assert plugin_id.startswith("plug-")
         plugin = get_plugin(plugin_id)
@@ -759,7 +759,7 @@ class TestPluginCRUD:
         assert plugin["status"] == "draft"
 
     def test_add_with_params(self):
-        plugin_id = add_plugin(
+        plugin_id = create_plugin(
             name="Full Plugin",
             description="full",
             version="2.0.0",
@@ -773,14 +773,14 @@ class TestPluginCRUD:
         assert plugin["author"] == "tester"
 
     def test_update(self):
-        plugin_id = add_plugin(name="Original Plugin", description="d")
+        plugin_id = create_plugin(name="Original Plugin", description="d")
         result = update_plugin(plugin_id, name="Updated Plugin")
         assert result is True
         plugin = get_plugin(plugin_id)
         assert plugin["name"] == "Updated Plugin"
 
     def test_update_multiple_fields(self):
-        plugin_id = add_plugin(name="MultiPlug", description="d")
+        plugin_id = create_plugin(name="MultiPlug", description="d")
         result = update_plugin(plugin_id, name="Updated", version="3.0.0", status="published")
         assert result is True
         plugin = get_plugin(plugin_id)
@@ -789,12 +789,12 @@ class TestPluginCRUD:
         assert plugin["status"] == "published"
 
     def test_update_no_fields(self):
-        plugin_id = add_plugin(name="NoUpdate", description="d")
+        plugin_id = create_plugin(name="NoUpdate", description="d")
         result = update_plugin(plugin_id)
         assert result is False
 
     def test_delete(self):
-        plugin_id = add_plugin(name="To Delete", description="d")
+        plugin_id = create_plugin(name="To Delete", description="d")
         result = delete_plugin(plugin_id)
         assert result is True
         assert get_plugin(plugin_id) is None
@@ -807,13 +807,13 @@ class TestPluginCRUD:
         assert get_plugin("plug-nonexist") is None
 
     def test_get_all(self):
-        add_plugin(name="Plugin A", description="a")
-        add_plugin(name="Plugin B", description="b")
+        create_plugin(name="Plugin A", description="a")
+        create_plugin(name="Plugin B", description="b")
         plugins = get_all_plugins()
         assert len(plugins) >= 2
 
     def test_get_detail(self):
-        plugin_id = add_plugin(name="Detail Plugin", description="d")
+        plugin_id = create_plugin(name="Detail Plugin", description="d")
         detail = get_plugin_detail(plugin_id)
         assert detail is not None
         assert detail["name"] == "Detail Plugin"
@@ -823,7 +823,7 @@ class TestPluginCRUD:
         assert get_plugin_detail("plug-nonexist") is None
 
     def test_add_component(self):
-        plugin_id = add_plugin(name="Comp Plugin", description="d")
+        plugin_id = create_plugin(name="Comp Plugin", description="d")
         comp_id = add_plugin_component(
             plugin_id, name="my-skill", component_type="skill", content="echo hello"
         )
@@ -834,24 +834,24 @@ class TestPluginCRUD:
         assert components[0]["type"] == "skill"
 
     def test_get_component_by_name(self):
-        plugin_id = add_plugin(name="CompName Plugin", description="d")
+        plugin_id = create_plugin(name="CompName Plugin", description="d")
         add_plugin_component(plugin_id, name="test-hook", component_type="hook", content="content")
         comp = get_plugin_component_by_name(plugin_id, "test-hook", "hook")
         assert comp is not None
         assert comp["name"] == "test-hook"
 
     def test_get_component_by_name_nonexistent(self):
-        plugin_id = add_plugin(name="NoComp Plugin", description="d")
+        plugin_id = create_plugin(name="NoComp Plugin", description="d")
         assert get_plugin_component_by_name(plugin_id, "nonexist", "skill") is None
 
     def test_update_component(self):
-        plugin_id = add_plugin(name="UpdComp Plugin", description="d")
+        plugin_id = create_plugin(name="UpdComp Plugin", description="d")
         comp_id = add_plugin_component(plugin_id, name="orig", component_type="skill", content="v1")
         result = update_plugin_component(comp_id, name="updated", content="v2")
         assert result is True
 
     def test_delete_component(self):
-        plugin_id = add_plugin(name="DelComp Plugin", description="d")
+        plugin_id = create_plugin(name="DelComp Plugin", description="d")
         comp_id = add_plugin_component(
             plugin_id, name="del-comp", component_type="command", content="x"
         )
@@ -861,12 +861,12 @@ class TestPluginCRUD:
         assert len(components) == 0
 
     def test_get_components_empty(self):
-        plugin_id = add_plugin(name="Empty Plugin", description="d")
+        plugin_id = create_plugin(name="Empty Plugin", description="d")
         components = get_plugin_components(plugin_id)
         assert components == []
 
     def test_get_detail_with_components(self):
-        plugin_id = add_plugin(name="Full Detail Plugin", description="d")
+        plugin_id = create_plugin(name="Full Detail Plugin", description="d")
         add_plugin_component(plugin_id, name="s1", component_type="skill", content="c1")
         add_plugin_component(plugin_id, name="h1", component_type="hook", content="c2")
         detail = get_plugin_detail(plugin_id)
@@ -995,7 +995,7 @@ class TestSkillCRUD:
 
 class TestHookCRUD:
     def test_add_and_get(self):
-        hook_id = add_hook(name="Test Hook", event="pre-commit")
+        hook_id = create_hook(name="Test Hook", event="pre-commit")
         assert hook_id is not None
         assert isinstance(hook_id, int)
         hook = get_hook(hook_id)
@@ -1005,8 +1005,8 @@ class TestHookCRUD:
         assert hook["enabled"] == 1
 
     def test_add_with_params(self):
-        project_id = add_project(name="Hook Proj", description="d")
-        hook_id = add_hook(
+        project_id = create_project(name="Hook Proj", description="d")
+        hook_id = create_hook(
             name="Full Hook",
             event="post-push",
             description="A full hook",
@@ -1023,14 +1023,14 @@ class TestHookCRUD:
         assert hook["project_id"] == project_id
 
     def test_update(self):
-        hook_id = add_hook(name="Original Hook", event="pre-commit")
+        hook_id = create_hook(name="Original Hook", event="pre-commit")
         result = update_hook(hook_id, name="Updated Hook")
         assert result is True
         hook = get_hook(hook_id)
         assert hook["name"] == "Updated Hook"
 
     def test_update_multiple_fields(self):
-        hook_id = add_hook(name="Multi Hook", event="pre-commit")
+        hook_id = create_hook(name="Multi Hook", event="pre-commit")
         result = update_hook(hook_id, name="Updated", event="post-push", enabled=False)
         assert result is True
         hook = get_hook(hook_id)
@@ -1039,12 +1039,12 @@ class TestHookCRUD:
         assert hook["enabled"] == 0
 
     def test_update_no_fields(self):
-        hook_id = add_hook(name="NoUpdate", event="pre-commit")
+        hook_id = create_hook(name="NoUpdate", event="pre-commit")
         result = update_hook(hook_id)
         assert result is False
 
     def test_delete(self):
-        hook_id = add_hook(name="To Delete", event="pre-commit")
+        hook_id = create_hook(name="To Delete", event="pre-commit")
         result = delete_hook(hook_id)
         assert result is True
         assert get_hook(hook_id) is None
@@ -1057,15 +1057,15 @@ class TestHookCRUD:
         assert get_hook(99999) is None
 
     def test_get_all(self):
-        add_hook(name="Hook A", event="pre-commit")
-        add_hook(name="Hook B", event="post-push")
+        create_hook(name="Hook A", event="pre-commit")
+        create_hook(name="Hook B", event="post-push")
         hooks = get_all_hooks()
         assert len(hooks) >= 2
 
     def test_get_all_filtered_by_project(self):
-        project_id = add_project(name="Filter Proj", description="d")
-        add_hook(name="Proj Hook", event="pre-commit", project_id=project_id)
-        add_hook(name="Global Hook", event="pre-commit")
+        project_id = create_project(name="Filter Proj", description="d")
+        create_hook(name="Proj Hook", event="pre-commit", project_id=project_id)
+        create_hook(name="Global Hook", event="pre-commit")
         hooks = get_all_hooks(project_id=project_id)
         names = [h["name"] for h in hooks]
         assert "Proj Hook" in names
@@ -1073,17 +1073,17 @@ class TestHookCRUD:
         assert "Global Hook" in names
 
     def test_get_by_project(self):
-        project_id = add_project(name="By Proj", description="d")
-        add_hook(name="Proj Only Hook", event="pre-commit", project_id=project_id)
-        add_hook(name="Other Hook", event="pre-commit")
+        project_id = create_project(name="By Proj", description="d")
+        create_hook(name="Proj Only Hook", event="pre-commit", project_id=project_id)
+        create_hook(name="Other Hook", event="pre-commit")
         hooks = get_hooks_by_project(project_id)
         names = [h["name"] for h in hooks]
         assert "Proj Only Hook" in names
         assert "Other Hook" not in names
 
     def test_get_by_event(self):
-        add_hook(name="PreCommit Hook", event="pre-commit")
-        add_hook(name="PostPush Hook", event="post-push")
+        create_hook(name="PreCommit Hook", event="pre-commit")
+        create_hook(name="PostPush Hook", event="post-push")
         hooks = get_hooks_by_event("pre-commit")
         names = [h["name"] for h in hooks]
         assert "PreCommit Hook" in names
@@ -1091,7 +1091,7 @@ class TestHookCRUD:
 
     def test_get_by_event_disabled(self):
         """Disabled hooks should not be returned by get_hooks_by_event."""
-        add_hook(name="Disabled Hook", event="deploy", enabled=False)
+        create_hook(name="Disabled Hook", event="deploy", enabled=False)
         hooks = get_hooks_by_event("deploy")
         names = [h["name"] for h in hooks]
         assert "Disabled Hook" not in names
@@ -1104,7 +1104,7 @@ class TestHookCRUD:
 
 class TestCommandCRUD:
     def test_add_and_get(self):
-        cmd_id = add_command(name="test-cmd", description="A test command")
+        cmd_id = create_command(name="test-cmd", description="A test command")
         assert cmd_id is not None
         assert isinstance(cmd_id, int)
         cmd = get_command(cmd_id)
@@ -1114,8 +1114,8 @@ class TestCommandCRUD:
         assert cmd["enabled"] == 1
 
     def test_add_with_params(self):
-        project_id = add_project(name="Cmd Proj", description="d")
-        cmd_id = add_command(
+        project_id = create_project(name="Cmd Proj", description="d")
+        cmd_id = create_command(
             name="full-cmd",
             description="full",
             content="echo hello",
@@ -1132,14 +1132,14 @@ class TestCommandCRUD:
         assert cmd["project_id"] == project_id
 
     def test_update(self):
-        cmd_id = add_command(name="orig-cmd")
+        cmd_id = create_command(name="orig-cmd")
         result = update_command(cmd_id, name="updated-cmd")
         assert result is True
         cmd = get_command(cmd_id)
         assert cmd["name"] == "updated-cmd"
 
     def test_update_multiple_fields(self):
-        cmd_id = add_command(name="multi-cmd")
+        cmd_id = create_command(name="multi-cmd")
         result = update_command(
             cmd_id, name="updated", description="new desc", content="new content", enabled=False
         )
@@ -1151,12 +1151,12 @@ class TestCommandCRUD:
         assert cmd["enabled"] == 0
 
     def test_update_no_fields(self):
-        cmd_id = add_command(name="no-update")
+        cmd_id = create_command(name="no-update")
         result = update_command(cmd_id)
         assert result is False
 
     def test_delete(self):
-        cmd_id = add_command(name="del-cmd")
+        cmd_id = create_command(name="del-cmd")
         result = delete_command(cmd_id)
         assert result is True
         assert get_command(cmd_id) is None
@@ -1169,24 +1169,24 @@ class TestCommandCRUD:
         assert get_command(99999) is None
 
     def test_get_all(self):
-        add_command(name="Cmd A")
-        add_command(name="Cmd B")
+        create_command(name="Cmd A")
+        create_command(name="Cmd B")
         commands = get_all_commands()
         assert len(commands) >= 2
 
     def test_get_all_filtered_by_project(self):
-        project_id = add_project(name="CmdFilter Proj", description="d")
-        add_command(name="Proj Cmd", project_id=project_id)
-        add_command(name="Global Cmd")
+        project_id = create_project(name="CmdFilter Proj", description="d")
+        create_command(name="Proj Cmd", project_id=project_id)
+        create_command(name="Global Cmd")
         commands = get_all_commands(project_id=project_id)
         names = [c["name"] for c in commands]
         assert "Proj Cmd" in names
         assert "Global Cmd" in names
 
     def test_get_by_project(self):
-        project_id = add_project(name="CmdBy Proj", description="d")
-        add_command(name="Proj Only Cmd", project_id=project_id)
-        add_command(name="Other Cmd")
+        project_id = create_project(name="CmdBy Proj", description="d")
+        create_command(name="Proj Only Cmd", project_id=project_id)
+        create_command(name="Other Cmd")
         commands = get_commands_by_project(project_id)
         names = [c["name"] for c in commands]
         assert "Proj Only Cmd" in names
@@ -1200,7 +1200,7 @@ class TestCommandCRUD:
 
 class TestRuleCRUD:
     def test_add_and_get(self):
-        rule_id = add_rule(name="Test Rule")
+        rule_id = create_rule(name="Test Rule")
         assert rule_id is not None
         assert isinstance(rule_id, int)
         rule = get_rule(rule_id)
@@ -1210,8 +1210,8 @@ class TestRuleCRUD:
         assert rule["enabled"] == 1
 
     def test_add_with_params(self):
-        project_id = add_project(name="Rule Proj", description="d")
-        rule_id = add_rule(
+        project_id = create_project(name="Rule Proj", description="d")
+        rule_id = create_rule(
             name="Full Rule",
             rule_type="security",
             description="A security rule",
@@ -1231,14 +1231,14 @@ class TestRuleCRUD:
         assert rule["project_id"] == project_id
 
     def test_update(self):
-        rule_id = add_rule(name="Original Rule")
+        rule_id = create_rule(name="Original Rule")
         result = update_rule(rule_id, name="Updated Rule")
         assert result is True
         rule = get_rule(rule_id)
         assert rule["name"] == "Updated Rule"
 
     def test_update_multiple_fields(self):
-        rule_id = add_rule(name="Multi Rule")
+        rule_id = create_rule(name="Multi Rule")
         result = update_rule(
             rule_id, name="Updated", rule_type="security", description="new desc", enabled=False
         )
@@ -1250,12 +1250,12 @@ class TestRuleCRUD:
         assert rule["enabled"] == 0
 
     def test_update_no_fields(self):
-        rule_id = add_rule(name="NoUpdate")
+        rule_id = create_rule(name="NoUpdate")
         result = update_rule(rule_id)
         assert result is False
 
     def test_delete(self):
-        rule_id = add_rule(name="To Delete")
+        rule_id = create_rule(name="To Delete")
         result = delete_rule(rule_id)
         assert result is True
         assert get_rule(rule_id) is None
@@ -1268,32 +1268,32 @@ class TestRuleCRUD:
         assert get_rule(99999) is None
 
     def test_get_all(self):
-        add_rule(name="Rule A")
-        add_rule(name="Rule B")
+        create_rule(name="Rule A")
+        create_rule(name="Rule B")
         rules = get_all_rules()
         assert len(rules) >= 2
 
     def test_get_all_filtered_by_project(self):
-        project_id = add_project(name="RuleFilter Proj", description="d")
-        add_rule(name="Proj Rule", project_id=project_id)
-        add_rule(name="Global Rule")
+        project_id = create_project(name="RuleFilter Proj", description="d")
+        create_rule(name="Proj Rule", project_id=project_id)
+        create_rule(name="Global Rule")
         rules = get_all_rules(project_id=project_id)
         names = [r["name"] for r in rules]
         assert "Proj Rule" in names
         assert "Global Rule" in names
 
     def test_get_by_project(self):
-        project_id = add_project(name="RuleBy Proj", description="d")
-        add_rule(name="Proj Only Rule", project_id=project_id)
-        add_rule(name="Other Rule")
+        project_id = create_project(name="RuleBy Proj", description="d")
+        create_rule(name="Proj Only Rule", project_id=project_id)
+        create_rule(name="Other Rule")
         rules = get_rules_by_project(project_id)
         names = [r["name"] for r in rules]
         assert "Proj Only Rule" in names
         assert "Other Rule" not in names
 
     def test_get_by_type(self):
-        add_rule(name="Validation Rule", rule_type="validation")
-        add_rule(name="Security Rule", rule_type="security")
+        create_rule(name="Validation Rule", rule_type="validation")
+        create_rule(name="Security Rule", rule_type="security")
         rules = get_rules_by_type("validation")
         names = [r["name"] for r in rules]
         assert "Validation Rule" in names
@@ -1301,7 +1301,7 @@ class TestRuleCRUD:
 
     def test_get_by_type_disabled(self):
         """Disabled rules should not be returned by get_rules_by_type."""
-        add_rule(name="Disabled Rule", rule_type="audit", enabled=False)
+        create_rule(name="Disabled Rule", rule_type="audit", enabled=False)
         rules = get_rules_by_type("audit")
         names = [r["name"] for r in rules]
         assert "Disabled Rule" not in names
@@ -1313,7 +1313,7 @@ class TestRuleCRUD:
 
 from app.database import (
     # Marketplace functions
-    add_marketplace,
+    create_marketplace,
     add_marketplace_plugin,
     # Plugin export functions
     add_plugin_export,
@@ -1371,8 +1371,8 @@ class TestTriggerUpdateBranches:
 
     def test_update_all_fields(self):
         # Create a real team for FK constraint
-        team_id = add_team(name="TrigTeam", description="d")
-        tid = add_trigger(name="AllFields", prompt_template="af")
+        team_id = create_team(name="TrigTeam", description="d")
+        tid = create_trigger(name="AllFields", prompt_template="af")
         result = update_trigger(
             tid,
             name="Updated",
@@ -1411,8 +1411,8 @@ class TestTriggerUpdateBranches:
 
     def test_update_null_fields(self):
         """Setting fields to empty string clears them to NULL."""
-        team_id = add_team(name="NullTeam", description="d")
-        tid = add_trigger(
+        team_id = create_team(name="NullTeam", description="d")
+        tid = create_trigger(
             name="NullTest",
             prompt_template="nt",
             match_field_path="event.x",
@@ -1444,13 +1444,13 @@ class TestTriggerUpdateBranches:
         assert t["team_id"] is None
 
     def test_update_invalid_backend_type_ignored(self):
-        tid = add_trigger(name="InvalidBT", prompt_template="ib")
+        tid = create_trigger(name="InvalidBT", prompt_template="ib")
         update_trigger(tid, backend_type="invalid_backend")
         t = get_trigger(tid)
         assert t["backend_type"] == "claude"  # Unchanged
 
     def test_update_invalid_trigger_source_ignored(self):
-        tid = add_trigger(name="InvalidTS", prompt_template="is")
+        tid = create_trigger(name="InvalidTS", prompt_template="is")
         update_trigger(tid, trigger_source="invalid_source")
         t = get_trigger(tid)
         assert t["trigger_source"] == "webhook"  # Unchanged
@@ -1460,7 +1460,7 @@ class TestAgentUpdateBranches:
     """Exercise all update_agent field branches for coverage."""
 
     def test_update_all_fields(self):
-        aid = add_agent(name="AllFields Agent", system_prompt="p")
+        aid = create_agent(name="AllFields Agent", system_prompt="p")
         result = update_agent(
             aid,
             name="Updated Agent",
@@ -1513,29 +1513,29 @@ class TestTeamSupplementary:
     """Additional team tests for coverage."""
 
     def test_delete_agent_assignments_bulk(self):
-        team_id = add_team(name="Bulk Team", description="d")
-        agent_id = add_agent(name="Bulk Agent", system_prompt="p")
+        team_id = create_team(name="Bulk Team", description="d")
+        agent_id = create_agent(name="Bulk Agent", system_prompt="p")
         add_team_agent_assignment(team_id, agent_id, "skill", "s1", "skill1")
         add_team_agent_assignment(team_id, agent_id, "command", "c1", "cmd1")
         count = delete_team_agent_assignments_bulk(team_id, agent_id=agent_id)
         assert count >= 2
 
     def test_delete_agent_assignments_bulk_by_type(self):
-        team_id = add_team(name="BulkType Team", description="d")
-        agent_id = add_agent(name="BulkType Agent", system_prompt="p")
+        team_id = create_team(name="BulkType Team", description="d")
+        agent_id = create_agent(name="BulkType Agent", system_prompt="p")
         add_team_agent_assignment(team_id, agent_id, "skill", "s1", "skill1")
         add_team_agent_assignment(team_id, agent_id, "command", "c1", "cmd1")
         count = delete_team_agent_assignments_bulk(team_id, entity_type="skill")
         assert count >= 1
 
     def test_get_teams_by_trigger_source(self):
-        add_team(name="Webhook Team", description="d", trigger_source="webhook")
+        create_team(name="Webhook Team", description="d", trigger_source="webhook")
         teams = get_teams_by_trigger_source("webhook")
         names = [t["name"] for t in teams]
         assert "Webhook Team" in names
 
     def test_get_webhook_triggers(self):
-        add_trigger(name="WH Test", prompt_template="wh", trigger_source="webhook")
+        create_trigger(name="WH Test", prompt_template="wh", trigger_source="webhook")
         triggers = get_webhook_triggers()
         names = [t["name"] for t in triggers]
         assert "WH Test" in names
@@ -1545,7 +1545,7 @@ class TestExecutionLogCRUD:
     """Tests for execution log CRUD functions."""
 
     def test_create_and_get(self):
-        trigger_id = add_trigger(name="Exec Trigger", prompt_template="e")
+        trigger_id = create_trigger(name="Exec Trigger", prompt_template="e")
         result = create_execution_log(
             execution_id="exec-001",
             trigger_id=trigger_id,
@@ -1562,7 +1562,7 @@ class TestExecutionLogCRUD:
         assert log["status"] == "running"
 
     def test_update(self):
-        trigger_id = add_trigger(name="Exec Upd", prompt_template="e")
+        trigger_id = create_trigger(name="Exec Upd", prompt_template="e")
         create_execution_log(
             "exec-002", trigger_id, "manual", "2026-01-01T00:00:00", "p", "claude", "cmd"
         )
@@ -1581,7 +1581,7 @@ class TestExecutionLogCRUD:
         assert log["duration_ms"] == 60000
 
     def test_update_no_fields(self):
-        trigger_id = add_trigger(name="Exec NoUpd", prompt_template="e")
+        trigger_id = create_trigger(name="Exec NoUpd", prompt_template="e")
         create_execution_log(
             "exec-003", trigger_id, "manual", "2026-01-01T00:00:00", "p", "claude", "cmd"
         )
@@ -1589,7 +1589,7 @@ class TestExecutionLogCRUD:
         assert result is False
 
     def test_get_logs_for_trigger(self):
-        trigger_id = add_trigger(name="Exec List", prompt_template="e")
+        trigger_id = create_trigger(name="Exec List", prompt_template="e")
         create_execution_log(
             "exec-010", trigger_id, "manual", "2026-01-01T00:00:00", "p", "claude", "cmd"
         )
@@ -1597,7 +1597,7 @@ class TestExecutionLogCRUD:
         assert len(logs) >= 1
 
     def test_get_all_logs(self):
-        trigger_id = add_trigger(name="Exec All", prompt_template="e")
+        trigger_id = create_trigger(name="Exec All", prompt_template="e")
         create_execution_log(
             "exec-020", trigger_id, "manual", "2026-01-01T00:00:00", "p", "claude", "cmd"
         )
@@ -1605,7 +1605,7 @@ class TestExecutionLogCRUD:
         assert len(logs) >= 1
 
     def test_get_running_for_trigger(self):
-        trigger_id = add_trigger(name="Exec Run", prompt_template="e")
+        trigger_id = create_trigger(name="Exec Run", prompt_template="e")
         create_execution_log(
             "exec-030", trigger_id, "manual", "2026-01-01T00:00:00", "p", "claude", "cmd"
         )
@@ -1613,7 +1613,7 @@ class TestExecutionLogCRUD:
         assert running is not None
 
     def test_get_latest_for_trigger(self):
-        trigger_id = add_trigger(name="Exec Latest", prompt_template="e")
+        trigger_id = create_trigger(name="Exec Latest", prompt_template="e")
         create_execution_log(
             "exec-040", trigger_id, "manual", "2026-01-01T00:00:00", "p", "claude", "cmd"
         )
@@ -1629,7 +1629,7 @@ class TestExecutionLogCRUD:
         assert isinstance(count, int)
 
     def test_update_status_cas(self):
-        trigger_id = add_trigger(name="Exec CAS", prompt_template="e")
+        trigger_id = create_trigger(name="Exec CAS", prompt_template="e")
         create_execution_log(
             "exec-050", trigger_id, "manual", "2026-01-01T00:00:00", "p", "claude", "cmd"
         )
@@ -1644,7 +1644,7 @@ class TestExecutionLogCRUD:
         assert result is True
 
     def test_update_status_cas_wrong_expected(self):
-        trigger_id = add_trigger(name="Exec CAS2", prompt_template="e")
+        trigger_id = create_trigger(name="Exec CAS2", prompt_template="e")
         create_execution_log(
             "exec-051", trigger_id, "manual", "2026-01-01T00:00:00", "p", "claude", "cmd"
         )
@@ -1723,7 +1723,7 @@ class TestProjectSkillsCRUD:
     """Tests for project skills functions."""
 
     def test_add_and_get(self):
-        project_id = add_project(name="Skill Proj", description="d")
+        project_id = create_project(name="Skill Proj", description="d")
         skill_id = add_project_skill(project_id, "test-skill", "/skills/test")
         assert skill_id is not None
         skills = get_project_skills(project_id)
@@ -1731,7 +1731,7 @@ class TestProjectSkillsCRUD:
         assert skills[0]["skill_name"] == "test-skill"
 
     def test_delete_by_name(self):
-        project_id = add_project(name="SkillDel Proj", description="d")
+        project_id = create_project(name="SkillDel Proj", description="d")
         add_project_skill(project_id, "del-skill", "/skills/del")
         result = delete_project_skill(project_id, "del-skill")
         assert result is True
@@ -1739,20 +1739,20 @@ class TestProjectSkillsCRUD:
         assert len(skills) == 0
 
     def test_delete_by_id(self):
-        project_id = add_project(name="SkillDelId Proj", description="d")
+        project_id = create_project(name="SkillDelId Proj", description="d")
         skill_id = add_project_skill(project_id, "del-id-skill", "/skills/del-id")
         result = delete_project_skill_by_id(skill_id)
         assert result is True
 
     def test_clear_skills(self):
-        project_id = add_project(name="ClearSkill Proj", description="d")
+        project_id = create_project(name="ClearSkill Proj", description="d")
         add_project_skill(project_id, "s1", "/s1")
         add_project_skill(project_id, "s2", "/s2")
         count = clear_project_skills(project_id)
         assert count >= 2
 
     def test_clear_skills_by_source(self):
-        project_id = add_project(name="ClearSrc Proj", description="d")
+        project_id = create_project(name="ClearSrc Proj", description="d")
         add_project_skill(project_id, "s1", "/s1", source="manual")
         add_project_skill(project_id, "s2", "/s2", source="scan")
         count = clear_project_skills(project_id, source="manual")
@@ -1765,14 +1765,14 @@ class TestProjectInstallationsCRUD:
     """Tests for project installation functions."""
 
     def test_add_and_get(self):
-        project_id = add_project(name="Install Proj", description="d")
+        project_id = create_project(name="Install Proj", description="d")
         inst_id = add_project_installation(project_id, "plugin", "plug-abc")
         assert inst_id is not None
         installations = get_project_installations(project_id)
         assert len(installations) >= 1
 
     def test_get_filtered_by_type(self):
-        project_id = add_project(name="InstFilter Proj", description="d")
+        project_id = create_project(name="InstFilter Proj", description="d")
         add_project_installation(project_id, "plugin", "plug-1")
         add_project_installation(project_id, "skill", "skill-1")
         plugins = get_project_installations(project_id, component_type="plugin")
@@ -1780,13 +1780,13 @@ class TestProjectInstallationsCRUD:
         assert all(i["component_type"] == "plugin" for i in plugins)
 
     def test_get_single(self):
-        project_id = add_project(name="InstSingle Proj", description="d")
+        project_id = create_project(name="InstSingle Proj", description="d")
         add_project_installation(project_id, "plugin", "plug-xyz")
         inst = get_project_installation(project_id, "plugin", "plug-xyz")
         assert inst is not None
 
     def test_delete(self):
-        project_id = add_project(name="InstDel Proj", description="d")
+        project_id = create_project(name="InstDel Proj", description="d")
         add_project_installation(project_id, "plugin", "plug-del")
         result = delete_project_installation(project_id, "plugin", "plug-del")
         assert result is True
@@ -1796,43 +1796,43 @@ class TestMarketplaceCRUD:
     """Tests for marketplace functions."""
 
     def test_add_and_get(self):
-        mkt_id = add_marketplace(name="Test Market", url="https://example.com")
+        mkt_id = create_marketplace(name="Test Market", url="https://example.com")
         assert mkt_id is not None
         mkt = get_marketplace(mkt_id)
         assert mkt is not None
         assert mkt["name"] == "Test Market"
 
     def test_get_all(self):
-        add_marketplace(name="Market A", url="https://a.com")
+        create_marketplace(name="Market A", url="https://a.com")
         mkts = get_all_marketplaces()
         assert len(mkts) >= 1
 
     def test_update(self):
-        mkt_id = add_marketplace(name="UpdMarket", url="https://upd.com")
+        mkt_id = create_marketplace(name="UpdMarket", url="https://upd.com")
         result = update_marketplace(mkt_id, name="Updated Market")
         assert result is True
         mkt = get_marketplace(mkt_id)
         assert mkt["name"] == "Updated Market"
 
     def test_update_no_fields(self):
-        mkt_id = add_marketplace(name="NoUpd", url="https://noupd.com")
+        mkt_id = create_marketplace(name="NoUpd", url="https://noupd.com")
         result = update_marketplace(mkt_id)
         assert result is False
 
     def test_delete(self):
-        mkt_id = add_marketplace(name="DelMarket", url="https://del.com")
+        mkt_id = create_marketplace(name="DelMarket", url="https://del.com")
         result = delete_marketplace(mkt_id)
         assert result is True
 
     def test_add_plugin(self):
-        mkt_id = add_marketplace(name="PluginMarket", url="https://pm.com")
+        mkt_id = create_marketplace(name="PluginMarket", url="https://pm.com")
         mktp_id = add_marketplace_plugin(mkt_id, remote_name="cool-plugin")
         assert mktp_id is not None
         plugins = get_marketplace_plugins(mkt_id)
         assert len(plugins) >= 1
 
     def test_delete_plugin(self):
-        mkt_id = add_marketplace(name="DelPlugMarket", url="https://dpm.com")
+        mkt_id = create_marketplace(name="DelPlugMarket", url="https://dpm.com")
         mktp_id = add_marketplace_plugin(mkt_id, remote_name="del-plugin")
         result = delete_marketplace_plugin(mktp_id)
         assert result is True
@@ -1842,7 +1842,7 @@ class TestPluginExportCRUD:
     """Tests for plugin export functions."""
 
     def test_add_and_get(self):
-        plugin_id = add_plugin(name="Export Plugin", description="d")
+        plugin_id = create_plugin(name="Export Plugin", description="d")
         export_id = add_plugin_export(plugin_id)
         assert export_id is not None
         export = get_plugin_export(export_id)
@@ -1850,19 +1850,19 @@ class TestPluginExportCRUD:
         assert export["plugin_id"] == plugin_id
 
     def test_get_for_plugin(self):
-        plugin_id = add_plugin(name="Exports Plugin", description="d")
+        plugin_id = create_plugin(name="Exports Plugin", description="d")
         add_plugin_export(plugin_id, export_format="claude")
         exports = get_plugin_exports_for_plugin(plugin_id)
         assert len(exports) >= 1
 
     def test_update(self):
-        plugin_id = add_plugin(name="UpdExport Plugin", description="d")
+        plugin_id = create_plugin(name="UpdExport Plugin", description="d")
         export_id = add_plugin_export(plugin_id)
         result = update_plugin_export(export_id, status="completed")
         assert result is True
 
     def test_delete(self):
-        plugin_id = add_plugin(name="DelExport Plugin", description="d")
+        plugin_id = create_plugin(name="DelExport Plugin", description="d")
         export_id = add_plugin_export(plugin_id)
         result = delete_plugin_export(export_id)
         assert result is True

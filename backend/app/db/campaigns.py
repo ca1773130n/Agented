@@ -127,7 +127,7 @@ def update_campaign_status(
             return False
 
 
-def add_campaign_execution(campaign_id: str, repo_url: str) -> Optional[int]:
+def create_campaign_execution(campaign_id: str, repo_url: str) -> Optional[int]:
     """Add a campaign execution entry for a repo. Returns row id."""
     with get_connection() as conn:
         try:
@@ -141,7 +141,7 @@ def add_campaign_execution(campaign_id: str, repo_url: str) -> Optional[int]:
             conn.commit()
             return cursor.lastrowid
         except sqlite3.Error as e:
-            logger.error("Database error in add_campaign_execution: %s", e)
+            logger.error("Database error in create_campaign_execution: %s", e)
             return None
 
 

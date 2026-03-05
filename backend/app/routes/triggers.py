@@ -116,7 +116,7 @@ def add_trigger_project(path: TriggerPath):
     project_id = data.get("project_id")
     if not project_id:
         return error_response("BAD_REQUEST", "project_id is required", HTTPStatus.BAD_REQUEST)
-    result, status = TriggerService.add_project(path.trigger_id, project_id)
+    result, status = TriggerService.create_project(path.trigger_id, project_id)
     return result, status
 
 

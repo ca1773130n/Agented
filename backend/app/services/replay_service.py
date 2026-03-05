@@ -97,7 +97,7 @@ class ReplayService:
         }
 
     @classmethod
-    def _run_replay_subprocess(cls, execution_id: str, cmd_str: str, trigger_id: str):
+    def _run_replay_subprocess(cls, execution_id: str, cmd_str: str, trigger_id: str) -> None:
         """Run the replay subprocess in background (mirrors run_trigger pattern)."""
         from app.config import PROJECT_ROOT
 
@@ -182,7 +182,7 @@ class ReplayService:
             ProcessManager.cleanup(execution_id)
 
     @classmethod
-    def _stream_pipe(cls, execution_id: str, stream: str, pipe):
+    def _stream_pipe(cls, execution_id: str, stream: str, pipe) -> None:
         """Read lines from a subprocess pipe and append to execution log."""
         try:
             for line in pipe:

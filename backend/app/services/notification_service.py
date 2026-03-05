@@ -25,7 +25,7 @@ class NotificationService:
         status: str,
         duration_ms: int,
         summary: str = "",
-    ):
+    ) -> None:
         """Notify all configured integrations when an execution completes.
 
         Spawns a background thread for each integration to avoid blocking.
@@ -59,7 +59,7 @@ class NotificationService:
             thread.start()
 
     @staticmethod
-    def _send_to_integration(integration: dict, message: str, metadata: dict):
+    def _send_to_integration(integration: dict, message: str, metadata: dict) -> None:
         """Send notification to a single integration (runs in background thread)."""
         integration_id = integration["id"]
         try:

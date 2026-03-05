@@ -27,7 +27,7 @@ class HealthMonitorService:
     MISSING_FIRE_MULTIPLIER = 2
 
     @classmethod
-    def init(cls):
+    def init(cls) -> None:
         """Register APScheduler jobs for health monitoring. Called at app startup."""
         from .scheduler_service import SchedulerService
 
@@ -60,7 +60,7 @@ class HealthMonitorService:
         logger.info("Health monitor service initialized (5-min interval)")
 
     @classmethod
-    def _check_health(cls):
+    def _check_health(cls) -> None:
         """Main health check loop. Iterates all triggers and checks for issues."""
         from ..db.triggers import get_all_triggers
 
@@ -90,7 +90,7 @@ class HealthMonitorService:
         logger.debug("Health check completed at %s", cls._last_check_time)
 
     @classmethod
-    def _check_consecutive_failures(cls, trigger_id: str):
+    def _check_consecutive_failures(cls, trigger_id: str) -> None:
         """Check for consecutive execution failures using a simple reverse-chronological loop."""
         from ..db.health_alerts import create_health_alert
         from ..db.triggers import get_execution_logs_for_trigger
@@ -118,7 +118,7 @@ class HealthMonitorService:
             )
 
     @classmethod
-    def _check_slow_execution(cls, trigger_id: str):
+    def _check_slow_execution(cls, trigger_id: str) -> None:
         """Check if the most recent execution is abnormally slow (>3x average)."""
         from ..db.health_alerts import create_health_alert
         from ..db.triggers import get_execution_logs_for_trigger
@@ -164,7 +164,7 @@ class HealthMonitorService:
             )
 
     @classmethod
-    def _check_missing_fire(cls, trigger: dict):
+    def _check_missing_fire(cls, trigger: dict) -> None:
         """Check if a scheduled trigger has missed its expected fire time.
 
         Only applies to scheduled triggers (not webhook/github) per 10-RESEARCH.md Pitfall 3.

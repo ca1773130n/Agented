@@ -137,7 +137,7 @@ class ProjectWorkspaceService:
     def clone_async(project_id: str) -> None:
         """Clone a project's GitHub repo in a background thread."""
 
-        def _do_clone():
+        def _do_clone() -> None:
             try:
                 update_project_clone_status(project_id, "cloning")
                 project = get_project(project_id)

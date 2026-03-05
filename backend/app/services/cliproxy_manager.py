@@ -416,7 +416,7 @@ class CLIProxyManager:
 
         # Start background thread to drain stdout/stderr so the process
         # doesn't block when its pipe buffer fills up.
-        def _drain():
+        def _drain() -> None:
             try:
                 for fd in [proc.stdout, proc.stderr]:
                     if fd is None:

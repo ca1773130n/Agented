@@ -1,7 +1,7 @@
 """Tests for team topology extensions: edges, SuperAgent members, and new topology types."""
 
 from app.db.teams import (
-    add_team,
+    create_team,
     add_team_edge,
     add_team_member,
     delete_team_edge,
@@ -44,7 +44,7 @@ def _create_super_agent_in_db(isolated_db, sa_id, name="Test SuperAgent"):
 
 def _create_team_with_members(isolated_db, agent_ids):
     """Create a team and add agent members. Returns (team_id, member_ids_dict)."""
-    team_id = add_team(name="Topology Test Team")
+    team_id = create_team(name="Topology Test Team")
     assert team_id is not None
 
     member_ids = {}
@@ -65,7 +65,7 @@ def _create_team_with_members(isolated_db, agent_ids):
 def test_add_team_member_with_super_agent_id(isolated_db):
     """Create a super_agent in DB, add as team member, verify member_type is 'super_agent'."""
     _create_super_agent_in_db(isolated_db, "super-sa001", "Lead SA")
-    team_id = add_team(name="SA Test Team")
+    team_id = create_team(name="SA Test Team")
     assert team_id is not None
 
     member_id = add_team_member(team_id=team_id, super_agent_id="super-sa001")
@@ -91,7 +91,7 @@ def test_add_team_member_xor_validation(isolated_db):
     """Attempt to add member with both agent_id AND super_agent_id, verify returns None."""
     _create_agent_in_db(isolated_db, "agent-xor01", "Agent XOR")
     _create_super_agent_in_db(isolated_db, "super-xor01", "SA XOR")
-    team_id = add_team(name="XOR Test Team")
+    team_id = create_team(name="XOR Test Team")
     assert team_id is not None
 
     result = add_team_member(
@@ -316,7 +316,7 @@ def test_get_team_detail_mixed_members(isolated_db):
     _create_agent_in_db(isolated_db, "agent-mix01", "Agent Mix")
     _create_super_agent_in_db(isolated_db, "super-mix01", "SA Mix")
 
-    team_id = add_team(name="Mixed Team")
+    team_id = create_team(name="Mixed Team")
     assert team_id is not None
 
     add_team_member(team_id=team_id, agent_id="agent-mix01")

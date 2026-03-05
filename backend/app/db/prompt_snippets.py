@@ -14,7 +14,7 @@ from .ids import _get_unique_snippet_id
 logger = logging.getLogger(__name__)
 
 
-def add_snippet(
+def create_snippet(
     name: str,
     content: str,
     description: str = "",

@@ -113,7 +113,7 @@ class TeamExecutionService:
         return team_exec_id
 
     @classmethod
-    def _cleanup_execution(cls, team_exec_id: str):
+    def _cleanup_execution(cls, team_exec_id: str) -> None:
         with cls._lock:
             cls._executions.pop(team_exec_id, None)
 
@@ -128,7 +128,7 @@ class TeamExecutionService:
         event,
         trigger_type,
         working_directory=None,
-    ):
+    ) -> None:
         """Wrapper that runs a strategy and catches all errors."""
         try:
             execution_ids = strategy(team, config, message, event, trigger_type, working_directory)
@@ -316,7 +316,7 @@ class TeamExecutionService:
         exec_lock = threading.Lock()
         threads = []
 
-        def _run_one(aid):
+        def _run_one(aid) -> None:
             eid, _ = cls._run_agent_and_get_output(
                 team, aid, message, event, trigger_type, working_directory
             )
@@ -374,7 +374,7 @@ class TeamExecutionService:
         exec_lock = threading.Lock()
         threads = []
 
-        def _run_worker(aid):
+        def _run_worker(aid) -> None:
             eid, _ = cls._run_agent_and_get_output(
                 team, aid, worker_message, event, trigger_type, working_directory
             )

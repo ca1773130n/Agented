@@ -3340,9 +3340,7 @@ def _migrate_v74_add_execution_queue_table(conn):
             completed_at TEXT
         )
     """)
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_eq_status ON execution_queue(status)"
-    )
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_eq_status ON execution_queue(status)")
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_eq_trigger_status ON execution_queue(trigger_id, status)"
     )

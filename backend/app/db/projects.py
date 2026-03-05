@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 # =============================================================================
 
 
-def add_project(
+def create_project(
     name: str,
     description: str = None,
     status: str = "active",

@@ -5,8 +5,8 @@ named snippets from the database. Supports nested snippets with circular
 reference detection (max depth 5).
 """
 
-import re
 import logging
+import re
 
 from ..db.prompt_snippets import get_snippet_by_name
 
@@ -37,7 +37,7 @@ class SnippetService:
         if visited is None:
             visited = set()
 
-        def replacer(match):
+        def replacer(match) -> str:
             name = match.group(1)
             if name in visited:
                 # Circular reference -- leave unresolved

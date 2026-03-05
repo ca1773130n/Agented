@@ -4,6 +4,7 @@ Delegates to:
   - session_cost_service: pricing data and cost computation
   - session_collection_service: session file discovery, parsing, DB recording
 """
+
 import logging
 
 from .session_collection_service import (

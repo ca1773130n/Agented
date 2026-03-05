@@ -2,6 +2,7 @@
 
 import datetime
 import json
+import logging
 import secrets
 import string
 import subprocess
@@ -9,7 +10,6 @@ import threading
 from http import HTTPStatus
 from queue import Empty, Queue
 from typing import Dict, Generator, List, Tuple
-import logging
 
 from .skill_discovery_service import get_playground_working_dir
 
@@ -55,7 +55,7 @@ class SkillTestingService:
         }, HTTPStatus.ACCEPTED
 
     @classmethod
-    def _run_skill_test(cls, test_id: str, skill_name: str, test_input: str):
+    def _run_skill_test(cls, test_id: str, skill_name: str, test_input: str) -> None:
         """Run a skill test (background thread)."""
         try:
             # Build command - prepend skill command to prompt
@@ -132,7 +132,7 @@ class SkillTestingService:
                 cls._test_processes.pop(test_id, None)
 
             # Cleanup subscribers after delay
-            def cleanup():
+            def cleanup() -> None:
                 import time
 
                 time.sleep(60)  # Keep session for 60 seconds after completion
@@ -219,7 +219,7 @@ class SkillTestingService:
         return {"message": "Test stopped"}, HTTPStatus.OK
 
     @classmethod
-    def _broadcast_test(cls, test_id: str, event_type: str, data: dict):
+    def _broadcast_test(cls, test_id: str, event_type: str, data: dict) -> None:
         """Broadcast an event to test subscribers."""
         message = cls._format_sse(event_type, data)
         with cls._lock:

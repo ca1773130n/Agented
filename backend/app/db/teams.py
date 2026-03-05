@@ -37,7 +37,7 @@ def _get_team_members_columns(conn) -> set:
 # =============================================================================
 
 
-def add_team(
+def create_team(
     name: str,
     description: str = None,
     color: str = "#00d4ff",

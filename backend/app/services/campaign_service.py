@@ -9,8 +9,8 @@ import threading
 from typing import Optional
 
 from ..db.campaigns import (
-    add_campaign_execution,
     create_campaign,
+    create_campaign_execution,
     get_campaign,
     list_campaign_executions,
     update_campaign_execution,
@@ -36,7 +36,7 @@ def start_campaign(name: str, trigger_id: str, repo_urls: list[str]) -> Optional
 
     # Create execution entries for each repo
     for repo_url in repo_urls:
-        add_campaign_execution(campaign_id, repo_url)
+        create_campaign_execution(campaign_id, repo_url)
 
     # Spawn a thread per repo
     threads = []
@@ -62,7 +62,7 @@ def start_campaign(name: str, trigger_id: str, repo_urls: list[str]) -> Optional
     return campaign_id
 
 
-def _execute_repo(campaign_id: str, trigger_id: str, repo_url: str):
+def _execute_repo(campaign_id: str, trigger_id: str, repo_url: str) -> None:
     """Execute a single repo within a campaign. Acquires semaphore for concurrency control."""
     acquired = False
     try:
@@ -121,7 +121,7 @@ def _execute_repo(campaign_id: str, trigger_id: str, repo_url: str):
             _semaphore.release()
 
 
-def _monitor_campaign(campaign_id: str, threads: list):
+def _monitor_campaign(campaign_id: str, threads: list) -> None:
     """Wait for all repo threads to complete, then update campaign status."""
     for t in threads:
         t.join()

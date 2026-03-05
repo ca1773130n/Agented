@@ -399,7 +399,7 @@ class SessionCollectionService:
     # ----- Database -----
 
     @classmethod
-    def _record_usage(cls, session_id: str, backend_type: str, usage: dict):
+    def _record_usage(cls, session_id: str, backend_type: str, usage: dict) -> None:
         """Record session usage into the token_usage table."""
         from ..database import create_token_usage_record
 
@@ -516,7 +516,7 @@ class SessionCollectionService:
         return set()
 
     @classmethod
-    def _save_imported_sessions(cls, sessions: set[str]):
+    def _save_imported_sessions(cls, sessions: set[str]) -> None:
         """Save set of imported session IDs to DB settings."""
         try:
             from ..database import get_connection

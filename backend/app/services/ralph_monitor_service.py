@@ -39,7 +39,7 @@ class RalphMonitorService:
         cwd: str,
         max_iterations: int,
         no_progress_threshold: int = 3,
-    ):
+    ) -> None:
         """Start monitoring a Ralph loop session for iteration progress.
 
         Records the initial git commit hash and starts a daemon thread that
@@ -86,7 +86,7 @@ class RalphMonitorService:
         cwd: str,
         max_iterations: int,
         threshold: int,
-    ):
+    ) -> None:
         """Poll git commits every 30s, track iterations, trigger circuit breaker.
 
         Runs in a daemon thread. Exits when state["active"] is set to False
@@ -164,7 +164,7 @@ class RalphMonitorService:
                 return
 
     @classmethod
-    def stop_monitoring(cls, session_id: str):
+    def stop_monitoring(cls, session_id: str) -> None:
         """Stop monitoring a Ralph loop session.
 
         Sets active=False so the monitor thread will exit on its next cycle,

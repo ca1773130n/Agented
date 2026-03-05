@@ -3,12 +3,12 @@
 from unittest.mock import patch
 
 from app.database import get_trigger
-from app.db.triggers import add_trigger
+from app.db.triggers import create_trigger
 
 
 def _seed_trigger(name="Test Dry Run", prompt="{message} in {paths}"):
     """Create a test trigger and return its ID."""
-    return add_trigger(
+    return create_trigger(
         name=name,
         prompt_template=prompt,
         backend_type="claude",

@@ -9,13 +9,15 @@ from pydantic import BaseModel, Field
 from app.models.common import error_response
 
 from ..database import (
-    add_product,
     count_products,
     delete_product,
     get_all_products,
     get_product,
     get_product_detail,
     update_product,
+)
+from ..database import (
+    create_product as db_create_product,
 )
 from ..models.common import PaginationQuery
 
@@ -46,7 +48,7 @@ def create_product():
     if not name:
         return error_response("BAD_REQUEST", "name is required", HTTPStatus.BAD_REQUEST)
 
-    product_id = add_product(
+    product_id = db_create_product(
         name=name,
         description=data.get("description"),
         status=data.get("status", "active"),

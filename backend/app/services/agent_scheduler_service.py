@@ -28,7 +28,7 @@ class AgentSchedulerService:
     _lock = threading.Lock()
 
     @classmethod
-    def init(cls):
+    def init(cls) -> None:
         """Initialize from DB: load existing sessions into _session_states. Called at app startup."""
         from ..database import get_all_agent_sessions
 
@@ -73,7 +73,7 @@ class AgentSchedulerService:
         return {"eligible": True, "reason": "ok"}
 
     @classmethod
-    def evaluate_all_accounts(cls, now: datetime = None):
+    def evaluate_all_accounts(cls, now: datetime = None) -> None:
         """Main evaluation loop: check all accounts against rate limit ETAs.
 
         Called by MonitoringService poll callback (wired in Plan 02).
@@ -192,7 +192,7 @@ class AgentSchedulerService:
         stop_eta_minutes: float = None,
         resets_at: str = None,
         now: datetime = None,
-    ):
+    ) -> None:
         """Update in-memory cache + persist to DB.
 
         Computes resume_estimate when stopping. Resets consecutive_safe_polls to 0 when stopping.
@@ -249,7 +249,7 @@ class AgentSchedulerService:
         )
 
     @classmethod
-    def _maybe_resume(cls, account_id: int, hysteresis_polls: int):
+    def _maybe_resume(cls, account_id: int, hysteresis_polls: int) -> None:
         """Hysteresis-damped resume: only resume after N consecutive safe polls.
 
         Prevents oscillation when ETA hovers near the safety margin threshold.
@@ -364,7 +364,7 @@ class AgentSchedulerService:
         return None
 
     @classmethod
-    def mark_running(cls, account_id: int):
+    def mark_running(cls, account_id: int) -> None:
         """Execution lifecycle hook: called BEFORE starting execution on an account.
 
         Transitions queued -> running. Creates session in running state if none exists.
@@ -385,7 +385,7 @@ class AgentSchedulerService:
         logger.info(f"Scheduler: account {account_id} marked running")
 
     @classmethod
-    def mark_completed(cls, account_id: int):
+    def mark_completed(cls, account_id: int) -> None:
         """Execution lifecycle hook: called AFTER execution finishes on an account.
 
         Transitions running -> queued. Preserves stopped state (scheduler may have

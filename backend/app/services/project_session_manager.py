@@ -297,7 +297,7 @@ class ProjectSessionManager:
         return session_id
 
     @classmethod
-    def _reader_loop(cls, session_id: str, master_fd: int):
+    def _reader_loop(cls, session_id: str, master_fd: int) -> None:
         """Read PTY output, strip ANSI, append to ring buffer, broadcast via SSE.
 
         Runs in a dedicated daemon thread. Uses select() with 0.5s timeout for
@@ -314,7 +314,7 @@ class ProjectSessionManager:
             si = cls._sessions.get(session_id)
             _stream_json = si.stream_json if si else False
 
-        def _emit_line(line_text: str):
+        def _emit_line(line_text: str) -> None:
             """Strip ANSI, optionally parse stream-json, broadcast non-empty lines."""
             cleaned = _ANSI_RE.sub("", line_text).strip()
             if not cleaned:
@@ -404,7 +404,7 @@ class ProjectSessionManager:
             cls._handle_session_exit(session_id)
 
     @classmethod
-    def _handle_session_exit(cls, session_id: str):
+    def _handle_session_exit(cls, session_id: str) -> None:
         """Handle session process exit: determine status, update DB, notify subscribers."""
         with cls._lock:
             session_info = cls._sessions.get(session_id)
@@ -729,7 +729,7 @@ class ProjectSessionManager:
                         pass
 
     @classmethod
-    def _broadcast(cls, session_id: str, event_type: str, data: dict):
+    def _broadcast(cls, session_id: str, event_type: str, data: dict) -> None:
         """Broadcast an SSE event to all subscribers for a session.
 
         Args:
@@ -775,7 +775,7 @@ class ProjectSessionManager:
             }
 
     @classmethod
-    def cleanup_dead_sessions(cls):
+    def cleanup_dead_sessions(cls) -> None:
         """Clean up sessions whose processes are no longer alive.
 
         Called on startup to handle sessions that were active when the server
@@ -817,7 +817,7 @@ class ProjectSessionManager:
             logger.debug("No dead sessions found during startup cleanup")
 
     @classmethod
-    def check_resource_limits(cls):
+    def check_resource_limits(cls) -> None:
         """Check all active sessions for resource limit violations.
 
         Enforces two limits:

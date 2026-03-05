@@ -1,9 +1,9 @@
 """Skill harness service — user skills CRUD, harness integration, agent export."""
 
 import json
+import logging
 from http import HTTPStatus
 from typing import Tuple
-import logging
 
 from ..database import (
     add_user_skill,

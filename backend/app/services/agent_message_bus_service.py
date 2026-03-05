@@ -28,7 +28,7 @@ class AgentMessageBusService:
     _flush_thread: Optional[threading.Thread] = None
 
     @classmethod
-    def start(cls):
+    def start(cls) -> None:
         """Start the background worker for TTL sweeps."""
         cls._shutdown_event.clear()
         cls._flush_thread = threading.Thread(
@@ -38,7 +38,7 @@ class AgentMessageBusService:
         logger.info("AgentMessageBusService started")
 
     @classmethod
-    def stop(cls):
+    def stop(cls) -> None:
         """Stop the background worker."""
         cls._shutdown_event.set()
         if cls._flush_thread and cls._flush_thread.is_alive():
@@ -164,7 +164,7 @@ class AgentMessageBusService:
         subject: str,
         content: str,
         priority: str,
-    ):
+    ) -> None:
         """Push an SSE event to an active subscriber and mark as delivered."""
         with cls._lock:
             queues = cls._subscribers.get(agent_id, [])
@@ -225,7 +225,7 @@ class AgentMessageBusService:
         return f"event: {event_type}\ndata: {json.dumps(data)}\n\n"
 
     @classmethod
-    def _background_worker(cls):
+    def _background_worker(cls) -> None:
         """Background worker that runs TTL sweeps every 60 seconds."""
         logger.info("Message bus background worker started")
         while not cls._shutdown_event.is_set():

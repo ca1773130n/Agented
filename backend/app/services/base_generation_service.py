@@ -66,7 +66,7 @@ class BaseGenerationService(ABC):
         # Read stdout and stderr concurrently via threads + queue
         line_queue: Queue = Queue()
 
-        def read_stream(stream, stream_type):
+        def read_stream(stream, stream_type) -> None:
             for line in iter(stream.readline, ""):
                 if line:
                     line_queue.put((stream_type, line.rstrip("\n\r")))

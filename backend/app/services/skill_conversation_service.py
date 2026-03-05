@@ -311,7 +311,7 @@ Use this skill when:
         return {"message": "Conversation abandoned"}, HTTPStatus.OK
 
     @classmethod
-    def _broadcast(cls, conv_id: str, event_type: str, data: dict):
+    def _broadcast(cls, conv_id: str, event_type: str, data: dict) -> None:
         """Broadcast an SSE event to all subscribers of a conversation."""
         if conv_id not in cls._subscribers:
             return
@@ -330,7 +330,7 @@ Use this skill when:
         backend: str | None = None,
         account_id: str | None = None,
         model: str | None = None,
-    ):
+    ) -> None:
         """Process a message with Claude using real-time LLM streaming."""
         if conv_id not in cls._conversations:
             return
@@ -382,7 +382,7 @@ Use this skill when:
             conv["processing"] = False
 
     @classmethod
-    def _cleanup_conversation(cls, conv_id: str):
+    def _cleanup_conversation(cls, conv_id: str) -> None:
         """Clean up a conversation and its resources."""
         with cls._lock:
             # Signal subscribers to stop

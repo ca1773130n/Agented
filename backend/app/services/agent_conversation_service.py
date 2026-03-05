@@ -15,7 +15,7 @@ from typing import Dict, Generator, List, Tuple
 logger = logging.getLogger(__name__)
 
 from ..database import (
-    add_agent,
+    create_agent,
     create_agent_conversation,
     get_agent_conversation,
     update_agent_conversation,
@@ -175,7 +175,7 @@ class AgentConversationService:
         backend: str | None = None,
         account_id: str | None = None,
         model: str | None = None,
-    ):
+    ) -> None:
         """Stream an LLM response in real-time (runs in background thread)."""
         try:
             # Build conversation context as OpenAI-format messages
@@ -348,7 +348,7 @@ class AgentConversationService:
 
         # Create the agent
         name = agent_config.get("name", "Unnamed Agent")
-        agent_id = add_agent(
+        agent_id = create_agent(
             name=name,
             description=agent_config.get("description"),
             role=agent_config.get("role"),
@@ -413,7 +413,7 @@ class AgentConversationService:
         return conv, HTTPStatus.OK
 
     @classmethod
-    def _broadcast(cls, conv_id: str, event_type: str, data: dict):
+    def _broadcast(cls, conv_id: str, event_type: str, data: dict) -> None:
         """Broadcast an event to all subscribers."""
         message = cls._format_sse(event_type, data)
         with cls._lock:
@@ -427,7 +427,7 @@ class AgentConversationService:
         return f"event: {event_type}\ndata: {json.dumps(data)}\n\n"
 
     @classmethod
-    def _cleanup_conversation(cls, conv_id: str):
+    def _cleanup_conversation(cls, conv_id: str) -> None:
         """Clean up in-memory conversation state."""
         with cls._lock:
             cls._conversations.pop(conv_id, None)

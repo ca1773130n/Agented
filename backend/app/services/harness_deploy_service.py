@@ -1,12 +1,12 @@
 """Harness deploy service — deploy configs to GitHub."""
 
 import json
+import logging
 import os
 from http import HTTPStatus
 from typing import Tuple
 
 import yaml
-import logging
 
 from ..database import (
     get_agent,

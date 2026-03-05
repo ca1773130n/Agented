@@ -16,8 +16,8 @@ from app.models.common import error_response
 from ..database import (
     add_project_phase,
     add_project_plan,
-    add_super_agent,
     add_super_agent_document,
+    create_super_agent,
     delete_project_plan,
     get_milestones_by_project,
     get_phases_by_milestone,
@@ -445,7 +445,7 @@ def _resolve_manager_agent(project: dict) -> Optional[str]:
         return sa_id
 
     project_name = project.get("name", "Unnamed Project")
-    sa_id = add_super_agent(
+    sa_id = create_super_agent(
         name=f"{project_name} Manager",
         description=f"AI manager for project '{project_name}'. Manages kanban plans via chat.",
         backend_type="claude",

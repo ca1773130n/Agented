@@ -13,7 +13,7 @@ import yaml
 
 from app.db import (
     add_project_path,
-    add_trigger,
+    create_trigger,
     get_all_triggers,
     get_trigger,
     get_trigger_by_name,
@@ -244,7 +244,7 @@ def _create_new_trigger(metadata: dict, spec: dict) -> tuple[str, str]:
     """Create a new trigger from parsed config."""
     schedule = spec.get("schedule", {})
 
-    trigger_id = add_trigger(
+    trigger_id = create_trigger(
         name=metadata["name"],
         prompt_template=spec["prompt_template"],
         backend_type=metadata["backend_type"],

@@ -1,9 +1,9 @@
 """Rate limit detection and account cooldown management service."""
 
+import logging
 import re
 from datetime import datetime, timedelta
 from typing import List, Optional
-import logging
 
 from ..database import (
     clear_account_rate_limit as db_clear_rate_limit,

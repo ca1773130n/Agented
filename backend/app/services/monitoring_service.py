@@ -32,7 +32,7 @@ class MonitoringService:
     _LEVEL_ORDER = {"normal": 0, "info": 1, "warning": 2, "critical": 3}
 
     @classmethod
-    def init(cls):
+    def init(cls) -> None:
         """Initialize monitoring service. Called once at app startup.
 
         Auto-enables monitoring when backend accounts exist and registers
@@ -91,7 +91,7 @@ class MonitoringService:
         logger.info("Monitoring service initialized")
 
     @classmethod
-    def reconfigure(cls, config: dict):
+    def reconfigure(cls, config: dict) -> None:
         """Reconfigure monitoring: save config and re-register/remove APScheduler job."""
         from ..database import save_monitoring_config
 
@@ -107,7 +107,7 @@ class MonitoringService:
             logger.info("Monitoring disabled: job removed")
 
     @classmethod
-    def _register_job(cls, interval_minutes: int):
+    def _register_job(cls, interval_minutes: int) -> None:
         """Register or re-register the monitoring interval job."""
         from .scheduler_service import SchedulerService
 
@@ -133,7 +133,7 @@ class MonitoringService:
         )
 
     @classmethod
-    def _remove_job(cls):
+    def _remove_job(cls) -> None:
         """Remove the monitoring job if it exists."""
         from .scheduler_service import SchedulerService
 
@@ -145,7 +145,7 @@ class MonitoringService:
             SchedulerService._scheduler.remove_job(cls._job_id)
 
     @classmethod
-    def _register_cleanup_job(cls):
+    def _register_cleanup_job(cls) -> None:
         """Register daily snapshot cleanup job (4am UTC)."""
         from ..database import delete_old_snapshots
         from .scheduler_service import SchedulerService
@@ -164,7 +164,7 @@ class MonitoringService:
         )
 
     @classmethod
-    def _poll_usage(cls):
+    def _poll_usage(cls) -> None:
         """Periodic polling job: call real provider APIs per enabled account, record snapshots."""
         from ..database import (
             get_all_accounts_with_health,

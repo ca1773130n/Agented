@@ -8,7 +8,7 @@ from http import HTTPStatus
 from queue import Queue
 from typing import Dict, List, Tuple
 
-from ..database import add_command, get_command
+from ..database import create_command, get_command
 from .base_conversation_service import BaseConversationService
 
 logger = logging.getLogger(__name__)
@@ -101,7 +101,7 @@ class CommandConversationService(BaseConversationService):
         arguments_str = json.dumps(arguments) if arguments else None
 
         try:
-            command_id = add_command(
+            command_id = create_command(
                 name=name,
                 description=description,
                 content=content,

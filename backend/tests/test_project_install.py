@@ -29,9 +29,9 @@ def mock_workspace(tmp_path, monkeypatch):
 @pytest.fixture
 def project_id(isolated_db):
     """Create a project and return its ID."""
-    from app.database import add_project
+    from app.database import create_project
 
-    pid = add_project(name="Test Project", local_path="/tmp/test-project")
+    pid = create_project(name="Test Project", local_path="/tmp/test-project")
     return pid
 
 
@@ -52,9 +52,9 @@ def _create_agent(isolated_db):
 
 def _create_hook(isolated_db):
     """Create a hook and return its ID."""
-    from app.database import add_hook
+    from app.database import create_hook
 
-    return add_hook(
+    return create_hook(
         name="Pre-commit check",
         event="PreToolUse",
         description="Validates tool usage",
@@ -64,9 +64,9 @@ def _create_hook(isolated_db):
 
 def _create_command(isolated_db):
     """Create a command and return its ID."""
-    from app.database import add_command
+    from app.database import create_command
 
-    return add_command(
+    return create_command(
         name="Deploy Staging",
         description="Deploy to staging environment",
         content="Run the deployment script for staging.",
@@ -75,9 +75,9 @@ def _create_command(isolated_db):
 
 def _create_rule(isolated_db):
     """Create a rule and return its ID."""
-    from app.database import add_rule
+    from app.database import create_rule
 
-    return add_rule(
+    return create_rule(
         name="No console.log",
         rule_type="validation",
         description="Prevent console.log in production code",

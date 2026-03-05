@@ -37,12 +37,12 @@ class WordBoundaryAccumulator:
     maintaining perceived real-time delivery.
     """
 
-    def __init__(self, flush_callback, max_buffer: int = 80):
+    def __init__(self, flush_callback, max_buffer: int = 80) -> None:
         self.buffer = ""
         self.flush_callback = flush_callback
         self.max_buffer = max_buffer
 
-    def add(self, text: str):
+    def add(self, text: str) -> None:
         """Add text to the buffer. Flush if word boundary found or buffer is full."""
         self.buffer += text
         if len(self.buffer) >= self.max_buffer or self._has_boundary():
@@ -52,7 +52,7 @@ class WordBoundaryAccumulator:
         """Check if the buffer contains a word boundary character."""
         return any(c in self.buffer for c in (" ", "\n", "\t"))
 
-    def flush(self):
+    def flush(self) -> None:
         """Flush the buffer contents via the callback."""
         if self.buffer:
             self.flush_callback(self.buffer)
@@ -267,7 +267,7 @@ class BaseConversationService(abc.ABC):
         return {"message": "Conversation abandoned"}, HTTPStatus.OK
 
     @classmethod
-    def _broadcast(cls, conv_id: str, event_type: str, data: dict):
+    def _broadcast(cls, conv_id: str, event_type: str, data: dict) -> None:
         """Broadcast an SSE event to all subscribers of a conversation."""
         if conv_id not in cls._subscribers:
             return
@@ -286,7 +286,7 @@ class BaseConversationService(abc.ABC):
         backend: str | None = None,
         account_id: str | None = None,
         model: str | None = None,
-    ):
+    ) -> None:
         """Process a message using real-time LLM streaming via LiteLLM.
 
         Uses the shared stream_llm_response() utility for token-by-token streaming
@@ -384,7 +384,7 @@ class BaseConversationService(abc.ABC):
         return None
 
     @classmethod
-    def _persist_messages(cls, conv_id: str):
+    def _persist_messages(cls, conv_id: str) -> None:
         """Persist conversation messages to the database."""
         conv = cls._conversations.get(conv_id)
         if not conv:
@@ -449,7 +449,7 @@ class BaseConversationService(abc.ABC):
         return {"conversations": convs}, HTTPStatus.OK
 
     @classmethod
-    def _cleanup_stale_conversations(cls):
+    def _cleanup_stale_conversations(cls) -> None:
         """Clean up conversations that have been inactive for too long."""
         now = datetime.datetime.now()
         stale_ids = []
@@ -466,7 +466,7 @@ class BaseConversationService(abc.ABC):
         delete_old_design_conversations()
 
     @classmethod
-    def _cleanup_conversation(cls, conv_id: str):
+    def _cleanup_conversation(cls, conv_id: str) -> None:
         """Clean up a conversation and its resources."""
         with cls._lock:
             for queue in cls._subscribers.get(conv_id, []):

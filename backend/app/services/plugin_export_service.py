@@ -314,7 +314,7 @@ class ExportService:
         hooks: list,
         rules: list,
         base: Path,
-    ):
+    ) -> None:
         """Record sync state entries for each exported entity."""
         for agent in agents:
             agent_id = agent.get("id", "")
@@ -357,14 +357,14 @@ class ExportService:
 # --- File writing helpers ---
 
 
-def _write_json(path: Path, data: dict):
+def _write_json(path: Path, data: dict) -> None:
     """Write a dict as formatted JSON to a file."""
     with open(path, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
         f.write("\n")
 
 
-def _write_text(path: Path, content: str):
+def _write_text(path: Path, content: str) -> None:
     """Write text content to a file."""
     with open(path, "w", encoding="utf-8") as f:
         f.write(content)

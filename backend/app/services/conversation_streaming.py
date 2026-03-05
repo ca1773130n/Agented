@@ -494,7 +494,7 @@ def _stream_via_cli(
 
         timed_out = False
 
-        def _on_timeout():
+        def _on_timeout() -> None:
             nonlocal timed_out
             timed_out = True
             try:
@@ -587,7 +587,7 @@ def _stream_via_opencode_cli(
 
         timed_out = False
 
-        def _on_timeout():
+        def _on_timeout() -> None:
             nonlocal timed_out
             timed_out = True
             try:

@@ -128,7 +128,7 @@ class SetupExecutionService:
         return execution_id
 
     @classmethod
-    def _stream_stdout_interactive(cls, execution_id: str, stdout, stdin):
+    def _stream_stdout_interactive(cls, execution_id: str, stdout, stdin) -> None:
         """Read stdout line by line, detecting interaction requests."""
         try:
             for line in iter(stdout.readline, ""):
@@ -219,7 +219,7 @@ class SetupExecutionService:
             logger.error(f"Setup {execution_id}: stdout stream error: {e}")
 
     @classmethod
-    def _stream_stderr(cls, execution_id: str, stderr):
+    def _stream_stderr(cls, execution_id: str, stderr) -> None:
         """Read stderr line by line and broadcast as log events."""
         try:
             for line in iter(stderr.readline, ""):
@@ -239,7 +239,7 @@ class SetupExecutionService:
             logger.error(f"Setup {execution_id}: stderr stream error: {e}")
 
     @classmethod
-    def _wait_for_completion(cls, execution_id: str, process):
+    def _wait_for_completion(cls, execution_id: str, process) -> None:
         """Wait for subprocess to finish and finalize execution."""
         try:
             process.wait()
@@ -268,7 +268,7 @@ class SetupExecutionService:
         status: str,
         exit_code: int = None,
         error_message: str = None,
-    ):
+    ) -> None:
         """Finalize a setup execution: update DB, broadcast completion, cleanup."""
         finished_at = datetime.datetime.now().isoformat()
 
@@ -454,7 +454,7 @@ class SetupExecutionService:
         return True
 
     @classmethod
-    def _broadcast(cls, execution_id: str, event_type: str, data: dict):
+    def _broadcast(cls, execution_id: str, event_type: str, data: dict) -> None:
         """Broadcast an SSE event to all subscribers."""
         message = cls._format_sse(event_type, data)
         with cls._lock:

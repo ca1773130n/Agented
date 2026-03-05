@@ -225,7 +225,7 @@ def _read_until_done(fd: int, timeout: float) -> str:
     return "".join(output)
 
 
-def _cleanup_child(pid: int, master_fd: int):
+def _cleanup_child(pid: int, master_fd: int) -> None:
     """Kill child process and close master fd."""
     try:
         os.close(master_fd)

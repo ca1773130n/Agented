@@ -11,12 +11,12 @@ logger = logging.getLogger(__name__)
 import yaml
 
 from ..database import (
-    add_agent,
-    add_command,
-    add_hook,
     add_project_skill,
-    add_team,
     add_team_member,
+    create_agent,
+    create_command,
+    create_hook,
+    create_team,
     get_project_detail,
 )
 from .github_service import GitHubService
@@ -219,7 +219,7 @@ class HarnessLoaderService(LayerDetectionService):
                     skills_list = frontmatter.get("skills", [])
 
                     try:
-                        add_agent(
+                        create_agent(
                             name=agent_name,
                             description=frontmatter.get("description"),
                             role=frontmatter.get("role"),
@@ -269,7 +269,7 @@ class HarnessLoaderService(LayerDetectionService):
                 skills_list = frontmatter.get("skills", [])
 
                 try:
-                    add_agent(
+                    create_agent(
                         name=agent_name,
                         description=frontmatter.get("description"),
                         role=frontmatter.get("role"),
@@ -353,7 +353,7 @@ class HarnessLoaderService(LayerDetectionService):
                 event = "PreToolUse"
 
             try:
-                add_hook(
+                create_hook(
                     name=hook_name,
                     event=event,
                     description=frontmatter.get("description"),
@@ -386,7 +386,7 @@ class HarnessLoaderService(LayerDetectionService):
             command_name = frontmatter.get("name", item.replace(".md", ""))
 
             try:
-                add_command(
+                create_command(
                     name=command_name,
                     description=frontmatter.get("description"),
                     content=body if body else content,
@@ -427,7 +427,7 @@ class HarnessLoaderService(LayerDetectionService):
 
                     try:
                         # Create team with github_sync source
-                        team_id = add_team(
+                        team_id = create_team(
                             name=team_name,
                             description=description,
                             color=color,

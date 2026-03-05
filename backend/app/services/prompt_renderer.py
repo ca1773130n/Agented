@@ -7,8 +7,8 @@ no side effects, no I/O, no instance state.
 Reference: Fowler "Refactoring" (2018) Extract Class pattern.
 """
 
-import re
 import logging
+import re
 
 from .prompt_snippet_service import SnippetService
 

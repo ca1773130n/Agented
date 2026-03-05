@@ -89,7 +89,7 @@ class ExecutionLogService:
         return execution_id
 
     @classmethod
-    def append_log(cls, execution_id: str, stream: str, content: str):
+    def append_log(cls, execution_id: str, stream: str, content: str) -> None:
         """Add a log line and notify subscribers."""
         log_line = LogLine(
             timestamp=datetime.datetime.now().isoformat(), stream=stream, content=content
@@ -109,7 +109,7 @@ class ExecutionLogService:
         status: str,
         exit_code: Optional[int] = None,
         error_message: Optional[str] = None,
-    ):
+    ) -> None:
         """Finalize execution, flush logs to database, notify subscribers."""
         finished_at = datetime.datetime.now()
 
@@ -267,7 +267,7 @@ class ExecutionLogService:
                         )
 
     @classmethod
-    def _broadcast(cls, execution_id: str, event_type: str, data: dict):
+    def _broadcast(cls, execution_id: str, event_type: str, data: dict) -> None:
         """Broadcast an event to all subscribers."""
         message = cls._format_sse(event_type, data)
         with cls._lock:

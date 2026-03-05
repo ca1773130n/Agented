@@ -375,8 +375,9 @@ def create_app(config=None):
     init_request_middleware(app)
 
     # Global JSON error handlers — unified ErrorResponse shape (API-02)
-    from .models.common import error_response
     from http import HTTPStatus
+
+    from .models.common import error_response
 
     @app.errorhandler(404)
     def not_found(e):

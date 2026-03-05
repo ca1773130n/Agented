@@ -131,7 +131,7 @@ class GrdPlanningService:
         return None
 
     @classmethod
-    def unregister_session(cls, session_id: str):
+    def unregister_session(cls, session_id: str) -> None:
         """Remove a session from the active tracking dict.
 
         Called when a session completes to free the project for new sessions.
@@ -158,7 +158,7 @@ class GrdPlanningService:
         return project.get("grd_init_status") or "none"
 
     @classmethod
-    def auto_init_project(cls, project_id: str, local_path: str):
+    def auto_init_project(cls, project_id: str, local_path: str) -> None:
         """Background GRD initialization after project clone.
 
         Checks if .planning/ already exists. If so, syncs directly.
@@ -169,7 +169,7 @@ class GrdPlanningService:
 
         from .grd_sync_service import GrdSyncService
 
-        def _run_init():
+        def _run_init() -> None:
             try:
                 update_project(project_id, grd_init_status="initializing")
                 planning_dir = str(Path(local_path) / ".planning")

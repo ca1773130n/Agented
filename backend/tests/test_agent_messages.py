@@ -11,7 +11,7 @@ from app.db.messages import (
     get_pending_messages,
     update_message_status,
 )
-from app.db.super_agents import add_super_agent
+from app.db.super_agents import create_super_agent
 from app.services.agent_message_bus_service import AgentMessageBusService
 from app.services.super_agent_session_service import SuperAgentSessionService
 
@@ -28,7 +28,7 @@ def clear_bus_state():
 
 def _make_agent(name="Agent-A"):
     """Helper to create a super agent directly via DB."""
-    return add_super_agent(name=name, description=f"{name} description")
+    return create_super_agent(name=name, description=f"{name} description")
 
 
 # =============================================================================

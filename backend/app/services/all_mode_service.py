@@ -68,7 +68,7 @@ class AllModeService:
             threads.append(thread)
 
         # Completion waiter: push idle status after all backend threads finish
-        def _on_all_complete():
+        def _on_all_complete() -> None:
             for t in threads:
                 t.join(timeout=timeout + 10)
             from .chat_state_service import ChatStateService
@@ -80,7 +80,7 @@ class AllModeService:
         return execution_map
 
     @classmethod
-    def _stream_backend(cls, session_id, backend, messages, model, account_email, timeout):
+    def _stream_backend(cls, session_id, backend, messages, model, account_email, timeout) -> None:
         """Stream a single backend response, pushing deltas with backend tag."""
         from .chat_state_service import ChatStateService
         from .conversation_streaming import stream_llm_response
@@ -197,7 +197,9 @@ class CompoundModeService:
         return execution_map
 
     @classmethod
-    def _stream_and_collect(cls, session_id, backend, messages, model, account_email, timeout):
+    def _stream_and_collect(
+        cls, session_id, backend, messages, model, account_email, timeout
+    ) -> None:
         """Stream backend and collect full response for synthesis."""
         from .chat_state_service import ChatStateService
         from .conversation_streaming import stream_llm_response
@@ -255,7 +257,7 @@ class CompoundModeService:
         account_email,
         timeout,
         synthesis_max_tokens,
-    ):
+    ) -> None:
         """Wait for all backends, then synthesize."""
         from .chat_state_service import ChatStateService
         from .conversation_streaming import stream_llm_response

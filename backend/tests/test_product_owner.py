@@ -7,8 +7,8 @@ from app.database import (
 )
 from app.db import assign_team_to_project
 from app.db.connection import get_connection
-from app.db.projects import add_project
-from app.db.teams import add_team, add_team_member
+from app.db.projects import create_project
+from app.db.teams import create_team, add_team_member
 
 # =============================================================================
 # Helpers
@@ -295,7 +295,7 @@ class TestMilestoneProjectJunction:
         prod_resp = _create_product(client)
         prod_id = prod_resp.get_json()["product"]["id"]
 
-        proj_id = add_project(name="Test Proj", product_id=prod_id)
+        proj_id = create_project(name="Test Proj", product_id=prod_id)
 
         ms_resp = client.post(
             f"/admin/products/{prod_id}/milestones",
@@ -320,7 +320,7 @@ class TestMilestoneProjectJunction:
         prod_resp = _create_product(client)
         prod_id = prod_resp.get_json()["product"]["id"]
 
-        proj_id = add_project(name="Test Proj", product_id=prod_id)
+        proj_id = create_project(name="Test Proj", product_id=prod_id)
 
         ms_resp = client.post(
             f"/admin/products/{prod_id}/milestones",
@@ -392,11 +392,11 @@ class TestMeetingProtocol:
         client.put(f"/admin/products/{prod_id}/owner", json={"owner_agent_id": owner_id})
 
         # Create a project under this product
-        proj_id = add_project(name="Test Proj", product_id=prod_id)
+        proj_id = create_project(name="Test Proj", product_id=prod_id)
 
         # Create a leader super_agent and assign to project via team
         leader_id = _create_super_agent(client, name="Leader Agent")
-        team_id = add_team(name="Test Team")
+        team_id = create_team(name="Test Team")
         add_team_member(team_id=team_id, name="Leader", super_agent_id=leader_id, tier="leader")
         assign_team_to_project(proj_id, team_id)
 
@@ -451,9 +451,9 @@ class TestMeetingProtocol:
         client.put(f"/admin/products/{prod_id}/owner", json={"owner_agent_id": owner_id})
 
         # Create a project with a leader to have actual messages
-        proj_id = add_project(name="Test Proj", product_id=prod_id)
+        proj_id = create_project(name="Test Proj", product_id=prod_id)
         leader_id = _create_super_agent(client, name="Leader Agent")
-        team_id = add_team(name="Test Team")
+        team_id = create_team(name="Test Team")
         add_team_member(team_id=team_id, name="Leader", super_agent_id=leader_id, tier="leader")
         assign_team_to_project(proj_id, team_id)
 
@@ -491,7 +491,7 @@ class TestDashboard:
         )
 
         # Add a project for health calculation
-        add_project(name="Proj A", product_id=prod_id, status="active")
+        create_project(name="Proj A", product_id=prod_id, status="active")
 
         resp = client.get(f"/admin/products/{prod_id}/dashboard")
         assert resp.status_code == 200
@@ -514,9 +514,9 @@ class TestDashboard:
         prod_resp = _create_product(client)
         prod_id = prod_resp.get_json()["product"]["id"]
 
-        add_project(name="Active Proj", product_id=prod_id, status="active")
-        add_project(name="Active Proj 2", product_id=prod_id, status="active")
-        add_project(name="Planning Proj", product_id=prod_id, status="planning")
+        create_project(name="Active Proj", product_id=prod_id, status="active")
+        create_project(name="Active Proj 2", product_id=prod_id, status="active")
+        create_project(name="Planning Proj", product_id=prod_id, status="planning")
 
         resp = client.get(f"/admin/products/{prod_id}/dashboard")
         body = resp.get_json()
@@ -527,8 +527,8 @@ class TestDashboard:
         prod_resp = _create_product(client)
         prod_id = prod_resp.get_json()["product"]["id"]
 
-        add_project(name="Active Proj", product_id=prod_id, status="active")
-        add_project(name="Archived Proj", product_id=prod_id, status="archived")
+        create_project(name="Active Proj", product_id=prod_id, status="active")
+        create_project(name="Archived Proj", product_id=prod_id, status="archived")
 
         resp = client.get(f"/admin/products/{prod_id}/dashboard")
         body = resp.get_json()

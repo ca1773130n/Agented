@@ -171,7 +171,7 @@ PREDEFINED_TRIGGER = PREDEFINED_TRIGGERS[0]
 # =============================================================================
 
 
-def add_trigger(
+def create_trigger(
     name: str,
     prompt_template: str,
     backend_type: str = "claude",

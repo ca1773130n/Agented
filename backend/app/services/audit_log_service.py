@@ -85,9 +85,9 @@ class AuditLogService:
 
         # Persist to SQLite (best-effort, never block caller)
         try:
-            from ..db.audit_events import add_audit_event
+            from ..db.audit_events import create_audit_event
 
-            add_audit_event(
+            create_audit_event(
                 action=action,
                 entity_type=entity_type,
                 entity_id=entity_id,

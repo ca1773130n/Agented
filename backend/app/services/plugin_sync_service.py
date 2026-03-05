@@ -4,6 +4,7 @@ Delegates to:
   - plugin_file_watcher: watchdog file watching + debouncing
   - sync_persistence_service: DB-to-disk and disk-to-DB sync logic
 """
+
 import logging
 
 from .plugin_file_watcher import PluginFileWatcher  # noqa: F401

@@ -18,7 +18,7 @@ VALID_DOC_TYPES = {"SOUL", "IDENTITY", "MEMORY", "ROLE"}
 # =============================================================================
 
 
-def add_super_agent(
+def create_super_agent(
     name: str,
     description: str = None,
     backend_type: str = "claude",

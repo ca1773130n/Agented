@@ -1,16 +1,15 @@
 """Trigger management service."""
 
+import logging
 from http import HTTPStatus
 from pathlib import Path
 from typing import Tuple
-import logging
 
 from ..database import (
     PREDEFINED_TRIGGER_ID,
     add_github_repo,
     add_project_path,
     add_project_to_trigger,
-    add_trigger,
     count_all_triggers,
     count_paths_for_trigger,
     delete_trigger,
@@ -26,6 +25,9 @@ from ..database import (
     remove_project_path,
     update_trigger,
     update_trigger_auto_resolve,
+)
+from ..database import (
+    create_trigger as db_create_trigger,
 )
 from .audit_log_service import AuditLogService
 from .budget_service import BudgetService
@@ -160,7 +162,7 @@ class TriggerService:
         allowed_tools = data.get("allowed_tools")
         sigterm_grace_seconds = data.get("sigterm_grace_seconds")
 
-        trigger_id = add_trigger(
+        trigger_id = db_create_trigger(
             name=name,
             prompt_template=prompt_template,
             backend_type=backend_type,
@@ -395,7 +397,7 @@ class TriggerService:
             }, HTTPStatus.BAD_REQUEST
 
     @staticmethod
-    def add_project(trigger_id: str, project_id: str) -> Tuple[dict, HTTPStatus]:
+    def create_project(trigger_id: str, project_id: str) -> Tuple[dict, HTTPStatus]:
         """Add a project reference to a trigger."""
         trigger = get_trigger(trigger_id)
         if not trigger:
@@ -462,7 +464,7 @@ class TriggerService:
 
         execution_result = {"execution_id": None}
 
-        def run_and_capture():
+        def run_and_capture() -> None:
             execution_result["execution_id"] = ExecutionService.run_trigger(
                 trigger, message, None, "manual"
             )

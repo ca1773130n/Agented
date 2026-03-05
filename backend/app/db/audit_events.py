@@ -13,7 +13,7 @@ from .connection import get_connection
 logger = logging.getLogger(__name__)
 
 
-def add_audit_event(
+def create_audit_event(
     action: str,
     entity_type: str,
     entity_id: str,

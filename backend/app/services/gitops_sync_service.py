@@ -286,7 +286,7 @@ class GitOpsSyncService:
         return change_info
 
     @classmethod
-    def start_polling(cls):
+    def start_polling(cls) -> None:
         """Start polling all enabled GitOps repos via APScheduler.
 
         Registers a job for each enabled repo with the configured interval.
@@ -310,7 +310,7 @@ class GitOpsSyncService:
             cls._register_poll_job(scheduler, repo)
 
     @classmethod
-    def stop_polling(cls):
+    def stop_polling(cls) -> None:
         """Remove all GitOps scheduler jobs."""
         try:
             from flask import current_app
@@ -330,7 +330,7 @@ class GitOpsSyncService:
         cls._scheduler_jobs.clear()
 
     @classmethod
-    def _register_poll_job(cls, scheduler, repo: dict):
+    def _register_poll_job(cls, scheduler, repo: dict) -> None:
         """Register an APScheduler job for a single repo."""
         job_id = f"gitops_sync_{repo['id']}"
         interval = repo.get("poll_interval_seconds", 60)
@@ -354,7 +354,7 @@ class GitOpsSyncService:
             logger.error("Failed to register GitOps poll job: %s", e)
 
     @classmethod
-    def _poll_sync(cls, repo_id: str):
+    def _poll_sync(cls, repo_id: str) -> None:
         """Polling callback -- sync a repo (catches all exceptions)."""
         try:
             cls.sync_repo(repo_id)
@@ -362,7 +362,7 @@ class GitOpsSyncService:
             logger.error("GitOps poll sync failed for %s: %s", repo_id, e)
 
     @classmethod
-    def init(cls):
+    def init(cls) -> None:
         """Initialize GitOps polling on server start."""
         cls.start_polling()
 

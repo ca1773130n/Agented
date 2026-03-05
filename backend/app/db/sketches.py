@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 # =============================================================================
 
 
-def add_sketch(
+def create_sketch(
     title: str,
     content: str = "",
     project_id: str = None,

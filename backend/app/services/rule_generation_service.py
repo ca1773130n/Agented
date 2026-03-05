@@ -1,7 +1,7 @@
 """Service for generating rule configurations using Claude CLI."""
 
-import re
 import logging
+import re
 
 from ..database import get_all_rules
 from .base_generation_service import BaseGenerationService

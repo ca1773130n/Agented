@@ -4,7 +4,7 @@ import time
 from unittest.mock import MagicMock, patch
 
 from app.db.campaigns import (
-    add_campaign_execution,
+    create_campaign_execution,
     create_campaign,
     delete_campaign,
     get_campaign,
@@ -96,7 +96,7 @@ def test_update_campaign_status(isolated_db):
 def test_campaign_executions_crud(isolated_db):
     """Campaign execution entries can be created, updated, and listed."""
     cid = create_campaign("c1", TRIGGER_A, ["https://github.com/r1"])
-    row_id = add_campaign_execution(cid, "https://github.com/r1")
+    row_id = create_campaign_execution(cid, "https://github.com/r1")
     assert row_id is not None
 
     # Update to running
@@ -121,7 +121,7 @@ def test_campaign_executions_crud(isolated_db):
 def test_delete_campaign(isolated_db):
     """Delete removes campaign and cascades to executions."""
     cid = create_campaign("c1", TRIGGER_A, ["https://github.com/r1"])
-    add_campaign_execution(cid, "https://github.com/r1")
+    create_campaign_execution(cid, "https://github.com/r1")
     assert delete_campaign(cid) is True
     assert get_campaign(cid) is None
     assert list_campaign_executions(cid) == []
@@ -237,8 +237,8 @@ def test_semaphore_limits_concurrency(isolated_db):
 def test_get_campaign_results(isolated_db):
     """Campaign results consolidated by repo."""
     cid = create_campaign("c1", TRIGGER_A, ["https://github.com/r1", "https://github.com/r2"])
-    add_campaign_execution(cid, "https://github.com/r1")
-    add_campaign_execution(cid, "https://github.com/r2")
+    create_campaign_execution(cid, "https://github.com/r1")
+    create_campaign_execution(cid, "https://github.com/r2")
     update_campaign_execution(cid, "https://github.com/r1", status="completed", execution_id="e1")
     update_campaign_execution(cid, "https://github.com/r2", status="failed", error="timeout")
     update_campaign_status(cid, "partial_failure", completed=1, failed=1)

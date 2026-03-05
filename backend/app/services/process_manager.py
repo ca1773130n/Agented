@@ -35,7 +35,7 @@ class ProcessManager:
     _lock = threading.Lock()
 
     @classmethod
-    def register(cls, execution_id: str, process: subprocess.Popen, trigger_id: str):
+    def register(cls, execution_id: str, process: subprocess.Popen, trigger_id: str) -> None:
         """Register a running process for tracking."""
         with cls._lock:
             try:
@@ -90,7 +90,7 @@ class ProcessManager:
             logger.info(f"Sent SIGTERM to process group {info.pgid} for execution {execution_id}")
 
             # Schedule SIGKILL fallback if process does not exit within sigterm_timeout
-            def _force_kill():
+            def _force_kill() -> None:
                 try:
                     if info.process.poll() is None:
                         os.killpg(info.pgid, signal.SIGKILL)
@@ -217,7 +217,7 @@ class ProcessManager:
         return True
 
     @classmethod
-    def _auto_cancel_paused(cls, execution_id: str):
+    def _auto_cancel_paused(cls, execution_id: str) -> None:
         """Auto-cancel a paused execution after PAUSE_TIMEOUT. Called by timer thread."""
         from ..db.triggers import update_execution_status_cas
 
@@ -229,9 +229,7 @@ class ProcessManager:
             return
 
         # Check if still paused via CAS
-        if not update_execution_status_cas(
-            execution_id, "pause_timeout", expected_status="paused"
-        ):
+        if not update_execution_status_cas(execution_id, "pause_timeout", expected_status="paused"):
             logger.info(
                 f"Execution {execution_id} no longer paused when auto-cancel fired, skipping"
             )
@@ -240,9 +238,7 @@ class ProcessManager:
         # Must SIGCONT before SIGTERM — stopped processes cannot receive SIGTERM
         try:
             os.killpg(info.pgid, signal.SIGCONT)
-            logger.info(
-                f"Sent SIGCONT before cancel for auto-cancel of execution {execution_id}"
-            )
+            logger.info(f"Sent SIGCONT before cancel for auto-cancel of execution {execution_id}")
         except ProcessLookupError:
             logger.info(f"Process already dead during auto-cancel of {execution_id}")
             return
@@ -255,7 +251,7 @@ class ProcessManager:
             os.killpg(info.pgid, signal.SIGTERM)
             logger.info(f"Sent SIGTERM for auto-cancel of execution {execution_id}")
 
-            def _force_kill():
+            def _force_kill() -> None:
                 try:
                     if info.process.poll() is None:
                         os.killpg(info.pgid, signal.SIGKILL)
@@ -283,7 +279,7 @@ class ProcessManager:
             return info is not None and info.paused_at is not None
 
     @classmethod
-    def cleanup(cls, execution_id: str):
+    def cleanup(cls, execution_id: str) -> None:
         """Remove a process from tracking (called after process exits)."""
         with cls._lock:
             info = cls._processes.pop(execution_id, None)
@@ -304,7 +300,7 @@ class ProcessManager:
             return list(cls._processes.keys())
 
     @classmethod
-    def cancel_all(cls, timeout: int = 300):
+    def cancel_all(cls, timeout: int = 300) -> None:
         """Wait for all processes to complete, then force-kill after timeout. For graceful shutdown."""
         with cls._lock:
             active = list(cls._processes.values())

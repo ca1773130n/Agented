@@ -8,7 +8,7 @@ from datetime import datetime, timedelta, timezone
 from app.db.health_alerts import get_recent_alerts
 from app.db.triggers import (
     add_pr_review,
-    add_trigger,
+    create_trigger,
     create_execution_log,
     update_execution_log,
     update_pr_review,
@@ -19,7 +19,7 @@ from app.services.report_service import ReportService
 
 def _create_trigger(name="test-trigger", trigger_source="webhook", **kwargs):
     """Helper to create a trigger and return its ID."""
-    return add_trigger(
+    return create_trigger(
         name=name,
         prompt_template="test {paths}",
         trigger_source=trigger_source,

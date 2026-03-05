@@ -1,8 +1,8 @@
 """Layer detection service — agent layer and role auto-detection."""
 
+import logging
 import re
 from typing import List
-import logging
 
 logger = logging.getLogger(__name__)
 

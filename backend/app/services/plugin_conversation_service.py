@@ -14,8 +14,8 @@ from typing import Dict, Generator, List, Tuple
 logger = logging.getLogger(__name__)
 
 from ..database import (
-    add_plugin,
     add_plugin_component,
+    create_plugin,
     get_plugin_detail,
 )
 
@@ -232,7 +232,7 @@ class PluginConversationService:
         components = plugin_config.get("components", [])
 
         try:
-            plugin_id = add_plugin(
+            plugin_id = create_plugin(
                 name=plugin_name,
                 description=description,
                 version=version,
@@ -276,7 +276,7 @@ class PluginConversationService:
         return {"message": "Conversation abandoned"}, HTTPStatus.OK
 
     @classmethod
-    def _broadcast(cls, conv_id: str, event_type: str, data: dict):
+    def _broadcast(cls, conv_id: str, event_type: str, data: dict) -> None:
         """Broadcast an SSE event to all subscribers of a conversation."""
         if conv_id not in cls._subscribers:
             return
@@ -295,7 +295,7 @@ class PluginConversationService:
         backend: str | None = None,
         account_id: str | None = None,
         model: str | None = None,
-    ):
+    ) -> None:
         """Process a message with Claude using real-time LLM streaming."""
         if conv_id not in cls._conversations:
             return
@@ -347,7 +347,7 @@ class PluginConversationService:
             conv["processing"] = False
 
     @classmethod
-    def _cleanup_conversation(cls, conv_id: str):
+    def _cleanup_conversation(cls, conv_id: str) -> None:
         """Clean up a conversation and its resources."""
         with cls._lock:
             for queue in cls._subscribers.get(conv_id, []):

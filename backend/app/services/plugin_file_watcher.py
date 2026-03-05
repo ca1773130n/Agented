@@ -25,7 +25,7 @@ class PluginFileWatcher(FileSystemEventHandler):
 
     DEBOUNCE_SECONDS = 2.0
 
-    def __init__(self, plugin_id: str, plugin_dir: str):
+    def __init__(self, plugin_id: str, plugin_dir: str) -> None:
         super().__init__()
         self.plugin_id = plugin_id
         self.plugin_dir = plugin_dir
@@ -34,7 +34,7 @@ class PluginFileWatcher(FileSystemEventHandler):
         self._timer: Optional[threading.Timer] = None
         self._observer: Optional[Observer] = None
 
-    def on_modified(self, event):
+    def on_modified(self, event) -> None:
         """Handle file modification events. Ignores directories."""
         if event.is_directory:
             return
@@ -42,7 +42,7 @@ class PluginFileWatcher(FileSystemEventHandler):
             self._pending[event.src_path] = datetime.now(timezone.utc).timestamp()
         self._schedule_process()
 
-    def on_created(self, event):
+    def on_created(self, event) -> None:
         """Handle file creation events. New files should also be synced."""
         if event.is_directory:
             return
@@ -50,7 +50,7 @@ class PluginFileWatcher(FileSystemEventHandler):
             self._pending[event.src_path] = datetime.now(timezone.utc).timestamp()
         self._schedule_process()
 
-    def _schedule_process(self):
+    def _schedule_process(self) -> None:
         """Cancel existing timer and schedule a new debounced processing run."""
         if self._timer is not None:
             self._timer.cancel()
@@ -58,7 +58,7 @@ class PluginFileWatcher(FileSystemEventHandler):
         self._timer.daemon = True
         self._timer.start()
 
-    def _process_pending(self):
+    def _process_pending(self) -> None:
         """Process all pending file changes after debounce window."""
         with self._lock:
             paths = dict(self._pending)
@@ -74,7 +74,7 @@ class PluginFileWatcher(FileSystemEventHandler):
             except Exception:
                 log.exception("Error syncing file to DB: %s", file_path)
 
-    def start(self):
+    def start(self) -> None:
         """Start watching the plugin directory for file changes."""
         self._observer = Observer()
         self._observer.schedule(self, self.plugin_dir, recursive=True)
@@ -82,7 +82,7 @@ class PluginFileWatcher(FileSystemEventHandler):
         self._observer.start()
         log.info("File watcher started for plugin %s at %s", self.plugin_id, self.plugin_dir)
 
-    def stop(self):
+    def stop(self) -> None:
         """Stop watching and clean up resources."""
         if self._observer is not None:
             self._observer.stop()

@@ -183,7 +183,7 @@ def get_all_accounts_with_health(backend_type: str = None) -> List[dict]:
         return [dict(row) for row in cursor.fetchall()]
 
 
-def update_backend_last_used(backend_type: str):
+def update_backend_last_used(backend_type: str) -> None:
     """Update last_used_at timestamp for a backend by type."""
     with get_connection() as conn:
         conn.execute(
@@ -193,7 +193,7 @@ def update_backend_last_used(backend_type: str):
         conn.commit()
 
 
-def update_backend_models(backend_id: str, models: list[str]):
+def update_backend_models(backend_id: str, models: list[str]) -> None:
     """Update the models list for a backend."""
     import json as _json
 
@@ -205,7 +205,7 @@ def update_backend_models(backend_id: str, models: list[str]):
         conn.commit()
 
 
-def auto_enable_monitoring_for_account(account_id: int):
+def auto_enable_monitoring_for_account(account_id: int) -> None:
     """If global monitoring is enabled, auto-add a new account to monitoring config."""
     # Lazy import to avoid cross-domain circular dependency
     from .monitoring import get_monitoring_config, save_monitoring_config

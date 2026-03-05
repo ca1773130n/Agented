@@ -24,9 +24,9 @@ class _SafeEncoder(json.JSONEncoder):
 
 
 from app.database import (
-    add_milestone,
     add_project_phase,
     add_project_plan,
+    create_milestone,
     get_milestones_by_project,
     get_phases_by_milestone,
     get_plans_by_phase,
@@ -137,7 +137,7 @@ class GrdSyncService:
                 break
 
         if milestone_id is None:
-            milestone_id = add_milestone(
+            milestone_id = create_milestone(
                 project_id, version=version, title=title, roadmap_json=content[:10000]
             )
 
@@ -408,7 +408,7 @@ class GrdSyncService:
             results["errors"].append(f"{summary_file.name}: {e}")
 
     @classmethod
-    def sync_on_session_complete(cls, project_id: str, session_id: str):
+    def sync_on_session_complete(cls, project_id: str, session_id: str) -> None:
         """Sync .planning/ files to DB after a planning session completes.
 
         Called by ProjectSessionManager._handle_session_exit() for GRD-related sessions.

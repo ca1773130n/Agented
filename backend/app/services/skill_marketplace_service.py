@@ -2,18 +2,18 @@
 
 import datetime
 import json
+import logging
 import os
 import subprocess
 from http import HTTPStatus
 from typing import Tuple
-import logging
 
 from ..database import (
-    add_agent,
     add_plugin_component,
-    add_team,
     add_team_member,
     add_user_skill,
+    create_agent,
+    create_team,
     get_agent_by_name,
     get_marketplace,
     get_plugin_component_by_name,
@@ -252,7 +252,7 @@ class SkillMarketplaceService:
                                     if isinstance(triggers_value, list):
                                         triggers_value = json.dumps(triggers_value)
 
-                                    agent_id = add_agent(
+                                    agent_id = create_agent(
                                         name=full_agent_name,
                                         description=agent_info.get("description", ""),
                                         role=agent_info.get("role", ""),
@@ -283,7 +283,7 @@ class SkillMarketplaceService:
                             full_agent_name = f"{plugin_name}:{agent_name}"
                             existing = get_agent_by_name(full_agent_name)
                             if not existing:
-                                agent_id = add_agent(
+                                agent_id = create_agent(
                                     name=full_agent_name,
                                     description=agent_def.get("description", ""),
                                     role=agent_def.get("role", ""),
@@ -326,7 +326,7 @@ class SkillMarketplaceService:
                             full_team_name = f"{plugin_name}:{team_info.get('name', team_folder)}"
                             existing = get_team_by_name(full_team_name)
                             if not existing:
-                                team_id = add_team(
+                                team_id = create_team(
                                     name=full_team_name,
                                     description=team_info.get("description", ""),
                                     color=team_info.get("color", "#00d4ff"),
@@ -356,7 +356,7 @@ class SkillMarketplaceService:
                             full_team_name = f"{plugin_name}:{team_name}"
                             existing = get_team_by_name(full_team_name)
                             if not existing:
-                                team_id = add_team(
+                                team_id = create_team(
                                     name=full_team_name,
                                     description=team_def.get("description", ""),
                                     color=team_def.get("color", "#00d4ff"),

@@ -5,7 +5,6 @@ Entries persist across server restarts, enabling durable dispatch.
 """
 
 import logging
-import sqlite3
 from typing import List, Optional
 
 from .connection import get_connection
@@ -157,9 +156,7 @@ def get_queue_depth(trigger_id: Optional[str] = None) -> int:
                 (trigger_id,),
             )
         else:
-            cursor = conn.execute(
-                "SELECT COUNT(*) FROM execution_queue WHERE status = 'pending'"
-            )
+            cursor = conn.execute("SELECT COUNT(*) FROM execution_queue WHERE status = 'pending'")
         return cursor.fetchone()[0]
 
 

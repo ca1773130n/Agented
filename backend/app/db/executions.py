@@ -64,8 +64,11 @@ def get_filtered_executions(
     Returns rows ordered by started_at DESC with trigger_name from JOIN.
     """
     where_sql, params = _build_where_clause(
-        status=status, trigger_id=trigger_id,
-        date_from=date_from, date_to=date_to, q=q,
+        status=status,
+        trigger_id=trigger_id,
+        date_from=date_from,
+        date_to=date_to,
+        q=q,
     )
 
     query = f"""
@@ -95,8 +98,11 @@ def count_filtered_executions(
     Uses the same WHERE clause as get_filtered_executions for consistency.
     """
     where_sql, params = _build_where_clause(
-        status=status, trigger_id=trigger_id,
-        date_from=date_from, date_to=date_to, q=q,
+        status=status,
+        trigger_id=trigger_id,
+        date_from=date_from,
+        date_to=date_to,
+        q=q,
     )
 
     query = f"SELECT COUNT(*) FROM execution_logs e{where_sql}"

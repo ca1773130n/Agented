@@ -7,7 +7,6 @@ from flask_openapi3 import APIBlueprint, Tag
 from app.models.common import error_response
 
 from ..database import (
-    add_mcp_server,
     assign_mcp_to_project,
     count_mcp_servers,
     delete_mcp_server,
@@ -18,6 +17,9 @@ from ..database import (
     unassign_mcp_from_project,
     update_mcp_server,
     update_project_mcp_assignment,
+)
+from ..database import (
+    create_mcp_server as db_create_mcp_server,
 )
 from ..models.common import PaginationQuery
 from ..models.mcp_server import (
@@ -72,7 +74,7 @@ def get_mcp_server_endpoint(path: McpServerIdPath):
 @mcp_servers_bp.post("/")
 def create_mcp_server(body: CreateMcpServerRequest):
     """Create a custom MCP server. Presets cannot be created via API."""
-    server_id = add_mcp_server(
+    server_id = db_create_mcp_server(
         name=body.name,
         description=body.description,
         server_type=body.server_type or "stdio",

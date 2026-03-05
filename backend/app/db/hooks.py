@@ -9,7 +9,7 @@ from .connection import get_connection
 logger = logging.getLogger(__name__)
 
 
-def add_hook(
+def create_hook(
     name: str,
     event: str,
     description: Optional[str] = None,
@@ -31,7 +31,7 @@ def add_hook(
             conn.commit()
             return cursor.lastrowid
         except sqlite3.Error as e:
-            logger.error(f"Database error in add_hook: {e}")
+            logger.error(f"Database error in create_hook: {e}")
             return None
 
 

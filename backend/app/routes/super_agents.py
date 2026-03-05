@@ -16,7 +16,6 @@ from app.models.common import error_response
 logger = logging.getLogger(__name__)
 
 from ..database import (
-    add_super_agent,
     add_super_agent_document,
     delete_super_agent,
     delete_super_agent_document,
@@ -28,6 +27,9 @@ from ..database import (
     get_super_agent_sessions,
     update_super_agent,
     update_super_agent_document,
+)
+from ..database import (
+    create_super_agent as db_create_super_agent,
 )
 from ..models.common import PaginationQuery
 from ..services.super_agent_session_service import SuperAgentSessionService
@@ -78,7 +80,7 @@ def create_super_agent():
     if not name:
         return error_response("BAD_REQUEST", "name is required", HTTPStatus.BAD_REQUEST)
 
-    sa_id = add_super_agent(
+    sa_id = db_create_super_agent(
         name=name,
         description=data.get("description"),
         backend_type=data.get("backend_type", "claude"),

@@ -215,7 +215,7 @@ class WorktreeService:
         return True
 
     @classmethod
-    def _ensure_gitignore(cls, project_path: str):
+    def _ensure_gitignore(cls, project_path: str) -> None:
         """Ensure .worktrees/ is listed in .gitignore.
 
         Creates .gitignore if it does not exist. Caller must hold the

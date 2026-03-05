@@ -40,7 +40,7 @@ class SchedulerService:
     _initialized: bool = False
 
     @classmethod
-    def init(cls, app=None):
+    def init(cls, app=None) -> None:
         """Initialize the scheduler. Should be called once at app startup."""
         if not SCHEDULER_AVAILABLE:
             logger.warning("APScheduler not installed. Scheduled triggers will not run.")
@@ -77,9 +77,7 @@ class SchedulerService:
                 replace_existing=True,
                 kwargs={"days": retention_days},
             )
-            logger.info(
-                "Scheduled daily execution log cleanup (%d-day retention)", retention_days
-            )
+            logger.info("Scheduled daily execution log cleanup (%d-day retention)", retention_days)
         else:
             logger.info(
                 "Execution log cleanup disabled (EXECUTION_LOG_RETENTION_DAYS=0, unlimited retention)"
@@ -96,7 +94,7 @@ class SchedulerService:
         logger.info("Scheduler service initialized")
 
     @classmethod
-    def shutdown(cls):
+    def shutdown(cls) -> None:
         """Shutdown the scheduler gracefully."""
         if cls._scheduler and cls._initialized:
             cls._scheduler.shutdown(wait=False)
@@ -104,7 +102,7 @@ class SchedulerService:
             logger.info("Scheduler service shutdown")
 
     @classmethod
-    def _load_scheduled_triggers(cls):
+    def _load_scheduled_triggers(cls) -> None:
         """Load all scheduled triggers and register their jobs."""
         if not cls._scheduler:
             return
@@ -116,7 +114,7 @@ class SchedulerService:
                 logger.info(f"Loaded scheduled trigger: {trigger['id']} ({trigger['name']})")
 
     @classmethod
-    def schedule_trigger(cls, trigger_data: dict):
+    def schedule_trigger(cls, trigger_data: dict) -> None:
         """Schedule a trigger based on its configuration."""
         if not cls._scheduler:
             return
@@ -156,7 +154,7 @@ class SchedulerService:
             logger.info(f"Scheduled trigger {trigger_id} - next run: {job.next_run_time}")
 
     @classmethod
-    def unschedule_trigger(cls, trigger_id: str):
+    def unschedule_trigger(cls, trigger_id: str) -> None:
         """Remove a trigger from the scheduler."""
         if not cls._scheduler:
             return
@@ -170,7 +168,7 @@ class SchedulerService:
             logger.info(f"Unscheduled trigger {trigger_id}")
 
     @classmethod
-    def reschedule_trigger(cls, trigger_id: str):
+    def reschedule_trigger(cls, trigger_id: str) -> None:
         """Reschedule a trigger after its configuration changes."""
         trigger_data = get_trigger(trigger_id)
         if not trigger_data:
@@ -201,9 +199,7 @@ class SchedulerService:
             try:
                 return CronTrigger.from_crontab(cron_expr, timezone=tz)
             except (ValueError, TypeError) as e:
-                logger.warning(
-                    "Invalid cron expression %r for trigger: %s", cron_expr, e
-                )
+                logger.warning("Invalid cron expression %r for trigger: %s", cron_expr, e)
                 return None
 
         # Fall back to legacy structured schedule fields
@@ -229,7 +225,7 @@ class SchedulerService:
         return None
 
     @classmethod
-    def _execute_trigger(cls, trigger_id: str):
+    def _execute_trigger(cls, trigger_id: str) -> None:
         """Execute a scheduled trigger. Called by APScheduler."""
         logger.info(f"Executing scheduled trigger: {trigger_id}")
 
@@ -306,7 +302,7 @@ class SchedulerService:
     # =========================================================================
 
     @classmethod
-    def _load_scheduled_teams(cls):
+    def _load_scheduled_teams(cls) -> None:
         """Load all scheduled teams and register their jobs."""
         if not cls._scheduler:
             return
@@ -318,7 +314,7 @@ class SchedulerService:
                 logger.info(f"Loaded scheduled team: {team['id']} ({team['name']})")
 
     @classmethod
-    def schedule_team(cls, team: dict):
+    def schedule_team(cls, team: dict) -> None:
         """Schedule a team based on its trigger_config.
 
         Trigger config follows the same schema as trigger scheduling:
@@ -377,7 +373,7 @@ class SchedulerService:
             logger.info(f"Scheduled team {team_id} - next run: {job.next_run_time}")
 
     @classmethod
-    def unschedule_team(cls, team_id: str):
+    def unschedule_team(cls, team_id: str) -> None:
         """Remove a team from the scheduler."""
         if not cls._scheduler:
             return
@@ -389,7 +385,7 @@ class SchedulerService:
             logger.info(f"Unscheduled team {team_id}")
 
     @classmethod
-    def _execute_team(cls, team_id: str):
+    def _execute_team(cls, team_id: str) -> None:
         """Execute a scheduled team. Called by APScheduler."""
         logger.info(f"Executing scheduled team: {team_id}")
 

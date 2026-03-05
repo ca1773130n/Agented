@@ -1,7 +1,7 @@
 """Service for generating trigger configurations using Claude CLI."""
 
-import re
 import logging
+import re
 
 from ..db.triggers import VALID_BACKENDS, VALID_TRIGGER_SOURCES, get_all_triggers
 from .base_generation_service import BaseGenerationService

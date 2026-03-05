@@ -13,9 +13,9 @@ import pytest
 @pytest.fixture
 def project_id(isolated_db):
     """Create a project and return its ID."""
-    from app.database import add_project
+    from app.database import create_project
 
-    pid = add_project(name="Setup Test Project", local_path="/tmp/test-setup-project")
+    pid = create_project(name="Setup Test Project", local_path="/tmp/test-setup-project")
     return pid
 
 

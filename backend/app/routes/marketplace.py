@@ -9,7 +9,6 @@ from pydantic import BaseModel, Field
 from app.models.common import error_response
 
 from ..database import (
-    add_marketplace,
     add_marketplace_plugin,
     delete_marketplace,
     delete_marketplace_plugin,
@@ -17,6 +16,9 @@ from ..database import (
     get_marketplace,
     get_marketplace_plugins,
     update_marketplace,
+)
+from ..database import (
+    create_marketplace as db_create_marketplace,
 )
 from ..services.github_service import GitHubService
 
@@ -117,7 +119,7 @@ def create_marketplace():
                 HTTPStatus.BAD_REQUEST,
             )
 
-    marketplace_id = add_marketplace(
+    marketplace_id = db_create_marketplace(
         name=name,
         url=url,
         marketplace_type=data.get("type", "git"),

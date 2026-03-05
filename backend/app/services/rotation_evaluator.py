@@ -32,14 +32,14 @@ class RotationEvaluator:
     EVALUATION_INTERVAL_SECONDS = 15
 
     @classmethod
-    def init(cls):
+    def init(cls) -> None:
         """Initialize rotation evaluator. Called at app startup after MonitoringService
         and AgentSchedulerService."""
         cls._register_job()
         logger.info("RotationEvaluator initialized")
 
     @classmethod
-    def _register_job(cls):
+    def _register_job(cls) -> None:
         """Register interval job on SchedulerService._scheduler.
 
         Follows MonitoringService._register_job() pattern exactly.
@@ -67,7 +67,7 @@ class RotationEvaluator:
         )
 
     @classmethod
-    def _evaluate_running_sessions(cls):
+    def _evaluate_running_sessions(cls) -> None:
         """Main evaluation loop (called by APScheduler every 15s).
 
         CRITICAL: Entire body wrapped in try/except. Unhandled exceptions in APScheduler
@@ -102,7 +102,7 @@ class RotationEvaluator:
             logger.error(f"RotationEvaluator: unhandled error in evaluation loop: {e}")
 
     @classmethod
-    def _evaluate_single_execution(cls, execution_id, ExecutionLogService, RotationService):
+    def _evaluate_single_execution(cls, execution_id, ExecutionLogService, RotationService) -> None:
         """Evaluate a single execution for rotation need, applying hysteresis."""
         from ..database import get_trigger
 
@@ -174,7 +174,7 @@ class RotationEvaluator:
                     cls._evaluation_state[execution_id]["consecutive_rotate_polls"] = 0
 
     @classmethod
-    def _dispatch_rotation(cls, execution_id, trigger, message_text, event, trigger_type):
+    def _dispatch_rotation(cls, execution_id, trigger, message_text, event, trigger_type) -> None:
         """Background rotation dispatch.
 
         Calls RotationService.execute_rotation(). Wrapped in try/except to prevent
@@ -233,7 +233,7 @@ class RotationEvaluator:
         }
 
     @classmethod
-    def _cleanup_stale_state(cls, active_execution_ids: list):
+    def _cleanup_stale_state(cls, active_execution_ids: list) -> None:
         """Remove entries from _evaluation_state for executions no longer active."""
         with cls._lock:
             stale_keys = [key for key in cls._evaluation_state if key not in active_execution_ids]

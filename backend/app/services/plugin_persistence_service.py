@@ -5,11 +5,11 @@ import logging
 from pathlib import Path
 
 from app.database import (
-    add_agent,
-    add_command,
-    add_hook,
     add_plugin_component,
-    add_rule,
+    create_agent,
+    create_command,
+    create_hook,
+    create_rule,
 )
 from app.utils.plugin_format import parse_yaml_frontmatter
 
@@ -56,7 +56,7 @@ class PluginPersistenceService:
                 # Extract context from ## Context section if present
                 context = cls._extract_section_text(body, "Context")
 
-                agent_id = add_agent(
+                agent_id = create_agent(
                     name=name,
                     description=description,
                     system_prompt=body,
@@ -135,7 +135,7 @@ class PluginPersistenceService:
                 parameters = frontmatter.get("parameters")
                 arguments = json.dumps(parameters) if parameters else None
 
-                cmd_id = add_command(
+                cmd_id = create_command(
                     name=name,
                     description=description,
                     content=body,
@@ -205,7 +205,7 @@ class PluginPersistenceService:
                         if script_name.startswith("rule-"):
                             rule_type = cls._RULE_EVENT_MAP.get(event_type, "validation")
                             rule_name = script_name.replace("rule-", "").replace(".sh", "")
-                            rule_id = add_rule(
+                            rule_id = create_rule(
                                 name=rule_name,
                                 rule_type=rule_type,
                                 description=f"Imported from {event_type} hook",
@@ -220,7 +220,7 @@ class PluginPersistenceService:
                                 logger.info("Imported rule '%s' (type=%s)", rule_name, rule_type)
                         else:
                             hook_name = script_name.replace(".sh", "")
-                            hook_id = add_hook(
+                            hook_id = create_hook(
                                 name=hook_name or f"hook-{event_type.lower()}",
                                 event=event_type,
                                 description="Imported from hooks.json",
@@ -242,7 +242,7 @@ class PluginPersistenceService:
                             hook_name = (
                                 script_name.replace(".sh", "") or f"hook-{event_type.lower()}"
                             )
-                            hook_id = add_hook(
+                            hook_id = create_hook(
                                 name=hook_name,
                                 event=event_type,
                                 description="Imported from hooks.json",

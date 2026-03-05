@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 # =============================================================================
 
 
-def add_product(
+def create_product(
     name: str,
     description: str = None,
     status: str = "active",

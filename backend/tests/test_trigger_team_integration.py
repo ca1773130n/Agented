@@ -29,9 +29,9 @@ def _create_trigger_with_mode(
     match_field_value=None,
 ):
     """Create a trigger with execution_mode and team_id set."""
-    from app.database import add_trigger, get_trigger
+    from app.database import create_trigger, get_trigger
 
-    trigger_id = add_trigger(
+    trigger_id = create_trigger(
         name="Test Trigger",
         prompt_template="test {message}",
         backend_type="claude",
@@ -91,9 +91,9 @@ def test_trigger_update_execution_mode(isolated_db):
 
 def test_trigger_default_execution_mode(isolated_db):
     """New triggers have execution_mode='direct' by default."""
-    from app.database import add_trigger, get_trigger
+    from app.database import create_trigger, get_trigger
 
-    trigger_id = add_trigger(
+    trigger_id = create_trigger(
         name="Default Mode Trigger",
         prompt_template="test",
     )

@@ -9,7 +9,7 @@ Covers:
 
 import concurrent.futures
 
-from app.db.audit_events import add_audit_event, count_audit_events, query_audit_events
+from app.db.audit_events import create_audit_event, count_audit_events, query_audit_events
 from app.services.audit_log_service import AuditLogService
 
 
@@ -37,8 +37,8 @@ class TestAuditPersistence:
         assert event["details"]["name"] == "My Trigger"
 
     def test_direct_add_audit_event(self, isolated_db):
-        """Direct add_audit_event stores event correctly."""
-        result = add_audit_event(
+        """Direct create_audit_event stores event correctly."""
+        result = create_audit_event(
             action="team.delete",
             entity_type="team",
             entity_id="team-xyz",
@@ -57,10 +57,10 @@ class TestAuditQuery:
 
     def _seed_events(self):
         """Seed multiple events for query testing."""
-        add_audit_event("trigger.create", "trigger", "trig-1", "success", "user-a")
-        add_audit_event("trigger.update", "trigger", "trig-1", "success", "user-b")
-        add_audit_event("team.create", "team", "team-1", "success", "user-a")
-        add_audit_event("rbac.denied", "api", "/admin/triggers/", "denied", "user-c")
+        create_audit_event("trigger.create", "trigger", "trig-1", "success", "user-a")
+        create_audit_event("trigger.update", "trigger", "trig-1", "success", "user-b")
+        create_audit_event("team.create", "team", "team-1", "success", "user-a")
+        create_audit_event("rbac.denied", "api", "/admin/triggers/", "denied", "user-c")
 
     def test_filter_by_entity_type(self, isolated_db):
         self._seed_events()
@@ -105,7 +105,7 @@ class TestAuditQuery:
 
     def test_date_range_filter(self, isolated_db):
         """Date range filtering works with created_at."""
-        add_audit_event("test.action", "test", "t-1", "ok")
+        create_audit_event("test.action", "test", "t-1", "ok")
         # Query with a start_date far in the past should include all
         events = query_audit_events(start_date="2020-01-01")
         assert len(events) >= 1
@@ -115,7 +115,7 @@ class TestAuditQuery:
 
     def test_details_json_parsing(self, isolated_db):
         """Details stored as JSON are parsed back to dict."""
-        add_audit_event(
+        create_audit_event(
             "test.detail",
             "test",
             "t-2",
@@ -134,7 +134,7 @@ class TestAuditConcurrency:
         """Multiple threads writing audit events concurrently."""
 
         def write_event(i):
-            return add_audit_event(
+            return create_audit_event(
                 action="test.concurrent",
                 entity_type="test",
                 entity_id=f"t-{i}",
@@ -157,7 +157,7 @@ class TestAuditRetention:
 
     def test_events_persist_across_queries(self, isolated_db):
         """Events written once are retrievable in separate queries."""
-        add_audit_event("persist.test", "test", "p-1", "ok")
+        create_audit_event("persist.test", "test", "p-1", "ok")
 
         # Query in a separate call (simulating restart)
         events = query_audit_events(entity_id="p-1")

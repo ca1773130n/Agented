@@ -217,7 +217,7 @@ class BackendCLIService:
         return session_id
 
     @classmethod
-    def _pty_reader(cls, session_id: str, master_fd: int, pid: int):
+    def _pty_reader(cls, session_id: str, master_fd: int, pid: int) -> None:
         """Read from PTY master fd, detect URLs/interactions, and handle completion."""
         buffer = ""
         # Accumulate recent lines for multi-line interaction detection (numbered menus)
@@ -569,7 +569,7 @@ class BackendCLIService:
         cls._finish_session(session_id, status, exit_code, error_message)
 
     @classmethod
-    def _handle_interaction(cls, session_id: str, master_fd: int, interaction: dict):
+    def _handle_interaction(cls, session_id: str, master_fd: int, interaction: dict) -> None:
         """Handle an interactive question from the CLI."""
         interaction_id = str(uuid.uuid4())
 
@@ -678,7 +678,7 @@ class BackendCLIService:
         status: str,
         exit_code: int = None,
         error_message: str = None,
-    ):
+    ) -> None:
         """Finalize a CLI session: broadcast completion, move to completed, schedule cleanup."""
         finished_at = datetime.datetime.now().isoformat()
 
@@ -725,7 +725,7 @@ class BackendCLIService:
             cls._cleanup_timers[session_id] = timer
 
     @classmethod
-    def _cleanup_completed(cls, session_id: str):
+    def _cleanup_completed(cls, session_id: str) -> None:
         """Remove a completed session from the completed dict after TTL."""
         with cls._lock:
             cls._completed.pop(session_id, None)
@@ -1020,7 +1020,7 @@ class BackendCLIService:
             return {"success": False, "output": None, "error": str(e)}
 
     @classmethod
-    def _broadcast(cls, session_id: str, event_type: str, data: dict):
+    def _broadcast(cls, session_id: str, event_type: str, data: dict) -> None:
         """Broadcast an SSE event to all subscribers."""
         message = cls._format_sse(event_type, data)
         with cls._lock:

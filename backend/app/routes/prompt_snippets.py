@@ -9,7 +9,9 @@ from pydantic import BaseModel, Field
 from app.models.common import error_response
 
 from ..db.prompt_snippets import (
-    add_snippet,
+    create_snippet as db_create_snippet,
+)
+from ..db.prompt_snippets import (
     delete_snippet,
     get_all_snippets,
     get_snippet,
@@ -71,7 +73,7 @@ def create_snippet():
             "CONFLICT", f"A snippet named '{name}' already exists", HTTPStatus.CONFLICT
         )
 
-    snippet_id = add_snippet(name=name, content=content, description=description)
+    snippet_id = db_create_snippet(name=name, content=content, description=description)
     if snippet_id:
         snippet = get_snippet(snippet_id)
         return {"message": "Snippet created", "snippet": snippet}, HTTPStatus.CREATED

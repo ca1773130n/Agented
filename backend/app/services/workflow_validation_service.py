@@ -13,11 +13,25 @@ from typing import List, Tuple
 logger = logging.getLogger(__name__)
 
 # Dangerous constructs that must be rejected in condition expressions
-DANGEROUS_NAMES = frozenset({
-    "import", "exec", "eval", "__builtins__", "__import__",
-    "globals", "locals", "compile", "getattr", "setattr",
-    "delattr", "open", "breakpoint", "exit", "quit",
-})
+DANGEROUS_NAMES = frozenset(
+    {
+        "import",
+        "exec",
+        "eval",
+        "__builtins__",
+        "__import__",
+        "globals",
+        "locals",
+        "compile",
+        "getattr",
+        "setattr",
+        "delattr",
+        "open",
+        "breakpoint",
+        "exit",
+        "quit",
+    }
+)
 
 
 def validate_workflow_dag(graph_data: dict) -> Tuple[bool, List[str]]:
@@ -120,8 +134,7 @@ def validate_workflow_dag(graph_data: dict) -> Tuple[bool, List[str]]:
             except SyntaxError as se:
                 col = se.offset or 0
                 errors.append(
-                    f"Invalid condition expression in node '{node_id}': "
-                    f"SyntaxError at column {col}"
+                    f"Invalid condition expression in node '{node_id}': SyntaxError at column {col}"
                 )
 
     # Check 4: Unreachable nodes (warn only)

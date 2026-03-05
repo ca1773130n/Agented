@@ -30,14 +30,14 @@ def seed_triggers(isolated_db):
 
     Returns (trigger_ids, total_count) where total_count includes predefined triggers.
     """
-    from app.db.triggers import add_trigger
+    from app.db.triggers import create_trigger
 
     # Count predefined triggers already in DB
     predefined_count = count_all_triggers()
 
     trigger_ids = []
     for i in range(25):
-        tid = add_trigger(
+        tid = create_trigger(
             name=f"Test Trigger {i:03d}",
             prompt_template=f"Test prompt {i}",
             backend_type="claude",

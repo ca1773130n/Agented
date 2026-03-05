@@ -5,7 +5,7 @@ import logging
 from typing import List, Optional
 
 from .connection import get_connection
-from .triggers import add_trigger, get_trigger_by_name
+from .triggers import create_trigger, get_trigger_by_name
 
 logger = logging.getLogger(__name__)
 
@@ -235,8 +235,8 @@ def deploy_template(template_id: str) -> Optional[str]:
         trigger_name = f"{base_name} ({counter})"
         counter += 1
 
-    # Create the trigger via add_trigger() directly
-    trigger_id = add_trigger(
+    # Create the trigger via create_trigger() directly
+    trigger_id = create_trigger(
         name=trigger_name,
         prompt_template=config.get("prompt_template", ""),
         backend_type=config.get("backend_type", "claude"),

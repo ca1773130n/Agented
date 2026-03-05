@@ -5,7 +5,7 @@ import tempfile
 
 import yaml
 
-from app.db import add_project_path, add_trigger, get_all_triggers, get_trigger
+from app.db import add_project_path, create_trigger, get_all_triggers, get_trigger
 from app.services.config_export_service import (
     export_all_triggers,
     export_trigger,
@@ -19,7 +19,7 @@ def _seed_trigger(isolated_db):
     """Create a test trigger with paths for export testing."""
     # Use a real temp directory so symlink creation succeeds
     project_dir = tempfile.mkdtemp(prefix="test-project-")
-    trigger_id = add_trigger(
+    trigger_id = create_trigger(
         name="Test Export Bot",
         prompt_template="/test-export {paths}",
         backend_type="claude",
@@ -39,7 +39,7 @@ def _seed_trigger(isolated_db):
 
 def _seed_scheduled_trigger(isolated_db):
     """Create a scheduled trigger for testing schedule export."""
-    trigger_id = add_trigger(
+    trigger_id = create_trigger(
         name="Scheduled Test Bot",
         prompt_template="/scheduled-test {paths}",
         backend_type="claude",
@@ -81,7 +81,7 @@ def test_export_produces_valid_json(isolated_db):
 
 def test_export_excludes_sensitive_fields(isolated_db):
     """Test that webhook_secret is not included in exports."""
-    trigger_id = add_trigger(
+    trigger_id = create_trigger(
         name="Secret Bot",
         prompt_template="/secret {paths}",
         backend_type="claude",
@@ -216,7 +216,7 @@ def test_scheduled_trigger_export_includes_schedule(isolated_db):
 def test_upsert_updates_existing_trigger(isolated_db):
     """Test that upsert=True updates an existing trigger by name match."""
     # Create original trigger
-    original_id = add_trigger(
+    original_id = create_trigger(
         name="Upsert Target",
         prompt_template="/original {paths}",
         backend_type="claude",
@@ -255,7 +255,7 @@ spec:
 def test_upsert_false_creates_new_with_existing_name(isolated_db):
     """Test that upsert=False creates a new trigger even if name exists."""
     # Create original trigger
-    original_id = add_trigger(
+    original_id = create_trigger(
         name="Dup Name Bot",
         prompt_template="/original {paths}",
         backend_type="claude",

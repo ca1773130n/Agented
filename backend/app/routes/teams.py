@@ -22,7 +22,6 @@ from pydantic import BaseModel, Field
 from ..database import (
     VALID_ENTITY_TYPES,
     VALID_TRIGGER_SOURCES,
-    add_team,
     add_team_agent_assignment,
     # Edge CRUD
     add_team_edge,
@@ -43,6 +42,9 @@ from ..database import (
     remove_team_member,
     update_team,
     update_team_member,
+)
+from ..database import (
+    create_team as db_create_team,
 )
 
 # models
@@ -213,7 +215,7 @@ def create_team():
             "CONFLICT", "A team with this name already exists", HTTPStatus.CONFLICT
         )
 
-    team_id = add_team(
+    team_id = db_create_team(
         name=name,
         description=data.get("description"),
         color=data.get("color", "#00d4ff"),

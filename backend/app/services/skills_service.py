@@ -6,6 +6,7 @@ Delegates to:
   - skill_harness_service: user skills CRUD, harness integration, agent export
   - skill_marketplace_service: marketplace load and deploy operations
 """
+
 import logging
 
 from .skill_discovery_service import SkillDiscoveryService, get_playground_working_dir  # noqa: F401

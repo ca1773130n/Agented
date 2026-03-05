@@ -333,7 +333,9 @@ def get_product_milestone(milestone_id: str) -> Optional[dict]:
         return dict(row) if row else None
 
 
-def get_milestones_by_product(product_id: str, status: str = None, limit=None, offset=0) -> List[dict]:
+def get_milestones_by_product(
+    product_id: str, status: str = None, limit=None, offset=0
+) -> List[dict]:
     """Get all milestones for a product with optional status filtering."""
     with get_connection() as conn:
         query = "SELECT * FROM product_milestones WHERE product_id = ?"

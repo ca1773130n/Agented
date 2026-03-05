@@ -5,7 +5,7 @@ from http import HTTPStatus
 from typing import Tuple
 
 from ..database import (
-    add_marketplace,
+    create_marketplace,
     get_all_marketplaces,
     get_marketplace_plugins,
     get_setting,
@@ -41,7 +41,7 @@ class SetupBundleService:
                 break
 
         if not marketplace_id:
-            marketplace_id = add_marketplace(BUNDLE_MARKETPLACE_NAME, BUNDLE_MARKETPLACE_URL)
+            marketplace_id = create_marketplace(BUNDLE_MARKETPLACE_NAME, BUNDLE_MARKETPLACE_URL)
             if not marketplace_id:
                 return {"error": "Failed to create marketplace"}, HTTPStatus.INTERNAL_SERVER_ERROR
             marketplace_created = True
@@ -83,7 +83,7 @@ class SetupBundleService:
         }, HTTPStatus.CREATED
 
     @staticmethod
-    def _set_harness_from_existing(marketplace_id: str, remote_name: str):
+    def _set_harness_from_existing(marketplace_id: str, remote_name: str) -> None:
         """Set harness settings from an already-installed marketplace plugin."""
         for p in get_marketplace_plugins(marketplace_id):
             if p["remote_name"] == remote_name:

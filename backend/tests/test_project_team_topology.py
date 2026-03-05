@@ -5,7 +5,7 @@ import json
 import pytest
 
 from app.db.projects import (
-    add_project,
+    create_project,
     add_project_team_edge,
     delete_project_team_edge,
     delete_project_team_edges_by_project,
@@ -13,13 +13,13 @@ from app.db.projects import (
     get_project_team_edges,
     update_project_team_topology_config,
 )
-from app.db.teams import add_team
+from app.db.teams import create_team
 
 
 @pytest.fixture
 def sample_project(isolated_db):
     """Create a sample project."""
-    pid = add_project(name="Test Project", local_path="/tmp/test")
+    pid = create_project(name="Test Project", local_path="/tmp/test")
     assert pid is not None
     return pid
 
@@ -27,8 +27,8 @@ def sample_project(isolated_db):
 @pytest.fixture
 def sample_teams(isolated_db):
     """Create two sample teams."""
-    t1 = add_team(name="Frontend Team")
-    t2 = add_team(name="Backend Team")
+    t1 = create_team(name="Frontend Team")
+    t2 = create_team(name="Backend Team")
     assert t1 is not None
     assert t2 is not None
     return t1, t2

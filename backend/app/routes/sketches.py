@@ -10,12 +10,14 @@ from pydantic import BaseModel, Field
 from app.models.common import error_response
 
 from ..db.sketches import (
-    add_sketch,
     count_sketches,
     delete_sketch,
     get_all_sketches,
     get_sketch,
     update_sketch,
+)
+from ..db.sketches import (
+    create_sketch as db_create_sketch,
 )
 from ..models.common import PaginationQuery
 
@@ -50,7 +52,7 @@ def create_sketch():
     if not title:
         return error_response("BAD_REQUEST", "title is required", HTTPStatus.BAD_REQUEST)
 
-    sketch_id = add_sketch(
+    sketch_id = db_create_sketch(
         title=title,
         content=data.get("content", ""),
         project_id=data.get("project_id"),

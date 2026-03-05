@@ -1712,9 +1712,7 @@ def create_fresh_schema(conn):
             completed_at TEXT
         )
     """)
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_eq_status ON execution_queue(status)"
-    )
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_eq_status ON execution_queue(status)")
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_eq_trigger_status ON execution_queue(trigger_id, status)"
     )

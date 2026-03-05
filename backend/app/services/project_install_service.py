@@ -358,7 +358,7 @@ class ProjectInstallService:
         return f"---\n{yaml_content}---\n\n{body}\n"
 
     @staticmethod
-    def _update_settings_json_hooks(workspace: str, hook: dict, action: str = "add"):
+    def _update_settings_json_hooks(workspace: str, hook: dict, action: str = "add") -> None:
         """Update .claude/settings.json with hook entries.
 
         Args:

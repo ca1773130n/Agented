@@ -14,8 +14,8 @@ import zipfile
 from pathlib import Path
 
 from app.database import (
-    add_super_agent,
     add_super_agent_document,
+    create_super_agent,
     get_all_backends,
     get_all_super_agents,
     get_super_agent,
@@ -237,7 +237,7 @@ class SuperAgentExportService:
                 counter += 1
 
         # Create SuperAgent
-        new_id = add_super_agent(
+        new_id = create_super_agent(
             name=name,
             description=config.get("description"),
             backend_type=config.get("backend_type", "claude"),
@@ -309,13 +309,13 @@ class SuperAgentExportService:
 # =============================================================================
 
 
-def _write_text(path: Path, content: str):
+def _write_text(path: Path, content: str) -> None:
     """Write text content to a file, creating parent directories as needed."""
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content, encoding="utf-8")
 
 
-def _write_json(path: Path, data: dict):
+def _write_json(path: Path, data: dict) -> None:
     """Write a dict as formatted JSON to a file."""
     _write_text(path, json.dumps(data, indent=2) + "\n")
 

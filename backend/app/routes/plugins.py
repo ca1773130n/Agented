@@ -9,7 +9,6 @@ from pydantic import BaseModel, Field
 from app.models.common import error_response
 
 from ..database import (
-    add_plugin,
     add_plugin_component,
     count_plugins,
     delete_plugin,
@@ -20,6 +19,9 @@ from ..database import (
     get_plugin_detail,
     update_plugin,
     update_plugin_component,
+)
+from ..database import (
+    create_plugin as db_create_plugin,
 )
 from ..models.common import PaginationQuery
 
@@ -55,7 +57,7 @@ def create_plugin():
     if not name:
         return error_response("BAD_REQUEST", "name is required", HTTPStatus.BAD_REQUEST)
 
-    plugin_id = add_plugin(
+    plugin_id = db_create_plugin(
         name=name,
         description=data.get("description"),
         version=data.get("version", "1.0.0"),

@@ -9,7 +9,7 @@ from .connection import get_connection
 logger = logging.getLogger(__name__)
 
 
-def add_rule(
+def create_rule(
     name: str,
     rule_type: str = "validation",
     description: Optional[str] = None,
@@ -41,7 +41,7 @@ def add_rule(
             conn.commit()
             return cursor.lastrowid
         except sqlite3.Error as e:
-            logger.error(f"Database error in add_rule: {e}")
+            logger.error(f"Database error in create_rule: {e}")
             return None
 
 

@@ -9,7 +9,6 @@ from pydantic import BaseModel, Field
 from app.models.common import error_response
 
 from ..database import (
-    add_hook,
     count_hooks,
     delete_hook,
     get_all_hooks,
@@ -17,6 +16,9 @@ from ..database import (
     get_hooks_by_event,
     get_hooks_by_project,
     update_hook,
+)
+from ..database import (
+    create_hook as db_create_hook,
 )
 from ..models.common import PaginationQuery
 
@@ -76,7 +78,7 @@ def create_hook():
             HTTPStatus.BAD_REQUEST,
         )
 
-    hook_id = add_hook(
+    hook_id = db_create_hook(
         name=name,
         event=event,
         description=data.get("description"),

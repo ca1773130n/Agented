@@ -1,11 +1,11 @@
 """Database package - re-exports all public functions and constants for backward compatibility.
 
 All public functions and constants are re-exported here so that:
-  from app.db import add_trigger, get_trigger  # works
+  from app.db import create_trigger, get_trigger  # works
   from app.db import get_connection             # works
 
 For new code, prefer importing from specific sub-modules:
-  from app.db.triggers import add_trigger
+  from app.db.triggers import create_trigger
   from app.db.connection import get_connection
 """
 
@@ -17,9 +17,9 @@ from .agents import (  # noqa: F401
     VALID_AGENT_STATUSES,
     VALID_CONVERSATION_STATUSES,
     VALID_EFFORT_LEVELS,
-    # Agent CRUD
-    add_agent,
     count_agents,
+    # Agent CRUD
+    create_agent,
     # Agent conversation operations
     create_agent_conversation,
     # Design conversation operations
@@ -48,8 +48,8 @@ from .analytics import (  # noqa: F401
 
 # Audit events (persistent trail)
 from .audit_events import (  # noqa: F401
-    add_audit_event,
     count_audit_events,
+    create_audit_event,
     query_audit_events,
 )
 
@@ -135,8 +135,8 @@ from .budgets import (  # noqa: F401
 
 # Campaigns (multi-repo campaign orchestration)
 from .campaigns import (  # noqa: F401
-    add_campaign_execution,
     create_campaign,
+    create_campaign_execution,
     delete_campaign,
     get_campaign,
     list_campaign_executions,
@@ -158,8 +158,8 @@ from .chunk_results import (  # noqa: F401
 
 # Commands
 from .commands import (  # noqa: F401
-    add_command,
     count_commands,
+    create_command,
     delete_command,
     get_all_commands,
     get_command,
@@ -194,10 +194,10 @@ from .gitops import (  # noqa: F401
 
 # GRD (milestones, phases, plans, sessions, sync state)
 from .grd import (  # noqa: F401
-    add_milestone,
     add_project_phase,
     add_project_plan,
     add_project_session,
+    create_milestone,
     delete_milestone,
     delete_project_phase,
     delete_project_plan,
@@ -233,8 +233,8 @@ from .health_alerts import (  # noqa: F401
 
 # Hooks
 from .hooks import (  # noqa: F401
-    add_hook,
     count_hooks,
+    create_hook,
     delete_hook,
     get_all_hooks,
     get_hook,
@@ -376,9 +376,9 @@ from .integrations import (  # noqa: F401
 # MCP servers and execution type handlers
 from .mcp_servers import (  # noqa: F401
     add_execution_type_handler,
-    add_mcp_server,
     assign_mcp_to_project,
     count_mcp_servers,
+    create_mcp_server,
     delete_execution_type_handler,
     delete_mcp_server,
     get_all_execution_type_handlers,
@@ -431,16 +431,16 @@ from .monitoring import (  # noqa: F401
 
 # Plugins (includes components, marketplaces, sync state, exports)
 from .plugins import (  # noqa: F401
-    # Marketplaces
-    add_marketplace,
     add_marketplace_plugin,
-    add_plugin,
     add_plugin_component,
     # Plugin exports
     add_plugin_export,
     # Sync state
     add_sync_state,
     count_plugins,
+    # Marketplaces
+    create_marketplace,
+    create_plugin,
     delete_marketplace,
     delete_marketplace_plugin,
     delete_plugin,
@@ -468,8 +468,8 @@ from .plugins import (  # noqa: F401
 
 # Products
 from .products import (  # noqa: F401
-    add_product,
     count_products,
+    create_product,
     delete_product,
     get_all_products,
     get_product,
@@ -479,7 +479,6 @@ from .products import (  # noqa: F401
 
 # Projects (includes skills, installations, team assignments)
 from .projects import (  # noqa: F401
-    add_project,
     # Project installations
     add_project_installation,
     # Project skills
@@ -490,6 +489,7 @@ from .projects import (  # noqa: F401
     assign_team_to_project,
     clear_project_skills,
     count_projects,
+    create_project,
     delete_project,
     delete_project_installation,
     delete_project_skill,
@@ -513,7 +513,7 @@ from .projects import (  # noqa: F401
 
 # Prompt snippets (reusable prompt fragments)
 from .prompt_snippets import (  # noqa: F401
-    add_snippet,
+    create_snippet,
     delete_snippet,
     get_all_snippets,
     get_snippet,
@@ -568,8 +568,8 @@ from .rotations import (  # noqa: F401
 
 # Rules
 from .rules import (  # noqa: F401
-    add_rule,
     count_rules,
+    create_rule,
     delete_rule,
     get_all_rules,
     get_rule,
@@ -611,7 +611,7 @@ from .settings import (  # noqa: F401
 
 # Sketches
 from .sketches import (  # noqa: F401
-    add_sketch,
+    create_sketch,
     delete_sketch,
     get_all_sketches,
     get_recent_classified_sketches,
@@ -635,10 +635,10 @@ from .skills import (  # noqa: F401
 # SuperAgents (super_agents + documents + sessions)
 from .super_agents import (  # noqa: F401
     VALID_DOC_TYPES,
-    add_super_agent,
     add_super_agent_document,
     add_super_agent_session,
     count_active_sessions,
+    create_super_agent,
     delete_super_agent,
     delete_super_agent_document,
     delete_super_agent_session,
@@ -659,13 +659,13 @@ from .teams import (  # noqa: F401
     # Team edge operations (directed graph)
     VALID_EDGE_TYPES,
     VALID_ENTITY_TYPES,
-    add_team,
     # Team agent assignment operations
     add_team_agent_assignment,
     add_team_edge,
     # Team member operations
     add_team_member,
     count_teams,
+    create_team,
     delete_team,
     delete_team_agent_assignment,
     delete_team_agent_assignments_bulk,
@@ -708,15 +708,15 @@ from .triggers import (  # noqa: F401
     # Project path operations
     add_project_path,
     add_project_to_trigger,
-    # Trigger CRUD
-    add_trigger,
-    # Trigger count helpers
-    count_all_triggers,
-    count_paths_for_trigger,
     # Execution log operations
     count_all_execution_logs,
+    # Trigger count helpers
+    count_all_triggers,
     count_execution_logs_for_trigger,
+    count_paths_for_trigger,
     create_execution_log,
+    # Trigger CRUD
+    create_trigger,
     delete_old_execution_logs,
     delete_pr_review,
     delete_trigger,
@@ -725,7 +725,9 @@ from .triggers import (  # noqa: F401
     get_all_pr_reviews,
     get_all_triggers,
     get_execution_log,
+    get_execution_logs_filtered,
     get_execution_logs_for_trigger,
+    get_execution_stats,
     get_latest_execution_for_trigger,
     get_paths_for_trigger,
     get_paths_for_trigger_detailed,
@@ -748,8 +750,6 @@ from .triggers import (  # noqa: F401
     remove_project_from_trigger,
     remove_project_path,
     update_execution_log,
-    get_execution_logs_filtered,
-    get_execution_stats,
     update_execution_status_cas,
     update_pr_review,
     update_trigger,
@@ -769,25 +769,25 @@ from .viewer_comments import (  # noqa: F401
 
 # Workflows (workflows, versions, executions, node executions, approval states)
 from .workflows import (  # noqa: F401
-    add_workflow,
     add_workflow_approval_state,
     add_workflow_execution,
     add_workflow_node_execution,
     add_workflow_version,
     add_workflow_version_raw,
     cleanup_stale_approval_states,
+    create_workflow,
     delete_workflow,
     get_all_workflows,
     get_latest_workflow_version,
-    get_workflow_execution_analytics,
-    get_workflow_execution_timeline,
-    get_workflow_node_analytics,
     get_pending_approval_states,
     get_running_workflow_executions,
     get_workflow,
     get_workflow_approval_state,
     get_workflow_execution,
+    get_workflow_execution_analytics,
+    get_workflow_execution_timeline,
     get_workflow_executions,
+    get_workflow_node_analytics,
     get_workflow_node_executions,
     get_workflow_versions,
     publish_workflow_version,

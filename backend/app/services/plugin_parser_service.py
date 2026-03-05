@@ -6,14 +6,14 @@ from pathlib import Path
 from typing import Optional
 
 from app.database import (
-    add_agent,
-    add_command,
-    add_hook,
-    add_plugin,
     add_plugin_component,
-    add_rule,
-    add_team,
     add_team_member,
+    create_agent,
+    create_command,
+    create_hook,
+    create_plugin,
+    create_rule,
+    create_team,
 )
 
 logger = logging.getLogger(__name__)
@@ -65,7 +65,7 @@ class PluginParserService:
         version = manifest.get("version", "1.0.0")
 
         # Step 2: Create Agented plugin record
-        plugin_id = add_plugin(
+        plugin_id = create_plugin(
             name=name,
             description=description,
             version=version,
@@ -138,7 +138,7 @@ class PluginParserService:
         version = manifest.get("version", "1.0.0")
 
         # Create plugin record
-        plugin_id = add_plugin(
+        plugin_id = create_plugin(
             name=name,
             description=description,
             version=version,
@@ -166,7 +166,7 @@ class PluginParserService:
         team_data = manifest.get("team")
         team_id = None
         if team_data:
-            team_id = add_team(
+            team_id = create_team(
                 name=team_data.get("name", name),
                 description=team_data.get("description", ""),
                 topology=team_data.get("topology"),
@@ -181,7 +181,7 @@ class PluginParserService:
         # Import agents
         for agent_data in manifest.get("agents", []):
             try:
-                agent_id = add_agent(
+                agent_id = create_agent(
                     name=agent_data.get("name", "Unnamed Agent"),
                     description=agent_data.get("description"),
                     role=agent_data.get("role"),
@@ -215,7 +215,7 @@ class PluginParserService:
         # Import commands
         for cmd_data in manifest.get("commands", []):
             try:
-                cmd_id = add_command(
+                cmd_id = create_command(
                     name=cmd_data.get("name", "unnamed-command"),
                     description=cmd_data.get("description"),
                     content=cmd_data.get("content"),
@@ -232,7 +232,7 @@ class PluginParserService:
         # Import hooks
         for hook_data in manifest.get("hooks", []):
             try:
-                hook_id = add_hook(
+                hook_id = create_hook(
                     name=hook_data.get("name", "unnamed-hook"),
                     event=hook_data.get("event", "PreToolUse"),
                     description=hook_data.get("description"),
@@ -247,7 +247,7 @@ class PluginParserService:
         # Import rules
         for rule_data in manifest.get("rules", []):
             try:
-                rule_id = add_rule(
+                rule_id = create_rule(
                     name=rule_data.get("name", "unnamed-rule"),
                     rule_type=rule_data.get("rule_type", "validation"),
                     description=rule_data.get("description"),

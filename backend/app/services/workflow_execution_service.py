@@ -41,14 +41,14 @@ SAFE_BOOL_OPS = {
 }
 
 
-def _resolve_name(name: str, context: dict):
+def _resolve_name(name: str, context: dict) -> None:
     """Resolve a top-level name from the context dict."""
     if name in context:
         return context[name]
     raise ValueError(f"Undefined variable: '{name}'")
 
 
-def _resolve_attribute(node: ast.Attribute, context: dict):
+def _resolve_attribute(node: ast.Attribute, context: dict) -> None:
     """Resolve dot-notation attribute access on the context dict.
 
     E.g., pr.lines_changed -> context["pr"]["lines_changed"]
@@ -80,7 +80,7 @@ def _resolve_attribute(node: ast.Attribute, context: dict):
     return value
 
 
-def _eval_node(node, context: dict):
+def _eval_node(node, context: dict) -> None:
     """Recursively evaluate an AST node against a context dict.
 
     Only allows safe operations: comparisons, boolean ops, unary not,
@@ -382,7 +382,7 @@ class WorkflowExecutionService:
             return bool(entry and entry.get("_cancelled"))
 
     @classmethod
-    def _update_status(cls, execution_id: str, status: str, error: str = None):
+    def _update_status(cls, execution_id: str, status: str, error: str = None) -> None:
         """Update in-memory execution status."""
         with cls._lock:
             entry = cls._executions.get(execution_id)
@@ -392,7 +392,7 @@ class WorkflowExecutionService:
                     entry["error"] = error
 
     @classmethod
-    def _update_node_state(cls, execution_id: str, node_id: str, status: str):
+    def _update_node_state(cls, execution_id: str, node_id: str, status: str) -> None:
         """Update in-memory node state."""
         with cls._lock:
             entry = cls._executions.get(execution_id)
@@ -400,7 +400,7 @@ class WorkflowExecutionService:
                 entry.setdefault("node_states", {})[node_id] = status
 
     @classmethod
-    def cleanup_stale_executions(cls):
+    def cleanup_stale_executions(cls) -> None:
         """Mark any DB-persisted 'running' or 'pending_approval' executions as failed.
 
         Called once at server startup to recover from unclean shutdowns where
@@ -440,7 +440,7 @@ class WorkflowExecutionService:
             logger.error("Failed to cleanup stale approval states: %s", e)
 
     @classmethod
-    def _cleanup_execution(cls, execution_id: str):
+    def _cleanup_execution(cls, execution_id: str) -> None:
         """Remove execution from in-memory tracking (called after TTL)."""
         with cls._lock:
             cls._executions.pop(execution_id, None)
@@ -458,7 +458,7 @@ class WorkflowExecutionService:
         input_json: Optional[str],
         trigger_type: str,
         timeout_seconds: int,
-    ):
+    ) -> None:
         """Execute the workflow DAG in topological order.
 
         This method runs in a background daemon thread. It:
@@ -802,7 +802,7 @@ class WorkflowExecutionService:
         cls._schedule_cleanup(execution_id)
 
     @classmethod
-    def _schedule_cleanup(cls, execution_id: str):
+    def _schedule_cleanup(cls, execution_id: str) -> None:
         """Schedule removal of in-memory tracking after 5 minutes.
 
         Uses APScheduler when available so the job survives daemon-thread teardown.
@@ -830,7 +830,9 @@ class WorkflowExecutionService:
         timer.start()
 
     @classmethod
-    def _mark_downstream_skipped(cls, node_id: str, successors: Dict[str, set], skipped_nodes: set):
+    def _mark_downstream_skipped(
+        cls, node_id: str, successors: Dict[str, set], skipped_nodes: set
+    ) -> None:
         """Recursively mark all downstream nodes as skipped."""
         for succ_id in successors.get(node_id, set()):
             if succ_id not in skipped_nodes:
@@ -910,7 +912,7 @@ class WorkflowExecutionService:
         """
         result: list = [None, None]  # [output_msg, exception]
 
-        def _run():
+        def _run() -> None:
             try:
                 result[0] = cls._dispatch_node(node_id, node_type, node_config, input_msg)
             except Exception as exc:

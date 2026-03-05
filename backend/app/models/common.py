@@ -16,7 +16,9 @@ class ErrorResponse(BaseModel):
     """
 
     code: str = Field(..., description="Machine-readable error code", examples=["NOT_FOUND"])
-    message: str = Field(..., description="Human-readable error message", examples=["Bot not found"])
+    message: str = Field(
+        ..., description="Human-readable error message", examples=["Bot not found"]
+    )
     error: Optional[str] = Field(
         None, description="Legacy error message (same as message, for backward compat)"
     )

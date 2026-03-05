@@ -300,7 +300,7 @@ class SuperAgentSessionService:
         return "\n".join(parts)
 
     @classmethod
-    def _compact_session(cls, session_id: str):
+    def _compact_session(cls, session_id: str) -> None:
         """Compact a session's conversation log by summarizing old messages.
 
         This method must be called with the lock held.
@@ -348,7 +348,7 @@ class SuperAgentSessionService:
         )
 
     @classmethod
-    def restore_active_sessions(cls):
+    def restore_active_sessions(cls) -> None:
         """Restore active sessions from database on startup."""
         with cls._lock:
             active_rows = get_active_sessions_list()

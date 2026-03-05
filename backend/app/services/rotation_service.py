@@ -476,7 +476,7 @@ class RotationService:
         return (100.0 - max_pct) / 100.0
 
     @classmethod
-    def reset_rotation_state(cls, execution_id: str):
+    def reset_rotation_state(cls, execution_id: str) -> None:
         """Cleanup method: remove execution from in-memory rotation state.
 
         Called after execution completes (regardless of rotation).

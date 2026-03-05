@@ -22,7 +22,7 @@ VALID_CONVERSATION_STATUSES = {"active", "completed", "abandoned"}
 # =============================================================================
 
 
-def add_agent(
+def create_agent(
     name: str,
     description: str = None,
     role: str = None,

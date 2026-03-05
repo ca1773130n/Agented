@@ -9,13 +9,12 @@ from pydantic import BaseModel, Field
 from app.models.common import error_response
 
 from ..database import (
-    add_project,
     add_project_skill,
     add_project_team_edge,
-    add_super_agent,
     add_super_agent_document,
     assign_team_to_project,
     count_projects,
+    create_super_agent,
     delete_project,
     delete_project_skill_by_id,
     delete_project_team_edge,
@@ -30,6 +29,9 @@ from ..database import (
     unassign_team_from_project,
     update_project,
     update_project_team_topology_config,
+)
+from ..database import (
+    create_project as db_create_project,
 )
 from ..models.common import PaginationQuery
 from ..services.github_service import GitHubService
@@ -97,7 +99,7 @@ def create_project():
                 HTTPStatus.BAD_REQUEST,
             )
 
-    project_id = add_project(
+    project_id = db_create_project(
         name=name,
         description=data.get("description"),
         status=data.get("status", "active"),
@@ -591,7 +593,7 @@ def get_or_create_manager(path: ProjectPath):
 
     # Auto-create manager super agent
     project_name = project.get("name", "Unnamed Project")
-    sa_id = add_super_agent(
+    sa_id = create_super_agent(
         name=f"{project_name} Manager",
         description=f"AI manager for project '{project_name}'. Manages kanban plans via chat.",
         backend_type="claude",

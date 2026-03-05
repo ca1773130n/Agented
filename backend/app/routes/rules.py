@@ -9,7 +9,6 @@ from pydantic import BaseModel, Field
 from app.models.common import error_response
 
 from ..database import (
-    add_rule,
     count_rules,
     delete_rule,
     get_all_rules,
@@ -17,6 +16,9 @@ from ..database import (
     get_rules_by_project,
     get_rules_by_type,
     update_rule,
+)
+from ..database import (
+    create_rule as db_create_rule,
 )
 from ..models.common import PaginationQuery
 
@@ -68,7 +70,7 @@ def create_rule():
             HTTPStatus.BAD_REQUEST,
         )
 
-    rule_id = add_rule(
+    rule_id = db_create_rule(
         name=name,
         rule_type=rule_type,
         description=data.get("description"),

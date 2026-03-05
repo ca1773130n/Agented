@@ -9,7 +9,7 @@ from .connection import get_connection
 logger = logging.getLogger(__name__)
 
 
-def add_command(
+def create_command(
     name: str,
     description: Optional[str] = None,
     content: Optional[str] = None,
@@ -39,7 +39,7 @@ def add_command(
             conn.commit()
             return cursor.lastrowid
         except sqlite3.Error as e:
-            logger.error(f"Database error in add_command: {e}")
+            logger.error(f"Database error in create_command: {e}")
             return None
 
 

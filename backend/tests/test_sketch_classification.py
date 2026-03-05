@@ -11,8 +11,8 @@ import json
 
 import pytest
 
-from app.db.sketches import add_sketch, get_sketch, update_sketch
-from app.db.teams import add_team
+from app.db.sketches import create_sketch, get_sketch, update_sketch
+from app.db.teams import create_team
 from app.services.sketch_routing_service import SketchRoutingService
 
 # =============================================================================
@@ -100,7 +100,7 @@ class TestCacheLookup:
     def test_cache_finds_similar_sketch(self):
         """Add a classified sketch to DB, _check_cache with similar text returns classification."""
         # Create a classified sketch
-        sid = add_sketch("build REST API endpoints for user management", content="backend service")
+        sid = create_sketch("build REST API endpoints for user management", content="backend service")
         classification = {
             "phase": "execution",
             "domains": ["backend"],
@@ -118,7 +118,7 @@ class TestCacheLookup:
 
     def test_cache_misses_for_unrelated_text(self):
         """Add classified sketch, cache with completely different text returns None."""
-        sid = add_sketch(
+        sid = create_sketch(
             "build REST API endpoints for user management",
             content="backend service implementation",
         )
@@ -176,7 +176,7 @@ class TestRouting:
 
     def test_route_execution_phase_finds_team(self):
         """Add a team with matching domain description, route execution sketch finds it."""
-        team_id = add_team(name="Backend Team", description="Handles backend api and services")
+        team_id = create_team(name="Backend Team", description="Handles backend api and services")
         assert team_id is not None
 
         classification = {
@@ -206,7 +206,7 @@ class TestClassifyRouteEndpoints:
 
     def test_classify_endpoint_updates_sketch(self):
         """POST /admin/sketches/:id/classify returns 200, sketch status becomes 'classified'."""
-        sketch_id = add_sketch("build a REST API for user auth", content="backend api service")
+        sketch_id = create_sketch("build a REST API for user auth", content="backend api service")
         resp = self.client.post(f"/admin/sketches/{sketch_id}/classify")
         assert resp.status_code == 200
         data = resp.get_json()
@@ -226,7 +226,7 @@ class TestClassifyRouteEndpoints:
 
     def test_route_endpoint_updates_sketch(self):
         """Classify first, then POST /admin/sketches/:id/route returns 200, status becomes 'routed'."""
-        sketch_id = add_sketch("build a REST API for user auth", content="backend api service")
+        sketch_id = create_sketch("build a REST API for user auth", content="backend api service")
         # First classify
         self.client.post(f"/admin/sketches/{sketch_id}/classify")
         # Then route
@@ -244,7 +244,7 @@ class TestClassifyRouteEndpoints:
 
     def test_route_endpoint_unclassified_returns_400(self):
         """POST /admin/sketches/:id/route on draft sketch returns 400."""
-        sketch_id = add_sketch("Unclassified sketch")
+        sketch_id = create_sketch("Unclassified sketch")
         resp = self.client.post(f"/admin/sketches/{sketch_id}/route")
         assert resp.status_code == 400
         data = resp.get_json()

@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 # =============================================================================
 
 
-def add_mcp_server(
+def create_mcp_server(
     name: str,
     description: str = None,
     server_type: str = "stdio",

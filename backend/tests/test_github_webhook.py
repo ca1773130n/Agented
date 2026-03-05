@@ -244,10 +244,10 @@ class TestTriggerSourceFiltering:
         assert webhook_triggers[0]["id"] == "bot-security"
 
     def test_add_trigger_with_trigger_source(self, isolated_db):
-        """add_trigger should accept trigger_source parameter."""
-        from app.database import add_trigger, get_trigger
+        """create_trigger should accept trigger_source parameter."""
+        from app.database import create_trigger, get_trigger
 
-        trigger_id = add_trigger(
+        trigger_id = create_trigger(
             name="Manual Trigger",
             prompt_template="/test",
             backend_type="claude",
@@ -260,9 +260,9 @@ class TestTriggerSourceFiltering:
 
     def test_update_trigger_trigger_source(self, isolated_db):
         """update_trigger should update trigger_source."""
-        from app.database import add_trigger, get_trigger, update_trigger
+        from app.database import create_trigger, get_trigger, update_trigger
 
-        trigger_id = add_trigger(
+        trigger_id = create_trigger(
             name="Test Trigger",
             prompt_template="/test",
             trigger_source="webhook",

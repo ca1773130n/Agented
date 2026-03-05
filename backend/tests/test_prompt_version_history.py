@@ -3,7 +3,7 @@
 from unittest.mock import patch
 
 from app.db.triggers import (
-    add_trigger,
+    create_trigger,
     get_prompt_template_history,
     get_trigger,
     log_prompt_template_change,
@@ -12,7 +12,7 @@ from app.db.triggers import (
 
 def test_log_template_change_with_diff(isolated_db):
     """Log a change with old/new templates; verify diff_text is non-empty."""
-    trigger_id = add_trigger(name="test-bot", prompt_template="old prompt")
+    trigger_id = create_trigger(name="test-bot", prompt_template="old prompt")
     assert trigger_id is not None
 
     result = log_prompt_template_change(
@@ -27,7 +27,7 @@ def test_log_template_change_with_diff(isolated_db):
 
 def test_log_template_change_with_author(isolated_db):
     """Log with author='user'; verify author field stored."""
-    trigger_id = add_trigger(name="author-bot", prompt_template="v1")
+    trigger_id = create_trigger(name="author-bot", prompt_template="v1")
     log_prompt_template_change(trigger_id, "v1", "v2", author="user")
 
     history = get_prompt_template_history(trigger_id)
@@ -36,7 +36,7 @@ def test_log_template_change_with_author(isolated_db):
 
 def test_get_history_returns_entries(isolated_db):
     """Log 3 changes; get history returns 3 entries in reverse chronological order."""
-    trigger_id = add_trigger(name="multi-bot", prompt_template="v0")
+    trigger_id = create_trigger(name="multi-bot", prompt_template="v0")
 
     for i in range(3):
         log_prompt_template_change(trigger_id, f"v{i}", f"v{i + 1}", author=f"user{i}")

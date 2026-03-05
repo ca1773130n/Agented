@@ -1,11 +1,11 @@
 """Service for deploying project team configurations to Claude Code format."""
 
 import json
+import logging
 from http import HTTPStatus
 from typing import Tuple
 
 import yaml
-import logging
 
 from ..database import (
     get_project_detail,

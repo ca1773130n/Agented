@@ -268,7 +268,7 @@ class SyncService:
     # --- Watcher management ---
 
     @classmethod
-    def start_watching(cls, plugin_id: str, plugin_dir: str):
+    def start_watching(cls, plugin_id: str, plugin_dir: str) -> None:
         """Start file watching for a plugin directory.
 
         Args:
@@ -286,7 +286,7 @@ class SyncService:
             cls._watchers[plugin_id] = watcher
 
     @classmethod
-    def stop_watching(cls, plugin_id: str):
+    def stop_watching(cls, plugin_id: str) -> None:
         """Stop file watching for a plugin.
 
         Args:
@@ -417,7 +417,7 @@ class SyncService:
         return None
 
     @staticmethod
-    def _update_agent_from_file(entity_id: str, file_content: str):
+    def _update_agent_from_file(entity_id: str, file_content: str) -> None:
         """Parse agent markdown and update the agent in DB."""
         frontmatter, body = parse_yaml_frontmatter(file_content)
         update_kwargs = {}
@@ -431,7 +431,7 @@ class SyncService:
             update_agent(entity_id, **update_kwargs)
 
     @staticmethod
-    def _update_skill_from_file(entity_id: str, file_content: str):
+    def _update_skill_from_file(entity_id: str, file_content: str) -> None:
         """Parse skill markdown and update the skill in DB."""
         frontmatter, body = parse_yaml_frontmatter(file_content)
         update_kwargs = {}
@@ -443,7 +443,7 @@ class SyncService:
             update_user_skill(int(entity_id), **update_kwargs)
 
     @staticmethod
-    def _update_command_from_file(entity_id: str, file_content: str):
+    def _update_command_from_file(entity_id: str, file_content: str) -> None:
         """Parse command markdown and update the command in DB."""
         frontmatter, body = parse_yaml_frontmatter(file_content)
         update_kwargs = {}
@@ -457,7 +457,7 @@ class SyncService:
             update_command(int(entity_id), **update_kwargs)
 
     @staticmethod
-    def _update_hooks_from_json(plugin_id: str, plugin_dir: str, file_content: str):
+    def _update_hooks_from_json(plugin_id: str, plugin_dir: str, file_content: str) -> None:
         """Parse hooks.json and update corresponding hooks/rules in DB.
 
         Each hook entry in the JSON maps back to a sync_state entity.

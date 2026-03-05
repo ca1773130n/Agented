@@ -7,13 +7,13 @@ import zipfile
 
 import pytest
 
-from app.database import add_super_agent, add_super_agent_document, get_super_agent
+from app.database import create_super_agent, add_super_agent_document, get_super_agent
 
 
 @pytest.fixture
 def sample_super_agent(isolated_db):
     """Create a SuperAgent with 2 identity documents for testing."""
-    sa_id = add_super_agent(
+    sa_id = create_super_agent(
         name="Test Agent",
         description="A test super agent",
         backend_type="claude",
@@ -27,7 +27,7 @@ def sample_super_agent(isolated_db):
 @pytest.fixture
 def sample_agent_no_docs(isolated_db):
     """Create a SuperAgent with no documents."""
-    sa_id = add_super_agent(
+    sa_id = create_super_agent(
         name="Empty Agent",
         description="An agent with no docs",
         backend_type="claude",
@@ -292,7 +292,7 @@ class TestImportMissingManifest:
 class TestSlugifySpecialCharacters:
     def test_slugify_special_characters(self, client):
         """Export agent with special chars in name produces safe path."""
-        sa_id = add_super_agent(
+        sa_id = create_super_agent(
             name="My Agent!!! @#$% v2.0",
             description="Special chars test",
             backend_type="claude",

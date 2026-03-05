@@ -5,8 +5,8 @@ have been moved to the app.db package. This module re-exports everything
 from app.db so that existing imports continue to work.
 
 For new code, import directly from app.db or its sub-modules:
-    from app.db import add_trigger
-    from app.db.triggers import add_trigger
+    from app.db import create_trigger
+    from app.db.triggers import create_trigger
 """
 
 from app.db import *  # noqa: F401, F403

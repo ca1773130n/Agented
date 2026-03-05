@@ -67,7 +67,7 @@ class BackendTestService:
         prompt: str,
         account_id: Optional[str],
         model: Optional[str],
-    ):
+    ) -> None:
         """Run a one-shot prompt test (background thread).
 
         For Claude backend: uses CLIProxyAPI via LiteLLM for real-time streaming.
@@ -98,7 +98,7 @@ class BackendTestService:
 
         finally:
             # 2-minute TTL cleanup
-            def cleanup():
+            def cleanup() -> None:
                 import time
 
                 time.sleep(120)
@@ -119,7 +119,7 @@ class BackendTestService:
         model: Optional[str],
         account_id: Optional[str] = None,
         backend: str = "claude",
-    ):
+    ) -> None:
         """Stream test via CLIProxyAPI for real-time token streaming."""
         from .conversation_streaming import stream_llm_response
 
@@ -137,7 +137,7 @@ class BackendTestService:
         cls._mark_test_complete(test_id)
 
     @classmethod
-    def _mark_test_complete(cls, test_id: str):
+    def _mark_test_complete(cls, test_id: str) -> None:
         """Mark a test session as completed and broadcast."""
         with cls._lock:
             if test_id in cls._test_sessions:
@@ -153,7 +153,7 @@ class BackendTestService:
         prompt: str,
         account_id: Optional[str],
         model: Optional[str],
-    ):
+    ) -> None:
         """Run a test via CLI subprocess (fallback for non-proxy backends)."""
         cmd_map = {
             "opencode": ["opencode", "run", "--prompt", prompt],
@@ -181,7 +181,7 @@ class BackendTestService:
             env=os.environ.copy(),
         )
 
-        def _read_stdout():
+        def _read_stdout() -> None:
             for line in iter(process.stdout.readline, ""):
                 if line:
                     content = line.rstrip("\n\r")
@@ -190,7 +190,7 @@ class BackendTestService:
                             cls._test_sessions[test_id]["output"].append(content)
                     cls._broadcast_test(test_id, "output", {"content": content})
 
-        def _read_stderr():
+        def _read_stderr() -> None:
             for line in iter(process.stderr.readline, ""):
                 if line:
                     content = line.rstrip("\n\r")
@@ -272,7 +272,7 @@ class BackendTestService:
                         pass
 
     @classmethod
-    def _broadcast_test(cls, test_id: str, event_type: str, data: dict):
+    def _broadcast_test(cls, test_id: str, event_type: str, data: dict) -> None:
         """Broadcast an SSE event to all subscribers of a test session."""
         message = cls._format_sse(event_type, data)
         with cls._lock:

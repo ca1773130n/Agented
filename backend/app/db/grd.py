@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 # =============================================================================
 
 
-def add_milestone(
+def create_milestone(
     project_id: str,
     version: str,
     title: str,
@@ -79,9 +79,7 @@ def get_milestones_by_project(project_id: str, limit=None, offset=0) -> List[dic
 def count_milestones_by_project(project_id: str) -> int:
     """Count milestones for a project."""
     with get_connection() as conn:
-        cursor = conn.execute(
-            "SELECT COUNT(*) FROM milestones WHERE project_id = ?", (project_id,)
-        )
+        cursor = conn.execute("SELECT COUNT(*) FROM milestones WHERE project_id = ?", (project_id,))
         return cursor.fetchone()[0]
 
 

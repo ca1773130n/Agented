@@ -160,10 +160,10 @@ class TestGenerateEndpoint:
 
     def test_prompt_includes_available_entities(self, client, isolated_db):
         """Verify the prompt passed to subprocess.run includes agent/skill names from DB."""
-        from app.database import add_agent, add_user_skill
+        from app.database import create_agent, add_user_skill
 
         # Add test entities to the DB
-        add_agent(name="Test Agent Alpha", role="code reviewer", backend_type="claude")
+        create_agent(name="Test Agent Alpha", role="code reviewer", backend_type="claude")
         add_user_skill(skill_name="code-review", skill_path="/skills/code-review")
 
         captured_prompt = {}

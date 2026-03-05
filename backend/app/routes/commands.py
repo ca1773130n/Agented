@@ -9,13 +9,15 @@ from pydantic import BaseModel, Field
 from app.models.common import error_response
 
 from ..database import (
-    add_command,
     count_commands,
     delete_command,
     get_all_commands,
     get_command,
     get_commands_by_project,
     update_command,
+)
+from ..database import (
+    create_command as db_create_command,
 )
 from ..models.common import PaginationQuery
 
@@ -51,7 +53,7 @@ def create_command():
     if not name:
         return error_response("BAD_REQUEST", "name is required", HTTPStatus.BAD_REQUEST)
 
-    command_id = add_command(
+    command_id = db_create_command(
         name=name,
         description=data.get("description"),
         content=data.get("content"),

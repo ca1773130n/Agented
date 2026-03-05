@@ -7,7 +7,7 @@ from http import HTTPStatus
 from queue import Queue
 from typing import Dict, List, Tuple
 
-from ..database import add_hook, get_hook
+from ..database import create_hook, get_hook
 from .base_conversation_service import BaseConversationService
 
 logger = logging.getLogger(__name__)
@@ -99,7 +99,7 @@ class HookConversationService(BaseConversationService):
         enabled = config.get("enabled", True)
 
         try:
-            hook_id = add_hook(
+            hook_id = create_hook(
                 name=name,
                 event=event,
                 description=description,

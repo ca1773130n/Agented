@@ -243,7 +243,7 @@ class ExecutionService:
             retry_at=retry_at,
         )
 
-        def _retry():
+        def _retry() -> None:
             with cls._rate_limit_lock:
                 cls._retry_timers.pop(trigger_id, None)
                 cls._pending_retries.pop(trigger_id, None)
@@ -346,7 +346,7 @@ class ExecutionService:
                     _event=event,
                     _type=trigger_type,
                     _tid=trigger_id,
-                ):
+                ) -> None:
                     with cls._rate_limit_lock:
                         cls._retry_timers.pop(_tid, None)
                         cls._pending_retries.pop(_tid, None)
@@ -601,7 +601,9 @@ class ExecutionService:
                 logger.debug("Budget monitor check failed for %s: %s", execution_id, monitor_err)
 
     @classmethod
-    def _stream_pipe(cls, execution_id: str, stream_name: str, pipe, backend_type: str = None):
+    def _stream_pipe(
+        cls, execution_id: str, stream_name: str, pipe, backend_type: str = None
+    ) -> None:
         """Read from a pipe line by line and stream to log service.
 
         When stream_name is 'stderr' and backend_type is provided, checks each line
@@ -1349,7 +1351,7 @@ class ExecutionService:
         return cmd
 
     @classmethod
-    def run_resolve_command(cls, audit_summary: str, project_paths: list):
+    def run_resolve_command(cls, audit_summary: str, project_paths: list) -> None:
         """Execute Claude command to resolve security issues."""
         cmd = cls.build_resolve_command(audit_summary, project_paths)
 

@@ -9,7 +9,6 @@ from pydantic import BaseModel, Field
 from app.models.common import error_response
 
 from ..database import (
-    add_workflow,
     add_workflow_version_raw,
     delete_workflow,
     get_all_workflows,
@@ -24,6 +23,9 @@ from ..database import (
     get_workflow_node_executions,
     get_workflow_versions,
     update_workflow,
+)
+from ..database import (
+    create_workflow as db_create_workflow,
 )
 
 tag = Tag(name="workflows", description="Workflow management operations")
@@ -93,7 +95,7 @@ def create_workflow():
                 details={"errors": errors},
             )
 
-    workflow_id = add_workflow(
+    workflow_id = db_create_workflow(
         name=name,
         description=data.get("description"),
         trigger_type=data.get("trigger_type", "manual"),

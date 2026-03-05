@@ -4,7 +4,7 @@ import pytest
 
 from apscheduler.triggers.cron import CronTrigger
 
-from app.db.triggers import add_trigger
+from app.db.triggers import create_trigger
 
 
 # ---------------------------------------------------------------------------

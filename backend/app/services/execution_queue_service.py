@@ -15,7 +15,6 @@ import threading
 from typing import ClassVar, Dict, Optional
 
 from ..db.execution_queue import (
-    cancel_pending_entries,
     count_active_for_trigger,
     enqueue_execution,
     get_pending_entries,
@@ -160,10 +159,9 @@ class ExecutionQueueService:
 
             # Check circuit breaker -- get backend type from trigger config
             try:
-                from .circuit_breaker_service import CircuitBreakerService
-
                 # Look up trigger to get backend_type
                 from ..database import get_trigger
+                from .circuit_breaker_service import CircuitBreakerService
 
                 trigger = get_trigger(trigger_id)
                 if trigger:
@@ -215,7 +213,9 @@ class ExecutionQueueService:
 
             message_text = entry.get("message_text", "")
             event_data_raw = entry.get("event_data", "{}")
-            event = json.loads(event_data_raw) if event_data_raw and event_data_raw != "{}" else None
+            event = (
+                json.loads(event_data_raw) if event_data_raw and event_data_raw != "{}" else None
+            )
 
             # Delegate to team execution if execution_mode is 'team'
             if trigger.get("execution_mode") == "team" and trigger.get("team_id"):

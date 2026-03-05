@@ -8,10 +8,10 @@ import logging
 from typing import Any
 
 from ..database import (
-    add_agent,
-    add_hook,
-    add_plugin,
-    add_trigger,
+    create_agent,
+    create_hook,
+    create_plugin,
+    create_trigger,
     delete_agent,
     delete_hook,
     delete_plugin,
@@ -72,9 +72,7 @@ class BulkService:
                 result = handler(item)
                 results.append(result)
             except Exception as e:
-                logger.warning(
-                    "Bulk %s %s item %d failed: %s", action, entity_type, i, e
-                )
+                logger.warning("Bulk %s %s item %d failed: %s", action, entity_type, i, e)
                 results.append({"index": i, "success": False, "id": None, "error": str(e)})
 
         # Ensure all results have correct indices
@@ -93,7 +91,7 @@ def _create_agent(item: dict) -> dict:
     name = item.get("name")
     if not name:
         return {"index": 0, "success": False, "id": None, "error": "name is required"}
-    agent_id = add_agent(
+    agent_id = create_agent(
         name=name,
         description=item.get("description"),
         role=item.get("role"),
@@ -117,7 +115,12 @@ def _update_agent(item: dict) -> dict:
         return {"index": 0, "success": False, "id": agent_id, "error": "No fields to update"}
     success = update_agent(agent_id, **fields)
     if not success:
-        return {"index": 0, "success": False, "id": agent_id, "error": "Agent not found or no changes"}
+        return {
+            "index": 0,
+            "success": False,
+            "id": agent_id,
+            "error": "Agent not found or no changes",
+        }
     return {"index": 0, "success": True, "id": agent_id, "error": None}
 
 
@@ -138,7 +141,7 @@ def _create_trigger(item: dict) -> dict:
     prompt_template = item.get("prompt_template")
     if not prompt_template:
         return {"index": 0, "success": False, "id": None, "error": "prompt_template is required"}
-    trigger_id = add_trigger(
+    trigger_id = create_trigger(
         name=name,
         prompt_template=prompt_template,
         backend_type=item.get("backend_type", "claude"),
@@ -159,7 +162,9 @@ def _update_trigger(item: dict) -> dict:
     success = update_trigger(trigger_id, **fields)
     if not success:
         return {
-            "index": 0, "success": False, "id": trigger_id,
+            "index": 0,
+            "success": False,
+            "id": trigger_id,
             "error": "Trigger not found or no changes",
         }
     return {"index": 0, "success": True, "id": trigger_id, "error": None}
@@ -171,7 +176,9 @@ def _delete_trigger(item: dict) -> dict:
         return {"index": 0, "success": False, "id": None, "error": "id is required for delete"}
     if trigger_id in PREDEFINED_TRIGGER_IDS:
         return {
-            "index": 0, "success": False, "id": trigger_id,
+            "index": 0,
+            "success": False,
+            "id": trigger_id,
             "error": "Cannot delete predefined trigger",
         }
     success = delete_trigger(trigger_id)
@@ -184,7 +191,7 @@ def _create_plugin(item: dict) -> dict:
     name = item.get("name")
     if not name:
         return {"index": 0, "success": False, "id": None, "error": "name is required"}
-    plugin_id = add_plugin(
+    plugin_id = create_plugin(
         name=name,
         description=item.get("description"),
         version=item.get("version", "1.0.0"),
@@ -206,7 +213,9 @@ def _update_plugin(item: dict) -> dict:
     success = update_plugin(plugin_id, **fields)
     if not success:
         return {
-            "index": 0, "success": False, "id": plugin_id,
+            "index": 0,
+            "success": False,
+            "id": plugin_id,
             "error": "Plugin not found or no changes",
         }
     return {"index": 0, "success": True, "id": plugin_id, "error": None}
@@ -229,7 +238,7 @@ def _create_hook(item: dict) -> dict:
     event = item.get("event")
     if not event:
         return {"index": 0, "success": False, "id": None, "error": "event is required"}
-    hook_id = add_hook(
+    hook_id = create_hook(
         name=name,
         event=event,
         description=item.get("description"),
@@ -251,7 +260,9 @@ def _update_hook(item: dict) -> dict:
     success = update_hook(hook_id, **fields)
     if not success:
         return {
-            "index": 0, "success": False, "id": hook_id,
+            "index": 0,
+            "success": False,
+            "id": hook_id,
             "error": "Hook not found or no changes",
         }
     return {"index": 0, "success": True, "id": hook_id, "error": None}

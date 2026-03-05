@@ -34,24 +34,24 @@ class TeamFileHandler(FileSystemEventHandler):
     updates via ProjectSessionManager SSE.
     """
 
-    def __init__(self, session_id: str, team_name: str):
+    def __init__(self, session_id: str, team_name: str) -> None:
         super().__init__()
         self.session_id = session_id
         self.team_name = team_name
 
-    def on_modified(self, event):
+    def on_modified(self, event) -> None:
         """Handle file modification events."""
         if event.is_directory:
             return
         self._process_event(event.src_path)
 
-    def on_created(self, event):
+    def on_created(self, event) -> None:
         """Handle file creation events."""
         if event.is_directory:
             return
         self._process_event(event.src_path)
 
-    def _process_event(self, src_path: str):
+    def _process_event(self, src_path: str) -> None:
         """Process a file event, broadcasting team or task updates."""
         from .project_session_manager import ProjectSessionManager
 
@@ -93,7 +93,7 @@ class TeamMonitorService:
     _lock = threading.Lock()
 
     @classmethod
-    def start_monitoring(cls, session_id: str, team_name: str):
+    def start_monitoring(cls, session_id: str, team_name: str) -> None:
         """Start monitoring a team's filesystem directories.
 
         Creates watchdog observers for ~/.claude/teams/{team_name}/ and
@@ -157,7 +157,7 @@ class TeamMonitorService:
         team_name: str,
         teams_dir: str,
         tasks_dir: str,
-    ):
+    ) -> None:
         """Fallback polling loop to catch missed watchdog events.
 
         Checks team config and task files every 5 seconds. Exits when
@@ -223,7 +223,7 @@ class TeamMonitorService:
                 pass
 
     @classmethod
-    def stop_monitoring(cls, session_id: str):
+    def stop_monitoring(cls, session_id: str) -> None:
         """Stop monitoring a team session.
 
         Stops the watchdog observer, marks the monitor as inactive,
@@ -267,7 +267,7 @@ class TeamMonitorService:
             }
 
     @classmethod
-    def _update_members(cls, session_id: str, team_data: dict):
+    def _update_members(cls, session_id: str, team_data: dict) -> None:
         """Update stored members list from parsed team config."""
         with cls._lock:
             state = cls._monitors.get(session_id)
@@ -275,7 +275,7 @@ class TeamMonitorService:
                 state["members"] = team_data.get("members", [])
 
     @classmethod
-    def _update_task(cls, session_id: str, task_data: dict):
+    def _update_task(cls, session_id: str, task_data: dict) -> None:
         """Update or add a task in the stored tasks list."""
         with cls._lock:
             state = cls._monitors.get(session_id)
