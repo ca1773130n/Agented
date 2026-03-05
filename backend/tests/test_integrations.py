@@ -4,21 +4,16 @@ All external API calls are mocked -- no real Slack, Teams, JIRA, or Linear
 calls are made.
 """
 
-import json
-import threading
 import time
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from app.db import integrations as db_integrations
-from app.services.integrations import ADAPTER_REGISTRY, get_adapter, IntegrationAdapter
-from app.services.integrations.slack_adapter import SlackAdapter
-from app.services.integrations.teams_adapter import TeamsAdapter
+from app.services.integrations import ADAPTER_REGISTRY, IntegrationAdapter, get_adapter
 from app.services.integrations.jira_adapter import JiraAdapter
 from app.services.integrations.linear_adapter import LinearAdapter
+from app.services.integrations.slack_adapter import SlackAdapter
+from app.services.integrations.teams_adapter import TeamsAdapter
 from app.services.notification_service import NotificationService
-
 
 # =============================================================================
 # Adapter registry tests
@@ -48,7 +43,9 @@ class TestAdapterRegistry:
     def test_all_adapters_are_integration_adapters(self):
         """All registered adapters are subclasses of IntegrationAdapter."""
         for adapter_type, cls in ADAPTER_REGISTRY.items():
-            assert issubclass(cls, IntegrationAdapter), f"{adapter_type} is not an IntegrationAdapter"
+            assert issubclass(cls, IntegrationAdapter), (
+                f"{adapter_type} is not an IntegrationAdapter"
+            )
 
 
 # =============================================================================
@@ -166,13 +163,18 @@ class TestJiraAdapter:
         mock_client.create_issue.return_value = mock_issue
         mock_get_client.return_value = mock_client
 
-        adapter = JiraAdapter(server="https://jira.example.com", email="test@test.com", api_token="token")
+        adapter = JiraAdapter(
+            server="https://jira.example.com", email="test@test.com", api_token="token"
+        )
 
-        result = adapter.create_ticket("SEC", {
-            "title": "Critical SQL Injection",
-            "description": "Found SQL injection in login endpoint",
-            "severity": "critical",
-        })
+        result = adapter.create_ticket(
+            "SEC",
+            {
+                "title": "Critical SQL Injection",
+                "description": "Found SQL injection in login endpoint",
+                "severity": "critical",
+            },
+        )
 
         assert result == "SEC-42"
         call_args = mock_client.create_issue.call_args
@@ -193,11 +195,13 @@ class TestJiraAdapter:
         valid, _ = adapter.validate_config({"server": "https://jira.example.com"})
         assert valid is False
 
-        valid, _ = adapter.validate_config({
-            "server": "https://jira.example.com",
-            "email": "test@test.com",
-            "api_token": "token",
-        })
+        valid, _ = adapter.validate_config(
+            {
+                "server": "https://jira.example.com",
+                "email": "test@test.com",
+                "api_token": "token",
+            }
+        )
         assert valid is True
 
 
@@ -216,18 +220,25 @@ class TestLinearAdapter:
             "data": {
                 "issueCreate": {
                     "success": True,
-                    "issue": {"id": "abc", "identifier": "ENG-42", "url": "https://linear.app/ENG-42"},
+                    "issue": {
+                        "id": "abc",
+                        "identifier": "ENG-42",
+                        "url": "https://linear.app/ENG-42",
+                    },
                 }
             }
         }
         mock_post.return_value = mock_response
 
         adapter = LinearAdapter(api_key="lin_test_key")
-        result = adapter.create_ticket("team-id", {
-            "title": "Fix vulnerability",
-            "description": "XSS found",
-            "severity": "high",
-        })
+        result = adapter.create_ticket(
+            "team-id",
+            {
+                "title": "Fix vulnerability",
+                "description": "XSS found",
+                "severity": "high",
+            },
+        )
 
         assert result == "ENG-42"
         mock_post.assert_called_once()
@@ -322,8 +333,12 @@ class TestNotificationService:
     def test_dispatch_to_all_integrations(self, mock_config_service):
         """NotificationService dispatches to all integrations for a trigger."""
         # Create test integrations using predefined trigger ID
-        id1 = db_integrations.create_integration("Slack", "slack", config={"channel": "#alerts"}, trigger_id="bot-security")
-        id2 = db_integrations.create_integration("Teams", "teams", config={"webhook_url": "https://test.com"}, trigger_id="bot-security")
+        db_integrations.create_integration(
+            "Slack", "slack", config={"channel": "#alerts"}, trigger_id="bot-security"
+        )
+        db_integrations.create_integration(
+            "Teams", "teams", config={"webhook_url": "https://test.com"}, trigger_id="bot-security"
+        )
 
         mock_adapter = MagicMock()
         mock_adapter.send_notification.return_value = True
@@ -348,7 +363,8 @@ class TestNotificationService:
         # Create 5 integrations
         for i in range(5):
             db_integrations.create_integration(
-                f"Test {i}", "slack",
+                f"Test {i}",
+                "slack",
                 config={"channel": f"#ch{i}"},
                 trigger_id="bot-security",
             )
@@ -419,9 +435,7 @@ class TestIntegrationRoutes:
         )
         intg_id = create_resp.get_json()["id"]
 
-        resp = client.put(
-            f"/admin/integrations/{intg_id}", json={"name": "New", "enabled": False}
-        )
+        resp = client.put(f"/admin/integrations/{intg_id}", json={"name": "New", "enabled": False})
         assert resp.status_code == 200
         assert resp.get_json()["name"] == "New"
 

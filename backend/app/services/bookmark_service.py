@@ -8,11 +8,21 @@ from typing import Optional
 
 from app.db.bookmarks import (
     create_bookmark as db_create_bookmark,
+)
+from app.db.bookmarks import (
     delete_bookmark as db_delete_bookmark,
+)
+from app.db.bookmarks import (
     get_bookmark as db_get_bookmark,
+)
+from app.db.bookmarks import (
     list_bookmarks_for_execution,
     list_bookmarks_for_trigger,
+)
+from app.db.bookmarks import (
     search_bookmarks as db_search_bookmarks,
+)
+from app.db.bookmarks import (
     update_bookmark as db_update_bookmark,
 )
 
@@ -159,9 +169,7 @@ def delete_bookmark(bookmark_id: str) -> bool:
     return db_delete_bookmark(bookmark_id)
 
 
-def search_bookmarks(
-    query: Optional[str] = None, tags: Optional[list[str]] = None
-) -> list[dict]:
+def search_bookmarks(query: Optional[str] = None, tags: Optional[list[str]] = None) -> list[dict]:
     """Search bookmarks by query text and/or tags.
 
     Args:

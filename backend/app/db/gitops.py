@@ -1,8 +1,6 @@
 """GitOps repository configuration and sync state CRUD operations."""
 
-import json
 import logging
-from datetime import datetime, timezone
 from typing import Optional
 
 from .connection import get_connection
@@ -60,9 +58,7 @@ def get_gitops_repo(repo_id: str) -> Optional[dict]:
     """
     with get_connection() as conn:
         conn.row_factory = _dict_factory
-        row = conn.execute(
-            "SELECT * FROM gitops_repos WHERE id = ?", (repo_id,)
-        ).fetchone()
+        row = conn.execute("SELECT * FROM gitops_repos WHERE id = ?", (repo_id,)).fetchone()
     return row
 
 
@@ -74,9 +70,7 @@ def list_gitops_repos() -> list[dict]:
     """
     with get_connection() as conn:
         conn.row_factory = _dict_factory
-        rows = conn.execute(
-            "SELECT * FROM gitops_repos ORDER BY created_at DESC"
-        ).fetchall()
+        rows = conn.execute("SELECT * FROM gitops_repos ORDER BY created_at DESC").fetchall()
     return rows
 
 
@@ -92,8 +86,12 @@ def update_gitops_repo(repo_id: str, **kwargs) -> bool:
         True if the repo was found and updated.
     """
     allowed = {
-        "name", "repo_url", "branch", "config_path",
-        "poll_interval_seconds", "enabled",
+        "name",
+        "repo_url",
+        "branch",
+        "config_path",
+        "poll_interval_seconds",
+        "enabled",
     }
     updates = {k: v for k, v in kwargs.items() if k in allowed and v is not None}
     if not updates:
@@ -175,8 +173,7 @@ def add_sync_log(
                (repo_id, commit_sha, files_changed, files_applied,
                 files_conflicted, status, details)
                VALUES (?, ?, ?, ?, ?, ?, ?)""",
-            (repo_id, commit_sha, files_changed, files_applied,
-             files_conflicted, status, details),
+            (repo_id, commit_sha, files_changed, files_applied, files_conflicted, status, details),
         )
         conn.commit()
     return cursor.lastrowid

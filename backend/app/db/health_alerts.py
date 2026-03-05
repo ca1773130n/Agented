@@ -39,9 +39,7 @@ def create_health_alert(
             (alert_type, trigger_id),
         )
         if cursor.fetchone():
-            logger.debug(
-                "Deduplicated health alert: %s for trigger %s", alert_type, trigger_id
-            )
+            logger.debug("Deduplicated health alert: %s for trigger %s", alert_type, trigger_id)
             return None
 
         cursor = conn.execute(
@@ -82,9 +80,7 @@ def get_recent_alerts(
 def acknowledge_alert(alert_id: int) -> bool:
     """Set acknowledged=1 for a specific alert. Returns True if updated."""
     with get_connection() as conn:
-        cursor = conn.execute(
-            "UPDATE health_alerts SET acknowledged = 1 WHERE id = ?", (alert_id,)
-        )
+        cursor = conn.execute("UPDATE health_alerts SET acknowledged = 1 WHERE id = ?", (alert_id,))
         conn.commit()
         return cursor.rowcount > 0
 
@@ -100,9 +96,7 @@ def delete_old_alerts(days: int = 7) -> int:
         return cursor.rowcount
 
 
-def get_alert_count(
-    trigger_id: Optional[str] = None, since: Optional[str] = None
-) -> int:
+def get_alert_count(trigger_id: Optional[str] = None, since: Optional[str] = None) -> int:
     """Count health alerts with optional filters."""
     with get_connection() as conn:
         query = "SELECT COUNT(*) FROM health_alerts WHERE 1=1"

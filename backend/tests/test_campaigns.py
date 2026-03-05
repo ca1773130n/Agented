@@ -3,8 +3,6 @@
 import time
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from app.db.campaigns import (
     add_campaign_execution,
     create_campaign,
@@ -238,17 +236,11 @@ def test_semaphore_limits_concurrency(isolated_db):
 
 def test_get_campaign_results(isolated_db):
     """Campaign results consolidated by repo."""
-    cid = create_campaign(
-        "c1", TRIGGER_A, ["https://github.com/r1", "https://github.com/r2"]
-    )
+    cid = create_campaign("c1", TRIGGER_A, ["https://github.com/r1", "https://github.com/r2"])
     add_campaign_execution(cid, "https://github.com/r1")
     add_campaign_execution(cid, "https://github.com/r2")
-    update_campaign_execution(
-        cid, "https://github.com/r1", status="completed", execution_id="e1"
-    )
-    update_campaign_execution(
-        cid, "https://github.com/r2", status="failed", error="timeout"
-    )
+    update_campaign_execution(cid, "https://github.com/r1", status="completed", execution_id="e1")
+    update_campaign_execution(cid, "https://github.com/r2", status="failed", error="timeout")
     update_campaign_status(cid, "partial_failure", completed=1, failed=1)
 
     results = get_campaign_results(cid)

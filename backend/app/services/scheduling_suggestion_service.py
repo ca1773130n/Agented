@@ -45,9 +45,7 @@ class SchedulingSuggestionService:
 
         Returns empty suggestions with message if insufficient data (<10 executions).
         """
-        hour_patterns, day_patterns = get_execution_time_patterns(
-            trigger_id=trigger_id, days=days
-        )
+        hour_patterns, day_patterns = get_execution_time_patterns(trigger_id=trigger_id, days=days)
 
         # Calculate total executions analyzed
         total_executions = sum(row["total"] for row in hour_patterns)
@@ -128,12 +126,14 @@ class SchedulingSuggestionService:
             avg_dur = row["avg_duration_ms"]
             # Use the first key that's not 'total', 'success', or 'avg_duration_ms'
             key = row.get("hour") or row.get("day_of_week") or "unknown"
-            ranked.append({
-                "key": key,
-                "success_rate": round(success_rate, 1),
-                "avg_duration_ms": round(avg_dur, 1) if avg_dur else None,
-                "total": total,
-            })
+            ranked.append(
+                {
+                    "key": key,
+                    "success_rate": round(success_rate, 1),
+                    "avg_duration_ms": round(avg_dur, 1) if avg_dur else None,
+                    "total": total,
+                }
+            )
 
         # Sort: success_rate DESC, then avg_duration_ms ASC (None last)
         ranked.sort(

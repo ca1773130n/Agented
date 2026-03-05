@@ -37,8 +37,7 @@ class TriggerGenerationService(BaseGenerationService):
         """Gather existing triggers, valid backends, and sources for context."""
         triggers = get_all_triggers()
         existing = [
-            {"name": t.get("name"), "trigger_source": t.get("trigger_source")}
-            for t in triggers
+            {"name": t.get("name"), "trigger_source": t.get("trigger_source")} for t in triggers
         ]
         return {
             "existing_triggers": existing,
@@ -82,9 +81,7 @@ class TriggerGenerationService(BaseGenerationService):
 
         # Existing triggers for context
         if existing:
-            trigger_lines = [
-                f"  - {t.get('name')} ({t.get('trigger_source')})" for t in existing
-            ]
+            trigger_lines = [f"  - {t.get('name')} ({t.get('trigger_source')})" for t in existing]
             sections.append(
                 "Existing triggers (avoid name conflicts):\n" + "\n".join(trigger_lines)
             )
@@ -166,9 +163,7 @@ class TriggerGenerationService(BaseGenerationService):
         # Validate backend_type
         backend = config.get("backend_type", "")
         if backend and backend not in VALID_BACKENDS:
-            warnings.append(
-                f"Invalid backend_type '{backend}'. Valid: {', '.join(VALID_BACKENDS)}"
-            )
+            warnings.append(f"Invalid backend_type '{backend}'. Valid: {', '.join(VALID_BACKENDS)}")
             config["backend_type"] = "claude"  # Default to claude
 
         # Validate trigger_source
@@ -182,9 +177,7 @@ class TriggerGenerationService(BaseGenerationService):
         # Check schedule fields if scheduled trigger
         if config.get("trigger_source") == "scheduled":
             if not config.get("schedule_type"):
-                warnings.append(
-                    "Scheduled trigger missing schedule_type (daily/weekly/monthly)"
-                )
+                warnings.append("Scheduled trigger missing schedule_type (daily/weekly/monthly)")
             if not config.get("schedule_value"):
                 warnings.append("Scheduled trigger missing schedule_value")
 

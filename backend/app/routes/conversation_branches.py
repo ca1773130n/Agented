@@ -36,16 +36,12 @@ def create_branch(path: ConversationPath):
     fork_message_index = body.get("fork_message_index")
 
     if fork_message_index is None:
-        return {
-            "error": "Missing required field: fork_message_index"
-        }, HTTPStatus.BAD_REQUEST
+        return {"error": "Missing required field: fork_message_index"}, HTTPStatus.BAD_REQUEST
 
     try:
         fork_message_index = int(fork_message_index)
     except (TypeError, ValueError):
-        return {
-            "error": "fork_message_index must be an integer"
-        }, HTTPStatus.BAD_REQUEST
+        return {"error": "fork_message_index must be an integer"}, HTTPStatus.BAD_REQUEST
 
     name = body.get("name")
 
@@ -64,9 +60,7 @@ def create_branch(path: ConversationPath):
 @conversation_branches_bp.get("/conversations/<conversation_id>/branches")
 def list_branches(path: ConversationPath):
     """List all branches for a conversation with message counts."""
-    branches = ConversationBranchService.get_conversation_branches(
-        path.conversation_id
-    )
+    branches = ConversationBranchService.get_conversation_branches(path.conversation_id)
     return {"branches": branches, "total": len(branches)}, HTTPStatus.OK
 
 
@@ -102,14 +96,10 @@ def add_branch_message(path: BranchPath):
     content = body.get("content")
 
     if not role or not content:
-        return {
-            "error": "Missing required fields: role, content"
-        }, HTTPStatus.BAD_REQUEST
+        return {"error": "Missing required fields: role, content"}, HTTPStatus.BAD_REQUEST
 
     try:
-        message = ConversationBranchService.add_message(
-            path.branch_id, role, content
-        )
+        message = ConversationBranchService.add_message(path.branch_id, role, content)
         return message, HTTPStatus.CREATED
     except ValueError as e:
         msg = str(e)

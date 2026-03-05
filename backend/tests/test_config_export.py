@@ -1,8 +1,6 @@
 """Tests for trigger configuration export/import service."""
 
 import json
-import os
-import re
 import tempfile
 
 import yaml
@@ -322,20 +320,22 @@ def test_export_nonexistent_trigger(isolated_db):
 
 def test_import_json_format(isolated_db):
     """Test import from JSON format."""
-    config = json.dumps({
-        "version": "1.0",
-        "kind": "trigger",
-        "metadata": {
-            "name": "JSON Import Bot",
-            "backend_type": "claude",
-            "trigger_source": "webhook",
-        },
-        "spec": {
-            "prompt_template": "/json-import {paths}",
-            "enabled": True,
-            "detection_keyword": "",
-        },
-    })
+    config = json.dumps(
+        {
+            "version": "1.0",
+            "kind": "trigger",
+            "metadata": {
+                "name": "JSON Import Bot",
+                "backend_type": "claude",
+                "trigger_source": "webhook",
+            },
+            "spec": {
+                "prompt_template": "/json-import {paths}",
+                "enabled": True,
+                "detection_keyword": "",
+            },
+        }
+    )
 
     trigger_id, status = import_trigger(config, format="json")
     assert status == "created"

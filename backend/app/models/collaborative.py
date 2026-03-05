@@ -14,9 +14,7 @@ class ViewerInfo(BaseModel):
 class PresenceEvent(BaseModel):
     """SSE event payload for viewer presence changes."""
 
-    event_type: str = Field(
-        ..., description="Presence event type: join, leave, or heartbeat"
-    )
+    event_type: str = Field(..., description="Presence event type: join, leave, or heartbeat")
     viewer_id: str = Field(..., description="Viewer who triggered the event")
     name: str = Field(..., description="Display name of the viewer")
     viewers: list[ViewerInfo] = Field(

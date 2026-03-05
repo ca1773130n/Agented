@@ -46,10 +46,10 @@ from ..database import (
 # models
 from ..models.common import PaginationQuery
 from ..models.team import VALID_EDGE_TYPES, VALID_TOPOLOGIES
-from ..services.team_generation_service import TeamGenerationService
 
 # services
 from ..services.rbac_service import require_role
+from ..services.team_generation_service import TeamGenerationService
 from ..services.team_service import TeamService
 
 tag = Tag(name="teams", description="Team management operations")

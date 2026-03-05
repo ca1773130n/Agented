@@ -730,9 +730,7 @@ class WorkflowExecutionService:
                             target_id = edge["target"]
                             if target_id not in skipped_nodes:
                                 skipped_nodes.add(target_id)
-                                cls._mark_downstream_skipped(
-                                    target_id, successors, skipped_nodes
-                                )
+                                cls._mark_downstream_skipped(target_id, successors, skipped_nodes)
 
         # Write DB records for any remaining skipped nodes
         for remaining_id in skipped_nodes:
@@ -1096,9 +1094,7 @@ class WorkflowExecutionService:
             )
 
         if result.status == ExecutionStatus.LAUNCH_FAILED:
-            raise RuntimeError(
-                f"Agent node {node_id}: execution launch failed"
-            )
+            raise RuntimeError(f"Agent node {node_id}: execution launch failed")
 
         # DISPATCHED: execution started successfully
         return WorkflowMessage(
@@ -1207,9 +1203,7 @@ class WorkflowExecutionService:
                 try:
                     result = evaluate_condition(expression, context)
                 except ValueError as e:
-                    logger.error(
-                        f"Expression evaluation error on node {node_id}: {e}"
-                    )
+                    logger.error(f"Expression evaluation error on node {node_id}: {e}")
                     result = False
         else:
             logger.warning(f"Unknown condition type: {condition}")
@@ -1325,8 +1319,7 @@ class WorkflowExecutionService:
         execution_id = (input_msg.metadata or {}).get("_execution_id")
         if not execution_id:
             raise RuntimeError(
-                "execution_id not available in input_msg.metadata -- "
-                "_run_workflow must inject it"
+                "execution_id not available in input_msg.metadata -- _run_workflow must inject it"
             )
 
         # Create approval event
@@ -1373,15 +1366,11 @@ class WorkflowExecutionService:
 
         if was_rejected:
             cls._update_status(execution_id, "running")
-            raise RuntimeError(
-                f"Approval gate rejected (execution={execution_id}, node={node_id})"
-            )
+            raise RuntimeError(f"Approval gate rejected (execution={execution_id}, node={node_id})")
 
         # Approved -- restore running status and pass through
         cls._update_status(execution_id, "running")
-        logger.info(
-            f"Approval gate: approved for execution={execution_id}, node={node_id}"
-        )
+        logger.info(f"Approval gate: approved for execution={execution_id}, node={node_id}")
 
         return WorkflowMessage(
             content_type=input_msg.content_type or "approval_gate",
@@ -1402,9 +1391,7 @@ class WorkflowExecutionService:
     # =========================================================================
 
     @classmethod
-    def approve_node(
-        cls, execution_id: str, node_id: str, resolved_by: str = None
-    ) -> bool:
+    def approve_node(cls, execution_id: str, node_id: str, resolved_by: str = None) -> bool:
         """Approve a pending approval gate node.
 
         Sets the threading.Event to resume workflow execution and updates DB
@@ -1427,9 +1414,7 @@ class WorkflowExecutionService:
         return True
 
     @classmethod
-    def reject_node(
-        cls, execution_id: str, node_id: str, resolved_by: str = None
-    ) -> bool:
+    def reject_node(cls, execution_id: str, node_id: str, resolved_by: str = None) -> bool:
         """Reject a pending approval gate node.
 
         Sets a rejection flag and the threading.Event so the approval gate node

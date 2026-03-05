@@ -3,7 +3,7 @@
 import logging
 import sys
 import types
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 from app.services.execution_log_service import ExecutionLogService
 
@@ -100,9 +100,7 @@ def test_import_error_handled_gracefully(isolated_db, caplog):
 
     # Verify no WARNING was emitted for ImportError
     warning_msgs = [
-        r
-        for r in caplog.records
-        if r.levelname == "WARNING" and "NotificationService" in r.message
+        r for r in caplog.records if r.levelname == "WARNING" and "NotificationService" in r.message
     ]
     assert len(warning_msgs) == 0
 

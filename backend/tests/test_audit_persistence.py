@@ -9,8 +9,6 @@ Covers:
 
 import concurrent.futures
 
-import pytest
-
 from app.db.audit_events import add_audit_event, count_audit_events, query_audit_events
 from app.services.audit_log_service import AuditLogService
 
@@ -118,7 +116,10 @@ class TestAuditQuery:
     def test_details_json_parsing(self, isolated_db):
         """Details stored as JSON are parsed back to dict."""
         add_audit_event(
-            "test.detail", "test", "t-2", "ok",
+            "test.detail",
+            "test",
+            "t-2",
+            "ok",
             details={"changes": {"name": {"old": "a", "new": "b"}}},
         )
         events = query_audit_events(entity_id="t-2")
@@ -134,7 +135,7 @@ class TestAuditConcurrency:
 
         def write_event(i):
             return add_audit_event(
-                action=f"test.concurrent",
+                action="test.concurrent",
                 entity_type="test",
                 entity_id=f"t-{i}",
                 outcome="ok",

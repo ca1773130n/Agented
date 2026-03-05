@@ -23,9 +23,7 @@ class DiffContextService:
     CONTEXT_LINES = 10
 
     @classmethod
-    def extract_pr_diff_context(
-        cls, diff_text: str, context_lines: Optional[int] = None
-    ) -> str:
+    def extract_pr_diff_context(cls, diff_text: str, context_lines: Optional[int] = None) -> str:
         """Extract focused context from a unified diff.
 
         Args:
@@ -38,8 +36,6 @@ class DiffContextService:
         """
         if not diff_text or not diff_text.strip():
             return ""
-
-        effective_context = context_lines if context_lines is not None else cls.CONTEXT_LINES
 
         try:
             patch_set = PatchSet(diff_text)
@@ -70,9 +66,7 @@ class DiffContextService:
                 parts.append(f"## {patched_file.path}")
 
             # Add summary line
-            parts.append(
-                f"+{patched_file.added} -{patched_file.removed} lines changed"
-            )
+            parts.append(f"+{patched_file.added} -{patched_file.removed} lines changed")
             parts.append("")
 
             # Include all hunks with context
@@ -156,9 +150,7 @@ class DiffContextService:
         if full_tokens == 0:
             reduction_percent = 0.0
         else:
-            reduction_percent = round(
-                ((full_tokens - diff_tokens) / full_tokens) * 100, 1
-            )
+            reduction_percent = round(((full_tokens - diff_tokens) / full_tokens) * 100, 1)
 
         return {
             "full_tokens": int(full_tokens),

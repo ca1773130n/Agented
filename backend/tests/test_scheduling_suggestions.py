@@ -2,8 +2,6 @@
 
 from datetime import datetime, timedelta, timezone
 
-import pytest
-
 from app.db.connection import get_connection
 
 

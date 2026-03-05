@@ -93,9 +93,7 @@ def trigger_sync(path: GitOpsRepoPath, query: GitOpsSyncQuery):
         return {"error": "GitOps repo not found"}, HTTPStatus.NOT_FOUND
 
     try:
-        result = GitOpsSyncService.sync_repo(
-            path.repo_id, dry_run=bool(query.dry_run)
-        )
+        result = GitOpsSyncService.sync_repo(path.repo_id, dry_run=bool(query.dry_run))
     except ValueError as e:
         return {"error": str(e)}, HTTPStatus.BAD_REQUEST
 

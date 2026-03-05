@@ -13,7 +13,6 @@ from ..db.campaigns import (
     create_campaign,
     get_campaign,
     list_campaign_executions,
-    list_campaigns,
     update_campaign_execution,
     update_campaign_status,
 )
@@ -73,13 +72,15 @@ def _execute_repo(campaign_id: str, trigger_id: str, repo_url: str):
         update_campaign_execution(campaign_id, repo_url, status="running")
 
         # Deferred import to avoid circular imports
-        from .orchestration_service import OrchestrationService
         from ..db.triggers import get_trigger
+        from .orchestration_service import OrchestrationService
 
         trigger = get_trigger(trigger_id)
         if not trigger:
             update_campaign_execution(
-                campaign_id, repo_url, status="failed",
+                campaign_id,
+                repo_url,
+                status="failed",
                 error=f"Trigger {trigger_id} not found",
             )
             return
@@ -94,13 +95,15 @@ def _execute_repo(campaign_id: str, trigger_id: str, repo_url: str):
 
         if result.execution_id:
             update_campaign_execution(
-                campaign_id, repo_url,
+                campaign_id,
+                repo_url,
                 execution_id=result.execution_id,
                 status="completed",
             )
         else:
             update_campaign_execution(
-                campaign_id, repo_url,
+                campaign_id,
+                repo_url,
                 status="failed",
                 error=f"Execution not dispatched: {result.status.value} - {result.detail or ''}",
             )
@@ -108,7 +111,10 @@ def _execute_repo(campaign_id: str, trigger_id: str, repo_url: str):
     except Exception as e:
         logger.error("Campaign %s repo %s failed: %s", campaign_id, repo_url, e)
         update_campaign_execution(
-            campaign_id, repo_url, status="failed", error=str(e),
+            campaign_id,
+            repo_url,
+            status="failed",
+            error=str(e),
         )
     finally:
         if acquired:
@@ -137,6 +143,7 @@ def _monitor_campaign(campaign_id: str, threads: list):
     # Post-completion notification (non-blocking, deferred import)
     try:
         from .notification_service import NotificationService
+
         NotificationService.on_execution_complete(
             execution_id=campaign_id,
             trigger_id=None,
@@ -150,7 +157,10 @@ def _monitor_campaign(campaign_id: str, threads: list):
 
     logger.info(
         "Campaign %s finished: status=%s completed=%d failed=%d",
-        campaign_id, status, completed, failed,
+        campaign_id,
+        status,
+        completed,
+        failed,
     )
 
 

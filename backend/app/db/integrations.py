@@ -48,9 +48,7 @@ def get_integration(integration_id: str) -> Optional[dict]:
     """Get a single integration by ID."""
     with get_connection() as conn:
         conn.row_factory = __import__("sqlite3").Row
-        row = conn.execute(
-            "SELECT * FROM integrations WHERE id = ?", (integration_id,)
-        ).fetchone()
+        row = conn.execute("SELECT * FROM integrations WHERE id = ?", (integration_id,)).fetchone()
         return _row_to_dict(row) if row else None
 
 
@@ -113,9 +111,7 @@ def update_integration(
 def delete_integration(integration_id: str) -> bool:
     """Delete an integration. Returns True if found and deleted."""
     with get_connection() as conn:
-        cursor = conn.execute(
-            "DELETE FROM integrations WHERE id = ?", (integration_id,)
-        )
+        cursor = conn.execute("DELETE FROM integrations WHERE id = ?", (integration_id,))
         conn.commit()
         return cursor.rowcount > 0
 

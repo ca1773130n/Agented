@@ -108,9 +108,7 @@ def update_snippet_endpoint(path: SnippetPath):
         if name != snippet["name"]:
             existing = get_snippet_by_name(name)
             if existing:
-                return {
-                    "error": f"A snippet named '{name}' already exists"
-                }, HTTPStatus.CONFLICT
+                return {"error": f"A snippet named '{name}' already exists"}, HTTPStatus.CONFLICT
 
     success = update_snippet(
         path.snippet_id,

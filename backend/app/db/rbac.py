@@ -51,9 +51,7 @@ def get_role_for_api_key(api_key: str) -> Optional[str]:
         The role string (e.g. 'admin'), or None if not found.
     """
     with get_connection() as conn:
-        row = conn.execute(
-            "SELECT role FROM user_roles WHERE api_key = ?", (api_key,)
-        ).fetchone()
+        row = conn.execute("SELECT role FROM user_roles WHERE api_key = ?", (api_key,)).fetchone()
         return row[0] if row else None
 
 
@@ -65,9 +63,7 @@ def get_user_role(role_id: str) -> Optional[dict]:
     """
     with get_connection() as conn:
         conn.row_factory = _dict_factory
-        row = conn.execute(
-            "SELECT * FROM user_roles WHERE id = ?", (role_id,)
-        ).fetchone()
+        row = conn.execute("SELECT * FROM user_roles WHERE id = ?", (role_id,)).fetchone()
         conn.row_factory = None
         return row
 
@@ -80,16 +76,12 @@ def list_user_roles() -> list:
     """
     with get_connection() as conn:
         conn.row_factory = _dict_factory
-        rows = conn.execute(
-            "SELECT * FROM user_roles ORDER BY created_at DESC"
-        ).fetchall()
+        rows = conn.execute("SELECT * FROM user_roles ORDER BY created_at DESC").fetchall()
         conn.row_factory = None
         return rows
 
 
-def update_user_role(
-    role_id: str, label: Optional[str] = None, role: Optional[str] = None
-) -> bool:
+def update_user_role(role_id: str, label: Optional[str] = None, role: Optional[str] = None) -> bool:
     """Update a user role record.
 
     Args:

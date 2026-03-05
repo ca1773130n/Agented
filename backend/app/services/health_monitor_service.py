@@ -32,9 +32,7 @@ class HealthMonitorService:
         from .scheduler_service import SchedulerService
 
         if not SchedulerService._scheduler:
-            logger.warning(
-                "Scheduler not available -- health monitoring jobs not registered"
-            )
+            logger.warning("Scheduler not available -- health monitoring jobs not registered")
             return
 
         # Health check every 5 minutes
@@ -64,7 +62,6 @@ class HealthMonitorService:
     @classmethod
     def _check_health(cls):
         """Main health check loop. Iterates all triggers and checks for issues."""
-        from ..db.health_alerts import create_health_alert
         from ..db.triggers import get_all_triggers
 
         now = datetime.now(timezone.utc)
@@ -115,13 +112,9 @@ class HealthMonitorService:
             create_health_alert(
                 alert_type="consecutive_failure",
                 trigger_id=trigger_id,
-                message=(
-                    f"Trigger has {consecutive_failures} consecutive failed executions"
-                ),
+                message=(f"Trigger has {consecutive_failures} consecutive failed executions"),
                 details={"consecutive_count": consecutive_failures},
-                severity="critical"
-                if consecutive_failures >= 5
-                else "warning",
+                severity="critical" if consecutive_failures >= 5 else "warning",
             )
 
     @classmethod
@@ -190,16 +183,12 @@ class HealthMonitorService:
         from ..db.health_alerts import create_health_alert
 
         # Determine expected interval in hours
-        interval_hours = {"daily": 24, "weekly": 168, "monthly": 720}.get(
-            schedule_type
-        )
+        interval_hours = {"daily": 24, "weekly": 168, "monthly": 720}.get(schedule_type)
         if not interval_hours:
             return
 
         try:
-            last_run = datetime.fromisoformat(
-                last_run_at.replace("Z", "+00:00")
-            )
+            last_run = datetime.fromisoformat(last_run_at.replace("Z", "+00:00"))
             if not last_run.tzinfo:
                 last_run = last_run.replace(tzinfo=timezone.utc)
         except (ValueError, TypeError):
@@ -228,7 +217,7 @@ class HealthMonitorService:
     @classmethod
     def get_status(cls) -> dict:
         """Return current health status summary."""
-        from ..db.health_alerts import get_alert_count, get_recent_alerts
+        from ..db.health_alerts import get_recent_alerts
 
         recent = get_recent_alerts(limit=50, acknowledged=False)
         critical_count = sum(1 for a in recent if a.get("severity") == "critical")

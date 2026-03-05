@@ -4,15 +4,12 @@ Tests Fernet encryption, MultiFernet key rotation, CRUD API endpoints,
 audit logging, performance, and execution service integration.
 """
 
-import os
 import time
-from unittest.mock import patch
 
 import pytest
 from cryptography.fernet import Fernet
 
 from app.services.secret_vault_service import SecretVaultService
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -179,6 +176,7 @@ class TestSecretCRUD:
         SecretVaultService.update_secret(sid, description="new desc")
 
         from app.db.secrets import get_secret
+
         secret = get_secret(sid)
         assert secret["description"] == "new desc"
 
@@ -196,6 +194,7 @@ class TestSecretCRUD:
         """list_secrets() NEVER includes the encrypted_value field."""
         SecretVaultService.create_secret(name="list-test", value="secret-val")
         from app.db.secrets import list_secrets
+
         secrets = list_secrets()
         assert len(secrets) >= 1
         for s in secrets:
@@ -336,7 +335,9 @@ class TestSecretsAPI:
 
     def test_reveal_secret_api(self, client, isolated_db):
         """POST /admin/secrets/<id>/reveal returns decrypted value."""
-        create_resp = client.post("/admin/secrets/", json={"name": "reveal-test", "value": "my-key"})
+        create_resp = client.post(
+            "/admin/secrets/", json={"name": "reveal-test", "value": "my-key"}
+        )
         sid = create_resp.get_json()["id"]
 
         resp = client.post(f"/admin/secrets/{sid}/reveal")

@@ -8,7 +8,6 @@ from flask_openapi3 import APIBlueprint, Tag
 from ..models.bookmark import (
     BookmarkCreate,
     BookmarkPath,
-    BookmarkResponse,
     BookmarkUpdate,
     TriggerBookmarkPath,
 )
@@ -17,15 +16,12 @@ from ..services.bookmark_service import (
     delete_bookmark,
     get_bookmark,
     get_bookmarks_for_bot,
-    resolve_deep_link,
     search_bookmarks,
     update_bookmark,
 )
 
 tag = Tag(name="bookmarks", description="Execution bookmark management")
-bookmarks_bp = APIBlueprint(
-    "bookmarks", __name__, url_prefix="/admin", abp_tags=[tag]
-)
+bookmarks_bp = APIBlueprint("bookmarks", __name__, url_prefix="/admin", abp_tags=[tag])
 
 
 @bookmarks_bp.post("/bookmarks")

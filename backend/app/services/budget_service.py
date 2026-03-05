@@ -328,9 +328,7 @@ class BudgetService:
             if current_count >= max_monthly_runs:
                 return {
                     "allowed": False,
-                    "reason": (
-                        f"Monthly run limit exceeded ({current_count}/{max_monthly_runs})"
-                    ),
+                    "reason": (f"Monthly run limit exceeded ({current_count}/{max_monthly_runs})"),
                     "remaining_usd": None,
                     "current_spend": None,
                     "limit": limits,

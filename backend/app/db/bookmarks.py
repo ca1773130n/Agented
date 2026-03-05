@@ -94,9 +94,7 @@ def list_bookmarks_for_execution(execution_id: str) -> list[dict]:
         return [dict(row) for row in cursor.fetchall()]
 
 
-def search_bookmarks(
-    query: Optional[str] = None, tags: Optional[str] = None
-) -> list[dict]:
+def search_bookmarks(query: Optional[str] = None, tags: Optional[str] = None) -> list[dict]:
     """Search bookmarks by text query and/or tags.
 
     Args:

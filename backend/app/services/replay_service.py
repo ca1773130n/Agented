@@ -6,9 +6,7 @@ uses difflib to produce structured line-level diffs.
 """
 
 import difflib
-import json
 import logging
-import os
 import shutil
 import subprocess
 import threading
@@ -25,9 +23,7 @@ class ReplayService:
     """Service for replaying executions and comparing outputs."""
 
     @classmethod
-    def replay_execution(
-        cls, original_execution_id: str, notes: Optional[str] = None
-    ) -> dict:
+    def replay_execution(cls, original_execution_id: str, notes: Optional[str] = None) -> dict:
         """Replay an execution with identical prompt/command from the original.
 
         Args:
@@ -47,9 +43,7 @@ class ReplayService:
 
         status = original.get("status", "")
         if status == "running":
-            raise ValueError(
-                f"Cannot replay a running execution: {original_execution_id}"
-            )
+            raise ValueError(f"Cannot replay a running execution: {original_execution_id}")
 
         # Create new execution record with replay trigger type
         original_trigger_type = original.get("trigger_type", "unknown")
@@ -103,9 +97,7 @@ class ReplayService:
         }
 
     @classmethod
-    def _run_replay_subprocess(
-        cls, execution_id: str, cmd_str: str, trigger_id: str
-    ):
+    def _run_replay_subprocess(cls, execution_id: str, cmd_str: str, trigger_id: str):
         """Run the replay subprocess in background (mirrors run_trigger pattern)."""
         from app.config import PROJECT_ROOT
 
@@ -201,9 +193,7 @@ class ReplayService:
             pipe.close()
 
     @classmethod
-    def compare_outputs(
-        cls, execution_id_a: str, execution_id_b: str
-    ) -> dict:
+    def compare_outputs(cls, execution_id_a: str, execution_id_b: str) -> dict:
         """Compare outputs of two executions using unified diff.
 
         Args:

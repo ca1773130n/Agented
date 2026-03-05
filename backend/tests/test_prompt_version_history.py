@@ -39,7 +39,7 @@ def test_get_history_returns_entries(isolated_db):
     trigger_id = add_trigger(name="multi-bot", prompt_template="v0")
 
     for i in range(3):
-        log_prompt_template_change(trigger_id, f"v{i}", f"v{i+1}", author=f"user{i}")
+        log_prompt_template_change(trigger_id, f"v{i}", f"v{i + 1}", author=f"user{i}")
 
     history = get_prompt_template_history(trigger_id)
     assert len(history) == 3
@@ -61,6 +61,7 @@ def test_rollback_prompt_template(client):
     # Log changes
     log_prompt_template_change(trigger_id, "version 0", "version 1", author="user")
     from app.db.triggers import update_trigger
+
     update_trigger(trigger_id, prompt_template="version 1")
 
     log_prompt_template_change(trigger_id, "version 1", "version 2", author="user")
@@ -94,6 +95,7 @@ def test_rollback_creates_history_entry(client):
 
     log_prompt_template_change(trigger_id, "original", "modified", author="user")
     from app.db.triggers import update_trigger
+
     update_trigger(trigger_id, prompt_template="modified")
 
     history_before = get_prompt_template_history(trigger_id)
@@ -218,6 +220,7 @@ def test_rollback_endpoint(client):
 
     log_prompt_template_change(trigger_id, "start", "changed", author="user")
     from app.db.triggers import update_trigger
+
     update_trigger(trigger_id, prompt_template="changed")
 
     history = get_prompt_template_history(trigger_id)

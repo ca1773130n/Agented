@@ -7,7 +7,12 @@ that the analytics endpoints return correct aggregated data.
 from datetime import datetime, timedelta
 
 from app.db.budgets import create_token_usage_record
-from app.db.triggers import add_pr_review, create_execution_log, update_execution_log, update_pr_review
+from app.db.triggers import (
+    add_pr_review,
+    create_execution_log,
+    update_execution_log,
+    update_pr_review,
+)
 
 
 def _date_str(days_ago: int) -> str:

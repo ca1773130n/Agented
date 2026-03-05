@@ -188,7 +188,9 @@ class ProjectSessionManager:
                         len(accounts) if accounts else 0,
                     )
             except Exception:
-                logger.warning("Could not resolve CLAUDE_CONFIG_DIR from backend accounts", exc_info=True)
+                logger.warning(
+                    "Could not resolve CLAUDE_CONFIG_DIR from backend accounts", exc_info=True
+                )
 
         # Create PTY pair
         master_fd, slave_fd = pty.openpty()

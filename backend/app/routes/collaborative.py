@@ -18,9 +18,7 @@ tag = Tag(
     name="collaborative",
     description="Live collaborative execution viewing with presence and comments",
 )
-collaborative_bp = APIBlueprint(
-    "collaborative", __name__, url_prefix="/admin", abp_tags=[tag]
-)
+collaborative_bp = APIBlueprint("collaborative", __name__, url_prefix="/admin", abp_tags=[tag])
 
 
 # -- Path models --

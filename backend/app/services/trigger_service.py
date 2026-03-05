@@ -535,9 +535,7 @@ class TriggerService:
             return {"error": "Failed to update"}, HTTPStatus.INTERNAL_SERVER_ERROR
 
     @staticmethod
-    def rollback_prompt_template(
-        trigger_id: str, version_id: int
-    ) -> Tuple[dict, HTTPStatus]:
+    def rollback_prompt_template(trigger_id: str, version_id: int) -> Tuple[dict, HTTPStatus]:
         """Rollback a trigger's prompt template to a previous version."""
         trigger = get_trigger(trigger_id)
         if not trigger:
@@ -578,9 +576,7 @@ class TriggerService:
         }, HTTPStatus.OK
 
     @staticmethod
-    def preview_prompt_full(
-        trigger_id: str, payload: dict
-    ) -> Tuple[dict, HTTPStatus]:
+    def preview_prompt_full(trigger_id: str, payload: dict) -> Tuple[dict, HTTPStatus]:
         """Full dry-run preview: render prompt with snippets and placeholders, show CLI command.
 
         CRITICAL: This method does NOT spawn any subprocess.

@@ -24,9 +24,7 @@ class DiffLine(BaseModel):
     """A single line in a diff output."""
 
     line_number: int = Field(..., description="Line number in the diff output")
-    type: str = Field(
-        ..., description="Line type: 'unchanged', 'added', or 'removed'"
-    )
+    type: str = Field(..., description="Line type: 'unchanged', 'added', or 'removed'")
     content: str = Field(..., description="Line content")
 
 
@@ -35,9 +33,7 @@ class OutputDiff(BaseModel):
 
     original_execution_id: str = Field(..., description="First execution ID")
     replay_execution_id: str = Field(..., description="Second execution ID")
-    diff_lines: list[DiffLine] = Field(
-        default_factory=list, description="Line-level diff output"
-    )
+    diff_lines: list[DiffLine] = Field(default_factory=list, description="Line-level diff output")
     original_line_count: int = Field(0, description="Total lines in original output")
     replay_line_count: int = Field(0, description="Total lines in replay output")
     change_summary: dict = Field(

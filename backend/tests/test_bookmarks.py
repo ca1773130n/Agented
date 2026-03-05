@@ -138,12 +138,8 @@ def test_tag_based_search(isolated_db):
 
 def test_text_search(isolated_db):
     """Test searching bookmarks by text query on title/notes."""
-    _create_test_bookmark(
-        isolated_db, title="Critical vulnerability", notes="Found SQL injection"
-    )
-    _create_test_bookmark(
-        isolated_db, title="Minor issue", notes="CSS alignment problem"
-    )
+    _create_test_bookmark(isolated_db, title="Critical vulnerability", notes="Found SQL injection")
+    _create_test_bookmark(isolated_db, title="Minor issue", notes="CSS alignment problem")
 
     results = search_bookmarks(query="SQL injection")
     assert len(results) == 1

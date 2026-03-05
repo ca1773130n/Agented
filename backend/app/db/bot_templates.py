@@ -5,7 +5,6 @@ import logging
 from typing import List, Optional
 
 from .connection import get_connection
-from .ids import _get_unique_template_id
 from .triggers import add_trigger, get_trigger_by_name
 
 logger = logging.getLogger(__name__)
@@ -26,25 +25,27 @@ CURATED_BOT_TEMPLATES = [
         ),
         "category": "code-review",
         "icon": "git-pull-request",
-        "config_json": json.dumps({
-            "name": "PR Reviewer",
-            "prompt_template": (
-                "Review the following pull request thoroughly.\n\n"
-                "PR: {pr_url}\n"
-                "Title: {pr_title}\n"
-                "Author: {pr_author}\n\n"
-                "Analyze the code changes for:\n"
-                "1. Potential bugs or logic errors\n"
-                "2. Code style and best practices\n"
-                "3. Security concerns\n"
-                "4. Performance implications\n"
-                "5. Test coverage gaps\n\n"
-                "Provide constructive, actionable feedback."
-            ),
-            "backend_type": "claude",
-            "trigger_source": "github",
-            "model": None,
-        }),
+        "config_json": json.dumps(
+            {
+                "name": "PR Reviewer",
+                "prompt_template": (
+                    "Review the following pull request thoroughly.\n\n"
+                    "PR: {pr_url}\n"
+                    "Title: {pr_title}\n"
+                    "Author: {pr_author}\n\n"
+                    "Analyze the code changes for:\n"
+                    "1. Potential bugs or logic errors\n"
+                    "2. Code style and best practices\n"
+                    "3. Security concerns\n"
+                    "4. Performance implications\n"
+                    "5. Test coverage gaps\n\n"
+                    "Provide constructive, actionable feedback."
+                ),
+                "backend_type": "claude",
+                "trigger_source": "github",
+                "model": None,
+            }
+        ),
         "sort_order": 1,
     },
     {
@@ -57,24 +58,26 @@ CURATED_BOT_TEMPLATES = [
         ),
         "category": "dependency",
         "icon": "package",
-        "config_json": json.dumps({
-            "name": "Dependency Updater",
-            "prompt_template": (
-                "Check the project dependencies for updates and security issues.\n\n"
-                "Project paths:\n{paths}\n\n"
-                "Tasks:\n"
-                "1. Identify outdated dependencies\n"
-                "2. Check for known security vulnerabilities\n"
-                "3. Suggest safe upgrade paths\n"
-                "4. Flag any breaking changes in major version updates\n"
-                "5. Generate a summary report of recommended actions"
-            ),
-            "backend_type": "claude",
-            "trigger_source": "scheduled",
-            "model": None,
-            "schedule_type": "weekly",
-            "schedule_value": "monday",
-        }),
+        "config_json": json.dumps(
+            {
+                "name": "Dependency Updater",
+                "prompt_template": (
+                    "Check the project dependencies for updates and security issues.\n\n"
+                    "Project paths:\n{paths}\n\n"
+                    "Tasks:\n"
+                    "1. Identify outdated dependencies\n"
+                    "2. Check for known security vulnerabilities\n"
+                    "3. Suggest safe upgrade paths\n"
+                    "4. Flag any breaking changes in major version updates\n"
+                    "5. Generate a summary report of recommended actions"
+                ),
+                "backend_type": "claude",
+                "trigger_source": "scheduled",
+                "model": None,
+                "schedule_type": "weekly",
+                "schedule_value": "monday",
+            }
+        ),
         "sort_order": 2,
     },
     {
@@ -87,25 +90,27 @@ CURATED_BOT_TEMPLATES = [
         ),
         "category": "security",
         "icon": "shield",
-        "config_json": json.dumps({
-            "name": "Security Scanner",
-            "prompt_template": (
-                "Perform a comprehensive security audit on the following project.\n\n"
-                "Project paths:\n{paths}\n\n"
-                "Scan for:\n"
-                "1. Hardcoded secrets, API keys, or credentials\n"
-                "2. SQL injection vulnerabilities\n"
-                "3. Cross-site scripting (XSS) risks\n"
-                "4. Insecure authentication patterns\n"
-                "5. Dependency vulnerabilities\n"
-                "6. Improper error handling that leaks information\n\n"
-                "Trigger message: {message}\n\n"
-                "Provide severity ratings and remediation steps for each finding."
-            ),
-            "backend_type": "claude",
-            "trigger_source": "webhook",
-            "model": None,
-        }),
+        "config_json": json.dumps(
+            {
+                "name": "Security Scanner",
+                "prompt_template": (
+                    "Perform a comprehensive security audit on the following project.\n\n"
+                    "Project paths:\n{paths}\n\n"
+                    "Scan for:\n"
+                    "1. Hardcoded secrets, API keys, or credentials\n"
+                    "2. SQL injection vulnerabilities\n"
+                    "3. Cross-site scripting (XSS) risks\n"
+                    "4. Insecure authentication patterns\n"
+                    "5. Dependency vulnerabilities\n"
+                    "6. Improper error handling that leaks information\n\n"
+                    "Trigger message: {message}\n\n"
+                    "Provide severity ratings and remediation steps for each finding."
+                ),
+                "backend_type": "claude",
+                "trigger_source": "webhook",
+                "model": None,
+            }
+        ),
         "sort_order": 3,
     },
     {
@@ -118,24 +123,26 @@ CURATED_BOT_TEMPLATES = [
         ),
         "category": "changelog",
         "icon": "file-text",
-        "config_json": json.dumps({
-            "name": "Changelog Generator",
-            "prompt_template": (
-                "Generate a changelog for the project based on recent activity.\n\n"
-                "Project paths:\n{paths}\n\n"
-                "Instructions: {message}\n\n"
-                "Tasks:\n"
-                "1. Analyze recent git commits and merged PRs\n"
-                "2. Categorize changes: Features, Bug Fixes, Breaking Changes, "
-                "Documentation, Performance\n"
-                "3. Write clear, user-facing descriptions for each change\n"
-                "4. Follow Keep a Changelog format\n"
-                "5. Include contributor attribution where applicable"
-            ),
-            "backend_type": "claude",
-            "trigger_source": "webhook",
-            "model": None,
-        }),
+        "config_json": json.dumps(
+            {
+                "name": "Changelog Generator",
+                "prompt_template": (
+                    "Generate a changelog for the project based on recent activity.\n\n"
+                    "Project paths:\n{paths}\n\n"
+                    "Instructions: {message}\n\n"
+                    "Tasks:\n"
+                    "1. Analyze recent git commits and merged PRs\n"
+                    "2. Categorize changes: Features, Bug Fixes, Breaking Changes, "
+                    "Documentation, Performance\n"
+                    "3. Write clear, user-facing descriptions for each change\n"
+                    "4. Follow Keep a Changelog format\n"
+                    "5. Include contributor attribution where applicable"
+                ),
+                "backend_type": "claude",
+                "trigger_source": "webhook",
+                "model": None,
+            }
+        ),
         "sort_order": 4,
     },
     {
@@ -148,23 +155,25 @@ CURATED_BOT_TEMPLATES = [
         ),
         "category": "testing",
         "icon": "check-circle",
-        "config_json": json.dumps({
-            "name": "Test Writer",
-            "prompt_template": (
-                "Generate tests for the specified code in the project.\n\n"
-                "Project paths:\n{paths}\n\n"
-                "Instructions: {message}\n\n"
-                "Tasks:\n"
-                "1. Analyze the source code and identify untested areas\n"
-                "2. Generate unit tests covering happy paths and edge cases\n"
-                "3. Include error handling and boundary condition tests\n"
-                "4. Follow the project's existing test conventions and framework\n"
-                "5. Ensure tests are isolated and deterministic"
-            ),
-            "backend_type": "claude",
-            "trigger_source": "webhook",
-            "model": None,
-        }),
+        "config_json": json.dumps(
+            {
+                "name": "Test Writer",
+                "prompt_template": (
+                    "Generate tests for the specified code in the project.\n\n"
+                    "Project paths:\n{paths}\n\n"
+                    "Instructions: {message}\n\n"
+                    "Tasks:\n"
+                    "1. Analyze the source code and identify untested areas\n"
+                    "2. Generate unit tests covering happy paths and edge cases\n"
+                    "3. Include error handling and boundary condition tests\n"
+                    "4. Follow the project's existing test conventions and framework\n"
+                    "5. Ensure tests are isolated and deterministic"
+                ),
+                "backend_type": "claude",
+                "trigger_source": "webhook",
+                "model": None,
+            }
+        ),
         "sort_order": 5,
     },
 ]

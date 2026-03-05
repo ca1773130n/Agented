@@ -17,7 +17,9 @@ class SecretCreate(BaseModel):
 class SecretUpdate(BaseModel):
     """Request body for updating a secret."""
 
-    value: Optional[str] = Field(default=None, description="New plaintext value (will be encrypted)")
+    value: Optional[str] = Field(
+        default=None, description="New plaintext value (will be encrypted)"
+    )
     description: Optional[str] = Field(default=None, max_length=1000, description="New description")
 
 

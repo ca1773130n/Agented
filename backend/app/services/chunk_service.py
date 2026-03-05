@@ -103,13 +103,18 @@ class ChunkService:
                 continue
 
             # Comments at top of file
-            if stripped.startswith("#") and not preamble_lines or (
-                preamble_lines
-                and all(
-                    pl.strip().startswith(("#", "import ", "from ", '"""', "'''")) or not pl.strip()
-                    for pl in preamble_lines
+            if (
+                stripped.startswith("#")
+                and not preamble_lines
+                or (
+                    preamble_lines
+                    and all(
+                        pl.strip().startswith(("#", "import ", "from ", '"""', "'''"))
+                        or not pl.strip()
+                        for pl in preamble_lines
+                    )
+                    and stripped.startswith("#")
                 )
-                and stripped.startswith("#")
             ):
                 preamble_lines.append(line)
                 continue
@@ -173,9 +178,7 @@ class ChunkService:
         return cls._add_overlap_and_preamble(chunks, preamble)
 
     @classmethod
-    def _split_by_char_limit(
-        cls, content: str, max_chars: int, preamble: str
-    ) -> list[str]:
+    def _split_by_char_limit(cls, content: str, max_chars: int, preamble: str) -> list[str]:
         """Fallback: split content at character boundaries."""
         preamble_len = len(preamble) + 1 if preamble else 0  # +1 for newline
         effective_max = max_chars - preamble_len

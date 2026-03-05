@@ -121,9 +121,7 @@ class CollaborativeViewerService:
             with cls._lock:
                 viewers = cls._get_viewer_list_locked(execution_id)
             cls._broadcast_presence(execution_id, "leave", viewer_id, viewer_name, viewers)
-            logger.info(
-                "Removed stale viewer %s from execution %s", viewer_id, execution_id
-            )
+            logger.info("Removed stale viewer %s from execution %s", viewer_id, execution_id)
 
         if stale_entries:
             logger.info("Cleaned up %d stale viewer(s)", len(stale_entries))

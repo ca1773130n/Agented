@@ -31,11 +31,11 @@ from ..utils.json_path import get_nested_value
 from .audit_log_service import AuditLogService
 from .budget_service import BudgetService
 from .command_builder import CommandBuilder
+from .diff_context_service import DiffContextService
 from .execution_log_service import ExecutionLogService
 from .github_service import GitHubService
 from .process_manager import ProcessManager
 from .prompt_renderer import PromptRenderer
-from .diff_context_service import DiffContextService
 from .rate_limit_service import RateLimitService
 
 logger = logging.getLogger(__name__)
@@ -537,15 +537,11 @@ class ExecutionService:
 
                 # Check execution time limit
                 elapsed = _time.time() - start_time
-                if BudgetService.check_execution_time_limit(
-                    entity_type, entity_id, elapsed
-                ):
+                if BudgetService.check_execution_time_limit(entity_type, entity_id, elapsed):
                     from ..db.budgets import get_budget_limit
 
                     limits = get_budget_limit(entity_type, entity_id)
-                    limit_seconds = (
-                        limits.get("max_execution_time_seconds") if limits else None
-                    )
+                    limit_seconds = limits.get("max_execution_time_seconds") if limits else None
                     logger.warning(
                         "Execution time limit exceeded (%ds > %ds) for execution %s — "
                         "terminating via cancel_graceful",

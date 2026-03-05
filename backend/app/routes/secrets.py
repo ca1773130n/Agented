@@ -40,6 +40,7 @@ def vault_status():
     if configured:
         try:
             from app.db.secrets import count_secrets
+
             count = count_secrets()
         except Exception:
             pass
@@ -75,6 +76,7 @@ def create_secret():
         return {"error": str(e)}, HTTPStatus.INTERNAL_SERVER_ERROR
 
     from app.db.secrets import get_secret
+
     secret = get_secret(secret_id)
     return _secret_metadata(secret), HTTPStatus.CREATED
 
@@ -87,6 +89,7 @@ def list_secrets():
         return err
 
     from app.db.secrets import list_secrets as db_list_secrets
+
     secrets = db_list_secrets()
     return {"secrets": secrets}, HTTPStatus.OK
 
@@ -99,6 +102,7 @@ def get_secret_detail(path: SecretPath):
         return err
 
     from app.db.secrets import get_secret
+
     secret = get_secret(path.secret_id)
     if not secret:
         return {"error": "Secret not found"}, HTTPStatus.NOT_FOUND
@@ -121,6 +125,7 @@ def reveal_secret(path: SecretPath):
         return {"error": "Secret not found"}, HTTPStatus.NOT_FOUND
 
     from app.db.secrets import get_secret
+
     secret = get_secret(path.secret_id)
     return {
         "id": secret["id"],
@@ -153,6 +158,7 @@ def update_secret(path: SecretPath):
         return {"error": "Secret not found"}, HTTPStatus.NOT_FOUND
 
     from app.db.secrets import get_secret
+
     secret = get_secret(path.secret_id)
     return _secret_metadata(secret), HTTPStatus.OK
 

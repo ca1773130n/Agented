@@ -2,11 +2,9 @@
 
 import random
 import string
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 
-import pytest
-
-from app.db.budgets import get_budget_limit, get_monthly_run_count, set_budget_limit
+from app.db.budgets import get_budget_limit, set_budget_limit
 from app.db.connection import get_connection
 from app.db.health_alerts import get_recent_alerts
 from app.services.budget_service import BudgetService
@@ -133,9 +131,7 @@ class TestBudgetEnforcement:
         assert result["allowed"] is True
 
         # Time limit should not trigger either
-        assert (
-            BudgetService.check_execution_time_limit("trigger", "trig-null", 99999) is False
-        )
+        assert BudgetService.check_execution_time_limit("trigger", "trig-null", 99999) is False
 
     def test_budget_exceeded_creates_health_alert(self, client, isolated_db):
         """Pre-execution budget check creates health alert when monthly run limit exceeded."""
@@ -157,7 +153,7 @@ class TestBudgetEnforcement:
         # Simulate what execution_service does: create the health alert
         from app.db.health_alerts import create_health_alert
 
-        alert_id = create_health_alert(
+        create_health_alert(
             alert_type="budget_exceeded",
             trigger_id="trig-alert",
             message="Execution blocked: monthly run limit exceeded (3/3)",

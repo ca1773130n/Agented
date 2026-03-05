@@ -56,7 +56,10 @@ _TUI_NOISE_RE = re.compile(
 )
 
 # Spinner animation patterns — these lines repeat endlessly as the spinner redraws
-_SPINNER_RE = re.compile(r"^[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏●○◉◎◌◍◐◑◒◓⣾⣽⣻⢿⡿⣟⣯⣷⠁⠂⠄⡀⢀⠠⠐⠈]?\s*(waiting|loading|spinner|connecting)", re.IGNORECASE)
+_SPINNER_RE = re.compile(
+    r"^[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏●○◉◎◌◍◐◑◒◓⣾⣽⣻⢿⡿⣟⣯⣷⠁⠂⠄⡀⢀⠠⠐⠈]?\s*(waiting|loading|spinner|connecting)",
+    re.IGNORECASE,
+)
 
 # Maximum broadcast rate: suppress duplicate lines within this window (seconds)
 _DEDUP_WINDOW = 2.0
@@ -143,7 +146,10 @@ class BackendCLIService:
         session_id = f"cli-{uuid.uuid4().hex[:8]}"
         logger.info(
             "Starting CLI session %s: type=%s action=%s config_path=%r",
-            session_id, backend_type, action, config_path,
+            session_id,
+            backend_type,
+            action,
+            config_path,
         )
 
         # Open a pseudo-terminal so the CLI sees a real TTY
@@ -239,8 +245,9 @@ class BackendCLIService:
                     idle_ticks += 1
                     # Flush any pending OAuth URL on idle
                     if pending_oauth_url is not None and idle_ticks >= 2:
-                        logger.info("CLI %s: OAuth URL (flushed): %s…",
-                                    session_id, pending_oauth_url[:80])
+                        logger.info(
+                            "CLI %s: OAuth URL (flushed): %s…", session_id, pending_oauth_url[:80]
+                        )
                         cls._broadcast(
                             session_id,
                             "oauth_url",
@@ -255,14 +262,18 @@ class BackendCLIService:
                     if idle_ticks >= 2 and recent_lines:
                         interaction = cls._try_parse_menu(recent_lines)
                         if interaction:
-                            logger.info("CLI %s: detected menu: prompt=%r opts=%r",
-                                        session_id, interaction["prompt"],
-                                        [o[:30] for o in interaction.get("options", [])])
+                            logger.info(
+                                "CLI %s: detected menu: prompt=%r opts=%r",
+                                session_id,
+                                interaction["prompt"],
+                                [o[:30] for o in interaction.get("options", [])],
+                            )
                             recent_lines.clear()
                             cls._handle_interaction(session_id, master_fd, interaction)
                             interaction_count += 1
-                            logger.info("CLI %s: menu interaction completed, resuming reader",
-                                        session_id)
+                            logger.info(
+                                "CLI %s: menu interaction completed, resuming reader", session_id
+                            )
                             idle_ticks = 0
                             continue
                     # Check single-line prompt in buffer (no trailing \n)
@@ -294,17 +305,11 @@ class BackendCLIService:
                     # (e.g. after onboarding), re-send the action command (e.g. /login).
                     # Only fire if recent_lines has no pending menu options (to avoid
                     # sending \n that would accidentally confirm a menu selection).
-                    has_pending_options = any(
-                        _NUMBERED_OPTION_RE.match(rl) for rl in recent_lines
-                    )
+                    has_pending_options = any(_NUMBERED_OPTION_RE.match(rl) for rl in recent_lines)
                     # Force-complete login sessions when:
                     # (a) explicit success pattern detected + 2s idle, or
                     # (b) at least 1 interaction handled + 10s idle (CLI returned to REPL)
-                    if (
-                        action_started
-                        and not has_pending_options
-                        and interaction_count >= 1
-                    ):
+                    if action_started and not has_pending_options and interaction_count >= 1:
                         with cls._lock:
                             session = cls._sessions.get(session_id, {})
                         if session.get("action") == "login":
@@ -312,8 +317,10 @@ class BackendCLIService:
                                 logger.info(
                                     "CLI %s: login done (success_detected=%s, "
                                     "interactions=%d, idle=%ds), terminating",
-                                    session_id, login_completed,
-                                    interaction_count, idle_ticks,
+                                    session_id,
+                                    login_completed,
+                                    interaction_count,
+                                    idle_ticks,
                                 )
                                 try:
                                     os.close(master_fd)
@@ -345,7 +352,9 @@ class BackendCLIService:
                             if action_cmd:
                                 logger.info(
                                     "CLI %s: idle %ds at REPL, re-sending %r",
-                                    session_id, idle_ticks, action_cmd,
+                                    session_id,
+                                    idle_ticks,
+                                    action_cmd,
                                 )
                                 try:
                                     os.write(master_fd, (action_cmd + "\n").encode())
@@ -403,10 +412,14 @@ class BackendCLIService:
                             if any(
                                 kw in lower
                                 for kw in (
-                                    "login method", "select login",
-                                    "sign in", "authenticat",
-                                    "opening browser", "usage",
-                                    "waiting for auth", "trust",
+                                    "login method",
+                                    "select login",
+                                    "sign in",
+                                    "authenticat",
+                                    "opening browser",
+                                    "usage",
+                                    "waiting for auth",
+                                    "trust",
                                 )
                             ):
                                 action_started = True
@@ -419,10 +432,12 @@ class BackendCLIService:
                             else:
                                 logger.info(
                                     "CLI %s: OAuth URL (assembled): %s…",
-                                    session_id, pending_oauth_url[:80],
+                                    session_id,
+                                    pending_oauth_url[:80],
                                 )
                                 cls._broadcast(
-                                    session_id, "oauth_url",
+                                    session_id,
+                                    "oauth_url",
                                     {
                                         "url": pending_oauth_url,
                                         "content": pending_oauth_url,
@@ -440,9 +455,7 @@ class BackendCLIService:
                         # Try to parse as single-line interaction
                         interaction = cls._try_parse_interaction(stripped)
                         if interaction:
-                            logger.info(
-                                "CLI %s: detected interaction: %r", session_id, interaction
-                            )
+                            logger.info("CLI %s: detected interaction: %r", session_id, interaction)
                             recent_lines.clear()
                             cls._handle_interaction(session_id, master_fd, interaction)
                             interaction_count += 1
@@ -458,13 +471,13 @@ class BackendCLIService:
                         if len(_recent_broadcasts) > _DEDUP_MAX_RECENT:
                             cutoff = now_ts - _DEDUP_WINDOW
                             _recent_broadcasts = {
-                                k: v for k, v in _recent_broadcasts.items()
-                                if v > cutoff
+                                k: v for k, v in _recent_broadcasts.items() if v > cutoff
                             }
 
                         # Broadcast as log line
                         cls._broadcast(
-                            session_id, "log",
+                            session_id,
+                            "log",
                             {
                                 "content": stripped,
                                 "stream": "stdout",
@@ -477,14 +490,13 @@ class BackendCLIService:
                             login_completed = True
                             logger.info(
                                 "CLI %s: login success detected: %s",
-                                session_id, stripped[:80],
+                                session_id,
+                                stripped[:80],
                             )
 
                 # After processing all lines from this chunk, check if
                 # recent_lines contains numbered menu options.
-                opt_count = sum(
-                    1 for rl in recent_lines if _NUMBERED_OPTION_RE.match(rl)
-                )
+                opt_count = sum(1 for rl in recent_lines if _NUMBERED_OPTION_RE.match(rl))
 
                 if opt_count >= 2:
                     # Brief peek for more data — CLI may still be writing options.
@@ -505,7 +517,8 @@ class BackendCLIService:
                                         if len(recent_lines) > 15:
                                             recent_lines.pop(0)
                                         cls._broadcast(
-                                            session_id, "log",
+                                            session_id,
+                                            "log",
                                             {
                                                 "content": s,
                                                 "stream": "stdout",
@@ -600,9 +613,13 @@ class BackendCLIService:
             cls._current_question.pop(session_id, None)
 
         # Write response to PTY
-        logger.info("CLI %s: writing response: %r (is_json=%s, has_option_nums=%s)",
-                     session_id, response, interaction.get("is_json_tool_use"),
-                     bool(interaction.get("_option_numbers")))
+        logger.info(
+            "CLI %s: writing response: %r (is_json=%s, has_option_nums=%s)",
+            session_id,
+            response,
+            interaction.get("is_json_tool_use"),
+            bool(interaction.get("_option_numbers")),
+        )
         try:
             if interaction.get("is_json_tool_use"):
                 response_json = json.dumps({"type": "tool_result", **response})
@@ -611,19 +628,24 @@ class BackendCLIService:
                 # Numbered menu: navigate to the selected option using arrow keys + Enter
                 answer = response.get("answer", "")
                 options = interaction.get("options", [])
-                option_nums = interaction["_option_numbers"]
+                interaction["_option_numbers"]
                 try:
                     idx = options.index(answer)
-                    logger.info("CLI %s: menu selection idx=%d, sending %d down arrows + Enter",
-                                session_id, idx, idx)
+                    logger.info(
+                        "CLI %s: menu selection idx=%d, sending %d down arrows + Enter",
+                        session_id,
+                        idx,
+                        idx,
+                    )
                     # Arrow down to reach the option (first option is index 0, already selected)
                     for _ in range(idx):
                         os.write(master_fd, b"\x1b[B")  # Down arrow
                         time.sleep(0.05)
                     os.write(master_fd, b"\r")  # Enter to select
                 except (ValueError, IndexError):
-                    logger.warning("CLI %s: option not found, sending raw answer: %r",
-                                   session_id, answer)
+                    logger.warning(
+                        "CLI %s: option not found, sending raw answer: %r", session_id, answer
+                    )
                     # Fallback: just send the answer text
                     os.write(master_fd, (str(answer) + "\n").encode("utf-8"))
             else:
@@ -737,8 +759,8 @@ class BackendCLIService:
         # Must end with colon, question mark, or bracket options to distinguish from
         # help hints like "? for shortcuts" which are NOT interactive prompts.
         match = re.match(
-            r"^\?\s+(.+?)\s*(?:\[([^\]]+)\])\s*$"   # "? text [opt/opt]"
-            r"|^\?\s+(.+?[?:])\s*$",                  # "? text:" or "? text?"
+            r"^\?\s+(.+?)\s*(?:\[([^\]]+)\])\s*$"  # "? text [opt/opt]"
+            r"|^\?\s+(.+?[?:])\s*$",  # "? text:" or "? text?"
             content,
         )
         if match:

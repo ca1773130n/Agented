@@ -44,8 +44,11 @@ class SecretVaultService:
                 '"from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"'
             )
 
-        fernet_keys = [Fernet(k.strip().encode() if isinstance(k.strip(), str) else k.strip())
-                       for k in keys_str.split(",") if k.strip()]
+        fernet_keys = [
+            Fernet(k.strip().encode() if isinstance(k.strip(), str) else k.strip())
+            for k in keys_str.split(",")
+            if k.strip()
+        ]
         if not fernet_keys:
             raise RuntimeError("AGENTED_VAULT_KEYS contains no valid keys")
 
@@ -157,7 +160,8 @@ class SecretVaultService:
 
         # Audit log field changes for description
         new_metadata = {
-            "description": new_description if new_description is not None
+            "description": new_description
+            if new_description is not None
             else old_metadata["description"],
             "scope": existing.get("scope", "global"),
         }
@@ -252,8 +256,9 @@ class SecretVaultService:
                 env_name = f"AGENTED_SECRET_{secret_meta['name'].upper()}"
                 result[env_name] = plaintext
             except Exception as e:
-                logger.warning("Failed to decrypt secret '%s' for execution: %s",
-                               secret_meta["name"], e)
+                logger.warning(
+                    "Failed to decrypt secret '%s' for execution: %s", secret_meta["name"], e
+                )
         return result
 
     @classmethod

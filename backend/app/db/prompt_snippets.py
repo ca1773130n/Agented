@@ -56,9 +56,7 @@ def get_snippet_by_name(name: str) -> Optional[dict]:
 def get_all_snippets() -> List[dict]:
     """Get all prompt snippets."""
     with get_connection() as conn:
-        cursor = conn.execute(
-            "SELECT * FROM prompt_snippets ORDER BY created_at ASC"
-        )
+        cursor = conn.execute("SELECT * FROM prompt_snippets ORDER BY created_at ASC")
         return [dict(row) for row in cursor.fetchall()]
 
 

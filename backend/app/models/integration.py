@@ -9,9 +9,7 @@ class IntegrationCreate(BaseModel):
     """Request body for creating an integration."""
 
     name: str = Field(..., description="Display name for the integration")
-    type: str = Field(
-        ..., description="Integration type: slack, teams, jira, or linear"
-    )
+    type: str = Field(..., description="Integration type: slack, teams, jira, or linear")
     config: dict = Field(
         default_factory=dict, description="Non-secret configuration (channel, project key, etc.)"
     )

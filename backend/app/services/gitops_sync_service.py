@@ -10,10 +10,8 @@ import hashlib
 import json
 import logging
 import os
-import shutil
 import subprocess
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Optional
 
 import yaml
@@ -29,7 +27,9 @@ from app.services.audit_log_service import AuditLogService
 logger = logging.getLogger(__name__)
 
 # Local cache directory for cloned repos (relative to backend/)
-_CACHE_BASE = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), ".gitops-cache")
+_CACHE_BASE = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.dirname(__file__))), ".gitops-cache"
+)
 
 
 class GitOpsSyncService:
@@ -72,9 +72,7 @@ class GitOpsSyncService:
         local_path = cls._get_local_path(repo_id)
         try:
             # Clone or pull
-            current_sha = cls._ensure_repo(
-                local_path, repo["repo_url"], repo["branch"]
-            )
+            current_sha = cls._ensure_repo(local_path, repo["repo_url"], repo["branch"])
         except subprocess.CalledProcessError as e:
             error_msg = f"Git operation failed: {e.stderr or e.stdout or str(e)}"
             logger.error("GitOps sync failed for %s: %s", repo_id, error_msg)
@@ -133,9 +131,7 @@ class GitOpsSyncService:
 
         for yaml_path in yaml_files:
             try:
-                change = cls._process_config_file(
-                    yaml_path, repo_id, last_sha, dry_run
-                )
+                change = cls._process_config_file(yaml_path, repo_id, last_sha, dry_run)
                 if change:
                     changes.append(change)
                     files_changed += 1
@@ -144,14 +140,14 @@ class GitOpsSyncService:
                     if change.get("conflict"):
                         files_conflicted += 1
             except Exception as e:
-                logger.error(
-                    "Error processing %s: %s", os.path.basename(yaml_path), e
+                logger.error("Error processing %s: %s", os.path.basename(yaml_path), e)
+                changes.append(
+                    {
+                        "file": os.path.basename(yaml_path),
+                        "error": str(e),
+                        "applied": False,
+                    }
                 )
-                changes.append({
-                    "file": os.path.basename(yaml_path),
-                    "error": str(e),
-                    "applied": False,
-                })
 
         # Update sync state
         status = "dry_run" if dry_run else "success"
@@ -206,11 +202,11 @@ class GitOpsSyncService:
         Returns change info dict if config differs from DB, None if unchanged.
         """
         # Deferred import to avoid circular imports at module load
+        from app.db import get_trigger_by_name
         from app.services.config_export_service import (
             export_trigger,
             import_trigger,
         )
-        from app.db import get_trigger_by_name
 
         filename = os.path.basename(yaml_path)
 
@@ -236,9 +232,7 @@ class GitOpsSyncService:
         if existing:
             # Export current DB state and hash it
             db_config_str = export_trigger(existing["id"], format="yaml")
-            db_hash = hashlib.sha256(
-                (db_config_str or "").encode()
-            ).hexdigest()
+            db_hash = hashlib.sha256((db_config_str or "").encode()).hexdigest()
 
             if git_hash == db_hash:
                 # No changes
@@ -271,9 +265,7 @@ class GitOpsSyncService:
             return change_info
 
         # Apply the change -- Git wins
-        trigger_id, status = import_trigger(
-            config_str=raw_content, format="yaml", upsert=True
-        )
+        trigger_id, status = import_trigger(config_str=raw_content, format="yaml", upsert=True)
 
         change_info["applied"] = True
         change_info["trigger_id"] = trigger_id
@@ -301,6 +293,7 @@ class GitOpsSyncService:
         """
         try:
             from flask import current_app
+
             scheduler = current_app.extensions.get("scheduler")
         except RuntimeError:
             logger.debug("No Flask app context; skipping GitOps polling setup")
@@ -321,6 +314,7 @@ class GitOpsSyncService:
         """Remove all GitOps scheduler jobs."""
         try:
             from flask import current_app
+
             scheduler = current_app.extensions.get("scheduler")
         except RuntimeError:
             return
@@ -412,8 +406,7 @@ class GitOpsSyncService:
             # Fresh clone
             os.makedirs(local_path, exist_ok=True)
             subprocess.run(
-                ["git", "clone", "--branch", branch, "--single-branch",
-                 repo_url, local_path],
+                ["git", "clone", "--branch", branch, "--single-branch", repo_url, local_path],
                 capture_output=True,
                 text=True,
                 check=True,

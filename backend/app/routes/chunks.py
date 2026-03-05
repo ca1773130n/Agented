@@ -97,9 +97,7 @@ def _process_chunk(
                                 break
                             time.sleep(1)
             except Exception as e:
-                logger.warning(
-                    "Bot execution for chunk %s failed: %s", chunk_result_id, e
-                )
+                logger.warning("Bot execution for chunk %s failed: %s", chunk_result_id, e)
                 bot_output = f"Error processing chunk: {e}"
 
             # Update chunk result
@@ -153,9 +151,7 @@ def _finalize_chunked_execution(chunked_execution_id: str):
             chunked_execution_id,
             e,
         )
-        update_chunked_execution_status(
-            chunked_execution_id, status="failed"
-        )
+        update_chunked_execution_status(chunked_execution_id, status="failed")
 
 
 @chunks_bp.post("/bots/<bot_id>/run-chunked")
@@ -183,15 +179,11 @@ def run_chunked(path: BotPath):
     # Create chunked execution record
     chunked_execution_id = create_chunked_execution(path.bot_id, len(chunks))
     if not chunked_execution_id:
-        return {
-            "error": "Failed to create chunked execution"
-        }, HTTPStatus.INTERNAL_SERVER_ERROR
+        return {"error": "Failed to create chunked execution"}, HTTPStatus.INTERNAL_SERVER_ERROR
 
     # Create chunk result records and spawn background threads
     for idx, chunk_content in enumerate(chunks):
-        chunk_result_id = create_chunk_result(
-            chunked_execution_id, idx, chunk_content
-        )
+        chunk_result_id = create_chunk_result(chunked_execution_id, idx, chunk_content)
         if chunk_result_id:
             thread = threading.Thread(
                 target=_process_chunk,

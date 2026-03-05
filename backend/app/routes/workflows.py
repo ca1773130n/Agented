@@ -358,9 +358,7 @@ def approve_workflow_node(path: ApprovalNodePath):
         path.execution_id, path.node_id, resolved_by=resolved_by
     )
     if not success:
-        return {
-            "error": "Approval not found or node is not pending approval"
-        }, HTTPStatus.NOT_FOUND
+        return {"error": "Approval not found or node is not pending approval"}, HTTPStatus.NOT_FOUND
 
     return {"message": "Node approved", "execution_id": path.execution_id}, HTTPStatus.OK
 
@@ -377,9 +375,7 @@ def reject_workflow_node(path: ApprovalNodePath):
         path.execution_id, path.node_id, resolved_by=resolved_by
     )
     if not success:
-        return {
-            "error": "Approval not found or node is not pending approval"
-        }, HTTPStatus.NOT_FOUND
+        return {"error": "Approval not found or node is not pending approval"}, HTTPStatus.NOT_FOUND
 
     return {"message": "Node rejected", "execution_id": path.execution_id}, HTTPStatus.OK
 

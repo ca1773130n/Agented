@@ -12,12 +12,12 @@ def register_blueprints(app):
     from .bot_templates import bot_templates_bp
     from .budgets import budgets_bp
     from .campaigns import campaigns_bp
-    from .command_conversations import command_conversations_bp
     from .chunks import chunks_bp
     from .collaborative import collaborative_bp
-    from .conversation_branches import conversation_branches_bp
-    from .config_export import config_export_bp
+    from .command_conversations import command_conversations_bp
     from .commands import commands_bp
+    from .config_export import config_export_bp
+    from .conversation_branches import conversation_branches_bp
     from .execution_search import execution_search_bp
     from .executions import executions_bp
     from .github_webhook import github_webhook_bp
@@ -36,17 +36,17 @@ def register_blueprints(app):
     from .plugin_exports import plugin_exports_bp
     from .plugins import plugins_bp
     from .pr_reviews import pr_reviews_bp
-    from .prompt_snippets import prompt_snippets_bp
-    from .rbac import rbac_bp
     from .product_owner import product_owner_bp
     from .products import products_bp
-    from .replay import replay_bp
     from .projects import projects_bp
+    from .prompt_snippets import prompt_snippets_bp
+    from .rbac import rbac_bp
+    from .replay import replay_bp
     from .rotation import rotation_bp
     from .rule_conversations import rule_conversations_bp
-    from .scheduling_suggestions import scheduling_bp
     from .rules import rules_bp
     from .scheduler import scheduler_bp
+    from .scheduling_suggestions import scheduling_bp
     from .secrets import secrets_bp
     from .settings import settings_bp
     from .setup import setup_bp

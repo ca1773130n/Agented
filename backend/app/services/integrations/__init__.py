@@ -20,9 +20,7 @@ class IntegrationAdapter(ABC):
         ...
 
     @abstractmethod
-    def create_ticket(
-        self, project_key: str, finding: dict
-    ) -> Optional[str]:
+    def create_ticket(self, project_key: str, finding: dict) -> Optional[str]:
         """Create a ticket/issue from a finding. Returns ticket ID/URL or None."""
         ...
 
@@ -49,7 +47,9 @@ def get_adapter(adapter_type: str, **kwargs) -> Optional[IntegrationAdapter]:
 
 
 # Import adapters to trigger self-registration
-from . import jira_adapter  # noqa: F401, E402
-from . import linear_adapter  # noqa: F401, E402
-from . import slack_adapter  # noqa: F401, E402
-from . import teams_adapter  # noqa: F401, E402
+from . import (
+    jira_adapter,  # noqa: F401, E402
+    linear_adapter,  # noqa: F401, E402
+    slack_adapter,  # noqa: F401, E402
+    teams_adapter,  # noqa: F401, E402
+)

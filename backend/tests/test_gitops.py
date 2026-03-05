@@ -4,8 +4,6 @@ All git operations are mocked -- no real cloning or remote access.
 """
 
 import json
-import os
-import textwrap
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -22,7 +20,6 @@ from app.db.gitops import (
     update_sync_state,
 )
 from app.services.gitops_sync_service import GitOpsSyncService
-
 
 # ---------------------------------------------------------------------------
 # DB CRUD tests
@@ -163,16 +160,17 @@ class TestGitOpsSyncService:
         repo_id = create_gitops_repo("sync-new", "https://example.com/repo.git")
 
         # Set up fake clone directory
-        clone_dir = self._mock_git_clone(tmp_path, {
-            "bot-test.yaml": _make_trigger_yaml("sync-bot", "sync prompt"),
-        })
+        clone_dir = self._mock_git_clone(
+            tmp_path,
+            {
+                "bot-test.yaml": _make_trigger_yaml("sync-bot", "sync prompt"),
+            },
+        )
         mock_cache.__str__ = lambda self: str(tmp_path / "cache")
         # Patch _get_local_path to return our fake clone
         with patch.object(GitOpsSyncService, "_get_local_path", return_value=str(clone_dir)):
             # Mock git operations
-            mock_run.return_value = MagicMock(
-                stdout="abc123def456\n", stderr="", returncode=0
-            )
+            mock_run.return_value = MagicMock(stdout="abc123def456\n", stderr="", returncode=0)
 
             result = GitOpsSyncService.sync_repo(repo_id)
 
@@ -183,6 +181,7 @@ class TestGitOpsSyncService:
 
         # Verify the trigger was created
         from app.db import get_trigger_by_name
+
         trigger = get_trigger_by_name("sync-bot")
         assert trigger is not None
         assert trigger["prompt_template"] == "sync prompt"
@@ -196,9 +195,7 @@ class TestGitOpsSyncService:
 
         clone_dir = self._mock_git_clone(tmp_path, {})
         with patch.object(GitOpsSyncService, "_get_local_path", return_value=str(clone_dir)):
-            mock_run.return_value = MagicMock(
-                stdout="same_sha\n", stderr="", returncode=0
-            )
+            mock_run.return_value = MagicMock(stdout="same_sha\n", stderr="", returncode=0)
             result = GitOpsSyncService.sync_repo(repo_id)
 
         assert result["status"] == "skipped"
@@ -210,18 +207,20 @@ class TestGitOpsSyncService:
         repo_id = create_gitops_repo("upsert-test", "https://example.com/repo.git")
 
         # First sync: create the trigger
-        clone_dir = self._mock_git_clone(tmp_path, {
-            "bot-upsert.yaml": _make_trigger_yaml("upsert-bot", "original prompt"),
-        })
+        clone_dir = self._mock_git_clone(
+            tmp_path,
+            {
+                "bot-upsert.yaml": _make_trigger_yaml("upsert-bot", "original prompt"),
+            },
+        )
         with patch.object(GitOpsSyncService, "_get_local_path", return_value=str(clone_dir)):
-            mock_run.return_value = MagicMock(
-                stdout="sha1\n", stderr="", returncode=0
-            )
+            mock_run.return_value = MagicMock(stdout="sha1\n", stderr="", returncode=0)
             result1 = GitOpsSyncService.sync_repo(repo_id)
 
         assert result1["files_applied"] >= 1
 
-        from app.db import get_trigger_by_name, get_all_triggers
+        from app.db import get_all_triggers, get_trigger_by_name
+
         trigger_v1 = get_trigger_by_name("upsert-bot")
         assert trigger_v1 is not None
         original_id = trigger_v1["id"]
@@ -233,9 +232,7 @@ class TestGitOpsSyncService:
         )
 
         with patch.object(GitOpsSyncService, "_get_local_path", return_value=str(clone_dir)):
-            mock_run.return_value = MagicMock(
-                stdout="sha2\n", stderr="", returncode=0
-            )
+            mock_run.return_value = MagicMock(stdout="sha2\n", stderr="", returncode=0)
             result2 = GitOpsSyncService.sync_repo(repo_id)
 
         assert result2["files_applied"] >= 1
@@ -255,13 +252,14 @@ class TestGitOpsSyncService:
         """Test dry-run returns changes without applying them."""
         repo_id = create_gitops_repo("dry-run-test", "https://example.com/repo.git")
 
-        clone_dir = self._mock_git_clone(tmp_path, {
-            "bot-dry.yaml": _make_trigger_yaml("dry-run-bot", "dry prompt"),
-        })
+        clone_dir = self._mock_git_clone(
+            tmp_path,
+            {
+                "bot-dry.yaml": _make_trigger_yaml("dry-run-bot", "dry prompt"),
+            },
+        )
         with patch.object(GitOpsSyncService, "_get_local_path", return_value=str(clone_dir)):
-            mock_run.return_value = MagicMock(
-                stdout="drysha\n", stderr="", returncode=0
-            )
+            mock_run.return_value = MagicMock(stdout="drysha\n", stderr="", returncode=0)
             result = GitOpsSyncService.sync_repo(repo_id, dry_run=True)
 
         assert result["status"] == "dry_run"
@@ -270,6 +268,7 @@ class TestGitOpsSyncService:
 
         # Trigger should NOT exist
         from app.db import get_trigger_by_name
+
         assert get_trigger_by_name("dry-run-bot") is None
 
     @patch("app.services.gitops_sync_service.subprocess.run")
@@ -278,17 +277,19 @@ class TestGitOpsSyncService:
         repo_id = create_gitops_repo("conflict-test", "https://example.com/repo.git")
 
         # First sync to establish baseline
-        clone_dir = self._mock_git_clone(tmp_path, {
-            "bot-conflict.yaml": _make_trigger_yaml("conflict-bot", "v1 prompt"),
-        })
+        clone_dir = self._mock_git_clone(
+            tmp_path,
+            {
+                "bot-conflict.yaml": _make_trigger_yaml("conflict-bot", "v1 prompt"),
+            },
+        )
         with patch.object(GitOpsSyncService, "_get_local_path", return_value=str(clone_dir)):
-            mock_run.return_value = MagicMock(
-                stdout="sha-v1\n", stderr="", returncode=0
-            )
+            mock_run.return_value = MagicMock(stdout="sha-v1\n", stderr="", returncode=0)
             GitOpsSyncService.sync_repo(repo_id)
 
         # Now change BOTH sides: DB was modified, Git has different content
         from app.db import get_trigger_by_name, update_trigger
+
         trigger = get_trigger_by_name("conflict-bot")
         update_trigger(trigger["id"], prompt_template="db-modified prompt")
 
@@ -299,9 +300,7 @@ class TestGitOpsSyncService:
         )
 
         with patch.object(GitOpsSyncService, "_get_local_path", return_value=str(clone_dir)):
-            mock_run.return_value = MagicMock(
-                stdout="sha-v2\n", stderr="", returncode=0
-            )
+            mock_run.return_value = MagicMock(stdout="sha-v2\n", stderr="", returncode=0)
             result = GitOpsSyncService.sync_repo(repo_id)
 
         assert result["status"] == "success"
@@ -331,13 +330,14 @@ class TestGitOpsSyncService:
         """Test that sync log entries are created after sync."""
         repo_id = create_gitops_repo("log-sync", "https://example.com/repo.git")
 
-        clone_dir = self._mock_git_clone(tmp_path, {
-            "bot-log.yaml": _make_trigger_yaml("log-bot", "log prompt"),
-        })
+        clone_dir = self._mock_git_clone(
+            tmp_path,
+            {
+                "bot-log.yaml": _make_trigger_yaml("log-bot", "log prompt"),
+            },
+        )
         with patch.object(GitOpsSyncService, "_get_local_path", return_value=str(clone_dir)):
-            mock_run.return_value = MagicMock(
-                stdout="logsha\n", stderr="", returncode=0
-            )
+            mock_run.return_value = MagicMock(stdout="logsha\n", stderr="", returncode=0)
             GitOpsSyncService.sync_repo(repo_id)
 
         logs = list_sync_logs(repo_id)

@@ -727,9 +727,7 @@ class TestNodeTypes:
         )
         _create_test_version(client, wf_id, graph)
 
-        with patch(
-            "app.services.orchestration_service.OrchestrationService"
-        ) as mock_orch:
+        with patch("app.services.orchestration_service.OrchestrationService") as mock_orch:
             mock_orch.execute_with_fallback.return_value = mock_result
 
             resp = client.post(f"/admin/workflows/{wf_id}/run")
@@ -926,9 +924,7 @@ class TestExpressionEvaluator:
         assert evaluate_condition("pr.draft == False", ctx) is True
 
         # 4. pr.file_count >= 10 and pr.lines_changed < 1000
-        assert (
-            evaluate_condition("pr.file_count >= 10 and pr.lines_changed < 1000", ctx) is True
-        )
+        assert evaluate_condition("pr.file_count >= 10 and pr.lines_changed < 1000", ctx) is True
 
         # 5. "security" in pr.labels
         assert evaluate_condition('"security" in pr.labels', ctx) is True
@@ -1418,17 +1414,13 @@ class TestAgentNodeFallback:
             execution_id="exec-123",
         )
 
-        with patch(
-            "app.services.orchestration_service.OrchestrationService"
-        ) as mock_orch:
+        with patch("app.services.orchestration_service.OrchestrationService") as mock_orch:
             mock_orch.execute_with_fallback.return_value = mock_result
 
             input_msg = WorkflowMessage(text="test message")
             node_config = {"agent_id": "agent-test01"}
 
-            output = WorkflowExecutionService._execute_agent_node(
-                "node1", node_config, input_msg
-            )
+            output = WorkflowExecutionService._execute_agent_node("node1", node_config, input_msg)
 
             mock_orch.execute_with_fallback.assert_called_once()
             call_args = mock_orch.execute_with_fallback.call_args
@@ -1446,9 +1438,7 @@ class TestAgentNodeFallback:
             detail="all backends rate-limited",
         )
 
-        with patch(
-            "app.services.orchestration_service.OrchestrationService"
-        ) as mock_orch:
+        with patch("app.services.orchestration_service.OrchestrationService") as mock_orch:
             mock_orch.execute_with_fallback.return_value = mock_result
 
             input_msg = WorkflowMessage(text="test")
@@ -1466,9 +1456,7 @@ class TestAgentNodeFallback:
             execution_id="exec-routed",
         )
 
-        with patch(
-            "app.services.orchestration_service.OrchestrationService"
-        ) as mock_orch:
+        with patch("app.services.orchestration_service.OrchestrationService") as mock_orch:
             mock_orch.execute_with_fallback.return_value = mock_result
 
             input_msg = WorkflowMessage(
@@ -1506,9 +1494,7 @@ class TestAgentNodeFallback:
             execution_id="exec-large",
         )
 
-        with patch(
-            "app.services.orchestration_service.OrchestrationService"
-        ) as mock_orch:
+        with patch("app.services.orchestration_service.OrchestrationService") as mock_orch:
             mock_orch.execute_with_fallback.return_value = mock_result
 
             input_msg = WorkflowMessage(
@@ -1791,9 +1777,7 @@ class TestWorkflowModels:
 
     def test_fallback_chain_entry(self):
         """FallbackChainEntry model validates correctly."""
-        entry = FallbackChainEntry(
-            backend_id="b1", account_id="a1", priority=1, tier="cheap"
-        )
+        entry = FallbackChainEntry(backend_id="b1", account_id="a1", priority=1, tier="cheap")
         assert entry.tier == "cheap"
         assert entry.priority == 1
 

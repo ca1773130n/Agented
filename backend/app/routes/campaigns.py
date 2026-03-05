@@ -12,10 +12,8 @@ from ..db.campaigns import (
 )
 from ..models.campaign import (
     CampaignCreate,
-    CampaignExecutionResponse,
     CampaignListQuery,
     CampaignPath,
-    CampaignResponse,
     TriggerCampaignPath,
 )
 from ..services.campaign_service import get_campaign_results, start_campaign

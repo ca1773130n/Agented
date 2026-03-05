@@ -309,7 +309,10 @@ def proxy_callback_forward():
             follow_redirects=True,
         )
         if resp.status_code < 400:
-            return {"status": "completed", "message": "Callback forwarded successfully"}, HTTPStatus.OK
+            return {
+                "status": "completed",
+                "message": "Callback forwarded successfully",
+            }, HTTPStatus.OK
         return {
             "status": "error",
             "message": f"Callback server returned {resp.status_code}",

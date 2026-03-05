@@ -19,9 +19,7 @@ from ..services.config_export_service import (
 )
 
 tag = Tag(name="config", description="Trigger configuration export/import")
-config_export_bp = APIBlueprint(
-    "config_export", __name__, url_prefix="/admin", abp_tags=[tag]
-)
+config_export_bp = APIBlueprint("config_export", __name__, url_prefix="/admin", abp_tags=[tag])
 
 
 class TriggerIdPath(BaseModel):

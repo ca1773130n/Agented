@@ -98,9 +98,7 @@ class NotificationService:
             )
 
     @staticmethod
-    def create_tickets_from_findings(
-        trigger_id: str, findings: list
-    ) -> list:
+    def create_tickets_from_findings(trigger_id: str, findings: list) -> list:
         """Create tickets from findings using ticket-capable integrations (JIRA, Linear).
 
         Args:
@@ -111,9 +109,7 @@ class NotificationService:
             List of created ticket IDs/URLs.
         """
         integrations = db_integrations.list_integrations_for_trigger(trigger_id)
-        ticket_integrations = [
-            i for i in integrations if i["type"] in ("jira", "linear")
-        ]
+        ticket_integrations = [i for i in integrations if i["type"] in ("jira", "linear")]
 
         if not ticket_integrations:
             return []

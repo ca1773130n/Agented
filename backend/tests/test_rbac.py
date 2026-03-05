@@ -8,24 +8,20 @@ Covers:
 - DB CRUD operations for user roles
 """
 
-import pytest
-
 from app.db.rbac import (
+    count_user_roles,
     create_user_role,
     delete_user_role,
     get_role_for_api_key,
     get_user_role,
     list_user_roles,
     update_user_role,
-    count_user_roles,
 )
+from app.services.audit_log_service import AuditLogService
 from app.services.rbac_service import (
     ROLE_PERMISSIONS,
     has_permission,
-    require_role,
 )
-from app.services.audit_log_service import AuditLogService
-
 
 # =============================================================================
 # Permission matrix tests (16 combinations)
@@ -214,7 +210,7 @@ class TestRequireRoleDecorator:
         # Record count before denial
         from app.services.audit_log_service import _recent_events
 
-        initial_count = len(_recent_events)
+        len(_recent_events)
 
         client.get(
             "/admin/rbac/roles",

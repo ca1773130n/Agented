@@ -76,9 +76,7 @@ def export_all_triggers(format: str = "yaml") -> str:
         return yaml.dump_all(configs, default_flow_style=False, sort_keys=False)
 
 
-def import_trigger(
-    config_str: str, format: str = "yaml", upsert: bool = False
-) -> tuple[str, str]:
+def import_trigger(config_str: str, format: str = "yaml", upsert: bool = False) -> tuple[str, str]:
     """Import a trigger from a YAML or JSON config string.
 
     Args:

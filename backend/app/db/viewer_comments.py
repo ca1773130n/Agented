@@ -6,8 +6,8 @@ Persisted to SQLite for durability beyond SSE sessions.
 
 import logging
 import random
-import string
 import sqlite3
+import string
 from typing import Optional
 
 from .connection import get_connection
@@ -73,9 +73,7 @@ def get_comments_for_execution(execution_id: str) -> list[dict]:
 def get_comment(comment_id: str) -> Optional[dict]:
     """Get a single comment by ID."""
     with get_connection() as conn:
-        cursor = conn.execute(
-            "SELECT * FROM viewer_comments WHERE id = ?", (comment_id,)
-        )
+        cursor = conn.execute("SELECT * FROM viewer_comments WHERE id = ?", (comment_id,))
         row = cursor.fetchone()
         return dict(row) if row else None
 
@@ -83,9 +81,7 @@ def get_comment(comment_id: str) -> Optional[dict]:
 def delete_comment(comment_id: str) -> bool:
     """Delete a comment by ID. Returns True if deleted."""
     with get_connection() as conn:
-        cursor = conn.execute(
-            "DELETE FROM viewer_comments WHERE id = ?", (comment_id,)
-        )
+        cursor = conn.execute("DELETE FROM viewer_comments WHERE id = ?", (comment_id,))
         conn.commit()
         return cursor.rowcount > 0
 

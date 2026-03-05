@@ -43,9 +43,7 @@ class BranchResponse(BaseModel):
     branch_id: str = Field(..., description="Unique branch identifier")
     conversation_id: str = Field(..., description="Parent conversation ID")
     parent_branch_id: Optional[str] = Field(None, description="Parent branch ID if forked")
-    fork_message_id: Optional[str] = Field(
-        None, description="Message ID at the fork point"
-    )
+    fork_message_id: Optional[str] = Field(None, description="Message ID at the fork point")
     name: Optional[str] = Field(None, description="Branch name")
     status: str = Field("active", description="Branch status")
     created_at: str = Field(..., description="Creation timestamp")
@@ -57,9 +55,7 @@ class BranchMessage(BaseModel):
     id: str = Field(..., description="Unique message identifier")
     conversation_id: str = Field(..., description="Parent conversation ID")
     branch_id: str = Field(..., description="Branch this message belongs to")
-    parent_message_id: Optional[str] = Field(
-        None, description="Parent message ID in the tree"
-    )
+    parent_message_id: Optional[str] = Field(None, description="Parent message ID in the tree")
     message_index: int = Field(..., description="Order index within the branch")
     role: str = Field(..., description="Message role (user, assistant, system)")
     content: str = Field(..., description="Message content")

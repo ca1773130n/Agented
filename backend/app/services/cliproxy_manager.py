@@ -222,11 +222,11 @@ class CLIProxyManager:
           - device_code: (codex only) The device code to enter
           - output: Initial output lines from the process
         """
-        import tempfile
 
         config_path = str(_GLOBAL_CONFIG)
-        env = {k: v for k, v in os.environ.items()
-               if k not in ("CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT")}
+        env = {
+            k: v for k, v in os.environ.items() if k not in ("CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT")
+        }
 
         # Set config dir so cliproxyapi uses the right account credentials
         if config_dir:
@@ -243,9 +243,7 @@ class CLIProxyManager:
             return cls._start_claude_login(config_path, env)
 
     @classmethod
-    def _start_claude_login(
-        cls, config_path: str, env: dict
-    ) -> tuple[subprocess.Popen, dict]:
+    def _start_claude_login(cls, config_path: str, env: dict) -> tuple[subprocess.Popen, dict]:
         """Start ``cliproxyapi --claude-login`` with fake open intercept."""
         import tempfile
 
@@ -274,7 +272,9 @@ class CLIProxyManager:
 
         logger.info(
             "CLIProxy claude login started: pid=%s tmpdir=%s url_file=%s",
-            proc.pid, tmpdir, url_file,
+            proc.pid,
+            tmpdir,
+            url_file,
         )
 
         # Poll for the URL file to appear (written by our fake open script).
@@ -308,7 +308,8 @@ class CLIProxyManager:
                     pass
                 logger.warning(
                     "CLIProxy login process exited early: rc=%s stderr=%s",
-                    rc, stderr_out[:500],
+                    rc,
+                    stderr_out[:500],
                 )
                 break
             time.sleep(0.2)
@@ -317,6 +318,7 @@ class CLIProxyManager:
         if not oauth_url:
             try:
                 import select as sel
+
                 for fd in [proc.stdout, proc.stderr]:
                     if fd is None:
                         continue
@@ -328,8 +330,10 @@ class CLIProxyManager:
                         url_match = re.search(r"(https?://\S+)", line)
                         if url_match:
                             candidate = url_match.group(1)
-                            if any(kw in candidate.lower() for kw in
-                                   ("claude.ai", "anthropic", "oauth", "authorize")):
+                            if any(
+                                kw in candidate.lower()
+                                for kw in ("claude.ai", "anthropic", "oauth", "authorize")
+                            ):
                                 oauth_url = candidate
                                 break
                     if oauth_url:
@@ -341,9 +345,7 @@ class CLIProxyManager:
         return proc, {"url": oauth_url}
 
     @classmethod
-    def _start_codex_login(
-        cls, config_path: str, env: dict
-    ) -> tuple[subprocess.Popen, dict]:
+    def _start_codex_login(cls, config_path: str, env: dict) -> tuple[subprocess.Popen, dict]:
         """Start ``cliproxyapi -codex-device-login`` and capture device URL + code.
 
         Device-code flow: cliproxyapi prints a URL and an 8-char device code
@@ -373,6 +375,7 @@ class CLIProxyManager:
                 if proc.poll() is not None:
                     break
                 import select as sel
+
                 ready, _, _ = sel.select([proc.stdout], [], [], 0.5)
                 if not ready:
                     continue
@@ -388,8 +391,9 @@ class CLIProxyManager:
                     url_match = re.search(r"(https?://\S+)", line)
                     if url_match:
                         candidate = url_match.group(1)
-                        if any(kw in candidate.lower() for kw in
-                               ("openai", "codex", "auth", "device")):
+                        if any(
+                            kw in candidate.lower() for kw in ("openai", "codex", "auth", "device")
+                        ):
                             device_url = candidate
 
                 # Look for device code (e.g. "A8AZ-S5ZA3")
@@ -406,7 +410,8 @@ class CLIProxyManager:
 
         logger.info(
             "CLIProxy codex login: device_url=%s device_code=%s",
-            device_url, device_code,
+            device_url,
+            device_code,
         )
 
         # Start background thread to drain stdout/stderr so the process
@@ -420,6 +425,7 @@ class CLIProxyManager:
                         logger.debug("CLIProxy codex drain: %s", line.rstrip())
             except Exception:
                 pass
+
         threading.Thread(target=_drain, daemon=True).start()
 
         return proc, {

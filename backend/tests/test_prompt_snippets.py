@@ -1,6 +1,6 @@
 """Tests for prompt snippet CRUD and resolution."""
 
-from app.db.prompt_snippets import add_snippet, get_all_snippets, get_snippet, get_snippet_by_name
+from app.db.prompt_snippets import add_snippet
 from app.services.prompt_snippet_service import SnippetService
 
 

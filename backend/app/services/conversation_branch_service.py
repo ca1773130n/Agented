@@ -63,8 +63,7 @@ class ConversationBranchService:
 
         if fork_message_index < 0 or fork_message_index >= len(messages):
             raise ValueError(
-                f"fork_message_index {fork_message_index} out of bounds "
-                f"(0 to {len(messages) - 1})"
+                f"fork_message_index {fork_message_index} out of bounds (0 to {len(messages) - 1})"
             )
 
         # Create the branch record

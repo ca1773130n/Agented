@@ -2,7 +2,6 @@
 
 from http import HTTPStatus
 
-from flask import request
 from flask_openapi3 import APIBlueprint, Tag
 
 from ..db.rbac import (

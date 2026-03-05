@@ -10,7 +10,7 @@ from typing import Optional, Tuple
 from app.db import integrations as db_integrations
 from app.models.integration import IntegrationCreate
 from app.services.audit_log_service import AuditLogService
-from app.services.integrations import get_adapter, IntegrationAdapter
+from app.services.integrations import IntegrationAdapter, get_adapter
 
 logger = logging.getLogger(__name__)
 
@@ -41,8 +41,10 @@ class IntegrationConfigService:
         if data.secret_name:
             try:
                 from app.services.secret_vault_service import SecretVaultService
+
                 if SecretVaultService.is_configured():
                     from app.db import secrets as db_secrets
+
                     secret = db_secrets.get_secret_by_name(data.secret_name)
                     if not secret:
                         raise ValueError(f"Secret '{data.secret_name}' not found in vault")
@@ -97,9 +99,12 @@ class IntegrationConfigService:
         if secret_name:
             try:
                 from app.services.secret_vault_service import SecretVaultService
+
                 if SecretVaultService.is_configured():
                     import json
+
                     from app.db import secrets as db_secrets
+
                     secret_record = db_secrets.get_secret_by_name(secret_name)
                     if secret_record:
                         plaintext = SecretVaultService.decrypt(

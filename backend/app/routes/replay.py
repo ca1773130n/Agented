@@ -82,9 +82,7 @@ def get_comparison_diff(path: ComparisonPath):
     replay_id = comparison["replay_execution_id"]
 
     # Check if either execution is still running
-    if ExecutionLogService.is_running(original_id) or ExecutionLogService.is_running(
-        replay_id
-    ):
+    if ExecutionLogService.is_running(original_id) or ExecutionLogService.is_running(replay_id):
         return {
             "error": "Cannot diff: one or both executions are still running"
         }, HTTPStatus.CONFLICT
@@ -105,9 +103,7 @@ def preview_diff_context():
     """
     body = request.get_json(silent=True)
     if not body or "diff_text" not in body:
-        return {
-            "error": "Missing required field: diff_text"
-        }, HTTPStatus.BAD_REQUEST
+        return {"error": "Missing required field: diff_text"}, HTTPStatus.BAD_REQUEST
 
     diff_text = body["diff_text"]
     context_lines = body.get("context_lines")

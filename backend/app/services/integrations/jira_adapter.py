@@ -24,9 +24,7 @@ SEVERITY_TO_PRIORITY = {
 class JiraAdapter(IntegrationAdapter):
     """JIRA integration via the jira Python library."""
 
-    def __init__(
-        self, server: str = "", email: str = "", api_token: str = "", **kwargs
-    ):
+    def __init__(self, server: str = "", email: str = "", api_token: str = "", **kwargs):
         self.server = server
         self.email = email
         self.api_token = api_token
@@ -67,7 +65,7 @@ class JiraAdapter(IntegrationAdapter):
         priority = SEVERITY_TO_PRIORITY.get(severity, "Medium")
         title = finding.get("title", "Agented Finding")
         description = finding.get("description", "")
-        source = finding.get("source", "agented")
+        finding.get("source", "agented")
 
         issue_dict = {
             "project": {"key": project_key},

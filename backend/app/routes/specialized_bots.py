@@ -13,6 +13,7 @@ specialized_bots_bp = APIBlueprint(
     "specialized_bots", __name__, url_prefix="/admin", abp_tags=[tag]
 )
 
+
 # Map prompt_template commands to skill slugs
 # e.g. "/vulnerability-scan {paths}" -> "vulnerability-scan"
 def _skill_slug(prompt_template: str) -> str:

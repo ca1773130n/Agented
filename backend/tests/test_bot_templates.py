@@ -1,6 +1,6 @@
 """Tests for bot template CRUD and deploy operations."""
 
-from app.db.bot_templates import CURATED_BOT_TEMPLATES, get_all_templates, get_template
+from app.db.bot_templates import get_all_templates
 from app.db.seeds import seed_bot_templates
 
 
@@ -15,8 +15,13 @@ def test_curated_templates_seeded(isolated_db):
     templates = get_all_templates()
     assert len(templates) == 5
     slugs = {t["slug"] for t in templates}
-    expected = {"pr-reviewer", "dependency-updater", "security-scanner",
-                "changelog-generator", "test-writer"}
+    expected = {
+        "pr-reviewer",
+        "dependency-updater",
+        "security-scanner",
+        "changelog-generator",
+        "test-writer",
+    }
     assert slugs == expected
 
 
@@ -55,6 +60,7 @@ def test_deploy_template_creates_trigger(client):
 
     # Verify trigger exists
     from app.db.triggers import get_trigger
+
     trigger = get_trigger(trigger_id)
     assert trigger is not None
     assert trigger["name"] is not None
@@ -75,6 +81,7 @@ def test_deploy_same_template_twice_creates_unique_name(client):
     data2 = resp2.get_json()
 
     from app.db.triggers import get_trigger
+
     trigger1 = get_trigger(data1["trigger_id"])
     trigger2 = get_trigger(data2["trigger_id"])
 

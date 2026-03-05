@@ -140,7 +140,9 @@ def install_cli(backend_type: str, timeout: int = 180) -> dict:
             env=env,
         )
         if result.returncode != 0:
-            error = result.stderr.strip() or result.stdout.strip() or f"Exit code {result.returncode}"
+            error = (
+                result.stderr.strip() or result.stdout.strip() or f"Exit code {result.returncode}"
+            )
             return {"success": False, "version": None, "error": error}
     except subprocess.TimeoutExpired:
         return {"success": False, "version": None, "error": f"Install timed out after {timeout}s"}
@@ -154,7 +156,11 @@ def install_cli(backend_type: str, timeout: int = 180) -> dict:
     if installed:
         logger.info("Installed %s CLI: %s", backend_type, version)
         return {"success": True, "version": version, "error": None}
-    return {"success": False, "version": None, "error": "Install succeeded but CLI not found on PATH"}
+    return {
+        "success": False,
+        "version": None,
+        "error": "Install succeeded but CLI not found on PATH",
+    }
 
 
 def get_all_backends_status() -> list:

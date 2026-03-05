@@ -239,9 +239,7 @@ def get_effectiveness_over_time(
                 entry = dict(row)
                 total = entry["total_reviews"]
                 accepted = entry["accepted"]
-                entry["acceptance_rate"] = (
-                    round((accepted / total) * 100, 1) if total > 0 else 0.0
-                )
+                entry["acceptance_rate"] = round((accepted / total) * 100, 1) if total > 0 else 0.0
                 results.append(entry)
             return results
         except sqlite3.Error as e:

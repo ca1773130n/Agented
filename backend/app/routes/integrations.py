@@ -24,9 +24,7 @@ logger = logging.getLogger(__name__)
 tag = Tag(name="integrations", description="Integration management and notifications")
 
 # Admin blueprint for CRUD operations
-integrations_bp = APIBlueprint(
-    "integrations", __name__, url_prefix="/admin", abp_tags=[tag]
-)
+integrations_bp = APIBlueprint("integrations", __name__, url_prefix="/admin", abp_tags=[tag])
 
 # API blueprint for public webhook endpoints (Slack slash commands)
 slack_command_tag = Tag(name="slack-commands", description="Slack slash command webhook")
@@ -180,19 +178,24 @@ def slack_slash_command():
     # Expected: "run <trigger-name> on <target>"
     trigger_name, target, parse_error = _parse_run_command(text)
     if parse_error:
-        return jsonify({
-            "response_type": "ephemeral",
-            "text": parse_error,
-        }), 200
+        return jsonify(
+            {
+                "response_type": "ephemeral",
+                "text": parse_error,
+            }
+        ), 200
 
     # --- Look up trigger ---
     from ..db import triggers as db_triggers
+
     trigger = db_triggers.get_trigger_by_name(trigger_name)
     if not trigger:
-        return jsonify({
-            "response_type": "ephemeral",
-            "text": f"Unknown trigger: '{trigger_name}'. Use `/agented run <trigger-name> on <target>`.",
-        }), 200
+        return jsonify(
+            {
+                "response_type": "ephemeral",
+                "text": f"Unknown trigger: '{trigger_name}'. Use `/agented run <trigger-name> on <target>`.",
+            }
+        ), 200
 
     # --- Dispatch in background ---
     thread = threading.Thread(
@@ -203,10 +206,12 @@ def slack_slash_command():
     thread.start()
 
     # --- Immediate response (within 3 seconds) ---
-    return jsonify({
-        "response_type": "ephemeral",
-        "text": f"Starting {trigger_name} on {target}...",
-    }), 200
+    return jsonify(
+        {
+            "response_type": "ephemeral",
+            "text": f"Starting {trigger_name} on {target}...",
+        }
+    ), 200
 
 
 def _parse_run_command(text: str):
@@ -227,7 +232,7 @@ def _parse_run_command(text: str):
         return None, None, "Usage: `/agented run <trigger-name> on <target>`"
 
     trigger_name = " ".join(parts[1:on_idx])
-    target = " ".join(parts[on_idx + 1:])
+    target = " ".join(parts[on_idx + 1 :])
 
     if not trigger_name or not target:
         return None, None, "Usage: `/agented run <trigger-name> on <target>`"
@@ -239,8 +244,10 @@ def _get_slack_signing_secret() -> str:
     """Retrieve the Slack signing secret from the secrets vault."""
     try:
         from ..services.secret_vault_service import SecretVaultService
+
         if SecretVaultService.is_configured():
             from ..db import secrets as db_secrets
+
             secret = db_secrets.get_secret_by_name("slack_signing_secret")
             if secret:
                 return SecretVaultService.decrypt(
@@ -253,14 +260,14 @@ def _get_slack_signing_secret() -> str:
 
     # Fallback to environment variable
     import os
+
     return os.environ.get("SLACK_SIGNING_SECRET", "")
 
 
-def _dispatch_slash_command_execution(
-    trigger: dict, target: str, response_url: str, user_id: str
-):
+def _dispatch_slash_command_execution(trigger: dict, target: str, response_url: str, user_id: str):
     """Run the trigger execution in a background thread and post results."""
     import httpx
+
     from ..services.execution_service import ExecutionService
 
     trigger_name = trigger["name"]

@@ -7,14 +7,11 @@ All external API calls are mocked.
 import hashlib
 import hmac
 import time
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 from urllib.parse import urlencode
 
-import pytest
-
-from app.services.integrations.slack_adapter import SlackAdapter
 from app.routes.integrations import _parse_run_command
-
+from app.services.integrations.slack_adapter import SlackAdapter
 
 # =============================================================================
 # Signature verification tests
@@ -42,18 +39,17 @@ class TestSlackSignatureVerification:
         body = "command=/agented&text=run+security-audit+on+payments"
         sig = self._make_signature(ts, body)
 
-        assert SlackAdapter.verify_slack_signature(
-            self.SIGNING_SECRET, ts, body, sig
-        ) is True
+        assert SlackAdapter.verify_slack_signature(self.SIGNING_SECRET, ts, body, sig) is True
 
     def test_invalid_signature_rejected(self):
         """A wrong signature is rejected."""
         ts = str(int(time.time()))
         body = "command=/agented&text=test"
 
-        assert SlackAdapter.verify_slack_signature(
-            self.SIGNING_SECRET, ts, body, "v0=bad_signature"
-        ) is False
+        assert (
+            SlackAdapter.verify_slack_signature(self.SIGNING_SECRET, ts, body, "v0=bad_signature")
+            is False
+        )
 
     def test_expired_timestamp_rejected(self):
         """A timestamp older than 5 minutes is rejected (replay protection)."""
@@ -61,21 +57,22 @@ class TestSlackSignatureVerification:
         body = "command=/agented&text=test"
         sig = self._make_signature(old_ts, body)
 
-        assert SlackAdapter.verify_slack_signature(
-            self.SIGNING_SECRET, old_ts, body, sig
-        ) is False
+        assert SlackAdapter.verify_slack_signature(self.SIGNING_SECRET, old_ts, body, sig) is False
 
     def test_invalid_timestamp_format(self):
         """Non-numeric timestamp is rejected."""
-        assert SlackAdapter.verify_slack_signature(
-            self.SIGNING_SECRET, "not-a-number", "body", "v0=sig"
-        ) is False
+        assert (
+            SlackAdapter.verify_slack_signature(
+                self.SIGNING_SECRET, "not-a-number", "body", "v0=sig"
+            )
+            is False
+        )
 
     def test_empty_timestamp_rejected(self):
         """Empty timestamp is rejected."""
-        assert SlackAdapter.verify_slack_signature(
-            self.SIGNING_SECRET, "", "body", "v0=sig"
-        ) is False
+        assert (
+            SlackAdapter.verify_slack_signature(self.SIGNING_SECRET, "", "body", "v0=sig") is False
+        )
 
 
 # =============================================================================
@@ -132,13 +129,15 @@ class TestSlashCommandEndpoint:
     def _build_request(self, text="run security-audit on payments", timestamp=None):
         """Build a signed Slack slash command request."""
         ts = timestamp or str(int(time.time()))
-        body = urlencode({
-            "command": "/agented",
-            "text": text,
-            "user_id": "U12345",
-            "channel_id": "C12345",
-            "response_url": "https://hooks.slack.com/response/test",
-        })
+        body = urlencode(
+            {
+                "command": "/agented",
+                "text": text,
+                "user_id": "U12345",
+                "channel_id": "C12345",
+                "response_url": "https://hooks.slack.com/response/test",
+            }
+        )
         sig_basestring = f"v0:{ts}:{body}"
         computed = hmac.new(
             self.SIGNING_SECRET.encode(),

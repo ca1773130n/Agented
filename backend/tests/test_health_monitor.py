@@ -5,12 +5,12 @@ Uses isolated_db fixture for real SQLite data -- no mocking of the DB layer.
 
 from datetime import datetime, timedelta, timezone
 
-from app.db.health_alerts import create_health_alert, get_recent_alerts
+from app.db.health_alerts import get_recent_alerts
 from app.db.triggers import (
+    add_pr_review,
     add_trigger,
     create_execution_log,
     update_execution_log,
-    add_pr_review,
     update_pr_review,
 )
 from app.services.health_monitor_service import HealthMonitorService
@@ -32,11 +32,11 @@ def _create_execution(trigger_id, status="completed", duration_ms=60000, offset_
     import uuid
 
     exec_id = f"exec-{uuid.uuid4().hex[:8]}"
-    started = (
-        datetime.now(timezone.utc) - timedelta(hours=offset_hours)
-    ).isoformat()
+    started = (datetime.now(timezone.utc) - timedelta(hours=offset_hours)).isoformat()
     finished = (
-        datetime.now(timezone.utc) - timedelta(hours=offset_hours) + timedelta(milliseconds=duration_ms)
+        datetime.now(timezone.utc)
+        - timedelta(hours=offset_hours)
+        + timedelta(milliseconds=duration_ms)
     ).isoformat()
 
     create_execution_log(
@@ -102,9 +102,7 @@ def test_slow_execution_detection(isolated_db):
 
     # Create 10 executions with ~5 minute average (300000 ms)
     for i in range(10):
-        _create_execution(
-            trigger_id, status="completed", duration_ms=300000, offset_hours=i + 1
-        )
+        _create_execution(trigger_id, status="completed", duration_ms=300000, offset_hours=i + 1)
 
     # Create one very slow recent execution: 20 minutes (1200000 ms) = 4x average
     _create_execution(trigger_id, status="completed", duration_ms=1200000, offset_hours=0)
