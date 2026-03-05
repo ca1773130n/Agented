@@ -2,8 +2,8 @@
 
 **Milestone:** v0.1.0 -- Production Hardening (active) / v0.2.0 -- Miscellaneous
 **Current Phase:** Phase 8 (autopilot: executing)
-**Current Plan:** 03 (completed)
-**Status:** phase-verified
+**Current Plan:** 04
+**Status:** executing
 
 **Progress:** [███░░░░░░░] 33%
 
@@ -20,7 +20,7 @@
 | Phase | Name | Status | Verification |
 |-------|------|--------|--------------|
 | 7 | Workflow Automation & Pipeline Intelligence | Complete (3/3) — Verified | proxy |
-| 8 | Execution Intelligence & Replay | In Progress (2/5) | proxy |
+| 8 | Execution Intelligence & Replay | In Progress (3/5) | proxy |
 | 9 | Bot Authoring & Template Ecosystem | Pending | proxy |
 | 10 | Analytics & Monitoring Dashboards | In Progress (4/5) | proxy |
 | 11 | Enterprise Integrations & Governance | Pending | proxy |
@@ -76,6 +76,7 @@
 - [Phase 8]: Explicit max_chars overrides SIZE_THRESHOLD for fine-grained chunking control
 - [Phase 8]: Chunk overlap capped at min(OVERLAP_CHARS, chunk_size/5) for proportional scaling
 - [Phase 8]: Background chunk dispatch uses Semaphore(3) per 08-RESEARCH.md anti-pattern guidance
+- [Phase 8]: Viewer presence ephemeral in-memory; comments persist to SQLite with line-number anchoring
 
 ## Blockers
 
@@ -105,8 +106,9 @@ None -- no phases have deferred verification level in this milestone.
 | 16 | 05 | ~15min | 2 | 17 |
 | 08 | 01 | 15min | 2 | 12 |
 | 08 | 02 | 17min | 3 | 11 |
+| 08 | 03 | 10min | 2 | 9 |
 
 ## Session Log
 
 - **Last session:** 2026-03-05
-- **Stopped at:** Completed 08-02-PLAN.md (smart chunking, conversation branching, chunked execution pipeline)
+- **Stopped at:** Completed 08-03-PLAN.md (collaborative viewer service, presence tracking, inline comments)
