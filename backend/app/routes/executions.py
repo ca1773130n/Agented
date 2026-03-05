@@ -8,7 +8,8 @@ from flask_openapi3 import APIBlueprint, Tag
 from pydantic import BaseModel, Field
 
 from ..database import get_trigger
-from ..models.common import PaginationQuery
+from ..db.executions import count_filtered_executions, get_filtered_executions
+from ..models.common import ExecutionFilterQuery, PaginationQuery
 from ..services.execution_log_service import ExecutionLogService
 from ..services.execution_queue_service import ExecutionQueueService
 
@@ -25,20 +26,24 @@ class ExecutionPath(BaseModel):
 
 
 @executions_bp.get("/triggers/<trigger_id>/executions")
-def list_trigger_executions(path: TriggerPath, query: PaginationQuery):
-    """List execution history for a trigger."""
+def list_trigger_executions(path: TriggerPath, query: ExecutionFilterQuery):
+    """List execution history for a trigger with optional filters."""
     trigger = get_trigger(path.trigger_id)
     if not trigger:
         return {"error": "Trigger not found"}, HTTPStatus.NOT_FOUND
 
     limit = min(query.limit or 50, 500)
     offset = query.offset or 0
-    status = request.args.get("status", None)
 
-    executions = ExecutionLogService.get_history(
-        trigger_id=path.trigger_id, limit=limit, offset=offset, status=status
+    executions = get_filtered_executions(
+        limit=limit, offset=offset,
+        status=query.status, trigger_id=path.trigger_id,
+        date_from=query.date_from, date_to=query.date_to, q=query.q,
     )
-    total_count = ExecutionLogService.count_history(trigger_id=path.trigger_id, status=status)
+    total_count = count_filtered_executions(
+        status=query.status, trigger_id=path.trigger_id,
+        date_from=query.date_from, date_to=query.date_to, q=query.q,
+    )
 
     # Get currently running execution if any
     running = ExecutionLogService.get_running_for_trigger(path.trigger_id)
@@ -52,13 +57,20 @@ def list_trigger_executions(path: TriggerPath, query: PaginationQuery):
 
 
 @executions_bp.get("/executions")
-def list_all_executions(query: PaginationQuery):
-    """List all execution history across all triggers."""
+def list_all_executions(query: ExecutionFilterQuery):
+    """List all execution history across all triggers with optional filters."""
     limit = min(query.limit or 100, 500)
     offset = query.offset or 0
 
-    executions = ExecutionLogService.get_history(limit=limit, offset=offset)
-    total_count = ExecutionLogService.count_history()
+    executions = get_filtered_executions(
+        limit=limit, offset=offset,
+        status=query.status, trigger_id=query.trigger_id,
+        date_from=query.date_from, date_to=query.date_to, q=query.q,
+    )
+    total_count = count_filtered_executions(
+        status=query.status, trigger_id=query.trigger_id,
+        date_from=query.date_from, date_to=query.date_to, q=query.q,
+    )
 
     return {
         "executions": executions,

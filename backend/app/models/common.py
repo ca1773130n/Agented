@@ -57,3 +57,15 @@ class PaginationQuery(BaseModel):
 
     limit: Optional[int] = Field(None, ge=1, le=500, description="Max records to return")
     offset: Optional[int] = Field(None, ge=0, description="Number of records to skip")
+
+
+class ExecutionFilterQuery(PaginationQuery):
+    """Query parameters for filtering execution history (API-04)."""
+
+    status: Optional[str] = Field(
+        None, description="Filter by status (running, completed, failed, cancelled)"
+    )
+    trigger_id: Optional[str] = Field(None, description="Filter by trigger ID")
+    date_from: Optional[str] = Field(None, description="Start date (ISO 8601, e.g. 2026-03-01)")
+    date_to: Optional[str] = Field(None, description="End date (ISO 8601, e.g. 2026-03-31)")
+    q: Optional[str] = Field(None, description="Text search over execution output/logs")
