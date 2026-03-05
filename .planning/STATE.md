@@ -1,9 +1,9 @@
 # GRD Execution State
 
 **Milestone:** v0.1.0 -- Production Hardening (active) / v0.2.0 -- Miscellaneous
-**Current Phase:** Phase 8 (autopilot: executing)
-**Current Plan:** 06
-**Status:** executing
+**Current Phase:** Phase 8 (complete)
+**Current Plan:** 05 (completed)
+**Status:** phase-verified
 
 **Progress:** [███░░░░░░░] 33%
 
@@ -11,8 +11,8 @@
 
 ## Position
 
-- **Last completed:** v0.1.0 Phase 5 (observability and process reliability) -- verified passed
-- **Next up:** v0.1.0 Phase 4 (Security Hardening) or v0.2.0 Phase 8
+- **Last completed:** v0.2.0 Phase 8 (Execution Intelligence & Replay) -- verified passed
+- **Next up:** v0.2.0 Phase 9 (Bot Authoring & Template Ecosystem)
 - **Blocked by:** Nothing
 
 ## Phase Summary
@@ -20,7 +20,7 @@
 | Phase | Name | Status | Verification |
 |-------|------|--------|--------------|
 | 7 | Workflow Automation & Pipeline Intelligence | Complete (3/3) — Verified | proxy |
-| 8 | Execution Intelligence & Replay | Complete (5/5) | proxy |
+| 8 | Execution Intelligence & Replay | Complete (5/5) — Verified | proxy |
 | 9 | Bot Authoring & Template Ecosystem | Pending | proxy |
 | 10 | Analytics & Monitoring Dashboards | In Progress (4/5) | proxy |
 | 11 | Enterprise Integrations & Governance | Pending | proxy |
