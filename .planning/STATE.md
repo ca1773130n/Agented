@@ -11,8 +11,8 @@
 
 ## Position
 
-- **Last completed:** v0.1.0 Phase 5 (observability and process reliability) -- verified passed
-- **Next up:** v0.1.0 Phase 4 (Security Hardening) or v0.2.0 Phase 8
+- **Last completed:** v0.2.0 Phase 8 (Execution Intelligence & Replay) -- verified passed
+- **Next up:** v0.2.0 Phase 9 (Bot Authoring & Template Ecosystem)
 - **Blocked by:** Nothing
 
 ## Phase Summary
@@ -20,7 +20,7 @@
 | Phase | Name | Status | Verification |
 |-------|------|--------|--------------|
 | 7 | Workflow Automation & Pipeline Intelligence | Complete (3/3) — Verified | proxy |
-| 8 | Execution Intelligence & Replay | Pending | proxy |
+| 8 | Execution Intelligence & Replay | Complete (5/5) — Verified | proxy |
 | 9 | Bot Authoring & Template Ecosystem | Pending | proxy |
 | 10 | Analytics & Monitoring Dashboards | Complete (5/5) | proxy |
 | 11 | Enterprise Integrations & Governance | Pending | proxy |
@@ -74,6 +74,19 @@
 - [Phase 10]: analyticsApi created as separate module (not merged into monitoring.ts) for domain clarity
 - [Phase 10]: SchedulingSuggestions integrated into TriggerDetailPanel scheduled section for immediate visibility
 - [Phase 10]: BudgetLimitsExtended as standalone component (BudgetLimitForm is modal-based with different UX)
+- [Phase 8]: PR diff fetched via {pr_url}.diff URL pattern using urllib for DiffContextService injection
+- [Phase 8]: Comparison record persisted before subprocess start to survive crashes per 08-RESEARCH.md
+- [Phase 8]: Explicit max_chars overrides SIZE_THRESHOLD for fine-grained chunking control
+- [Phase 8]: Chunk overlap capped at min(OVERLAP_CHARS, chunk_size/5) for proportional scaling
+- [Phase 8]: Background chunk dispatch uses Semaphore(3) per 08-RESEARCH.md anti-pattern guidance
+- [Phase 8]: Viewer presence ephemeral in-memory; comments persist to SQLite with line-number anchoring
+- [Phase 8]: Simple 200-line pagination for large diffs instead of virtual scrolling for v1
+- [Phase 8]: Expandable table row pattern for replay integration in ExecutionHistory
+- [Phase 8]: Replayable statuses: success, failed, timeout, cancelled, interrupted
+- [Phase 8]: Collaborative viewer generates viewer_id per session via crypto.randomUUID(), no localStorage persistence for v1
+- [Phase 8]: SSE event listeners (presence_join/leave, inline_comment) attached to existing execution stream, no separate SSE connection
+- [Phase 8]: BranchNavigator uses simple indented list tree, not heavyweight graph visualization
+- [Phase 8]: Chunk/branch expansion rows follow existing replay expansion pattern in ExecutionHistory table
 
 ## Blockers
 
@@ -102,8 +115,13 @@ None -- no phases have deferred verification level in this milestone.
 | 16 | 04 | ~20min | 3 | 4 |
 | 16 | 05 | ~15min | 2 | 17 |
 | 10 | 05 | 11min | 2 | 11 |
+| 08 | 01 | 15min | 2 | 12 |
+| 08 | 02 | 17min | 3 | 11 |
+| 08 | 03 | 10min | 2 | 9 |
+| 08 | 04 | 3min | 2 | 6 |
+| 08 | 05 | 6min | 2 | 12 |
 
 ## Session Log
 
 - **Last session:** 2026-03-05
-- **Stopped at:** Completed 10-05-PLAN.md (health dashboard, team report, scheduling suggestions, budget limits frontend)
+- **Stopped at:** Completed 10-05-PLAN.md (health dashboard, team report, scheduling suggestions, budget limits frontend) + Completed 08-05-PLAN.md (collaborative viewing, branch navigation, chunk results frontend)

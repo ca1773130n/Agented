@@ -70,6 +70,21 @@ PRODUCT_MILESTONE_ID_LENGTH = 6
 MCP_SERVER_ID_PREFIX = "mcp-"
 MCP_SERVER_ID_LENGTH = 6
 
+ROLE_ID_PREFIX = "role-"
+ROLE_ID_LENGTH = 6
+
+SECRET_ID_PREFIX = "sec-"
+SECRET_ID_LENGTH = 6
+
+BOOKMARK_ID_PREFIX = "bm-"
+BOOKMARK_ID_LENGTH = 6
+
+INTEGRATION_ID_PREFIX = "intg-"
+INTEGRATION_ID_LENGTH = 6
+
+CAMPAIGN_ID_PREFIX = "camp-"
+CAMPAIGN_ID_LENGTH = 6
+
 
 # --- Generic helper ---
 
@@ -368,6 +383,20 @@ def generate_mcp_server_id() -> str:
     return f"{MCP_SERVER_ID_PREFIX}{random_part}"
 
 
+def generate_role_id() -> str:
+    """Generate a unique role ID like 'role-abc123'."""
+    chars = string.ascii_lowercase + string.digits
+    random_part = "".join(secrets.choice(chars) for _ in range(ROLE_ID_LENGTH))
+    return f"{ROLE_ID_PREFIX}{random_part}"
+
+
+def generate_bookmark_id() -> str:
+    """Generate a unique bookmark ID like 'bm-abc123'."""
+    chars = string.ascii_lowercase + string.digits
+    random_part = "".join(secrets.choice(chars) for _ in range(BOOKMARK_ID_LENGTH))
+    return f"{BOOKMARK_ID_PREFIX}{random_part}"
+
+
 # --- v0.4.0 Collision-safe ID generators ---
 
 
@@ -441,3 +470,69 @@ def _get_unique_mcp_server_id(conn) -> str:
         cursor = conn.execute("SELECT id FROM mcp_servers WHERE id = ?", (mid,))
         if cursor.fetchone() is None:
             return mid
+
+
+def _get_unique_role_id(conn) -> str:
+    """Generate a role ID that doesn't exist in the database."""
+    while True:
+        rid = generate_role_id()
+        cursor = conn.execute("SELECT id FROM user_roles WHERE id = ?", (rid,))
+        if cursor.fetchone() is None:
+            return rid
+
+
+def generate_secret_id() -> str:
+    """Generate a unique secret ID like 'sec-abc123'."""
+    chars = string.ascii_lowercase + string.digits
+    random_part = "".join(secrets.choice(chars) for _ in range(SECRET_ID_LENGTH))
+    return f"{SECRET_ID_PREFIX}{random_part}"
+
+
+def _get_unique_secret_id(conn) -> str:
+    """Generate a secret ID that doesn't exist in the database."""
+    while True:
+        sid = generate_secret_id()
+        cursor = conn.execute("SELECT id FROM secrets WHERE id = ?", (sid,))
+        if cursor.fetchone() is None:
+            return sid
+
+
+def _get_unique_bookmark_id(conn) -> str:
+    """Generate a bookmark ID that doesn't exist in the database."""
+    while True:
+        bid = generate_bookmark_id()
+        cursor = conn.execute("SELECT id FROM bookmarks WHERE id = ?", (bid,))
+        if cursor.fetchone() is None:
+            return bid
+
+
+def generate_integration_id() -> str:
+    """Generate a unique integration ID like 'intg-abc123'."""
+    chars = string.ascii_lowercase + string.digits
+    random_part = "".join(secrets.choice(chars) for _ in range(INTEGRATION_ID_LENGTH))
+    return f"{INTEGRATION_ID_PREFIX}{random_part}"
+
+
+def _get_unique_integration_id(conn) -> str:
+    """Generate an integration ID that doesn't exist in the database."""
+    while True:
+        iid = generate_integration_id()
+        cursor = conn.execute("SELECT id FROM integrations WHERE id = ?", (iid,))
+        if cursor.fetchone() is None:
+            return iid
+
+
+def generate_campaign_id() -> str:
+    """Generate a unique campaign ID like 'camp-abc123'."""
+    chars = string.ascii_lowercase + string.digits
+    random_part = "".join(secrets.choice(chars) for _ in range(CAMPAIGN_ID_LENGTH))
+    return f"{CAMPAIGN_ID_PREFIX}{random_part}"
+
+
+def _get_unique_campaign_id(conn) -> str:
+    """Generate a campaign ID that doesn't exist in the database."""
+    while True:
+        cid = generate_campaign_id()
+        cursor = conn.execute("SELECT id FROM campaigns WHERE id = ?", (cid,))
+        if cursor.fetchone() is None:
+            return cid

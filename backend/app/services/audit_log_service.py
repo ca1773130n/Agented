@@ -44,7 +44,11 @@ _REDACTED_FIELDS: frozenset = frozenset(
 
 
 class AuditLogService:
-    """Emit structured JSON audit events via the ``agented.audit`` logger."""
+    """Emit structured JSON audit events via the ``agented.audit`` logger.
+
+    Events are written to both the in-memory ring buffer (for real-time SSE)
+    and to SQLite (for persistent, queryable history).
+    """
 
     @staticmethod
     def log(
@@ -53,6 +57,7 @@ class AuditLogService:
         entity_id: str,
         outcome: str,
         details: Optional[Dict[str, Any]] = None,
+        actor: str = "system",
     ) -> None:
         """Emit a structured audit event.
 
@@ -62,6 +67,7 @@ class AuditLogService:
             entity_id:   Primary identifier of the entity.
             outcome:     Result of the action, e.g. "started", "success", "failed".
             details:     Optional dict of additional structured context.
+            actor:       Who performed the action (default "system").
         """
         event: Dict[str, Any] = {
             "ts": datetime.datetime.utcnow().isoformat() + "Z",
@@ -69,12 +75,28 @@ class AuditLogService:
             "entity_type": entity_type,
             "entity_id": entity_id,
             "outcome": outcome,
+            "actor": actor,
         }
         if details:
             event["details"] = details
 
         audit_logger.info(json.dumps(event))
         _recent_events.append(event)
+
+        # Persist to SQLite (best-effort, never block caller)
+        try:
+            from ..db.audit_events import add_audit_event
+
+            add_audit_event(
+                action=action,
+                entity_type=entity_type,
+                entity_id=entity_id,
+                outcome=outcome,
+                actor=actor,
+                details=details,
+            )
+        except Exception as exc:
+            audit_logger.debug("Failed to persist audit event to SQLite: %s", exc)
 
     @staticmethod
     def log_field_changes(
@@ -119,6 +141,42 @@ class AuditLogService:
             entity_id=entity_id,
             outcome="updated",
             details={"changes": changes},
+        )
+
+    @staticmethod
+    def query_events(
+        entity_type: Optional[str] = None,
+        entity_id: Optional[str] = None,
+        actor: Optional[str] = None,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> List[Dict[str, Any]]:
+        """Query persistent audit events from SQLite with optional filters.
+
+        Args:
+            entity_type: Filter by entity type.
+            entity_id: Filter by entity ID.
+            actor: Filter by actor.
+            start_date: ISO date for range start (inclusive).
+            end_date: ISO date for range end (inclusive).
+            limit: Max events to return.
+            offset: Skip N events.
+
+        Returns:
+            List of audit event dicts, newest first.
+        """
+        from ..db.audit_events import query_audit_events
+
+        return query_audit_events(
+            entity_type=entity_type,
+            entity_id=entity_id,
+            actor=actor,
+            start_date=start_date,
+            end_date=end_date,
+            limit=limit,
+            offset=offset,
         )
 
     @staticmethod

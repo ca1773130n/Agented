@@ -1349,4 +1349,286 @@ def create_fresh_schema(conn):
         "CREATE INDEX IF NOT EXISTS idx_webhook_dedup_created ON webhook_dedup_keys(created_at)"
     )
 
+    # user_roles -- RBAC role assignments mapped to API keys
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS user_roles (
+            id TEXT PRIMARY KEY,
+            api_key TEXT NOT NULL UNIQUE,
+            label TEXT NOT NULL DEFAULT '',
+            role TEXT NOT NULL DEFAULT 'viewer'
+                CHECK(role IN ('viewer', 'operator', 'editor', 'admin')),
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_user_roles_api_key ON user_roles(api_key)")
+
+    # audit_events -- persistent audit trail for all configuration changes
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS audit_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            action TEXT NOT NULL,
+            entity_type TEXT NOT NULL,
+            entity_id TEXT NOT NULL,
+            outcome TEXT NOT NULL,
+            actor TEXT NOT NULL DEFAULT 'system',
+            details TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_audit_events_entity "
+        "ON audit_events(entity_type, entity_id)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_audit_events_actor ON audit_events(actor)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_audit_events_created ON audit_events(created_at DESC)"
+    )
+
+    # --- v0.2.0: Secrets vault ---
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS secrets (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL UNIQUE,
+            encrypted_value TEXT NOT NULL,
+            description TEXT DEFAULT '',
+            scope TEXT DEFAULT 'global',
+            created_by TEXT DEFAULT 'system',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            last_accessed_at TIMESTAMP
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_secrets_name ON secrets(name)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_secrets_scope ON secrets(scope)")
+
+    # --- Bookmarks ---
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS bookmarks (
+            id TEXT PRIMARY KEY,
+            execution_id TEXT NOT NULL,
+            trigger_id TEXT NOT NULL,
+            title TEXT NOT NULL DEFAULT '',
+            notes TEXT DEFAULT '',
+            tags TEXT DEFAULT '',
+            line_number INTEGER,
+            deep_link TEXT NOT NULL,
+            created_by TEXT DEFAULT 'system',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_bookmarks_trigger ON bookmarks(trigger_id)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_bookmarks_execution ON bookmarks(execution_id)"
+    )
+
+    # --- Integrations ---
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS integrations (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            type TEXT NOT NULL,
+            config TEXT NOT NULL DEFAULT '{}',
+            trigger_id TEXT,
+            enabled INTEGER DEFAULT 1,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (trigger_id) REFERENCES triggers(id) ON DELETE SET NULL
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_integrations_type ON integrations(type)")
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_integrations_trigger ON integrations(trigger_id)"
+    )
+
+    # --- v0.2.0: GitOps tables ---
+
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS gitops_repos (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            repo_url TEXT NOT NULL,
+            branch TEXT NOT NULL DEFAULT 'main',
+            config_path TEXT NOT NULL DEFAULT 'agented/',
+            poll_interval_seconds INTEGER DEFAULT 60,
+            last_sync_at TIMESTAMP,
+            last_commit_sha TEXT,
+            enabled INTEGER DEFAULT 1,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS gitops_sync_log (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            repo_id TEXT NOT NULL,
+            commit_sha TEXT,
+            files_changed INTEGER DEFAULT 0,
+            files_applied INTEGER DEFAULT 0,
+            files_conflicted INTEGER DEFAULT 0,
+            status TEXT DEFAULT 'pending',
+            details TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (repo_id) REFERENCES gitops_repos(id) ON DELETE CASCADE
+        )
+    """)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_gitops_sync_repo ON gitops_sync_log(repo_id)"
+    )
+
+    # --- v0.2.0: Campaign tables (INT-07) ---
+
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS campaigns (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            trigger_id TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'pending',
+            repo_urls TEXT NOT NULL,
+            total_repos INTEGER DEFAULT 0,
+            completed_repos INTEGER DEFAULT 0,
+            failed_repos INTEGER DEFAULT 0,
+            started_at TIMESTAMP,
+            finished_at TIMESTAMP,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (trigger_id) REFERENCES triggers(id) ON DELETE CASCADE
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_campaigns_trigger ON campaigns(trigger_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_campaigns_status ON campaigns(status)")
+
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS campaign_executions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            campaign_id TEXT NOT NULL,
+            execution_id TEXT,
+            repo_url TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'pending',
+            started_at TIMESTAMP,
+            finished_at TIMESTAMP,
+            error_message TEXT,
+            FOREIGN KEY (campaign_id) REFERENCES campaigns(id) ON DELETE CASCADE
+        )
+    """)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_campaign_exec_campaign ON campaign_executions(campaign_id)"
+    )
+
+    # Replay comparisons (EXE-01: execution replay and A/B comparison)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS replay_comparisons (
+            id TEXT PRIMARY KEY,
+            original_execution_id TEXT NOT NULL,
+            replay_execution_id TEXT NOT NULL,
+            notes TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (original_execution_id) REFERENCES execution_logs(execution_id) ON DELETE CASCADE,
+            FOREIGN KEY (replay_execution_id) REFERENCES execution_logs(execution_id) ON DELETE CASCADE
+        )
+    """)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_replay_comp_original "
+        "ON replay_comparisons(original_execution_id)"
+    )
+
+    # Conversation messages (EXE-04: tree-structured conversation branching)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS conversation_messages (
+            id TEXT PRIMARY KEY,
+            conversation_id TEXT NOT NULL,
+            branch_id TEXT NOT NULL,
+            parent_message_id TEXT,
+            message_index INTEGER NOT NULL,
+            role TEXT NOT NULL,
+            content TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (conversation_id) REFERENCES agent_conversations(id) ON DELETE CASCADE
+        )
+    """)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_conv_msg_conv_branch "
+        "ON conversation_messages(conversation_id, branch_id)"
+    )
+
+    # Conversation branches (EXE-04: ContextBranch paper arXiv:2512.13914)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS conversation_branches (
+            id TEXT PRIMARY KEY,
+            conversation_id TEXT NOT NULL,
+            parent_branch_id TEXT,
+            fork_message_id TEXT,
+            name TEXT,
+            status TEXT DEFAULT 'active',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (conversation_id) REFERENCES agent_conversations(id) ON DELETE CASCADE
+        )
+    """)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_conv_branch_conv "
+        "ON conversation_branches(conversation_id)"
+    )
+
+    # Chunked executions (EXE-03: smart chunking with merge/dedup)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS chunked_executions (
+            id TEXT PRIMARY KEY,
+            bot_id TEXT NOT NULL,
+            total_chunks INTEGER NOT NULL,
+            completed_chunks INTEGER DEFAULT 0,
+            status TEXT DEFAULT 'pending',
+            merged_output TEXT,
+            unique_findings_count INTEGER,
+            duplicate_count INTEGER,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            completed_at TIMESTAMP,
+            FOREIGN KEY (bot_id) REFERENCES triggers(id) ON DELETE CASCADE
+        )
+    """)
+
+    # Chunk results (EXE-03: per-chunk bot output storage)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS chunk_results (
+            id TEXT PRIMARY KEY,
+            chunked_execution_id TEXT NOT NULL,
+            chunk_index INTEGER NOT NULL,
+            chunk_content TEXT NOT NULL,
+            bot_output TEXT,
+            token_count INTEGER DEFAULT 0,
+            status TEXT DEFAULT 'pending',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            completed_at TIMESTAMP,
+            FOREIGN KEY (chunked_execution_id) REFERENCES chunked_executions(id) ON DELETE CASCADE
+        )
+    """)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_chunk_results_exec "
+        "ON chunk_results(chunked_execution_id)"
+    )
+
+    # Viewer comments (EXE-05: inline comments on execution log lines)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS viewer_comments (
+            id TEXT PRIMARY KEY,
+            execution_id TEXT NOT NULL,
+            viewer_id TEXT NOT NULL,
+            viewer_name TEXT NOT NULL,
+            line_number INTEGER NOT NULL,
+            content TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (execution_id) REFERENCES execution_logs(execution_id) ON DELETE CASCADE
+        )
+    """)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_viewer_comments_execution "
+        "ON viewer_comments(execution_id)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_viewer_comments_execution_line "
+        "ON viewer_comments(execution_id, line_number)"
+    )
+
     conn.commit()

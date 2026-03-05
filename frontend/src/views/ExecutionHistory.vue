@@ -1,9 +1,13 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, watch } from 'vue';
 import { useRouter } from 'vue-router';
-import type { Execution } from '../services/api';
-import { executionApi, triggerApi, ApiError } from '../services/api';
+import type { Execution, MergedChunkResults } from '../services/api';
+import { executionApi, triggerApi, ApiError, chunkApi } from '../services/api';
 import ExecutionLogViewer from '../components/triggers/ExecutionLogViewer.vue';
+import ReplayComparison from '../components/triggers/ReplayComparison.vue';
+import PresenceIndicator from '../components/triggers/PresenceIndicator.vue';
+import ChunkResults from '../components/triggers/ChunkResults.vue';
+import BranchNavigator from '../components/triggers/BranchNavigator.vue';
 import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import LoadingState from '../components/base/LoadingState.vue';
@@ -11,6 +15,7 @@ import EmptyState from '../components/base/EmptyState.vue';
 import { useToast } from '../composables/useToast';
 import { useFocusTrap } from '../composables/useFocusTrap';
 import { useWebMcpTool } from '../composables/useWebMcpTool';
+import { useCollaborativeViewer } from '../composables/useCollaborativeViewer';
 
 const props = withDefaults(defineProps<{
   triggerId?: string;
@@ -31,6 +36,22 @@ const triggerName = ref('');
 const logModalRef = ref<HTMLElement | null>(null);
 const logModalOpen = computed(() => !!selectedExecution.value);
 useFocusTrap(logModalRef, logModalOpen);
+
+// Collaborative viewer state
+const collaborativeExecutionId = ref('');
+const { viewers, isJoined } = useCollaborativeViewer(
+  collaborativeExecutionId,
+  `User-${Math.random().toString(36).slice(2, 6)}`,
+  () => null, // EventSource will be attached when execution log modal is open
+);
+
+// Chunk results state
+const chunkExpandedId = ref<string | null>(null);
+const chunkResults = ref<MergedChunkResults | null>(null);
+const chunkLoading = ref(false);
+
+// Branch navigator state
+const branchExpandedId = ref<string | null>(null);
 
 useWebMcpTool({
   name: 'agented_execution_history_get_state',
@@ -110,10 +131,6 @@ function formatDuration(ms?: number): string {
   return `${seconds}s`;
 }
 
-function viewLogs(execution: Execution) {
-  selectedExecution.value = execution;
-}
-
 function closeLogs() {
   selectedExecution.value = null;
 }
@@ -135,6 +152,14 @@ async function handleRetryExecution(execution: Execution) {
   }
 }
 
+const replayExpandedId = ref<string | null>(null);
+
+const REPLAYABLE_STATUSES = new Set(['success', 'failed', 'timeout', 'cancelled', 'interrupted']);
+
+function toggleReplay(executionId: string) {
+  replayExpandedId.value = replayExpandedId.value === executionId ? null : executionId;
+}
+
 const cancellingId = ref<string | null>(null);
 
 async function handleCancelExecution(executionId: string) {
@@ -154,6 +179,34 @@ async function handleCancelExecution(executionId: string) {
 function onExecutionComplete(_status: string) {
   // Refresh the list
   loadData();
+}
+
+async function toggleChunkResults(executionId: string) {
+  if (chunkExpandedId.value === executionId) {
+    chunkExpandedId.value = null;
+    chunkResults.value = null;
+    return;
+  }
+  chunkExpandedId.value = executionId;
+  chunkLoading.value = true;
+  try {
+    const results = await chunkApi.getResults(executionId);
+    chunkResults.value = results;
+  } catch {
+    chunkResults.value = null;
+  } finally {
+    chunkLoading.value = false;
+  }
+}
+
+function toggleBranches(executionId: string) {
+  branchExpandedId.value = branchExpandedId.value === executionId ? null : executionId;
+}
+
+// Update collaborative execution ID when viewing logs
+function viewLogs(execution: Execution) {
+  selectedExecution.value = execution;
+  collaborativeExecutionId.value = execution.execution_id;
 }
 
 onMounted(loadData);
@@ -229,9 +282,11 @@ onMounted(loadData);
                 />
               </td>
             </tr>
-            <tr
+            <template
               v-for="(execution, index) in filteredExecutions"
               :key="execution.execution_id"
+            >
+            <tr
               :style="{ '--delay': `${index * 20}ms` }"
             >
               <td v-if="!triggerId" class="cell-trigger">
@@ -289,8 +344,66 @@ onMounted(loadData);
                     <path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/>
                   </svg>
                 </button>
+                <button
+                  v-if="REPLAYABLE_STATUSES.has(execution.status)"
+                  class="btn-icon btn-replay"
+                  :class="{ active: replayExpandedId === execution.execution_id }"
+                  @click="toggleReplay(execution.execution_id)"
+                  title="Replay & Compare"
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M16 3h5v5M4 20L21 3M21 16v5h-5M15 15l6 6M4 4l5 5"/>
+                  </svg>
+                </button>
+                <button
+                  class="btn-icon btn-chunks"
+                  :class="{ active: chunkExpandedId === execution.execution_id }"
+                  @click="toggleChunkResults(execution.execution_id)"
+                  title="Chunk Results"
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="3" y="3" width="7" height="7" rx="1"/>
+                    <rect x="14" y="3" width="7" height="7" rx="1"/>
+                    <rect x="3" y="14" width="7" height="7" rx="1"/>
+                    <rect x="14" y="14" width="7" height="7" rx="1"/>
+                  </svg>
+                </button>
+                <button
+                  class="btn-icon btn-branches"
+                  :class="{ active: branchExpandedId === execution.execution_id }"
+                  @click="toggleBranches(execution.execution_id)"
+                  title="Branches"
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M6 3v12M18 9a3 3 0 100-6 3 3 0 000 6zM6 21a3 3 0 100-6 3 3 0 000 6zM18 9c-3 0-6 3-6 6v3"/>
+                  </svg>
+                </button>
               </td>
             </tr>
+            <!-- Replay Comparison Expansion Row -->
+            <tr v-if="replayExpandedId === execution.execution_id" :key="execution.execution_id + '-replay'">
+              <td :colspan="triggerId ? 6 : 7" class="replay-expansion-cell">
+                <ReplayComparison :execution-id="execution.execution_id" />
+              </td>
+            </tr>
+            <!-- Chunk Results Expansion Row -->
+            <tr v-if="chunkExpandedId === execution.execution_id" :key="execution.execution_id + '-chunks'">
+              <td :colspan="triggerId ? 6 : 7" class="chunk-expansion-cell">
+                <div v-if="chunkLoading" class="expansion-loading">
+                  <div class="spinner-small"></div>
+                  Loading chunk results...
+                </div>
+                <ChunkResults v-else-if="chunkResults" :results="chunkResults" />
+                <div v-else class="expansion-empty">No chunk results available for this execution.</div>
+              </td>
+            </tr>
+            <!-- Branch Navigator Expansion Row -->
+            <tr v-if="branchExpandedId === execution.execution_id" :key="execution.execution_id + '-branches'">
+              <td :colspan="triggerId ? 6 : 7" class="branch-expansion-cell">
+                <BranchNavigator :conversation-id="execution.execution_id" />
+              </td>
+            </tr>
+            </template>
           </tbody>
         </table>
       </div>
@@ -304,6 +417,7 @@ onMounted(loadData);
             <h3 id="modal-title-execution-log">Execution Logs</h3>
             <span class="execution-id">{{ selectedExecution.execution_id }}</span>
           </div>
+          <PresenceIndicator v-if="isJoined" :viewers="viewers" />
           <button class="close-btn" @click="closeLogs">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M18 6L6 18M6 6l12 12"/>
@@ -684,9 +798,104 @@ onMounted(loadData);
   cursor: not-allowed;
 }
 
+.btn-icon.btn-replay {
+  color: var(--accent-violet, #8b5cf6);
+  border-color: rgba(139, 92, 246, 0.3);
+}
+
+.btn-icon.btn-replay:hover,
+.btn-icon.btn-replay.active {
+  background: rgba(139, 92, 246, 0.15);
+  color: var(--accent-violet, #8b5cf6);
+  border-color: var(--accent-violet, #8b5cf6);
+}
+
 .btn-icon svg {
   width: 16px;
   height: 16px;
+}
+
+/* Replay Expansion Row */
+.replay-expansion-cell {
+  padding: 20px 16px !important;
+  background: var(--bg-secondary);
+  border-bottom: 2px solid var(--accent-violet, #8b5cf6);
+  animation: expandIn 0.2s ease;
+}
+
+@keyframes expandIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* Chunk Expansion Row */
+.chunk-expansion-cell {
+  padding: 20px 16px !important;
+  background: var(--bg-secondary);
+  border-bottom: 2px solid var(--accent-cyan);
+  animation: expandIn 0.2s ease;
+}
+
+/* Branch Expansion Row */
+.branch-expansion-cell {
+  padding: 20px 16px !important;
+  background: var(--bg-secondary);
+  border-bottom: 2px solid var(--accent-emerald, #10b981);
+  animation: expandIn 0.2s ease;
+}
+
+.expansion-loading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 16px;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
+.expansion-empty {
+  padding: 16px;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  text-align: center;
+}
+
+.spinner-small {
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--border-subtle);
+  border-top-color: var(--accent-cyan);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Chunk & Branch action buttons */
+.btn-icon.btn-chunks {
+  color: var(--accent-cyan);
+  border-color: rgba(0, 212, 255, 0.3);
+}
+
+.btn-icon.btn-chunks:hover,
+.btn-icon.btn-chunks.active {
+  background: var(--accent-cyan-dim);
+  color: var(--accent-cyan);
+  border-color: var(--accent-cyan);
+}
+
+.btn-icon.btn-branches {
+  color: var(--accent-emerald, #10b981);
+  border-color: rgba(16, 185, 129, 0.3);
+}
+
+.btn-icon.btn-branches:hover,
+.btn-icon.btn-branches.active {
+  background: var(--accent-emerald-dim);
+  color: var(--accent-emerald, #10b981);
+  border-color: var(--accent-emerald, #10b981);
 }
 
 /* Empty State */

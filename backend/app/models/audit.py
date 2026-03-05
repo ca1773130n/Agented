@@ -1,9 +1,9 @@
 """Audit-related Pydantic models."""
 
 from enum import Enum
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class SeverityLevel(str, Enum):
@@ -117,3 +117,33 @@ class AuditProjectsResponse(BaseModel):
     """Response for listing audited projects."""
 
     projects: List[ProjectInfo]
+
+
+# =============================================================================
+# Persistent audit event models (enterprise governance)
+# =============================================================================
+
+
+class AuditQueryParams(BaseModel):
+    """Query parameters for filtering persistent audit events."""
+
+    entity_type: Optional[str] = Field(None, description="Filter by entity type")
+    entity_id: Optional[str] = Field(None, description="Filter by entity ID")
+    actor: Optional[str] = Field(None, description="Filter by actor")
+    start_date: Optional[str] = Field(None, description="Start date (ISO format, inclusive)")
+    end_date: Optional[str] = Field(None, description="End date (ISO format, inclusive)")
+    limit: int = Field(100, description="Maximum number of events to return", ge=1, le=1000)
+    offset: int = Field(0, description="Number of events to skip", ge=0)
+
+
+class AuditEventResponse(BaseModel):
+    """Response model for a single persistent audit event."""
+
+    id: int
+    action: str
+    entity_type: str
+    entity_id: str
+    outcome: str
+    actor: str
+    details: Optional[Dict[str, Any]] = None
+    created_at: Optional[str] = None

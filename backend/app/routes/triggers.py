@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 
 from ..database import get_trigger
 from ..services.execution_service import ExecutionService
+from ..services.rbac_service import require_role
 from ..services.trigger_service import TriggerService
 
 tag = Tag(name="Triggers", description="Trigger management")
@@ -19,6 +20,7 @@ class TriggerPath(BaseModel):
 
 
 @triggers_bp.get("/")
+@require_role("viewer", "operator", "editor", "admin")
 def list_triggers():
     """List all triggers with path counts and execution status."""
     result, status = TriggerService.list_triggers()
@@ -26,6 +28,7 @@ def list_triggers():
 
 
 @triggers_bp.post("/")
+@require_role("editor", "admin")
 def create_trigger():
     """Create a new trigger."""
     data = request.get_json()
@@ -36,6 +39,7 @@ def create_trigger():
 
 
 @triggers_bp.get("/<trigger_id>")
+@require_role("viewer", "operator", "editor", "admin")
 def get_trigger_detail(path: TriggerPath):
     """Get trigger details with paths."""
     result, status = TriggerService.get_trigger_detail(path.trigger_id)
@@ -43,6 +47,7 @@ def get_trigger_detail(path: TriggerPath):
 
 
 @triggers_bp.put("/<trigger_id>")
+@require_role("editor", "admin")
 def update_trigger(path: TriggerPath):
     """Update a trigger."""
     data = request.get_json()
@@ -53,6 +58,7 @@ def update_trigger(path: TriggerPath):
 
 
 @triggers_bp.delete("/<trigger_id>")
+@require_role("editor", "admin")
 def delete_trigger(path: TriggerPath):
     """Delete a trigger (non-predefined only)."""
     result, status = TriggerService.delete_trigger(path.trigger_id)
@@ -60,6 +66,7 @@ def delete_trigger(path: TriggerPath):
 
 
 @triggers_bp.get("/<trigger_id>/paths")
+@require_role("viewer", "operator", "editor", "admin")
 def list_trigger_paths(path: TriggerPath):
     """List all project paths for a trigger."""
     result, status = TriggerService.list_paths(path.trigger_id)
@@ -67,6 +74,7 @@ def list_trigger_paths(path: TriggerPath):
 
 
 @triggers_bp.post("/<trigger_id>/paths")
+@require_role("editor", "admin")
 def add_trigger_path(path: TriggerPath):
     """Add a project path to a trigger."""
     data = request.get_json()
@@ -77,6 +85,7 @@ def add_trigger_path(path: TriggerPath):
 
 
 @triggers_bp.delete("/<trigger_id>/paths")
+@require_role("editor", "admin")
 def remove_trigger_path(path: TriggerPath):
     """Remove a project path from a trigger."""
     data = request.get_json()
@@ -92,6 +101,7 @@ class TriggerProjectPath(BaseModel):
 
 
 @triggers_bp.post("/<trigger_id>/projects")
+@require_role("editor", "admin")
 def add_trigger_project(path: TriggerPath):
     """Add a project reference to a trigger."""
     data = request.get_json()
@@ -105,6 +115,7 @@ def add_trigger_project(path: TriggerPath):
 
 
 @triggers_bp.delete("/<trigger_id>/projects/<project_id>")
+@require_role("editor", "admin")
 def remove_trigger_project(path: TriggerProjectPath):
     """Remove a project reference from a trigger."""
     result, status = TriggerService.remove_project(path.trigger_id, path.project_id)
@@ -112,6 +123,7 @@ def remove_trigger_project(path: TriggerProjectPath):
 
 
 @triggers_bp.put("/<trigger_id>/auto-resolve")
+@require_role("editor", "admin")
 def set_auto_resolve(path: TriggerPath):
     """Enable/disable auto-resolve and PR creation for the security trigger."""
     data = request.get_json()
@@ -123,6 +135,7 @@ def set_auto_resolve(path: TriggerPath):
 
 
 @triggers_bp.get("/<trigger_id>/status")
+@require_role("viewer", "operator", "editor", "admin")
 def get_trigger_status(path: TriggerPath):
     """Get execution status for a trigger."""
     trigger = get_trigger(path.trigger_id)
@@ -134,6 +147,7 @@ def get_trigger_status(path: TriggerPath):
 
 
 @triggers_bp.post("/<trigger_id>/run")
+@require_role("operator", "editor", "admin")
 def run_trigger(path: TriggerPath):
     """Manually trigger a trigger to run.
 
@@ -165,6 +179,7 @@ def run_trigger(path: TriggerPath):
 
 
 @triggers_bp.post("/<trigger_id>/preview-prompt")
+@require_role("viewer", "operator", "editor", "admin")
 def preview_trigger_prompt(path: TriggerPath):
     """Dry-run preview: render the prompt template with sample data.
 

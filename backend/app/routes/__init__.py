@@ -8,16 +8,24 @@ def register_blueprints(app):
     from .analytics import analytics_bp
     from .audit import audit_bp
     from .backends import backends_bp
+    from .bookmarks import bookmarks_bp
     from .budgets import budgets_bp
+    from .campaigns import campaigns_bp
     from .command_conversations import command_conversations_bp
+    from .chunks import chunks_bp
+    from .collaborative import collaborative_bp
+    from .conversation_branches import conversation_branches_bp
+    from .config_export import config_export_bp
     from .commands import commands_bp
     from .executions import executions_bp
     from .github_webhook import github_webhook_bp
+    from .gitops import gitops_bp
     from .grd import grd_bp
     from .health import health_bp
     from .health_monitor import health_monitor_bp
     from .hook_conversations import hook_conversations_bp
     from .hooks import hooks_bp
+    from .integrations import integrations_bp, slack_command_bp
     from .marketplace import marketplace_bp
     from .mcp_servers import mcp_servers_bp, project_mcp_bp
     from .monitoring import monitoring_bp
@@ -26,14 +34,17 @@ def register_blueprints(app):
     from .plugin_exports import plugin_exports_bp
     from .plugins import plugins_bp
     from .pr_reviews import pr_reviews_bp
+    from .rbac import rbac_bp
     from .product_owner import product_owner_bp
     from .products import products_bp
+    from .replay import replay_bp
     from .projects import projects_bp
     from .rotation import rotation_bp
     from .rule_conversations import rule_conversations_bp
     from .scheduling_suggestions import scheduling_bp
     from .rules import rules_bp
     from .scheduler import scheduler_bp
+    from .secrets import secrets_bp
     from .settings import settings_bp
     from .setup import setup_bp
     from .sketches import sketches_bp
@@ -59,6 +70,9 @@ def register_blueprints(app):
 
         # GitHub webhook: 30 requests per minute per IP
         limiter.limit("30/minute")(github_webhook_bp)
+
+        # Slack slash commands: 30 requests per minute per IP
+        limiter.limit("30/minute")(slack_command_bp)
 
         # Admin routes: 120 requests per minute per IP
         # Generous limit to accommodate SPA page loads, AJAX calls, and SSE reconnects
@@ -98,6 +112,7 @@ def register_blueprints(app):
             super_agent_exports_bp,
             workflows_bp,
             sketches_bp,
+            gitops_bp,
             grd_bp,
             rotation_bp,
             mcp_servers_bp,
@@ -105,6 +120,16 @@ def register_blueprints(app):
             product_owner_bp,
             health_monitor_bp,
             scheduling_bp,
+            rbac_bp,
+            secrets_bp,
+            config_export_bp,
+            bookmarks_bp,
+            integrations_bp,
+            campaigns_bp,
+            replay_bp,
+            conversation_branches_bp,
+            chunks_bp,
+            collaborative_bp,
         ]
         for bp in admin_blueprints:
             limiter.limit("120/minute")(bp)
@@ -151,6 +176,7 @@ def register_blueprints(app):
     app.register_api(super_agent_exports_bp)
     app.register_api(workflows_bp)
     app.register_api(sketches_bp)
+    app.register_api(gitops_bp)
     app.register_api(grd_bp)
     app.register_api(rotation_bp)
     app.register_api(mcp_servers_bp)
@@ -158,6 +184,17 @@ def register_blueprints(app):
     app.register_api(product_owner_bp)
     app.register_api(health_monitor_bp)
     app.register_api(scheduling_bp)
+    app.register_api(rbac_bp)
+    app.register_api(secrets_bp)
+    app.register_api(config_export_bp)
+    app.register_api(bookmarks_bp)
+    app.register_api(integrations_bp)
+    app.register_api(slack_command_bp)
+    app.register_api(campaigns_bp)
+    app.register_api(replay_bp)
+    app.register_api(conversation_branches_bp)
+    app.register_api(chunks_bp)
+    app.register_api(collaborative_bp)
 
     # SPA catch-all: MUST be registered LAST so API routes take priority
     app.register_blueprint(spa_bp)

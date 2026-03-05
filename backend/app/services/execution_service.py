@@ -35,6 +35,7 @@ from .execution_log_service import ExecutionLogService
 from .github_service import GitHubService
 from .process_manager import ProcessManager
 from .prompt_renderer import PromptRenderer
+from .diff_context_service import DiffContextService
 from .rate_limit_service import RateLimitService
 
 logger = logging.getLogger(__name__)
@@ -428,6 +429,31 @@ class ExecutionService:
         logger.info("Saved threat report: %s", filepath)
         return filepath
 
+    @staticmethod
+    def _fetch_pr_diff(event: dict) -> Optional[str]:
+        """Fetch PR diff text from GitHub.
+
+        Constructs the diff URL from the PR URL ({pr_url}.diff) and fetches it.
+        Returns the diff text or None if unavailable.
+        """
+        pr_url = event.get("pr_url", "")
+        if not pr_url:
+            return None
+
+        diff_url = f"{pr_url}.diff"
+        try:
+            import urllib.request
+
+            req = urllib.request.Request(
+                diff_url,
+                headers={"Accept": "text/plain", "User-Agent": "Agented/1.0"},
+            )
+            with urllib.request.urlopen(req, timeout=15) as response:
+                return response.read().decode("utf-8", errors="replace")
+        except Exception as e:
+            logger.debug("Could not fetch PR diff from %s: %s", diff_url, e)
+            return None
+
     # Execution timeout bounds (seconds)
     TIMEOUT_MIN = 60  # 1 minute minimum
     TIMEOUT_MAX = 3600  # 1 hour maximum
@@ -653,6 +679,27 @@ class ExecutionService:
             prompt = PromptRenderer.render(trigger, trigger_id, message_text, paths_str, event)
             PromptRenderer.warn_unresolved(prompt, trigger.get("name", trigger_id), logger)
 
+            # EXE-02: Inject diff-aware context for github_pr trigger events
+            # Extracts focused diff context from PR to reduce token costs by 40-80%
+            if trigger_type in ("github_webhook", "github_pr") and event:
+                try:
+                    pr_diff_text = cls._fetch_pr_diff(event)
+                    if pr_diff_text:
+                        diff_context = DiffContextService.extract_pr_diff_context(pr_diff_text)
+                        if diff_context:
+                            prompt = f"{prompt}\n\n--- PR Diff Context ---\n{diff_context}"
+                            logger.info(
+                                "Injected diff-aware context (%d chars) into prompt for trigger '%s'",
+                                len(diff_context),
+                                trigger.get("name", trigger_id),
+                            )
+                except Exception as e:
+                    logger.warning(
+                        "Failed to inject diff context for trigger '%s': %s",
+                        trigger.get("name", trigger_id),
+                        e,
+                    )
+
             # For security audit skill, save message as threat report and prepend path
             if "/weekly-security-audit" in prompt:
                 threat_report_path = cls.save_threat_report(trigger_id, message_text)
@@ -783,6 +830,19 @@ class ExecutionService:
                     e,
                     exc_info=True,
                 )
+
+            # Inject secrets from vault into subprocess environment
+            try:
+                from app.services.secret_vault_service import SecretVaultService
+
+                if SecretVaultService.is_configured():
+                    vault_secrets = SecretVaultService.get_secrets_for_execution(scope="global")
+                    if vault_secrets:
+                        if env_overrides is None:
+                            env_overrides = {}
+                        env_overrides.update(vault_secrets)
+            except Exception as e:
+                logger.warning("Failed to inject vault secrets into execution env: %s", e)
 
             # Build process environment with optional overrides
             proc_env = {**os.environ, **env_overrides} if env_overrides else None
