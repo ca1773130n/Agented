@@ -1,9 +1,9 @@
 # GRD Execution State
 
 **Milestone:** v0.1.0 -- Production Hardening (active) / v0.2.0 -- Miscellaneous
-**Current Phase:** Phase 10 (autopilot: executing)
-**Current Plan:** 05 (completed)
-**Status:** phase-verified
+**Current Phase:** Phase 9 (autopilot: executing)
+**Current Plan:** 01 of 04 (in progress)
+**Status:** executing
 
 **Progress:** [█████░░░░░] 52%
 
@@ -11,8 +11,8 @@
 
 ## Position
 
-- **Last completed:** v0.2.0 Phase 8 (Execution Intelligence & Replay) -- verified passed
-- **Next up:** v0.2.0 Phase 9 (Bot Authoring & Template Ecosystem)
+- **Last completed:** Phase 9 Plan 01 (Bot Template Marketplace & NL Bot Creator Backend)
+- **Next up:** Phase 9 Plan 02
 - **Blocked by:** Nothing
 
 ## Phase Summary
@@ -21,7 +21,7 @@
 |-------|------|--------|--------------|
 | 7 | Workflow Automation & Pipeline Intelligence | Complete (3/3) — Verified | proxy |
 | 8 | Execution Intelligence & Replay | Complete (5/5) — Verified | proxy |
-| 9 | Bot Authoring & Template Ecosystem | Pending | proxy |
+| 9 | Bot Authoring & Template Ecosystem | In Progress (1/4) | proxy |
 | 10 | Analytics & Monitoring Dashboards | Complete (5/5) | proxy |
 | 11 | Enterprise Integrations & Governance | Pending | proxy |
 | 12 | Specialized Automation Bots | Pending | proxy |
@@ -87,6 +87,9 @@
 - [Phase 8]: SSE event listeners (presence_join/leave, inline_comment) attached to existing execution stream, no separate SSE connection
 - [Phase 8]: BranchNavigator uses simple indented list tree, not heavyweight graph visualization
 - [Phase 8]: Chunk/branch expansion rows follow existing replay expansion pattern in ExecutionHistory table
+- [Phase 9]: Deploy uses add_trigger() directly (not TriggerService) to avoid circular imports
+- [Phase 9]: Unique name handling via counter suffix: 'Template Name (2)', increments until unique
+- [Phase 9]: TriggerGenerationService follows exact BaseGenerationService subclass pattern
 
 ## Blockers
 
@@ -120,8 +123,9 @@ None -- no phases have deferred verification level in this milestone.
 | 08 | 03 | 10min | 2 | 9 |
 | 08 | 04 | 3min | 2 | 6 |
 | 08 | 05 | 6min | 2 | 12 |
+| 09 | 01 | 16min | 2 | 12 |
 
 ## Session Log
 
 - **Last session:** 2026-03-05
-- **Stopped at:** Completed 10-05-PLAN.md (health dashboard, team report, scheduling suggestions, budget limits frontend) + Completed 08-05-PLAN.md (collaborative viewing, branch navigation, chunk results frontend)
+- **Stopped at:** Completed 09-01-PLAN.md (bot template marketplace backend + NL bot creator)
