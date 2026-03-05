@@ -15,7 +15,10 @@ from ..database import (
     get_pending_approval_states,
     get_workflow,
     get_workflow_execution,
+    get_workflow_execution_analytics,
+    get_workflow_execution_timeline,
     get_workflow_executions,
+    get_workflow_node_analytics,
     get_workflow_node_executions,
     get_workflow_versions,
     update_workflow,
@@ -339,6 +342,40 @@ def stream_workflow_execution(path: WorkflowExecutionIdPath):
             "X-Accel-Buffering": "no",
         },
     )
+
+
+# =============================================================================
+# Analytics Endpoints
+# =============================================================================
+
+
+@workflows_bp.get("/<workflow_id>/analytics")
+def workflow_analytics(path: WorkflowPath):
+    """Get per-node success/failure rates and aggregate stats for a workflow."""
+    workflow = get_workflow(path.workflow_id)
+    if not workflow:
+        return {"error": "Workflow not found"}, HTTPStatus.NOT_FOUND
+
+    days = request.args.get("days", 30, type=int)
+    nodes = get_workflow_node_analytics(path.workflow_id)
+    summary = get_workflow_execution_analytics(path.workflow_id, days=days)
+
+    return {"nodes": nodes, "summary": summary}, HTTPStatus.OK
+
+
+@workflows_bp.get("/executions/<execution_id>/timeline")
+def workflow_execution_timeline(path: WorkflowExecutionPath):
+    """Get ordered node execution timeline for debugging a workflow execution."""
+    execution = get_workflow_execution(path.execution_id)
+    if not execution:
+        return {"error": "Execution not found"}, HTTPStatus.NOT_FOUND
+
+    nodes = get_workflow_execution_timeline(path.execution_id)
+    return {
+        "nodes": nodes,
+        "workflow_id": execution.get("workflow_id"),
+        "status": execution.get("status"),
+    }, HTTPStatus.OK
 
 
 # =============================================================================

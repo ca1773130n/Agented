@@ -545,6 +545,194 @@ def get_pending_approval_states() -> List[dict]:
         return [dict(row) for row in cursor.fetchall()]
 
 
+# =============================================================================
+# Workflow Analytics
+# =============================================================================
+
+
+def get_workflow_node_analytics(workflow_id: str) -> List[dict]:
+    """Get per-node aggregation of execution statistics for a workflow.
+
+    Returns a list of dicts with: node_id, node_type, total_runs, success_count,
+    failure_count, skip_count, avg_duration_seconds, last_run_at.
+    """
+    with get_connection() as conn:
+        cursor = conn.execute(
+            """
+            SELECT
+                ne.node_id,
+                ne.node_type,
+                COUNT(*) as total_runs,
+                SUM(CASE WHEN ne.status = 'completed' THEN 1 ELSE 0 END) as success_count,
+                SUM(CASE WHEN ne.status = 'failed' THEN 1 ELSE 0 END) as failure_count,
+                SUM(CASE WHEN ne.status = 'skipped' THEN 1 ELSE 0 END) as skip_count,
+                AVG(
+                    CASE WHEN ne.ended_at IS NOT NULL AND ne.started_at IS NOT NULL
+                    THEN (julianday(ne.ended_at) - julianday(ne.started_at)) * 86400.0
+                    ELSE NULL END
+                ) as avg_duration_seconds,
+                MAX(ne.started_at) as last_run_at
+            FROM workflow_node_executions ne
+            JOIN workflow_executions we ON ne.execution_id = we.id
+            WHERE we.workflow_id = ?
+            GROUP BY ne.node_id, ne.node_type
+            ORDER BY ne.node_id
+            """,
+            (workflow_id,),
+        )
+        rows = cursor.fetchall()
+        return [
+            {
+                "node_id": row[0],
+                "node_type": row[1],
+                "total_runs": row[2],
+                "success_count": row[3],
+                "failure_count": row[4],
+                "skip_count": row[5],
+                "avg_duration_seconds": round(row[6], 2) if row[6] else 0.0,
+                "last_run_at": row[7],
+            }
+            for row in rows
+        ]
+
+
+def get_workflow_execution_timeline(execution_id: str) -> List[dict]:
+    """Get all node executions for a workflow execution, ordered chronologically.
+
+    Useful for debugging -- shows exactly which node failed and the error details.
+    """
+    with get_connection() as conn:
+        cursor = conn.execute(
+            """
+            SELECT
+                ne.node_id,
+                ne.node_type,
+                ne.status,
+                ne.input_json,
+                ne.output_json,
+                ne.error,
+                ne.started_at,
+                ne.ended_at,
+                CASE WHEN ne.ended_at IS NOT NULL AND ne.started_at IS NOT NULL
+                    THEN (julianday(ne.ended_at) - julianday(ne.started_at)) * 86400.0
+                    ELSE NULL END as duration_seconds
+            FROM workflow_node_executions ne
+            WHERE ne.execution_id = ?
+            ORDER BY ne.started_at ASC, ne.id ASC
+            """,
+            (execution_id,),
+        )
+        rows = cursor.fetchall()
+        return [
+            {
+                "node_id": row[0],
+                "node_type": row[1],
+                "status": row[2],
+                "input_json": row[3],
+                "output_json": row[4],
+                "error": row[5],
+                "started_at": row[6],
+                "ended_at": row[7],
+                "duration_seconds": round(row[8], 2) if row[8] else None,
+            }
+            for row in rows
+        ]
+
+
+def get_workflow_execution_analytics(
+    workflow_id: Optional[str] = None, days: int = 30
+) -> dict:
+    """Get aggregate workflow execution analytics.
+
+    Args:
+        workflow_id: Optional filter by specific workflow.
+        days: Number of days to look back (default 30).
+
+    Returns:
+        Dict with total_executions, success_rate, avg_duration, most_failed_nodes,
+        and execution_trend (daily counts).
+    """
+    with get_connection() as conn:
+        where = "WHERE we.started_at >= datetime('now', ?)"
+        params: list = [f"-{days} days"]
+
+        if workflow_id is not None:
+            where += " AND we.workflow_id = ?"
+            params.append(workflow_id)
+
+        # Aggregate stats
+        cursor = conn.execute(
+            f"""
+            SELECT
+                COUNT(*) as total,
+                SUM(CASE WHEN we.status = 'completed' THEN 1 ELSE 0 END) as success_count,
+                AVG(
+                    CASE WHEN we.ended_at IS NOT NULL AND we.started_at IS NOT NULL
+                    THEN (julianday(we.ended_at) - julianday(we.started_at)) * 86400.0
+                    ELSE NULL END
+                ) as avg_duration
+            FROM workflow_executions we {where}
+            """,
+            params,
+        )
+        row = cursor.fetchone()
+        total = row[0] or 0
+        success_count = row[1] or 0
+        success_rate = round(success_count / total, 4) if total > 0 else 0.0
+        avg_duration = round(row[2], 2) if row[2] else 0.0
+
+        # Most failed nodes
+        most_failed_params: list = [f"-{days} days"]
+        most_failed_where = "WHERE we.started_at >= datetime('now', ?)"
+        if workflow_id is not None:
+            most_failed_where += " AND we.workflow_id = ?"
+            most_failed_params.append(workflow_id)
+
+        cursor2 = conn.execute(
+            f"""
+            SELECT ne.node_id, ne.node_type, COUNT(*) as fail_count
+            FROM workflow_node_executions ne
+            JOIN workflow_executions we ON ne.execution_id = we.id
+            {most_failed_where}
+            AND ne.status = 'failed'
+            GROUP BY ne.node_id, ne.node_type
+            ORDER BY fail_count DESC
+            LIMIT 5
+            """,
+            most_failed_params,
+        )
+        most_failed = [
+            {"node_id": r[0], "node_type": r[1], "fail_count": r[2]}
+            for r in cursor2.fetchall()
+        ]
+
+        # Execution trend (daily counts)
+        trend_params: list = [f"-{days} days"]
+        trend_where = "WHERE we.started_at >= datetime('now', ?)"
+        if workflow_id is not None:
+            trend_where += " AND we.workflow_id = ?"
+            trend_params.append(workflow_id)
+
+        cursor3 = conn.execute(
+            f"""
+            SELECT strftime('%Y-%m-%d', we.started_at) as day, COUNT(*) as count
+            FROM workflow_executions we {trend_where}
+            GROUP BY day
+            ORDER BY day ASC
+            """,
+            trend_params,
+        )
+        trend = [{"date": r[0], "count": r[1]} for r in cursor3.fetchall()]
+
+        return {
+            "total_executions": total,
+            "success_rate": success_rate,
+            "avg_duration_seconds": avg_duration,
+            "most_failed_nodes": most_failed,
+            "execution_trend": trend,
+        }
+
+
 def cleanup_stale_approval_states() -> int:
     """Mark timed-out pending approval states as timed_out.
 

@@ -939,11 +939,25 @@ def update_execution_status_cas(
 
 
 def get_execution_logs_filtered(
-    status: Optional[str] = None, trigger_id: Optional[str] = None
+    status: Optional[str] = None,
+    trigger_id: Optional[str] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    limit: int = 100,
+    offset: int = 0,
 ) -> List[dict]:
-    """Query execution logs with optional status and trigger_id filters.
+    """Query execution logs with composable filters and pagination.
 
-    Returns matching rows ordered by created_at DESC.
+    Args:
+        status: Filter by execution status (e.g. 'running', 'success', 'failed').
+        trigger_id: Filter by trigger ID.
+        date_from: Filter by started_at >= date_from (ISO 8601 string).
+        date_to: Filter by started_at <= date_to (ISO 8601 string).
+        limit: Max rows to return (default 100).
+        offset: Number of rows to skip (default 0).
+
+    Returns:
+        Matching rows ordered by started_at DESC.
     """
     with get_connection() as conn:
         query = "SELECT * FROM execution_logs WHERE 1=1"
@@ -955,10 +969,56 @@ def get_execution_logs_filtered(
         if trigger_id is not None:
             query += " AND trigger_id = ?"
             params.append(trigger_id)
+        if date_from is not None:
+            query += " AND started_at >= ?"
+            params.append(date_from)
+        if date_to is not None:
+            query += " AND started_at <= ?"
+            params.append(date_to)
 
-        query += " ORDER BY started_at DESC"
+        query += " ORDER BY started_at DESC LIMIT ? OFFSET ?"
+        params.extend([limit, offset])
         cursor = conn.execute(query, params)
         return [dict(row) for row in cursor.fetchall()]
+
+
+def get_execution_stats(trigger_id: Optional[str] = None) -> Dict:
+    """Get aggregate execution statistics.
+
+    Args:
+        trigger_id: Optional filter by trigger ID.
+
+    Returns:
+        Dict with total, success_count, failed_count, avg_duration.
+    """
+    with get_connection() as conn:
+        where = "WHERE 1=1"
+        params: list = []
+        if trigger_id is not None:
+            where += " AND trigger_id = ?"
+            params.append(trigger_id)
+
+        cursor = conn.execute(
+            f"""
+            SELECT
+                COUNT(*) as total,
+                SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) as success_count,
+                SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) as failed_count,
+                AVG(CASE WHEN duration_ms IS NOT NULL
+                    THEN duration_ms / 1000.0
+                    ELSE NULL END
+                ) as avg_duration_seconds
+            FROM execution_logs {where}
+            """,
+            params,
+        )
+        row = cursor.fetchone()
+        return {
+            "total": row[0] or 0,
+            "success_count": row[1] or 0,
+            "failed_count": row[2] or 0,
+            "avg_duration_seconds": round(row[3], 2) if row[3] else 0.0,
+        }
 
 
 def get_execution_log(execution_id: str) -> Optional[dict]:

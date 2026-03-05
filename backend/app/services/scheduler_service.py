@@ -2,6 +2,7 @@
 
 import json
 import logging
+import os
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -62,17 +63,27 @@ class SchedulerService:
         cls._load_scheduled_triggers()
         cls._load_scheduled_teams()
 
-        # Schedule daily cleanup of old execution logs (30-day retention)
-        cls._scheduler.add_job(
-            func=delete_old_execution_logs,
-            trigger="cron",
-            hour=3,
-            minute=0,
-            id="cleanup_old_executions",
-            replace_existing=True,
-            kwargs={"days": 30},
-        )
-        logger.info("Scheduled daily execution log cleanup (30-day retention)")
+        # Schedule daily cleanup of old execution logs (configurable retention).
+        # Default: 0 = unlimited retention (no cleanup). Set EXECUTION_LOG_RETENTION_DAYS
+        # to a positive integer to enable automatic cleanup.
+        retention_days = int(os.environ.get("EXECUTION_LOG_RETENTION_DAYS", "0"))
+        if retention_days > 0:
+            cls._scheduler.add_job(
+                func=delete_old_execution_logs,
+                trigger="cron",
+                hour=3,
+                minute=0,
+                id="cleanup_old_executions",
+                replace_existing=True,
+                kwargs={"days": retention_days},
+            )
+            logger.info(
+                "Scheduled daily execution log cleanup (%d-day retention)", retention_days
+            )
+        else:
+            logger.info(
+                "Execution log cleanup disabled (EXECUTION_LOG_RETENTION_DAYS=0, unlimited retention)"
+            )
 
         # Initialize workflow trigger service (depends on scheduler being started)
         try:
