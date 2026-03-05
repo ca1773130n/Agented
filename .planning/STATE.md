@@ -11,8 +11,8 @@
 
 ## Position
 
-- **Last completed:** Phase 12 Plan 02 (Claude Skill Instructions and SpecializedBotService)
-- **Next up:** Phase 12 Plan 03
+- **Last completed:** Phase 12 Plan 03 (Specialized Bot API Routes & Search UI)
+- **Next up:** Phase 12 complete; next phase TBD
 - **Blocked by:** Nothing
 
 ## Phase Summary
@@ -24,7 +24,7 @@
 | 9 | Bot Authoring & Template Ecosystem | Complete (4/4) | proxy |
 | 10 | Analytics & Monitoring Dashboards | Complete (5/5) | proxy |
 | 11 | Enterprise Integrations & Governance | Pending | proxy |
-| 12 | Specialized Automation Bots | In Progress (2/3) | proxy |
+| 12 | Specialized Automation Bots | Complete (3/3) | proxy |
 | 13 | Execution Resilience & Infrastructure | Pending | proxy |
 | 14 | API Hardening & Developer Experience | Pending | proxy |
 | 15 | Code Consistency & Standards | Pending | sanity |
@@ -105,6 +105,9 @@
 - [Phase 12]: osv-scanner as primary vulnerability scanner with ecosystem-specific fallbacks
 - [Phase 12]: PR summary optimized for 60s SLA with lightweight diff analysis
 - [Phase 12]: SpecializedBotService uses classmethod pattern matching existing services
+- [Phase 12]: Standalone sidebar button for Execution Search (not expandable group) since single destination
+- [Phase 12]: Search functions in specializedBotApi (not separate module) for domain cohesion
+- [Phase 12]: v-html for FTS5 snippets with XSS safety note (content from own DB, not user HTML)
 
 ## Blockers
 
@@ -144,8 +147,9 @@ None -- no phases have deferred verification level in this milestone.
 | 09 | 04 | 11min | 2 | 7 |
 | 12 | 01 | 11min | 2 | 10 |
 | 12 | 02 | 12min | 2 | 8 |
+| 12 | 03 | 14min | 2 | 8 |
 
 ## Session Log
 
 - **Last session:** 2026-03-05
-- **Stopped at:** Completed 12-02-PLAN.md (Claude skill instructions and SpecializedBotService)
+- **Stopped at:** Completed 12-03-PLAN.md (Specialized Bot API Routes & Search UI)
