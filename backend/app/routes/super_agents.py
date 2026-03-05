@@ -2,8 +2,6 @@
 
 import json
 import logging
-import random
-import string
 import threading
 import time
 from http import HTTPStatus
@@ -322,8 +320,9 @@ class ChatSendRequest(BaseModel):
 
 def _generate_message_id() -> str:
     """Generate a unique message ID with msg- prefix."""
-    suffix = "".join(random.choices(string.ascii_lowercase + string.digits, k=6))
-    return f"msg-{suffix}"
+    from app.db.ids import generate_message_id
+
+    return generate_message_id()
 
 
 @super_agents_bp.get("/<super_agent_id>/sessions/<session_id>/chat/stream")

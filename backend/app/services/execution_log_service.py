@@ -3,22 +3,14 @@
 import datetime
 import json
 import logging
-import os
 import threading
 from dataclasses import asdict, dataclass
 from queue import Empty, Queue
 from typing import Dict, Generator, List, Optional
 
+from app.config import SSE_KEEPALIVE_TIMEOUT, SSE_REPLAY_LIMIT, STALE_EXECUTION_THRESHOLD
+
 logger = logging.getLogger(__name__)
-
-# Stale execution cleanup threshold in seconds (default 15 minutes).
-# Override via STALE_EXECUTION_THRESHOLD_SECS environment variable.
-STALE_EXECUTION_THRESHOLD = int(os.environ.get("STALE_EXECUTION_THRESHOLD_SECS", "900"))
-
-# Maximum number of buffered log lines replayed to new SSE subscribers on connect.
-# Prevents flooding clients that connect to long-running executions with thousands of events.
-# Override via SSE_REPLAY_LIMIT environment variable.
-SSE_REPLAY_LIMIT = int(os.environ.get("SSE_REPLAY_LIMIT", "500"))
 
 from ..database import (
     count_all_execution_logs,
@@ -255,7 +247,7 @@ class ExecutionLogService:
         try:
             while True:
                 try:
-                    event = queue.get(timeout=30)  # 30 second timeout for keepalive
+                    event = queue.get(timeout=SSE_KEEPALIVE_TIMEOUT)
                     if event is None:
                         break  # End of stream
                     yield event

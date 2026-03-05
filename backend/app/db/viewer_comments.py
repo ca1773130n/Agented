@@ -5,23 +5,18 @@ Persisted to SQLite for durability beyond SSE sessions.
 """
 
 import logging
-import random
 import sqlite3
-import string
 from typing import Optional
 
 from .connection import get_connection
+from .ids import generate_comment_id
 
 logger = logging.getLogger(__name__)
-
-COMMENT_ID_PREFIX = "cmt-"
-COMMENT_ID_LENGTH = 6
 
 
 def _generate_comment_id() -> str:
     """Generate a comment ID with cmt- prefix and 6-char random suffix."""
-    suffix = "".join(random.choices(string.ascii_lowercase + string.digits, k=COMMENT_ID_LENGTH))
-    return f"{COMMENT_ID_PREFIX}{suffix}"
+    return generate_comment_id()
 
 
 def create_viewer_comment(

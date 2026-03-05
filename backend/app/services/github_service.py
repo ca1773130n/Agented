@@ -9,14 +9,16 @@ import subprocess
 import tempfile
 from typing import Optional, Tuple
 
+from app import config as app_config
+
 logger = logging.getLogger(__name__)
 
 
 class GitHubService:
     """Service for GitHub repository clone, branch, commit, push, and PR operations."""
 
-    CLONE_TIMEOUT = 300  # 5 minutes
-    GIT_OP_TIMEOUT = 120  # 2 minutes
+    CLONE_TIMEOUT = app_config.CLONE_TIMEOUT
+    GIT_OP_TIMEOUT = app_config.GIT_OP_TIMEOUT
 
     @staticmethod
     def parse_repo_url(url: str) -> Tuple[str, str]:

@@ -91,14 +91,38 @@ TEMPLATE_ID_LENGTH = 6
 SNIPPET_ID_PREFIX = "snip-"
 SNIPPET_ID_LENGTH = 6
 
+COMMENT_ID_PREFIX = "cmt-"
+COMMENT_ID_LENGTH = 6
 
-# --- Generic helper ---
+
+# --- Central ID factory ---
+
+_ID_CHARS = string.ascii_lowercase + string.digits
+
+
+def generate_id(prefix: str, length: int = 6) -> str:
+    """Generate a random ID with the given prefix and random suffix length.
+
+    Uses ``secrets.choice()`` for cryptographically secure randomness.
+    All entity-specific generators delegate to this function.
+
+    Args:
+        prefix: The ID prefix (e.g. ``"agent-"``).
+        length: Number of random characters in the suffix.
+
+    Returns:
+        A string like ``"{prefix}{random_suffix}"``.
+    """
+    random_part = "".join(secrets.choice(_ID_CHARS) for _ in range(length))
+    return f"{prefix}{random_part}"
+
+
+# --- Generic helper (kept for backward compat) ---
 
 
 def _generate_short_id(length: int = 6) -> str:
     """Generate a random short ID for internal use."""
-    chars = string.ascii_lowercase + string.digits
-    return "".join(secrets.choice(chars) for _ in range(length))
+    return generate_id("", length)
 
 
 # --- Public ID generators ---
@@ -106,51 +130,37 @@ def _generate_short_id(length: int = 6) -> str:
 
 def generate_trigger_id() -> str:
     """Generate a unique trigger ID like 'trig-abc123'."""
-    chars = string.ascii_lowercase + string.digits
-    random_part = "".join(secrets.choice(chars) for _ in range(TRIGGER_ID_LENGTH))
-    return f"{TRIGGER_ID_PREFIX}{random_part}"
+    return generate_id(TRIGGER_ID_PREFIX, TRIGGER_ID_LENGTH)
 
 
 def generate_agent_id() -> str:
     """Generate a unique agent ID like 'agent-abc123'."""
-    chars = string.ascii_lowercase + string.digits
-    random_part = "".join(secrets.choice(chars) for _ in range(AGENT_ID_LENGTH))
-    return f"{AGENT_ID_PREFIX}{random_part}"
+    return generate_id(AGENT_ID_PREFIX, AGENT_ID_LENGTH)
 
 
 def generate_conversation_id() -> str:
     """Generate a unique conversation ID like 'conv-abc12345'."""
-    chars = string.ascii_lowercase + string.digits
-    random_part = "".join(secrets.choice(chars) for _ in range(CONVERSATION_ID_LENGTH))
-    return f"{CONVERSATION_ID_PREFIX}{random_part}"
+    return generate_id(CONVERSATION_ID_PREFIX, CONVERSATION_ID_LENGTH)
 
 
 def generate_team_id() -> str:
     """Generate a unique team ID like 'team-abc123'."""
-    chars = string.ascii_lowercase + string.digits
-    random_part = "".join(secrets.choice(chars) for _ in range(TEAM_ID_LENGTH))
-    return f"{TEAM_ID_PREFIX}{random_part}"
+    return generate_id(TEAM_ID_PREFIX, TEAM_ID_LENGTH)
 
 
 def generate_product_id() -> str:
     """Generate a unique product ID like 'prod-abc123'."""
-    chars = string.ascii_lowercase + string.digits
-    random_part = "".join(secrets.choice(chars) for _ in range(PRODUCT_ID_LENGTH))
-    return f"{PRODUCT_ID_PREFIX}{random_part}"
+    return generate_id(PRODUCT_ID_PREFIX, PRODUCT_ID_LENGTH)
 
 
 def generate_project_id() -> str:
     """Generate a unique project ID like 'proj-abc123'."""
-    chars = string.ascii_lowercase + string.digits
-    random_part = "".join(secrets.choice(chars) for _ in range(PROJECT_ID_LENGTH))
-    return f"{PROJECT_ID_PREFIX}{random_part}"
+    return generate_id(PROJECT_ID_PREFIX, PROJECT_ID_LENGTH)
 
 
 def generate_plugin_id() -> str:
     """Generate a unique plugin ID like 'plug-abc123'."""
-    chars = string.ascii_lowercase + string.digits
-    random_part = "".join(secrets.choice(chars) for _ in range(PLUGIN_ID_LENGTH))
-    return f"{PLUGIN_ID_PREFIX}{random_part}"
+    return generate_id(PLUGIN_ID_PREFIX, PLUGIN_ID_LENGTH)
 
 
 def generate_execution_id(trigger_id: str) -> str:
@@ -158,7 +168,7 @@ def generate_execution_id(trigger_id: str) -> str:
     import datetime
 
     timestamp = datetime.datetime.now().strftime("%Y%m%dT%H%M%S")
-    random_part = "".join(secrets.choice(string.ascii_lowercase + string.digits) for _ in range(4))
+    random_part = generate_id("", 4)
     return f"exec-{trigger_id}-{timestamp}-{random_part}"
 
 
@@ -233,44 +243,32 @@ def _get_unique_plugin_id(conn) -> str:
 
 def generate_super_agent_id() -> str:
     """Generate a unique super agent ID like 'super-abc123'."""
-    chars = string.ascii_lowercase + string.digits
-    random_part = "".join(secrets.choice(chars) for _ in range(SUPER_AGENT_ID_LENGTH))
-    return f"{SUPER_AGENT_ID_PREFIX}{random_part}"
+    return generate_id(SUPER_AGENT_ID_PREFIX, SUPER_AGENT_ID_LENGTH)
 
 
 def generate_session_id() -> str:
     """Generate a unique session ID like 'sess-abc12345'."""
-    chars = string.ascii_lowercase + string.digits
-    random_part = "".join(secrets.choice(chars) for _ in range(SESSION_ID_LENGTH))
-    return f"{SESSION_ID_PREFIX}{random_part}"
+    return generate_id(SESSION_ID_PREFIX, SESSION_ID_LENGTH)
 
 
 def generate_message_id() -> str:
     """Generate a unique message ID like 'msg-abc12345'."""
-    chars = string.ascii_lowercase + string.digits
-    random_part = "".join(secrets.choice(chars) for _ in range(MESSAGE_ID_LENGTH))
-    return f"{MESSAGE_ID_PREFIX}{random_part}"
+    return generate_id(MESSAGE_ID_PREFIX, MESSAGE_ID_LENGTH)
 
 
 def generate_workflow_id() -> str:
     """Generate a unique workflow ID like 'wf-abc123'."""
-    chars = string.ascii_lowercase + string.digits
-    random_part = "".join(secrets.choice(chars) for _ in range(WORKFLOW_ID_LENGTH))
-    return f"{WORKFLOW_ID_PREFIX}{random_part}"
+    return generate_id(WORKFLOW_ID_PREFIX, WORKFLOW_ID_LENGTH)
 
 
 def generate_workflow_execution_id() -> str:
     """Generate a unique workflow execution ID like 'wfx-abc12345'."""
-    chars = string.ascii_lowercase + string.digits
-    random_part = "".join(secrets.choice(chars) for _ in range(WORKFLOW_EXECUTION_ID_LENGTH))
-    return f"{WORKFLOW_EXECUTION_ID_PREFIX}{random_part}"
+    return generate_id(WORKFLOW_EXECUTION_ID_PREFIX, WORKFLOW_EXECUTION_ID_LENGTH)
 
 
 def generate_sketch_id() -> str:
     """Generate a unique sketch ID like 'sketch-abc123'."""
-    chars = string.ascii_lowercase + string.digits
-    random_part = "".join(secrets.choice(chars) for _ in range(SKETCH_ID_LENGTH))
-    return f"{SKETCH_ID_PREFIX}{random_part}"
+    return generate_id(SKETCH_ID_PREFIX, SKETCH_ID_LENGTH)
 
 
 # --- v0.3.0 Collision-safe ID generators ---
@@ -335,72 +333,57 @@ def _get_unique_sketch_id(conn) -> str:
 
 def generate_milestone_id() -> str:
     """Generate a unique milestone ID like 'ms-abc123'."""
-    chars = string.ascii_lowercase + string.digits
-    random_part = "".join(secrets.choice(chars) for _ in range(MILESTONE_ID_LENGTH))
-    return f"{MILESTONE_ID_PREFIX}{random_part}"
+    return generate_id(MILESTONE_ID_PREFIX, MILESTONE_ID_LENGTH)
 
 
 def generate_phase_id() -> str:
     """Generate a unique phase ID like 'phase-abc123'."""
-    chars = string.ascii_lowercase + string.digits
-    random_part = "".join(secrets.choice(chars) for _ in range(PHASE_ID_LENGTH))
-    return f"{PHASE_ID_PREFIX}{random_part}"
+    return generate_id(PHASE_ID_PREFIX, PHASE_ID_LENGTH)
 
 
 def generate_plan_id() -> str:
     """Generate a unique plan ID like 'plan-abc123'."""
-    chars = string.ascii_lowercase + string.digits
-    random_part = "".join(secrets.choice(chars) for _ in range(PLAN_ID_LENGTH))
-    return f"{PLAN_ID_PREFIX}{random_part}"
+    return generate_id(PLAN_ID_PREFIX, PLAN_ID_LENGTH)
 
 
 def generate_project_session_id() -> str:
     """Generate a unique project session ID like 'psess-abc12345'."""
-    chars = string.ascii_lowercase + string.digits
-    random_part = "".join(secrets.choice(chars) for _ in range(PROJECT_SESSION_ID_LENGTH))
-    return f"{PROJECT_SESSION_ID_PREFIX}{random_part}"
+    return generate_id(PROJECT_SESSION_ID_PREFIX, PROJECT_SESSION_ID_LENGTH)
 
 
 def generate_rotation_event_id() -> str:
     """Generate a unique rotation event ID like 'rot-abc12345'."""
-    chars = string.ascii_lowercase + string.digits
-    random_part = "".join(secrets.choice(chars) for _ in range(ROTATION_EVENT_ID_LENGTH))
-    return f"{ROTATION_EVENT_ID_PREFIX}{random_part}"
+    return generate_id(ROTATION_EVENT_ID_PREFIX, ROTATION_EVENT_ID_LENGTH)
 
 
 def generate_product_decision_id() -> str:
     """Generate a unique product decision ID like 'pdec-abc123'."""
-    chars = string.ascii_lowercase + string.digits
-    random_part = "".join(secrets.choice(chars) for _ in range(PRODUCT_DECISION_ID_LENGTH))
-    return f"{PRODUCT_DECISION_ID_PREFIX}{random_part}"
+    return generate_id(PRODUCT_DECISION_ID_PREFIX, PRODUCT_DECISION_ID_LENGTH)
 
 
 def generate_product_milestone_id() -> str:
     """Generate a unique product milestone ID like 'pms-abc123'."""
-    chars = string.ascii_lowercase + string.digits
-    random_part = "".join(secrets.choice(chars) for _ in range(PRODUCT_MILESTONE_ID_LENGTH))
-    return f"{PRODUCT_MILESTONE_ID_PREFIX}{random_part}"
+    return generate_id(PRODUCT_MILESTONE_ID_PREFIX, PRODUCT_MILESTONE_ID_LENGTH)
 
 
 def generate_mcp_server_id() -> str:
     """Generate a unique MCP server ID like 'mcp-abc123'."""
-    chars = string.ascii_lowercase + string.digits
-    random_part = "".join(secrets.choice(chars) for _ in range(MCP_SERVER_ID_LENGTH))
-    return f"{MCP_SERVER_ID_PREFIX}{random_part}"
+    return generate_id(MCP_SERVER_ID_PREFIX, MCP_SERVER_ID_LENGTH)
 
 
 def generate_role_id() -> str:
     """Generate a unique role ID like 'role-abc123'."""
-    chars = string.ascii_lowercase + string.digits
-    random_part = "".join(secrets.choice(chars) for _ in range(ROLE_ID_LENGTH))
-    return f"{ROLE_ID_PREFIX}{random_part}"
+    return generate_id(ROLE_ID_PREFIX, ROLE_ID_LENGTH)
 
 
 def generate_bookmark_id() -> str:
     """Generate a unique bookmark ID like 'bm-abc123'."""
-    chars = string.ascii_lowercase + string.digits
-    random_part = "".join(secrets.choice(chars) for _ in range(BOOKMARK_ID_LENGTH))
-    return f"{BOOKMARK_ID_PREFIX}{random_part}"
+    return generate_id(BOOKMARK_ID_PREFIX, BOOKMARK_ID_LENGTH)
+
+
+def generate_comment_id() -> str:
+    """Generate a unique comment ID like 'cmt-abc123'."""
+    return generate_id(COMMENT_ID_PREFIX, COMMENT_ID_LENGTH)
 
 
 # --- v0.4.0 Collision-safe ID generators ---
@@ -489,9 +472,7 @@ def _get_unique_role_id(conn) -> str:
 
 def generate_secret_id() -> str:
     """Generate a unique secret ID like 'sec-abc123'."""
-    chars = string.ascii_lowercase + string.digits
-    random_part = "".join(secrets.choice(chars) for _ in range(SECRET_ID_LENGTH))
-    return f"{SECRET_ID_PREFIX}{random_part}"
+    return generate_id(SECRET_ID_PREFIX, SECRET_ID_LENGTH)
 
 
 def _get_unique_secret_id(conn) -> str:
@@ -514,9 +495,7 @@ def _get_unique_bookmark_id(conn) -> str:
 
 def generate_integration_id() -> str:
     """Generate a unique integration ID like 'intg-abc123'."""
-    chars = string.ascii_lowercase + string.digits
-    random_part = "".join(secrets.choice(chars) for _ in range(INTEGRATION_ID_LENGTH))
-    return f"{INTEGRATION_ID_PREFIX}{random_part}"
+    return generate_id(INTEGRATION_ID_PREFIX, INTEGRATION_ID_LENGTH)
 
 
 def _get_unique_integration_id(conn) -> str:
@@ -530,9 +509,7 @@ def _get_unique_integration_id(conn) -> str:
 
 def generate_campaign_id() -> str:
     """Generate a unique campaign ID like 'camp-abc123'."""
-    chars = string.ascii_lowercase + string.digits
-    random_part = "".join(secrets.choice(chars) for _ in range(CAMPAIGN_ID_LENGTH))
-    return f"{CAMPAIGN_ID_PREFIX}{random_part}"
+    return generate_id(CAMPAIGN_ID_PREFIX, CAMPAIGN_ID_LENGTH)
 
 
 def _get_unique_campaign_id(conn) -> str:
@@ -546,9 +523,7 @@ def _get_unique_campaign_id(conn) -> str:
 
 def generate_template_id() -> str:
     """Generate a unique template ID like 'tpl-abc123'."""
-    chars = string.ascii_lowercase + string.digits
-    random_part = "".join(secrets.choice(chars) for _ in range(TEMPLATE_ID_LENGTH))
-    return f"{TEMPLATE_ID_PREFIX}{random_part}"
+    return generate_id(TEMPLATE_ID_PREFIX, TEMPLATE_ID_LENGTH)
 
 
 def _get_unique_template_id(conn) -> str:
@@ -562,9 +537,7 @@ def _get_unique_template_id(conn) -> str:
 
 def generate_snippet_id() -> str:
     """Generate a unique snippet ID like 'snip-abc123'."""
-    chars = string.ascii_lowercase + string.digits
-    random_part = "".join(secrets.choice(chars) for _ in range(SNIPPET_ID_LENGTH))
-    return f"{SNIPPET_ID_PREFIX}{random_part}"
+    return generate_id(SNIPPET_ID_PREFIX, SNIPPET_ID_LENGTH)
 
 
 def _get_unique_snippet_id(conn) -> str:

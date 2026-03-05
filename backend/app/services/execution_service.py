@@ -12,7 +12,17 @@ import subprocess
 import threading
 from typing import Dict, List, Optional
 
-from app.config import PROJECT_ROOT
+from app.config import (
+    EXECUTION_TIMEOUT_DEFAULT,
+    EXECUTION_TIMEOUT_MAX,
+    EXECUTION_TIMEOUT_MIN,
+    MAX_RETRY_ATTEMPTS,
+    MAX_RETRY_DELAY,
+    PROJECT_ROOT,
+    SIGTERM_GRACE_SECONDS,
+    THREAD_JOIN_TIMEOUT,
+    WEBHOOK_DEDUP_WINDOW,
+)
 
 from ..database import (
     PREDEFINED_TRIGGER_ID,
@@ -99,9 +109,6 @@ class ExecutionState:
 class ExecutionService:
     """Service for trigger execution and status tracking via database."""
 
-    # Webhook deduplication TTL in seconds (DB-backed via webhook_dedup_keys table)
-    WEBHOOK_DEDUP_WINDOW = 10
-
     # Thread-safe dict tracking rate limit detections: {execution_id: cooldown_seconds}
     _rate_limit_detected: Dict[str, int] = {}
     # Thread-safe dict tracking transient failure detections: {execution_id: error_description}
@@ -111,19 +118,12 @@ class ExecutionService:
     # Acquire before any read or write to those dicts.
     _rate_limit_lock = threading.Lock()
 
-    # Seconds within which identical (trigger, payload) pairs are suppressed (DB-backed)
-    WEBHOOK_DEDUP_WINDOW = 10
-
     # Pending rate-limit retries: {trigger_id: {"retry_at": str, "cooldown_seconds": int, ...}}
     _pending_retries: Dict[str, dict] = {}
     # Active retry timers: {trigger_id: threading.Timer}
     _retry_timers: Dict[str, threading.Timer] = {}
     # Per-trigger consecutive retry attempt counter: {trigger_id: int}
     _retry_counts: Dict[str, int] = {}
-    # Maximum consecutive rate-limit retries before giving up
-    MAX_RETRY_ATTEMPTS = 5
-    # Cap on backoff delay (seconds) to avoid extremely long waits
-    MAX_RETRY_DELAY = 3600
 
     @classmethod
     def was_rate_limited(cls, execution_id: str) -> Optional[int]:
@@ -173,13 +173,13 @@ class ExecutionService:
         if existing:
             existing.cancel()
 
-        if attempt_count > cls.MAX_RETRY_ATTEMPTS:
+        if attempt_count > MAX_RETRY_ATTEMPTS:
             logger.error(
                 "Rate-limit retry for trigger %s has exceeded max attempts (%d/%d) — "
                 "giving up to prevent infinite retry loop",
                 trigger_id,
                 attempt_count,
-                cls.MAX_RETRY_ATTEMPTS,
+                MAX_RETRY_ATTEMPTS,
             )
             AuditLogService.log(
                 action="retry.exhausted",
@@ -188,7 +188,7 @@ class ExecutionService:
                 outcome="terminal_failure",
                 details={
                     "attempt_count": attempt_count,
-                    "max_attempts": cls.MAX_RETRY_ATTEMPTS,
+                    "max_attempts": MAX_RETRY_ATTEMPTS,
                     "trigger_type": trigger_type,
                 },
             )
@@ -204,14 +204,14 @@ class ExecutionService:
                     terminal_exec_id,
                     "stderr",
                     f"[TERMINAL] Rate-limit retry exhausted after {attempt_count} attempts "
-                    f"(max={cls.MAX_RETRY_ATTEMPTS}). No further retries will be scheduled.",
+                    f"(max={MAX_RETRY_ATTEMPTS}). No further retries will be scheduled.",
                 )
                 ExecutionLogService.finish_execution(
                     execution_id=terminal_exec_id,
                     status=ExecutionState.FAILED,
                     exit_code=-1,
                     error_message=(
-                        f"Rate-limit retry exhausted: {attempt_count}/{cls.MAX_RETRY_ATTEMPTS} attempts"
+                        f"Rate-limit retry exhausted: {attempt_count}/{MAX_RETRY_ATTEMPTS} attempts"
                     ),
                 )
             with cls._rate_limit_lock:
@@ -259,9 +259,7 @@ class ExecutionService:
         # Exponential backoff: base * 2^(attempt-1), capped at MAX_RETRY_DELAY, plus random jitter
         # to reduce thundering herd when multiple executions hit rate limits simultaneously.
         jitter = random.uniform(0, min(10, cooldown_seconds))
-        backoff_delay = (
-            min(cooldown_seconds * (2 ** (attempt_count - 1)), cls.MAX_RETRY_DELAY) + jitter
-        )
+        backoff_delay = min(cooldown_seconds * (2 ** (attempt_count - 1)), MAX_RETRY_DELAY) + jitter
 
         timer = threading.Timer(backoff_delay, _retry)
         timer.daemon = True
@@ -274,7 +272,7 @@ class ExecutionService:
             "backoff_delay=%.1fs, retry_at=%s",
             trigger_id,
             attempt_count,
-            cls.MAX_RETRY_ATTEMPTS,
+            MAX_RETRY_ATTEMPTS,
             cooldown_seconds,
             backoff_delay,
             retry_at,
@@ -470,10 +468,10 @@ class ExecutionService:
             logger.debug("Could not fetch PR diff from %s: %s", diff_url, e)
             return None
 
-    # Execution timeout bounds (seconds)
-    TIMEOUT_MIN = 60  # 1 minute minimum
-    TIMEOUT_MAX = 3600  # 1 hour maximum
-    TIMEOUT_DEFAULT = 600  # 10 minutes default
+    # Execution timeout bounds imported from app.config
+    TIMEOUT_MIN = EXECUTION_TIMEOUT_MIN
+    TIMEOUT_MAX = EXECUTION_TIMEOUT_MAX
+    TIMEOUT_DEFAULT = EXECUTION_TIMEOUT_DEFAULT
 
     @staticmethod
     def build_command(
@@ -927,8 +925,8 @@ class ExecutionService:
                     os.killpg(os.getpgid(process.pid), signal.SIGKILL)
                 except OSError as e:
                     tlog.debug("Process already exited during timeout cleanup: %s", e)
-                stdout_thread.join(timeout=5)
-                stderr_thread.join(timeout=5)
+                stdout_thread.join(timeout=SIGTERM_GRACE_SECONDS)
+                stderr_thread.join(timeout=SIGTERM_GRACE_SECONDS)
                 if stdout_thread.is_alive():
                     tlog.warning("stdout reader thread still alive after kill")
                 if stderr_thread.is_alive():
@@ -954,8 +952,8 @@ class ExecutionService:
                 return execution_id
 
             # Wait for pipe readers to finish
-            stdout_thread.join(timeout=10)
-            stderr_thread.join(timeout=10)
+            stdout_thread.join(timeout=THREAD_JOIN_TIMEOUT)
+            stderr_thread.join(timeout=THREAD_JOIN_TIMEOUT)
             if stdout_thread.is_alive():
                 tlog.error(
                     "stdout reader thread still alive after process exit — output may be incomplete"
@@ -1248,7 +1246,7 @@ class ExecutionService:
             is_new = check_and_insert_dedup_key(
                 trigger_id=trigger["id"],
                 payload_hash=payload_hash,
-                ttl_seconds=cls.WEBHOOK_DEDUP_WINDOW,
+                ttl_seconds=WEBHOOK_DEDUP_WINDOW,
             )
             if not is_new:
                 logger.info(

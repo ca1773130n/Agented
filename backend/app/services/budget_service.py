@@ -5,6 +5,8 @@ import logging
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
+from app.config import DEFAULT_5H_TOKEN_LIMIT, DEFAULT_WEEKLY_TOKEN_LIMIT
+
 from ..database import (
     create_token_usage_record,
     get_average_output_tokens,
@@ -16,10 +18,6 @@ from ..database import (
 from ..db.budgets import get_monthly_run_count
 
 logger = logging.getLogger(__name__)
-
-# Default rate limit window token limits (conservative Tier 1 Anthropic estimates)
-DEFAULT_5H_TOKEN_LIMIT = 300_000
-DEFAULT_WEEKLY_TOKEN_LIMIT = 1_000_000
 
 
 class BudgetService:

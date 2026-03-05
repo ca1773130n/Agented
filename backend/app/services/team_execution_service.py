@@ -2,10 +2,10 @@
 
 import json
 import logging
-import random
-import string
 import threading
 from typing import Dict, List, Optional
+
+from app.db.ids import generate_id
 
 logger = logging.getLogger(__name__)
 
@@ -59,8 +59,7 @@ class TeamExecutionService:
             topology_config = {}
 
         # Generate tracking ID
-        suffix = "".join(random.choices(string.ascii_lowercase + string.digits, k=8))
-        team_exec_id = f"team-exec-{suffix}"
+        team_exec_id = generate_id("team-exec-", 8)
 
         # Record tracking entry
         with cls._lock:
