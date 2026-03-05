@@ -3309,6 +3309,21 @@ def _migrate_v72_add_execution_logs_fts(conn):
     conn.commit()
 
 
+def _migrate_v73_add_circuit_breakers_table(conn):
+    """Add circuit_breakers table for per-backend resilience state persistence."""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS circuit_breakers (
+            backend_type TEXT PRIMARY KEY,
+            state TEXT NOT NULL DEFAULT 'closed',
+            fail_count INTEGER DEFAULT 0,
+            success_count INTEGER DEFAULT 0,
+            last_failure_time REAL,
+            updated_at TEXT DEFAULT (datetime('now'))
+        )
+    """)
+    conn.commit()
+
+
 VERSIONED_MIGRATIONS = [
     (1, "add_github_columns", _migrate_add_github_columns),
     (2, "add_pr_reviews_table", _migrate_add_pr_reviews_table),
@@ -3386,4 +3401,6 @@ VERSIONED_MIGRATIONS = [
     (70, "prompt_snippets_table", _migrate_v70_prompt_snippets_table),
     (71, "template_history_author_diff", _migrate_v71_template_history_author_diff),
     (72, "add_execution_logs_fts", _migrate_v72_add_execution_logs_fts),
+    # v0.2.0 resilience infrastructure
+    (73, "add_circuit_breakers_table", _migrate_v73_add_circuit_breakers_table),
 ]

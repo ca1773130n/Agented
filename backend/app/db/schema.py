@@ -1696,4 +1696,16 @@ def create_fresh_schema(conn):
     """)
     conn.execute("CREATE INDEX IF NOT EXISTS idx_bot_templates_slug ON bot_templates(slug)")
 
+    # --- v0.2.0: Circuit breakers (per-backend resilience) ---
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS circuit_breakers (
+            backend_type TEXT PRIMARY KEY,
+            state TEXT NOT NULL DEFAULT 'closed',
+            fail_count INTEGER DEFAULT 0,
+            success_count INTEGER DEFAULT 0,
+            last_failure_time REAL,
+            updated_at TEXT DEFAULT (datetime('now'))
+        )
+    """)
+
     conn.commit()
