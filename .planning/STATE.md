@@ -1,7 +1,7 @@
 # GRD Execution State
 
 **Milestone:** v0.1.0 -- Production Hardening (active) / v0.2.0 -- Miscellaneous
-**Current Phase:** Phase 9 (autopilot: executing)
+**Current Phase:** Phase 12 (autopilot: executing)
 **Current Plan:** 04 of 04 (complete)
 **Status:** executing
 
@@ -11,8 +11,8 @@
 
 ## Position
 
-- **Last completed:** Phase 9 Plan 04 (Version History UI, Webhook Test Console, Backend Tests)
-- **Next up:** Phase 11 (Enterprise Integrations & Governance)
+- **Last completed:** Phase 12 Plan 01 (Predefined Trigger Definitions and FTS5 Search Infrastructure)
+- **Next up:** Phase 12 Plan 02
 - **Blocked by:** Nothing
 
 ## Phase Summary
@@ -24,7 +24,7 @@
 | 9 | Bot Authoring & Template Ecosystem | Complete (4/4) | proxy |
 | 10 | Analytics & Monitoring Dashboards | Complete (5/5) | proxy |
 | 11 | Enterprise Integrations & Governance | Pending | proxy |
-| 12 | Specialized Automation Bots | Pending | proxy |
+| 12 | Specialized Automation Bots | In Progress (1/3) | proxy |
 | 13 | Execution Resilience & Infrastructure | Pending | proxy |
 | 14 | API Hardening & Developer Experience | Pending | proxy |
 | 15 | Code Consistency & Standards | Pending | sanity |
@@ -98,6 +98,9 @@
 - [Phase 9]: snippetRef() helper avoids Vue template interpolation collision with {{}} snippet syntax
 - [Phase 9]: Collapsible tool tabs in GenericTriggerDashboard for Version History and Test Console panels
 - [Phase 9]: Fixed get_prompt_template_history ordering: added secondary sort by id DESC for deterministic results
+- [Phase 12]: FTS5 with porter tokenizer for BM25-ranked search over execution logs
+- [Phase 12]: Content sync via 3 SQLite triggers (INSERT, UPDATE, DELETE) per 12-RESEARCH.md
+- [Phase 12]: Migration v72 rebuilds FTS index from existing data for existing databases
 
 ## Blockers
 
@@ -135,8 +138,9 @@ None -- no phases have deferred verification level in this milestone.
 | 09 | 02 | 16min | 2 | 13 |
 | 09 | 03 | 5min | 2 | 9 |
 | 09 | 04 | 11min | 2 | 7 |
+| 12 | 01 | 11min | 2 | 10 |
 
 ## Session Log
 
 - **Last session:** 2026-03-05
-- **Stopped at:** Completed 09-04-PLAN.md (version history UI, webhook test console, backend tests)
+- **Stopped at:** Completed 12-01-PLAN.md (predefined triggers and FTS5 search infrastructure)
