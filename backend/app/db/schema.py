@@ -105,8 +105,8 @@ def create_fresh_schema(conn):
     conn.execute("""
         CREATE VIRTUAL TABLE IF NOT EXISTS execution_logs_fts
         USING fts5(
-            stdout_content,
-            stderr_content,
+            stdout_log,
+            stderr_log,
             prompt,
             content=execution_logs,
             content_rowid=id,
@@ -119,7 +119,7 @@ def create_fresh_schema(conn):
         CREATE TRIGGER IF NOT EXISTS execution_logs_fts_insert
         AFTER INSERT ON execution_logs
         BEGIN
-            INSERT INTO execution_logs_fts(rowid, stdout_content, stderr_content, prompt)
+            INSERT INTO execution_logs_fts(rowid, stdout_log, stderr_log, prompt)
             VALUES (new.id, COALESCE(new.stdout_log, ''), COALESCE(new.stderr_log, ''), COALESCE(new.prompt, ''));
         END
     """)
@@ -128,9 +128,9 @@ def create_fresh_schema(conn):
         CREATE TRIGGER IF NOT EXISTS execution_logs_fts_update
         AFTER UPDATE OF stdout_log, stderr_log ON execution_logs
         BEGIN
-            INSERT INTO execution_logs_fts(execution_logs_fts, rowid, stdout_content, stderr_content, prompt)
+            INSERT INTO execution_logs_fts(execution_logs_fts, rowid, stdout_log, stderr_log, prompt)
             VALUES ('delete', old.id, COALESCE(old.stdout_log, ''), COALESCE(old.stderr_log, ''), COALESCE(old.prompt, ''));
-            INSERT INTO execution_logs_fts(rowid, stdout_content, stderr_content, prompt)
+            INSERT INTO execution_logs_fts(rowid, stdout_log, stderr_log, prompt)
             VALUES (new.id, COALESCE(new.stdout_log, ''), COALESCE(new.stderr_log, ''), COALESCE(new.prompt, ''));
         END
     """)
@@ -139,7 +139,7 @@ def create_fresh_schema(conn):
         CREATE TRIGGER IF NOT EXISTS execution_logs_fts_delete
         AFTER DELETE ON execution_logs
         BEGIN
-            INSERT INTO execution_logs_fts(execution_logs_fts, rowid, stdout_content, stderr_content, prompt)
+            INSERT INTO execution_logs_fts(execution_logs_fts, rowid, stdout_log, stderr_log, prompt)
             VALUES ('delete', old.id, COALESCE(old.stdout_log, ''), COALESCE(old.stderr_log, ''), COALESCE(old.prompt, ''));
         END
     """)
@@ -1438,12 +1438,9 @@ def create_fresh_schema(conn):
         )
     """)
     conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_audit_events_entity "
-        "ON audit_events(entity_type, entity_id)"
+        "CREATE INDEX IF NOT EXISTS idx_audit_events_entity ON audit_events(entity_type, entity_id)"
     )
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_audit_events_actor ON audit_events(actor)"
-    )
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_audit_events_actor ON audit_events(actor)")
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_audit_events_created ON audit_events(created_at DESC)"
     )
@@ -1480,12 +1477,8 @@ def create_fresh_schema(conn):
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """)
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_bookmarks_trigger ON bookmarks(trigger_id)"
-    )
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_bookmarks_execution ON bookmarks(execution_id)"
-    )
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_bookmarks_trigger ON bookmarks(trigger_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_bookmarks_execution ON bookmarks(execution_id)")
 
     # --- Integrations ---
     conn.execute("""
@@ -1502,9 +1495,7 @@ def create_fresh_schema(conn):
         )
     """)
     conn.execute("CREATE INDEX IF NOT EXISTS idx_integrations_type ON integrations(type)")
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_integrations_trigger ON integrations(trigger_id)"
-    )
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_integrations_trigger ON integrations(trigger_id)")
 
     # --- v0.2.0: GitOps tables ---
 
@@ -1537,9 +1528,7 @@ def create_fresh_schema(conn):
             FOREIGN KEY (repo_id) REFERENCES gitops_repos(id) ON DELETE CASCADE
         )
     """)
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_gitops_sync_repo ON gitops_sync_log(repo_id)"
-    )
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_gitops_sync_repo ON gitops_sync_log(repo_id)")
 
     # --- v0.2.0: Campaign tables (INT-07) ---
 
@@ -1629,8 +1618,7 @@ def create_fresh_schema(conn):
         )
     """)
     conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_conv_branch_conv "
-        "ON conversation_branches(conversation_id)"
+        "CREATE INDEX IF NOT EXISTS idx_conv_branch_conv ON conversation_branches(conversation_id)"
     )
 
     # Chunked executions (EXE-03: smart chunking with merge/dedup)
@@ -1666,8 +1654,7 @@ def create_fresh_schema(conn):
         )
     """)
     conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_chunk_results_exec "
-        "ON chunk_results(chunked_execution_id)"
+        "CREATE INDEX IF NOT EXISTS idx_chunk_results_exec ON chunk_results(chunked_execution_id)"
     )
 
     # Viewer comments (EXE-05: inline comments on execution log lines)
@@ -1684,8 +1671,7 @@ def create_fresh_schema(conn):
         )
     """)
     conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_viewer_comments_execution "
-        "ON viewer_comments(execution_id)"
+        "CREATE INDEX IF NOT EXISTS idx_viewer_comments_execution ON viewer_comments(execution_id)"
     )
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_viewer_comments_execution_line "

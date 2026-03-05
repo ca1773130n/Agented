@@ -2902,13 +2902,9 @@ def _migrate_v58_budget_time_and_run_limits(conn):
     existing_cols = {row[1] for row in cursor.fetchall()}
 
     if "max_execution_time_seconds" not in existing_cols:
-        conn.execute(
-            "ALTER TABLE budget_limits ADD COLUMN max_execution_time_seconds INTEGER"
-        )
+        conn.execute("ALTER TABLE budget_limits ADD COLUMN max_execution_time_seconds INTEGER")
     if "max_monthly_runs" not in existing_cols:
-        conn.execute(
-            "ALTER TABLE budget_limits ADD COLUMN max_monthly_runs INTEGER"
-        )
+        conn.execute("ALTER TABLE budget_limits ADD COLUMN max_monthly_runs INTEGER")
 
 
 def _migrate_v57_add_rbac_and_audit_tables(conn):
@@ -2939,12 +2935,9 @@ def _migrate_v57_add_rbac_and_audit_tables(conn):
         )
     """)
     conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_audit_events_entity "
-        "ON audit_events(entity_type, entity_id)"
+        "CREATE INDEX IF NOT EXISTS idx_audit_events_entity ON audit_events(entity_type, entity_id)"
     )
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_audit_events_actor ON audit_events(actor)"
-    )
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_audit_events_actor ON audit_events(actor)")
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_audit_events_created ON audit_events(created_at DESC)"
     )
@@ -2971,9 +2964,7 @@ def _migrate_v58_add_secrets_table(conn):
 
 def _migrate_v59_add_bookmarks_table(conn):
     """Create bookmarks table for execution bookmarking with deep-links."""
-    cursor = conn.execute(
-        "SELECT name FROM sqlite_master WHERE type='table' AND name='bookmarks'"
-    )
+    cursor = conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='bookmarks'")
     if cursor.fetchone() is None:
         conn.execute("""
             CREATE TABLE IF NOT EXISTS bookmarks (
@@ -2989,9 +2980,7 @@ def _migrate_v59_add_bookmarks_table(conn):
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
-        conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_bookmarks_trigger ON bookmarks(trigger_id)"
-        )
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_bookmarks_trigger ON bookmarks(trigger_id)")
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_bookmarks_execution ON bookmarks(execution_id)"
         )
@@ -3015,9 +3004,7 @@ def _migrate_v60_add_integrations_table(conn):
         )
     """)
     conn.execute("CREATE INDEX IF NOT EXISTS idx_integrations_type ON integrations(type)")
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_integrations_trigger ON integrations(trigger_id)"
-    )
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_integrations_trigger ON integrations(trigger_id)")
 
 
 def _migrate_v62_add_campaign_tables(conn):
@@ -3063,6 +3050,7 @@ def _migrate_v62_add_campaign_tables(conn):
 # Versioned migration registry
 # =============================================================================
 
+
 def _migrate_v57_add_gitops_tables(conn):
     """Add gitops_repos and gitops_sync_log tables for GitOps sync engine."""
     conn.execute("""
@@ -3093,9 +3081,7 @@ def _migrate_v57_add_gitops_tables(conn):
             FOREIGN KEY (repo_id) REFERENCES gitops_repos(id) ON DELETE CASCADE
         )
     """)
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_gitops_sync_repo ON gitops_sync_log(repo_id)"
-    )
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_gitops_sync_repo ON gitops_sync_log(repo_id)")
     conn.commit()
 
 
@@ -3151,8 +3137,7 @@ def _migrate_v64_add_conversation_branch_tables(conn):
         )
     """)
     conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_conv_branch_conv "
-        "ON conversation_branches(conversation_id)"
+        "CREATE INDEX IF NOT EXISTS idx_conv_branch_conv ON conversation_branches(conversation_id)"
     )
     conn.commit()
 
@@ -3189,8 +3174,7 @@ def _migrate_v65_add_chunk_tables(conn):
         )
     """)
     conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_chunk_results_exec "
-        "ON chunk_results(chunked_execution_id)"
+        "CREATE INDEX IF NOT EXISTS idx_chunk_results_exec ON chunk_results(chunked_execution_id)"
     )
     conn.commit()
 
@@ -3210,8 +3194,7 @@ def _migrate_v66_add_viewer_comments_table(conn):
         )
     """)
     conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_viewer_comments_execution "
-        "ON viewer_comments(execution_id)"
+        "CREATE INDEX IF NOT EXISTS idx_viewer_comments_execution ON viewer_comments(execution_id)"
     )
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_viewer_comments_execution_line "
@@ -3263,15 +3246,11 @@ def _migrate_v70_prompt_snippets_table(conn):
 def _migrate_v71_template_history_author_diff(conn):
     """Add author and diff_text columns to trigger_template_history."""
     try:
-        conn.execute(
-            "ALTER TABLE trigger_template_history ADD COLUMN author TEXT DEFAULT 'system'"
-        )
+        conn.execute("ALTER TABLE trigger_template_history ADD COLUMN author TEXT DEFAULT 'system'")
     except Exception:
         pass  # Column may already exist
     try:
-        conn.execute(
-            "ALTER TABLE trigger_template_history ADD COLUMN diff_text TEXT DEFAULT ''"
-        )
+        conn.execute("ALTER TABLE trigger_template_history ADD COLUMN diff_text TEXT DEFAULT ''")
     except Exception:
         pass  # Column may already exist
     conn.commit()
@@ -3282,8 +3261,8 @@ def _migrate_v72_add_execution_logs_fts(conn):
     conn.execute("""
         CREATE VIRTUAL TABLE IF NOT EXISTS execution_logs_fts
         USING fts5(
-            stdout_content,
-            stderr_content,
+            stdout_log,
+            stderr_log,
             prompt,
             content=execution_logs,
             content_rowid=id,
@@ -3295,7 +3274,7 @@ def _migrate_v72_add_execution_logs_fts(conn):
         CREATE TRIGGER IF NOT EXISTS execution_logs_fts_insert
         AFTER INSERT ON execution_logs
         BEGIN
-            INSERT INTO execution_logs_fts(rowid, stdout_content, stderr_content, prompt)
+            INSERT INTO execution_logs_fts(rowid, stdout_log, stderr_log, prompt)
             VALUES (new.id, COALESCE(new.stdout_log, ''), COALESCE(new.stderr_log, ''), COALESCE(new.prompt, ''));
         END
     """)
@@ -3304,9 +3283,9 @@ def _migrate_v72_add_execution_logs_fts(conn):
         CREATE TRIGGER IF NOT EXISTS execution_logs_fts_update
         AFTER UPDATE OF stdout_log, stderr_log ON execution_logs
         BEGIN
-            INSERT INTO execution_logs_fts(execution_logs_fts, rowid, stdout_content, stderr_content, prompt)
+            INSERT INTO execution_logs_fts(execution_logs_fts, rowid, stdout_log, stderr_log, prompt)
             VALUES ('delete', old.id, COALESCE(old.stdout_log, ''), COALESCE(old.stderr_log, ''), COALESCE(old.prompt, ''));
-            INSERT INTO execution_logs_fts(rowid, stdout_content, stderr_content, prompt)
+            INSERT INTO execution_logs_fts(rowid, stdout_log, stderr_log, prompt)
             VALUES (new.id, COALESCE(new.stdout_log, ''), COALESCE(new.stderr_log, ''), COALESCE(new.prompt, ''));
         END
     """)
@@ -3315,14 +3294,14 @@ def _migrate_v72_add_execution_logs_fts(conn):
         CREATE TRIGGER IF NOT EXISTS execution_logs_fts_delete
         AFTER DELETE ON execution_logs
         BEGIN
-            INSERT INTO execution_logs_fts(execution_logs_fts, rowid, stdout_content, stderr_content, prompt)
+            INSERT INTO execution_logs_fts(execution_logs_fts, rowid, stdout_log, stderr_log, prompt)
             VALUES ('delete', old.id, COALESCE(old.stdout_log, ''), COALESCE(old.stderr_log, ''), COALESCE(old.prompt, ''));
         END
     """)
 
     # Rebuild the FTS index from existing execution_logs data
     conn.execute("""
-        INSERT INTO execution_logs_fts(rowid, stdout_content, stderr_content, prompt)
+        INSERT INTO execution_logs_fts(rowid, stdout_log, stderr_log, prompt)
         SELECT id, COALESCE(stdout_log, ''), COALESCE(stderr_log, ''), COALESCE(prompt, '')
         FROM execution_logs
     """)

@@ -748,9 +748,7 @@ class ModelDiscoveryService:
                 while npm_root.name and npm_root.name != "node_modules":
                     npm_root = npm_root.parent
                 if npm_root.name == "node_modules":
-                    for candidate in npm_root.rglob(
-                        "@openai/codex-*/vendor/*/codex/codex"
-                    ):
+                    for candidate in npm_root.rglob("@openai/codex-*/vendor/*/codex/codex"):
                         if candidate.is_file():
                             binary_path = candidate
                             break
@@ -840,26 +838,21 @@ class ModelDiscoveryService:
                 return None
 
             # Filter to real model names (must match gemini-X.Y-<variant> pattern)
-            model_re = re.compile(
-                r"^gemini-\d+(?:\.\d+)?-[a-z][\w-]*$"
-            )
+            model_re = re.compile(r"^gemini-\d+(?:\.\d+)?-[a-z][\w-]*$")
             # Skip test/fake model strings and date-suffixed variants
             skip_re = re.compile(
                 r"test|super-duper|custom(?:tools)?|base"
                 r"|-\d{2}-\d{4}$|-\d{2}-\d{2}$"
             )
             raw = sorted(set(result.stdout.strip().splitlines()))
-            clean = [
-                m for m in raw
-                if model_re.match(m) and not skip_re.search(m)
-            ]
+            clean = [m for m in raw if model_re.match(m) and not skip_re.search(m)]
 
             if clean:
                 logger.info("Gemini models from package: %s", clean)
                 return clean
-            elif models:
-                logger.info("Gemini models from package (unfiltered): %s", models)
-                return models
+            elif raw:
+                logger.info("Gemini models from package (unfiltered): %s", raw)
+                return raw
         except Exception as e:
             logger.debug("Gemini package model extraction failed: %s", e)
         return None
@@ -1037,4 +1030,3 @@ class ModelDiscoveryService:
                 if len(model_id) < 40:
                     models.add(model_id)
         return models
-

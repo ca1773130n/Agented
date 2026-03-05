@@ -10,13 +10,6 @@ For new code, prefer importing from specific sub-modules:
 """
 
 # Analytics (cost, execution, effectiveness aggregation)
-from .analytics import (  # noqa: F401
-    get_cost_analytics,
-    get_effectiveness_analytics,
-    get_effectiveness_over_time,
-    get_execution_analytics,
-)
-
 # Infrastructure
 # Agents (includes conversations and design conversations)
 from .agents import (  # noqa: F401
@@ -45,6 +38,19 @@ from .agents import (  # noqa: F401
     update_agent,
     update_agent_conversation,
     update_design_conversation,
+)
+from .analytics import (  # noqa: F401
+    get_cost_analytics,
+    get_effectiveness_analytics,
+    get_effectiveness_over_time,
+    get_execution_analytics,
+)
+
+# Audit events (persistent trail)
+from .audit_events import (  # noqa: F401
+    add_audit_event,
+    count_audit_events,
+    query_audit_events,
 )
 
 # Backends (fallback chains, accounts, agent sessions)
@@ -85,15 +91,6 @@ from .backends import (  # noqa: F401
     verify_account_exists,
 )
 
-# Bot templates (curated marketplace)
-from .bot_templates import (  # noqa: F401
-    CURATED_BOT_TEMPLATES,
-    deploy_template,
-    get_all_templates,
-    get_template,
-    get_template_by_slug,
-)
-
 # Bookmarks
 from .bookmarks import (  # noqa: F401
     create_bookmark,
@@ -105,16 +102,13 @@ from .bookmarks import (  # noqa: F401
     update_bookmark,
 )
 
-# Campaigns (multi-repo campaign orchestration)
-from .campaigns import (  # noqa: F401
-    add_campaign_execution,
-    create_campaign,
-    delete_campaign,
-    get_campaign,
-    list_campaign_executions,
-    list_campaigns,
-    update_campaign_execution,
-    update_campaign_status,
+# Bot templates (curated marketplace)
+from .bot_templates import (  # noqa: F401
+    CURATED_BOT_TEMPLATES,
+    deploy_template,
+    get_all_templates,
+    get_template,
+    get_template_by_slug,
 )
 
 # Budgets (token usage, budget limits, execution token data)
@@ -139,6 +133,29 @@ from .budgets import (  # noqa: F401
     update_execution_token_data,
 )
 
+# Campaigns (multi-repo campaign orchestration)
+from .campaigns import (  # noqa: F401
+    add_campaign_execution,
+    create_campaign,
+    delete_campaign,
+    get_campaign,
+    list_campaign_executions,
+    list_campaigns,
+    update_campaign_execution,
+    update_campaign_status,
+)
+
+# Chunk results (smart chunking pipeline)
+from .chunk_results import (  # noqa: F401
+    create_chunk_result,
+    create_chunked_execution,
+    get_chunk_results,
+    get_chunked_execution,
+    increment_completed_chunks,
+    update_chunk_result,
+    update_chunked_execution_status,
+)
+
 # Commands
 from .commands import (  # noqa: F401
     add_command,
@@ -150,6 +167,18 @@ from .commands import (  # noqa: F401
     update_command,
 )
 from .connection import get_connection  # noqa: F401
+
+# Conversation branches (tree-structured conversation branching)
+from .conversation_branches import (  # noqa: F401
+    count_messages_for_branch,
+    create_branch,
+    create_message,
+    get_branch,
+    get_branches_for_conversation,
+    get_message,
+    get_messages_for_branch,
+    update_branch_status,
+)
 
 # GitOps (repository config and sync state)
 from .gitops import (  # noqa: F401
@@ -202,16 +231,6 @@ from .health_alerts import (  # noqa: F401
     get_recent_alerts,
 )
 
-# Integrations (external service adapters)
-from .integrations import (  # noqa: F401
-    create_integration,
-    delete_integration,
-    get_integration,
-    list_integrations,
-    list_integrations_for_trigger,
-    update_integration,
-)
-
 # Hooks
 from .hooks import (  # noqa: F401
     add_hook,
@@ -224,77 +243,6 @@ from .hooks import (  # noqa: F401
     update_hook,
 )
 
-# Audit events (persistent trail)
-from .audit_events import (  # noqa: F401
-    add_audit_event,
-    count_audit_events,
-    query_audit_events,
-)
-
-# Chunk results (smart chunking pipeline)
-from .chunk_results import (  # noqa: F401
-    create_chunk_result,
-    create_chunked_execution,
-    get_chunk_results,
-    get_chunked_execution,
-    increment_completed_chunks,
-    update_chunk_result,
-    update_chunked_execution_status,
-)
-
-# Conversation branches (tree-structured conversation branching)
-from .conversation_branches import (  # noqa: F401
-    create_branch,
-    create_message,
-    count_messages_for_branch,
-    get_branch,
-    get_branches_for_conversation,
-    get_message,
-    get_messages_for_branch,
-    update_branch_status,
-)
-
-# Viewer comments (collaborative inline commenting on execution logs)
-from .viewer_comments import (  # noqa: F401
-    create_viewer_comment,
-    delete_comment,
-    get_comment,
-    get_comments_for_execution,
-    get_comments_for_line,
-)
-
-# Replay comparisons (execution replay A/B comparison)
-from .replay import (  # noqa: F401
-    create_replay_comparison,
-    get_all_replay_comparisons,
-    get_replay_comparison,
-    get_replay_comparisons_for_execution,
-)
-
-# RBAC (user roles)
-from .rbac import (  # noqa: F401
-    VALID_ROLES,
-    count_user_roles,
-    create_user_role,
-    delete_user_role,
-    get_role_for_api_key,
-    get_user_role,
-    list_user_roles,
-    update_user_role,
-)
-
-# Secrets (encrypted vault)
-from .secrets import (  # noqa: F401
-    count_secrets,
-    create_secret,
-    delete_secret as delete_secret_record,
-    get_secret,
-    get_secret_by_name,
-    list_secrets,
-    update_last_accessed,
-    update_secret as update_secret_record,
-)
-
 # ID generators and constants
 from .ids import (  # noqa: F401
     AGENT_ID_LENGTH,
@@ -304,16 +252,12 @@ from .ids import (  # noqa: F401
     CAMPAIGN_ID_LENGTH,
     CAMPAIGN_ID_PREFIX,
     CONVERSATION_ID_LENGTH,
+    CONVERSATION_ID_PREFIX,
     INTEGRATION_ID_LENGTH,
     INTEGRATION_ID_PREFIX,
-    CONVERSATION_ID_PREFIX,
     MCP_SERVER_ID_LENGTH,
     MCP_SERVER_ID_PREFIX,
-    ROLE_ID_LENGTH,
-    ROLE_ID_PREFIX,
     MESSAGE_ID_LENGTH,
-    SECRET_ID_LENGTH,
-    SECRET_ID_PREFIX,
     MESSAGE_ID_PREFIX,
     MILESTONE_ID_LENGTH,
     # New v0.4.0 ID generators
@@ -334,19 +278,23 @@ from .ids import (  # noqa: F401
     PROJECT_ID_PREFIX,
     PROJECT_SESSION_ID_LENGTH,
     PROJECT_SESSION_ID_PREFIX,
+    ROLE_ID_LENGTH,
+    ROLE_ID_PREFIX,
     ROTATION_EVENT_ID_LENGTH,
     ROTATION_EVENT_ID_PREFIX,
+    SECRET_ID_LENGTH,
+    SECRET_ID_PREFIX,
     SESSION_ID_LENGTH,
     SESSION_ID_PREFIX,
     SKETCH_ID_LENGTH,
     SKETCH_ID_PREFIX,
+    SNIPPET_ID_LENGTH,
+    SNIPPET_ID_PREFIX,
     SUPER_AGENT_ID_LENGTH,
     # New v0.3.0 ID generators
     SUPER_AGENT_ID_PREFIX,
     TEAM_ID_LENGTH,
     TEAM_ID_PREFIX,
-    SNIPPET_ID_LENGTH,
-    SNIPPET_ID_PREFIX,
     TEMPLATE_ID_LENGTH,
     TEMPLATE_ID_PREFIX,
     TRIGGER_ID_LENGTH,
@@ -356,15 +304,12 @@ from .ids import (  # noqa: F401
     WORKFLOW_ID_LENGTH,
     WORKFLOW_ID_PREFIX,
     _generate_short_id,
-    _get_unique_bookmark_id,
-    _get_unique_integration_id,
     _get_unique_agent_id,
+    _get_unique_bookmark_id,
     _get_unique_campaign_id,
     _get_unique_conversation_id,
+    _get_unique_integration_id,
     _get_unique_mcp_server_id,
-    _get_unique_role_id,
-    _get_unique_secret_id,
-    _get_unique_snippet_id,
     _get_unique_message_id,
     _get_unique_milestone_id,
     _get_unique_phase_id,
@@ -375,24 +320,25 @@ from .ids import (  # noqa: F401
     _get_unique_product_milestone_id,
     _get_unique_project_id,
     _get_unique_project_session_id,
+    _get_unique_role_id,
     _get_unique_rotation_event_id,
+    _get_unique_secret_id,
     _get_unique_session_id,
     _get_unique_sketch_id,
+    _get_unique_snippet_id,
     _get_unique_super_agent_id,
     _get_unique_team_id,
     _get_unique_template_id,
     _get_unique_trigger_id,
     _get_unique_workflow_execution_id,
     _get_unique_workflow_id,
-    generate_bookmark_id,
-    generate_integration_id,
     generate_agent_id,
+    generate_bookmark_id,
     generate_campaign_id,
     generate_conversation_id,
     generate_execution_id,
+    generate_integration_id,
     generate_mcp_server_id,
-    generate_role_id,
-    generate_secret_id,
     generate_message_id,
     generate_milestone_id,
     generate_phase_id,
@@ -403,16 +349,28 @@ from .ids import (  # noqa: F401
     generate_product_milestone_id,
     generate_project_id,
     generate_project_session_id,
+    generate_role_id,
     generate_rotation_event_id,
+    generate_secret_id,
     generate_session_id,
     generate_sketch_id,
+    generate_snippet_id,
     generate_super_agent_id,
     generate_team_id,
-    generate_snippet_id,
     generate_template_id,
     generate_trigger_id,
     generate_workflow_execution_id,
     generate_workflow_id,
+)
+
+# Integrations (external service adapters)
+from .integrations import (  # noqa: F401
+    create_integration,
+    delete_integration,
+    get_integration,
+    list_integrations,
+    list_integrations_for_trigger,
+    update_integration,
 )
 
 # MCP servers and execution type handlers
@@ -471,16 +429,6 @@ from .monitoring import (  # noqa: F401
     upsert_pending_retry,
 )
 
-# Prompt snippets (reusable prompt fragments)
-from .prompt_snippets import (  # noqa: F401
-    add_snippet,
-    delete_snippet,
-    get_all_snippets,
-    get_snippet,
-    get_snippet_by_name,
-    update_snippet,
-)
-
 # Plugins (includes components, marketplaces, sync state, exports)
 from .plugins import (  # noqa: F401
     # Marketplaces
@@ -516,7 +464,6 @@ from .plugins import (  # noqa: F401
     update_plugin,
     update_plugin_component,
     update_plugin_export,
-    update_sync_state,
 )
 
 # Products
@@ -564,6 +511,36 @@ from .projects import (  # noqa: F401
     update_project_team_topology_config,
 )
 
+# Prompt snippets (reusable prompt fragments)
+from .prompt_snippets import (  # noqa: F401
+    add_snippet,
+    delete_snippet,
+    get_all_snippets,
+    get_snippet,
+    get_snippet_by_name,
+    update_snippet,
+)
+
+# RBAC (user roles)
+from .rbac import (  # noqa: F401
+    VALID_ROLES,
+    count_user_roles,
+    create_user_role,
+    delete_user_role,
+    get_role_for_api_key,
+    get_user_role,
+    list_user_roles,
+    update_user_role,
+)
+
+# Replay comparisons (execution replay A/B comparison)
+from .replay import (  # noqa: F401
+    create_replay_comparison,
+    get_all_replay_comparisons,
+    get_replay_comparison,
+    get_replay_comparisons_for_execution,
+)
+
 # Rotations and organizational (rotation events, product decisions, product milestones, team connections)
 from .rotations import (  # noqa: F401
     add_milestone_project,
@@ -599,6 +576,22 @@ from .rules import (  # noqa: F401
     get_rules_by_project,
     get_rules_by_type,
     update_rule,
+)
+
+# Secrets (encrypted vault)
+from .secrets import (  # noqa: F401
+    count_secrets,
+    create_secret,
+    get_secret,
+    get_secret_by_name,
+    list_secrets,
+    update_last_accessed,
+)
+from .secrets import (
+    delete_secret as delete_secret_record,
+)
+from .secrets import (
+    update_secret as update_secret_record,
 )
 from .seeds import (  # noqa: F401
     auto_register_project_root,
@@ -758,6 +751,15 @@ from .triggers import (  # noqa: F401
     update_trigger_auto_resolve,
     update_trigger_last_run,
     update_trigger_next_run,
+)
+
+# Viewer comments (collaborative inline commenting on execution logs)
+from .viewer_comments import (  # noqa: F401
+    create_viewer_comment,
+    delete_comment,
+    get_comment,
+    get_comments_for_execution,
+    get_comments_for_line,
 )
 
 # Workflows (workflows, versions, executions, node executions, approval states)
