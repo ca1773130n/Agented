@@ -4,7 +4,7 @@ import logging
 import sqlite3
 from typing import List, Optional
 
-from .connection import get_connection
+from .connection import get_connection, safe_set_clause
 
 logger = logging.getLogger(__name__)
 
@@ -74,7 +74,7 @@ def update_command(
             return False
         updates.append("updated_at = CURRENT_TIMESTAMP")
         values.append(command_id)
-        cursor = conn.execute(f"UPDATE commands SET {', '.join(updates)} WHERE id = ?", values)
+        cursor = conn.execute(f"UPDATE commands SET {safe_set_clause(updates)} WHERE id = ?", values)
         conn.commit()
         return cursor.rowcount > 0
 

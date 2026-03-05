@@ -7,16 +7,19 @@ import SketchStatusTracker from '../../components/sketches/SketchStatusTracker.v
 import { router } from '../../router/index'
 
 vi.mock('../../services/api', () => ({
-  sketchApi: {
-    list: vi.fn(),
-    get: vi.fn(),
-    create: vi.fn(),
-    classify: vi.fn(),
-    route: vi.fn(),
-  },
-  projectApi: {
-    list: vi.fn(),
-  },
+  sketchApi: { list: vi.fn(), get: vi.fn(), create: vi.fn(), classify: vi.fn(), route: vi.fn() },
+  projectApi: { get: vi.fn(), list: vi.fn() },
+  teamApi: { get: vi.fn(), list: vi.fn() },
+  agentApi: { get: vi.fn(), list: vi.fn() },
+  productApi: { get: vi.fn(), list: vi.fn() },
+  pluginApi: { get: vi.fn(), list: vi.fn() },
+  triggerApi: { get: vi.fn(), list: vi.fn() },
+  backendApi: { get: vi.fn(), list: vi.fn() },
+  workflowApi: { get: vi.fn(), list: vi.fn() },
+  mcpServerApi: { get: vi.fn(), list: vi.fn() },
+  superAgentApi: { get: vi.fn(), list: vi.fn() },
+  userSkillsApi: { get: vi.fn(), list: vi.fn() },
+  auditApi: { getDetail: vi.fn(), list: vi.fn() },
   ApiError: class extends Error {
     status: number
     constructor(status: number, message: string) {

@@ -5,7 +5,7 @@ import logging
 import sqlite3
 from typing import List, Optional
 
-from .connection import get_connection
+from .connection import get_connection, safe_set_clause
 
 logger = logging.getLogger(__name__)
 
@@ -393,7 +393,7 @@ def update_backend_account(
             return True  # No fields to update, but account exists
 
         values.append(account_id)
-        conn.execute(f"UPDATE backend_accounts SET {', '.join(updates)} WHERE id = ?", values)
+        conn.execute(f"UPDATE backend_accounts SET {safe_set_clause(updates)} WHERE id = ?", values)
         conn.commit()
         return True
 

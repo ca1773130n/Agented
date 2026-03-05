@@ -15,47 +15,34 @@ import {
 } from '../services/api';
 
 /**
+ * Factory that creates an entity validator function from a fetch function.
+ * The returned validator calls fetchFn(id) and returns true if it resolves,
+ * false if it throws (404 or network error).
+ */
+function makeEntityValidator(fetchFn: (id: string) => Promise<unknown>): (id: string) => Promise<boolean> {
+  return async (id: string) => {
+    try { await fetchFn(id); return true; } catch { return false; }
+  };
+}
+
+/**
  * Map entity param names to lightweight existence check functions.
  * Each function calls the existing .get() API method which returns
  * the entity or throws on 404/error.
  */
 const entityValidators: Record<string, (id: string) => Promise<boolean>> = {
-  teamId: async (id) => {
-    try { await teamApi.get(id); return true; } catch { return false; }
-  },
-  agentId: async (id) => {
-    try { await agentApi.get(id); return true; } catch { return false; }
-  },
-  projectId: async (id) => {
-    try { await projectApi.get(id); return true; } catch { return false; }
-  },
-  productId: async (id) => {
-    try { await productApi.get(id); return true; } catch { return false; }
-  },
-  pluginId: async (id) => {
-    try { await pluginApi.get(id); return true; } catch { return false; }
-  },
-  skillId: async (id) => {
-    try { await userSkillsApi.get(Number(id)); return true; } catch { return false; }
-  },
-  triggerId: async (id) => {
-    try { await triggerApi.get(id); return true; } catch { return false; }
-  },
-  backendId: async (id) => {
-    try { await backendApi.get(id); return true; } catch { return false; }
-  },
-  auditId: async (id) => {
-    try { await auditApi.getDetail(id); return true; } catch { return false; }
-  },
-  superAgentId: async (id) => {
-    try { await superAgentApi.get(id); return true; } catch { return false; }
-  },
-  workflowId: async (id) => {
-    try { await workflowApi.get(id); return true; } catch { return false; }
-  },
-  mcpServerId: async (id) => {
-    try { await mcpServerApi.get(id); return true; } catch { return false; }
-  },
+  teamId:       makeEntityValidator(teamApi.get.bind(teamApi)),
+  agentId:      makeEntityValidator(agentApi.get.bind(agentApi)),
+  projectId:    makeEntityValidator(projectApi.get.bind(projectApi)),
+  productId:    makeEntityValidator(productApi.get.bind(productApi)),
+  pluginId:     makeEntityValidator(pluginApi.get.bind(pluginApi)),
+  skillId:      makeEntityValidator((id: string) => userSkillsApi.get(Number(id))),
+  triggerId:    makeEntityValidator(triggerApi.get.bind(triggerApi)),
+  backendId:    makeEntityValidator(backendApi.get.bind(backendApi)),
+  auditId:      makeEntityValidator(auditApi.getDetail.bind(auditApi)),
+  superAgentId: makeEntityValidator(superAgentApi.get.bind(superAgentApi)),
+  workflowId:   makeEntityValidator(workflowApi.get.bind(workflowApi)),
+  mcpServerId:  makeEntityValidator(mcpServerApi.get.bind(mcpServerApi)),
 };
 
 /**

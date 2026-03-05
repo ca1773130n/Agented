@@ -4,7 +4,7 @@ import logging
 import sqlite3
 from typing import List, Optional
 
-from .connection import get_connection
+from .connection import get_connection, safe_set_clause
 from .ids import (
     _get_unique_milestone_id,
     _get_unique_phase_id,
@@ -104,7 +104,7 @@ def update_milestone(milestone_id: str, **kwargs) -> bool:
     values.append(milestone_id)
 
     with get_connection() as conn:
-        cursor = conn.execute(f"UPDATE milestones SET {', '.join(updates)} WHERE id = ?", values)
+        cursor = conn.execute(f"UPDATE milestones SET {safe_set_clause(updates)} WHERE id = ?", values)
         conn.commit()
         return cursor.rowcount > 0
 
@@ -212,7 +212,7 @@ def update_project_phase(phase_id: str, **kwargs) -> bool:
 
     with get_connection() as conn:
         cursor = conn.execute(
-            f"UPDATE project_phases SET {', '.join(updates)} WHERE id = ?", values
+            f"UPDATE project_phases SET {safe_set_clause(updates)} WHERE id = ?", values
         )
         conn.commit()
         return cursor.rowcount > 0
@@ -295,7 +295,7 @@ def update_project_plan(plan_id: str, **kwargs) -> bool:
     values.append(plan_id)
 
     with get_connection() as conn:
-        cursor = conn.execute(f"UPDATE project_plans SET {', '.join(updates)} WHERE id = ?", values)
+        cursor = conn.execute(f"UPDATE project_plans SET {safe_set_clause(updates)} WHERE id = ?", values)
         conn.commit()
         return cursor.rowcount > 0
 
@@ -425,7 +425,7 @@ def update_project_session(session_id: str, **kwargs) -> bool:
 
     with get_connection() as conn:
         cursor = conn.execute(
-            f"UPDATE project_sessions SET {', '.join(updates)} WHERE id = ?", values
+            f"UPDATE project_sessions SET {safe_set_clause(updates)} WHERE id = ?", values
         )
         conn.commit()
         return cursor.rowcount > 0

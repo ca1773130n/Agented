@@ -1,4 +1,4 @@
-import { ref, watch, type Ref } from 'vue'
+import { ref, watch, nextTick, type Ref } from 'vue'
 import type { Node, Edge } from '@vue-flow/core'
 import { workflowApi } from '../services/api/workflows'
 
@@ -150,10 +150,10 @@ export function useWorkflowCanvas(workflowId: Ref<string>): {
       isDirty.value = false
     } finally {
       isLoading.value = false
-      // Use setTimeout to let the watcher fire first, then reset the flag
-      setTimeout(() => {
+      // Use nextTick to let the watcher fire first (on the next DOM update cycle), then reset the flag
+      nextTick(() => {
         _loading = false
-      }, 0)
+      })
     }
   }
 

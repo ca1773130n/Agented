@@ -79,11 +79,8 @@ class AgentConversationService:
     _lock = threading.Lock()
 
     @classmethod
-    def start_conversation(cls) -> Tuple[dict, HTTPStatus]:
-        """Start a new agent creation conversation."""
-        conv_id = create_agent_conversation()
-
-        # Initialize in-memory state
+    def _prepare_conversation_context(cls) -> dict:
+        """Build the initial context for a new conversation."""
         initial_messages = [
             ConversationMessage(
                 role="system",
@@ -91,16 +88,29 @@ class AgentConversationService:
                 timestamp=datetime.datetime.now().isoformat(),
             )
         ]
+        return {"messages": initial_messages, "processing": False}
+
+    @classmethod
+    def _initialize_conversation_record(cls, context: dict) -> str:
+        """Create the DB record and in-memory state, returns conv_id."""
+        conv_id = create_agent_conversation()
+        initial_messages = context["messages"]
 
         with cls._lock:
-            cls._conversations[conv_id] = {"messages": initial_messages, "processing": False}
+            cls._conversations[conv_id] = context
             cls._subscribers[conv_id] = []
             cls._start_times[conv_id] = datetime.datetime.now()
 
-        # Store messages in database
         update_agent_conversation(
             conv_id, messages=json.dumps([asdict(m) for m in initial_messages])
         )
+        return conv_id
+
+    @classmethod
+    def start_conversation(cls) -> Tuple[dict, HTTPStatus]:
+        """Start a new agent creation conversation."""
+        context = cls._prepare_conversation_context()
+        conv_id = cls._initialize_conversation_record(context)
 
         return {
             "conversation_id": conv_id,
@@ -108,15 +118,8 @@ class AgentConversationService:
         }, HTTPStatus.CREATED
 
     @classmethod
-    def send_message(
-        cls,
-        conv_id: str,
-        message: str,
-        backend: str | None = None,
-        account_id: str | None = None,
-        model: str | None = None,
-    ) -> Tuple[dict, HTTPStatus]:
-        """Send a user message to the conversation and trigger Claude response."""
+    def _validate_conversation(cls, conv_id: str) -> Tuple[dict, HTTPStatus]:
+        """Validate conversation exists and is active. Returns (conv, None) or (error, status)."""
         conv = get_agent_conversation(conv_id)
         if not conv:
             return error_response("NOT_FOUND", "Conversation not found", HTTPStatus.NOT_FOUND)
@@ -125,15 +128,12 @@ class AgentConversationService:
             return error_response(
                 "BAD_REQUEST", "Conversation is not active", HTTPStatus.BAD_REQUEST
             )
+        return conv, None
 
-        # Check if already processing
+    @classmethod
+    def _build_message_payload(cls, conv_id: str, conv: dict, message: str) -> Tuple[dict, str]:
+        """Set up in-memory state and build user message. Returns (user_msg, msg_id)."""
         with cls._lock:
-            if conv_id in cls._conversations and cls._conversations[conv_id].get("processing"):
-                return error_response(
-                    "CONFLICT", "Already processing a message", HTTPStatus.CONFLICT
-                )
-
-            # Initialize conversation state if not exists
             if conv_id not in cls._conversations:
                 existing_messages = []
                 if conv.get("messages"):
@@ -148,7 +148,6 @@ class AgentConversationService:
 
             cls._conversations[conv_id]["processing"] = True
 
-        # Add user message
         user_msg = ConversationMessage(
             role="user", content=message, timestamp=datetime.datetime.now().isoformat()
         )
@@ -156,8 +155,31 @@ class AgentConversationService:
         with cls._lock:
             cls._conversations[conv_id]["messages"].append(user_msg)
 
-        # Generate message ID
         msg_id = "".join(secrets.choice(string.ascii_lowercase + string.digits) for _ in range(8))
+        return user_msg, msg_id
+
+    @classmethod
+    def send_message(
+        cls,
+        conv_id: str,
+        message: str,
+        backend: str | None = None,
+        account_id: str | None = None,
+        model: str | None = None,
+    ) -> Tuple[dict, HTTPStatus]:
+        """Send a user message to the conversation and trigger Claude response."""
+        conv, err = cls._validate_conversation(conv_id)
+        if err is not None:
+            return conv, err
+
+        # Check if already processing
+        with cls._lock:
+            if conv_id in cls._conversations and cls._conversations[conv_id].get("processing"):
+                return error_response(
+                    "CONFLICT", "Already processing a message", HTTPStatus.CONFLICT
+                )
+
+        user_msg, msg_id = cls._build_message_payload(conv_id, conv, message)
 
         # Broadcast user message to subscribers
         cls._broadcast(conv_id, "user_message", asdict(user_msg))

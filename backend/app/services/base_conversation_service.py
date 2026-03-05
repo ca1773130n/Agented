@@ -281,6 +281,52 @@ class BaseConversationService(abc.ABC):
                 queue.put(event)
 
     @classmethod
+    def _stream_and_accumulate(
+        cls,
+        conv_id: str,
+        messages: list,
+        model: str | None,
+        backend: str | None,
+        account_id: str | None,
+    ) -> str:
+        """Stream LLM response and accumulate full text. Returns the complete response string."""
+        from .conversation_streaming import stream_llm_response
+
+        full_response_parts = []
+        accumulator = WordBoundaryAccumulator(
+            flush_callback=lambda text: cls._broadcast(
+                conv_id, "response_chunk", {"content": text}
+            )
+        )
+
+        for chunk in stream_llm_response(
+            messages, model=model, account_email=account_id, backend=backend
+        ):
+            full_response_parts.append(chunk)
+            accumulator.add(chunk)
+
+        accumulator.flush()
+
+        response = "".join(full_response_parts).strip()
+        if not response:
+            response = "(No response generated)"
+        return response
+
+    @classmethod
+    def _persist_message(cls, conv_id: str, role: str, content: str) -> None:
+        """Append a message to the conversation and persist to DB."""
+        conv = cls._conversations.get(conv_id)
+        if conv is None:
+            return
+        msg = ConversationMessage(
+            role=role,
+            content=content,
+            timestamp=datetime.datetime.now().isoformat(),
+        )
+        conv["messages"].append(msg)
+        cls._persist_messages(conv_id)
+
+    @classmethod
     def _process_with_claude(
         cls,
         conv_id: str,
@@ -305,48 +351,19 @@ class BaseConversationService(abc.ABC):
             cls._broadcast(
                 conv_id, "response_start", {"timestamp": datetime.datetime.now().isoformat()}
             )
-            from .conversation_streaming import stream_llm_response
 
             # Build messages from conversation history
-            messages = []
-            for msg in conv["messages"]:
-                messages.append({"role": msg.role, "content": msg.content})
+            messages = [{"role": msg.role, "content": msg.content} for msg in conv["messages"]]
 
-            # Stream response chunks in real-time
-            full_response_parts = []
-            accumulator = WordBoundaryAccumulator(
-                flush_callback=lambda text: cls._broadcast(
-                    conv_id, "response_chunk", {"content": text}
-                )
-            )
+            response = cls._stream_and_accumulate(conv_id, messages, model, backend, account_id)
 
-            for chunk in stream_llm_response(
-                messages, model=model, account_email=account_id, backend=backend
-            ):
-                full_response_parts.append(chunk)
-                accumulator.add(chunk)
-
-            accumulator.flush()
-
-            response = "".join(full_response_parts).strip()
-            if not response:
-                response = "(No response generated)"
-
-            assistant_msg = ConversationMessage(
-                role="assistant",
-                content=response,
-                timestamp=datetime.datetime.now().isoformat(),
-            )
-            conv["messages"].append(assistant_msg)
+            cls._persist_message(conv_id, "assistant", response)
 
             cls._broadcast(
                 conv_id,
                 "response_complete",
                 {"content": response, "backend": backend or "claude"},
             )
-
-            # Persist messages to DB after each exchange
-            cls._persist_messages(conv_id)
 
         except Exception as e:
             logger.exception("Error processing with Claude")

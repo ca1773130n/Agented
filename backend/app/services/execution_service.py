@@ -667,6 +667,76 @@ class ExecutionService:
             pipe.close()
 
     @classmethod
+    def _clone_repos(cls, path_entries: list, cloned_dirs: list, github_repo_map: dict) -> list:
+        """Resolve path entries into effective local paths, cloning GitHub repos as needed.
+
+        Mutates cloned_dirs (appends temp dirs) and github_repo_map (clone_dir -> repo_url).
+        Returns effective_paths list.
+        """
+        effective_paths = []
+        for entry in path_entries:
+            if entry["path_type"] == "github":
+                repo_url = entry["github_repo_url"]
+                logger.info("Cloning GitHub repo: %s", repo_url)
+                clone_dir = GitHubService.clone_repo(repo_url)
+                cloned_dirs.append(clone_dir)
+                effective_paths.append(clone_dir)
+                github_repo_map[clone_dir] = repo_url
+            else:
+                effective_paths.append(entry["local_project_path"])
+        return effective_paths
+
+    @staticmethod
+    def _build_subprocess_env(env_overrides: dict) -> Optional[dict]:
+        """Build subprocess environment, injecting vault secrets and account overrides.
+
+        Returns a merged env dict (os.environ + overrides + vault secrets), or None if no
+        overrides or secrets are present.
+        """
+        # Inject secrets from vault into subprocess environment
+        try:
+            from app.services.secret_vault_service import SecretVaultService
+
+            if SecretVaultService.is_configured():
+                vault_secrets = SecretVaultService.get_secrets_for_execution(scope="global")
+                if vault_secrets:
+                    if env_overrides is None:
+                        env_overrides = {}
+                    env_overrides.update(vault_secrets)
+        except Exception as e:
+            logger.warning("Failed to inject vault secrets into execution env: %s", e)
+
+        return {**os.environ, **env_overrides} if env_overrides else None
+
+    @classmethod
+    def _match_payload(cls, config: dict, payload: dict) -> Optional[str]:
+        """Check whether a webhook payload matches a trigger/team config's field criteria.
+
+        Returns the extracted text string if the payload matches, or None if it does not match.
+        Text is extracted using text_field_path and normalized to str.
+        """
+        match_field_path = config.get("match_field_path")
+        match_field_value = config.get("match_field_value")
+        text_field_path = config.get("text_field_path", "text")
+        detection_keyword = config.get("detection_keyword", "")
+
+        if match_field_path and match_field_value:
+            actual_value = get_nested_value(payload, match_field_path)
+            if str(actual_value) != str(match_field_value):
+                return None
+
+        text = get_nested_value(payload, text_field_path)
+        if text is None:
+            text = ""
+        elif not isinstance(text, str):
+            text = str(text)
+
+        if detection_keyword and detection_keyword not in text:
+            return None
+
+        return text
+
+    @classmethod
     def run_trigger(
         cls,
         trigger: dict,
@@ -687,17 +757,7 @@ class ExecutionService:
             # Get detailed path info (includes path_type and github_repo_url)
             path_entries = get_paths_for_trigger_detailed(trigger_id)
 
-            effective_paths = []
-            for entry in path_entries:
-                if entry["path_type"] == "github":
-                    repo_url = entry["github_repo_url"]
-                    logger.info("Cloning GitHub repo: %s", repo_url)
-                    clone_dir = GitHubService.clone_repo(repo_url)
-                    cloned_dirs.append(clone_dir)
-                    effective_paths.append(clone_dir)
-                    github_repo_map[clone_dir] = repo_url
-                else:
-                    effective_paths.append(entry["local_project_path"])
+            effective_paths = cls._clone_repos(path_entries, cloned_dirs, github_repo_map)
 
             paths_str = ", ".join(effective_paths) if effective_paths else "no paths configured"
 
@@ -857,21 +917,8 @@ class ExecutionService:
                     exc_info=True,
                 )
 
-            # Inject secrets from vault into subprocess environment
-            try:
-                from app.services.secret_vault_service import SecretVaultService
-
-                if SecretVaultService.is_configured():
-                    vault_secrets = SecretVaultService.get_secrets_for_execution(scope="global")
-                    if vault_secrets:
-                        if env_overrides is None:
-                            env_overrides = {}
-                        env_overrides.update(vault_secrets)
-            except Exception as e:
-                logger.warning("Failed to inject vault secrets into execution env: %s", e)
-
-            # Build process environment with optional overrides
-            proc_env = {**os.environ, **env_overrides} if env_overrides else None
+            # Build process environment with optional overrides (includes vault secrets)
+            proc_env = cls._build_subprocess_env(env_overrides)
 
             # Use Popen for streaming output (start_new_session for process group management)
             process = subprocess.Popen(
@@ -1203,11 +1250,6 @@ class ExecutionService:
         # --- Trigger dispatch ---
         triggers = get_webhook_triggers()
         for trigger in triggers:
-            match_field_path = trigger.get("match_field_path")
-            match_field_value = trigger.get("match_field_value")
-            text_field_path = trigger.get("text_field_path", "text")
-            detection_keyword = trigger.get("detection_keyword", "")
-
             # HMAC validation: if this trigger has a webhook_secret configured,
             # require a valid signature. Skip trigger if signature is missing or invalid.
             webhook_secret = trigger.get("webhook_secret")
@@ -1224,22 +1266,10 @@ class ExecutionService:
                     )
                     continue
 
-            # Check if payload matches the trigger's field criteria
-            if match_field_path and match_field_value:
-                actual_value = get_nested_value(payload, match_field_path)
-                if str(actual_value) != str(match_field_value):
-                    continue  # Field value doesn't match
-
-            # Extract text from payload using configured path
-            text = get_nested_value(payload, text_field_path)
+            # Check if payload matches the trigger's field criteria and extract text
+            text = cls._match_payload(trigger, payload)
             if text is None:
-                text = ""
-            elif not isinstance(text, str):
-                text = str(text)
-
-            # Check keyword match if detection_keyword is set
-            if detection_keyword and detection_keyword not in text:
-                continue  # Keyword not found in text
+                continue
 
             # DB-backed deduplication: skip if identical payload was dispatched within TTL
             payload_hash = hashlib.sha256(
@@ -1300,26 +1330,9 @@ class ExecutionService:
             if not trigger_config:
                 trigger_config = {}
 
-            match_field_path = trigger_config.get("match_field_path")
-            match_field_value = trigger_config.get("match_field_value")
-            text_field_path = trigger_config.get("text_field_path", "text")
-            detection_keyword = trigger_config.get("detection_keyword", "")
-
-            # Check if payload matches the team's field criteria
-            if match_field_path and match_field_value:
-                actual_value = get_nested_value(payload, match_field_path)
-                if str(actual_value) != str(match_field_value):
-                    continue
-
-            # Extract text from payload
-            text = get_nested_value(payload, text_field_path)
+            # Check if payload matches the team's field criteria and extract text
+            text = cls._match_payload(trigger_config, payload)
             if text is None:
-                text = ""
-            elif not isinstance(text, str):
-                text = str(text)
-
-            # Check keyword match
-            if detection_keyword and detection_keyword not in text:
                 continue
 
             logger.info("Team '%s' triggered by webhook", team["name"])

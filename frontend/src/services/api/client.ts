@@ -81,20 +81,7 @@ async function apiFetchSingle<T>(url: string, options?: ApiFetchOptions): Promis
 
     if (!response.ok) {
       const data = await response.json().catch(() => ({}));
-      let retryAfter: number | undefined;
-      if (response.status === 429) {
-        const headerVal = response.headers.get('Retry-After');
-        if (headerVal) {
-          const seconds = Number(headerVal);
-          if (!isNaN(seconds) && seconds >= 0) {
-            retryAfter = seconds;
-          } else {
-            // Try parsing as HTTP date
-            const date = new Date(headerVal);
-            if (!isNaN(date.getTime())) retryAfter = Math.max(0, (date.getTime() - Date.now()) / 1000);
-          }
-        }
-      }
+      const retryAfter = response.status === 429 ? parseRetryAfter(response.headers) : undefined;
       throw new ApiError(response.status, data.message || data.error || `HTTP ${response.status}`, retryAfter);
     }
 
@@ -135,6 +122,109 @@ const SSE_DRAIN_BATCH_SIZE = 20;
 const SSE_QUEUE_WARN_INTERVAL_MS = 5000;
 // Fraction of SSE_MAX_QUEUE_SIZE at which a pre-saturation warning is emitted
 const SSE_QUEUE_WARN_THRESHOLD = 0.75;
+
+/**
+ * Parse the Retry-After header value into seconds.
+ * Supports both integer seconds and HTTP-date formats.
+ * Returns undefined if the header is absent or unparseable.
+ */
+function parseRetryAfter(headers: Headers): number | undefined {
+  const headerVal = headers.get('Retry-After');
+  if (!headerVal) return undefined;
+  const seconds = Number(headerVal);
+  if (!isNaN(seconds) && seconds >= 0) return seconds;
+  // Try parsing as HTTP date
+  const date = new Date(headerVal);
+  if (!isNaN(date.getTime())) return Math.max(0, (date.getTime() - Date.now()) / 1000);
+  return undefined;
+}
+
+interface EventQueue {
+  enqueue(type: string, event: Event, onOverflow?: (dropCount: number) => void): void;
+  drain(handlers: Map<string, Set<(event: MessageEvent) => void>>): void;
+  readonly length: number;
+  clear(): void;
+}
+
+/**
+ * Creates an event queue object with backpressure management.
+ * Enqueues SSE events and drains them in rAF batches.
+ */
+function createEventQueue(): EventQueue {
+  interface QueuedEvent { type: string; event: Event }
+  const eventQueue: QueuedEvent[] = [];
+  let drainScheduled = false;
+  let lastQueueWarnAt = 0;
+  let lastQueueThresholdWarnAt = 0;
+  let overflowDropCount = 0;
+  let _handlers: Map<string, Set<(event: MessageEvent) => void>> | null = null;
+
+  function drainBatch() {
+    drainScheduled = false;
+    if (!_handlers) return;
+    const batch = eventQueue.splice(0, SSE_DRAIN_BATCH_SIZE);
+    for (const { type, event } of batch) {
+      const listeners = _handlers.get(type);
+      if (listeners) {
+        for (const h of listeners) {
+          h(event as MessageEvent);
+        }
+      }
+    }
+    if (eventQueue.length > 0) {
+      drainScheduled = true;
+      requestAnimationFrame(drainBatch);
+    }
+  }
+
+  return {
+    enqueue(type: string, event: Event, onOverflow?: (dropCount: number) => void): void {
+      const queueSize = eventQueue.length;
+
+      if (queueSize >= SSE_MAX_QUEUE_SIZE * SSE_QUEUE_WARN_THRESHOLD && queueSize < SSE_MAX_QUEUE_SIZE) {
+        const now = Date.now();
+        if (now - lastQueueThresholdWarnAt >= SSE_QUEUE_WARN_INTERVAL_MS) {
+          lastQueueThresholdWarnAt = now;
+          console.warn(
+            `[SSE] Event queue at ${Math.round((queueSize / SSE_MAX_QUEUE_SIZE) * 100)}% capacity (${queueSize}/${SSE_MAX_QUEUE_SIZE}). UI rendering may be falling behind.`
+          );
+        }
+      }
+
+      if (eventQueue.length >= SSE_MAX_QUEUE_SIZE) {
+        eventQueue.shift();
+        overflowDropCount++;
+        const now = Date.now();
+        if (now - lastQueueWarnAt >= SSE_QUEUE_WARN_INTERVAL_MS) {
+          lastQueueWarnAt = now;
+          console.warn(
+            `[SSE] Event queue full (${SSE_MAX_QUEUE_SIZE} events). Oldest events are being dropped — UI may miss execution log entries.`
+          );
+          if (onOverflow) {
+            try { onOverflow(overflowDropCount); } catch { /* ignore callback errors */ }
+            overflowDropCount = 0;
+          }
+        }
+      }
+      eventQueue.push({ type, event });
+      if (!drainScheduled) {
+        drainScheduled = true;
+        requestAnimationFrame(drainBatch);
+      }
+    },
+
+    drain(handlers: Map<string, Set<(event: MessageEvent) => void>>): void {
+      _handlers = handlers;
+    },
+
+    get length() { return eventQueue.length; },
+
+    clear(): void {
+      eventQueue.length = 0;
+      drainScheduled = false;
+    },
+  };
+}
 
 /**
  * Authenticated SSE connection with backoff, backpressure, and API key injection.
@@ -204,66 +294,9 @@ export function createAuthenticatedEventSource(
   // addEventListener registry
   const registeredListeners = new Map<string, Set<(event: MessageEvent) => void>>();
 
-  // ---- Backpressure queue ----
-  interface QueuedEvent { type: string; event: Event }
-  const eventQueue: QueuedEvent[] = [];
-  let drainScheduled = false;
-  let lastQueueWarnAt = 0;
-  let lastQueueThresholdWarnAt = 0;
-  let overflowDropCount = 0;
-
-  function drainEventQueue() {
-    drainScheduled = false;
-    const batch = eventQueue.splice(0, SSE_DRAIN_BATCH_SIZE);
-    for (const { type, event } of batch) {
-      const handlers = registeredListeners.get(type);
-      if (handlers) {
-        for (const h of handlers) {
-          h(event as MessageEvent);
-        }
-      }
-    }
-    if (eventQueue.length > 0) {
-      drainScheduled = true;
-      requestAnimationFrame(drainEventQueue);
-    }
-  }
-
-  function enqueueEvent(type: string, event: Event) {
-    const queueSize = eventQueue.length;
-
-    if (queueSize >= SSE_MAX_QUEUE_SIZE * SSE_QUEUE_WARN_THRESHOLD && queueSize < SSE_MAX_QUEUE_SIZE) {
-      const now = Date.now();
-      if (now - lastQueueThresholdWarnAt >= SSE_QUEUE_WARN_INTERVAL_MS) {
-        lastQueueThresholdWarnAt = now;
-        console.warn(
-          `[SSE] Event queue at ${Math.round((queueSize / SSE_MAX_QUEUE_SIZE) * 100)}% capacity (${queueSize}/${SSE_MAX_QUEUE_SIZE}). UI rendering may be falling behind.`
-        );
-      }
-    }
-
-    if (eventQueue.length >= SSE_MAX_QUEUE_SIZE) {
-      eventQueue.shift();
-      overflowDropCount++;
-      const now = Date.now();
-      if (now - lastQueueWarnAt >= SSE_QUEUE_WARN_INTERVAL_MS) {
-        lastQueueWarnAt = now;
-        console.warn(
-          `[SSE] Event queue full (${SSE_MAX_QUEUE_SIZE} events). Oldest events are being dropped — UI may miss execution log entries.`
-        );
-        if (options?.onQueueOverflow) {
-          try { options.onQueueOverflow(overflowDropCount); } catch { /* ignore callback errors */ }
-          overflowDropCount = 0;
-        }
-      }
-    }
-    eventQueue.push({ type, event });
-    if (!drainScheduled) {
-      drainScheduled = true;
-      requestAnimationFrame(drainEventQueue);
-    }
-  }
-  // ---- end backpressure queue ----
+  // Backpressure queue — drains events in rAF batches
+  const queue = createEventQueue();
+  queue.drain(registeredListeners);
 
   function scheduleReconnect() {
     if (closed) return;
@@ -321,7 +354,7 @@ export function createAuthenticatedEventSource(
 
         // addEventListener handlers via backpressure queue
         if (registeredListeners.has(eventType)) {
-          enqueueEvent(eventType, msgEvent);
+          queue.enqueue(eventType, msgEvent, options?.onQueueOverflow);
         }
       },
       onerror(err) {
@@ -376,10 +409,10 @@ export function createAuthenticatedEventSource(
         retryTimeout = null;
       }
       registeredListeners.clear();
-      eventQueue.length = 0;
+      queue.clear();
     },
 
-    get queueDepth() { return eventQueue.length; },
+    get queueDepth() { return queue.length; },
   };
 
   return source;

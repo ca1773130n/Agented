@@ -132,9 +132,9 @@ def init_db():
         # Enable WAL mode for concurrent read/write safety
         result = conn.execute("PRAGMA journal_mode=WAL").fetchone()
         if result[0].lower() != "wal":
-            print(f"WARNING: WAL mode not enabled, got: {result[0]}")
+            logger.warning("WAL mode not enabled, got: %s", result[0])
         else:
-            print("SQLite WAL mode enabled")
+            logger.info("SQLite WAL mode enabled")
 
         # Check if we need to migrate from old schema (INTEGER id) to new (TEXT id)
         # Check for either legacy bots table or current triggers table
@@ -151,7 +151,7 @@ def init_db():
                 cursor = conn.execute("PRAGMA table_info(bots)")
                 columns = {row[1]: row[2] for row in cursor.fetchall()}
                 if columns.get("id") == "INTEGER":
-                    print("Migrating database to new schema with string bot IDs...")
+                    logger.info("Migrating database to new schema with string bot IDs...")
                     _migrate_to_string_ids(conn)
                     _migrate_add_github_columns(conn)
                     conn.commit()
@@ -185,8 +185,8 @@ def init_db():
             # Mark stale running executions from previous sessions
             stale_count = _mark_stale_executions(conn)
             if stale_count > 0:
-                print(
-                    f"Marked {stale_count} stale execution(s) as interrupted from previous session"
+                logger.info(
+                    "Marked %d stale execution(s) as interrupted from previous session", stale_count
                 )
             return
 
@@ -486,7 +486,7 @@ def _migrate_to_string_ids(conn):
                     target = os.readlink(old_symlink_path)
                     os.unlink(old_symlink_path)
                     os.symlink(target, new_symlink_path)
-                    print(f"Renamed symlink: {old_symlink} -> {new_symlink}")
+                    logger.info("Renamed symlink: %s -> %s", old_symlink, new_symlink)
 
             conn.execute(
                 """
@@ -497,7 +497,7 @@ def _migrate_to_string_ids(conn):
             )
 
     conn.commit()
-    print(f"Migration complete. Migrated {len(old_bots)} bots and {len(old_paths)} paths.")
+    logger.info("Migration complete. Migrated %d bots and %d paths.", len(old_bots), len(old_paths))
 
 
 def _migrate_add_github_columns(conn):
@@ -508,10 +508,10 @@ def _migrate_add_github_columns(conn):
 
     if "path_type" not in pp_columns:
         conn.execute("ALTER TABLE project_paths ADD COLUMN path_type TEXT NOT NULL DEFAULT 'local'")
-        print("Added path_type column to project_paths")
+        logger.info("Added path_type column to project_paths")
     if "github_repo_url" not in pp_columns:
         conn.execute("ALTER TABLE project_paths ADD COLUMN github_repo_url TEXT")
-        print("Added github_repo_url column to project_paths")
+        logger.info("Added github_repo_url column to project_paths")
 
     # Check bots columns
     cursor = conn.execute("PRAGMA table_info(bots)")
@@ -519,7 +519,7 @@ def _migrate_add_github_columns(conn):
 
     if "auto_resolve" not in bots_columns:
         conn.execute("ALTER TABLE bots ADD COLUMN auto_resolve INTEGER DEFAULT 0")
-        print("Added auto_resolve column to bots")
+        logger.info("Added auto_resolve column to bots")
 
     conn.commit()
 
@@ -554,7 +554,7 @@ def _migrate_add_pr_reviews_table(conn):
             "CREATE INDEX IF NOT EXISTS idx_pr_reviews_review_status ON pr_reviews(review_status)"
         )
         conn.commit()
-        print("Created pr_reviews table")
+        logger.info("Created pr_reviews table")
 
 
 def _migrate_add_trigger_source(conn):
@@ -565,7 +565,7 @@ def _migrate_add_trigger_source(conn):
     if "trigger_source" not in columns:
         conn.execute("ALTER TABLE bots ADD COLUMN trigger_source TEXT NOT NULL DEFAULT 'webhook'")
         conn.commit()
-        print("Added trigger_source column to bots")
+        logger.info("Added trigger_source column to bots")
 
 
 def _migrate_add_schedule_columns(conn):
@@ -595,7 +595,7 @@ def _migrate_add_schedule_columns(conn):
 
     if added_columns:
         conn.commit()
-        print(f"Added schedule columns to bots: {', '.join(added_columns)}")
+        logger.info("Added schedule columns to bots: %s", ', '.join(added_columns))
 
 
 def _migrate_add_skill_command(conn):
@@ -606,7 +606,7 @@ def _migrate_add_skill_command(conn):
     if "skill_command" not in columns:
         conn.execute("ALTER TABLE bots ADD COLUMN skill_command TEXT")
         conn.commit()
-        print("Added skill_command column to bots")
+        logger.info("Added skill_command column to bots")
 
 
 def _migrate_add_model_column(conn):
@@ -617,7 +617,7 @@ def _migrate_add_model_column(conn):
     if "model" not in columns:
         conn.execute("ALTER TABLE bots ADD COLUMN model TEXT")
         conn.commit()
-        print("Added model column to bots")
+        logger.info("Added model column to bots")
 
 
 def _migrate_add_agents_tables(conn):
@@ -655,7 +655,7 @@ def _migrate_add_agents_tables(conn):
         conn.execute("CREATE INDEX IF NOT EXISTS idx_agents_enabled ON agents(enabled)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_agents_created_at ON agents(created_at DESC)")
         conn.commit()
-        print("Created agents table")
+        logger.info("Created agents table")
     else:
         # Migrate existing agents table to add new harness fields
         cursor = conn.execute("PRAGMA table_info(agents)")
@@ -698,7 +698,7 @@ def _migrate_add_agents_tables(conn):
             "CREATE INDEX IF NOT EXISTS idx_agent_conversations_agent_id ON agent_conversations(agent_id)"
         )
         conn.commit()
-        print("Created agent_conversations table")
+        logger.info("Created agent_conversations table")
 
 
 def _migrate_add_user_skills_table(conn):
@@ -725,7 +725,7 @@ def _migrate_add_user_skills_table(conn):
             "CREATE INDEX IF NOT EXISTS idx_user_skills_harness ON user_skills(selected_for_harness)"
         )
         conn.commit()
-        print("Created user_skills table")
+        logger.info("Created user_skills table")
 
 
 def _migrate_add_teams_products_projects_plugins(conn):
@@ -906,7 +906,7 @@ def _migrate_add_teams_products_projects_plugins(conn):
 
     if tables_created:
         conn.commit()
-        print(f"Created tables: {', '.join(tables_created)}")
+        logger.info("Created tables: %s", ', '.join(tables_created))
 
 
 def _migrate_webhook_fields(conn):
@@ -931,7 +931,7 @@ def _migrate_webhook_fields(conn):
 
     if added_columns:
         conn.commit()
-        print(f"Added webhook columns: {', '.join(added_columns)}")
+        logger.info("Added webhook columns: %s", ', '.join(added_columns))
 
     # Migrate legacy bots to use new fields
     cursor = conn.execute(
@@ -953,7 +953,7 @@ def _migrate_webhook_fields(conn):
                 (str(bot["group_id"]), bot["id"]),
             )
         conn.commit()
-        print(f"Migrated {len(legacy_bots)} bots to webhook configuration")
+        logger.info("Migrated %d bots to webhook configuration", len(legacy_bots))
 
     # Update any remaining legacy trigger sources to 'webhook'
     cursor = conn.execute(
@@ -961,7 +961,7 @@ def _migrate_webhook_fields(conn):
     )
     if cursor.rowcount > 0:
         conn.commit()
-        print(f"Updated {cursor.rowcount} bots to 'webhook' trigger source")
+        logger.info("Updated %d bots to 'webhook' trigger source", cursor.rowcount)
 
 
 def _migrate_add_marketplaces_and_team_agents(conn):
@@ -1047,9 +1047,9 @@ def _migrate_add_marketplaces_and_team_agents(conn):
     if tables_created or columns_added:
         conn.commit()
         if tables_created:
-            print(f"Created tables: {', '.join(tables_created)}")
+            logger.info("Created tables: %s", ', '.join(tables_created))
         if columns_added:
-            print(f"Added columns: {', '.join(columns_added)}")
+            logger.info("Added columns: %s", ', '.join(columns_added))
 
 
 def _migrate_add_hooks_commands_project_skills(conn):
@@ -1140,9 +1140,9 @@ def _migrate_add_hooks_commands_project_skills(conn):
     if tables_created or columns_added:
         conn.commit()
         if tables_created:
-            print(f"Created tables: {', '.join(tables_created)}")
+            logger.info("Created tables: %s", ', '.join(tables_created))
         if columns_added:
-            print(f"Added columns: {', '.join(columns_added)}")
+            logger.info("Added columns: %s", ', '.join(columns_added))
 
 
 def _migrate_add_agent_effort_and_ai_backends(conn):
@@ -1277,11 +1277,11 @@ def _migrate_add_agent_effort_and_ai_backends(conn):
     if tables_created or columns_added or data_migrated:
         conn.commit()
         if tables_created:
-            print(f"Created tables: {', '.join(tables_created)}")
+            logger.info("Created tables: %s", ', '.join(tables_created))
         if columns_added:
-            print(f"Added columns: {', '.join(columns_added)}")
+            logger.info("Added columns: %s", ', '.join(columns_added))
         if data_migrated:
-            print(f"Migrated data: {'; '.join(data_migrated)}")
+            logger.info("Migrated data: %s", '; '.join(data_migrated))
 
 
 def _migrate_update_backend_model_names(conn):
@@ -1310,7 +1310,7 @@ def _migrate_add_bot_config_snapshot(conn):
     columns = {row[1] for row in cursor.fetchall()}
     if "bot_config_snapshot" not in columns:
         conn.execute("ALTER TABLE execution_logs ADD COLUMN bot_config_snapshot TEXT")
-        print("Added bot_config_snapshot column to execution_logs")
+        logger.info("Added bot_config_snapshot column to execution_logs")
 
 
 def _migrate_add_orchestration_tables(conn):
@@ -1404,9 +1404,9 @@ def _migrate_add_orchestration_tables(conn):
     if tables_created or columns_added:
         conn.commit()
         if tables_created:
-            print(f"Created tables: {', '.join(tables_created)}")
+            logger.info("Created tables: %s", ', '.join(tables_created))
         if columns_added:
-            print(f"Added columns: {', '.join(columns_added)}")
+            logger.info("Added columns: %s", ', '.join(columns_added))
 
 
 def _migrate_add_budget_tables(conn):
@@ -1488,9 +1488,9 @@ def _migrate_add_budget_tables(conn):
     if tables_created or columns_added:
         conn.commit()
         if tables_created:
-            print(f"Created budget tables: {', '.join(tables_created)}")
+            logger.info("Created budget tables: %s", ', '.join(tables_created))
         if columns_added:
-            print(f"Added budget columns: {', '.join(columns_added)}")
+            logger.info("Added budget columns: %s", ', '.join(columns_added))
 
 
 def _migrate_add_team_design_tables(conn):
@@ -1550,9 +1550,9 @@ def _migrate_add_team_design_tables(conn):
     if tables_created or columns_added:
         conn.commit()
         if tables_created:
-            print(f"Created team design tables: {', '.join(tables_created)}")
+            logger.info("Created team design tables: %s", ', '.join(tables_created))
         if columns_added:
-            print(f"Added team design columns: {', '.join(columns_added)}")
+            logger.info("Added team design columns: %s", ', '.join(columns_added))
 
 
 def _migrate_add_design_conversations_table(conn):
@@ -1578,7 +1578,7 @@ def _migrate_add_design_conversations_table(conn):
         )
         conn.execute("CREATE INDEX IF NOT EXISTS idx_dc_status ON design_conversations(status)")
         conn.commit()
-        print("Created design_conversations table")
+        logger.info("Created design_conversations table")
 
 
 def _migrate_add_sync_and_export_tables(conn):
@@ -1633,7 +1633,7 @@ def _migrate_add_sync_and_export_tables(conn):
 
     if tables_created:
         conn.commit()
-        print(f"Created plugin sync/export tables: {', '.join(tables_created)}")
+        logger.info("Created plugin sync/export tables: %s", ', '.join(tables_created))
 
 
 def _migrate_add_project_local_path(conn):
@@ -1643,7 +1643,7 @@ def _migrate_add_project_local_path(conn):
     if "local_path" not in columns:
         conn.execute("ALTER TABLE projects ADD COLUMN local_path TEXT")
         conn.commit()
-        print("Added local_path column to projects table")
+        logger.info("Added local_path column to projects table")
 
 
 def _migrate_add_rate_limit_snapshots(conn):
@@ -1674,7 +1674,7 @@ def _migrate_add_rate_limit_snapshots(conn):
             "CREATE INDEX IF NOT EXISTS idx_snapshots_time ON rate_limit_snapshots(recorded_at DESC)"
         )
         conn.commit()
-        print("Created rate_limit_snapshots table")
+        logger.info("Created rate_limit_snapshots table")
 
 
 def _migrate_add_agent_sessions(conn):
@@ -1699,7 +1699,7 @@ def _migrate_add_agent_sessions(conn):
         """)
         conn.execute("CREATE INDEX IF NOT EXISTS idx_agent_sessions_state ON agent_sessions(state)")
         conn.commit()
-        print("Created agent_sessions table")
+        logger.info("Created agent_sessions table")
 
 
 def _migrate_bots_to_triggers(conn):
@@ -1796,12 +1796,12 @@ def _migrate_add_trigger_execution_mode(conn):
 
     if "execution_mode" not in columns:
         conn.execute("ALTER TABLE triggers ADD COLUMN execution_mode TEXT DEFAULT 'direct'")
-        print("Added execution_mode column to triggers")
+        logger.info("Added execution_mode column to triggers")
     if "team_id" not in columns:
         conn.execute(
             "ALTER TABLE triggers ADD COLUMN team_id TEXT REFERENCES teams(id) ON DELETE SET NULL"
         )
-        print("Added team_id column to triggers")
+        logger.info("Added team_id column to triggers")
 
     conn.commit()
 
@@ -1827,7 +1827,7 @@ def _migrate_add_project_installations(conn):
             "ON project_installations(project_id)"
         )
         conn.commit()
-        print("Created table: project_installations")
+        logger.info("Created table: project_installations")
 
 
 def _migrate_add_setup_executions(conn):
@@ -1850,7 +1850,7 @@ def _migrate_add_setup_executions(conn):
             )
         """)
         conn.commit()
-        print("Created table: setup_executions")
+        logger.info("Created table: setup_executions")
 
 
 def _migrate_drop_token_usage_fk(conn):
@@ -1867,7 +1867,7 @@ def _migrate_drop_token_usage_fk(conn):
     if "FOREIGN KEY" not in create_sql:
         return  # already clean
 
-    print("Migrating token_usage: dropping FOREIGN KEY constraint...")
+    logger.info("Migrating token_usage: dropping FOREIGN KEY constraint...")
     conn.execute("ALTER TABLE token_usage RENAME TO token_usage_old")
     conn.execute("""
         CREATE TABLE token_usage (
@@ -1904,7 +1904,7 @@ def _migrate_drop_token_usage_fk(conn):
     # Clear imported-sessions tracking so they get re-imported into the clean table
     conn.execute("DELETE FROM settings WHERE key = 'session_usage_imported'")
     conn.commit()
-    print("Migrated token_usage: FK dropped, imported sessions reset")
+    logger.info("Migrated token_usage: FK dropped, imported sessions reset")
 
 
 def _migrate_fix_session_recorded_at(conn):
@@ -1926,7 +1926,9 @@ def _migrate_fix_session_recorded_at(conn):
     conn.execute("DELETE FROM token_usage WHERE entity_type = 'session'")
     conn.execute("DELETE FROM settings WHERE key = 'session_usage_imported'")
     conn.commit()
-    print(f"Reset {count} session records for timestamp fix (will reimport on next collection)")
+    logger.info(
+        "Reset %d session records for timestamp fix (will reimport on next collection)", count
+    )
 
 
 # =============================================================================
@@ -2772,7 +2774,7 @@ def _migrate_v50_trigger_template_history(conn):
             "ON trigger_template_history(trigger_id)"
         )
         conn.commit()
-        print("Created table: trigger_template_history")
+        logger.info("Created table: trigger_template_history")
 
 
 def _migrate_v48_pending_retries_table(conn):
@@ -2794,7 +2796,7 @@ def _migrate_v48_pending_retries_table(conn):
             )
         """)
         conn.commit()
-        print("Created table: pending_retries")
+        logger.info("Created table: pending_retries")
 
 
 def _migrate_v52_trigger_sigterm_grace_seconds(conn):
@@ -2803,7 +2805,7 @@ def _migrate_v52_trigger_sigterm_grace_seconds(conn):
     if "sigterm_grace_seconds" not in cols:
         conn.execute("ALTER TABLE triggers ADD COLUMN sigterm_grace_seconds INTEGER")
         conn.commit()
-        print("Added sigterm_grace_seconds column to triggers")
+        logger.info("Added sigterm_grace_seconds column to triggers")
 
 
 def _migrate_v51_workflow_version_draft(conn):
@@ -2812,7 +2814,7 @@ def _migrate_v51_workflow_version_draft(conn):
     if "is_draft" not in cols:
         conn.execute("ALTER TABLE workflow_versions ADD COLUMN is_draft INTEGER NOT NULL DEFAULT 0")
         conn.commit()
-        print("Added is_draft column to workflow_versions")
+        logger.info("Added is_draft column to workflow_versions")
 
 
 def _migrate_v53_project_manager_super_agent(conn):
@@ -2821,7 +2823,7 @@ def _migrate_v53_project_manager_super_agent(conn):
     if "manager_super_agent_id" not in cols:
         conn.execute("ALTER TABLE projects ADD COLUMN manager_super_agent_id TEXT")
         conn.commit()
-        print("Added manager_super_agent_id column to projects")
+        logger.info("Added manager_super_agent_id column to projects")
 
 
 def _migrate_v54_project_grd_init_status(conn):
@@ -2830,7 +2832,7 @@ def _migrate_v54_project_grd_init_status(conn):
     if "grd_init_status" not in cols:
         conn.execute("ALTER TABLE projects ADD COLUMN grd_init_status TEXT DEFAULT 'none'")
         conn.commit()
-        print("Added grd_init_status column to projects")
+        logger.info("Added grd_init_status column to projects")
 
 
 def _migrate_v47_webhook_dedup_keys(conn):
@@ -2985,7 +2987,7 @@ def _migrate_v59_add_bookmarks_table(conn):
             "CREATE INDEX IF NOT EXISTS idx_bookmarks_execution ON bookmarks(execution_id)"
         )
         conn.commit()
-        print("Created bookmarks table")
+        logger.info("Created bookmarks table")
 
 
 def _migrate_v60_add_integrations_table(conn):

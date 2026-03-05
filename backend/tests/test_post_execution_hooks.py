@@ -3,6 +3,7 @@
 import logging
 import sys
 import types
+from unittest import mock
 from unittest.mock import MagicMock
 
 from app.services.execution_log_service import ExecutionLogService
@@ -83,11 +84,13 @@ def test_import_error_handled_gracefully(isolated_db, caplog):
         command="claude -p test",
     )
 
-    # Ensure notification_service is NOT importable
+    # Ensure notification_service is NOT importable.
+    # Setting to None in sys.modules forces ImportError even when the file exists on disk.
     _cleanup_mock_notification_module()
 
-    with caplog.at_level(logging.DEBUG, logger="app.services.execution_log_service"):
-        ExecutionLogService.finish_execution(exec_id, "completed", exit_code=0)
+    with mock.patch.dict(sys.modules, {"app.services.notification_service": None}):
+        with caplog.at_level(logging.DEBUG, logger="app.services.execution_log_service"):
+            ExecutionLogService.finish_execution(exec_id, "completed", exit_code=0)
 
     # Verify execution still completed normally
     execution = ExecutionLogService.get_execution(exec_id)

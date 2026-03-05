@@ -3,6 +3,7 @@
 # stdlib
 import json
 import logging
+import sqlite3
 import subprocess
 import threading
 import uuid
@@ -215,19 +216,36 @@ def create_team():
             "CONFLICT", "A team with this name already exists", HTTPStatus.CONFLICT
         )
 
-    team_id = db_create_team(
-        name=name,
-        description=data.get("description"),
-        color=data.get("color", "#00d4ff"),
-        leader_id=data.get("leader_id"),
-        topology=data.get("topology"),
-        topology_config=data.get("topology_config"),
-        trigger_source=data.get("trigger_source"),
-        trigger_config=data.get("trigger_config"),
-    )
+    try:
+        team_id = db_create_team(
+            name=name,
+            description=data.get("description"),
+            color=data.get("color", "#00d4ff"),
+            leader_id=data.get("leader_id"),
+            topology=data.get("topology"),
+            topology_config=data.get("topology_config"),
+            trigger_source=data.get("trigger_source"),
+            trigger_config=data.get("trigger_config"),
+        )
+    except sqlite3.IntegrityError as e:
+        logger.error("Integrity error creating team: %s", e)
+        return error_response(
+            "CONFLICT",
+            "A team with this name or configuration already exists",
+            HTTPStatus.CONFLICT,
+        )
+    except sqlite3.OperationalError as e:
+        logger.error("DB error creating team: %s", e)
+        return error_response(
+            "SERVICE_UNAVAILABLE",
+            "Database unavailable, please retry",
+            HTTPStatus.SERVICE_UNAVAILABLE,
+        )
     if not team_id:
         return error_response(
-            "INTERNAL_SERVER_ERROR", "Failed to create team", HTTPStatus.INTERNAL_SERVER_ERROR
+            "INTERNAL_SERVER_ERROR",
+            "Failed to create team — the database insert returned no ID",
+            HTTPStatus.INTERNAL_SERVER_ERROR,
         )
 
     # Auto-add leader as team member if leader_id was provided

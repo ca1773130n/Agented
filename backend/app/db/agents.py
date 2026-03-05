@@ -4,7 +4,7 @@ import logging
 import sqlite3
 from typing import List, Optional
 
-from .connection import get_connection
+from .connection import get_connection, safe_set_clause
 from .ids import _get_unique_agent_id, _get_unique_conversation_id
 
 logger = logging.getLogger(__name__)
@@ -200,7 +200,7 @@ def update_agent(
     values.append(agent_id)
 
     with get_connection() as conn:
-        cursor = conn.execute(f"UPDATE agents SET {', '.join(updates)} WHERE id = ?", values)
+        cursor = conn.execute(f"UPDATE agents SET {safe_set_clause(updates)} WHERE id = ?", values)
         conn.commit()
         return cursor.rowcount > 0
 
@@ -308,7 +308,7 @@ def update_agent_conversation(
 
     with get_connection() as conn:
         cursor = conn.execute(
-            f"UPDATE agent_conversations SET {', '.join(updates)} WHERE id = ?", values
+            f"UPDATE agent_conversations SET {safe_set_clause(updates)} WHERE id = ?", values
         )
         conn.commit()
         return cursor.rowcount > 0
@@ -388,7 +388,7 @@ def update_design_conversation(conv_id: str, **kwargs) -> bool:
     values.append(conv_id)
     with get_connection() as conn:
         conn.execute(
-            f"UPDATE design_conversations SET {', '.join(updates)} WHERE id = ?",
+            f"UPDATE design_conversations SET {safe_set_clause(updates)} WHERE id = ?",
             values,
         )
         conn.commit()

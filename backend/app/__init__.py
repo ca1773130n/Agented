@@ -57,23 +57,8 @@ def _get_secret_key() -> str:
     return key
 
 
-def create_app(config=None):
-    """Create and configure the Flask application."""
-    app = OpenAPI(__name__, info=API_INFO, doc_prefix="/docs")
-    app.url_map.strict_slashes = False
-
-    # Load configuration
-    app.config.from_mapping(
-        SECRET_KEY=_get_secret_key(),
-        DATABASE=app_config.DB_PATH,
-    )
-
-    if config:
-        app.config.from_mapping(config)
-
-    testing = app.config.get("TESTING", False)
-
-    # Enable CORS (fail-closed: empty list blocks all cross-origin when unset)
+def _configure_cors(app) -> None:
+    """Configure CORS — fail-closed: empty list blocks all cross-origin when unset."""
     allowed_origins = os.environ.get("CORS_ALLOWED_ORIGINS", "").split(",")
     allowed_origins = [o.strip() for o in allowed_origins if o.strip()]
     cors_config = {"origins": allowed_origins} if allowed_origins else {"origins": []}
@@ -87,7 +72,6 @@ def create_app(config=None):
         },
         allow_headers=["Content-Type", "X-API-Key"],
     )
-
     # Security headers (SEC-01) — OWASP-aligned via flask-talisman
     # Initialize AFTER CORS so CORS headers are set first (no conflict — different headers)
     Talisman(
@@ -107,7 +91,6 @@ def create_app(config=None):
         content_security_policy_report_only=False,
         referrer_policy="strict-origin-when-cross-origin",
     )
-
     # Rate limiting (SEC-02) — in-memory storage safe for workers=1 (see gunicorn.conf.py)
     limiter = Limiter(
         get_remote_address,
@@ -118,6 +101,218 @@ def create_app(config=None):
     )
     # Store on app.extensions for blueprint-level access in register_blueprints()
     app.extensions["limiter"] = limiter
+
+
+def _init_database(app) -> None:  # noqa: ARG001 — app reserved for future config reads
+    """Initialize database tables, run migrations, and seed preset data."""
+    from .database import (
+        auto_register_project_root,
+        init_db,
+        migrate_existing_paths,
+        seed_bot_templates,
+        seed_predefined_triggers,
+        seed_preset_mcp_servers,
+    )
+
+    init_db()
+    seed_predefined_triggers()
+    seed_preset_mcp_servers()
+    seed_bot_templates()
+    migrate_existing_paths()
+    auto_register_project_root()
+
+
+def _detect_backends() -> None:
+    """Detect backend CLIs and log warnings for any that are missing."""
+    from .services.backend_detection_service import BACKEND_CAPABILITIES, detect_backend
+
+    for _bt in BACKEND_CAPABILITIES:
+        _inst, _ver, _ = detect_backend(_bt)
+        if not _inst:
+            _startup_warnings.append(f"cli_missing:{_bt}")
+
+    import logging as _grd_log
+
+    from .services.grd_cli_service import GrdCliService
+
+    _log = _grd_log.getLogger(__name__)
+    grd_path = GrdCliService.detect_binary()
+    if grd_path:
+        _log.info(f"GRD binary detected: {grd_path}")
+    else:
+        _log.warning(
+            "GRD binary not found — GRD CLI write operations will be unavailable. "
+            "Configure grd_binary_path in Agented settings or set CLAUDE_PLUGIN_ROOT env var."
+        )
+
+
+def _setup_scheduler(app) -> None:
+    """Initialize the APScheduler and register all periodic jobs."""
+    from .services.scheduler_service import SchedulerService
+
+    SchedulerService.init(app)
+
+    from .services.monitoring_service import MonitoringService
+
+    MonitoringService.init()
+
+    from .services.health_monitor_service import HealthMonitorService
+
+    HealthMonitorService.init()
+
+    from .services.session_collection_service import SessionCollectionService
+
+    if SchedulerService._scheduler:
+        SchedulerService._scheduler.add_job(
+            func=SessionCollectionService.collect_all,
+            trigger="interval",
+            minutes=10,
+            id="session_usage_collection",
+            replace_existing=True,
+        )
+
+    from .services.project_workspace_service import ProjectWorkspaceService
+
+    if SchedulerService._scheduler:
+        SchedulerService._scheduler.add_job(
+            func=ProjectWorkspaceService.sync_all_repos,
+            trigger="interval",
+            minutes=30,
+            id="project_repo_sync",
+            replace_existing=True,
+        )
+
+    from .services.agent_conversation_service import AgentConversationService
+
+    if SchedulerService._scheduler:
+        SchedulerService._scheduler.add_job(
+            func=AgentConversationService.cleanup_stale_conversations,
+            trigger="interval",
+            minutes=5,
+            id="stale_conversation_cleanup",
+            replace_existing=True,
+        )
+
+    from .db.webhook_dedup import cleanup_expired_keys
+
+    if SchedulerService._scheduler:
+        SchedulerService._scheduler.add_job(
+            func=cleanup_expired_keys,
+            trigger="interval",
+            seconds=60,
+            id="webhook_dedup_cleanup",
+            replace_existing=True,
+        )
+
+    from .services.agent_scheduler_service import AgentSchedulerService
+
+    AgentSchedulerService.init()
+
+    from .services.rotation_evaluator import RotationEvaluator
+
+    RotationEvaluator.init()
+
+
+def _register_cleanup_handlers() -> None:
+    """Register startup cleanup handlers and background service shutdown hooks."""
+    import logging as _log
+
+    _sess_log = _log.getLogger(__name__)
+
+    try:
+        from .services.project_session_manager import ProjectSessionManager
+
+        ProjectSessionManager.cleanup_dead_sessions()
+    except Exception as _cleanup_err:
+        _sess_log.error(
+            "Project session cleanup failed on startup: %s", _cleanup_err, exc_info=True
+        )
+        _startup_warnings.append(f"project_session_cleanup: {_cleanup_err}")
+
+    try:
+        from .services.workflow_execution_service import WorkflowExecutionService
+
+        WorkflowExecutionService.cleanup_stale_executions()
+    except Exception as _wf_cleanup_err:
+        _sess_log.error(
+            "Workflow stale execution cleanup failed on startup: %s",
+            _wf_cleanup_err,
+            exc_info=True,
+        )
+        _startup_warnings.append(f"workflow_stale_cleanup: {_wf_cleanup_err}")
+
+    try:
+        from .services.execution_service import ExecutionService
+
+        ExecutionService.restore_pending_retries()
+    except Exception as _retry_restore_err:
+        _sess_log.error(
+            "Pending retry restore failed on startup: %s", _retry_restore_err, exc_info=True
+        )
+        _startup_warnings.append(f"pending_retry_restore: {_retry_restore_err}")
+
+    from .services.execution_queue_service import ExecutionQueueService
+
+    ExecutionQueueService.start_dispatcher()
+    atexit.register(ExecutionQueueService.stop_dispatcher)
+
+    from .services.agent_message_bus_service import AgentMessageBusService
+
+    AgentMessageBusService.start()
+    atexit.register(AgentMessageBusService.stop)
+
+    _proxy_log = _log.getLogger(__name__)
+    try:
+        from .services.cliproxy_manager import CLIProxyManager
+
+        CLIProxyManager.kill_orphans()
+
+        try:
+            refresh_result = CLIProxyManager.refresh_expired_tokens(timeout_per_account=45)
+            refreshed = refresh_result.get("refreshed", [])
+            failed = refresh_result.get("failed", [])
+            if refreshed:
+                _proxy_log.info("Refreshed %d expired token(s): %s", len(refreshed), refreshed)
+            if failed:
+                _proxy_log.warning("Failed to refresh %d token(s): %s", len(failed), failed)
+        except Exception as refresh_err:
+            _proxy_log.warning("Token auto-refresh skipped: %s", refresh_err)
+
+        if CLIProxyManager.install_if_needed():
+            if CLIProxyManager.start():
+                _proxy_log.info(
+                    "CLIProxyAPI global proxy started on port %d", CLIProxyManager._port
+                )
+            else:
+                _proxy_log.info("CLIProxyAPI not started (no config or not ready)")
+            atexit.register(CLIProxyManager.stop)
+        else:
+            _proxy_log.info("CLIProxyAPI binary not available -- proxy streaming disabled")
+    except Exception as proxy_init_err:
+        _proxy_log.error(
+            "CLIProxyManager initialization failed; proxy streaming will be unavailable: %s",
+            proxy_init_err,
+            exc_info=True,
+        )
+
+
+def create_app(config=None):
+    """Create and configure the Flask application."""
+    app = OpenAPI(__name__, info=API_INFO, doc_prefix="/docs")
+    app.url_map.strict_slashes = False
+
+    # Load configuration
+    app.config.from_mapping(
+        SECRET_KEY=_get_secret_key(),
+        DATABASE=app_config.DB_PATH,
+    )
+
+    if config:
+        app.config.from_mapping(config)
+
+    testing = app.config.get("TESTING", False)
+
+    _configure_cors(app)
 
     # Paths that bypass authentication (public endpoints)
     _AUTH_BYPASS_PREFIXES = ("/health", "/docs", "/openapi", "/api/webhooks/github")
@@ -154,214 +349,10 @@ def create_app(config=None):
     # In testing mode, DB init is handled by the isolated_db fixture and
     # background services are not needed.
     if not testing:
-        # Initialize database
-        from .database import (
-            auto_register_project_root,
-            init_db,
-            migrate_existing_paths,
-            seed_bot_templates,
-            seed_predefined_triggers,
-            seed_preset_mcp_servers,
-        )
-
-        init_db()
-        seed_predefined_triggers()
-        seed_preset_mcp_servers()
-        seed_bot_templates()
-        migrate_existing_paths()
-        auto_register_project_root()
-
-        # Detect backend CLIs and log any that are missing
-        from .services.backend_detection_service import BACKEND_CAPABILITIES, detect_backend
-
-        for _bt in BACKEND_CAPABILITIES:
-            _inst, _ver, _ = detect_backend(_bt)
-            if not _inst:
-                _startup_warnings.append(f"cli_missing:{_bt}")
-
-        # Detect GRD binary for CLI write operations
-        from .services.grd_cli_service import GrdCliService
-
-        grd_path = GrdCliService.detect_binary()
-        if grd_path:
-            import logging as _grd_log
-
-            _grd_log.getLogger(__name__).info(f"GRD binary detected: {grd_path}")
-        else:
-            import logging as _grd_log
-
-            _grd_log.getLogger(__name__).warning(
-                "GRD binary not found — GRD CLI write operations will be unavailable. "
-                "Configure grd_binary_path in Agented settings or set CLAUDE_PLUGIN_ROOT env var."
-            )
-
-        # Initialize scheduler for scheduled triggers
-        from .services.scheduler_service import SchedulerService
-
-        SchedulerService.init(app)
-
-        # Initialize monitoring service (depends on SchedulerService)
-        from .services.monitoring_service import MonitoringService
-
-        MonitoringService.init()
-
-        # Initialize health monitor service (depends on SchedulerService)
-        from .services.health_monitor_service import HealthMonitorService
-
-        HealthMonitorService.init()
-
-        # Schedule periodic session usage collection (every 10 minutes)
-        from .services.session_collection_service import SessionCollectionService
-
-        if SchedulerService._scheduler:
-            SchedulerService._scheduler.add_job(
-                func=SessionCollectionService.collect_all,
-                trigger="interval",
-                minutes=10,
-                id="session_usage_collection",
-                replace_existing=True,
-            )
-
-        # Schedule periodic repo sync (every 30 minutes)
-        from .services.project_workspace_service import ProjectWorkspaceService
-
-        if SchedulerService._scheduler:
-            SchedulerService._scheduler.add_job(
-                func=ProjectWorkspaceService.sync_all_repos,
-                trigger="interval",
-                minutes=30,
-                id="project_repo_sync",
-                replace_existing=True,
-            )
-
-        # Schedule periodic stale conversation cleanup (every 5 minutes)
-        from .services.agent_conversation_service import AgentConversationService
-
-        if SchedulerService._scheduler:
-            SchedulerService._scheduler.add_job(
-                func=AgentConversationService.cleanup_stale_conversations,
-                trigger="interval",
-                minutes=5,
-                id="stale_conversation_cleanup",
-                replace_existing=True,
-            )
-
-        # Schedule periodic webhook dedup key cleanup (every 60 seconds)
-        from .db.webhook_dedup import cleanup_expired_keys
-
-        if SchedulerService._scheduler:
-            SchedulerService._scheduler.add_job(
-                func=cleanup_expired_keys,
-                trigger="interval",
-                seconds=60,
-                id="webhook_dedup_cleanup",
-                replace_existing=True,
-            )
-
-        # Initialize agent execution scheduler (depends on MonitoringService)
-        from .services.agent_scheduler_service import AgentSchedulerService
-
-        AgentSchedulerService.init()
-
-        # Initialize rotation evaluator (depends on MonitoringService + AgentSchedulerService)
-        from .services.rotation_evaluator import RotationEvaluator
-
-        RotationEvaluator.init()
-
-        # Clean up dead project sessions from previous server run
-        try:
-            from .services.project_session_manager import ProjectSessionManager
-
-            ProjectSessionManager.cleanup_dead_sessions()
-        except Exception as _cleanup_err:
-            import logging as _sess_log
-
-            _sess_log.getLogger(__name__).error(
-                "Project session cleanup failed on startup: %s", _cleanup_err, exc_info=True
-            )
-            _startup_warnings.append(f"project_session_cleanup: {_cleanup_err}")
-
-        # Mark any workflow executions left as 'running' from previous server run as failed
-        try:
-            from .services.workflow_execution_service import WorkflowExecutionService
-
-            WorkflowExecutionService.cleanup_stale_executions()
-        except Exception as _wf_cleanup_err:
-            import logging as _wf_log
-
-            _wf_log.getLogger(__name__).error(
-                "Workflow stale execution cleanup failed on startup: %s",
-                _wf_cleanup_err,
-                exc_info=True,
-            )
-            _startup_warnings.append(f"workflow_stale_cleanup: {_wf_cleanup_err}")
-
-        # Restore any rate-limit retries that were pending when the server last restarted
-        try:
-            from .services.execution_service import ExecutionService
-
-            ExecutionService.restore_pending_retries()
-        except Exception as _retry_restore_err:
-            import logging as _retry_log
-
-            _retry_log.getLogger(__name__).error(
-                "Pending retry restore failed on startup: %s", _retry_restore_err, exc_info=True
-            )
-            _startup_warnings.append(f"pending_retry_restore: {_retry_restore_err}")
-
-        # Start execution queue dispatcher (recovers stale entries, polls every 1s)
-        from .services.execution_queue_service import ExecutionQueueService
-
-        ExecutionQueueService.start_dispatcher()
-        atexit.register(ExecutionQueueService.stop_dispatcher)
-
-        # Initialize agent message bus (TTL sweep background worker)
-        from .services.agent_message_bus_service import AgentMessageBusService
-
-        AgentMessageBusService.start()
-        atexit.register(AgentMessageBusService.stop)
-
-        # Initialize CLIProxyAPI manager (single global instance)
-        try:
-            import logging as _log
-
-            _proxy_log = _log.getLogger(__name__)
-            from .services.cliproxy_manager import CLIProxyManager
-
-            # Kill orphan cliproxyapi processes from previous runs
-            CLIProxyManager.kill_orphans()
-
-            # Auto-refresh expired OAuth tokens before starting the proxy
-            try:
-                refresh_result = CLIProxyManager.refresh_expired_tokens(timeout_per_account=45)
-                refreshed = refresh_result.get("refreshed", [])
-                failed = refresh_result.get("failed", [])
-                if refreshed:
-                    _proxy_log.info("Refreshed %d expired token(s): %s", len(refreshed), refreshed)
-                if failed:
-                    _proxy_log.warning("Failed to refresh %d token(s): %s", len(failed), failed)
-            except Exception as refresh_err:
-                _proxy_log.warning("Token auto-refresh skipped: %s", refresh_err)
-
-            # Install cliproxyapi if not available, then start global proxy
-            if CLIProxyManager.install_if_needed():
-                if CLIProxyManager.start():
-                    _proxy_log.info(
-                        "CLIProxyAPI global proxy started on port %d", CLIProxyManager._port
-                    )
-                else:
-                    _proxy_log.info("CLIProxyAPI not started (no config or not ready)")
-                atexit.register(CLIProxyManager.stop)
-            else:
-                _proxy_log.info("CLIProxyAPI binary not available -- proxy streaming disabled")
-        except Exception as proxy_init_err:
-            import logging as _log
-
-            _log.getLogger(__name__).error(
-                "CLIProxyManager initialization failed; proxy streaming will be unavailable: %s",
-                proxy_init_err,
-                exc_info=True,
-            )
+        _init_database(app)
+        _detect_backends()
+        _setup_scheduler(app)
+        _register_cleanup_handlers()
 
     # Register blueprints
     from .routes import register_blueprints
@@ -420,6 +411,33 @@ def create_app(config=None):
 
     @app.errorhandler(500)
     def internal_error(e):
+        # Inspect the original exception for more specific error codes.
+        # Flask wraps unhandled exceptions in an HTTPException; unwrap if possible.
+        original = getattr(e, "original_exception", e)
+        if isinstance(original, ValueError):
+            return error_response(
+                "VALIDATION_ERROR",
+                f"Validation failed: {original}",
+                HTTPStatus.UNPROCESSABLE_ENTITY,
+            )
+        if isinstance(original, PermissionError):
+            return error_response(
+                "FORBIDDEN",
+                "Permission denied",
+                HTTPStatus.FORBIDDEN,
+            )
+        if isinstance(original, sqlite3.IntegrityError):
+            return error_response(
+                "CONFLICT",
+                "Resource conflict: a record with this identifier already exists",
+                HTTPStatus.CONFLICT,
+            )
+        if isinstance(original, sqlite3.OperationalError):
+            return error_response(
+                "SERVICE_UNAVAILABLE",
+                "Database unavailable, please retry",
+                HTTPStatus.SERVICE_UNAVAILABLE,
+            )
         return error_response(
             "INTERNAL_SERVER_ERROR", "Internal server error", HTTPStatus.INTERNAL_SERVER_ERROR
         )

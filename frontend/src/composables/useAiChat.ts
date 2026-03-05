@@ -306,6 +306,90 @@ export function useAiChat(superAgentId: Ref<string>) {
     _resetHeartbeat();
   }
 
+  function handleMessage(data: Extract<StateDelta, { type: 'message' }>) {
+    // Push complete message with de-duplication by seq
+    if (data.role && data.content) {
+      // De-duplicate by content + role only (not timestamp).
+      // The optimistic user message added in sendMessage() has a
+      // client-generated timestamp, while the server echo arrives
+      // without one, so timestamp comparison always fails.
+      const isDuplicate = messages.value.some(
+        (m) => m.content === data.content && m.role === data.role,
+      );
+      if (!isDuplicate) {
+        const entry: ConversationMessage = {
+          role: data.role as 'user' | 'assistant' | 'system',
+          content: data.content,
+          timestamp: data.timestamp || new Date().toISOString(),
+        };
+        if (data.backend) {
+          entry.backend = data.backend;
+        }
+        messages.value.push(entry);
+      }
+    }
+  }
+
+  function handleContentDelta(data: Extract<StateDelta, { type: 'content_delta' }>) {
+    // Accumulate streaming content
+    if (data.content) {
+      streamingContent.value += data.content;
+      if (onStreamingChunkCallback) {
+        onStreamingChunkCallback(data.content);
+      }
+    }
+  }
+
+  function handleToolUse(data: Extract<StateDelta, { type: 'tool_call' }>) {
+    // data is narrowed to { type: 'tool_call'; id: string; name?: string; arguments?: string }
+    // which is structurally compatible with ToolCallDelta (type: 'tool_call' in ProcessGroupType)
+    processGroups.processToolCallDelta(data);
+  }
+
+  function handleFinish(data: Extract<StateDelta, { type: 'finish' }>) {
+    // Finalize streaming: push complete assistant message.
+    // Use the server-resolved backend (from the finish event) so each
+    // message permanently records which backend produced it, regardless
+    // of later dropdown changes.
+    const finalContent = data.content || streamingContent.value;
+    const resolvedBackend = data.backend || _currentBackend;
+    if (finalContent) {
+      messages.value.push({
+        role: 'assistant',
+        content: finalContent,
+        timestamp: new Date().toISOString(),
+        backend: resolvedBackend,
+      });
+    }
+    streamingContent.value = '';
+    isProcessing.value = false;
+    _currentBackend = undefined;
+  }
+
+  function handleStatusChange(data: Extract<StateDelta, { type: 'status_change' }>) {
+    // Update processing state based on status
+    if (data.status === 'streaming' || data.status === 'processing') {
+      isProcessing.value = true;
+    } else if (data.status === 'idle' || data.status === 'error') {
+      isProcessing.value = false;
+    }
+  }
+
+  function handleError(data: Extract<StateDelta, { type: 'error' }>) {
+    // Display error
+    error.value = data.message || 'Stream error';
+    isProcessing.value = false;
+  }
+
+  function handleFullSync(data: Extract<StateDelta, { type: 'full_sync' }>) {
+    // Replace all state with synced data
+    if (data.messages) {
+      messages.value = data.messages;
+    }
+    streamingContent.value = '';
+    processGroups.clearGroups();
+  }
+
   /**
    * Dispatch state_delta events by type.
    * Switches on data.type so TypeScript narrows each case automatically.
@@ -326,100 +410,14 @@ export function useAiChat(superAgentId: Ref<string>) {
     }
 
     switch (data.type) {
-      case 'message': {
-        // Push complete message with de-duplication by seq
-        if (data.role && data.content) {
-          // De-duplicate by content + role only (not timestamp).
-          // The optimistic user message added in sendMessage() has a
-          // client-generated timestamp, while the server echo arrives
-          // without one, so timestamp comparison always fails.
-          const isDuplicate = messages.value.some(
-            (m) => m.content === data.content && m.role === data.role,
-          );
-          if (!isDuplicate) {
-            const entry: ConversationMessage = {
-              role: data.role as 'user' | 'assistant' | 'system',
-              content: data.content,
-              timestamp: data.timestamp || new Date().toISOString(),
-            };
-            if (data.backend) {
-              entry.backend = data.backend;
-            }
-            messages.value.push(entry);
-          }
-        }
-        break;
-      }
-
-      case 'content_delta': {
-        // Accumulate streaming content
-        if (data.content) {
-          streamingContent.value += data.content;
-          if (onStreamingChunkCallback) {
-            onStreamingChunkCallback(data.content);
-          }
-        }
-        break;
-      }
-
-      case 'tool_call': {
-        // data is narrowed to { type: 'tool_call'; id: string; name?: string; arguments?: string }
-        // which is structurally compatible with ToolCallDelta (type: 'tool_call' in ProcessGroupType)
-        processGroups.processToolCallDelta(data);
-        break;
-      }
-
-      case 'finish': {
-        // Finalize streaming: push complete assistant message.
-        // Use the server-resolved backend (from the finish event) so each
-        // message permanently records which backend produced it, regardless
-        // of later dropdown changes.
-        const finalContent = data.content || streamingContent.value;
-        const resolvedBackend = data.backend || _currentBackend;
-        if (finalContent) {
-          messages.value.push({
-            role: 'assistant',
-            content: finalContent,
-            timestamp: new Date().toISOString(),
-            backend: resolvedBackend,
-          });
-        }
-        streamingContent.value = '';
-        isProcessing.value = false;
-        _currentBackend = undefined;
-        break;
-      }
-
-      case 'status_change': {
-        // Update processing state based on status
-        if (data.status === 'streaming' || data.status === 'processing') {
-          isProcessing.value = true;
-        } else if (data.status === 'idle' || data.status === 'error') {
-          isProcessing.value = false;
-        }
-        break;
-      }
-
-      case 'error': {
-        // Display error
-        error.value = data.message || 'Stream error';
-        isProcessing.value = false;
-        break;
-      }
-
-      case 'full_sync': {
-        // Replace all state with synced data
-        if (data.messages) {
-          messages.value = data.messages;
-        }
-        streamingContent.value = '';
-        processGroups.clearGroups();
-        break;
-      }
-
-      default:
-        // Unknown event type -- ignore
-        break;
+      case 'message':        handleMessage(data); break;
+      case 'content_delta':  handleContentDelta(data); break;
+      case 'tool_call':      handleToolUse(data); break;
+      case 'finish':         handleFinish(data); break;
+      case 'status_change':  handleStatusChange(data); break;
+      case 'error':          handleError(data); break;
+      case 'full_sync':      handleFullSync(data); break;
+      default:               break; // Unknown event type -- ignore
     }
   }
 

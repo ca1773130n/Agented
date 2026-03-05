@@ -9,6 +9,83 @@ import type {
   CanvasPositions,
 } from '../services/api'
 
+// Types used by node-creation helpers
+type SavedPositions = Record<string, { x: number; y: number }>
+
+/** Build a SuperAgent canvas node from a TeamMember with super_agent_id. */
+function createSuperAgentNode(
+  member: TeamMember,
+  idx: number,
+  savedPositions: SavedPositions,
+): Node<SuperAgentNodeData> {
+  const saId = member.super_agent_id!
+  const position = savedPositions[saId]
+    ? { x: savedPositions[saId].x, y: savedPositions[saId].y }
+    : { x: idx * 250, y: 100 }
+  return {
+    id: saId,
+    type: 'super_agent',
+    position,
+    data: {
+      label: member.name || member.super_agent_name || 'Unknown SuperAgent',
+      superAgentId: saId,
+      role: member.role || 'lead',
+      color: '#a855f7',
+      tier: member.tier || undefined,
+      sessionCount: 0,
+      documentCount: 0,
+      assignments: [],
+    } as SuperAgentNodeData,
+  }
+}
+
+/** Build a regular agent canvas node from a TeamMember. */
+function createAgentNode(
+  member: TeamMember,
+  idx: number,
+  savedPositions: SavedPositions,
+  color: string,
+  memberAssignments: { type: string; name: string; id: string }[],
+): Node<AgentNodeData> {
+  const agentId = member.agent_id || String(member.id) || `member-${idx}`
+  const position = savedPositions[agentId]
+    ? { x: savedPositions[agentId].x, y: savedPositions[agentId].y }
+    : { x: idx * 250, y: 100 }
+  return {
+    id: agentId,
+    type: 'agent',
+    position,
+    data: {
+      label: member.name || member.agent_name || 'Unknown Agent',
+      agentId,
+      role: member.role || 'member',
+      color,
+      tier: member.tier || undefined,
+      assignments: memberAssignments,
+    } as AgentNodeData,
+  }
+}
+
+/** Build canvas edges from stored raw topology edges, filtering to valid node IDs. */
+function createConnectionEdges(
+  storedEdges: NonNullable<TopologyConfig['edges']>,
+  nodeIds: Set<string>,
+): Edge[] {
+  return storedEdges
+    .filter((e) => nodeIds.has(e.source) && nodeIds.has(e.target))
+    .map((e) => ({
+      id: e.id || `e-${e.source}-${e.target}`,
+      source: e.source,
+      target: e.target,
+      type: 'messageFlow' as const,
+      animated: e.type === 'messaging' || !e.type,
+      data: {
+        edge_type: e.type || 'messaging',
+        label: e.label,
+      },
+    }))
+}
+
 export interface AgentNodeData {
   label: string
   agentId: string
@@ -66,29 +143,10 @@ export function useTeamCanvas(
       const savedPositions = topologyConfig?.positions || {}
 
       // Create nodes from members — handle both agent and super_agent member types
-      const newNodes: Node<AgentNodeData | SuperAgentNodeData>[] = members.value.map((member, idx) => {
+      const newNodes = (members.value.map((member, idx) => {
         if (member.super_agent_id) {
           // SuperAgent member — use super_agent_id as node ID (entity-prefixed, no collision risk)
-          const saId = member.super_agent_id
-          const position = savedPositions[saId]
-            ? { x: savedPositions[saId].x, y: savedPositions[saId].y }
-            : { x: idx * 250, y: 100 }
-
-          return {
-            id: saId,
-            type: 'super_agent',
-            position,
-            data: {
-              label: member.name || member.super_agent_name || 'Unknown SuperAgent',
-              superAgentId: saId,
-              role: member.role || 'lead',
-              color: '#a855f7',
-              tier: member.tier || undefined,
-              sessionCount: 0,
-              documentCount: 0,
-              assignments: [],
-            } as SuperAgentNodeData,
-          }
+          return createSuperAgentNode(member, idx, savedPositions)
         }
 
         // Regular agent member or manual member
@@ -97,42 +155,14 @@ export function useTeamCanvas(
           .filter((a) => a.agent_id === agentId)
           .map((a) => ({ type: a.entity_type, name: a.entity_name || a.entity_id, id: a.entity_id }))
 
-        const position = savedPositions[agentId]
-          ? { x: savedPositions[agentId].x, y: savedPositions[agentId].y }
-          : { x: idx * 250, y: 100 }
-
-        return {
-          id: agentId,
-          type: 'agent',
-          position,
-          data: {
-            label: member.name || member.agent_name || 'Unknown Agent',
-            agentId,
-            role: member.role || 'member',
-            color,
-            tier: member.tier || undefined,
-            assignments: memberAssignments,
-          } as AgentNodeData,
-        }
-      })
+        return createAgentNode(member, idx, savedPositions, color, memberAssignments)
+      }) as Node<AgentNodeData | SuperAgentNodeData>[])
 
       // Create edges: prefer stored raw edges, fall back to building from topology
       let newEdges: Edge[]
       if (topologyConfig?.edges && topologyConfig.edges.length > 0) {
         const nodeIds = new Set(newNodes.map((n) => n.id))
-        newEdges = topologyConfig.edges
-          .filter((e) => nodeIds.has(e.source) && nodeIds.has(e.target))
-          .map((e) => ({
-            id: e.id || `e-${e.source}-${e.target}`,
-            source: e.source,
-            target: e.target,
-            type: 'messageFlow' as const,
-            animated: e.type === 'messaging' || !e.type,
-            data: {
-              edge_type: e.type || 'messaging',
-              label: e.label,
-            },
-          }))
+        newEdges = createConnectionEdges(topologyConfig.edges, nodeIds)
       } else {
         newEdges = buildEdgesFromTopology(
           t.topology || null,

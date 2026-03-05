@@ -9,8 +9,8 @@ For new code, prefer importing from specific sub-modules:
   from app.db.connection import get_connection
 """
 
+# Infrastructure / utilities
 # Analytics (cost, execution, effectiveness aggregation)
-# Infrastructure
 # Agents (includes conversations and design conversations)
 from .agents import (  # noqa: F401
     # Constants
@@ -166,7 +166,7 @@ from .commands import (  # noqa: F401
     get_commands_by_project,
     update_command,
 )
-from .connection import get_connection  # noqa: F401
+from .connection import get_connection, safe_set_clause  # noqa: F401
 
 # Conversation branches (tree-structured conversation branching)
 from .conversation_branches import (  # noqa: F401

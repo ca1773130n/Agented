@@ -4,7 +4,7 @@ import logging
 import sqlite3
 from typing import List, Optional
 
-from .connection import get_connection
+from .connection import get_connection, safe_set_clause
 from .ids import _get_unique_mcp_server_id
 
 logger = logging.getLogger(__name__)
@@ -143,7 +143,7 @@ def update_mcp_server(server_id: str, **kwargs) -> bool:
     values.append(server_id)
 
     with get_connection() as conn:
-        cursor = conn.execute(f"UPDATE mcp_servers SET {', '.join(updates)} WHERE id = ?", values)
+        cursor = conn.execute(f"UPDATE mcp_servers SET {safe_set_clause(updates)} WHERE id = ?", values)
         conn.commit()
         return cursor.rowcount > 0
 
@@ -237,7 +237,7 @@ def update_project_mcp_assignment(
 
     with get_connection() as conn:
         cursor = conn.execute(
-            f"UPDATE project_mcp_servers SET {', '.join(updates)} "
+            f"UPDATE project_mcp_servers SET {safe_set_clause(updates)} "
             "WHERE project_id = ? AND mcp_server_id = ?",
             values,
         )
@@ -325,7 +325,7 @@ def update_execution_type_handler(handler_id: int, **kwargs) -> bool:
 
     with get_connection() as conn:
         cursor = conn.execute(
-            f"UPDATE execution_type_handlers SET {', '.join(updates)} WHERE id = ?", values
+            f"UPDATE execution_type_handlers SET {safe_set_clause(updates)} WHERE id = ?", values
         )
         conn.commit()
         return cursor.rowcount > 0

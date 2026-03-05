@@ -205,6 +205,30 @@ class WorkflowExecutionService:
     }
 
     @staticmethod
+    def _sort_nodes(nodes: dict, edges_list: list) -> list:
+        """Build topological sort order from nodes dict and edges list.
+
+        Returns a list of node_ids in topological order.
+        Raises graphlib.CycleError if the graph contains a cycle.
+        """
+        predecessors: Dict[str, set] = {nid: set() for nid in nodes}
+        for edge in edges_list:
+            predecessors[edge["target"]].add(edge["source"])
+        return list(graphlib.TopologicalSorter(predecessors).static_order())
+
+    @staticmethod
+    def _collect_results(topo_order: list, node_outputs: dict) -> Optional[str]:
+        """Get the last non-empty node output as JSON string for the workflow output.
+
+        Walks topo_order in reverse to find the last node that produced output.
+        Returns a JSON string or None if no node produced output.
+        """
+        for nid in reversed(topo_order):
+            if nid in node_outputs:
+                return node_outputs[nid].model_dump_json()
+        return None
+
+    @staticmethod
     def _validate_graph(graph_parsed: dict) -> None:
         """Validate workflow graph structure before execution.
 
@@ -483,13 +507,6 @@ class WorkflowExecutionService:
         for node in nodes_list:
             nodes[node["id"]] = node
 
-        # Build adjacency: predecessor map (node_id -> set of predecessor node_ids)
-        predecessors: Dict[str, set] = {nid: set() for nid in nodes}
-        for edge in edges_list:
-            source = edge["source"]
-            target = edge["target"]
-            predecessors[target].add(source)
-
         # Build successor map for skip propagation
         successors: Dict[str, set] = {nid: set() for nid in nodes}
         for edge in edges_list:
@@ -497,8 +514,7 @@ class WorkflowExecutionService:
 
         # Topological sort
         try:
-            ts = graphlib.TopologicalSorter(predecessors)
-            topo_order = list(ts.static_order())
+            topo_order = cls._sort_nodes(nodes, edges_list)
         except graphlib.CycleError as e:
             error_msg = f"Graph cycle detected: {e}"
             logger.error(f"Workflow {execution_id}: {error_msg}", exc_info=True)
@@ -507,6 +523,11 @@ class WorkflowExecutionService:
             update_workflow_execution(execution_id, status="failed", error=error_msg, ended_at=now)
             cls._schedule_cleanup(execution_id)
             return
+
+        # Build predecessor map (still needed for input routing per node)
+        predecessors: Dict[str, set] = {nid: set() for nid in nodes}
+        for edge in edges_list:
+            predecessors[edge["target"]].add(edge["source"])
 
         # Initialize node outputs and tracking
         node_outputs: Dict[str, WorkflowMessage] = {}
@@ -766,12 +787,7 @@ class WorkflowExecutionService:
                 ended_at=now,
             )
         else:
-            # Get the last node's output as the workflow output
-            last_output = None
-            for nid in reversed(topo_order):
-                if nid in node_outputs:
-                    last_output = node_outputs[nid].model_dump_json()
-                    break
+            last_output = cls._collect_results(topo_order, node_outputs)
             cls._update_status(execution_id, "completed")
             update_workflow_execution(
                 execution_id,

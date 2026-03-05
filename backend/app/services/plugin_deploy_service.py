@@ -11,6 +11,7 @@ import re
 import shutil
 import subprocess
 import tempfile
+import threading
 import time
 
 from app.database import (
@@ -26,8 +27,51 @@ logger = logging.getLogger(__name__)
 
 log = logging.getLogger(__name__)
 
+
+class _MarketplaceCache:
+    def __init__(self):
+        self._data: dict = {}
+        self._lock = threading.Lock()
+
+    def get(self, key):
+        with self._lock:
+            return self._data.get(key)
+
+    def set(self, key, value):
+        with self._lock:
+            self._data[key] = value
+
+    def pop(self, key, default=None):
+        with self._lock:
+            return self._data.pop(key, default)
+
+    def clear(self):
+        with self._lock:
+            self._data.clear()
+
+    def __setitem__(self, key, value):
+        with self._lock:
+            self._data[key] = value
+
+    def __getitem__(self, key):
+        with self._lock:
+            return self._data[key]
+
+    def __contains__(self, key):
+        with self._lock:
+            return key in self._data
+
+    def __iter__(self):
+        with self._lock:
+            return iter(list(self._data))
+
+    def __len__(self):
+        with self._lock:
+            return len(self._data)
+
+
 # In-memory cache for marketplace discovery results
-_marketplace_cache: dict = {}  # {marketplace_id: {"data": {...}, "fetched_at": float}}
+_marketplace_cache = _MarketplaceCache()  # {marketplace_id: {"data": {...}, "fetched_at": float}}
 _CACHE_TTL = 300  # 5 minutes
 
 
@@ -417,8 +461,6 @@ class DeployService:
         Returns cached result if fresh (within _CACHE_TTL seconds).
         On error, returns stale cache if available; otherwise re-raises.
         """
-        global _marketplace_cache
-
         # Check cache
         entry = _marketplace_cache.get(marketplace_id)
         if entry and (time.time() - entry["fetched_at"] < _CACHE_TTL):
@@ -437,10 +479,10 @@ class DeployService:
             raise
 
         # Store in cache
-        _marketplace_cache[marketplace_id] = {
+        _marketplace_cache.set(marketplace_id, {
             "data": result,
             "fetched_at": time.time(),
-        }
+        })
         return result
 
     @classmethod
@@ -450,7 +492,6 @@ class DeployService:
         Args:
             marketplace_id: If given, clear only that entry. If None, clear all.
         """
-        global _marketplace_cache
         if marketplace_id:
             _marketplace_cache.pop(marketplace_id, None)
         else:

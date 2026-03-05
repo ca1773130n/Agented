@@ -129,6 +129,33 @@ class WorkflowTriggerService:
 
     MAX_CHAIN_DEPTH = 10
 
+    # ──────────────────────────────────────────────
+    # Shared helpers
+    # ──────────────────────────────────────────────
+
+    @classmethod
+    def _get_workflows_by_trigger_type(cls, trigger_type: str) -> List[dict]:
+        """Return enabled workflows whose trigger_type matches, with parsed trigger_config.
+
+        Each returned dict is the workflow row with an extra 'trigger_config_parsed' key
+        holding the parsed dict (or None if the config was missing/invalid).
+        """
+        from ..db.workflows import get_all_workflows
+
+        results = []
+        for wf in get_all_workflows():
+            if wf.get("trigger_type") != trigger_type or not wf.get("enabled", 1):
+                continue
+            config_str = wf.get("trigger_config")
+            if not config_str:
+                continue
+            try:
+                wf["trigger_config_parsed"] = json.loads(config_str)
+            except (json.JSONDecodeError, TypeError):
+                continue
+            results.append(wf)
+        return results
+
     # =========================================================================
     # Initialization and Shutdown
     # =========================================================================
@@ -299,24 +326,14 @@ class WorkflowTriggerService:
     def _load_completion_triggers(cls) -> None:
         """Load completion triggers from DB on startup."""
         try:
-            from ..db.workflows import get_all_workflows
-
-            workflows = get_all_workflows()
             count = 0
-            for wf in workflows:
-                if wf.get("trigger_type") == "completion" and wf.get("enabled", 1):
-                    config_str = wf.get("trigger_config")
-                    if not config_str:
-                        continue
-                    try:
-                        config = json.loads(config_str)
-                    except (json.JSONDecodeError, TypeError):
-                        continue
-                    source_type = config.get("source_type")
-                    source_id = config.get("source_id")
-                    if source_type and source_id:
-                        cls.register_completion_trigger(source_type, source_id, wf["id"])
-                        count += 1
+            for wf in cls._get_workflows_by_trigger_type("completion"):
+                config = wf["trigger_config_parsed"]
+                source_type = config.get("source_type")
+                source_id = config.get("source_id")
+                if source_type and source_id:
+                    cls.register_completion_trigger(source_type, source_id, wf["id"])
+                    count += 1
             logger.info(f"Loaded {count} completion triggers from DB")
         except Exception as e:
             logger.error(f"Error loading completion triggers: {e}", exc_info=True)
@@ -416,29 +433,19 @@ class WorkflowTriggerService:
     def _load_cron_triggers(cls) -> None:
         """Load cron triggers from DB on startup."""
         try:
-            from ..db.workflows import get_all_workflows
-
-            workflows = get_all_workflows()
             count = 0
-            for wf in workflows:
-                if wf.get("trigger_type") == "cron" and wf.get("enabled", 1):
-                    config_str = wf.get("trigger_config")
-                    if not config_str:
-                        continue
+            for wf in cls._get_workflows_by_trigger_type("cron"):
+                config = wf["trigger_config_parsed"]
+                cron_expr = config.get("cron_expression")
+                tz = config.get("timezone", "UTC")
+                if cron_expr:
                     try:
-                        config = json.loads(config_str)
-                    except (json.JSONDecodeError, TypeError):
-                        continue
-                    cron_expr = config.get("cron_expression")
-                    tz = config.get("timezone", "UTC")
-                    if cron_expr:
-                        try:
-                            cls.register_cron_trigger(wf["id"], cron_expr, tz)
-                            count += 1
-                        except ValueError as e:
-                            logger.warning(
-                                f"Skipping invalid cron trigger for workflow {wf['id']}: {e}"
-                            )
+                        cls.register_cron_trigger(wf["id"], cron_expr, tz)
+                        count += 1
+                    except ValueError as e:
+                        logger.warning(
+                            f"Skipping invalid cron trigger for workflow {wf['id']}: {e}"
+                        )
             logger.info(f"Loaded {count} cron triggers from DB")
         except Exception as e:
             logger.error(f"Error loading cron triggers: {e}", exc_info=True)
@@ -602,33 +609,23 @@ class WorkflowTriggerService:
     def _load_polling_triggers(cls) -> None:
         """Load polling triggers from DB on startup."""
         try:
-            from ..db.workflows import get_all_workflows
-
-            workflows = get_all_workflows()
             count = 0
-            for wf in workflows:
-                if wf.get("trigger_type") == "poll" and wf.get("enabled", 1):
-                    config_str = wf.get("trigger_config")
-                    if not config_str:
-                        continue
+            for wf in cls._get_workflows_by_trigger_type("poll"):
+                config = wf["trigger_config_parsed"]
+                url = config.get("url")
+                if url:
                     try:
-                        config = json.loads(config_str)
-                    except (json.JSONDecodeError, TypeError):
-                        continue
-                    url = config.get("url")
-                    if url:
-                        try:
-                            cls.register_polling_trigger(
-                                workflow_id=wf["id"],
-                                url=url,
-                                interval_seconds=config.get("interval_seconds", 60),
-                                method=config.get("method", "GET"),
-                                headers=config.get("headers"),
-                                condition=config.get("condition", "status_changed"),
-                            )
-                            count += 1
-                        except ValueError as e:
-                            logger.warning(f"Skipping polling trigger for workflow {wf['id']}: {e}")
+                        cls.register_polling_trigger(
+                            workflow_id=wf["id"],
+                            url=url,
+                            interval_seconds=config.get("interval_seconds", 60),
+                            method=config.get("method", "GET"),
+                            headers=config.get("headers"),
+                            condition=config.get("condition", "status_changed"),
+                        )
+                        count += 1
+                    except ValueError as e:
+                        logger.warning(f"Skipping polling trigger for workflow {wf['id']}: {e}")
             logger.info(f"Loaded {count} polling triggers from DB")
         except Exception as e:
             logger.error(f"Error loading polling triggers: {e}", exc_info=True)
@@ -708,33 +705,23 @@ class WorkflowTriggerService:
     def _load_file_watch_triggers(cls) -> None:
         """Load file watch triggers from DB on startup."""
         try:
-            from ..db.workflows import get_all_workflows
-
-            workflows = get_all_workflows()
             count = 0
-            for wf in workflows:
-                if wf.get("trigger_type") == "file_watch" and wf.get("enabled", 1):
-                    config_str = wf.get("trigger_config")
-                    if not config_str:
-                        continue
+            for wf in cls._get_workflows_by_trigger_type("file_watch"):
+                config = wf["trigger_config_parsed"]
+                watch_path = config.get("watch_path")
+                if watch_path:
                     try:
-                        config = json.loads(config_str)
-                    except (json.JSONDecodeError, TypeError):
-                        continue
-                    watch_path = config.get("watch_path")
-                    if watch_path:
-                        try:
-                            cls.register_file_watch_trigger(
-                                workflow_id=wf["id"],
-                                watch_path=watch_path,
-                                patterns=config.get("patterns"),
-                                recursive=config.get("recursive", True),
-                            )
-                            count += 1
-                        except ValueError as e:
-                            logger.warning(
-                                f"Skipping file watch trigger for workflow {wf['id']}: {e}"
-                            )
+                        cls.register_file_watch_trigger(
+                            workflow_id=wf["id"],
+                            watch_path=watch_path,
+                            patterns=config.get("patterns"),
+                            recursive=config.get("recursive", True),
+                        )
+                        count += 1
+                    except ValueError as e:
+                        logger.warning(
+                            f"Skipping file watch trigger for workflow {wf['id']}: {e}"
+                        )
             logger.info(f"Loaded {count} file watch triggers from DB")
         except Exception as e:
             logger.error(f"Error loading file watch triggers: {e}", exc_info=True)

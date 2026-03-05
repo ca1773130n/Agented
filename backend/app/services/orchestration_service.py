@@ -48,6 +48,186 @@ class OrchestrationService:
     """Service that wraps ExecutionService with fallback chain and account rotation."""
 
     @classmethod
+    def _check_budget(cls, trigger: dict) -> Optional[str]:
+        """Pre-execution budget check for a trigger.
+
+        Returns a human-readable error detail string if the budget is blocked, or None if
+        execution is allowed. Logs a warning for soft-limit warnings even when allowed.
+        """
+        budget_check = BudgetService.check_budget("trigger", trigger["id"])
+        if not budget_check["allowed"]:
+            limit_info = budget_check.get("limit") or {}
+            period = limit_info.get("period", "monthly")
+            hard_limit = limit_info.get("hard_limit_usd", "N/A")
+            detail = (
+                f"trigger '{trigger['name']}' (id={trigger['id']}): "
+                f"{budget_check['reason']}; "
+                f"spend=${budget_check.get('current_spend', 0):.4f}, "
+                f"hard_limit=${hard_limit}, "
+                f"period={period}"
+            )
+            logger.warning(f"Budget check blocked execution for {detail}")
+            return detail
+
+        if budget_check.get("reason") == "soft_limit_warning":
+            logger.warning(
+                f"Soft budget limit warning for trigger '{trigger['name']}': "
+                f"spend ${budget_check.get('current_spend', 0):.2f}, "
+                f"remaining ${budget_check.get('remaining_usd', 'N/A')}"
+            )
+        return None
+
+    @classmethod
+    def _select_account(cls, chain_entry: dict) -> Optional[dict]:
+        """Pick the best available account for a chain entry.
+
+        Returns the account dict if one is available, or None if the entry should be skipped
+        (rate-limited, not eligible, or no accounts exist for the backend).
+        Side-effect: appends to no_accounts_backends list is not possible here — callers must
+        handle the None return to track skipped backends.
+        """
+        backend_type = chain_entry["backend_type"]
+        specific_account_id = chain_entry.get("account_id")
+
+        if specific_account_id:
+            # Preemptive scheduler eligibility check (rate limit prediction)
+            from .agent_scheduler_service import AgentSchedulerService
+
+            eligibility = AgentSchedulerService.check_eligibility(specific_account_id)
+            if not eligibility["eligible"]:
+                logger.info(
+                    f"Scheduler paused account {specific_account_id}: "
+                    f"{eligibility.get('message', eligibility['reason'])}"
+                )
+                return None
+
+            # Specific account requested -- check if rate-limited
+            if RateLimitService.is_rate_limited(specific_account_id):
+                logger.info(
+                    f"Specific account {specific_account_id} is rate-limited, "
+                    f"skipping chain entry for {backend_type}"
+                )
+                return None
+
+            from ..database import get_account_rate_limit_state
+
+            account_state = get_account_rate_limit_state(specific_account_id)
+            if not account_state:
+                logger.warning(f"Account {specific_account_id} not found, skipping chain entry")
+                return None
+
+            from ..database import get_accounts_for_backend_type
+
+            accounts = get_accounts_for_backend_type(backend_type)
+            account = next((a for a in accounts if a["id"] == specific_account_id), None)
+            if not account:
+                logger.warning(
+                    f"Account {specific_account_id} not found for backend {backend_type}"
+                )
+                return None
+            return account
+        else:
+            # Auto-select best available account
+            account = RateLimitService.pick_best_account(backend_type)
+            if not account:
+                logger.info(
+                    f"No available accounts for backend {backend_type}, trying next chain entry"
+                )
+                return None
+            return account
+
+    @classmethod
+    def _try_execute_chain_entry(
+        cls,
+        trigger: dict,
+        message_text: str,
+        event: Optional[dict],
+        trigger_type: str,
+        chain_entry: dict,
+        account: dict,
+    ) -> ExecutionResult:
+        """Attempt execution for a single chain entry with a chosen account.
+
+        Handles the mark_running / mark_completed lifecycle, delegates to
+        ExecutionService.run_trigger, and checks for rate-limit / transient failure
+        outcomes. Returns an ExecutionResult with the outcome.
+        """
+        from .execution_service import ExecutionService
+
+        backend_type = chain_entry["backend_type"]
+        env_overrides = cls._build_account_env(account)
+        modified_trigger = {**trigger, "backend_type": backend_type}
+
+        logger.info(
+            f"Attempting execution with backend={backend_type}, "
+            f"account={account['id']} ({account.get('account_name', 'unknown')})"
+        )
+
+        # Mark account as running (queued -> running transition)
+        try:
+            from .agent_scheduler_service import AgentSchedulerService
+
+            AgentSchedulerService.mark_running(account["id"])
+        except (RuntimeError, AttributeError) as e:
+            logger.error("Failed to mark account %s running: %s", account["id"], e, exc_info=True)
+        except Exception:
+            logger.exception("Unexpected error marking account %s running", account["id"])
+
+        # Execute with lifecycle hooks (mark_completed in finally block)
+        try:
+            execution_id = ExecutionService.run_trigger(
+                modified_trigger,
+                message_text,
+                event,
+                trigger_type,
+                env_overrides=env_overrides,
+                account_id=account["id"],
+            )
+        finally:
+            # Mark account as completed (running -> queued transition)
+            # Must be in finally block so state is always cleaned up
+            try:
+                from .agent_scheduler_service import AgentSchedulerService
+
+                AgentSchedulerService.mark_completed(account["id"])
+            except (RuntimeError, AttributeError) as e:
+                logger.error(
+                    "Failed to mark account %s completed: %s", account["id"], e, exc_info=True
+                )
+            except Exception:
+                logger.exception("Unexpected error marking account %s completed", account["id"])
+
+        # Check if execution was rate-limited
+        cooldown = ExecutionService.was_rate_limited(execution_id)
+        if cooldown is not None:
+            logger.info(
+                f"Execution {execution_id} was rate-limited "
+                f"(cooldown={cooldown}s), marking account {account['id']}"
+            )
+            RateLimitService.mark_rate_limited(account["id"], cooldown)
+            CircuitBreakerService.record_failure(backend_type, "rate_limit")
+            return ExecutionResult(
+                status=ExecutionStatus.CHAIN_EXHAUSTED,
+                detail=f"rate_limited:{cooldown}:{execution_id}",
+            )
+
+        # Check for transient failure patterns in execution stderr
+        transient_failure = ExecutionService.was_transient_failure(execution_id)
+        if transient_failure:
+            logger.info(f"Execution {execution_id} had transient failure: {transient_failure}")
+            CircuitBreakerService.record_failure(backend_type, transient_failure)
+            return ExecutionResult(
+                status=ExecutionStatus.CHAIN_EXHAUSTED, detail=f"transient:{transient_failure}"
+            )
+
+        # Execution succeeded or failed for non-rate-limit reason
+        if execution_id:
+            CircuitBreakerService.record_success(backend_type)
+            increment_account_executions(account["id"])
+            return ExecutionResult(status=ExecutionStatus.DISPATCHED, execution_id=execution_id)
+        return ExecutionResult(status=ExecutionStatus.LAUNCH_FAILED)
+
+    @classmethod
     def execute_with_fallback(
         cls,
         trigger: dict,
@@ -82,40 +262,20 @@ class OrchestrationService:
             f"Executing trigger '{trigger['name']}' with fallback chain ({len(chain)} entries)"
         )
 
+        # Pre-execution budget check
+        budget_error = cls._check_budget(trigger)
+        if budget_error is not None:
+            return ExecutionResult(status=ExecutionStatus.BUDGET_BLOCKED, detail=budget_error)
+
         # Track rate-limit cooldowns so we can schedule a retry if all accounts are exhausted
         rate_limited_cooldowns = []
         # Track backends skipped due to no available accounts for CHAIN_EXHAUSTED detail
         no_accounts_backends: list[str] = []
-
-        # Pre-execution budget check
-        budget_check = BudgetService.check_budget("trigger", trigger["id"])
-        if not budget_check["allowed"]:
-            limit_info = budget_check.get("limit") or {}
-            period = limit_info.get("period", "monthly")
-            hard_limit = limit_info.get("hard_limit_usd", "N/A")
-            detail = (
-                f"trigger '{trigger['name']}' (id={trigger['id']}): "
-                f"{budget_check['reason']}; "
-                f"spend=${budget_check.get('current_spend', 0):.4f}, "
-                f"hard_limit=${hard_limit}, "
-                f"period={period}"
-            )
-            logger.warning(f"Budget check blocked execution for {detail}")
-            return ExecutionResult(status=ExecutionStatus.BUDGET_BLOCKED, detail=detail)
-
-        if budget_check.get("reason") == "soft_limit_warning":
-            logger.warning(
-                f"Soft budget limit warning for trigger '{trigger['name']}': "
-                f"spend ${budget_check.get('current_spend', 0):.2f}, "
-                f"remaining ${budget_check.get('remaining_usd', 'N/A')}"
-            )
-
         # Track backends skipped due to circuit breaker for CHAIN_EXHAUSTED detail
         breaker_open_backends: list[str] = []
 
         for chain_entry in chain:
             backend_type = chain_entry["backend_type"]
-            specific_account_id = chain_entry.get("account_id")
 
             # Circuit breaker check: skip backends with OPEN breakers
             if not CircuitBreakerService.can_execute(backend_type):
@@ -126,125 +286,29 @@ class OrchestrationService:
                 continue
 
             # Pick account
-            if specific_account_id:
-                # Preemptive scheduler eligibility check (rate limit prediction)
-                from .agent_scheduler_service import AgentSchedulerService
-
-                eligibility = AgentSchedulerService.check_eligibility(specific_account_id)
-                if not eligibility["eligible"]:
-                    logger.info(
-                        f"Scheduler paused account {specific_account_id}: "
-                        f"{eligibility.get('message', eligibility['reason'])}"
-                    )
-                    continue  # Try next chain entry
-
-                # Specific account requested -- check if rate-limited
-                if RateLimitService.is_rate_limited(specific_account_id):
-                    logger.info(
-                        f"Specific account {specific_account_id} is rate-limited, "
-                        f"skipping chain entry for {backend_type}"
-                    )
-                    continue
-                # Use the specific account -- get its details
-                from ..database import get_account_rate_limit_state
-
-                account_state = get_account_rate_limit_state(specific_account_id)
-                if not account_state:
-                    logger.warning(f"Account {specific_account_id} not found, skipping chain entry")
-                    continue
-                # Get full account info
-                from ..database import get_accounts_for_backend_type
-
-                accounts = get_accounts_for_backend_type(backend_type)
-                account = next((a for a in accounts if a["id"] == specific_account_id), None)
-                if not account:
-                    logger.warning(
-                        f"Account {specific_account_id} not found for backend {backend_type}"
-                    )
-                    continue
-            else:
-                # Auto-select best available account
-                account = RateLimitService.pick_best_account(backend_type)
-                if not account:
-                    logger.info(
-                        f"No available accounts for backend {backend_type}, trying next chain entry"
-                    )
+            account = cls._select_account(chain_entry)
+            if account is None:
+                specific_account_id = chain_entry.get("account_id")
+                if not specific_account_id:
                     no_accounts_backends.append(backend_type)
-                    continue
+                continue
 
-            # Build env overrides from account config
-            env_overrides = cls._build_account_env(account)
-
-            # Create modified trigger dict with the chain entry's backend_type
-            modified_trigger = {**trigger, "backend_type": backend_type}
-
-            logger.info(
-                f"Attempting execution with backend={backend_type}, "
-                f"account={account['id']} ({account.get('account_name', 'unknown')})"
+            # Attempt execution for this chain entry
+            result = cls._try_execute_chain_entry(
+                trigger, message_text, event, trigger_type, chain_entry, account
             )
 
-            # Mark account as running (queued -> running transition)
-            try:
-                from .agent_scheduler_service import AgentSchedulerService
-
-                AgentSchedulerService.mark_running(account["id"])
-            except (RuntimeError, AttributeError) as e:
-                logger.error(
-                    "Failed to mark account %s running: %s", account["id"], e, exc_info=True
-                )
-            except Exception:
-                logger.exception("Unexpected error marking account %s running", account["id"])
-
-            # Execute with lifecycle hooks (mark_completed in finally block)
-            try:
-                execution_id = ExecutionService.run_trigger(
-                    modified_trigger,
-                    message_text,
-                    event,
-                    trigger_type,
-                    env_overrides=env_overrides,
-                    account_id=account["id"],
-                )
-            finally:
-                # Mark account as completed (running -> queued transition)
-                # Must be in finally block so state is always cleaned up
-                try:
-                    from .agent_scheduler_service import AgentSchedulerService
-
-                    AgentSchedulerService.mark_completed(account["id"])
-                except (RuntimeError, AttributeError) as e:
-                    logger.error(
-                        "Failed to mark account %s completed: %s", account["id"], e, exc_info=True
-                    )
-                except Exception:
-                    logger.exception("Unexpected error marking account %s completed", account["id"])
-
-            # Check if execution was rate-limited
-            cooldown = ExecutionService.was_rate_limited(execution_id)
-            if cooldown is not None:
-                logger.info(
-                    f"Execution {execution_id} was rate-limited "
-                    f"(cooldown={cooldown}s), marking account {account['id']}"
-                )
-                RateLimitService.mark_rate_limited(account["id"], cooldown)
-                rate_limited_cooldowns.append(cooldown)
-                # Rate limits are transient — record failure for circuit breaker
-                CircuitBreakerService.record_failure(backend_type, "rate_limit")
+            # CHAIN_EXHAUSTED from _try_execute_chain_entry means rate-limited or transient failure
+            if result.status == ExecutionStatus.CHAIN_EXHAUSTED and result.detail:
+                detail_str = result.detail or ""
+                if detail_str.startswith("rate_limited:"):
+                    parts = detail_str.split(":", 2)
+                    cooldown = int(parts[1]) if len(parts) > 1 else 0
+                    rate_limited_cooldowns.append(cooldown)
                 continue  # Try next chain entry
 
-            # Check for transient failure patterns in execution stderr
-            transient_failure = ExecutionService.was_transient_failure(execution_id)
-            if transient_failure:
-                logger.info(f"Execution {execution_id} had transient failure: {transient_failure}")
-                CircuitBreakerService.record_failure(backend_type, transient_failure)
-                continue  # Try next chain entry
-
-            # Execution succeeded or failed for non-rate-limit reason
-            if execution_id:
-                CircuitBreakerService.record_success(backend_type)
-                increment_account_executions(account["id"])
-                return ExecutionResult(status=ExecutionStatus.DISPATCHED, execution_id=execution_id)
-            return ExecutionResult(status=ExecutionStatus.LAUNCH_FAILED)
+            # Non-CHAIN_EXHAUSTED result: either DISPATCHED or LAUNCH_FAILED
+            return result
 
         # All chain entries exhausted
         logger.warning(f"All fallback chain entries exhausted for trigger '{trigger['name']}'")

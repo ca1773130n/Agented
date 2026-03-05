@@ -3,6 +3,18 @@ import type { Ref } from 'vue';
 import type { Sketch, Project, ConversationMessage } from '../services/api/types';
 import { sketchApi, projectApi } from '../services/api';
 
+/**
+ * Parse a JSON block from a string (e.g. a JSON field value).
+ * Returns the parsed value on success, or null on parse failure.
+ */
+function parseJsonBlock(text: string): unknown {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
+}
+
 export function useSketchChat() {
   const sketches: Ref<Sketch[]> = ref([]);
   const currentSketch: Ref<Sketch | null> = ref(null);
@@ -59,16 +71,14 @@ export function useSketchChat() {
 
       let classificationSummary = 'Sketch created and classified.';
       if (fetched.classification_json) {
-        try {
-          const cls = JSON.parse(fetched.classification_json);
+        const cls = parseJsonBlock(fetched.classification_json) as Record<string, unknown> | null;
+        if (cls) {
           const parts: string[] = [];
           if (cls.phase) parts.push(`Phase: ${cls.phase}`);
-          if (cls.domains && cls.domains.length) parts.push(`Domains: ${cls.domains.join(', ')}`);
+          if (cls.domains && (cls.domains as unknown[]).length) parts.push(`Domains: ${(cls.domains as string[]).join(', ')}`);
           if (cls.complexity) parts.push(`Complexity: ${cls.complexity}`);
-          if (cls.confidence != null) parts.push(`Confidence: ${Math.round(cls.confidence * 100)}%`);
+          if (cls.confidence != null) parts.push(`Confidence: ${Math.round((cls.confidence as number) * 100)}%`);
           if (parts.length) classificationSummary = parts.join(' | ');
-        } catch {
-          // classification_json parse error, use default summary
         }
       }
 
@@ -104,15 +114,13 @@ export function useSketchChat() {
 
       let routingSummary = 'Sketch routed successfully.';
       if (fetched.routing_json) {
-        try {
-          const rt = JSON.parse(fetched.routing_json);
+        const rt = parseJsonBlock(fetched.routing_json) as Record<string, unknown> | null;
+        if (rt) {
           const parts: string[] = [];
           if (rt.target_type) parts.push(`Target: ${rt.target_type}`);
           if (rt.target_id) parts.push(`ID: ${rt.target_id}`);
           if (rt.reason) parts.push(`Reason: ${rt.reason}`);
           if (parts.length) routingSummary = parts.join(' | ');
-        } catch {
-          // routing_json parse error
         }
       }
 
@@ -148,13 +156,13 @@ export function useSketchChat() {
     });
 
     if (sketch.classification_json) {
-      try {
-        const cls = JSON.parse(sketch.classification_json);
+      const cls = parseJsonBlock(sketch.classification_json) as Record<string, unknown> | null;
+      if (cls) {
         const parts: string[] = [];
         if (cls.phase) parts.push(`Phase: ${cls.phase}`);
-        if (cls.domains && cls.domains.length) parts.push(`Domains: ${cls.domains.join(', ')}`);
+        if (cls.domains && (cls.domains as unknown[]).length) parts.push(`Domains: ${(cls.domains as string[]).join(', ')}`);
         if (cls.complexity) parts.push(`Complexity: ${cls.complexity}`);
-        if (cls.confidence != null) parts.push(`Confidence: ${Math.round(cls.confidence * 100)}%`);
+        if (cls.confidence != null) parts.push(`Confidence: ${Math.round((cls.confidence as number) * 100)}%`);
         if (parts.length) {
           messages.value.push({
             role: 'assistant',
@@ -162,14 +170,12 @@ export function useSketchChat() {
             timestamp: sketch.updated_at || new Date().toISOString(),
           });
         }
-      } catch {
-        // ignore parse error
       }
     }
 
     if (sketch.routing_json) {
-      try {
-        const rt = JSON.parse(sketch.routing_json);
+      const rt = parseJsonBlock(sketch.routing_json) as Record<string, unknown> | null;
+      if (rt) {
         const parts: string[] = [];
         if (rt.target_type) parts.push(`Target: ${rt.target_type}`);
         if (rt.target_id) parts.push(`ID: ${rt.target_id}`);
@@ -181,8 +187,6 @@ export function useSketchChat() {
             timestamp: sketch.updated_at || new Date().toISOString(),
           });
         }
-      } catch {
-        // ignore parse error
       }
     }
   }
