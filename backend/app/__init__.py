@@ -374,32 +374,49 @@ def create_app(config=None):
 
     init_request_middleware(app)
 
-    # Global JSON error handlers
+    # Global JSON error handlers — unified ErrorResponse shape (API-02)
+    from .models.common import error_response
+    from http import HTTPStatus
+
     @app.errorhandler(404)
     def not_found(e):
-        return {"error": "Not found"}, 404
+        return error_response("NOT_FOUND", "Not found", HTTPStatus.NOT_FOUND)
 
     @app.errorhandler(405)
     def method_not_allowed(e):
-        return {"error": "Method not allowed"}, 405
+        return error_response(
+            "METHOD_NOT_ALLOWED", "Method not allowed", HTTPStatus.METHOD_NOT_ALLOWED
+        )
 
     @app.errorhandler(413)
     def payload_too_large(e):
-        return {"error": "Payload too large"}, 413
+        return error_response(
+            "PAYLOAD_TOO_LARGE", "Payload too large", HTTPStatus.REQUEST_ENTITY_TOO_LARGE
+        )
 
     @app.errorhandler(429)
     def ratelimit_handler(e):
-        return {"error": f"Rate limit exceeded: {e.description}"}, 429
+        return error_response(
+            "RATE_LIMITED",
+            f"Rate limit exceeded: {e.description}",
+            HTTPStatus.TOO_MANY_REQUESTS,
+        )
 
     @app.errorhandler(500)
     def internal_error(e):
-        return {"error": "Internal server error"}, 500
+        return error_response(
+            "INTERNAL_SERVER_ERROR", "Internal server error", HTTPStatus.INTERNAL_SERVER_ERROR
+        )
 
     @app.errorhandler(sqlite3.OperationalError)
     def db_operational_error(e):
         import logging as _db_log
 
         _db_log.getLogger(__name__).error("Database operational error: %s", e, exc_info=True)
-        return {"error": "Service temporarily unavailable"}, 503
+        return error_response(
+            "SERVICE_UNAVAILABLE",
+            "Service temporarily unavailable",
+            HTTPStatus.SERVICE_UNAVAILABLE,
+        )
 
     return app

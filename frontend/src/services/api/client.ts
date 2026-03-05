@@ -95,7 +95,7 @@ async function apiFetchSingle<T>(url: string, options?: ApiFetchOptions): Promis
           }
         }
       }
-      throw new ApiError(response.status, data.error || `HTTP ${response.status}`, retryAfter);
+      throw new ApiError(response.status, data.message || data.error || `HTTP ${response.status}`, retryAfter);
     }
 
     // Handle 204 No Content explicitly
