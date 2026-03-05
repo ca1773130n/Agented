@@ -19,6 +19,8 @@ import type {
   PrReview,
   PrReviewStats,
   PrHistoryPoint,
+  PromptHistoryEntry,
+  PreviewPromptFullResponse,
 } from './types';
 
 // Trigger API (renamed from Bot API)
@@ -148,6 +150,29 @@ export const triggerApi = {
     method: 'POST',
     body: JSON.stringify(sampleData || {}),
   }),
+
+  getPromptHistory: (triggerId: string) =>
+    apiFetch<{ history: PromptHistoryEntry[] }>(
+      `/admin/triggers/${triggerId}/prompt-history`
+    ),
+
+  rollbackPrompt: (triggerId: string, versionId: number) =>
+    apiFetch<{ message: string; trigger_id: string }>(
+      `/admin/triggers/${triggerId}/rollback-prompt`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ version_id: versionId }),
+      }
+    ),
+
+  previewPromptFull: (triggerId: string, payload: Record<string, string>) =>
+    apiFetch<PreviewPromptFullResponse>(
+      `/admin/triggers/${triggerId}/preview-prompt-full`,
+      {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      }
+    ),
 };
 
 // Audit API

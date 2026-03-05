@@ -1796,3 +1796,71 @@ export interface MergedChunkResults {
   merged_output: string;
   chunk_results: ChunkResult[];
 }
+
+// Bot Template types
+export interface BotTemplate {
+  id: string;
+  slug: string;
+  name: string;
+  description: string;
+  category: string;
+  icon: string;
+  config_json: string;
+  sort_order: number;
+  source: string;
+  is_published: number;
+  created_at: string;
+}
+
+export interface BotTemplateDeployResponse {
+  trigger_id: string;
+  template_id: string;
+  trigger_name: string;
+  message: string;
+}
+
+// Prompt Snippet types
+export interface PromptSnippet {
+  id: string;
+  name: string;
+  content: string;
+  description: string;
+  is_global: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateSnippetRequest {
+  name: string;
+  content: string;
+  description?: string;
+}
+
+export interface UpdateSnippetRequest {
+  name?: string;
+  content?: string;
+  description?: string;
+}
+
+// Prompt History types
+export interface PromptHistoryEntry {
+  id: number;
+  trigger_id: string;
+  old_template: string;
+  new_template: string;
+  author: string;
+  diff_text: string;
+  changed_at: string;
+}
+
+// Full Preview types
+export interface PreviewPromptFullResponse {
+  rendered_prompt: string;
+  cli_command: string;
+  cli_command_parts: string[];
+  backend_type: string;
+  model: string;
+  trigger_name: string;
+  unresolved_placeholders: string[];
+  unresolved_snippets: string[];
+}

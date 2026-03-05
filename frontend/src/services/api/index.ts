@@ -38,6 +38,8 @@ export { replayApi } from './replay';
 export { collaborativeApi } from './collaborative';
 export { branchApi } from './conversation-branches';
 export { chunkApi } from './chunks';
+export { botTemplateApi } from './bot-templates';
+export { promptSnippetApi } from './prompt-snippets';
 
 // Constant exports from types
 export { CLAUDE_MODELS, OPENCODE_MODELS } from './types';
@@ -304,6 +306,19 @@ export type {
   // Chunk result types
   ChunkResult,
   MergedChunkResults,
+
+  // Bot Template types
+  BotTemplate,
+  BotTemplateDeployResponse,
+
+  // Prompt Snippet types
+  PromptSnippet,
+  CreateSnippetRequest,
+  UpdateSnippetRequest,
+
+  // Prompt History & Preview types
+  PromptHistoryEntry,
+  PreviewPromptFullResponse,
 } from './types';
 
 // GRD types (from grd module, not types module)
