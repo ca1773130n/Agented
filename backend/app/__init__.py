@@ -396,11 +396,26 @@ def create_app(config=None):
 
     @app.errorhandler(429)
     def ratelimit_handler(e):
-        return error_response(
+        body, status = error_response(
             "RATE_LIMITED",
             f"Rate limit exceeded: {e.description}",
             HTTPStatus.TOO_MANY_REQUESTS,
         )
+        response = jsonify(body)
+        response.status_code = status
+        # Extract Retry-After from the rate limit window.
+        # Flask-Limiter's RateLimitExceeded carries the limit info; we use the
+        # window expiry as the Retry-After value so clients know when to retry.
+        retry_seconds = None
+        limit_obj = getattr(e, "limit", None)
+        if limit_obj is not None:
+            # RuntimeLimit wraps the parsed limit; .limit is the limits.RateLimitItem
+            inner = getattr(limit_obj, "limit", None)
+            if inner and hasattr(inner, "get_expiry"):
+                retry_seconds = inner.get_expiry()
+        if retry_seconds:
+            response.headers["Retry-After"] = str(int(retry_seconds))
+        return response
 
     @app.errorhandler(500)
     def internal_error(e):
