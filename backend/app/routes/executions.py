@@ -1,6 +1,7 @@
 """Execution log API endpoints with SSE streaming."""
 
 from http import HTTPStatus
+from typing import List, Optional
 
 from flask import Response, request
 from flask_openapi3 import APIBlueprint, Tag
@@ -186,3 +187,117 @@ def get_running_trigger_execution(path: TriggerPath):
         return {"running": False}, HTTPStatus.OK
 
     return {"running": True, "execution": running}, HTTPStatus.OK
+
+
+# --- Pause / Resume / Bulk Cancel ---
+
+
+class BulkCancelRequest(BaseModel):
+    """Request body for bulk cancellation of executions."""
+
+    trigger_id: Optional[str] = Field(None, description="Cancel executions for this trigger")
+    status: str = Field("running", description="Status filter (default: running)")
+    execution_ids: List[str] = Field(
+        default_factory=list, description="Specific execution IDs to cancel"
+    )
+
+
+@executions_bp.post("/executions/<execution_id>/pause")
+def pause_execution(path: ExecutionPath):
+    """Pause a running execution via SIGSTOP."""
+    from ..services.process_manager import ProcessManager
+
+    execution = ExecutionLogService.get_execution(path.execution_id)
+    if not execution:
+        return {"error": "Execution not found"}, HTTPStatus.NOT_FOUND
+    if execution["status"] != "running":
+        return {
+            "error": f'Can only pause running executions. Current status is "{execution["status"]}".'
+        }, HTTPStatus.CONFLICT
+
+    success = ProcessManager.pause(path.execution_id)
+    if success:
+        return {"status": "paused", "execution_id": path.execution_id}, HTTPStatus.OK
+
+    return {"error": "Failed to pause execution"}, HTTPStatus.INTERNAL_SERVER_ERROR
+
+
+@executions_bp.post("/executions/<execution_id>/resume")
+def resume_execution(path: ExecutionPath):
+    """Resume a paused execution via SIGCONT."""
+    from ..services.process_manager import ProcessManager
+
+    execution = ExecutionLogService.get_execution(path.execution_id)
+    if not execution:
+        return {"error": "Execution not found"}, HTTPStatus.NOT_FOUND
+    if execution["status"] != "paused":
+        return {
+            "error": f'Can only resume paused executions. Current status is "{execution["status"]}".'
+        }, HTTPStatus.CONFLICT
+
+    success = ProcessManager.resume(path.execution_id)
+    if success:
+        return {"status": "running", "execution_id": path.execution_id}, HTTPStatus.OK
+
+    return {"error": "Failed to resume execution"}, HTTPStatus.INTERNAL_SERVER_ERROR
+
+
+@executions_bp.post("/executions/bulk-cancel")
+def bulk_cancel_executions(body: BulkCancelRequest):
+    """Bulk cancel multiple executions by filter or explicit IDs."""
+    from ..database import get_execution_logs_filtered
+    from ..services.process_manager import ProcessManager
+
+    results = []
+    cancelled = 0
+    failed = 0
+
+    if body.execution_ids:
+        # Cancel by explicit IDs
+        target_ids = body.execution_ids
+    else:
+        # Query by filters
+        matching = get_execution_logs_filtered(
+            status=body.status, trigger_id=body.trigger_id
+        )
+        target_ids = [ex["execution_id"] for ex in matching]
+
+    for eid in target_ids:
+        execution = ExecutionLogService.get_execution(eid)
+        if not execution:
+            results.append({"execution_id": eid, "success": False, "reason": "not found"})
+            failed += 1
+            continue
+
+        current_status = execution["status"]
+        if current_status == "paused":
+            # Must resume before cancel: SIGCONT then cancel_graceful
+            success = ProcessManager.resume(eid)
+            if success:
+                success = ProcessManager.cancel_graceful(eid)
+            else:
+                # Process might not be tracked; try direct cancel
+                success = ProcessManager.cancel_graceful(eid)
+        elif current_status == "running":
+            success = ProcessManager.cancel_graceful(eid)
+        else:
+            results.append({
+                "execution_id": eid,
+                "success": False,
+                "reason": f"status is {current_status}",
+            })
+            failed += 1
+            continue
+
+        if success:
+            results.append({"execution_id": eid, "success": True})
+            cancelled += 1
+        else:
+            results.append({"execution_id": eid, "success": False, "reason": "cancel failed"})
+            failed += 1
+
+    return {
+        "cancelled": cancelled,
+        "failed": failed,
+        "details": results,
+    }, HTTPStatus.OK

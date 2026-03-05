@@ -956,7 +956,7 @@ def get_execution_logs_filtered(
             query += " AND trigger_id = ?"
             params.append(trigger_id)
 
-        query += " ORDER BY created_at DESC"
+        query += " ORDER BY started_at DESC"
         cursor = conn.execute(query, params)
         return [dict(row) for row in cursor.fetchall()]
 
