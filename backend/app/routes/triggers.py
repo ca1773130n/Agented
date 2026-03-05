@@ -2,7 +2,7 @@
 
 from http import HTTPStatus
 
-from flask import request
+from flask import Response, request
 from flask_openapi3 import APIBlueprint, Tag
 from pydantic import BaseModel, Field
 
@@ -189,3 +189,24 @@ def preview_trigger_prompt(path: TriggerPath):
     sample_data = request.get_json() or {}
     result, status = TriggerService.preview_prompt(path.trigger_id, sample_data)
     return result, status
+
+
+@triggers_bp.post("/generate/stream")
+@require_role("editor", "admin")
+def generate_trigger_stream():
+    """Generate a trigger configuration from a natural language description using AI (streaming)."""
+    from ..services.trigger_generation_service import TriggerGenerationService
+
+    data = request.get_json()
+    if not data:
+        return {"error": "JSON body required"}, HTTPStatus.BAD_REQUEST
+
+    description = (data.get("description") or "").strip()
+    if len(description) < 10:
+        return {"error": "Description must be at least 10 characters"}, HTTPStatus.BAD_REQUEST
+
+    return Response(
+        TriggerGenerationService.generate_streaming(description),
+        mimetype="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
