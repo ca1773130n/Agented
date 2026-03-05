@@ -1631,4 +1631,22 @@ def create_fresh_schema(conn):
         "ON viewer_comments(execution_id, line_number)"
     )
 
+    # --- v0.2.0: Bot templates (TPL-01: curated bot marketplace) ---
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS bot_templates (
+            id TEXT PRIMARY KEY,
+            slug TEXT UNIQUE NOT NULL,
+            name TEXT NOT NULL,
+            description TEXT NOT NULL,
+            category TEXT NOT NULL,
+            icon TEXT DEFAULT '',
+            config_json TEXT NOT NULL,
+            sort_order INTEGER DEFAULT 0,
+            source TEXT DEFAULT 'built-in',
+            is_published INTEGER DEFAULT 1,
+            created_at TEXT DEFAULT (datetime('now'))
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_bot_templates_slug ON bot_templates(slug)")
+
     conn.commit()

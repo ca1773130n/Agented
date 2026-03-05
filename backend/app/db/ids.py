@@ -85,6 +85,9 @@ INTEGRATION_ID_LENGTH = 6
 CAMPAIGN_ID_PREFIX = "camp-"
 CAMPAIGN_ID_LENGTH = 6
 
+TEMPLATE_ID_PREFIX = "tpl-"
+TEMPLATE_ID_LENGTH = 6
+
 
 # --- Generic helper ---
 
@@ -536,3 +539,19 @@ def _get_unique_campaign_id(conn) -> str:
         cursor = conn.execute("SELECT id FROM campaigns WHERE id = ?", (cid,))
         if cursor.fetchone() is None:
             return cid
+
+
+def generate_template_id() -> str:
+    """Generate a unique template ID like 'tpl-abc123'."""
+    chars = string.ascii_lowercase + string.digits
+    random_part = "".join(secrets.choice(chars) for _ in range(TEMPLATE_ID_LENGTH))
+    return f"{TEMPLATE_ID_PREFIX}{random_part}"
+
+
+def _get_unique_template_id(conn) -> str:
+    """Generate a template ID that doesn't exist in the database."""
+    while True:
+        tid = generate_template_id()
+        cursor = conn.execute("SELECT id FROM bot_templates WHERE id = ?", (tid,))
+        if cursor.fetchone() is None:
+            return tid

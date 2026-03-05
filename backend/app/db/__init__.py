@@ -85,6 +85,15 @@ from .backends import (  # noqa: F401
     verify_account_exists,
 )
 
+# Bot templates (curated marketplace)
+from .bot_templates import (  # noqa: F401
+    CURATED_BOT_TEMPLATES,
+    deploy_template,
+    get_all_templates,
+    get_template,
+    get_template_by_slug,
+)
+
 # Bookmarks
 from .bookmarks import (  # noqa: F401
     create_bookmark,
@@ -336,6 +345,8 @@ from .ids import (  # noqa: F401
     SUPER_AGENT_ID_PREFIX,
     TEAM_ID_LENGTH,
     TEAM_ID_PREFIX,
+    TEMPLATE_ID_LENGTH,
+    TEMPLATE_ID_PREFIX,
     TRIGGER_ID_LENGTH,
     TRIGGER_ID_PREFIX,
     WORKFLOW_EXECUTION_ID_LENGTH,
@@ -366,6 +377,7 @@ from .ids import (  # noqa: F401
     _get_unique_sketch_id,
     _get_unique_super_agent_id,
     _get_unique_team_id,
+    _get_unique_template_id,
     _get_unique_trigger_id,
     _get_unique_workflow_execution_id,
     _get_unique_workflow_id,
@@ -393,6 +405,7 @@ from .ids import (  # noqa: F401
     generate_sketch_id,
     generate_super_agent_id,
     generate_team_id,
+    generate_template_id,
     generate_trigger_id,
     generate_workflow_execution_id,
     generate_workflow_id,
@@ -576,6 +589,7 @@ from .rules import (  # noqa: F401
 from .seeds import (  # noqa: F401
     auto_register_project_root,
     migrate_existing_paths,
+    seed_bot_templates,
     seed_predefined_triggers,
     seed_preset_mcp_servers,
 )

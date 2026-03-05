@@ -3220,6 +3220,27 @@ def _migrate_v66_add_viewer_comments_table(conn):
     conn.commit()
 
 
+def _migrate_v69_bot_templates_table(conn):
+    """Create bot_templates table for curated bot marketplace."""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS bot_templates (
+            id TEXT PRIMARY KEY,
+            slug TEXT UNIQUE NOT NULL,
+            name TEXT NOT NULL,
+            description TEXT NOT NULL,
+            category TEXT NOT NULL,
+            icon TEXT DEFAULT '',
+            config_json TEXT NOT NULL,
+            sort_order INTEGER DEFAULT 0,
+            source TEXT DEFAULT 'built-in',
+            is_published INTEGER DEFAULT 1,
+            created_at TEXT DEFAULT (datetime('now'))
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_bot_templates_slug ON bot_templates(slug)")
+    conn.commit()
+
+
 VERSIONED_MIGRATIONS = [
     (1, "add_github_columns", _migrate_add_github_columns),
     (2, "add_pr_reviews_table", _migrate_add_pr_reviews_table),
@@ -3293,4 +3314,5 @@ VERSIONED_MIGRATIONS = [
     (66, "add_conversation_branch_tables", _migrate_v64_add_conversation_branch_tables),
     (67, "add_chunk_tables", _migrate_v65_add_chunk_tables),
     (68, "add_viewer_comments_table", _migrate_v66_add_viewer_comments_table),
+    (69, "bot_templates_table", _migrate_v69_bot_templates_table),
 ]

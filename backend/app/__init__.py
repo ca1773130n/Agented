@@ -159,6 +159,7 @@ def create_app(config=None):
             auto_register_project_root,
             init_db,
             migrate_existing_paths,
+            seed_bot_templates,
             seed_predefined_triggers,
             seed_preset_mcp_servers,
         )
@@ -166,6 +167,7 @@ def create_app(config=None):
         init_db()
         seed_predefined_triggers()
         seed_preset_mcp_servers()
+        seed_bot_templates()
         migrate_existing_paths()
         auto_register_project_root()
 

@@ -19,7 +19,7 @@ import sqlite3
 import app.config as config
 
 from .connection import get_connection
-from .ids import _get_unique_mcp_server_id
+from .ids import _get_unique_mcp_server_id, _get_unique_template_id
 from .triggers import PREDEFINED_TRIGGER_ID, PREDEFINED_TRIGGERS
 
 logger = logging.getLogger(__name__)
@@ -346,3 +346,57 @@ def auto_register_project_root():
                 print(f"Auto-registered project root for security trigger: {config.PROJECT_ROOT}")
             except sqlite3.IntegrityError:
                 _remove_symlink(symlink_name)
+
+
+# =============================================================================
+# Bot template seeding
+# =============================================================================
+
+
+def seed_bot_templates():
+    """Insert curated bot templates if they don't exist. Idempotent -- safe on every startup."""
+    from .bot_templates import CURATED_BOT_TEMPLATES
+
+    with get_connection() as conn:
+        for template in CURATED_BOT_TEMPLATES:
+            existing = conn.execute(
+                "SELECT id FROM bot_templates WHERE slug = ?",
+                (template["slug"],),
+            ).fetchone()
+            if existing:
+                # Update existing template to keep definitions current
+                conn.execute(
+                    """UPDATE bot_templates SET
+                        name=?, description=?, category=?, icon=?,
+                        config_json=?, sort_order=?
+                    WHERE slug=?""",
+                    (
+                        template["name"],
+                        template["description"],
+                        template["category"],
+                        template["icon"],
+                        template["config_json"],
+                        template["sort_order"],
+                        template["slug"],
+                    ),
+                )
+            else:
+                template_id = _get_unique_template_id(conn)
+                conn.execute(
+                    """INSERT INTO bot_templates
+                        (id, slug, name, description, category, icon,
+                         config_json, sort_order, source, is_published)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'built-in', 1)""",
+                    (
+                        template_id,
+                        template["slug"],
+                        template["name"],
+                        template["description"],
+                        template["category"],
+                        template["icon"],
+                        template["config_json"],
+                        template["sort_order"],
+                    ),
+                )
+                logger.info("Seeded bot template: %s (%s)", template["name"], template_id)
+        conn.commit()
