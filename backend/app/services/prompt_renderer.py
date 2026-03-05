@@ -9,6 +9,8 @@ Reference: Fowler "Refactoring" (2018) Extract Class pattern.
 
 import re
 
+from .prompt_snippet_service import SnippetService
+
 
 class PromptRenderer:
     """Stateless renderer for trigger prompt templates."""
@@ -60,6 +62,8 @@ class PromptRenderer:
             The fully rendered prompt string.
         """
         prompt = trigger["prompt_template"]
+        # Resolve {{snippet}} references before {placeholder} substitution
+        prompt = SnippetService.resolve_snippets(prompt)
         prompt = prompt.replace("{trigger_id}", trigger_id)
         prompt = prompt.replace("{bot_id}", trigger_id)  # Legacy placeholder support
         prompt = prompt.replace("{paths}", paths_str)

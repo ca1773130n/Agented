@@ -88,6 +88,9 @@ CAMPAIGN_ID_LENGTH = 6
 TEMPLATE_ID_PREFIX = "tpl-"
 TEMPLATE_ID_LENGTH = 6
 
+SNIPPET_ID_PREFIX = "snip-"
+SNIPPET_ID_LENGTH = 6
+
 
 # --- Generic helper ---
 
@@ -555,3 +558,19 @@ def _get_unique_template_id(conn) -> str:
         cursor = conn.execute("SELECT id FROM bot_templates WHERE id = ?", (tid,))
         if cursor.fetchone() is None:
             return tid
+
+
+def generate_snippet_id() -> str:
+    """Generate a unique snippet ID like 'snip-abc123'."""
+    chars = string.ascii_lowercase + string.digits
+    random_part = "".join(secrets.choice(chars) for _ in range(SNIPPET_ID_LENGTH))
+    return f"{SNIPPET_ID_PREFIX}{random_part}"
+
+
+def _get_unique_snippet_id(conn) -> str:
+    """Generate a snippet ID that doesn't exist in the database."""
+    while True:
+        sid = generate_snippet_id()
+        cursor = conn.execute("SELECT id FROM prompt_snippets WHERE id = ?", (sid,))
+        if cursor.fetchone() is None:
+            return sid

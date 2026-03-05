@@ -345,6 +345,8 @@ from .ids import (  # noqa: F401
     SUPER_AGENT_ID_PREFIX,
     TEAM_ID_LENGTH,
     TEAM_ID_PREFIX,
+    SNIPPET_ID_LENGTH,
+    SNIPPET_ID_PREFIX,
     TEMPLATE_ID_LENGTH,
     TEMPLATE_ID_PREFIX,
     TRIGGER_ID_LENGTH,
@@ -362,6 +364,7 @@ from .ids import (  # noqa: F401
     _get_unique_mcp_server_id,
     _get_unique_role_id,
     _get_unique_secret_id,
+    _get_unique_snippet_id,
     _get_unique_message_id,
     _get_unique_milestone_id,
     _get_unique_phase_id,
@@ -405,6 +408,7 @@ from .ids import (  # noqa: F401
     generate_sketch_id,
     generate_super_agent_id,
     generate_team_id,
+    generate_snippet_id,
     generate_template_id,
     generate_trigger_id,
     generate_workflow_execution_id,
@@ -465,6 +469,16 @@ from .monitoring import (  # noqa: F401
     save_monitoring_config,
     update_setup_execution,
     upsert_pending_retry,
+)
+
+# Prompt snippets (reusable prompt fragments)
+from .prompt_snippets import (  # noqa: F401
+    add_snippet,
+    delete_snippet,
+    get_all_snippets,
+    get_snippet,
+    get_snippet_by_name,
+    update_snippet,
 )
 
 # Plugins (includes components, marketplaces, sync state, exports)

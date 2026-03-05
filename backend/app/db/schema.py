@@ -101,6 +101,22 @@ def create_fresh_schema(conn):
     )
     conn.execute("CREATE INDEX IF NOT EXISTS idx_execution_logs_status ON execution_logs(status)")
 
+    # Prompt snippets (reusable prompt fragments for {{snippet}} resolution)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS prompt_snippets (
+            id TEXT PRIMARY KEY,
+            name TEXT UNIQUE NOT NULL,
+            content TEXT NOT NULL,
+            description TEXT DEFAULT '',
+            is_global INTEGER DEFAULT 1,
+            created_at TEXT DEFAULT (datetime('now')),
+            updated_at TEXT DEFAULT (datetime('now'))
+        )
+    """)
+    conn.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_prompt_snippets_name ON prompt_snippets(name)"
+    )
+
     # Trigger template change history
     conn.execute("""
         CREATE TABLE IF NOT EXISTS trigger_template_history (
@@ -108,6 +124,8 @@ def create_fresh_schema(conn):
             trigger_id TEXT NOT NULL,
             old_template TEXT NOT NULL,
             new_template TEXT NOT NULL,
+            author TEXT DEFAULT 'system',
+            diff_text TEXT DEFAULT '',
             changed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (trigger_id) REFERENCES triggers(id) ON DELETE CASCADE
         )

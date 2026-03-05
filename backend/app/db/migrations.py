@@ -3241,6 +3241,42 @@ def _migrate_v69_bot_templates_table(conn):
     conn.commit()
 
 
+def _migrate_v70_prompt_snippets_table(conn):
+    """Create prompt_snippets table for reusable prompt fragments."""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS prompt_snippets (
+            id TEXT PRIMARY KEY,
+            name TEXT UNIQUE NOT NULL,
+            content TEXT NOT NULL,
+            description TEXT DEFAULT '',
+            is_global INTEGER DEFAULT 1,
+            created_at TEXT DEFAULT (datetime('now')),
+            updated_at TEXT DEFAULT (datetime('now'))
+        )
+    """)
+    conn.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_prompt_snippets_name ON prompt_snippets(name)"
+    )
+    conn.commit()
+
+
+def _migrate_v71_template_history_author_diff(conn):
+    """Add author and diff_text columns to trigger_template_history."""
+    try:
+        conn.execute(
+            "ALTER TABLE trigger_template_history ADD COLUMN author TEXT DEFAULT 'system'"
+        )
+    except Exception:
+        pass  # Column may already exist
+    try:
+        conn.execute(
+            "ALTER TABLE trigger_template_history ADD COLUMN diff_text TEXT DEFAULT ''"
+        )
+    except Exception:
+        pass  # Column may already exist
+    conn.commit()
+
+
 VERSIONED_MIGRATIONS = [
     (1, "add_github_columns", _migrate_add_github_columns),
     (2, "add_pr_reviews_table", _migrate_add_pr_reviews_table),
@@ -3315,4 +3351,6 @@ VERSIONED_MIGRATIONS = [
     (67, "add_chunk_tables", _migrate_v65_add_chunk_tables),
     (68, "add_viewer_comments_table", _migrate_v66_add_viewer_comments_table),
     (69, "bot_templates_table", _migrate_v69_bot_templates_table),
+    (70, "prompt_snippets_table", _migrate_v70_prompt_snippets_table),
+    (71, "template_history_author_diff", _migrate_v71_template_history_author_diff),
 ]

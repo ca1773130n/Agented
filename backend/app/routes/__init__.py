@@ -35,6 +35,7 @@ def register_blueprints(app):
     from .plugin_exports import plugin_exports_bp
     from .plugins import plugins_bp
     from .pr_reviews import pr_reviews_bp
+    from .prompt_snippets import prompt_snippets_bp
     from .rbac import rbac_bp
     from .product_owner import product_owner_bp
     from .products import products_bp
@@ -132,6 +133,7 @@ def register_blueprints(app):
             chunks_bp,
             collaborative_bp,
             bot_templates_bp,
+            prompt_snippets_bp,
         ]
         for bp in admin_blueprints:
             limiter.limit("120/minute")(bp)
@@ -198,6 +200,7 @@ def register_blueprints(app):
     app.register_api(chunks_bp)
     app.register_api(collaborative_bp)
     app.register_api(bot_templates_bp)
+    app.register_api(prompt_snippets_bp)
 
     # SPA catch-all: MUST be registered LAST so API routes take priority
     app.register_blueprint(spa_bp)
