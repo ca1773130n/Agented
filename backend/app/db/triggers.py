@@ -676,7 +676,7 @@ def get_prompt_template_history(trigger_id: str, limit: int = 50) -> List[dict]:
             SELECT id, trigger_id, old_template, new_template, author, diff_text, changed_at
             FROM trigger_template_history
             WHERE trigger_id = ?
-            ORDER BY changed_at DESC
+            ORDER BY changed_at DESC, id DESC
             LIMIT ?
             """,
             (trigger_id, limit),
