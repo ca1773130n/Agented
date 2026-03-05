@@ -353,13 +353,15 @@ class CircuitBreakerService:
         # Include in-memory breakers
         with cls._global_lock:
             for backend_type, breaker in cls._breakers.items():
-                result.append({
-                    "backend_type": breaker.backend_type,
-                    "state": breaker.state.value,
-                    "fail_count": breaker.fail_count,
-                    "success_count": breaker.success_count,
-                    "last_failure_time": breaker.last_failure_time,
-                })
+                result.append(
+                    {
+                        "backend_type": breaker.backend_type,
+                        "state": breaker.state.value,
+                        "fail_count": breaker.fail_count,
+                        "success_count": breaker.success_count,
+                        "last_failure_time": breaker.last_failure_time,
+                    }
+                )
 
         # Also include any persisted states not in memory
         try:
@@ -367,13 +369,15 @@ class CircuitBreakerService:
             in_memory_types = {r["backend_type"] for r in result}
             for db_state in db_states:
                 if db_state["backend_type"] not in in_memory_types:
-                    result.append({
-                        "backend_type": db_state["backend_type"],
-                        "state": db_state["state"],
-                        "fail_count": db_state["fail_count"],
-                        "success_count": db_state["success_count"],
-                        "last_failure_time": db_state["last_failure_time"],
-                    })
+                    result.append(
+                        {
+                            "backend_type": db_state["backend_type"],
+                            "state": db_state["state"],
+                            "fail_count": db_state["fail_count"],
+                            "success_count": db_state["success_count"],
+                            "last_failure_time": db_state["last_failure_time"],
+                        }
+                    )
         except Exception:
             logger.exception("Failed to read persisted breaker states")
 

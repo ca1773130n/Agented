@@ -120,8 +120,7 @@ class OrchestrationService:
             # Circuit breaker check: skip backends with OPEN breakers
             if not CircuitBreakerService.can_execute(backend_type):
                 logger.info(
-                    f"Circuit breaker OPEN for backend {backend_type}, "
-                    f"skipping chain entry"
+                    f"Circuit breaker OPEN for backend {backend_type}, skipping chain entry"
                 )
                 breaker_open_backends.append(backend_type)
                 continue
@@ -236,9 +235,7 @@ class OrchestrationService:
             # Check for transient failure patterns in execution stderr
             transient_failure = ExecutionService.was_transient_failure(execution_id)
             if transient_failure:
-                logger.info(
-                    f"Execution {execution_id} had transient failure: {transient_failure}"
-                )
+                logger.info(f"Execution {execution_id} had transient failure: {transient_failure}")
                 CircuitBreakerService.record_failure(backend_type, transient_failure)
                 continue  # Try next chain entry
 

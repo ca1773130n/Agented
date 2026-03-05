@@ -64,9 +64,7 @@ def get_all_breaker_states() -> List[dict]:
     Returns list of dicts with backend_type, state, fail_count, etc.
     """
     with get_connection() as conn:
-        cursor = conn.execute(
-            "SELECT * FROM circuit_breakers ORDER BY backend_type"
-        )
+        cursor = conn.execute("SELECT * FROM circuit_breakers ORDER BY backend_type")
         return [dict(row) for row in cursor.fetchall()]
 
 
