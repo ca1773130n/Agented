@@ -3157,6 +3157,31 @@ def _migrate_v65_add_chunk_tables(conn):
     conn.commit()
 
 
+def _migrate_v66_add_viewer_comments_table(conn):
+    """Add viewer_comments table for inline commenting on execution log lines (EXE-05)."""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS viewer_comments (
+            id TEXT PRIMARY KEY,
+            execution_id TEXT NOT NULL,
+            viewer_id TEXT NOT NULL,
+            viewer_name TEXT NOT NULL,
+            line_number INTEGER NOT NULL,
+            content TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (execution_id) REFERENCES execution_logs(execution_id) ON DELETE CASCADE
+        )
+    """)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_viewer_comments_execution "
+        "ON viewer_comments(execution_id)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_viewer_comments_execution_line "
+        "ON viewer_comments(execution_id, line_number)"
+    )
+    conn.commit()
+
+
 VERSIONED_MIGRATIONS = [
     (1, "add_github_columns", _migrate_add_github_columns),
     (2, "add_pr_reviews_table", _migrate_add_pr_reviews_table),
@@ -3227,4 +3252,5 @@ VERSIONED_MIGRATIONS = [
     (63, "add_replay_comparisons_table", _migrate_v63_add_replay_comparisons_table),
     (64, "add_conversation_branch_tables", _migrate_v64_add_conversation_branch_tables),
     (65, "add_chunk_tables", _migrate_v65_add_chunk_tables),
+    (66, "add_viewer_comments_table", _migrate_v66_add_viewer_comments_table),
 ]

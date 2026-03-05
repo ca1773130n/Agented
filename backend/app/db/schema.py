@@ -1586,4 +1586,26 @@ def create_fresh_schema(conn):
         "ON chunk_results(chunked_execution_id)"
     )
 
+    # Viewer comments (EXE-05: inline comments on execution log lines)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS viewer_comments (
+            id TEXT PRIMARY KEY,
+            execution_id TEXT NOT NULL,
+            viewer_id TEXT NOT NULL,
+            viewer_name TEXT NOT NULL,
+            line_number INTEGER NOT NULL,
+            content TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (execution_id) REFERENCES execution_logs(execution_id) ON DELETE CASCADE
+        )
+    """)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_viewer_comments_execution "
+        "ON viewer_comments(execution_id)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_viewer_comments_execution_line "
+        "ON viewer_comments(execution_id, line_number)"
+    )
+
     conn.commit()

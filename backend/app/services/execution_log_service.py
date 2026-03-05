@@ -183,6 +183,17 @@ class ExecutionLogService:
         except Exception as e:
             logger.warning("Post-execution hook failed: %s", e)
 
+        # Clean up collaborative viewers for this execution (EXE-05)
+        # Lazy import to avoid circular imports.
+        try:
+            from .collaborative_viewer_service import CollaborativeViewerService
+
+            CollaborativeViewerService.cleanup_stale_viewers()
+        except ImportError:
+            logger.debug("CollaborativeViewerService not available, skipping viewer cleanup")
+        except Exception as e:
+            logger.warning("Collaborative viewer cleanup failed: %s", e)
+
         # Cleanup buffers, subscribers, and start times
         with cls._lock:
             cls._log_buffers.pop(execution_id, None)

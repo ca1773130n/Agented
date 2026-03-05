@@ -236,6 +236,15 @@ from .conversation_branches import (  # noqa: F401
     update_branch_status,
 )
 
+# Viewer comments (collaborative inline commenting on execution logs)
+from .viewer_comments import (  # noqa: F401
+    create_viewer_comment,
+    delete_comment,
+    get_comment,
+    get_comments_for_execution,
+    get_comments_for_line,
+)
+
 # Replay comparisons (execution replay A/B comparison)
 from .replay import (  # noqa: F401
     create_replay_comparison,
