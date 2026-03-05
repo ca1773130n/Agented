@@ -776,6 +776,34 @@ function handleSidebarKeydown(e: KeyboardEvent) {
         <span class="nav-indicator"></span>
       </button>
 
+      <!-- Bot Templates (flat link) -->
+      <button type="button" :class="{ active: sidebarActive('bot-templates') }" :aria-current="sidebarActive('bot-templates') ? 'page' : undefined" :title="isCollapsedDesktop() ? 'Bot Templates' : undefined" @click="navTo('bot-templates')">
+        <span class="nav-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <rect x="3" y="3" width="7" height="7" rx="1"/>
+            <rect x="14" y="3" width="7" height="7" rx="1"/>
+            <rect x="3" y="14" width="7" height="7" rx="1"/>
+            <rect x="14" y="14" width="7" height="7" rx="1"/>
+          </svg>
+        </span>
+        <span class="nav-text">Bot Templates</span>
+        <span class="nav-indicator"></span>
+      </button>
+
+      <!-- Prompt Snippets (flat link) -->
+      <button type="button" :class="{ active: sidebarActive('prompt-snippets') }" :aria-current="sidebarActive('prompt-snippets') ? 'page' : undefined" :title="isCollapsedDesktop() ? 'Prompt Snippets' : undefined" @click="navTo('prompt-snippets')">
+        <span class="nav-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M14.5 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V7.5L14.5 2z"/>
+            <polyline points="14 2 14 8 20 8"/>
+            <line x1="16" y1="13" x2="8" y2="13"/>
+            <line x1="16" y1="17" x2="8" y2="17"/>
+          </svg>
+        </span>
+        <span class="nav-text">Prompt Snippets</span>
+        <span class="nav-indicator"></span>
+      </button>
+
       <div class="nav-section-label">History</div>
       <!-- Triggers History (expandable) -->
       <button type="button" class="nav-group-toggle" :class="{ active: isHistorySectionActive() }" :aria-expanded="expandedSections.history" :aria-current="isHistorySectionActive() ? 'page' : undefined" :title="isCollapsedDesktop() ? 'Triggers' : undefined" @click="toggleSection( 'history')">

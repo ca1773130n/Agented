@@ -40,4 +40,16 @@ export const triggerRoutes: RouteRecordRaw[] = [
     component: () => import('../../views/ExecutionHistory.vue'),
     meta: { title: 'Execution History' },
   },
+  {
+    path: '/bot-templates',
+    name: 'bot-templates',
+    component: () => import('../../views/BotTemplateMarketplace.vue'),
+    meta: { title: 'Bot Templates' },
+  },
+  {
+    path: '/prompt-snippets',
+    name: 'prompt-snippets',
+    component: () => import('../../views/PromptSnippetLibrary.vue'),
+    meta: { title: 'Prompt Snippets' },
+  },
 ];
