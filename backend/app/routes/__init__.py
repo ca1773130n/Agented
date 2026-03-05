@@ -10,6 +10,7 @@ def register_blueprints(app):
     from .backends import backends_bp
     from .bookmarks import bookmarks_bp
     from .bot_templates import bot_templates_bp
+    from .bulk import bulk_bp
     from .budgets import budgets_bp
     from .campaigns import campaigns_bp
     from .chunks import chunks_bp
@@ -138,6 +139,7 @@ def register_blueprints(app):
             bot_templates_bp,
             prompt_snippets_bp,
             specialized_bots_bp,
+            bulk_bp,
         ]
         for bp in admin_blueprints:
             limiter.limit("120/minute")(bp)
@@ -207,6 +209,7 @@ def register_blueprints(app):
     app.register_api(bot_templates_bp)
     app.register_api(prompt_snippets_bp)
     app.register_api(specialized_bots_bp)
+    app.register_api(bulk_bp)
 
     # SPA catch-all: MUST be registered LAST so API routes take priority
     app.register_blueprint(spa_bp)
