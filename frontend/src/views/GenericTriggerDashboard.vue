@@ -4,6 +4,8 @@ import { useRoute, useRouter } from 'vue-router';
 import type { AuditRecord, Trigger, Execution } from '../services/api';
 import { auditApi, triggerApi, executionApi, ApiError } from '../services/api';
 import ExecutionLogViewer from '../components/triggers/ExecutionLogViewer.vue';
+import PromptVersionHistory from '../components/triggers/PromptVersionHistory.vue';
+import WebhookTestConsole from '../components/triggers/WebhookTestConsole.vue';
 import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import EntityLayout from '../layouts/EntityLayout.vue';
 import { useToast } from '../composables/useToast';
@@ -27,6 +29,7 @@ const runningExecution = ref<Execution | null>(null);
 const isRunning = ref(false);
 const showLiveLog = ref(false);
 const currentExecutionId = ref<string | null>(null);
+const activeToolTab = ref<'history' | 'test-console' | null>(null);
 let statusPollInterval: number | null = null;
 
 useWebMcpTool({
@@ -396,6 +399,39 @@ function getExecutionStatusClass(status?: string): string {
               {{ p.local_project_path }}
             </span>
           </div>
+        </div>
+      </div>
+      <!-- Prompt Tools -->
+      <div class="card">
+        <div class="tool-tabs">
+          <button
+            class="tool-tab"
+            :class="{ active: activeToolTab === 'history' }"
+            @click="activeToolTab = activeToolTab === 'history' ? null : 'history'"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="16" height="16">
+              <circle cx="12" cy="12" r="10"/>
+              <polyline points="12,6 12,12 16,14"/>
+            </svg>
+            Version History
+          </button>
+          <button
+            class="tool-tab"
+            :class="{ active: activeToolTab === 'test-console' }"
+            @click="activeToolTab = activeToolTab === 'test-console' ? null : 'test-console'"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="16" height="16">
+              <polyline points="4,17 10,11 4,5"/>
+              <line x1="12" y1="19" x2="20" y2="19"/>
+            </svg>
+            Test Console
+          </button>
+        </div>
+        <div v-if="activeToolTab === 'history'" class="tool-panel">
+          <PromptVersionHistory :trigger-id="triggerId" />
+        </div>
+        <div v-if="activeToolTab === 'test-console'" class="tool-panel">
+          <WebhookTestConsole :trigger-id="triggerId" />
         </div>
       </div>
     </template>
@@ -911,4 +947,40 @@ function getExecutionStatusClass(status?: string): string {
 }
 
 
+/* Tool Tabs */
+.tool-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 8px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.tool-tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  background: none;
+  border: none;
+  border-radius: 6px;
+  color: var(--text-tertiary);
+  font-size: 0.8rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.tool-tab:hover {
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+}
+
+.tool-tab.active {
+  background: var(--accent-cyan-dim);
+  color: var(--accent-cyan);
+}
+
+.tool-panel {
+  padding: 20px;
+}
 </style>
