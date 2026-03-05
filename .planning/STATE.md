@@ -2,10 +2,10 @@
 
 **Milestone:** v0.1.0 -- Production Hardening (active) / v0.2.0 -- Miscellaneous
 **Current Phase:** Phase 15 (autopilot: executing)
-**Current Plan:** 02 of 03
+**Current Plan:** 03 of 03
 **Status:** in_progress
 
-**Progress:** [██████████] 90%
+**Progress:** [██████████] 95%
 
 ---
 
@@ -27,7 +27,7 @@
 | 12 | Specialized Automation Bots | Complete (3/3) | proxy |
 | 13 | Execution Resilience & Infrastructure | Complete (4/4) — Verified | proxy |
 | 14 | API Hardening & Developer Experience | Complete (4/4) — Verified | proxy |
-| 15 | Code Consistency & Standards | In Progress (2/3) | sanity |
+| 15 | Code Consistency & Standards | Complete (3/3) | sanity |
 | 16 | Frontend Quality & User Experience | In Progress (5/5) | sanity |
 
 ## Priority Tiers
@@ -139,6 +139,9 @@
 - [Phase 15]: DataTable.vue retains any[] with eslint-disable -- generic component accepting polymorphic items
 - [Phase 15]: Chart.js and Vue Flow callbacks retain any with eslint-disable justifications
 - [Phase 15]: useAsyncState<T> composable created as infrastructure for future composable adoption
+- [Phase 15]: Used error_response() helper (not ErrorResponse.model_dump()) for unified error schema with backward compat
+- [Phase 15]: db_ prefix aliases in 15 route/service files to resolve handler-vs-import naming collisions
+- [Phase 15]: Three-level exception handling convention: critical (error+exc_info), best-effort (warning), silenced (comment)
 
 ## Blockers
 
@@ -188,8 +191,9 @@ None -- no phases have deferred verification level in this milestone.
 | 14 | 04 | 9min | 2 | 7 |
 | 15 | 01 | 26min | 2 | 42 |
 | 15 | 02 | 17min | 2 | 46 |
+| 15 | 03 | 54min | 3 | 284 |
 
 ## Session Log
 
 - **Last session:** 2026-03-06
-- **Stopped at:** Completed 15-02-PLAN.md (Frontend Type Consolidation & useAsyncState)
+- **Stopped at:** Completed 15-03-PLAN.md (Backend Consistency: Error Responses, DB Naming, Type Annotations, Exception Handling)
