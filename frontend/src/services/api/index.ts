@@ -34,6 +34,9 @@ export { sketchApi } from './sketches';
 export { grdApi } from './grd';
 export { mcpServerApi } from './mcp-servers';
 export { replayApi } from './replay';
+export { collaborativeApi } from './collaborative';
+export { branchApi } from './conversation-branches';
+export { chunkApi } from './chunks';
 
 // Constant exports from types
 export { CLAUDE_MODELS, OPENCODE_MODELS } from './types';
@@ -271,6 +274,19 @@ export type {
   DiffLine,
   OutputDiff,
   DiffContextPreview,
+
+  // Collaborative viewer types
+  ViewerInfo,
+  InlineComment,
+
+  // Conversation branch types
+  ConversationBranch,
+  BranchMessage,
+  BranchTree,
+
+  // Chunk result types
+  ChunkResult,
+  MergedChunkResults,
 } from './types';
 
 // GRD types (from grd module, not types module)

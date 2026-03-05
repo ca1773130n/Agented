@@ -1628,3 +1628,66 @@ export interface DiffContextPreview {
     reduction_percent: number;
   };
 }
+
+// Collaborative viewer types
+export interface ViewerInfo {
+  viewer_id: string;
+  name: string;
+  joined_at: string;
+}
+
+export interface InlineComment {
+  id: string;
+  execution_id: string;
+  viewer_id: string;
+  viewer_name: string;
+  line_number: number;
+  content: string;
+  created_at: string;
+}
+
+// Conversation branch types
+export interface ConversationBranch {
+  id: string;
+  conversation_id: string;
+  parent_branch_id: string | null;
+  fork_message_id: string | null;
+  name: string | null;
+  status: string;
+  created_at: string;
+  message_count?: number;
+}
+
+export interface BranchMessage {
+  id: string;
+  conversation_id: string;
+  branch_id: string;
+  parent_message_id: string | null;
+  message_index: number;
+  role: string;
+  content: string;
+  created_at: string;
+}
+
+export interface BranchTree {
+  branch_id: string;
+  name: string | null;
+  message_count: number;
+  children: BranchTree[];
+}
+
+// Chunk result types
+export interface ChunkResult {
+  chunk_index: number;
+  chunk_content: string;
+  bot_output: string;
+  token_count: number;
+}
+
+export interface MergedChunkResults {
+  total_chunks: number;
+  unique_findings: string[];
+  duplicate_count: number;
+  merged_output: string;
+  chunk_results: ChunkResult[];
+}
