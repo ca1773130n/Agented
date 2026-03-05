@@ -11,8 +11,8 @@
 
 ## Position
 
-- **Last completed:** Phase 12 Plan 01 (Predefined Trigger Definitions and FTS5 Search Infrastructure)
-- **Next up:** Phase 12 Plan 02
+- **Last completed:** Phase 12 Plan 02 (Claude Skill Instructions and SpecializedBotService)
+- **Next up:** Phase 12 Plan 03
 - **Blocked by:** Nothing
 
 ## Phase Summary
@@ -24,7 +24,7 @@
 | 9 | Bot Authoring & Template Ecosystem | Complete (4/4) | proxy |
 | 10 | Analytics & Monitoring Dashboards | Complete (5/5) | proxy |
 | 11 | Enterprise Integrations & Governance | Pending | proxy |
-| 12 | Specialized Automation Bots | In Progress (1/3) | proxy |
+| 12 | Specialized Automation Bots | In Progress (2/3) | proxy |
 | 13 | Execution Resilience & Infrastructure | Pending | proxy |
 | 14 | API Hardening & Developer Experience | Pending | proxy |
 | 15 | Code Consistency & Standards | Pending | sanity |
@@ -101,6 +101,10 @@
 - [Phase 12]: FTS5 with porter tokenizer for BM25-ranked search over execution logs
 - [Phase 12]: Content sync via 3 SQLite triggers (INSERT, UPDATE, DELETE) per 12-RESEARCH.md
 - [Phase 12]: Migration v72 rebuilds FTS index from existing data for existing databases
+- [Phase 12]: Chain-of-thought structured steps (Wei et al. 2022) for all 7 skill instruction files
+- [Phase 12]: osv-scanner as primary vulnerability scanner with ecosystem-specific fallbacks
+- [Phase 12]: PR summary optimized for 60s SLA with lightweight diff analysis
+- [Phase 12]: SpecializedBotService uses classmethod pattern matching existing services
 
 ## Blockers
 
@@ -139,8 +143,9 @@ None -- no phases have deferred verification level in this milestone.
 | 09 | 03 | 5min | 2 | 9 |
 | 09 | 04 | 11min | 2 | 7 |
 | 12 | 01 | 11min | 2 | 10 |
+| 12 | 02 | 12min | 2 | 8 |
 
 ## Session Log
 
 - **Last session:** 2026-03-05
-- **Stopped at:** Completed 12-01-PLAN.md (predefined triggers and FTS5 search infrastructure)
+- **Stopped at:** Completed 12-02-PLAN.md (Claude skill instructions and SpecializedBotService)
