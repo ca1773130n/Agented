@@ -213,6 +213,14 @@ from .audit_events import (  # noqa: F401
     query_audit_events,
 )
 
+# Replay comparisons (execution replay A/B comparison)
+from .replay import (  # noqa: F401
+    create_replay_comparison,
+    get_all_replay_comparisons,
+    get_replay_comparison,
+    get_replay_comparisons_for_execution,
+)
+
 # RBAC (user roles)
 from .rbac import (  # noqa: F401
     VALID_ROLES,

@@ -1495,4 +1495,21 @@ def create_fresh_schema(conn):
         "CREATE INDEX IF NOT EXISTS idx_campaign_exec_campaign ON campaign_executions(campaign_id)"
     )
 
+    # Replay comparisons (EXE-01: execution replay and A/B comparison)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS replay_comparisons (
+            id TEXT PRIMARY KEY,
+            original_execution_id TEXT NOT NULL,
+            replay_execution_id TEXT NOT NULL,
+            notes TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (original_execution_id) REFERENCES execution_logs(execution_id) ON DELETE CASCADE,
+            FOREIGN KEY (replay_execution_id) REFERENCES execution_logs(execution_id) ON DELETE CASCADE
+        )
+    """)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_replay_comp_original "
+        "ON replay_comparisons(original_execution_id)"
+    )
+
     conn.commit()

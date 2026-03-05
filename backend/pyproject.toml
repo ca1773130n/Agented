@@ -25,6 +25,7 @@ dependencies = [
     "sentry-sdk[flask]>=2.0.0",
     "slack-sdk>=3.40.1",
     "jira>=3.10.5",
+    "unidiff>=0.7.5",
 ]
 
 [project.optional-dependencies]

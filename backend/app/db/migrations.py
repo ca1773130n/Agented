@@ -3061,6 +3061,26 @@ def _migrate_v57_add_gitops_tables(conn):
     conn.commit()
 
 
+def _migrate_v63_add_replay_comparisons_table(conn):
+    """Add replay_comparisons table for execution replay A/B comparison (EXE-01)."""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS replay_comparisons (
+            id TEXT PRIMARY KEY,
+            original_execution_id TEXT NOT NULL,
+            replay_execution_id TEXT NOT NULL,
+            notes TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (original_execution_id) REFERENCES execution_logs(execution_id) ON DELETE CASCADE,
+            FOREIGN KEY (replay_execution_id) REFERENCES execution_logs(execution_id) ON DELETE CASCADE
+        )
+    """)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_replay_comp_original "
+        "ON replay_comparisons(original_execution_id)"
+    )
+    conn.commit()
+
+
 VERSIONED_MIGRATIONS = [
     (1, "add_github_columns", _migrate_add_github_columns),
     (2, "add_pr_reviews_table", _migrate_add_pr_reviews_table),
@@ -3128,4 +3148,5 @@ VERSIONED_MIGRATIONS = [
     (60, "add_integrations_table", _migrate_v60_add_integrations_table),
     (61, "add_gitops_tables", _migrate_v57_add_gitops_tables),
     (62, "add_campaign_tables", _migrate_v62_add_campaign_tables),
+    (63, "add_replay_comparisons_table", _migrate_v63_add_replay_comparisons_table),
 ]
