@@ -2,7 +2,7 @@
 
 **Milestone:** v0.1.0 -- Production Hardening (active) / v0.2.0 -- Miscellaneous
 **Current Phase:** Phase 9 (autopilot: executing)
-**Current Plan:** 01 of 04 (in progress)
+**Current Plan:** 02 of 04 (in progress)
 **Status:** executing
 
 **Progress:** [█████░░░░░] 52%
@@ -11,8 +11,8 @@
 
 ## Position
 
-- **Last completed:** Phase 9 Plan 01 (Bot Template Marketplace & NL Bot Creator Backend)
-- **Next up:** Phase 9 Plan 02
+- **Last completed:** Phase 9 Plan 02 (Prompt Snippet Library, Version History, Full Preview)
+- **Next up:** Phase 9 Plan 03
 - **Blocked by:** Nothing
 
 ## Phase Summary
@@ -21,7 +21,7 @@
 |-------|------|--------|--------------|
 | 7 | Workflow Automation & Pipeline Intelligence | Complete (3/3) — Verified | proxy |
 | 8 | Execution Intelligence & Replay | Complete (5/5) — Verified | proxy |
-| 9 | Bot Authoring & Template Ecosystem | In Progress (1/4) | proxy |
+| 9 | Bot Authoring & Template Ecosystem | In Progress (2/4) | proxy |
 | 10 | Analytics & Monitoring Dashboards | Complete (5/5) | proxy |
 | 11 | Enterprise Integrations & Governance | Pending | proxy |
 | 12 | Specialized Automation Bots | Pending | proxy |
@@ -90,6 +90,10 @@
 - [Phase 9]: Deploy uses add_trigger() directly (not TriggerService) to avoid circular imports
 - [Phase 9]: Unique name handling via counter suffix: 'Template Name (2)', increments until unique
 - [Phase 9]: TriggerGenerationService follows exact BaseGenerationService subclass pattern
+- [Phase 9]: Snippet resolution runs as first step in PromptRenderer.render() before {placeholder} substitution
+- [Phase 9]: Circular snippet references detected via visited set with MAX_DEPTH=5 hard limit
+- [Phase 9]: Rollback restores target version's new_template (state AT that version), logs with author='rollback'
+- [Phase 9]: preview-prompt-full uses ExecutionService.build_command() without subprocess
 
 ## Blockers
 
@@ -124,8 +128,9 @@ None -- no phases have deferred verification level in this milestone.
 | 08 | 04 | 3min | 2 | 6 |
 | 08 | 05 | 6min | 2 | 12 |
 | 09 | 01 | 16min | 2 | 12 |
+| 09 | 02 | 16min | 2 | 13 |
 
 ## Session Log
 
 - **Last session:** 2026-03-05
-- **Stopped at:** Completed 09-01-PLAN.md (bot template marketplace backend + NL bot creator)
+- **Stopped at:** Completed 09-02-PLAN.md (prompt snippet library, version history, rollback, full preview)
