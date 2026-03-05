@@ -69,14 +69,8 @@ useWebMcpTool({
   deps: [inputText, rawMessages, currentSketch, isProcessing],
 });
 
-// Adapt useSketchChat messages (ChatMessage) to ConversationMessage format
-const chatMessages = computed<ConversationMessage[]>(() =>
-  rawMessages.value.map((m) => ({
-    role: m.role as 'user' | 'assistant',
-    content: m.content,
-    timestamp: m.timestamp,
-  })),
-);
+// Messages from useSketchChat are already ConversationMessage typed
+const chatMessages = computed<ConversationMessage[]>(() => rawMessages.value);
 
 // Parse classification_json safely
 const parsedClassification = computed(() => {

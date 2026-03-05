@@ -77,6 +77,7 @@ function renderChart() {
   Object.keys(assignedColors).forEach(k => delete assignedColors[k]);
 
   // Build datasets using {x, y} point format for time scale
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Chart.js dataset config type is overly complex
   const datasets: any[] = [];
 
   for (const wh of props.windowHistories) {

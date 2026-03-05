@@ -1,13 +1,7 @@
 import { ref } from 'vue';
 import type { Ref } from 'vue';
-import type { Sketch, Project } from '../services/api/types';
+import type { Sketch, Project, ConversationMessage } from '../services/api/types';
 import { sketchApi, projectApi } from '../services/api';
-
-export interface ChatMessage {
-  role: 'user' | 'assistant';
-  content: string;
-  timestamp: string;
-}
 
 export function useSketchChat() {
   const sketches: Ref<Sketch[]> = ref([]);
@@ -15,15 +9,15 @@ export function useSketchChat() {
   const selectedProjectId: Ref<string | null> = ref(null);
   const projects: Ref<Project[]> = ref([]);
   const isProcessing: Ref<boolean> = ref(false);
-  const messages: Ref<ChatMessage[]> = ref([]);
+  const messages: Ref<ConversationMessage[]> = ref([]);
   const error: Ref<string | null> = ref(null);
 
   async function loadProjects() {
     try {
       const result = await projectApi.list();
       projects.value = result.projects;
-    } catch (e: any) {
-      error.value = e.message || 'Failed to load projects';
+    } catch (e: unknown) {
+      error.value = e instanceof Error ? e.message : 'Failed to load projects';
     }
   }
 
@@ -35,8 +29,8 @@ export function useSketchChat() {
       }
       const result = await sketchApi.list(params);
       sketches.value = result.sketches;
-    } catch (e: any) {
-      error.value = e.message || 'Failed to load sketches';
+    } catch (e: unknown) {
+      error.value = e instanceof Error ? e.message : 'Failed to load sketches';
     }
   }
 
@@ -86,8 +80,8 @@ export function useSketchChat() {
 
       currentSketch.value = fetched;
       await loadSketches();
-    } catch (e: any) {
-      const errMsg = e.message || 'Failed to create or classify sketch';
+    } catch (e: unknown) {
+      const errMsg = e instanceof Error ? e.message : 'Failed to create or classify sketch';
       error.value = errMsg;
       messages.value.push({
         role: 'assistant',
@@ -129,8 +123,8 @@ export function useSketchChat() {
       });
 
       await loadSketches();
-    } catch (e: any) {
-      const errMsg = e.message || 'Failed to route sketch';
+    } catch (e: unknown) {
+      const errMsg = e instanceof Error ? e.message : 'Failed to route sketch';
       error.value = errMsg;
       messages.value.push({
         role: 'assistant',

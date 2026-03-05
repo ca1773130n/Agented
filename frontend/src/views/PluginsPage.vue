@@ -94,7 +94,7 @@ useWebMcpPageTools({
   modalActions: {
     openCreate: () => { showCreateModal.value = true; },
     openDelete: (id: string) => {
-      const plugin = plugins.value.find((p: any) => p.id === id);
+      const plugin = plugins.value.find((p) => p.id === id);
       if (plugin) { pluginToDelete.value = plugin; showDeleteConfirm.value = true; }
     },
   },
@@ -182,7 +182,7 @@ async function generatePlugin() {
   }
   isGenerating.value = true;
   try {
-    const result = await startStream<{ config: Record<string, any>; warnings: string[] }>(
+    const result = await startStream<{ config: Record<string, string>; warnings: string[] }>(
       '/admin/plugins/generate/stream',
       { description: generateDescription.value.trim() },
     );

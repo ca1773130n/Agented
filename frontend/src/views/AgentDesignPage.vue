@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import type { Agent } from '../services/api';
+import type { Agent, EffortLevel } from '../services/api';
 import { agentApi, skillsApi, ApiError } from '../services/api';
 import PageLayout from '../components/base/PageLayout.vue';
 import EntityLayout from '../layouts/EntityLayout.vue';
@@ -188,8 +188,8 @@ async function saveChanges() {
       system_prompt: editForm.value.system_prompt,
       goals: JSON.stringify(editForm.value.goals),
       preferred_model: editForm.value.preferred_model || undefined,
-      effort_level: editForm.value.effort_level as any,
-      backend_type: editForm.value.backend_type as any,
+      effort_level: editForm.value.effort_level as EffortLevel,
+      backend_type: editForm.value.backend_type as Agent['backend_type'],
     });
     showToast('Agent updated successfully', 'success');
     editMode.value = false;

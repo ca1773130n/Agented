@@ -68,7 +68,7 @@ useWebMcpPageTools({
   modalActions: {
     openCreate: () => { router.push({ name: 'agent-create' }); },
     openDelete: (id: string) => {
-      const agent = agents.value.find((a: any) => a.id === id);
+      const agent = agents.value.find((a) => a.id === id);
       if (agent) { agentToDelete.value = agent; showDeleteConfirm.value = true; }
     },
   },

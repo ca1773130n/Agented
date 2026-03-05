@@ -7,10 +7,11 @@ export interface DataTableColumn {
   align?: 'left' | 'center' | 'right';
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- DataTable is a generic component that accepts items of any shape
 const props = withDefaults(
   defineProps<{
     columns: DataTableColumn[];
-    items: any[];
+    items: any[]; // eslint-disable-line @typescript-eslint/no-explicit-any
     sortField?: string;
     sortOrder?: 'asc' | 'desc';
     rowClickable?: boolean;
@@ -24,7 +25,7 @@ const props = withDefaults(
 
 const emit = defineEmits<{
   (e: 'sort', field: string): void;
-  (e: 'row-click', item: any): void;
+  (e: 'row-click', item: any): void; // eslint-disable-line @typescript-eslint/no-explicit-any
 }>();
 
 function handleHeaderClick(col: DataTableColumn) {
@@ -33,7 +34,7 @@ function handleHeaderClick(col: DataTableColumn) {
   }
 }
 
-function handleRowClick(item: any) {
+function handleRowClick(item: any) { // eslint-disable-line @typescript-eslint/no-explicit-any
   if (props.rowClickable) {
     emit('row-click', item);
   }

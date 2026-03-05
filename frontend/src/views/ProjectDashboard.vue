@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onUnmounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import type { Project, HarnessStatusResult, ProjectSkill, Hook, Command, Rule, Agent, ProjectInstallation } from '../services/api';
+import type { Project, HarnessStatusResult, ProjectSkill, Hook, Command, Rule, Agent, TeamMember, ProjectInstallation } from '../services/api';
 import { projectApi, grdApi, hookApi, commandApi, ruleApi, agentApi, teamApi, ApiError } from '../services/api';
 import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import EntityLayout from '../layouts/EntityLayout.vue';
@@ -62,12 +62,12 @@ const showSetup = ref(false);
 const setupCommand = ref('');
 
 // Team member data (fetched separately for OrgCanvas)
-const teamMembersMap = ref<Record<string, any[]>>({});
+const teamMembersMap = ref<Record<string, TeamMember[]>>({});
 
 // Compute all teams including owner team with "is_owner" flag and members
 const allTeams = computed(() => {
   if (!project.value) return [];
-  const teams: { id: string; name: string; color: string; is_owner: boolean; members?: any[] }[] = [];
+  const teams: { id: string; name: string; color: string; is_owner: boolean; members?: TeamMember[] }[] = [];
   if (project.value.owner_team_id && project.value.owner_team_name) {
     teams.push({
       id: project.value.owner_team_id,
@@ -147,7 +147,7 @@ async function loadData() {
     const teamDetails = await Promise.all(
       teamIds.map(id => teamApi.get(id).catch(() => null))
     );
-    const membersMap: Record<string, any[]> = {};
+    const membersMap: Record<string, TeamMember[]> = {};
     for (const td of teamDetails) {
       if (td) membersMap[td.id] = td.members || [];
     }

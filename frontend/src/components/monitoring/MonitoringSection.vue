@@ -333,7 +333,7 @@ const monitoringCardsByBackend = computed(() => {
   return groups;
 });
 
-// Convert a raw consumption rate to %/hr regardless of unit
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Monitoring window objects have variable shape from backend API
 function toRatePctPerHour(w: any, accountId?: number): number | undefined {
   const rates = w.consumption_rates;
   const rw = accountId != null ? getCardRateWindow(accountId) : '24h';
@@ -348,10 +348,11 @@ function toRatePctPerHour(w: any, accountId?: number): number | undefined {
 
 // Pre-compute chart data to avoid creating new objects on every template render
 const combinedHistoriesCache = computed(() => {
-  const result: Record<number, { windowType: string; label: string; history: any[]; color?: string; ratePerHour?: number; resetsAt?: string | null }[]> = {};
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Monitoring history entries have dynamic shape from backend snapshots
+  const result: Record<number, { windowType: string; label: string; history: SnapshotHistory['history']; color?: string; ratePerHour?: number; resetsAt?: string | null }[]> = {};
   for (const card of monitoringAccountCards.value) {
     result[card.account_id] = card.windows
-      .map((w: any, idx: number) => {
+      .map((w: any, idx: number) => { // eslint-disable-line @typescript-eslint/no-explicit-any -- monitoring window object
         const key = getTrendKey(card.account_id, w.window_type);
         const history = props.trendHistories[key]?.history || [];
         return {
@@ -363,13 +364,13 @@ const combinedHistoriesCache = computed(() => {
           resetsAt: w.resets_at || null,
         };
       })
-      .filter((wh: any) => wh.history.length >= 2);
+      .filter((wh) => wh.history.length >= 2);
   }
   return result;
 });
 
 const projectionHistoryCache = computed(() => {
-  const result: Record<number, any[]> = {};
+  const result: Record<number, SnapshotHistory['history']> = {};
   for (const card of monitoringAccountCards.value) {
     const windowType = props.selectedProjectionWindow[card.account_id];
     if (!windowType) { result[card.account_id] = []; continue; }
@@ -390,6 +391,7 @@ function getProjectionResetAt(accountId: number): string | null {
   const windowType = props.selectedProjectionWindow[accountId];
   if (!windowType) return null;
   const card = monitoringAccountCards.value.find(c => c.account_id === accountId);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- monitoring window object
   const w = card?.windows.find((win: any) => win.window_type === windowType);
   return w?.resets_at || null;
 }
@@ -398,6 +400,7 @@ function getProjectionRatePerHour(accountId: number): number | undefined {
   const windowType = props.selectedProjectionWindow[accountId];
   if (!windowType) return undefined;
   const card = monitoringAccountCards.value.find(c => c.account_id === accountId);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- monitoring window object
   const w = card?.windows.find((win: any) => win.window_type === windowType);
   if (!w) return undefined;
   return toRatePctPerHour(w, accountId);
@@ -513,9 +516,9 @@ function handleProjectionWindowChange(accountId: number, windowType: string) {
               <span class="account-card-type" :class="card.backend_type">{{ card.backend_type }}</span>
               <span v-if="card.plan" class="plan-label">{{ card.plan }}</span>
               <span
-                v-if="card.windows.some((w: any) => w.shared_with?.length)"
+                v-if="card.windows.some((w: { shared_with?: string[] }) => w.shared_with?.length)"
                 class="shared-creds-badge"
-                :title="'Shares credentials with: ' + card.windows.find((w: any) => w.shared_with?.length)?.shared_with?.join(', ')"
+                :title="'Shares credentials with: ' + card.windows.find((w: { shared_with?: string[] }) => w.shared_with?.length)?.shared_with?.join(', ')"
               >Shared</span>
               <div v-if="getSessionForAccount(card.account_id)" class="session-indicator">
                 <span class="session-dot"></span>
@@ -530,7 +533,7 @@ function handleProjectionWindowChange(accountId: number, windowType: string) {
             </div>
 
             <!-- No data message for accounts with no monitoring data -->
-            <div v-if="card.windows.every((w: any) => w.no_data)" class="monitoring-no-data">
+            <div v-if="card.windows.every((w: { no_data?: boolean }) => w.no_data)" class="monitoring-no-data">
               <span class="no-data-icon">!</span>
               <span>No monitoring data available. Check if the account's OAuth token is valid.</span>
             </div>
@@ -538,7 +541,7 @@ function handleProjectionWindowChange(accountId: number, windowType: string) {
             <!-- Gauges grid -->
             <div v-else class="monitoring-gauges-grid">
               <div
-                v-for="(w, wIdx) in card.windows.filter((w: any) => !w.no_data)"
+                v-for="(w, wIdx) in card.windows.filter((w: { no_data?: boolean }) => !w.no_data)"
                 :key="w.window_type"
                 class="monitoring-gauge-cell"
               >

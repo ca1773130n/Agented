@@ -104,7 +104,7 @@ function renderChart() {
           titleFont: { family: "'Geist Mono', 'SF Mono', monospace", size: 12, weight: 'bold' },
           bodyFont: { family: "'Geist', sans-serif", size: 12 },
           callbacks: {
-            label: (context: any) => `${context.dataset.label}: $${Number(context.parsed.y).toFixed(2)}`,
+            label: (context: any) => `${context.dataset.label}: $${Number(context.parsed.y).toFixed(2)}`, // eslint-disable-line @typescript-eslint/no-explicit-any -- Chart.js tooltip callback
           },
         },
       },
@@ -123,7 +123,7 @@ function renderChart() {
           ticks: {
             color: colors.textMuted,
             font: { family: "'Geist Mono', 'SF Mono', monospace", size: 10 },
-            callback: (value: any) => `$${Number(value).toFixed(2)}`,
+            callback: (value: string | number) => `$${Number(value).toFixed(2)}`,
           },
           grid: { color: colors.grid },
           border: { display: false },

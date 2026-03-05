@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, nextTick } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import type { Team, TeamMember, TeamAgentAssignment, Agent, TopologyType, TopologyConfig } from '../services/api';
+import type { Team, TeamMember, TeamAgentAssignment, Agent, SuperAgent, TopologyType, TopologyConfig } from '../services/api';
 import { teamApi, agentApi, superAgentApi, ApiError } from '../services/api';
 import TeamCanvas from '../components/canvas/TeamCanvas.vue';
 import TopologyPicker from '../components/teams/TopologyPicker.vue';
@@ -30,7 +30,7 @@ const team = ref<Team | null>(null);
 const members = ref<TeamMember[]>([]);
 const assignments = ref<TeamAgentAssignment[]>([]);
 const allAgents = ref<Agent[]>([]);
-const allSuperAgents = ref<any[]>([]);
+const allSuperAgents = ref<SuperAgent[]>([]);
 const canvasRef = ref<InstanceType<typeof TeamCanvas> | null>(null);
 
 // Local topology state for form view
@@ -106,7 +106,7 @@ async function loadData() {
 }
 
 // Handle topology update from TeamCanvas (includes dropdown changes)
-async function onTopologyUpdate(payload: { topology: string | null; topology_config: any }) {
+async function onTopologyUpdate(payload: { topology: string | null; topology_config: TopologyConfig | string }) {
   if (!team.value) return;
 
   localTopologyConfig.value = typeof payload.topology_config === 'string'
@@ -129,7 +129,7 @@ async function onTopologyUpdate(payload: { topology: string | null; topology_con
 }
 
 // Handle save from TeamCanvas
-async function onSave(payload: { topology: string | null; topology_config: any; positions: any }) {
+async function onSave(payload: { topology: string | null; topology_config: TopologyConfig | string; positions: Record<string, { x: number; y: number }> }) {
   try {
     // Parse existing config to preserve form-mode fields
     let existingConfig: TopologyConfig = {};
@@ -256,8 +256,8 @@ watch(viewMode, (newMode) => {
         @update:topology="onTopologyUpdate"
         @save="onSave"
         @members-changed="loadData"
-        @navigate-to-agent="(agentId: any) => router.push({ name: 'agent-design', params: { agentId } })"
-        @navigate-to-assignment="(_payload: any) => { /* Assignment navigation handled by entity type */ }"
+        @navigate-to-agent="(agentId: string) => router.push({ name: 'agent-design', params: { agentId } })"
+        @navigate-to-assignment="() => { /* Assignment navigation handled by entity type */ }"
       />
     </div>
 

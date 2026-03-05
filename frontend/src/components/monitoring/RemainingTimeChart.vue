@@ -57,6 +57,7 @@ function renderChart() {
     y: Math.max(0, 100 - h.percentage),
   }));
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Chart.js dataset type is complex with plugin-specific properties
   const datasets: any[] = [
     {
       label: 'Remaining %',

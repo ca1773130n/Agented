@@ -49,7 +49,7 @@ useWebMcpPageTools({
   modalActions: {
     openCreate: () => { showCreateModal.value = true; },
     openDelete: (id: string) => {
-      const wf = workflows.value.find((w: any) => w.id === id);
+      const wf = workflows.value.find((w) => w.id === id);
       if (wf) { workflowToDelete.value = wf; showDeleteConfirm.value = true; }
     },
   },
@@ -62,7 +62,7 @@ useWebMcpTool({
   page: 'WorkflowsPage',
   inputSchema: { type: 'object', properties: { workflowId: { type: 'string', description: 'ID of the workflow to toggle' } }, required: ['workflowId'] },
   execute: async (args) => {
-    const wf = workflows.value.find((w: any) => w.id === args.workflowId);
+    const wf = workflows.value.find((w) => w.id === args.workflowId);
     if (!wf) {
       return { content: [{ type: 'text' as const, text: JSON.stringify({ success: false, error: `Workflow ${args.workflowId} not found` }) }] };
     }

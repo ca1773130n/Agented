@@ -4,7 +4,7 @@ import { useRoute, useRouter } from 'vue-router';
 
 const props = defineProps<{
   /** Async function that fetches the entity. Throw on not-found. */
-  loadEntity: () => Promise<any>;
+  loadEntity: () => Promise<unknown>;
   /** Label for error messages (e.g., "team", "agent") */
   entityLabel?: string;
 }>();
@@ -13,19 +13,20 @@ const route = useRoute();
 const router = useRouter();
 const isLoading = ref(true);
 const loadError = ref<string | null>(null);
-const entityData = ref<any>(null);
+const entityData = ref<unknown>(null);
 
 async function load() {
   isLoading.value = true;
   loadError.value = null;
   try {
     entityData.value = await props.loadEntity();
-  } catch (err: any) {
-    if (err?.status === 404 || err?.message?.includes('not found')) {
+  } catch (err: unknown) {
+    const error = err as { status?: number; message?: string };
+    if (error?.status === 404 || error?.message?.includes('not found')) {
       router.replace({ name: 'not-found' });
       return;
     }
-    loadError.value = err?.message || `Failed to load ${props.entityLabel || 'entity'}`;
+    loadError.value = error?.message || `Failed to load ${props.entityLabel || 'entity'}`;
   } finally {
     isLoading.value = false;
   }

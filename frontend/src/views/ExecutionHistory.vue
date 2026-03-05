@@ -145,8 +145,8 @@ async function handleRetryExecution(execution: Execution) {
     await triggerApi.run(execution.trigger_id);
     showToast('Execution retry started', 'success');
     await loadData();
-  } catch (err: any) {
-    showToast(err.message || 'Failed to retry execution', 'error');
+  } catch (err: unknown) {
+    showToast(err instanceof Error ? err.message : 'Failed to retry execution', 'error');
   } finally {
     retryingId.value = null;
   }
@@ -169,8 +169,8 @@ async function handleCancelExecution(executionId: string) {
     await executionApi.cancel(executionId);
     showToast('Execution cancelled', 'success');
     await loadData();
-  } catch (err: any) {
-    showToast(err.message || 'Failed to cancel execution', 'error');
+  } catch (err: unknown) {
+    showToast(err instanceof Error ? err.message : 'Failed to cancel execution', 'error');
   } finally {
     cancellingId.value = null;
   }

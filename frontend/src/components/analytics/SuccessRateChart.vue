@@ -102,7 +102,7 @@ function renderChart() {
           titleFont: { family: "'Geist Mono', 'SF Mono', monospace", size: 12, weight: 'bold' },
           bodyFont: { family: "'Geist', sans-serif", size: 12 },
           callbacks: {
-            label: (context: any) => `Success Rate: ${Number(context.parsed.y).toFixed(1)}%`,
+            label: (context: any) => `Success Rate: ${Number(context.parsed.y).toFixed(1)}%`, // eslint-disable-line @typescript-eslint/no-explicit-any -- Chart.js tooltip callback
           },
         },
       },
@@ -122,7 +122,7 @@ function renderChart() {
           ticks: {
             color: colors.textMuted,
             font: { family: "'Geist Mono', 'SF Mono', monospace", size: 10 },
-            callback: (value: any) => `${value}%`,
+            callback: (value: string | number) => `${value}%`,
             stepSize: 20,
           },
           grid: { color: colors.grid },

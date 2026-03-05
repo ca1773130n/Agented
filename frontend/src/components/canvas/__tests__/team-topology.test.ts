@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest'
 import { ref } from 'vue'
 import { mount } from '@vue/test-utils'
 import type { Node, Edge } from '@vue-flow/core'
-import type { TopologyType } from '../../../services/api'
+import type { TopologyType, Agent, SuperAgent } from '../../../services/api'
 import { useTopologyValidation } from '../../../composables/useTopologyValidation'
 import { useCanvasLayout } from '../../../composables/useCanvasLayout'
 
@@ -318,11 +318,11 @@ describe('CanvasSidebar renders SuperAgents section', () => {
       props: {
         availableAgents: [
           { id: 'agent-001', name: 'Worker Agent', color: '#00d4ff' },
-        ],
+        ] as Agent[],
         availableSuperAgents: [
           { id: 'sa-001', name: 'Lead SA' },
           { id: 'sa-002', name: 'Research SA' },
-        ],
+        ] as SuperAgent[],
       },
     })
 

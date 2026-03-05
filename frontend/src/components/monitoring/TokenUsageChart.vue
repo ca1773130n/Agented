@@ -46,6 +46,7 @@ function renderChart() {
     textMuted: 'rgba(255, 255, 255, 0.35)',
   };
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Chart.js dataset config type is overly complex
   const costDataset: any = {
     label: 'Cost (USD)',
     data: sorted.map(d => d.total_cost_usd),
@@ -63,6 +64,7 @@ function renderChart() {
     costDataset.pointHoverRadius = 6;
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Chart.js dataset config type is overly complex
   const executionDataset: any = {
     label: 'Executions',
     data: sorted.map(d => d.execution_count),
@@ -124,7 +126,7 @@ function renderChart() {
             size: 12,
           },
           callbacks: {
-            label: (context: any) => {
+            label: (context: any) => { // eslint-disable-line @typescript-eslint/no-explicit-any -- Chart.js tooltip callback
               const dataIndex = context.dataIndex;
               const entry = sorted[dataIndex];
               if (context.dataset.label === 'Cost (USD)') {
@@ -132,7 +134,7 @@ function renderChart() {
               }
               return `Executions: ${entry.execution_count}`;
             },
-            afterBody: (contexts: any[]) => {
+            afterBody: (contexts: any[]) => { // eslint-disable-line @typescript-eslint/no-explicit-any -- Chart.js tooltip callback
               const dataIndex = contexts[0]?.dataIndex;
               if (dataIndex == null) return '';
               const entry = sorted[dataIndex];
@@ -171,7 +173,7 @@ function renderChart() {
               family: "'Geist Mono', 'SF Mono', monospace",
               size: 10,
             },
-            callback: (value: any) => `$${Number(value).toFixed(2)}`,
+            callback: (value: string | number) => `$${Number(value).toFixed(2)}`,
           },
           grid: {
             color: colors.grid,

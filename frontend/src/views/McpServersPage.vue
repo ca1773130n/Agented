@@ -83,7 +83,7 @@ useWebMcpPageTools({
   modalActions: {
     openCreate: () => { showCreateModal.value = true; },
     openDelete: (id: string) => {
-      const server = servers.value.find((s: any) => s.id === id);
+      const server = servers.value.find((s) => s.id === id);
       if (server) { serverToDelete.value = server; showDeleteConfirm.value = true; }
     },
   },

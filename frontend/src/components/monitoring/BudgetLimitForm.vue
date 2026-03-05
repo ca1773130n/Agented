@@ -123,8 +123,8 @@ async function handleSubmit() {
 
     await budgetApi.setLimit(data);
     emit('saved');
-  } catch (err: any) {
-    errorMessage.value = err?.message || 'Failed to save budget limit';
+  } catch (err: unknown) {
+    errorMessage.value = err instanceof Error ? err.message : 'Failed to save budget limit';
   } finally {
     isSubmitting.value = false;
   }

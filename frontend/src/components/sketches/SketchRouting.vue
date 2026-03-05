@@ -1,13 +1,19 @@
 <script setup lang="ts">
+interface SketchRoutingData {
+  target_type?: string;
+  target_id?: string;
+  reason?: string;
+}
+
 defineProps<{
-  routing: Record<string, any> | null;
+  routing: SketchRoutingData | null;
 }>();
 
 const emit = defineEmits<{
   (e: 'navigateTo', view: string, id?: string): void;
 }>();
 
-function handleTargetClick(routing: Record<string, any>) {
+function handleTargetClick(routing: SketchRoutingData) {
   if (routing.target_type === 'super_agent' && routing.target_id) {
     emit('navigateTo', 'super-agent-playground', routing.target_id);
   } else if (routing.target_type === 'team' && routing.target_id) {
@@ -47,7 +53,7 @@ function getTargetIcon(targetType: string): string {
         <span class="detail-label">Target</span>
         <span class="target-type-badge">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="14" height="14">
-            <path :d="getTargetIcon(routing.target_type)"/>
+            <path :d="getTargetIcon(routing.target_type || '')"/>
           </svg>
           {{ routing.target_type === 'super_agent' ? 'SuperAgent' : routing.target_type }}
         </span>

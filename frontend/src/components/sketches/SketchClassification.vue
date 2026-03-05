@@ -1,6 +1,14 @@
 <script setup lang="ts">
+interface SketchClassificationData {
+  phase?: string;
+  domains?: string[];
+  complexity?: string;
+  confidence?: number;
+  source?: string;
+}
+
 defineProps<{
-  classification: Record<string, any> | null;
+  classification: SketchClassificationData | null;
 }>();
 
 const phaseColors: Record<string, string> = {

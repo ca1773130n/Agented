@@ -1,12 +1,14 @@
 <script setup lang="ts">
+import type { Agent, SuperAgent } from '../../services/api'
+
 withDefaults(defineProps<{
-  availableAgents: any[]
-  availableSuperAgents?: any[]
+  availableAgents: Agent[]
+  availableSuperAgents?: SuperAgent[]
 }>(), {
   availableSuperAgents: () => [],
 })
 
-function onDragStart(event: DragEvent, agent: any) {
+function onDragStart(event: DragEvent, agent: Agent) {
   if (!event.dataTransfer) return
   event.dataTransfer.setData(
     'application/vueflow',
@@ -24,7 +26,7 @@ function onDragStart(event: DragEvent, agent: any) {
   event.dataTransfer.effectAllowed = 'move'
 }
 
-function onSuperAgentDragStart(event: DragEvent, sa: any) {
+function onSuperAgentDragStart(event: DragEvent, sa: SuperAgent) {
   if (!event.dataTransfer) return
   event.dataTransfer.setData(
     'application/vueflow',

@@ -1,13 +1,13 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { TeamAgentAssignment } from '../../services/api'
+import type { TeamMember, TeamAgentAssignment } from '../../services/api'
 import { teamApi } from '../../services/api'
 import { useToast } from '../../composables/useToast'
 
 const props = defineProps<{
   agentId: string
   memberId: number | null
-  members: any[]
+  members: TeamMember[]
   assignments: TeamAgentAssignment[]
   teamId?: string
 }>()

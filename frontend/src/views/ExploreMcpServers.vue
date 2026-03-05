@@ -182,7 +182,7 @@ async function installServer(server: MarketplaceSearchResult) {
       url: installForm.value.url || undefined,
       env_json: installForm.value.env_json || undefined,
       timeout_ms: installForm.value.timeout_ms,
-    } as any);
+    });
     showToast(`Installed "${server.name}" as MCP server`, 'success');
     server.installed = true;
     selectedServer.value = null;

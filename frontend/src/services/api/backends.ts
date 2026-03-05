@@ -121,7 +121,7 @@ export const backendApi = {
 
   // Rate limit check (provider API-based)
   checkRateLimits: (backendId: string, accountId: number) =>
-    apiFetch<{ windows: RateLimitWindow[]; message?: string }>(`/admin/backends/${backendId}/accounts/${accountId}/rate-limits`, {
+    apiFetch<{ windows: RateLimitWindow[]; message?: string; needs_login?: boolean; account_id?: number }>(`/admin/backends/${backendId}/accounts/${accountId}/rate-limits`, {
       method: 'POST',
     }),
 

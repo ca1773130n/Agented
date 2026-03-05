@@ -95,7 +95,7 @@ function renderChart() {
           titleFont: { family: "'Geist Mono', 'SF Mono', monospace", size: 12, weight: 'bold' },
           bodyFont: { family: "'Geist', sans-serif", size: 12 },
           callbacks: {
-            afterBody: (contexts: any[]) => {
+            afterBody: (contexts: any[]) => { // eslint-disable-line @typescript-eslint/no-explicit-any -- Chart.js tooltip callback
               const idx = contexts[0]?.dataIndex;
               if (idx == null || !sorted[idx]) return '';
               return `Total: ${sorted[idx].total_executions}`;

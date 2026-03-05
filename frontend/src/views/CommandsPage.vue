@@ -142,8 +142,8 @@ async function saveDetail() {
     showToast('Command updated successfully', 'success');
     closeDetail();
     await loadCommands();
-  } catch (err: any) {
-    showToast(err.message || 'Failed to update command', 'error');
+  } catch (err: unknown) {
+    showToast(err instanceof Error ? err.message : 'Failed to update command', 'error');
   } finally {
     isSaving.value = false;
   }
@@ -193,7 +193,7 @@ useWebMcpPageTools({
   modalActions: {
     openCreate: () => { showCreateModal.value = true; },
     openDelete: (id: string) => {
-      const command = commands.value.find((c: any) => String(c.id) === id);
+      const command = commands.value.find((c) => String(c.id) === id);
       if (command) { commandToDelete.value = command; showDeleteConfirm.value = true; }
     },
   },
@@ -329,7 +329,7 @@ async function generateCommand() {
   }
   isGenerating.value = true;
   try {
-    const result = await startStream<{ config: Record<string, any>; warnings: string[] }>(
+    const result = await startStream<{ config: Record<string, string>; warnings: string[] }>(
       '/admin/commands/generate/stream',
       { description: generateDescription.value.trim() },
     );

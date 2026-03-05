@@ -406,8 +406,8 @@ async function installCli() {
     const result = await backendApi.installCli(backendId.value);
     showToast?.(result.message || 'CLI installed', 'success');
     await loadBackend();
-  } catch (e: any) {
-    showToast?.(e.message || 'Failed to install CLI', 'error');
+  } catch (e: unknown) {
+    showToast?.(e instanceof Error ? e.message : 'Failed to install CLI', 'error');
   } finally {
     isInstalling.value = false;
   }
@@ -682,7 +682,7 @@ function onLoginModalSuccess() {
 async function checkAccountRateLimits(accountId: number) {
   rateLimitState.value[accountId] = { loading: true, windows: [], error: null };
   try {
-    const result = await backendApi.checkRateLimits(backendId.value, accountId) as any;
+    const result = await backendApi.checkRateLimits(backendId.value, accountId);
     if (result.needs_login && supportsConnect.value && backend.value?.is_installed) {
       // Auto-trigger login for this account
       const account = backend.value?.accounts?.find((a: BackendAccount) => a.id === accountId);

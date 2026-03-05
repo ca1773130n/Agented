@@ -62,7 +62,7 @@ function buildChart() {
 
   const datasets = Object.entries(grouped).map(([status, points]) => ({
     label: status.charAt(0).toUpperCase() + status.slice(1),
-    data: points as any[],
+    data: points as any[], // eslint-disable-line @typescript-eslint/no-explicit-any -- Chart.js scatter data type mismatch with categorical Y-axis
     backgroundColor: statusColors[status] || '#6b7280',
     borderColor: statusColors[status] || '#6b7280',
     pointRadius: 6,

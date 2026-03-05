@@ -141,8 +141,8 @@ async function saveDetail() {
     showToast('Hook updated successfully', 'success');
     closeDetail();
     await loadHooks();
-  } catch (err: any) {
-    showToast(err.message || 'Failed to update hook', 'error');
+  } catch (err: unknown) {
+    showToast(err instanceof Error ? err.message : 'Failed to update hook', 'error');
   } finally {
     isSaving.value = false;
   }
@@ -207,7 +207,7 @@ useWebMcpPageTools({
   modalActions: {
     openCreate: () => { showCreateModal.value = true; },
     openDelete: (id: string) => {
-      const hook = hooks.value.find((h: any) => String(h.id) === id);
+      const hook = hooks.value.find((h) => String(h.id) === id);
       if (hook) { hookToDelete.value = hook; showDeleteConfirm.value = true; }
     },
   },
@@ -319,16 +319,16 @@ async function generateHook() {
   }
   isGenerating.value = true;
   try {
-    const result = await startStream<{ config: Record<string, any>; warnings: string[] }>(
+    const result = await startStream<{ config: Record<string, string>; warnings: string[] }>(
       '/admin/hooks/generate/stream',
       { description: generateDescription.value.trim() },
     );
     if (result?.config) {
       formData.value.name = result.config.name || '';
-      formData.value.event = result.config.event || 'PreToolUse';
+      formData.value.event = (result.config.event || 'PreToolUse') as HookEvent;
       formData.value.description = result.config.description || '';
       formData.value.content = result.config.content || '';
-      formData.value.enabled = result.config.enabled !== false;
+      formData.value.enabled = result.config.enabled !== 'false';
       showGenerateModal.value = false;
       showCreateModal.value = true;
       showToast('Hook configuration generated! Review and save.', 'success');

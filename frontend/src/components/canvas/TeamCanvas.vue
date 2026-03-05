@@ -22,7 +22,7 @@ import '@vue-flow/minimap/dist/style.css'
 import { useTeamCanvas } from '../../composables/useTeamCanvas'
 import { useCanvasLayout } from '../../composables/useCanvasLayout'
 import { useTopologyValidation } from '../../composables/useTopologyValidation'
-import type { Team, TeamAgentAssignment, TopologyType } from '../../services/api'
+import type { Team, TeamMember, TeamAgentAssignment, Agent, SuperAgent, TopologyType, TopologyConfig } from '../../services/api'
 import { teamApi } from '../../services/api'
 import ConfirmModal from '../base/ConfirmModal.vue'
 import { useToast } from '../../composables/useToast';
@@ -38,15 +38,15 @@ const edgeTypes: EdgeTypesObject = {
 
 const props = defineProps<{
   team: Team | null
-  members: any[]
+  members: TeamMember[]
   assignments: TeamAgentAssignment[]
-  availableAgents: any[]
-  availableSuperAgents: any[]
+  availableAgents: Agent[]
+  availableSuperAgents: SuperAgent[]
 }>()
 
 const emit = defineEmits<{
-  'update:topology': [payload: { topology: string | null; topology_config: any }]
-  save: [payload: { topology: string | null; topology_config: any; positions: any }]
+  'update:topology': [payload: { topology: string | null; topology_config: TopologyConfig | string }]
+  save: [payload: { topology: string | null; topology_config: TopologyConfig | string; positions: Record<string, { x: number; y: number }> }]
   'members-changed': []
   'navigate-to-agent': [agentId: string]
   'navigate-to-assignment': [payload: { type: string; name: string; id: string }]
@@ -91,6 +91,7 @@ const { isValidConnection: rawIsValidConnection, warnings, inferredTopology } = 
 // Bypass validation for programmatic edge additions (addEdges API calls).
 // isValidConnection is only intended for user-initiated drag connections.
 let bypassValidation = false
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Vue Flow connection event type
 const isValidConnection = (connection: any) => {
   if (bypassValidation) return true
   return rawIsValidConnection(connection)
@@ -130,6 +131,7 @@ const edgeTypeOptions = [
   { type: 'messaging' as const, label: 'Messaging', color: 'rgba(168, 85, 247, 0.8)' },
 ]
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Vue Flow edge event type
 function onEdgeContextMenu(event: { event: MouseEvent | TouchEvent; edge: any }) {
   event.event.preventDefault()
   const x = event.event instanceof MouseEvent ? event.event.clientX : event.event.touches?.[0]?.clientX ?? 0
@@ -205,6 +207,7 @@ async function onDrop(event: DragEvent) {
 }
 
 // Handle node click to show detail panel
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Vue Flow node event type
 function onNodeClick(event: { node: any }) {
   const node = event.node
   selectedAgentId.value = node.id
@@ -368,16 +371,16 @@ function handleSetTopology(topology: string | null) {
   // Build a minimal config so buildEdgesFromTopology can auto-generate edges
   const currentNodes = nodes.value
   const nodeIds = currentNodes.map((n) => n.id)
-  let config: Record<string, any> = {}
+  let config: TopologyConfig = {}
 
   if (topology === 'sequential' || topology === 'human_in_loop') {
     config = { order: nodeIds }
   } else if (topology === 'coordinator') {
-    config = { coordinator: nodeIds[0] || null, workers: nodeIds.slice(1) }
+    config = { coordinator: nodeIds[0] || undefined, workers: nodeIds.slice(1) }
   } else if (topology === 'generator_critic' && nodeIds.length >= 2) {
     config = { generator: nodeIds[0], critic: nodeIds[1] }
   } else if (topology === 'hierarchical') {
-    config = { lead: nodeIds[0] || null }
+    config = { lead: nodeIds[0] || undefined }
   }
   // parallel & composite need no config (no edges generated)
 

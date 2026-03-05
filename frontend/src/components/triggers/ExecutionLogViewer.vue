@@ -190,8 +190,8 @@ async function handleCancel() {
   try {
     await executionApi.cancel(props.executionId);
     showToast('Execution cancelled', 'success');
-  } catch (error: any) {
-    showToast(error.message || 'Failed to cancel execution', 'error');
+  } catch (error: unknown) {
+    showToast(error instanceof Error ? error.message : 'Failed to cancel execution', 'error');
   } finally {
     cancelling.value = false;
   }

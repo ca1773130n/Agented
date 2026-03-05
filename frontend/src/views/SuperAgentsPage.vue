@@ -47,7 +47,7 @@ useWebMcpPageTools({
   modalActions: {
     openCreate: () => { showCreateModal.value = true; },
     openDelete: (id: string) => {
-      const sa = superAgents.value.find((s: any) => s.id === id);
+      const sa = superAgents.value.find((s) => s.id === id);
       if (sa) { agentToDelete.value = sa; showDeleteConfirm.value = true; }
     },
   },

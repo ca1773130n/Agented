@@ -9,7 +9,7 @@ import { useOrgCanvas } from '../../composables/useOrgCanvas'
 import { useCanvasLayout } from '../../composables/useCanvasLayout'
 import { useToast } from '../../composables/useToast'
 import { teamApi, projectApi } from '../../services/api'
-import type { CanvasEdgeType, Team } from '../../services/api'
+import type { CanvasEdgeType, Team, TeamMember } from '../../services/api'
 
 import '@vue-flow/core/dist/style.css'
 import '@vue-flow/core/dist/theme-default.css'
@@ -24,7 +24,7 @@ const edgeTypes: EdgeTypesObject = {
 
 const props = defineProps<{
   projectId: string
-  teams: { id: string; name: string; color: string; members?: any[] }[]
+  teams: { id: string; name: string; color: string; members?: TeamMember[] }[]
 }>()
 
 const emit = defineEmits<{
@@ -82,10 +82,12 @@ onConnect((params) => {
   }])
 })
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Vue Flow event type
 function onNodeClick(event: { node: any }) {
   emit('drill-down', event.node.data.teamId)
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Vue Flow event type
 function onEdgeContextMenu(event: { event: MouseEvent | TouchEvent; edge: any }) {
   if (event.event instanceof MouseEvent) {
     event.event.preventDefault()

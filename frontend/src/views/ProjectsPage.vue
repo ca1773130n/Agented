@@ -74,7 +74,7 @@ useWebMcpPageTools({
   modalActions: {
     openCreate: () => { showCreateModal.value = true; },
     openDelete: (id: string) => {
-      const project = projects.value.find((p: any) => p.id === id);
+      const project = projects.value.find((p) => p.id === id);
       if (project) { projectToDelete.value = project; showDeleteConfirm.value = true; }
     },
   },

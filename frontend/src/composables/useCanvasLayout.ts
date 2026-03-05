@@ -22,7 +22,7 @@ export function useCanvasLayout() {
     const tierRank: Record<string, number> = { leader: 0, senior: 1, member: 2 }
 
     for (const node of nodes) {
-      const nodeOpts: Record<string, any> = { width: NODE_WIDTH, height: NODE_HEIGHT }
+      const nodeOpts: Record<string, number> = { width: NODE_WIDTH, height: NODE_HEIGHT }
       if (tierMap && tierMap[node.id]) {
         nodeOpts.rank = tierRank[tierMap[node.id]]
       }

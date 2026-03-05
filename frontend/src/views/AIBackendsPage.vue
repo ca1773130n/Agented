@@ -209,8 +209,8 @@ async function installBackendCli(backend: AIBackend) {
     const result = await backendApi.installCli(backend.id);
     showToast(result.message || `${backend.name} installed`, 'success');
     await loadBackends(true);
-  } catch (e: any) {
-    showToast(e.message || `Failed to install ${backend.name}`, 'error');
+  } catch (e: unknown) {
+    showToast(e instanceof Error ? e.message : `Failed to install ${backend.name}`, 'error');
   } finally {
     installingBackend.value = null;
   }
@@ -228,8 +228,8 @@ async function addProxyAccount() {
     } else {
       showToast(result.message || 'Login failed', 'error');
     }
-  } catch (e: any) {
-    showToast(e.message || 'Failed to start login', 'error');
+  } catch (e: unknown) {
+    showToast(e instanceof Error ? e.message : 'Failed to start login', 'error');
   } finally {
     isAddingAccount.value = false;
   }
@@ -329,7 +329,7 @@ async function ensureTestAgent() {
       description: 'System agent for testing AI backends',
     });
     testAgentId.value = created.super_agent_id;
-  } catch (e: any) {
+  } catch (e: unknown) {
     console.error('Failed to ensure test agent:', e);
   }
 }

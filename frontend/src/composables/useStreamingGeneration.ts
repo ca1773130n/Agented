@@ -16,9 +16,9 @@ export function useStreamingGeneration() {
     isStreaming.value = false;
   }
 
-  async function startStream<T = any>(
+  async function startStream<T = unknown>(
     url: string,
-    body: Record<string, any>,
+    body: Record<string, unknown>,
   ): Promise<T | null> {
     reset();
     isStreaming.value = true;

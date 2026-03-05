@@ -2,6 +2,7 @@
 import { ref, computed } from 'vue';
 import { useRouter } from 'vue-router';
 import { marketplaceApi } from '../services/api';
+import type { MarketplaceSearchResult } from '../services/api';
 import PageHeader from '../components/base/PageHeader.vue';
 import LoadingState from '../components/base/LoadingState.vue';
 import EmptyState from '../components/base/EmptyState.vue';
@@ -15,9 +16,9 @@ const showToast = useToast();
 
 // Search state
 const searchQuery = ref('');
-const results = ref<any[]>([]);
+const results = ref<MarketplaceSearchResult[]>([]);
 const isSearching = ref(false);
-const selectedItem = ref<any>(null);
+const selectedItem = ref<MarketplaceSearchResult | null>(null);
 
 const detailModalRef = ref<HTMLElement | null>(null);
 const detailModalOpen = computed(() => !!selectedItem.value);
@@ -66,7 +67,7 @@ async function performSearch() {
   }
 }
 
-function selectItem(item: any) {
+function selectItem(item: MarketplaceSearchResult) {
   selectedItem.value = item;
 }
 
@@ -74,7 +75,7 @@ function closeDetail() {
   selectedItem.value = null;
 }
 
-function importPackage(_item: any) {
+function importPackage(_item: MarketplaceSearchResult) {
   showToast('SuperAgent import coming in a future update', 'info');
 }
 

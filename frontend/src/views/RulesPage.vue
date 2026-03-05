@@ -142,8 +142,8 @@ async function saveDetail() {
     showToast('Rule updated successfully', 'success');
     closeDetail();
     await loadRules();
-  } catch (err: any) {
-    showToast(err.message || 'Failed to update rule', 'error');
+  } catch (err: unknown) {
+    showToast(err instanceof Error ? err.message : 'Failed to update rule', 'error');
   } finally {
     isSaving.value = false;
   }
@@ -207,7 +207,7 @@ useWebMcpPageTools({
   modalActions: {
     openCreate: () => { showCreateModal.value = true; },
     openDelete: (id: string) => {
-      const rule = rules.value.find((r: any) => String(r.id) === id);
+      const rule = rules.value.find((r) => String(r.id) === id);
       if (rule) { ruleToDelete.value = rule; showDeleteConfirm.value = true; }
     },
   },
@@ -335,13 +335,13 @@ async function generateRule() {
   }
   isGenerating.value = true;
   try {
-    const result = await startStream<{ config: Record<string, any>; warnings: string[] }>(
+    const result = await startStream<{ config: Record<string, string>; warnings: string[] }>(
       '/admin/rules/generate/stream',
       { description: generateDescription.value.trim() },
     );
     if (result?.config) {
       formData.value.name = result.config.name || '';
-      formData.value.rule_type = result.config.rule_type || 'validation';
+      formData.value.rule_type = (result.config.rule_type || 'validation') as RuleType;
       formData.value.description = result.config.description || '';
       formData.value.condition = result.config.condition || '';
       formData.value.action = result.config.action || '';
