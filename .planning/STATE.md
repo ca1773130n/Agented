@@ -2,17 +2,17 @@
 
 **Milestone:** v0.1.0 -- Production Hardening (active) / v0.2.0 -- Miscellaneous
 **Current Phase:** Phase 9 (autopilot: executing)
-**Current Plan:** 03 of 04 (in progress)
+**Current Plan:** 04 of 04 (complete)
 **Status:** executing
 
-**Progress:** [█████░░░░░] 52%
+**Progress:** [██████░░░░] 57%
 
 ---
 
 ## Position
 
-- **Last completed:** Phase 9 Plan 03 (Bot Template Marketplace, NL Creator, Snippet Library Frontend)
-- **Next up:** Phase 9 Plan 04
+- **Last completed:** Phase 9 Plan 04 (Version History UI, Webhook Test Console, Backend Tests)
+- **Next up:** Phase 11 (Enterprise Integrations & Governance)
 - **Blocked by:** Nothing
 
 ## Phase Summary
@@ -21,7 +21,7 @@
 |-------|------|--------|--------------|
 | 7 | Workflow Automation & Pipeline Intelligence | Complete (3/3) — Verified | proxy |
 | 8 | Execution Intelligence & Replay | Complete (5/5) — Verified | proxy |
-| 9 | Bot Authoring & Template Ecosystem | In Progress (3/4) | proxy |
+| 9 | Bot Authoring & Template Ecosystem | Complete (4/4) | proxy |
 | 10 | Analytics & Monitoring Dashboards | Complete (5/5) | proxy |
 | 11 | Enterprise Integrations & Governance | Pending | proxy |
 | 12 | Specialized Automation Bots | Pending | proxy |
@@ -96,6 +96,8 @@
 - [Phase 9]: preview-prompt-full uses ExecutionService.build_command() without subprocess
 - [Phase 9]: SSE streaming for NL generator uses fetch+ReadableStream since POST body required (EventSource is GET-only)
 - [Phase 9]: snippetRef() helper avoids Vue template interpolation collision with {{}} snippet syntax
+- [Phase 9]: Collapsible tool tabs in GenericTriggerDashboard for Version History and Test Console panels
+- [Phase 9]: Fixed get_prompt_template_history ordering: added secondary sort by id DESC for deterministic results
 
 ## Blockers
 
@@ -132,8 +134,9 @@ None -- no phases have deferred verification level in this milestone.
 | 09 | 01 | 16min | 2 | 12 |
 | 09 | 02 | 16min | 2 | 13 |
 | 09 | 03 | 5min | 2 | 9 |
+| 09 | 04 | 11min | 2 | 7 |
 
 ## Session Log
 
 - **Last session:** 2026-03-05
-- **Stopped at:** Completed 09-03-PLAN.md (bot template marketplace, NL creator, snippet library frontend)
+- **Stopped at:** Completed 09-04-PLAN.md (version history UI, webhook test console, backend tests)
