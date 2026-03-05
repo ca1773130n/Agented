@@ -1,9 +1,9 @@
 # GRD Execution State
 
 **Milestone:** v0.1.0 -- Production Hardening (active) / v0.2.0 -- Miscellaneous
-**Current Phase:** Phase 14 (complete)
-**Current Plan:** 04 of 04
-**Status:** phase_complete
+**Current Phase:** Phase 15 (autopilot: executing)
+**Current Plan:** 01 of 03
+**Status:** in_progress
 
 **Progress:** [██████████] 90%
 
@@ -27,7 +27,7 @@
 | 12 | Specialized Automation Bots | Complete (3/3) | proxy |
 | 13 | Execution Resilience & Infrastructure | Complete (4/4) — Verified | proxy |
 | 14 | API Hardening & Developer Experience | Complete (4/4) — Verified | proxy |
-| 15 | Code Consistency & Standards | Pending | sanity |
+| 15 | Code Consistency & Standards | In Progress (1/3) | sanity |
 | 16 | Frontend Quality & User Experience | In Progress (5/5) | sanity |
 
 ## Priority Tiers
@@ -132,6 +132,9 @@
 - [Phase 14]: Handler lookup table pattern for entity_type/action dispatch in BulkService
 - [Phase 14]: AST-based dangerous construct detection via ast.walk for condition expression validation
 - [Phase 14]: Separate workflow_validation_service.py for DAG validation (not in workflow_execution_service.py)
+- [Phase 15]: Config constants grouped by domain (execution, SSE, process, budget, GitHub) in config.py
+- [Phase 15]: generate_id() factory uses secrets.choice() matching existing ids.py pattern
+- [Phase 15]: Class-level constants in services kept as aliases to config imports for backward compat
 
 ## Blockers
 
@@ -179,8 +182,9 @@ None -- no phases have deferred verification level in this milestone.
 | 14 | 01 | 14min | 2 | 5 |
 | 14 | 02 | ~20min | 2 | 30 |
 | 14 | 04 | 9min | 2 | 7 |
+| 15 | 01 | 26min | 2 | 42 |
 
 ## Session Log
 
 - **Last session:** 2026-03-06
-- **Stopped at:** Completed 14-04-PLAN.md (Bulk Operations & DAG Validation)
+- **Stopped at:** Completed 15-01-PLAN.md (Backend Foundation for Code Consistency)
