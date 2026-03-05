@@ -33,6 +33,7 @@ def register_blueprints(app):
     from .rbac import rbac_bp
     from .product_owner import product_owner_bp
     from .products import products_bp
+    from .replay import replay_bp
     from .projects import projects_bp
     from .rotation import rotation_bp
     from .rule_conversations import rule_conversations_bp
@@ -118,6 +119,7 @@ def register_blueprints(app):
             integrations_bp,
             campaigns_bp,
             analytics_bp,
+            replay_bp,
         ]
         for bp in admin_blueprints:
             limiter.limit("120/minute")(bp)
@@ -177,6 +179,7 @@ def register_blueprints(app):
     app.register_api(slack_command_bp)
     app.register_api(campaigns_bp)
     app.register_api(analytics_bp)
+    app.register_api(replay_bp)
 
     # SPA catch-all: MUST be registered LAST so API routes take priority
     app.register_blueprint(spa_bp)
