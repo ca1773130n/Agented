@@ -1,9 +1,12 @@
 """Service for generating plugin configurations using Claude CLI."""
 
 import re
+import logging
 
 from ..database import get_all_plugins
 from .base_generation_service import BaseGenerationService
+
+logger = logging.getLogger(__name__)
 
 
 class PluginGenerationService(BaseGenerationService):

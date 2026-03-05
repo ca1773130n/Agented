@@ -8,8 +8,11 @@ Reference: Fowler "Refactoring" (2018) Extract Class pattern.
 """
 
 import re
+import logging
 
 from .prompt_snippet_service import SnippetService
+
+logger = logging.getLogger(__name__)
 
 
 class PromptRenderer:

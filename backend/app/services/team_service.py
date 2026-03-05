@@ -1,9 +1,12 @@
 """Team service for topology validation and membership checking."""
 
 import json
+import logging
 
 from ..database import get_team_members
 from ..models.team import VALID_TOPOLOGIES
+
+logger = logging.getLogger(__name__)
 
 
 class TeamService:

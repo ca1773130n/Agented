@@ -6,8 +6,11 @@ reference detection (max depth 5).
 """
 
 import re
+import logging
 
 from ..db.prompt_snippets import get_snippet_by_name
+
+logger = logging.getLogger(__name__)
 
 
 class SnippetService:

@@ -36,6 +36,8 @@ from app.utils.plugin_format import (
     generate_skill_md,
 )
 
+logger = logging.getLogger(__name__)
+
 log = logging.getLogger(__name__)
 
 

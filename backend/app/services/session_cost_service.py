@@ -1,5 +1,9 @@
 """Session cost computation — pricing data and cost calculation."""
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 # Pricing per million tokens (USD) — mirrors BudgetService.MODEL_PRICING
 _PRICING = {
     "claude-opus-4-6": {"input": 15.0, "output": 75.0, "cache_read": 1.5, "cache_create": 18.75},

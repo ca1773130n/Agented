@@ -22,6 +22,8 @@ from app.database import (
     update_plugin_export,
 )
 
+logger = logging.getLogger(__name__)
+
 log = logging.getLogger(__name__)
 
 # In-memory cache for marketplace discovery results

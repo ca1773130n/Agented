@@ -1,9 +1,12 @@
 """Service for generating hook configurations using Claude CLI."""
 
 import re
+import logging
 
 from ..database import get_all_hooks
 from .base_generation_service import BaseGenerationService
+
+logger = logging.getLogger(__name__)
 
 VALID_EVENTS = [
     "PreToolUse",

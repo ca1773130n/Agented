@@ -6,6 +6,7 @@ import os
 import subprocess
 from http import HTTPStatus
 from typing import Tuple
+import logging
 
 from ..database import (
     add_agent,
@@ -21,6 +22,8 @@ from ..database import (
     get_user_skill_by_name,
 )
 from .skill_discovery_service import SkillDiscoveryService
+
+logger = logging.getLogger(__name__)
 
 
 class SkillMarketplaceService:

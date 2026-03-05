@@ -4,6 +4,7 @@ import json
 import threading
 from http import HTTPStatus
 from typing import Optional, Tuple
+import logging
 
 from ..database import (
     add_agent,
@@ -15,6 +16,8 @@ from ..database import (
 )
 from ..db.agents import VALID_BACKENDS
 from .execution_service import ExecutionService
+
+logger = logging.getLogger(__name__)
 
 
 class AgentService:

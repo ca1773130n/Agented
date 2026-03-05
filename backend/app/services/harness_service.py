@@ -5,10 +5,13 @@ Delegates to:
   - harness_deploy_service: deploy configs to GitHub
   - layer_detection_service: agent layer auto-detection
 """
+import logging
 
 from .harness_deploy_service import HarnessDeployService  # noqa: F401
 from .harness_loader_service import HarnessLoaderService  # noqa: F401
 from .layer_detection_service import LayerDetectionService  # noqa: F401
+
+logger = logging.getLogger(__name__)
 
 
 class HarnessService(HarnessLoaderService, HarnessDeployService, LayerDetectionService):

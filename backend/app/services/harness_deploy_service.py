@@ -6,6 +6,7 @@ from http import HTTPStatus
 from typing import Tuple
 
 import yaml
+import logging
 
 from ..database import (
     get_agent,
@@ -14,6 +15,8 @@ from ..database import (
     get_team_members,
 )
 from .github_service import GitHubService
+
+logger = logging.getLogger(__name__)
 
 
 class HarnessDeployService:

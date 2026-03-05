@@ -1,9 +1,12 @@
 """Service for generating rule configurations using Claude CLI."""
 
 import re
+import logging
 
 from ..database import get_all_rules
 from .base_generation_service import BaseGenerationService
+
+logger = logging.getLogger(__name__)
 
 VALID_RULE_TYPES = ["pre_check", "post_check", "validation"]
 

@@ -9,8 +9,11 @@ import threading
 from http import HTTPStatus
 from queue import Empty, Queue
 from typing import Dict, Generator, List, Tuple
+import logging
 
 from .skill_discovery_service import get_playground_working_dir
+
+logger = logging.getLogger(__name__)
 
 
 class SkillTestingService:

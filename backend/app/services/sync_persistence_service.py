@@ -31,6 +31,8 @@ from app.utils.plugin_format import (
     parse_yaml_frontmatter,
 )
 
+logger = logging.getLogger(__name__)
+
 log = logging.getLogger(__name__)
 
 

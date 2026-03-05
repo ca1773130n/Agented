@@ -2,6 +2,7 @@
 
 from http import HTTPStatus
 from typing import Tuple
+import logging
 
 from ..database import (
     add_pr_review,
@@ -13,6 +14,8 @@ from ..database import (
     get_pr_reviews_for_trigger,
     update_pr_review,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class PrReviewService:

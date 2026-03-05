@@ -7,6 +7,10 @@ no I/O, no instance state.
 Reference: Fowler "Refactoring" (2018) Extract Class pattern.
 """
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 class CommandBuilder:
     """Stateless builder for backend CLI commands."""

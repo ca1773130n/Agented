@@ -6,10 +6,13 @@ Delegates to:
   - skill_harness_service: user skills CRUD, harness integration, agent export
   - skill_marketplace_service: marketplace load and deploy operations
 """
+import logging
 
 from .skill_discovery_service import SkillDiscoveryService, get_playground_working_dir  # noqa: F401
 from .skill_harness_service import SkillHarnessService  # noqa: F401
 from .skill_testing_service import SkillTestingService  # noqa: F401
+
+logger = logging.getLogger(__name__)
 
 
 class SkillsService(SkillDiscoveryService, SkillTestingService, SkillHarnessService):

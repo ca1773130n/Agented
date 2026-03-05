@@ -10,6 +10,8 @@ from watchdog.observers import Observer
 
 from .sync_persistence_service import SyncService
 
+logger = logging.getLogger(__name__)
+
 log = logging.getLogger(__name__)
 
 

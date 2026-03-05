@@ -5,12 +5,15 @@ from http import HTTPStatus
 from typing import Tuple
 
 import yaml
+import logging
 
 from ..database import (
     get_project_detail,
     get_team_detail,
     get_team_members,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class ProjectDeployService:

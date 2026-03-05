@@ -1,9 +1,12 @@
 """Harness loader service — load configs from GitHub repos."""
 
 import json
+import logging
 import os
 from http import HTTPStatus
 from typing import List, Tuple
+
+logger = logging.getLogger(__name__)
 
 import yaml
 
@@ -238,7 +241,7 @@ class HarnessLoaderService(LayerDetectionService):
                         )
                         imported.append(agent_name)
                     except Exception as e:
-                        print(f"Failed to import agent {agent_name}: {e}")
+                        logger.error("Failed to import agent %s: %s", agent_name, e)
 
             # Also handle .md files directly in agents folder
             elif item.endswith(".md"):
@@ -286,7 +289,7 @@ class HarnessLoaderService(LayerDetectionService):
                     )
                     imported.append(agent_name)
                 except Exception as e:
-                    print(f"Failed to import agent {agent_name}: {e}")
+                    logger.error("Failed to import agent %s: %s", agent_name, e)
 
         return imported
 
@@ -312,7 +315,7 @@ class HarnessLoaderService(LayerDetectionService):
                         )
                         imported.append(skill_name)
                     except Exception as e:
-                        print(f"Failed to import skill {skill_name}: {e}")
+                        logger.error("Failed to import skill %s: %s", skill_name, e)
 
         return imported
 
@@ -361,7 +364,7 @@ class HarnessLoaderService(LayerDetectionService):
                 )
                 imported.append(hook_name)
             except Exception as e:
-                print(f"Failed to import hook {hook_name}: {e}")
+                logger.error("Failed to import hook %s: %s", hook_name, e)
 
         return imported
 
@@ -394,7 +397,7 @@ class HarnessLoaderService(LayerDetectionService):
                 )
                 imported.append(command_name)
             except Exception as e:
-                print(f"Failed to import command {command_name}: {e}")
+                logger.error("Failed to import command %s: %s", command_name, e)
 
         return imported
 
@@ -452,6 +455,6 @@ class HarnessLoaderService(LayerDetectionService):
 
                             imported.append(team_name)
                     except Exception as e:
-                        print(f"Failed to import team {team_name}: {e}")
+                        logger.error("Failed to import team %s: %s", team_name, e)
 
         return imported

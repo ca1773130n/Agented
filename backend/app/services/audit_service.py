@@ -155,7 +155,7 @@ class AuditService:
 
             AuditService._save_audit_index(audits)
         except Exception as e:
-            print(f"Error rebuilding audit index: {e}")
+            logger.error("Error rebuilding audit index: %s", e)
 
         return audits
 

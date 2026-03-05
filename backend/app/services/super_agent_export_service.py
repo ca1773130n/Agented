@@ -22,6 +22,8 @@ from app.database import (
     get_super_agent_documents,
 )
 
+logger = logging.getLogger(__name__)
+
 log = logging.getLogger(__name__)
 
 

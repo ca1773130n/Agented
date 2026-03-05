@@ -3,6 +3,7 @@
 import re
 from datetime import datetime, timedelta
 from typing import List, Optional
+import logging
 
 from ..database import (
     clear_account_rate_limit as db_clear_rate_limit,
@@ -13,6 +14,8 @@ from ..database import (
     get_all_accounts_with_health,
     update_account_rate_limit,
 )
+
+logger = logging.getLogger(__name__)
 
 # Default cooldown when no retry-after header is found
 DEFAULT_COOLDOWN_SECONDS = 60

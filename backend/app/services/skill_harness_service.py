@@ -3,6 +3,7 @@
 import json
 from http import HTTPStatus
 from typing import Tuple
+import logging
 
 from ..database import (
     add_user_skill,
@@ -15,6 +16,8 @@ from ..database import (
     update_user_skill,
 )
 from .skill_marketplace_service import SkillMarketplaceService
+
+logger = logging.getLogger(__name__)
 
 
 class SkillHarnessService(SkillMarketplaceService):

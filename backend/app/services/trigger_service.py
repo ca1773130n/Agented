@@ -3,6 +3,7 @@
 from http import HTTPStatus
 from pathlib import Path
 from typing import Tuple
+import logging
 
 from ..database import (
     PREDEFINED_TRIGGER_ID,
@@ -31,6 +32,8 @@ from .budget_service import BudgetService
 from .execution_service import ExecutionService
 from .github_service import GitHubService
 from .scheduler_service import SchedulerService
+
+logger = logging.getLogger(__name__)
 
 
 class TriggerService:
