@@ -831,6 +831,18 @@ function handleSidebarKeydown(e: KeyboardEvent) {
         </button>
       </div>
 
+      <!-- Execution Search (standalone nav item) -->
+      <button type="button" class="nav-group-toggle" :class="{ active: currentRouteName === 'execution-search' }" :aria-current="currentRouteName === 'execution-search' ? 'page' : undefined" :title="isCollapsedDesktop() ? 'Execution Search' : undefined" @click="navTo('execution-search')">
+        <span class="nav-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <circle cx="11" cy="11" r="8"/>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+          </svg>
+        </span>
+        <span class="nav-text">Execution Search</span>
+        <span class="nav-indicator"></span>
+      </button>
+
       <!-- Usage History (expandable) -->
       <button type="button" class="nav-group-toggle" :class="{ active: currentRouteName === 'usage-history' }" :aria-expanded="expandedSections.usage" :aria-current="sidebarActive('usage-history') ? 'page' : undefined" :title="isCollapsedDesktop() ? 'Usage' : undefined" @click="toggleSection( 'usage')">
         <span class="nav-icon">

@@ -1,6 +1,13 @@
 import type { RouteRecordRaw } from 'vue-router';
 
 export const miscRoutes: RouteRecordRaw[] = [
+  // Execution Search
+  {
+    path: '/execution-search',
+    name: 'execution-search',
+    component: () => import('../../views/ExecutionSearchPage.vue'),
+    meta: { title: 'Execution Search' },
+  },
   // Sketch
   {
     path: '/sketches',
