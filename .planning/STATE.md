@@ -2,7 +2,7 @@
 
 **Milestone:** v0.1.0 -- Production Hardening (active) / v0.2.0 -- Miscellaneous
 **Current Phase:** Phase 8 (autopilot: executing)
-**Current Plan:** 05
+**Current Plan:** 06
 **Status:** executing
 
 **Progress:** [███░░░░░░░] 33%
@@ -20,7 +20,7 @@
 | Phase | Name | Status | Verification |
 |-------|------|--------|--------------|
 | 7 | Workflow Automation & Pipeline Intelligence | Complete (3/3) — Verified | proxy |
-| 8 | Execution Intelligence & Replay | In Progress (4/5) | proxy |
+| 8 | Execution Intelligence & Replay | Complete (5/5) | proxy |
 | 9 | Bot Authoring & Template Ecosystem | Pending | proxy |
 | 10 | Analytics & Monitoring Dashboards | In Progress (4/5) | proxy |
 | 11 | Enterprise Integrations & Governance | Pending | proxy |
@@ -80,6 +80,10 @@
 - [Phase 8]: Simple 200-line pagination for large diffs instead of virtual scrolling for v1
 - [Phase 8]: Expandable table row pattern for replay integration in ExecutionHistory
 - [Phase 8]: Replayable statuses: success, failed, timeout, cancelled, interrupted
+- [Phase 8]: Collaborative viewer generates viewer_id per session via crypto.randomUUID(), no localStorage persistence for v1
+- [Phase 8]: SSE event listeners (presence_join/leave, inline_comment) attached to existing execution stream, no separate SSE connection
+- [Phase 8]: BranchNavigator uses simple indented list tree, not heavyweight graph visualization
+- [Phase 8]: Chunk/branch expansion rows follow existing replay expansion pattern in ExecutionHistory table
 
 ## Blockers
 
@@ -111,8 +115,9 @@ None -- no phases have deferred verification level in this milestone.
 | 08 | 02 | 17min | 3 | 11 |
 | 08 | 03 | 10min | 2 | 9 |
 | 08 | 04 | 3min | 2 | 6 |
+| 08 | 05 | 6min | 2 | 12 |
 
 ## Session Log
 
 - **Last session:** 2026-03-05
-- **Stopped at:** Completed 08-04-PLAN.md (replay frontend components, diff viewer, ExecutionHistory integration)
+- **Stopped at:** Completed 08-05-PLAN.md (collaborative viewing, branch navigation, chunk results frontend)
