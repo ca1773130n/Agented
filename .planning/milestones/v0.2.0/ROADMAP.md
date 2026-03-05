@@ -74,7 +74,7 @@ Plans:
 
 ---
 
-### Phase 9: Bot Authoring & Template Ecosystem
+### Phase 9: Bot Authoring & Template Ecosystem ✅ (2026-03-05)
 
 **Goal:** Users can discover and deploy pre-built bot templates, create new bots via natural language description, build a shared prompt snippet library, track prompt template history with rollback, and test webhook payloads before committing.
 
@@ -87,10 +87,10 @@ Plans:
 **Plans:** 4 plans
 
 Plans:
-- [ ] 09-01-PLAN.md -- Bot template marketplace backend + NL bot creator service (TPL-01, TPL-02)
-- [ ] 09-02-PLAN.md -- Prompt snippet library + version history enhancement + preview endpoint (TPL-03, TPL-04, TPL-05)
-- [ ] 09-03-PLAN.md -- Frontend: template marketplace, NL creator, snippet library views + API clients
-- [ ] 09-04-PLAN.md -- Frontend: version history + webhook test console components + backend tests
+- [x] 09-01-PLAN.md -- Bot template marketplace backend + NL bot creator service (TPL-01, TPL-02)
+- [x] 09-02-PLAN.md -- Prompt snippet library + version history enhancement + preview endpoint (TPL-03, TPL-04, TPL-05)
+- [x] 09-03-PLAN.md -- Frontend: template marketplace, NL creator, snippet library views + API clients
+- [x] 09-04-PLAN.md -- Frontend: version history + webhook test console components + backend tests
 
 **Success Criteria:**
 
@@ -339,7 +339,7 @@ Plans:
 | 15 | Code Consistency & Standards | CON-01..CON-09 (9) | Pending | sanity |
 | 16 | Frontend Quality & User Experience | UX-01..UX-09 (9) | Pending | sanity |
 
-**Total:** 10 phases, 89 requirements, 10% complete (1/10 phases)
+**Total:** 10 phases, 89 requirements, 30% complete (3/10 phases)
 
 ---
 
