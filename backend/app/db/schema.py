@@ -1696,6 +1696,31 @@ def create_fresh_schema(conn):
     """)
     conn.execute("CREATE INDEX IF NOT EXISTS idx_bot_templates_slug ON bot_templates(slug)")
 
+    # --- v0.2.0: Execution queue (durable dispatch with concurrency control) ---
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS execution_queue (
+            id TEXT PRIMARY KEY,
+            trigger_id TEXT NOT NULL,
+            trigger_type TEXT NOT NULL,
+            message_text TEXT,
+            event_data TEXT,
+            status TEXT NOT NULL DEFAULT 'pending',
+            priority INTEGER DEFAULT 0,
+            created_at TEXT NOT NULL,
+            dispatched_at TEXT,
+            completed_at TEXT
+        )
+    """)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_eq_status ON execution_queue(status)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_eq_trigger_status ON execution_queue(trigger_id, status)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_eq_priority_created ON execution_queue(priority DESC, created_at ASC)"
+    )
+
     # --- v0.2.0: Circuit breakers (per-backend resilience) ---
     conn.execute("""
         CREATE TABLE IF NOT EXISTS circuit_breakers (

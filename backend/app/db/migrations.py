@@ -3324,6 +3324,35 @@ def _migrate_v73_add_circuit_breakers_table(conn):
     conn.commit()
 
 
+def _migrate_v74_add_execution_queue_table(conn):
+    """Add execution_queue table for durable dispatch with per-trigger concurrency."""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS execution_queue (
+            id TEXT PRIMARY KEY,
+            trigger_id TEXT NOT NULL,
+            trigger_type TEXT NOT NULL,
+            message_text TEXT,
+            event_data TEXT,
+            status TEXT NOT NULL DEFAULT 'pending',
+            priority INTEGER DEFAULT 0,
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            dispatched_at TEXT,
+            completed_at TEXT
+        )
+    """)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_eq_status ON execution_queue(status)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_eq_trigger_status ON execution_queue(trigger_id, status)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_eq_priority_created "
+        "ON execution_queue(priority DESC, created_at ASC)"
+    )
+    conn.commit()
+
+
 VERSIONED_MIGRATIONS = [
     (1, "add_github_columns", _migrate_add_github_columns),
     (2, "add_pr_reviews_table", _migrate_add_pr_reviews_table),
@@ -3403,4 +3432,5 @@ VERSIONED_MIGRATIONS = [
     (72, "add_execution_logs_fts", _migrate_v72_add_execution_logs_fts),
     # v0.2.0 resilience infrastructure
     (73, "add_circuit_breakers_table", _migrate_v73_add_circuit_breakers_table),
+    (74, "add_execution_queue_table", _migrate_v74_add_execution_queue_table),
 ]
