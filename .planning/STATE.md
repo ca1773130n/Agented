@@ -2,7 +2,7 @@
 
 **Milestone:** v0.1.0 -- Production Hardening (active) / v0.2.0 -- Miscellaneous
 **Current Phase:** Phase 9 (autopilot: executing)
-**Current Plan:** 02 of 04 (in progress)
+**Current Plan:** 03 of 04 (in progress)
 **Status:** executing
 
 **Progress:** [█████░░░░░] 52%
@@ -11,8 +11,8 @@
 
 ## Position
 
-- **Last completed:** Phase 9 Plan 02 (Prompt Snippet Library, Version History, Full Preview)
-- **Next up:** Phase 9 Plan 03
+- **Last completed:** Phase 9 Plan 03 (Bot Template Marketplace, NL Creator, Snippet Library Frontend)
+- **Next up:** Phase 9 Plan 04
 - **Blocked by:** Nothing
 
 ## Phase Summary
@@ -21,7 +21,7 @@
 |-------|------|--------|--------------|
 | 7 | Workflow Automation & Pipeline Intelligence | Complete (3/3) — Verified | proxy |
 | 8 | Execution Intelligence & Replay | Complete (5/5) — Verified | proxy |
-| 9 | Bot Authoring & Template Ecosystem | In Progress (2/4) | proxy |
+| 9 | Bot Authoring & Template Ecosystem | In Progress (3/4) | proxy |
 | 10 | Analytics & Monitoring Dashboards | Complete (5/5) | proxy |
 | 11 | Enterprise Integrations & Governance | Pending | proxy |
 | 12 | Specialized Automation Bots | Pending | proxy |
@@ -94,6 +94,8 @@
 - [Phase 9]: Circular snippet references detected via visited set with MAX_DEPTH=5 hard limit
 - [Phase 9]: Rollback restores target version's new_template (state AT that version), logs with author='rollback'
 - [Phase 9]: preview-prompt-full uses ExecutionService.build_command() without subprocess
+- [Phase 9]: SSE streaming for NL generator uses fetch+ReadableStream since POST body required (EventSource is GET-only)
+- [Phase 9]: snippetRef() helper avoids Vue template interpolation collision with {{}} snippet syntax
 
 ## Blockers
 
@@ -129,8 +131,9 @@ None -- no phases have deferred verification level in this milestone.
 | 08 | 05 | 6min | 2 | 12 |
 | 09 | 01 | 16min | 2 | 12 |
 | 09 | 02 | 16min | 2 | 13 |
+| 09 | 03 | 5min | 2 | 9 |
 
 ## Session Log
 
 - **Last session:** 2026-03-05
-- **Stopped at:** Completed 09-02-PLAN.md (prompt snippet library, version history, rollback, full preview)
+- **Stopped at:** Completed 09-03-PLAN.md (bot template marketplace, NL creator, snippet library frontend)
