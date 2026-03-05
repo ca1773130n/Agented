@@ -40,6 +40,7 @@ export { branchApi } from './conversation-branches';
 export { chunkApi } from './chunks';
 export { botTemplateApi } from './bot-templates';
 export { promptSnippetApi } from './prompt-snippets';
+export { specializedBotApi } from './specialized-bots';
 
 // Constant exports from types
 export { CLAUDE_MODELS, OPENCODE_MODELS } from './types';
@@ -319,6 +320,13 @@ export type {
   // Prompt History & Preview types
   PromptHistoryEntry,
   PreviewPromptFullResponse,
+
+  // Specialized Bot types
+  SpecializedBotStatus,
+  SpecializedBotHealth,
+  ExecutionSearchResult,
+  ExecutionSearchResponse,
+  ExecutionSearchStats,
 } from './types';
 
 // GRD types (from grd module, not types module)
