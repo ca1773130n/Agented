@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 
 from ..database import get_trigger
 from ..models.common import PaginationQuery
+from ..services.budget_service import BudgetService
 from ..services.execution_service import ExecutionService
 from ..services.rbac_service import require_role
 from ..services.trigger_service import TriggerService
@@ -246,6 +247,30 @@ def preview_trigger_prompt_full(path: TriggerPath):
     payload = request.get_json() or {}
     result, status = TriggerService.preview_prompt_full(path.trigger_id, payload)
     return result, status
+
+
+@triggers_bp.post("/<trigger_id>/dry-run")
+@require_role("viewer", "operator", "editor", "admin")
+def dry_run_trigger(path: TriggerPath):
+    """Dry-run: render prompt, show CLI command, estimate cost -- no subprocess (API-01)."""
+    data = request.get_json() or {}
+    result, status = TriggerService.dry_run(path.trigger_id, data)
+    return result, status
+
+
+@triggers_bp.post("/<trigger_id>/estimate-cost")
+@require_role("viewer", "operator", "editor", "admin")
+def estimate_trigger_cost(path: TriggerPath):
+    """Estimate token count and cost for a trigger execution (API-08)."""
+    data = request.get_json() or {}
+    preview, status = TriggerService.preview_prompt(path.trigger_id, data)
+    if status != HTTPStatus.OK:
+        return preview, status
+    prompt = preview["rendered_prompt"]
+    trigger = get_trigger(path.trigger_id)
+    model = trigger.get("model") or "claude-sonnet-4"
+    estimate = BudgetService.estimate_cost(prompt, model, "trigger", path.trigger_id)
+    return {"trigger_id": path.trigger_id, "model": model, "estimate": estimate}, HTTPStatus.OK
 
 
 @triggers_bp.post("/generate/stream")

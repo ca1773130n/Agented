@@ -27,6 +27,7 @@ from ..database import (
     update_trigger_auto_resolve,
 )
 from .audit_log_service import AuditLogService
+from .budget_service import BudgetService
 from .execution_service import ExecutionService
 from .github_service import GitHubService
 from .scheduler_service import SchedulerService
@@ -642,4 +643,49 @@ class TriggerService:
             "trigger_name": trigger["name"],
             "unresolved_placeholders": [f"{{{p}}}" for p in unresolved_placeholders],
             "unresolved_snippets": [f"{{{{{s}}}}}" for s in unresolved_snippets],
+        }, HTTPStatus.OK
+
+    @staticmethod
+    def dry_run(trigger_id: str, sample_data: dict) -> Tuple[dict, HTTPStatus]:
+        """Full dry-run: render prompt, build CLI command, estimate cost (API-01).
+
+        Returns rendered prompt, CLI command string, backend type, model, and
+        estimated token count without spawning a subprocess.
+        """
+        # Re-use preview_prompt to render the prompt
+        preview, status = TriggerService.preview_prompt(trigger_id, sample_data)
+        if status != HTTPStatus.OK:
+            return preview, status
+
+        rendered_prompt = preview["rendered_prompt"]
+
+        trigger = get_trigger(trigger_id)
+        backend_type = trigger.get("backend_type", "claude")
+        model = trigger.get("model") or "claude-sonnet-4"
+        allowed_tools = trigger.get("allowed_tools")
+
+        # Build CLI command without executing
+        cli_command_parts = ExecutionService.build_command(
+            backend=backend_type,
+            prompt=rendered_prompt,
+            model=model,
+            allowed_tools=allowed_tools,
+        )
+
+        # Estimate cost
+        estimate = BudgetService.estimate_cost(
+            rendered_prompt,
+            model,
+            entity_type="trigger",
+            entity_id=trigger_id,
+        )
+
+        return {
+            "rendered_prompt": rendered_prompt,
+            "cli_command": " ".join(cli_command_parts),
+            "backend_type": backend_type,
+            "model": model,
+            "estimated_tokens": estimate,
+            "trigger_id": trigger_id,
+            "trigger_name": trigger["name"],
         }, HTTPStatus.OK
