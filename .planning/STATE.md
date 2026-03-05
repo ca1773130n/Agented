@@ -2,7 +2,7 @@
 
 **Milestone:** v0.1.0 -- Production Hardening (active) / v0.2.0 -- Miscellaneous
 **Current Phase:** Phase 14 (autopilot: executing)
-**Current Plan:** 01 of 04
+**Current Plan:** 02 of 04
 **Status:** executing
 
 **Progress:** [██████████] 90%
@@ -11,8 +11,8 @@
 
 ## Position
 
-- **Last completed:** Phase 14 Plan 01 (Unified Error Response & Request ID Propagation)
-- **Next up:** Phase 14 Plan 02
+- **Last completed:** Phase 14 Plan 02 (Pagination & Execution Filtering)
+- **Next up:** Phase 14 Plan 03
 - **Blocked by:** Nothing
 
 ## Phase Summary
@@ -26,7 +26,7 @@
 | 11 | Enterprise Integrations & Governance | Pending | proxy |
 | 12 | Specialized Automation Bots | Complete (3/3) | proxy |
 | 13 | Execution Resilience & Infrastructure | Complete (4/4) — Verified | proxy |
-| 14 | API Hardening & Developer Experience | In Progress (1/4) | proxy |
+| 14 | API Hardening & Developer Experience | In Progress (2/4) | proxy |
 | 15 | Code Consistency & Standards | Pending | sanity |
 | 16 | Frontend Quality & User Experience | In Progress (5/5) | sanity |
 
@@ -126,6 +126,8 @@
 - [Phase 14]: Keep legacy 'error' field alongside new 'code'/'message' for indefinite backward compatibility
 - [Phase 14]: Extract Retry-After from Flask-Limiter limit.get_expiry() since RateLimitExceeded does not set retry_after
 - [Phase 14]: 429 handler returns explicit Response with Retry-After header (not plain tuple) to propagate header
+- [Phase 14]: SQL LIMIT/OFFSET pushed to DB layer (not Python list slicing) for all 15+ list endpoints
+- [Phase 14]: Composable WHERE clause builder with parameterized queries for execution filtering (AND logic)
 
 ## Blockers
 
@@ -171,8 +173,9 @@ None -- no phases have deferred verification level in this milestone.
 | 13 | 03 | 8min | 2 | 7 |
 | 13 | 04 | 38min | 2 | 12 |
 | 14 | 01 | 14min | 2 | 5 |
+| 14 | 02 | ~20min | 2 | 30 |
 
 ## Session Log
 
 - **Last session:** 2026-03-06
-- **Stopped at:** Completed 14-01-PLAN.md (Unified Error Response & Request ID Propagation)
+- **Stopped at:** Completed 14-02-PLAN.md (Pagination & Execution Filtering)
