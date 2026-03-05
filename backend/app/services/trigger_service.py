@@ -13,6 +13,7 @@ from ..database import (
     delete_trigger,
     get_all_triggers,
     get_project,
+    get_prompt_template_history,
     get_trigger,
     get_trigger_by_name,
     list_paths_for_trigger,
@@ -532,3 +533,113 @@ class TriggerService:
             }, HTTPStatus.OK
         else:
             return {"error": "Failed to update"}, HTTPStatus.INTERNAL_SERVER_ERROR
+
+    @staticmethod
+    def rollback_prompt_template(
+        trigger_id: str, version_id: int
+    ) -> Tuple[dict, HTTPStatus]:
+        """Rollback a trigger's prompt template to a previous version."""
+        trigger = get_trigger(trigger_id)
+        if not trigger:
+            return {"error": "Trigger not found"}, HTTPStatus.NOT_FOUND
+
+        # Find the history entry
+        history = get_prompt_template_history(trigger_id, limit=1000)
+        target_entry = None
+        for entry in history:
+            if entry["id"] == version_id:
+                target_entry = entry
+                break
+
+        if not target_entry:
+            return {"error": "Version not found"}, HTTPStatus.NOT_FOUND
+
+        if target_entry["trigger_id"] != trigger_id:
+            return {"error": "Version does not belong to this trigger"}, HTTPStatus.BAD_REQUEST
+
+        current_template = trigger["prompt_template"]
+        restored_template = target_entry["new_template"]
+
+        # Update the trigger's prompt_template
+        success = update_trigger(trigger_id, prompt_template=restored_template)
+        if not success:
+            return {"error": "Failed to rollback"}, HTTPStatus.INTERNAL_SERVER_ERROR
+
+        # Log the rollback as a new history entry
+        log_prompt_template_change(
+            trigger_id, current_template, restored_template, author="rollback"
+        )
+
+        return {
+            "message": "Prompt template rolled back",
+            "old_template": current_template,
+            "new_template": restored_template,
+            "rolled_back_to_version": version_id,
+        }, HTTPStatus.OK
+
+    @staticmethod
+    def preview_prompt_full(
+        trigger_id: str, payload: dict
+    ) -> Tuple[dict, HTTPStatus]:
+        """Full dry-run preview: render prompt with snippets and placeholders, show CLI command.
+
+        CRITICAL: This method does NOT spawn any subprocess.
+        """
+        import re
+
+        trigger = get_trigger(trigger_id)
+        if not trigger:
+            return {"error": "Trigger not found"}, HTTPStatus.NOT_FOUND
+
+        from .prompt_renderer import PromptRenderer
+
+        # Build event context from payload
+        event = None
+        if any(
+            k in payload
+            for k in ("pr_url", "pr_number", "pr_title", "pr_author", "repo_url", "repo_full_name")
+        ):
+            event = {
+                "type": "github_pr",
+                "pr_url": payload.get("pr_url", ""),
+                "pr_number": payload.get("pr_number", ""),
+                "pr_title": payload.get("pr_title", ""),
+                "pr_author": payload.get("pr_author", ""),
+                "repo_url": payload.get("repo_url", ""),
+                "repo_full_name": payload.get("repo_full_name", ""),
+            }
+
+        rendered_prompt = PromptRenderer.render(
+            trigger=trigger,
+            trigger_id=trigger_id,
+            message_text=payload.get("message", ""),
+            paths_str=payload.get("paths", "/path/to/project"),
+            event=event,
+        )
+
+        # Build CLI command without executing
+        backend_type = trigger.get("backend_type", "claude")
+        model = trigger.get("model")
+        allowed_tools = trigger.get("allowed_tools")
+
+        cli_command_parts = ExecutionService.build_command(
+            backend=backend_type,
+            prompt=rendered_prompt,
+            model=model,
+            allowed_tools=allowed_tools,
+        )
+
+        # Find unresolved placeholders and snippets
+        unresolved_placeholders = re.findall(r"\{(\w+)\}", rendered_prompt)
+        unresolved_snippets = re.findall(r"\{\{(\w[\w\-]*)\}\}", rendered_prompt)
+
+        return {
+            "rendered_prompt": rendered_prompt,
+            "cli_command": " ".join(cli_command_parts),
+            "cli_command_parts": cli_command_parts,
+            "backend_type": backend_type,
+            "model": model,
+            "trigger_name": trigger["name"],
+            "unresolved_placeholders": [f"{{{p}}}" for p in unresolved_placeholders],
+            "unresolved_snippets": [f"{{{{{s}}}}}" for s in unresolved_snippets],
+        }, HTTPStatus.OK

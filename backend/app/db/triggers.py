@@ -6,6 +6,7 @@ and PR reviews are kept here for domain cohesion — triggers own their
 execution history and review records.
 """
 
+import difflib
 import logging
 import os
 import re
@@ -634,16 +635,31 @@ def get_paths_for_trigger_detailed(trigger_id: str) -> List[Dict]:
         return [dict(row) for row in cursor.fetchall()]
 
 
-def log_prompt_template_change(trigger_id: str, old_template: str, new_template: str) -> bool:
+def log_prompt_template_change(
+    trigger_id: str, old_template: str, new_template: str, author: str = "system"
+) -> bool:
     """Record a prompt template change in trigger_template_history. Returns True on success."""
+    # Compute unified diff
+    diff_lines = list(
+        difflib.unified_diff(
+            old_template.splitlines(keepends=True),
+            new_template.splitlines(keepends=True),
+            fromfile="previous",
+            tofile="current",
+            lineterm="",
+        )
+    )
+    diff_text = "\n".join(diff_lines)
+
     with get_connection() as conn:
         try:
             conn.execute(
                 """
-                INSERT INTO trigger_template_history (trigger_id, old_template, new_template)
-                VALUES (?, ?, ?)
+                INSERT INTO trigger_template_history
+                    (trigger_id, old_template, new_template, author, diff_text)
+                VALUES (?, ?, ?, ?, ?)
                 """,
-                (trigger_id, old_template, new_template),
+                (trigger_id, old_template, new_template, author, diff_text),
             )
             conn.commit()
             return True
@@ -657,7 +673,7 @@ def get_prompt_template_history(trigger_id: str, limit: int = 50) -> List[dict]:
     with get_connection() as conn:
         cursor = conn.execute(
             """
-            SELECT id, trigger_id, old_template, new_template, changed_at
+            SELECT id, trigger_id, old_template, new_template, author, diff_text, changed_at
             FROM trigger_template_history
             WHERE trigger_id = ?
             ORDER BY changed_at DESC

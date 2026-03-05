@@ -191,6 +191,58 @@ def preview_trigger_prompt(path: TriggerPath):
     return result, status
 
 
+@triggers_bp.get("/<trigger_id>/prompt-history")
+@require_role("viewer", "operator", "editor", "admin")
+def get_prompt_history(path: TriggerPath):
+    """Get prompt template change history for a trigger."""
+    from ..database import get_prompt_template_history
+
+    trigger = get_trigger(path.trigger_id)
+    if not trigger:
+        return {"error": "Trigger not found"}, HTTPStatus.NOT_FOUND
+
+    history = get_prompt_template_history(path.trigger_id, limit=50)
+    return {"history": history}, HTTPStatus.OK
+
+
+@triggers_bp.post("/<trigger_id>/rollback-prompt")
+@require_role("editor", "admin")
+def rollback_prompt(path: TriggerPath):
+    """Rollback prompt template to a previous version.
+
+    Request body (JSON):
+    - version_id (int): The history entry ID to rollback to.
+    """
+    data = request.get_json()
+    if not data:
+        return {"error": "JSON body required"}, HTTPStatus.BAD_REQUEST
+
+    version_id = data.get("version_id")
+    if version_id is None:
+        return {"error": "version_id is required"}, HTTPStatus.BAD_REQUEST
+
+    try:
+        version_id = int(version_id)
+    except (ValueError, TypeError):
+        return {"error": "version_id must be an integer"}, HTTPStatus.BAD_REQUEST
+
+    result, status = TriggerService.rollback_prompt_template(path.trigger_id, version_id)
+    return result, status
+
+
+@triggers_bp.post("/<trigger_id>/preview-prompt-full")
+@require_role("viewer", "operator", "editor", "admin")
+def preview_trigger_prompt_full(path: TriggerPath):
+    """Full dry-run preview: render prompt with snippets, placeholders, and CLI command.
+
+    Accepts a JSON body with custom payload values for substitution.
+    Does NOT spawn any subprocess -- read-only operation.
+    """
+    payload = request.get_json() or {}
+    result, status = TriggerService.preview_prompt_full(path.trigger_id, payload)
+    return result, status
+
+
 @triggers_bp.post("/generate/stream")
 @require_role("editor", "admin")
 def generate_trigger_stream():
