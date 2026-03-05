@@ -745,6 +745,7 @@ from .triggers import (  # noqa: F401
     remove_project_from_trigger,
     remove_project_path,
     update_execution_log,
+    get_execution_logs_filtered,
     update_execution_status_cas,
     update_pr_review,
     update_trigger,

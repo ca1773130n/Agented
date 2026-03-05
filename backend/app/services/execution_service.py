@@ -93,6 +93,8 @@ class ExecutionState:
     TIMEOUT = "timeout"
     CANCELLED = "cancelled"
     IDLE = "idle"
+    PAUSED = "paused"
+    PAUSE_TIMEOUT = "pause_timeout"
 
 
 class ExecutionService:

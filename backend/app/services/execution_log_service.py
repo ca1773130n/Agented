@@ -239,7 +239,7 @@ class ExecutionLogService:
 
         # Check if execution is already complete
         execution = get_execution_log(execution_id)
-        if execution and execution.get("status") not in ("running", None):
+        if execution and execution.get("status") not in ("running", "paused", None):
             yield cls._format_sse(
                 "complete",
                 {

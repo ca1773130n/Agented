@@ -938,6 +938,29 @@ def update_execution_status_cas(
         return cursor.rowcount > 0
 
 
+def get_execution_logs_filtered(
+    status: Optional[str] = None, trigger_id: Optional[str] = None
+) -> List[dict]:
+    """Query execution logs with optional status and trigger_id filters.
+
+    Returns matching rows ordered by created_at DESC.
+    """
+    with get_connection() as conn:
+        query = "SELECT * FROM execution_logs WHERE 1=1"
+        params: list = []
+
+        if status is not None:
+            query += " AND status = ?"
+            params.append(status)
+        if trigger_id is not None:
+            query += " AND trigger_id = ?"
+            params.append(trigger_id)
+
+        query += " ORDER BY created_at DESC"
+        cursor = conn.execute(query, params)
+        return [dict(row) for row in cursor.fetchall()]
+
+
 def get_execution_log(execution_id: str) -> Optional[dict]:
     """Get a single execution log by execution_id."""
     with get_connection() as conn:
