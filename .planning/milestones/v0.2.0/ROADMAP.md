@@ -45,7 +45,7 @@ Plans:
 
 ---
 
-### Phase 8: Execution Intelligence & Replay
+### Phase 8: Execution Intelligence & Replay ✅ (2026-03-05)
 
 **Goal:** Users can replay executions for A/B comparison, automatically feed bots only the relevant diff context, chunk large contexts intelligently, branch conversation histories, and collaboratively watch live runs.
 
@@ -58,11 +58,11 @@ Plans:
 **Plans:** 5 plans
 
 Plans:
-- [ ] 08-01-PLAN.md -- Execution replay service + diff-aware context injection backend (EXE-01, EXE-02)
-- [ ] 08-02-PLAN.md -- Smart chunking service + conversation branching backend (EXE-03, EXE-04)
-- [ ] 08-03-PLAN.md -- Collaborative viewer service with presence and inline comments backend (EXE-05)
-- [ ] 08-04-PLAN.md -- Replay comparison and diff viewer frontend components (EXE-01, EXE-02)
-- [ ] 08-05-PLAN.md -- Presence, comments, chunk results, and branch navigator frontend components (EXE-03, EXE-04, EXE-05)
+- [x] 08-01-PLAN.md -- Execution replay service + diff-aware context injection backend (EXE-01, EXE-02)
+- [x] 08-02-PLAN.md -- Smart chunking service + conversation branching backend (EXE-03, EXE-04)
+- [x] 08-03-PLAN.md -- Collaborative viewer service with presence and inline comments backend (EXE-05)
+- [x] 08-04-PLAN.md -- Replay comparison and diff viewer frontend components (EXE-01, EXE-02)
+- [x] 08-05-PLAN.md -- Presence, comments, chunk results, and branch navigator frontend components (EXE-03, EXE-04, EXE-05)
 
 **Success Criteria:**
 
