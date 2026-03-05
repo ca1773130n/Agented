@@ -33,6 +33,7 @@ export { workflowApi, workflowExecutionApi } from './workflows';
 export { sketchApi } from './sketches';
 export { grdApi } from './grd';
 export { mcpServerApi } from './mcp-servers';
+export { replayApi } from './replay';
 
 // Constant exports from types
 export { CLAUDE_MODELS, OPENCODE_MODELS } from './types';
@@ -264,6 +265,12 @@ export type {
   McpServer,
   ProjectMcpServerDetail,
   McpSyncResult,
+
+  // Replay & Diff types
+  ReplayComparison,
+  DiffLine,
+  OutputDiff,
+  DiffContextPreview,
 } from './types';
 
 // GRD types (from grd module, not types module)
