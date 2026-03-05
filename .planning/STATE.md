@@ -2,17 +2,17 @@
 
 **Milestone:** v0.1.0 -- Production Hardening (active) / v0.2.0 -- Miscellaneous
 **Current Phase:** Phase 13 (autopilot: executing)
-**Current Plan:** 03 of 04
-**Status:** executing
+**Current Plan:** 04 of 04
+**Status:** phase_complete
 
-**Progress:** [█████████░] 87%
+**Progress:** [██████████] 90%
 
 ---
 
 ## Position
 
-- **Last completed:** Phase 13 Plan 03 (Pause/Resume & Bulk Cancel)
-- **Next up:** Phase 13 Plan 04
+- **Last completed:** Phase 13 Plan 04 (Webhook Validation & Execution Analytics)
+- **Next up:** Phase 14 (API Hardening & Developer Experience)
 - **Blocked by:** Nothing
 
 ## Phase Summary
@@ -25,7 +25,7 @@
 | 10 | Analytics & Monitoring Dashboards | Complete (5/5) | proxy |
 | 11 | Enterprise Integrations & Governance | Pending | proxy |
 | 12 | Specialized Automation Bots | Complete (3/3) | proxy |
-| 13 | Execution Resilience & Infrastructure | In Progress (3/4) | proxy |
+| 13 | Execution Resilience & Infrastructure | Complete (4/4) | proxy |
 | 14 | API Hardening & Developer Experience | Pending | proxy |
 | 15 | Code Consistency & Standards | Pending | sanity |
 | 16 | Frontend Quality & User Experience | In Progress (5/5) | sanity |
@@ -120,6 +120,9 @@
 - [Phase 13]: CAS status updates in queue prevent dispatch races between threads
 - [Phase 13]: Stale dispatching entries reset to pending on server restart for crash recovery
 - [Phase 13]: Team-mode and direct-mode triggers both route through the queue uniformly
+- [Phase 13]: Timestamp-only replay protection (no DB table) -- simpler, sufficient for 5-min window
+- [Phase 13]: EXECUTION_LOG_RETENTION_DAYS=0 default means unlimited retention, operators opt-in to cleanup
+- [Phase 13]: 403 Forbidden for invalid webhook signatures (not 401) per webhooks.fyi best practices
 
 ## Blockers
 
@@ -163,8 +166,9 @@ None -- no phases have deferred verification level in this milestone.
 | 13 | 01 | 14min | 2 | 7 |
 | 13 | 02 | 13min | 2 | 9 |
 | 13 | 03 | 8min | 2 | 7 |
+| 13 | 04 | 38min | 2 | 12 |
 
 ## Session Log
 
 - **Last session:** 2026-03-05
-- **Stopped at:** Completed 13-02-PLAN.md (Execution Queue Service)
+- **Stopped at:** Completed 13-04-PLAN.md (Webhook Validation & Execution Analytics)
