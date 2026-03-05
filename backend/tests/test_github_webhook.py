@@ -52,7 +52,7 @@ class TestGitHubWebhookSignature:
             content_type="application/json",
             headers={"X-GitHub-Event": "pull_request", "X-Hub-Signature-256": "sha256=invalid"},
         )
-        assert response.status_code == 401
+        assert response.status_code == 403
 
     def test_valid_signature_accepted(self, client, monkeypatch):
         """Request with valid signature should be accepted."""

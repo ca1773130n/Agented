@@ -10,6 +10,7 @@ from flask_openapi3 import APIBlueprint, Tag
 logger = logging.getLogger(__name__)
 
 from ..services.execution_service import ExecutionService
+from ..services.webhook_validation_service import WebhookValidationService
 
 tag = Tag(name="webhook", description="General JSON webhook receiver")
 webhook_bp = APIBlueprint("webhook", __name__, abp_tags=[tag])

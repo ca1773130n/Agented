@@ -2,7 +2,6 @@
 
 import datetime
 import hashlib
-import hmac
 import json
 import logging
 import os
@@ -1182,19 +1181,6 @@ class ExecutionService:
 
         return pr_urls
 
-    @staticmethod
-    def _verify_webhook_hmac(raw_payload: bytes, signature_header: str, secret: str) -> bool:
-        """Verify HMAC-SHA256 signature for a webhook payload.
-
-        Signature header format: sha256=<hex-digest>
-        Returns True if the signature is valid, False otherwise.
-        """
-        if not signature_header or not signature_header.startswith("sha256="):
-            return False
-        expected = signature_header[7:]
-        computed = hmac.new(secret.encode("utf-8"), raw_payload, hashlib.sha256).hexdigest()
-        return hmac.compare_digest(computed, expected)
-
     @classmethod
     def dispatch_webhook_event(
         cls,
@@ -1226,7 +1212,9 @@ class ExecutionService:
             # require a valid signature. Skip trigger if signature is missing or invalid.
             webhook_secret = trigger.get("webhook_secret")
             if webhook_secret:
-                if raw_payload is None or not cls._verify_webhook_hmac(
+                from .webhook_validation_service import WebhookValidationService
+
+                if raw_payload is None or not WebhookValidationService.validate_signature(
                     raw_payload, signature_header or "", webhook_secret
                 ):
                     logger.warning(

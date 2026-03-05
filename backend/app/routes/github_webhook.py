@@ -1,7 +1,5 @@
 """GitHub webhook endpoint for PR events."""
 
-import hashlib
-import hmac
 import logging
 import os
 import threading
@@ -13,6 +11,7 @@ from flask_openapi3 import APIBlueprint, Tag
 
 from ..database import add_pr_review
 from ..services.execution_service import ExecutionService
+from ..services.webhook_validation_service import WebhookValidationService
 
 logger = logging.getLogger(__name__)
 
@@ -42,27 +41,6 @@ if not GITHUB_WEBHOOK_SECRET:
     )
 
 
-def verify_github_signature(payload: bytes, signature_header: str) -> bool:
-    """Verify the GitHub webhook signature using HMAC-SHA256."""
-    if not GITHUB_WEBHOOK_SECRET:
-        logger.warning("GITHUB_WEBHOOK_SECRET not configured, rejecting webhook")
-        return False
-
-    if not signature_header:
-        return False
-
-    # GitHub sends signature as "sha256=<signature>"
-    if not signature_header.startswith("sha256="):
-        return False
-
-    expected_signature = signature_header[7:]  # Remove "sha256=" prefix
-    computed_signature = hmac.new(
-        GITHUB_WEBHOOK_SECRET.encode("utf-8"), payload, hashlib.sha256
-    ).hexdigest()
-
-    return hmac.compare_digest(computed_signature, expected_signature)
-
-
 @github_webhook_bp.post("/")
 def github_webhook():
     """
@@ -81,12 +59,11 @@ def github_webhook():
     if len(payload) > MAX_GITHUB_WEBHOOK_PAYLOAD_BYTES:
         return {"error": "Payload too large"}, HTTPStatus.REQUEST_ENTITY_TOO_LARGE
 
-    signature = request.headers.get("X-Hub-Signature-256", "")
-
-    # Verify signature
-    if not verify_github_signature(payload, signature):
-        logger.warning("GitHub webhook signature verification failed")
-        return {"error": "Invalid signature"}, HTTPStatus.UNAUTHORIZED
+    # Verify signature using unified validation service
+    is_valid, error_reason = WebhookValidationService.validate_github(request, GITHUB_WEBHOOK_SECRET)
+    if not is_valid:
+        logger.warning("GitHub webhook signature verification failed: %s", error_reason)
+        return {"error": error_reason}, HTTPStatus.FORBIDDEN
 
     # Get event type
     event_type = request.headers.get("X-GitHub-Event", "")
