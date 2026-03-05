@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router';
 import type { Execution } from '../services/api';
 import { executionApi, triggerApi, ApiError } from '../services/api';
 import ExecutionLogViewer from '../components/triggers/ExecutionLogViewer.vue';
+import ReplayComparison from '../components/triggers/ReplayComparison.vue';
 import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import LoadingState from '../components/base/LoadingState.vue';
@@ -133,6 +134,14 @@ async function handleRetryExecution(execution: Execution) {
   } finally {
     retryingId.value = null;
   }
+}
+
+const replayExpandedId = ref<string | null>(null);
+
+const REPLAYABLE_STATUSES = new Set(['success', 'failed', 'timeout', 'cancelled', 'interrupted']);
+
+function toggleReplay(executionId: string) {
+  replayExpandedId.value = replayExpandedId.value === executionId ? null : executionId;
 }
 
 const cancellingId = ref<string | null>(null);
@@ -289,6 +298,23 @@ onMounted(loadData);
                     <path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/>
                   </svg>
                 </button>
+                <button
+                  v-if="REPLAYABLE_STATUSES.has(execution.status)"
+                  class="btn-icon btn-replay"
+                  :class="{ active: replayExpandedId === execution.execution_id }"
+                  @click="toggleReplay(execution.execution_id)"
+                  title="Replay & Compare"
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M16 3h5v5M4 20L21 3M21 16v5h-5M15 15l6 6M4 4l5 5"/>
+                  </svg>
+                </button>
+              </td>
+            </tr>
+            <!-- Replay Comparison Expansion Row -->
+            <tr v-if="replayExpandedId === execution.execution_id" :key="execution.execution_id + '-replay'">
+              <td :colspan="triggerId ? 6 : 7" class="replay-expansion-cell">
+                <ReplayComparison :execution-id="execution.execution_id" />
               </td>
             </tr>
           </tbody>
@@ -684,9 +710,34 @@ onMounted(loadData);
   cursor: not-allowed;
 }
 
+.btn-icon.btn-replay {
+  color: var(--accent-violet, #8b5cf6);
+  border-color: rgba(139, 92, 246, 0.3);
+}
+
+.btn-icon.btn-replay:hover,
+.btn-icon.btn-replay.active {
+  background: rgba(139, 92, 246, 0.15);
+  color: var(--accent-violet, #8b5cf6);
+  border-color: var(--accent-violet, #8b5cf6);
+}
+
 .btn-icon svg {
   width: 16px;
   height: 16px;
+}
+
+/* Replay Expansion Row */
+.replay-expansion-cell {
+  padding: 20px 16px !important;
+  background: var(--bg-secondary);
+  border-bottom: 2px solid var(--accent-violet, #8b5cf6);
+  animation: expandIn 0.2s ease;
+}
+
+@keyframes expandIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 /* Empty State */
