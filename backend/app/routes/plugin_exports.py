@@ -8,6 +8,7 @@ from flask_openapi3 import APIBlueprint, Tag
 from pydantic import BaseModel, Field
 
 from ..database import get_plugin_exports_for_plugin
+from ..models.common import PaginationQuery
 
 tag = Tag(
     name="plugin-exports",
@@ -178,10 +179,15 @@ def test_marketplace_connection():
 
 
 @plugin_exports_bp.get("/<plugin_id>/exports")
-def list_plugin_exports(path: PluginExportPath):
+def list_plugin_exports(path: PluginExportPath, query: PaginationQuery):
     """List all export records for a plugin."""
-    exports = get_plugin_exports_for_plugin(path.plugin_id)
-    return {"exports": exports}, HTTPStatus.OK
+    exports = get_plugin_exports_for_plugin(
+        path.plugin_id, limit=query.limit, offset=query.offset or 0
+    )
+    from ..db.plugins import count_plugin_exports_for_plugin
+
+    total_count = count_plugin_exports_for_plugin(path.plugin_id)
+    return {"exports": exports, "total_count": total_count}, HTTPStatus.OK
 
 
 # =============================================================================

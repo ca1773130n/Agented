@@ -8,6 +8,7 @@ from flask_openapi3 import APIBlueprint, Tag
 from pydantic import BaseModel, Field
 
 from ..database import get_trigger
+from ..models.common import PaginationQuery
 from ..services.execution_log_service import ExecutionLogService
 from ..services.execution_queue_service import ExecutionQueueService
 
@@ -24,14 +25,14 @@ class ExecutionPath(BaseModel):
 
 
 @executions_bp.get("/triggers/<trigger_id>/executions")
-def list_trigger_executions(path: TriggerPath):
+def list_trigger_executions(path: TriggerPath, query: PaginationQuery):
     """List execution history for a trigger."""
     trigger = get_trigger(path.trigger_id)
     if not trigger:
         return {"error": "Trigger not found"}, HTTPStatus.NOT_FOUND
 
-    limit = min(request.args.get("limit", 50, type=int), 500)  # Max 500
-    offset = max(request.args.get("offset", 0, type=int), 0)  # Min 0
+    limit = min(query.limit or 50, 500)
+    offset = query.offset or 0
     status = request.args.get("status", None)
 
     executions = ExecutionLogService.get_history(
@@ -51,10 +52,10 @@ def list_trigger_executions(path: TriggerPath):
 
 
 @executions_bp.get("/executions")
-def list_all_executions():
+def list_all_executions(query: PaginationQuery):
     """List all execution history across all triggers."""
-    limit = min(request.args.get("limit", 100, type=int), 500)  # Max 500
-    offset = max(request.args.get("offset", 0, type=int), 0)  # Min 0
+    limit = min(query.limit or 100, 500)
+    offset = query.offset or 0
 
     executions = ExecutionLogService.get_history(limit=limit, offset=offset)
     total_count = ExecutionLogService.count_history()

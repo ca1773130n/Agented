@@ -265,7 +265,7 @@ class AuditService:
 
     @staticmethod
     def get_history(
-        limit: int = None, project_path: str = None, trigger_id: str = None
+        limit: int = None, offset: int = 0, project_path: str = None, trigger_id: str = None
     ) -> Tuple[dict, HTTPStatus]:
         """Get audit history with optional filters."""
         audits = AuditService._load_audit_index()
@@ -277,7 +277,11 @@ class AuditService:
             audits = [a for a in audits if a.get("project_path") == project_path]
 
         audits.sort(key=lambda x: x.get("audit_date", ""), reverse=True)
+        total_count = len(audits)
 
+        # Apply pagination
+        if offset:
+            audits = audits[offset:]
         if limit:
             audits = audits[:limit]
 
@@ -288,7 +292,7 @@ class AuditService:
             summary["findings_count"] = len(audit.get("findings", []))
             summary_audits.append(summary)
 
-        return {"audits": summary_audits}, HTTPStatus.OK
+        return {"audits": summary_audits, "total_count": total_count}, HTTPStatus.OK
 
     @staticmethod
     def get_stats(project_path: str = None, trigger_id: str = None) -> Tuple[dict, HTTPStatus]:

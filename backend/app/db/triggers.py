@@ -442,17 +442,29 @@ def get_trigger_by_name(name: str) -> Optional[dict]:
         return dict(row) if row else None
 
 
-def get_all_triggers() -> List[dict]:
+def get_all_triggers(limit=None, offset=0) -> List[dict]:
     """Get all triggers with their path counts."""
     with get_connection() as conn:
-        cursor = conn.execute("""
+        query = """
             SELECT t.*, COUNT(p.id) as path_count
             FROM triggers t
             LEFT JOIN project_paths p ON t.id = p.trigger_id
             GROUP BY t.id
             ORDER BY t.is_predefined DESC, t.created_at ASC
-        """)
+        """
+        params: list = []
+        if limit is not None:
+            query += " LIMIT ? OFFSET ?"
+            params.extend([limit, offset])
+        cursor = conn.execute(query, params)
         return [dict(row) for row in cursor.fetchall()]
+
+
+def count_all_triggers() -> int:
+    """Count all triggers."""
+    with get_connection() as conn:
+        cursor = conn.execute("SELECT COUNT(*) FROM triggers")
+        return cursor.fetchone()[0]
 
 
 def get_webhook_triggers() -> List[dict]:
@@ -637,20 +649,31 @@ def get_symlink_paths_for_trigger(trigger_id: str) -> List[str]:
         return [f"project_links/{row['symlink_name']}" for row in cursor.fetchall()]
 
 
-def list_paths_for_trigger(trigger_id: str) -> List[dict]:
+def list_paths_for_trigger(trigger_id: str, limit=None, offset=0) -> List[dict]:
     """Get all project paths with metadata for a specific trigger."""
     with get_connection() as conn:
-        cursor = conn.execute(
-            """SELECT pp.id, pp.local_project_path, pp.symlink_name, pp.path_type,
+        query = """SELECT pp.id, pp.local_project_path, pp.symlink_name, pp.path_type,
                       pp.github_repo_url, pp.project_id, pp.created_at,
                       p.name as project_name, p.github_repo as project_github_repo
                FROM project_paths pp
                LEFT JOIN projects p ON pp.project_id = p.id
                WHERE pp.trigger_id = ?
-               ORDER BY pp.created_at ASC""",
-            (trigger_id,),
-        )
+               ORDER BY pp.created_at ASC"""
+        params: list = [trigger_id]
+        if limit is not None:
+            query += " LIMIT ? OFFSET ?"
+            params.extend([limit, offset])
+        cursor = conn.execute(query, params)
         return [dict(row) for row in cursor.fetchall()]
+
+
+def count_paths_for_trigger(trigger_id: str) -> int:
+    """Count project paths for a specific trigger."""
+    with get_connection() as conn:
+        cursor = conn.execute(
+            "SELECT COUNT(*) FROM project_paths WHERE trigger_id = ?", (trigger_id,)
+        )
+        return cursor.fetchone()[0]
 
 
 def add_github_repo(trigger_id: str, github_repo_url: str) -> bool:

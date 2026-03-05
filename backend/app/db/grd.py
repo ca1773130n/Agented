@@ -64,14 +64,25 @@ def get_milestone(milestone_id: str) -> Optional[dict]:
         return dict(row) if row else None
 
 
-def get_milestones_by_project(project_id: str) -> List[dict]:
+def get_milestones_by_project(project_id: str, limit=None, offset=0) -> List[dict]:
     """Get all milestones for a project."""
     with get_connection() as conn:
-        cursor = conn.execute(
-            "SELECT * FROM milestones WHERE project_id = ? ORDER BY created_at DESC",
-            (project_id,),
-        )
+        query = "SELECT * FROM milestones WHERE project_id = ? ORDER BY created_at DESC"
+        params: list = [project_id]
+        if limit is not None:
+            query += " LIMIT ? OFFSET ?"
+            params.extend([limit, offset])
+        cursor = conn.execute(query, params)
         return [dict(row) for row in cursor.fetchall()]
+
+
+def count_milestones_by_project(project_id: str) -> int:
+    """Count milestones for a project."""
+    with get_connection() as conn:
+        cursor = conn.execute(
+            "SELECT COUNT(*) FROM milestones WHERE project_id = ?", (project_id,)
+        )
+        return cursor.fetchone()[0]
 
 
 def update_milestone(milestone_id: str, **kwargs) -> bool:
@@ -359,14 +370,25 @@ def get_project_session(session_id: str) -> Optional[dict]:
         return dict(row) if row else None
 
 
-def get_sessions_by_project(project_id: str) -> List[dict]:
+def get_sessions_by_project(project_id: str, limit=None, offset=0) -> List[dict]:
     """Get all sessions for a project, ordered by started_at DESC."""
     with get_connection() as conn:
-        cursor = conn.execute(
-            "SELECT * FROM project_sessions WHERE project_id = ? ORDER BY started_at DESC",
-            (project_id,),
-        )
+        query = "SELECT * FROM project_sessions WHERE project_id = ? ORDER BY started_at DESC"
+        params: list = [project_id]
+        if limit is not None:
+            query += " LIMIT ? OFFSET ?"
+            params.extend([limit, offset])
+        cursor = conn.execute(query, params)
         return [dict(row) for row in cursor.fetchall()]
+
+
+def count_sessions_by_project(project_id: str) -> int:
+    """Count sessions for a project."""
+    with get_connection() as conn:
+        cursor = conn.execute(
+            "SELECT COUNT(*) FROM project_sessions WHERE project_id = ?", (project_id,)
+        )
+        return cursor.fetchone()[0]
 
 
 def update_project_session(session_id: str, **kwargs) -> bool:

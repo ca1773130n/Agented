@@ -65,11 +65,23 @@ def get_super_agent(super_agent_id: str) -> Optional[dict]:
         return dict(row) if row else None
 
 
-def get_all_super_agents() -> List[dict]:
+def get_all_super_agents(limit=None, offset=0) -> List[dict]:
     """Get all super agents ordered by name."""
     with get_connection() as conn:
-        cursor = conn.execute("SELECT * FROM super_agents ORDER BY name ASC")
+        query = "SELECT * FROM super_agents ORDER BY name ASC"
+        params: list = []
+        if limit is not None:
+            query += " LIMIT ? OFFSET ?"
+            params.extend([limit, offset])
+        cursor = conn.execute(query, params)
         return [dict(row) for row in cursor.fetchall()]
+
+
+def count_all_super_agents() -> int:
+    """Count all super agents."""
+    with get_connection() as conn:
+        cursor = conn.execute("SELECT COUNT(*) FROM super_agents")
+        return cursor.fetchone()[0]
 
 
 def update_super_agent(

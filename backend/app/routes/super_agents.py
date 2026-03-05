@@ -29,6 +29,7 @@ from ..database import (
     update_super_agent,
     update_super_agent_document,
 )
+from ..models.common import PaginationQuery
 from ..services.super_agent_session_service import SuperAgentSessionService
 
 tag = Tag(name="super-agents", description="SuperAgent management operations")
@@ -57,10 +58,13 @@ class SessionPath(BaseModel):
 
 
 @super_agents_bp.get("/")
-def list_super_agents():
+def list_super_agents(query: PaginationQuery):
     """List all super agents."""
-    super_agents = get_all_super_agents()
-    return {"super_agents": super_agents}, HTTPStatus.OK
+    from ..db.super_agents import count_all_super_agents
+
+    super_agents = get_all_super_agents(limit=query.limit, offset=query.offset or 0)
+    total_count = count_all_super_agents()
+    return {"super_agents": super_agents, "total_count": total_count}, HTTPStatus.OK
 
 
 @super_agents_bp.post("/")

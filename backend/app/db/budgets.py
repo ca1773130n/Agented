@@ -438,11 +438,23 @@ def delete_budget_limit(entity_type: str, entity_id: str) -> bool:
         return cursor.rowcount > 0
 
 
-def get_all_budget_limits() -> List[dict]:
+def get_all_budget_limits(limit=None, offset=0) -> List[dict]:
     """Get all budget limits."""
     with get_connection() as conn:
-        cursor = conn.execute("SELECT * FROM budget_limits ORDER BY entity_type, entity_id")
+        query = "SELECT * FROM budget_limits ORDER BY entity_type, entity_id"
+        params: list = []
+        if limit is not None:
+            query += " LIMIT ? OFFSET ?"
+            params.extend([limit, offset])
+        cursor = conn.execute(query, params)
         return [dict(row) for row in cursor.fetchall()]
+
+
+def count_all_budget_limits() -> int:
+    """Count all budget limits."""
+    with get_connection() as conn:
+        cursor = conn.execute("SELECT COUNT(*) FROM budget_limits")
+        return cursor.fetchone()[0]
 
 
 # =============================================================================

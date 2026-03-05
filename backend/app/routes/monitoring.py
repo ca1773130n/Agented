@@ -6,6 +6,7 @@ from flask import request
 from flask_openapi3 import APIBlueprint, Tag
 
 from ..database import get_monitoring_config, get_snapshot_history
+from ..models.common import PaginationQuery
 from ..services.monitoring_service import MonitoringService
 
 tag = Tag(name="monitoring", description="Rate limit monitoring configuration and status")
@@ -80,13 +81,15 @@ def poll_now():
 
 
 @monitoring_bp.get("/history")
-def get_history():
+def get_history(query: PaginationQuery):
     """Get snapshot history for a specific account and window type.
 
     Query params:
         account_id (required): Backend account ID
         window_type (required): Window type (e.g., '5h_sliding', 'weekly', 'rpd', 'tpm_60s')
         minutes (optional): How far back to look, default 360 (6 hours)
+        limit (optional): Max records to return
+        offset (optional): Number of records to skip
     """
     account_id = request.args.get("account_id", type=int)
     window_type = request.args.get("window_type")
@@ -97,17 +100,23 @@ def get_history():
             "error": "account_id and window_type are required query parameters"
         }, HTTPStatus.BAD_REQUEST
 
-    history = get_snapshot_history(account_id, window_type, since_minutes=minutes)
+    history = get_snapshot_history(
+        account_id, window_type, since_minutes=minutes,
+        limit=query.limit, offset=query.offset or 0,
+    )
+
+    formatted = [
+        {
+            "tokens_used": s["tokens_used"],
+            "percentage": s["percentage"],
+            "recorded_at": s["recorded_at"],
+        }
+        for s in history
+    ]
 
     return {
         "account_id": account_id,
         "window_type": window_type,
-        "history": [
-            {
-                "tokens_used": s["tokens_used"],
-                "percentage": s["percentage"],
-                "recorded_at": s["recorded_at"],
-            }
-            for s in history
-        ],
+        "history": formatted,
+        "total_count": len(formatted),
     }, HTTPStatus.OK

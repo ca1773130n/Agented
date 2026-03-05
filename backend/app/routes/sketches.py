@@ -9,11 +9,13 @@ from pydantic import BaseModel, Field
 
 from ..db.sketches import (
     add_sketch,
+    count_sketches,
     delete_sketch,
     get_all_sketches,
     get_sketch,
     update_sketch,
 )
+from ..models.common import PaginationQuery
 
 tag = Tag(name="sketches", description="Sketch management operations")
 sketches_bp = APIBlueprint("sketches", __name__, url_prefix="/admin/sketches", abp_tags=[tag])
@@ -24,12 +26,15 @@ class SketchPath(BaseModel):
 
 
 @sketches_bp.get("/")
-def list_sketches():
+def list_sketches(query: PaginationQuery):
     """List all sketches with optional filters."""
     status = request.args.get("status")
     project_id = request.args.get("project_id")
-    sketches = get_all_sketches(status=status, project_id=project_id)
-    return {"sketches": sketches}, HTTPStatus.OK
+    sketches = get_all_sketches(
+        status=status, project_id=project_id, limit=query.limit, offset=query.offset or 0
+    )
+    total_count = count_sketches(status=status, project_id=project_id)
+    return {"sketches": sketches, "total_count": total_count}, HTTPStatus.OK
 
 
 @sketches_bp.post("/")

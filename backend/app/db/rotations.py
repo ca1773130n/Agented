@@ -72,7 +72,7 @@ def get_all_rotation_events(limit: int = 100) -> List[dict]:
         return [dict(row) for row in cursor.fetchall()]
 
 
-def get_rotation_events_enriched(limit: int = 50) -> List[dict]:
+def get_rotation_events_enriched(limit: int = 50, offset: int = 0) -> List[dict]:
     """Get all rotation events with account names from JOIN, ordered by created_at DESC."""
     with get_connection() as conn:
         cursor = conn.execute(
@@ -84,11 +84,18 @@ def get_rotation_events_enriched(limit: int = 50) -> List[dict]:
             LEFT JOIN backend_accounts ba_from ON re.from_account_id = ba_from.id
             LEFT JOIN backend_accounts ba_to ON re.to_account_id = ba_to.id
             ORDER BY re.created_at DESC
-            LIMIT ?
+            LIMIT ? OFFSET ?
         """,
-            (limit,),
+            (limit, offset),
         )
         return [dict(row) for row in cursor.fetchall()]
+
+
+def count_rotation_events() -> int:
+    """Count all rotation events."""
+    with get_connection() as conn:
+        cursor = conn.execute("SELECT COUNT(*) FROM rotation_events")
+        return cursor.fetchone()[0]
 
 
 def get_rotation_events_enriched_by_execution(execution_id: str) -> List[dict]:
@@ -190,7 +197,9 @@ def get_product_decision(decision_id: str) -> Optional[dict]:
         return dict(row) if row else None
 
 
-def get_decisions_by_product(product_id: str, status: str = None, tag: str = None) -> List[dict]:
+def get_decisions_by_product(
+    product_id: str, status: str = None, tag: str = None, limit=None, offset=0
+) -> List[dict]:
     """Get all decisions for a product with optional status and tag filtering."""
     with get_connection() as conn:
         query = "SELECT * FROM product_decisions WHERE product_id = ?"
@@ -204,8 +213,28 @@ def get_decisions_by_product(product_id: str, status: str = None, tag: str = Non
             params.append(f"%{tag}%")
 
         query += " ORDER BY created_at DESC"
+
+        if limit is not None:
+            query += " LIMIT ? OFFSET ?"
+            params.extend([limit, offset])
+
         cursor = conn.execute(query, params)
         return [dict(row) for row in cursor.fetchall()]
+
+
+def count_decisions_by_product(product_id: str, status: str = None, tag: str = None) -> int:
+    """Count decisions for a product with optional filters."""
+    with get_connection() as conn:
+        query = "SELECT COUNT(*) FROM product_decisions WHERE product_id = ?"
+        params: list = [product_id]
+        if status:
+            query += " AND status = ?"
+            params.append(status)
+        if tag:
+            query += " AND tags_json LIKE ?"
+            params.append(f"%{tag}%")
+        cursor = conn.execute(query, params)
+        return cursor.fetchone()[0]
 
 
 def update_product_decision(decision_id: str, **kwargs) -> bool:
@@ -304,7 +333,7 @@ def get_product_milestone(milestone_id: str) -> Optional[dict]:
         return dict(row) if row else None
 
 
-def get_milestones_by_product(product_id: str, status: str = None) -> List[dict]:
+def get_milestones_by_product(product_id: str, status: str = None, limit=None, offset=0) -> List[dict]:
     """Get all milestones for a product with optional status filtering."""
     with get_connection() as conn:
         query = "SELECT * FROM product_milestones WHERE product_id = ?"
@@ -315,8 +344,25 @@ def get_milestones_by_product(product_id: str, status: str = None) -> List[dict]
             params.append(status)
 
         query += " ORDER BY sort_order ASC, created_at DESC"
+
+        if limit is not None:
+            query += " LIMIT ? OFFSET ?"
+            params.extend([limit, offset])
+
         cursor = conn.execute(query, params)
         return [dict(row) for row in cursor.fetchall()]
+
+
+def count_milestones_by_product_owner(product_id: str, status: str = None) -> int:
+    """Count milestones for a product with optional status filter."""
+    with get_connection() as conn:
+        query = "SELECT COUNT(*) FROM product_milestones WHERE product_id = ?"
+        params: list = [product_id]
+        if status:
+            query += " AND status = ?"
+            params.append(status)
+        cursor = conn.execute(query, params)
+        return cursor.fetchone()[0]
 
 
 def update_product_milestone(milestone_id: str, **kwargs) -> bool:
@@ -438,20 +484,31 @@ def add_milestone_project(
             return None
 
 
-def get_projects_for_milestone(milestone_id: str) -> List[dict]:
+def get_projects_for_milestone(milestone_id: str, limit=None, offset=0) -> List[dict]:
     """Get all projects linked to a product milestone."""
     with get_connection() as conn:
-        cursor = conn.execute(
-            """
+        query = """
             SELECT mp.*, p.name as project_name, p.status as project_status
             FROM milestone_projects mp
             JOIN projects p ON mp.project_id = p.id
             WHERE mp.milestone_id = ?
             ORDER BY p.name ASC
-        """,
-            (milestone_id,),
-        )
+        """
+        params: list = [milestone_id]
+        if limit is not None:
+            query += " LIMIT ? OFFSET ?"
+            params.extend([limit, offset])
+        cursor = conn.execute(query, params)
         return [dict(row) for row in cursor.fetchall()]
+
+
+def count_projects_for_milestone(milestone_id: str) -> int:
+    """Count projects linked to a product milestone."""
+    with get_connection() as conn:
+        cursor = conn.execute(
+            "SELECT COUNT(*) FROM milestone_projects WHERE milestone_id = ?", (milestone_id,)
+        )
+        return cursor.fetchone()[0]
 
 
 def delete_milestone_project(milestone_id: str, project_id: str) -> bool:

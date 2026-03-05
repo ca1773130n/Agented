@@ -10,6 +10,8 @@ from ..database import (
     add_project_path,
     add_project_to_trigger,
     add_trigger,
+    count_all_triggers,
+    count_paths_for_trigger,
     delete_trigger,
     get_all_triggers,
     get_project,
@@ -34,13 +36,14 @@ class TriggerService:
     """Service for trigger CRUD operations."""
 
     @staticmethod
-    def list_triggers() -> Tuple[dict, HTTPStatus]:
+    def list_triggers(limit=None, offset=0) -> Tuple[dict, HTTPStatus]:
         """Get all triggers with path counts and execution status."""
-        triggers = get_all_triggers()
+        triggers = get_all_triggers(limit=limit, offset=offset)
+        total_count = count_all_triggers()
         # Add execution status to each trigger
         for trigger in triggers:
             trigger["execution_status"] = ExecutionService.get_status(trigger["id"])
-        return {"triggers": triggers}, HTTPStatus.OK
+        return {"triggers": triggers, "total_count": total_count}, HTTPStatus.OK
 
     @staticmethod
     def get_trigger_detail(trigger_id: str) -> Tuple[dict, HTTPStatus]:
@@ -294,14 +297,15 @@ class TriggerService:
             return {"error": "Failed to delete trigger"}, HTTPStatus.INTERNAL_SERVER_ERROR
 
     @staticmethod
-    def list_paths(trigger_id: str) -> Tuple[dict, HTTPStatus]:
+    def list_paths(trigger_id: str, limit=None, offset=0) -> Tuple[dict, HTTPStatus]:
         """List all paths for a trigger."""
         trigger = get_trigger(trigger_id)
         if not trigger:
             return {"error": "Trigger not found"}, HTTPStatus.NOT_FOUND
 
-        paths = list_paths_for_trigger(trigger_id)
-        return {"paths": paths}, HTTPStatus.OK
+        paths = list_paths_for_trigger(trigger_id, limit=limit, offset=offset)
+        total_count = count_paths_for_trigger(trigger_id)
+        return {"paths": paths, "total_count": total_count}, HTTPStatus.OK
 
     @staticmethod
     def add_path(trigger_id: str, data: dict) -> Tuple[dict, HTTPStatus]:

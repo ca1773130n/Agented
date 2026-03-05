@@ -6,6 +6,7 @@ from flask import request
 from flask_openapi3 import APIBlueprint, Tag
 from pydantic import BaseModel, Field
 
+from ..models.common import PaginationQuery
 from ..services.audit_log_service import AuditLogService
 from ..services.audit_service import AuditService
 
@@ -22,13 +23,13 @@ class AuditWeekPath(BaseModel):
 
 
 @audit_bp.get("/history")
-def get_audit_history():
+def get_audit_history(query: PaginationQuery):
     """Get audit history with optional filters."""
-    limit = request.args.get("limit", type=int)
     project_path = request.args.get("project_path", "")
     trigger_id = request.args.get("trigger_id", "")
     result, status = AuditService.get_history(
-        limit=limit, project_path=project_path, trigger_id=trigger_id
+        limit=query.limit, offset=query.offset or 0,
+        project_path=project_path, trigger_id=trigger_id,
     )
     return result, status
 

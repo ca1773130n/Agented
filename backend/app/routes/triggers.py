@@ -7,6 +7,7 @@ from flask_openapi3 import APIBlueprint, Tag
 from pydantic import BaseModel, Field
 
 from ..database import get_trigger
+from ..models.common import PaginationQuery
 from ..services.execution_service import ExecutionService
 from ..services.rbac_service import require_role
 from ..services.trigger_service import TriggerService
@@ -21,9 +22,11 @@ class TriggerPath(BaseModel):
 
 @triggers_bp.get("/")
 @require_role("viewer", "operator", "editor", "admin")
-def list_triggers():
+def list_triggers(query: PaginationQuery):
     """List all triggers with path counts and execution status."""
-    result, status = TriggerService.list_triggers()
+    result, status = TriggerService.list_triggers(
+        limit=query.limit, offset=query.offset or 0
+    )
     return result, status
 
 
@@ -67,9 +70,11 @@ def delete_trigger(path: TriggerPath):
 
 @triggers_bp.get("/<trigger_id>/paths")
 @require_role("viewer", "operator", "editor", "admin")
-def list_trigger_paths(path: TriggerPath):
+def list_trigger_paths(path: TriggerPath, query: PaginationQuery):
     """List all project paths for a trigger."""
-    result, status = TriggerService.list_paths(path.trigger_id)
+    result, status = TriggerService.list_paths(
+        path.trigger_id, limit=query.limit, offset=query.offset or 0
+    )
     return result, status
 
 

@@ -468,14 +468,25 @@ def get_plugin_export(export_id: int) -> Optional[dict]:
         return dict(row) if row else None
 
 
-def get_plugin_exports_for_plugin(plugin_id: str) -> List[dict]:
+def get_plugin_exports_for_plugin(plugin_id: str, limit=None, offset=0) -> List[dict]:
     """Get all export records for a plugin."""
     with get_connection() as conn:
-        cursor = conn.execute(
-            "SELECT * FROM plugin_exports WHERE plugin_id = ? ORDER BY created_at DESC",
-            (plugin_id,),
-        )
+        query = "SELECT * FROM plugin_exports WHERE plugin_id = ? ORDER BY created_at DESC"
+        params: list = [plugin_id]
+        if limit is not None:
+            query += " LIMIT ? OFFSET ?"
+            params.extend([limit, offset])
+        cursor = conn.execute(query, params)
         return [dict(row) for row in cursor.fetchall()]
+
+
+def count_plugin_exports_for_plugin(plugin_id: str) -> int:
+    """Count export records for a plugin."""
+    with get_connection() as conn:
+        cursor = conn.execute(
+            "SELECT COUNT(*) FROM plugin_exports WHERE plugin_id = ?", (plugin_id,)
+        )
+        return cursor.fetchone()[0]
 
 
 def update_plugin_export(

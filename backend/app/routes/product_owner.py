@@ -24,6 +24,7 @@ from ..database import (
     update_product_decision,
     update_product_milestone,
 )
+from ..models.common import PaginationQuery
 from ..services.product_owner_service import ProductOwnerService
 
 tag = Tag(name="product-owner", description="Product owner dashboard operations")
@@ -69,15 +70,21 @@ def _check_product(product_id: str):
 
 
 @product_owner_bp.get("/<product_id>/decisions")
-def list_product_decisions(path: ProductPath):
+def list_product_decisions(path: ProductPath, query: PaginationQuery):
     """List decisions for a product with optional status and tag filters."""
     if not _check_product(path.product_id):
         return {"error": "Product not found"}, HTTPStatus.NOT_FOUND
 
     status = request.args.get("status")
     tag_filter = request.args.get("tag")
-    decisions = get_decisions_by_product(path.product_id, status=status, tag=tag_filter)
-    return {"decisions": decisions}, HTTPStatus.OK
+    decisions = get_decisions_by_product(
+        path.product_id, status=status, tag=tag_filter,
+        limit=query.limit, offset=query.offset or 0,
+    )
+    from ..db.rotations import count_decisions_by_product
+
+    total_count = count_decisions_by_product(path.product_id, status=status, tag=tag_filter)
+    return {"decisions": decisions, "total_count": total_count}, HTTPStatus.OK
 
 
 @product_owner_bp.post("/<product_id>/decisions")
@@ -168,14 +175,19 @@ def delete_product_decision_endpoint(path: DecisionPath):
 
 
 @product_owner_bp.get("/<product_id>/milestones")
-def list_product_milestones(path: ProductPath):
+def list_product_milestones(path: ProductPath, query: PaginationQuery):
     """List milestones for a product with optional status filter."""
     if not _check_product(path.product_id):
         return {"error": "Product not found"}, HTTPStatus.NOT_FOUND
 
     status = request.args.get("status")
-    milestones = get_milestones_by_product(path.product_id, status=status)
-    return {"milestones": milestones}, HTTPStatus.OK
+    milestones = get_milestones_by_product(
+        path.product_id, status=status, limit=query.limit, offset=query.offset or 0
+    )
+    from ..db.rotations import count_milestones_by_product_owner
+
+    total_count = count_milestones_by_product_owner(path.product_id, status=status)
+    return {"milestones": milestones, "total_count": total_count}, HTTPStatus.OK
 
 
 @product_owner_bp.post("/<product_id>/milestones")
@@ -266,13 +278,18 @@ def delete_product_milestone_endpoint(path: MilestonePath):
 
 
 @product_owner_bp.get("/<product_id>/milestones/<milestone_id>/projects")
-def list_milestone_projects(path: MilestonePath):
+def list_milestone_projects(path: MilestonePath, query: PaginationQuery):
     """List projects linked to a milestone."""
     if not _check_product(path.product_id):
         return {"error": "Product not found"}, HTTPStatus.NOT_FOUND
 
-    projects = get_projects_for_milestone(path.milestone_id)
-    return {"projects": projects}, HTTPStatus.OK
+    projects = get_projects_for_milestone(
+        path.milestone_id, limit=query.limit, offset=query.offset or 0
+    )
+    from ..db.rotations import count_projects_for_milestone
+
+    total_count = count_projects_for_milestone(path.milestone_id)
+    return {"projects": projects, "total_count": total_count}, HTTPStatus.OK
 
 
 @product_owner_bp.post("/<product_id>/milestones/<milestone_id>/projects")

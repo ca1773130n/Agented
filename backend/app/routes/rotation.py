@@ -5,6 +5,8 @@ from http import HTTPStatus
 from flask import request
 from flask_openapi3 import APIBlueprint, Tag
 
+from ..models.common import PaginationQuery
+
 tag = Tag(name="rotation", description="Rotation dashboard endpoints")
 rotation_bp = APIBlueprint("rotation", __name__, url_prefix="/admin/rotation", abp_tags=[tag])
 
@@ -39,24 +41,29 @@ def get_rotation_status():
 
 
 @rotation_bp.get("/history")
-def get_rotation_history():
+def get_rotation_history(query: PaginationQuery):
     """Get rotation event history with enriched account names.
 
     Query params:
         execution_id (optional): Filter by execution ID
         limit (optional): Max events to return, default 50
+        offset (optional): Number of events to skip, default 0
     """
     from ..db.rotations import (
+        count_rotation_events,
         get_rotation_events_enriched,
         get_rotation_events_enriched_by_execution,
     )
 
     execution_id = request.args.get("execution_id")
-    limit = request.args.get("limit", 50, type=int)
+    limit = query.limit or 50
+    offset = query.offset or 0
 
     if execution_id:
         events = get_rotation_events_enriched_by_execution(execution_id)
+        total_count = len(events)
     else:
-        events = get_rotation_events_enriched(limit)
+        events = get_rotation_events_enriched(limit, offset=offset)
+        total_count = count_rotation_events()
 
-    return {"events": events}, HTTPStatus.OK
+    return {"events": events, "total_count": total_count}, HTTPStatus.OK

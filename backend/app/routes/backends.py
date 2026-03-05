@@ -6,6 +6,7 @@ from http import HTTPStatus
 from flask import Response, request
 from flask_openapi3 import APIBlueprint
 
+from ..models.common import PaginationQuery
 from ..models.backend import (
     BackendAccountPath,
     BackendPath,
@@ -30,9 +31,9 @@ backends_bp = APIBlueprint("backends", __name__, url_prefix="/admin/backends")
 
 
 @backends_bp.get("/")
-def list_backends():
+def list_backends(query: PaginationQuery):
     """List all AI backends, auto-refreshing model lists via discovery."""
-    result, status = BackendService.list_backends()
+    result, status = BackendService.list_backends(limit=query.limit, offset=query.offset or 0)
     return result, status
 
 

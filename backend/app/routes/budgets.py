@@ -20,6 +20,7 @@ from ..database import (
     get_usage_by_entity,
     set_budget_limit,
 )
+from ..models.common import PaginationQuery
 from ..services.budget_service import BudgetService
 from ..services.session_usage_collector import SessionUsageCollector
 
@@ -40,21 +41,24 @@ def get_window_usage():
 
 
 @budgets_bp.get("/limits")
-def list_budget_limits():
+def list_budget_limits(query: PaginationQuery):
     """List all budget limits with current spend."""
-    limits = get_all_budget_limits()
+    from ..db.budgets import count_all_budget_limits
+
+    limits = get_all_budget_limits(limit=query.limit, offset=query.offset or 0)
+    total_count = count_all_budget_limits()
 
     # Enrich each limit with current spend
     enriched = []
-    for limit in limits:
+    for limit_row in limits:
         current_spend = get_current_period_spend(
-            limit["entity_type"], limit["entity_id"], limit.get("period", "monthly")
+            limit_row["entity_type"], limit_row["entity_id"], limit_row.get("period", "monthly")
         )
-        entry = dict(limit)
+        entry = dict(limit_row)
         entry["current_spend_usd"] = current_spend
         enriched.append(entry)
 
-    return {"limits": enriched}, HTTPStatus.OK
+    return {"limits": enriched, "total_count": total_count}, HTTPStatus.OK
 
 
 @budgets_bp.get("/limits/<entity_type>/<entity_id>")

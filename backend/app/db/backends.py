@@ -242,21 +242,33 @@ def get_account_with_backend(account_id: int) -> Optional[dict]:
 # =============================================================================
 
 
-def get_all_backends() -> list[dict]:
+def get_all_backends(limit=None, offset=0) -> list[dict]:
     """Get all backends with account counts, emails, and last used timestamps.
 
     last_used_at comes directly from the ai_backends column, which is kept
     up-to-date by update_backend_last_used() after each chat stream.
     """
     with get_connection() as conn:
-        cursor = conn.execute("""SELECT b.*,
+        query = """SELECT b.*,
                       (SELECT COUNT(*) FROM backend_accounts WHERE backend_id = b.id) as account_count,
                       (SELECT GROUP_CONCAT(ba.email, ', ')
                        FROM backend_accounts ba
                        WHERE ba.backend_id = b.id AND ba.email IS NOT NULL AND ba.email != ''
                       ) as account_emails
-               FROM ai_backends b ORDER BY name""")
+               FROM ai_backends b ORDER BY name"""
+        params: list = []
+        if limit is not None:
+            query += " LIMIT ? OFFSET ?"
+            params.extend([limit, offset])
+        cursor = conn.execute(query, params)
         return [_row_to_backend(row) for row in cursor.fetchall()]
+
+
+def count_all_backends() -> int:
+    """Count all backends."""
+    with get_connection() as conn:
+        cursor = conn.execute("SELECT COUNT(*) FROM ai_backends")
+        return cursor.fetchone()[0]
 
 
 def get_backend_by_id(backend_id: str) -> Optional[dict]:

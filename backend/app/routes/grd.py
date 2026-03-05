@@ -28,6 +28,7 @@ from ..database import (
     update_project,
     update_project_plan,
 )
+from ..models.common import PaginationQuery
 from ..services.execution_type_handler import get_handler
 from ..services.grd_cli_service import GrdCliService
 from ..services.grd_planning_service import GrdPlanningService
@@ -196,14 +197,19 @@ def trigger_sync(path: ProjectIdPath):
 
 
 @grd_bp.get("/<project_id>/milestones")
-def list_milestones(path: ProjectIdPath):
+def list_milestones(path: ProjectIdPath, query: PaginationQuery):
     """List all milestones for a project."""
     project = get_project(path.project_id)
     if not project:
         return {"error": "Project not found"}, HTTPStatus.NOT_FOUND
 
-    milestones = get_milestones_by_project(path.project_id)
-    return {"milestones": milestones}, HTTPStatus.OK
+    milestones = get_milestones_by_project(
+        path.project_id, limit=query.limit, offset=query.offset or 0
+    )
+    from ..db.grd import count_milestones_by_project
+
+    total_count = count_milestones_by_project(path.project_id)
+    return {"milestones": milestones, "total_count": total_count}, HTTPStatus.OK
 
 
 @grd_bp.get("/<project_id>/phases")
@@ -695,14 +701,19 @@ def create_session(path: ProjectIdPath, body: CreateSessionBody):
 
 
 @grd_bp.get("/<project_id>/sessions")
-def list_sessions(path: ProjectIdPath):
+def list_sessions(path: ProjectIdPath, query: PaginationQuery):
     """List all sessions for a project."""
     project = get_project(path.project_id)
     if not project:
         return {"error": "Project not found"}, HTTPStatus.NOT_FOUND
 
-    sessions = get_sessions_by_project(path.project_id)
-    return {"sessions": sessions}, HTTPStatus.OK
+    sessions = get_sessions_by_project(
+        path.project_id, limit=query.limit, offset=query.offset or 0
+    )
+    from ..db.grd import count_sessions_by_project
+
+    total_count = count_sessions_by_project(path.project_id)
+    return {"sessions": sessions, "total_count": total_count}, HTTPStatus.OK
 
 
 @grd_bp.get("/<project_id>/sessions/<session_id>/stream")

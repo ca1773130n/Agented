@@ -40,7 +40,7 @@ class BackendService:
     """Service for backend management and account operations."""
 
     @staticmethod
-    def list_backends() -> Tuple[dict, HTTPStatus]:
+    def list_backends(limit=None, offset=0) -> Tuple[dict, HTTPStatus]:
         """List all backends with live-discovered model lists.
 
         Runs model discovery for all backends concurrently on every request.
@@ -48,9 +48,11 @@ class BackendService:
         """
         from concurrent.futures import ThreadPoolExecutor, as_completed
 
+        from ..db.backends import count_all_backends
         from ..services.model_discovery_service import ModelDiscoveryService
 
-        backends = get_all_backends()
+        backends = get_all_backends(limit=limit, offset=offset)
+        total_count = count_all_backends()
 
         # Build map of backend_type -> backend dict(s) for overlay
         type_to_backends: dict[str, list[dict]] = {}
@@ -67,16 +69,17 @@ class BackendService:
                 logger.warning("Model discovery for %s failed: %s", btype, e)
                 return btype, []
 
-        with ThreadPoolExecutor(max_workers=len(type_to_backends)) as pool:
-            futures = {pool.submit(_discover, bt): bt for bt in type_to_backends}
-            for future in as_completed(futures):
-                btype, models = future.result()
-                for backend in type_to_backends.get(btype, []):
-                    if models:
-                        backend["models"] = models
-                        update_backend_models(backend["id"], models)
+        if type_to_backends:
+            with ThreadPoolExecutor(max_workers=len(type_to_backends)) as pool:
+                futures = {pool.submit(_discover, bt): bt for bt in type_to_backends}
+                for future in as_completed(futures):
+                    btype, models = future.result()
+                    for backend in type_to_backends.get(btype, []):
+                        if models:
+                            backend["models"] = models
+                            update_backend_models(backend["id"], models)
 
-        return {"backends": backends}, HTTPStatus.OK
+        return {"backends": backends, "total_count": total_count}, HTTPStatus.OK
 
     @staticmethod
     def get_backend(backend_id: str) -> Tuple[dict, HTTPStatus]:

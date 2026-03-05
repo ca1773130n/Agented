@@ -48,11 +48,13 @@ def get_sketch(sketch_id: str) -> Optional[dict]:
 def get_all_sketches(
     status: str = None,
     project_id: str = None,
+    limit: int = None,
+    offset: int = 0,
 ) -> List[dict]:
     """Get all sketches with optional status and project_id filters."""
     query = "SELECT * FROM sketches"
     conditions = []
-    values = []
+    values: list = []
 
     if status is not None:
         conditions.append("status = ?")
@@ -66,9 +68,34 @@ def get_all_sketches(
 
     query += " ORDER BY updated_at DESC"
 
+    if limit is not None:
+        query += " LIMIT ? OFFSET ?"
+        values.extend([limit, offset])
+
     with get_connection() as conn:
         cursor = conn.execute(query, values)
         return [dict(row) for row in cursor.fetchall()]
+
+
+def count_sketches(status: str = None, project_id: str = None) -> int:
+    """Count sketches with optional filters."""
+    query = "SELECT COUNT(*) FROM sketches"
+    conditions = []
+    values: list = []
+
+    if status is not None:
+        conditions.append("status = ?")
+        values.append(status)
+    if project_id is not None:
+        conditions.append("project_id = ?")
+        values.append(project_id)
+
+    if conditions:
+        query += " WHERE " + " AND ".join(conditions)
+
+    with get_connection() as conn:
+        cursor = conn.execute(query, values)
+        return cursor.fetchone()[0]
 
 
 def update_sketch(sketch_id: str, **kwargs) -> bool:

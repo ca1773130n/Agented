@@ -91,18 +91,22 @@ def get_latest_snapshots(max_age_minutes: int = 60) -> List[dict]:
         return [_utc_suffix(dict(row)) for row in cursor.fetchall()]
 
 
-def get_snapshot_history(account_id: int, window_type: str, since_minutes: int = 360) -> List[dict]:
+def get_snapshot_history(
+    account_id: int, window_type: str, since_minutes: int = 360, limit=None, offset=0
+) -> List[dict]:
     """Return snapshots for the given account/window within the last N minutes, ordered ASC."""
     with get_connection() as conn:
-        cursor = conn.execute(
-            """
+        query = """
             SELECT * FROM rate_limit_snapshots
             WHERE account_id = ? AND window_type = ?
               AND recorded_at >= datetime('now', ?)
             ORDER BY recorded_at ASC
-            """,
-            (account_id, window_type, f"-{since_minutes} minutes"),
-        )
+            """
+        params: list = [account_id, window_type, f"-{since_minutes} minutes"]
+        if limit is not None:
+            query += " LIMIT ? OFFSET ?"
+            params.extend([limit, offset])
+        cursor = conn.execute(query, params)
         return [_utc_suffix(dict(row)) for row in cursor.fetchall()]
 
 

@@ -710,6 +710,9 @@ from .triggers import (  # noqa: F401
     add_project_to_trigger,
     # Trigger CRUD
     add_trigger,
+    # Trigger count helpers
+    count_all_triggers,
+    count_paths_for_trigger,
     # Execution log operations
     count_all_execution_logs,
     count_execution_logs_for_trigger,
