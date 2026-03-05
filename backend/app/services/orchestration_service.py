@@ -11,6 +11,7 @@ from ..database import (
     increment_account_executions,
 )
 from .budget_service import BudgetService
+from .circuit_breaker_service import CircuitBreakerService
 from .rate_limit_service import RateLimitService
 
 logger = logging.getLogger(__name__)
@@ -23,6 +24,7 @@ class ExecutionStatus(str, Enum):
     BUDGET_BLOCKED = "budget_blocked"  # Pre-execution budget check failed
     CHAIN_EXHAUSTED = "chain_exhausted"  # All fallback chain entries exhausted
     LAUNCH_FAILED = "launch_failed"  # Execution attempted but failed to launch
+    CIRCUIT_BREAKER_OPEN = "circuit_breaker_open"  # All backends have open circuit breakers
 
 
 @dataclass
@@ -34,6 +36,7 @@ class ExecutionResult:
     - BUDGET_BLOCKED: budget pre-check failed; detail contains spend / limit info
     - CHAIN_EXHAUSTED: all fallback chain entries were rate-limited or unavailable
     - LAUNCH_FAILED: run_trigger returned None (command not found, process error, etc.)
+    - CIRCUIT_BREAKER_OPEN: all backends have open circuit breakers (fast-fail)
     """
 
     status: ExecutionStatus
@@ -107,9 +110,21 @@ class OrchestrationService:
                 f"remaining ${budget_check.get('remaining_usd', 'N/A')}"
             )
 
+        # Track backends skipped due to circuit breaker for CHAIN_EXHAUSTED detail
+        breaker_open_backends: list[str] = []
+
         for chain_entry in chain:
             backend_type = chain_entry["backend_type"]
             specific_account_id = chain_entry.get("account_id")
+
+            # Circuit breaker check: skip backends with OPEN breakers
+            if not CircuitBreakerService.can_execute(backend_type):
+                logger.info(
+                    f"Circuit breaker OPEN for backend {backend_type}, "
+                    f"skipping chain entry"
+                )
+                breaker_open_backends.append(backend_type)
+                continue
 
             # Pick account
             if specific_account_id:
@@ -214,10 +229,22 @@ class OrchestrationService:
                 )
                 RateLimitService.mark_rate_limited(account["id"], cooldown)
                 rate_limited_cooldowns.append(cooldown)
+                # Rate limits are transient — record failure for circuit breaker
+                CircuitBreakerService.record_failure(backend_type, "rate_limit")
+                continue  # Try next chain entry
+
+            # Check for transient failure patterns in execution stderr
+            transient_failure = ExecutionService.was_transient_failure(execution_id)
+            if transient_failure:
+                logger.info(
+                    f"Execution {execution_id} had transient failure: {transient_failure}"
+                )
+                CircuitBreakerService.record_failure(backend_type, transient_failure)
                 continue  # Try next chain entry
 
             # Execution succeeded or failed for non-rate-limit reason
             if execution_id:
+                CircuitBreakerService.record_success(backend_type)
                 increment_account_executions(account["id"])
                 return ExecutionResult(status=ExecutionStatus.DISPATCHED, execution_id=execution_id)
             return ExecutionResult(status=ExecutionStatus.LAUNCH_FAILED)
@@ -225,8 +252,19 @@ class OrchestrationService:
         # All chain entries exhausted
         logger.warning(f"All fallback chain entries exhausted for trigger '{trigger['name']}'")
 
+        # If ALL chain entries were skipped due to circuit breaker, return specific status
+        if breaker_open_backends and not rate_limited_cooldowns and not no_accounts_backends:
+            return ExecutionResult(
+                status=ExecutionStatus.CIRCUIT_BREAKER_OPEN,
+                detail=f"circuit breakers open for: {', '.join(sorted(set(breaker_open_backends)))}",
+            )
+
         # Build a human-readable detail for the caller
         exhausted_parts = []
+        if breaker_open_backends:
+            exhausted_parts.append(
+                f"circuit breaker open for: {', '.join(sorted(set(breaker_open_backends)))}"
+            )
         if no_accounts_backends:
             exhausted_parts.append(
                 f"no available accounts for: {', '.join(sorted(set(no_accounts_backends)))}"

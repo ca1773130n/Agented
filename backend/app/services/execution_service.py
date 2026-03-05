@@ -103,7 +103,10 @@ class ExecutionService:
 
     # Thread-safe dict tracking rate limit detections: {execution_id: cooldown_seconds}
     _rate_limit_detected: Dict[str, int] = {}
-    # _rate_limit_lock guards _rate_limit_detected, _pending_retries, _retry_timers, and _retry_counts.
+    # Thread-safe dict tracking transient failure detections: {execution_id: error_description}
+    _transient_failure_detected: Dict[str, str] = {}
+    # _rate_limit_lock guards _rate_limit_detected, _transient_failure_detected,
+    # _pending_retries, _retry_timers, and _retry_counts.
     # Acquire before any read or write to those dicts.
     _rate_limit_lock = threading.Lock()
 
@@ -131,6 +134,18 @@ class ExecutionService:
             return None
         with cls._rate_limit_lock:
             return cls._rate_limit_detected.pop(execution_id, None)
+
+    @classmethod
+    def was_transient_failure(cls, execution_id: str) -> Optional[str]:
+        """Check if an execution had a transient failure. Returns error description or None.
+
+        Pops the entry from the tracking dict (one-time check).
+        Uses CircuitBreakerService.is_transient_error for classification.
+        """
+        if not execution_id:
+            return None
+        with cls._rate_limit_lock:
+            return cls._transient_failure_detected.pop(execution_id, None)
 
     @classmethod
     def schedule_retry(
@@ -621,6 +636,20 @@ class ExecutionService:
                                     "cooldown_seconds": cooldown,
                                 },
                             )
+                        else:
+                            # Check for transient failure patterns (502/503/timeout/connection)
+                            from .circuit_breaker_service import CircuitBreakerService
+
+                            if CircuitBreakerService.is_transient_error(error=content):
+                                with cls._rate_limit_lock:
+                                    # Only record first transient error per execution
+                                    if execution_id not in cls._transient_failure_detected:
+                                        cls._transient_failure_detected[execution_id] = content
+                                        logger.warning(
+                                            "Transient failure detected for execution %s: %s",
+                                            execution_id,
+                                            content[:200],
+                                        )
         except (OSError, ValueError) as e:
             logger.error(
                 "Error reading %s stream for execution %s: %s",
