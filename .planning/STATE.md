@@ -1,8 +1,8 @@
 # GRD Execution State
 
 **Milestone:** v0.1.0 -- Production Hardening (active) / v0.2.0 -- Miscellaneous
-**Current Phase:** Phase 12 (autopilot: executing)
-**Current Plan:** 04 of 04 (complete)
+**Current Phase:** Phase 13 (autopilot: executing)
+**Current Plan:** 01 of 04
 **Status:** executing
 
 **Progress:** [█████████░] 87%
@@ -11,8 +11,8 @@
 
 ## Position
 
-- **Last completed:** Phase 12 Plan 03 (Specialized Bot API Routes & Search UI)
-- **Next up:** Phase 12 complete; next phase TBD
+- **Last completed:** Phase 13 Plan 01 (Circuit Breaker Service & Transient Retry)
+- **Next up:** Phase 13 Plan 02
 - **Blocked by:** Nothing
 
 ## Phase Summary
@@ -25,7 +25,7 @@
 | 10 | Analytics & Monitoring Dashboards | Complete (5/5) | proxy |
 | 11 | Enterprise Integrations & Governance | Pending | proxy |
 | 12 | Specialized Automation Bots | Complete (3/3) | proxy |
-| 13 | Execution Resilience & Infrastructure | Pending | proxy |
+| 13 | Execution Resilience & Infrastructure | In Progress (1/4) | proxy |
 | 14 | API Hardening & Developer Experience | Pending | proxy |
 | 15 | Code Consistency & Standards | Pending | sanity |
 | 16 | Frontend Quality & User Experience | In Progress (5/5) | sanity |
@@ -108,6 +108,9 @@
 - [Phase 12]: Standalone sidebar button for Execution Search (not expandable group) since single destination
 - [Phase 12]: Search functions in specializedBotApi (not separate module) for domain cohesion
 - [Phase 12]: v-html for FTS5 snippets with XSS safety note (content from own DB, not user HTML)
+- [Phase 13]: Per-backend threading.Lock with _ensure_breaker internal method to avoid reentrant lock deadlocks
+- [Phase 13]: Non-transient patterns checked first (higher specificity) before transient patterns in is_transient_error()
+- [Phase 13]: CIRCUIT_BREAKER_OPEN status added to ExecutionStatus enum for explicit fast-fail signaling
 
 ## Blockers
 
@@ -148,8 +151,9 @@ None -- no phases have deferred verification level in this milestone.
 | 12 | 01 | 11min | 2 | 10 |
 | 12 | 02 | 12min | 2 | 8 |
 | 12 | 03 | 14min | 2 | 8 |
+| 13 | 01 | 14min | 2 | 7 |
 
 ## Session Log
 
 - **Last session:** 2026-03-05
-- **Stopped at:** Completed 12-03-PLAN.md (Specialized Bot API Routes & Search UI)
+- **Stopped at:** Completed 13-01-PLAN.md (Circuit Breaker Service & Transient Retry)
