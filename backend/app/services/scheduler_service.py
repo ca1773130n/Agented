@@ -89,7 +89,7 @@ class SchedulerService:
 
             WorkflowTriggerService.init()
         except Exception as e:
-            logger.error(f"Error initializing workflow trigger service: {e}")
+            logger.error(f"Error initializing workflow trigger service: {e}", exc_info=True)
 
         logger.info("Scheduler service initialized")
 
@@ -254,7 +254,7 @@ class SchedulerService:
             )
             logger.info(f"Scheduled trigger {trigger_id} execution completed")
         except Exception as e:
-            logger.error(f"Error executing scheduled trigger {trigger_id}: {e}")
+            logger.error(f"Error executing scheduled trigger {trigger_id}: {e}", exc_info=True)
 
         # Update next_run_at after execution
         if cls._scheduler:
@@ -409,4 +409,4 @@ class SchedulerService:
             )
             logger.info(f"Scheduled team {team_id} execution started")
         except Exception as e:
-            logger.error(f"Error executing scheduled team {team_id}: {e}")
+            logger.error(f"Error executing scheduled team {team_id}: {e}", exc_info=True)

@@ -269,7 +269,7 @@ class BackendTestService:
                     try:
                         cls._test_subscribers[test_id].remove(queue)
                     except ValueError:
-                        pass
+                        pass  # Intentionally silenced: invalid value handled gracefully
 
     @classmethod
     def _broadcast_test(cls, test_id: str, event_type: str, data: dict) -> None:

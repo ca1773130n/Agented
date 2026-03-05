@@ -299,7 +299,7 @@ class TeamSpawnHandler(ExecutionTypeHandler):
                 # Settings readable — Claude Code is installed, env var will be set in child
                 return None
         except (json.JSONDecodeError, OSError):
-            pass
+            pass  # Intentionally silenced: cleanup/IO operation is best-effort
 
         # Claude Code settings not found — feature unavailable
         return {

@@ -8,6 +8,8 @@ import subprocess
 from http import HTTPStatus
 from typing import Tuple
 
+from app.models.common import error_response
+
 from ..database import (
     add_plugin_component,
     add_team_member,
@@ -48,7 +50,9 @@ class SkillMarketplaceService:
         # Get marketplace info
         marketplace = get_marketplace(marketplace_id)
         if not marketplace:
-            return {"error": "Configured marketplace not found"}, HTTPStatus.NOT_FOUND
+            return error_response(
+                "NOT_FOUND", "Configured marketplace not found", HTTPStatus.NOT_FOUND
+            )
 
         marketplace_url = marketplace.get("url", "")
         marketplace_type = marketplace.get("type", "git")
@@ -167,7 +171,7 @@ class SkillMarketplaceService:
                                     if component_id:
                                         imported_commands.append(full_cmd_name)
                                 except Exception:
-                                    pass
+                                    pass  # Intentionally silenced: failure is non-critical
 
                 # 3. Import hooks
                 hooks_dir = os.path.join(plugin_dir, "hooks")
@@ -200,7 +204,7 @@ class SkillMarketplaceService:
                                 if component_id:
                                     imported_hooks.append(full_hook_name)
                             except Exception:
-                                pass
+                                pass  # Intentionally silenced: failure is non-critical
 
                 # 4. Import agents
                 agents_dir = os.path.join(plugin_dir, "agents")
@@ -272,7 +276,7 @@ class SkillMarketplaceService:
                                     if agent_id:
                                         imported_agents.append(full_agent_name)
                                 except Exception:
-                                    pass
+                                    pass  # Intentionally silenced: failure is non-critical
 
                 # Also check plugin.json for agents defined inline
                 agents_in_config = plugin_config.get("agents", [])
@@ -400,7 +404,9 @@ class SkillMarketplaceService:
                 shutil.rmtree(temp_dir, ignore_errors=True)
 
         except subprocess.TimeoutExpired:
-            return {"error": "Marketplace clone timed out"}, HTTPStatus.GATEWAY_TIMEOUT
+            return error_response(
+                "INTERNAL_SERVER_ERROR", "Marketplace clone timed out", HTTPStatus.GATEWAY_TIMEOUT
+            )
         except Exception as e:
             return {
                 "error": f"Failed to load from marketplace: {str(e)}"
@@ -425,7 +431,9 @@ class SkillMarketplaceService:
         # Get marketplace info
         marketplace = get_marketplace(marketplace_id)
         if not marketplace:
-            return {"error": "Configured marketplace not found"}, HTTPStatus.NOT_FOUND
+            return error_response(
+                "NOT_FOUND", "Configured marketplace not found", HTTPStatus.NOT_FOUND
+            )
 
         # Generate the config
         config_result, _ = cls.generate_harness_config()

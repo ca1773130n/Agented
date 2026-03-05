@@ -144,7 +144,7 @@ class ReplayService:
                 try:
                     os.killpg(os.getpgid(process.pid), signal.SIGKILL)
                 except OSError:
-                    pass
+                    pass  # Intentionally silenced: cleanup/IO operation is best-effort
                 ExecutionLogService.finish_execution(
                     execution_id=execution_id,
                     status="timeout",
@@ -173,7 +173,7 @@ class ReplayService:
             ProcessManager.cleanup(execution_id)
 
         except Exception as e:
-            logger.error("Replay subprocess error for %s: %s", execution_id, e)
+            logger.error("Replay subprocess error for %s: %s", execution_id, e, exc_info=True)
             ExecutionLogService.finish_execution(
                 execution_id=execution_id,
                 status="failed",
@@ -188,7 +188,7 @@ class ReplayService:
             for line in pipe:
                 ExecutionLogService.append_log(execution_id, stream, line.rstrip("\n"))
         except Exception as e:
-            logger.error("Error streaming %s for %s: %s", stream, execution_id, e)
+            logger.error("Error streaming %s for %s: %s", stream, execution_id, e, exc_info=True)
         finally:
             pipe.close()
 

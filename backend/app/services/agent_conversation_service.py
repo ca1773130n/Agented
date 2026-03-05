@@ -14,6 +14,8 @@ from typing import Dict, Generator, List, Tuple
 
 logger = logging.getLogger(__name__)
 
+from app.models.common import error_response
+
 from ..database import (
     create_agent,
     create_agent_conversation,
@@ -117,15 +119,19 @@ class AgentConversationService:
         """Send a user message to the conversation and trigger Claude response."""
         conv = get_agent_conversation(conv_id)
         if not conv:
-            return {"error": "Conversation not found"}, HTTPStatus.NOT_FOUND
+            return error_response("NOT_FOUND", "Conversation not found", HTTPStatus.NOT_FOUND)
 
         if conv.get("status") != "active":
-            return {"error": "Conversation is not active"}, HTTPStatus.BAD_REQUEST
+            return error_response(
+                "BAD_REQUEST", "Conversation is not active", HTTPStatus.BAD_REQUEST
+            )
 
         # Check if already processing
         with cls._lock:
             if conv_id in cls._conversations and cls._conversations[conv_id].get("processing"):
-                return {"error": "Already processing a message"}, HTTPStatus.CONFLICT
+                return error_response(
+                    "CONFLICT", "Already processing a message", HTTPStatus.CONFLICT
+                )
 
             # Initialize conversation state if not exists
             if conv_id not in cls._conversations:
@@ -231,7 +237,7 @@ class AgentConversationService:
 
         except FileNotFoundError as e:
             error_msg = "Claude CLI not found. Please ensure 'claude' is installed and in PATH."
-            logger.error(f"Claude CLI not found for conversation {conv_id}: {e}")
+            logger.error(f"Claude CLI not found for conversation {conv_id}: {e}", exc_info=True)
             with cls._lock:
                 if conv_id in cls._conversations:
                     cls._conversations[conv_id]["processing"] = False
@@ -239,7 +245,7 @@ class AgentConversationService:
 
         except subprocess.SubprocessError as e:
             error_msg = f"Subprocess error: {str(e)}"
-            logger.error(f"Subprocess error for conversation {conv_id}: {e}")
+            logger.error(f"Subprocess error for conversation {conv_id}: {e}", exc_info=True)
             with cls._lock:
                 if conv_id in cls._conversations:
                     cls._conversations[conv_id]["processing"] = False
@@ -305,14 +311,14 @@ class AgentConversationService:
                     try:
                         cls._subscribers[conv_id].remove(queue)
                     except ValueError:
-                        pass
+                        pass  # Intentionally silenced: invalid value handled gracefully
 
     @classmethod
     def finalize_agent(cls, conv_id: str) -> Tuple[dict, HTTPStatus]:
         """Parse conversation to create an agent and return it."""
         conv = get_agent_conversation(conv_id)
         if not conv:
-            return {"error": "Conversation not found"}, HTTPStatus.NOT_FOUND
+            return error_response("NOT_FOUND", "Conversation not found", HTTPStatus.NOT_FOUND)
 
         # Get messages
         messages = []
@@ -363,7 +369,9 @@ class AgentConversationService:
         )
 
         if not agent_id:
-            return {"error": "Failed to create agent"}, HTTPStatus.INTERNAL_SERVER_ERROR
+            return error_response(
+                "INTERNAL_SERVER_ERROR", "Failed to create agent", HTTPStatus.INTERNAL_SERVER_ERROR
+            )
 
         # Update conversation with agent_id and mark as completed
         update_agent_conversation(conv_id, agent_id=agent_id, status="completed")
@@ -387,7 +395,7 @@ class AgentConversationService:
         """Abandon a conversation without creating an agent."""
         conv = get_agent_conversation(conv_id)
         if not conv:
-            return {"error": "Conversation not found"}, HTTPStatus.NOT_FOUND
+            return error_response("NOT_FOUND", "Conversation not found", HTTPStatus.NOT_FOUND)
 
         update_agent_conversation(conv_id, status="abandoned")
         cls._cleanup_conversation(conv_id)
@@ -399,7 +407,7 @@ class AgentConversationService:
         """Get a conversation with its messages."""
         conv = get_agent_conversation(conv_id)
         if not conv:
-            return {"error": "Conversation not found"}, HTTPStatus.NOT_FOUND
+            return error_response("NOT_FOUND", "Conversation not found", HTTPStatus.NOT_FOUND)
 
         # Parse messages
         messages = []

@@ -6,6 +6,8 @@ import threading
 from http import HTTPStatus
 from typing import Optional, Tuple
 
+from app.models.common import error_response
+
 from ..database import (
     count_agents,
     delete_agent,
@@ -40,7 +42,7 @@ class AgentService:
         """Get a single agent with parsed JSON fields."""
         agent = get_agent(agent_id)
         if not agent:
-            return {"error": "Agent not found"}, HTTPStatus.NOT_FOUND
+            return error_response("NOT_FOUND", "Agent not found", HTTPStatus.NOT_FOUND)
 
         AgentService._parse_agent_json_fields(agent)
         return agent, HTTPStatus.OK
@@ -50,7 +52,7 @@ class AgentService:
         """Create a new agent."""
         name = data.get("name")
         if not name:
-            return {"error": "name is required"}, HTTPStatus.BAD_REQUEST
+            return error_response("BAD_REQUEST", "name is required", HTTPStatus.BAD_REQUEST)
 
         description = data.get("description")
         role = data.get("role")
@@ -96,14 +98,16 @@ class AgentService:
                 "name": name,
             }, HTTPStatus.CREATED
         else:
-            return {"error": "Failed to create agent"}, HTTPStatus.INTERNAL_SERVER_ERROR
+            return error_response(
+                "INTERNAL_SERVER_ERROR", "Failed to create agent", HTTPStatus.INTERNAL_SERVER_ERROR
+            )
 
     @staticmethod
     def update_agent_data(agent_id: str, data: dict) -> Tuple[dict, HTTPStatus]:
         """Update an agent."""
         agent = get_agent(agent_id)
         if not agent:
-            return {"error": "Agent not found"}, HTTPStatus.NOT_FOUND
+            return error_response("NOT_FOUND", "Agent not found", HTTPStatus.NOT_FOUND)
 
         # Convert lists to JSON strings if needed
         goals = data.get("goals")
@@ -134,30 +138,32 @@ class AgentService:
         if success:
             return {"message": "Agent updated"}, HTTPStatus.OK
         else:
-            return {"error": "No changes made"}, HTTPStatus.BAD_REQUEST
+            return error_response("BAD_REQUEST", "No changes made", HTTPStatus.BAD_REQUEST)
 
     @staticmethod
     def delete_agent_by_id(agent_id: str) -> Tuple[dict, HTTPStatus]:
         """Delete an agent."""
         agent = get_agent(agent_id)
         if not agent:
-            return {"error": "Agent not found"}, HTTPStatus.NOT_FOUND
+            return error_response("NOT_FOUND", "Agent not found", HTTPStatus.NOT_FOUND)
 
         success = delete_agent(agent_id)
         if success:
             return {"message": "Agent deleted"}, HTTPStatus.OK
         else:
-            return {"error": "Failed to delete agent"}, HTTPStatus.INTERNAL_SERVER_ERROR
+            return error_response(
+                "INTERNAL_SERVER_ERROR", "Failed to delete agent", HTTPStatus.INTERNAL_SERVER_ERROR
+            )
 
     @staticmethod
     def run_agent(agent_id: str, message: str = "") -> Tuple[dict, HTTPStatus]:
         """Execute an agent with the given message."""
         agent = get_agent(agent_id)
         if not agent:
-            return {"error": "Agent not found"}, HTTPStatus.NOT_FOUND
+            return error_response("NOT_FOUND", "Agent not found", HTTPStatus.NOT_FOUND)
 
         if not agent.get("enabled"):
-            return {"error": "Agent is disabled"}, HTTPStatus.BAD_REQUEST
+            return error_response("BAD_REQUEST", "Agent is disabled", HTTPStatus.BAD_REQUEST)
 
         # Build the full prompt for the agent
         full_prompt = AgentService.build_agent_prompt(agent, message)

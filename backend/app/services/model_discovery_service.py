@@ -197,7 +197,7 @@ class ModelDiscoveryService:
                     for match in id_pattern.finditer(line):
                         models.add(match.group(0))
         except (OSError, IOError):
-            pass
+            pass  # Intentionally silenced: cleanup/IO operation is best-effort
         return list(models) if models else None
 
     @classmethod
@@ -377,7 +377,7 @@ class ModelDiscoveryService:
                         if model:
                             all_models.add(model)
                     except (json.JSONDecodeError, OSError):
-                        pass
+                        pass  # Intentionally silenced: cleanup/IO operation is best-effort
 
             # Check state.json for last-used model
             for state_path in [gemini_home / "state.json", gemini_home / ".gemini" / "state.json"]:
@@ -388,7 +388,7 @@ class ModelDiscoveryService:
                         if model:
                             all_models.add(model)
                     except (json.JSONDecodeError, OSError):
-                        pass
+                        pass  # Intentionally silenced: cleanup/IO operation is best-effort
 
         if all_models:
             logger.info(f"Gemini models from local files: {list(all_models)}")

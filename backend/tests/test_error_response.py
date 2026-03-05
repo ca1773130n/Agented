@@ -2,8 +2,6 @@
 
 from http import HTTPStatus
 
-import pytest
-
 
 class TestErrorResponseHelper:
     """Unit tests for the error_response() helper function."""

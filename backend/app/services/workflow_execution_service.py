@@ -437,7 +437,7 @@ class WorkflowExecutionService:
                     "Marked %d stale pending approval states as timed_out on startup", count
                 )
         except Exception as e:
-            logger.error("Failed to cleanup stale approval states: %s", e)
+            logger.error("Failed to cleanup stale approval states: %s", e, exc_info=True)
 
     @classmethod
     def _cleanup_execution(cls, execution_id: str) -> None:
@@ -501,7 +501,7 @@ class WorkflowExecutionService:
             topo_order = list(ts.static_order())
         except graphlib.CycleError as e:
             error_msg = f"Graph cycle detected: {e}"
-            logger.error(f"Workflow {execution_id}: {error_msg}")
+            logger.error(f"Workflow {execution_id}: {error_msg}", exc_info=True)
             cls._update_status(execution_id, "failed", error=error_msg)
             now = datetime.now(timezone.utc).isoformat()
             update_workflow_execution(execution_id, status="failed", error=error_msg, ended_at=now)
@@ -792,7 +792,7 @@ class WorkflowExecutionService:
                 try:
                     output_data = json.loads(last_output)
                 except (json.JSONDecodeError, TypeError):
-                    pass
+                    pass  # Intentionally silenced: malformed data handled gracefully
             WorkflowTriggerService.on_execution_complete(
                 "workflow", workflow_id, final_status, output=output_data
             )
@@ -823,7 +823,7 @@ class WorkflowExecutionService:
                 )
                 return
         except Exception:
-            pass
+            pass  # Intentionally silenced: failure is non-critical
         # Fallback: daemon timer (used when scheduler is unavailable)
         timer = threading.Timer(300, cls._cleanup_execution, args=[execution_id])
         timer.daemon = True
@@ -1205,7 +1205,9 @@ class WorkflowExecutionService:
                 try:
                     result = evaluate_condition(expression, context)
                 except ValueError as e:
-                    logger.error(f"Expression evaluation error on node {node_id}: {e}")
+                    logger.error(
+                        f"Expression evaluation error on node {node_id}: {e}", exc_info=True
+                    )
                     result = False
         else:
             logger.warning(f"Unknown condition type: {condition}")

@@ -2,7 +2,6 @@
 
 from unittest.mock import patch
 
-from app.database import get_trigger
 from app.db.triggers import create_trigger
 
 

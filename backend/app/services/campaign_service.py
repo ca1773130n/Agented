@@ -109,7 +109,7 @@ def _execute_repo(campaign_id: str, trigger_id: str, repo_url: str) -> None:
             )
 
     except Exception as e:
-        logger.error("Campaign %s repo %s failed: %s", campaign_id, repo_url, e)
+        logger.error("Campaign %s repo %s failed: %s", campaign_id, repo_url, e, exc_info=True)
         update_campaign_execution(
             campaign_id,
             repo_url,

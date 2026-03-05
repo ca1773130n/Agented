@@ -12,6 +12,7 @@ from typing import Dict, List, Tuple
 logger = logging.getLogger(__name__)
 
 from app.config import PROJECT_ROOT
+from app.models.common import error_response
 
 from ..database import get_all_triggers, list_paths_for_trigger
 
@@ -155,7 +156,7 @@ class AuditService:
 
             AuditService._save_audit_index(audits)
         except Exception as e:
-            logger.error("Error rebuilding audit index: %s", e)
+            logger.error("Error rebuilding audit index: %s", e, exc_info=True)
 
         return audits
 
@@ -553,7 +554,7 @@ class AuditService:
             if audit.get("audit_id") == audit_id:
                 return audit, HTTPStatus.OK
 
-        return {"error": f"Audit not found: {audit_id}"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", f"Audit not found: {audit_id}", HTTPStatus.NOT_FOUND)
 
     @staticmethod
     def get_weekly_report(audit_week: str) -> Tuple[dict, HTTPStatus]:
@@ -561,7 +562,9 @@ class AuditService:
         report_file = os.path.join(AUDIT_REPORTS_DIR, f"security_report_{audit_week}.json")
 
         if not os.path.exists(report_file):
-            return {"error": f"Report not found for {audit_week}"}, HTTPStatus.NOT_FOUND
+            return error_response(
+                "NOT_FOUND", f"Report not found for {audit_week}", HTTPStatus.NOT_FOUND
+            )
 
         try:
             with open(report_file, "r", encoding="utf-8") as f:
@@ -573,14 +576,18 @@ class AuditService:
             return report, HTTPStatus.OK
 
         except Exception as e:
-            return {"error": f"Failed to read report: {str(e)}"}, HTTPStatus.INTERNAL_SERVER_ERROR
+            return error_response(
+                "INTERNAL_SERVER_ERROR",
+                f"Failed to read report: {str(e)}",
+                HTTPStatus.INTERNAL_SERVER_ERROR,
+            )
 
     @staticmethod
     def add_audit(data: dict) -> Tuple[dict, HTTPStatus]:
         """Add a new audit result."""
         project_path = data.get("project_path")
         if not project_path:
-            return {"error": "project_path required"}, HTTPStatus.BAD_REQUEST
+            return error_response("BAD_REQUEST", "project_path required", HTTPStatus.BAD_REQUEST)
 
         audit_date = data.get("audit_date", datetime.datetime.now().isoformat())
         timestamp = audit_date.replace(":", "").replace("-", "").replace("T", "_").split(".")[0]
@@ -622,4 +629,6 @@ class AuditService:
         if AuditService._save_audit_index(audits):
             return {"message": "Audit added", "audit_id": audit_id}, HTTPStatus.CREATED
         else:
-            return {"error": "Failed to save audit"}, HTTPStatus.INTERNAL_SERVER_ERROR
+            return error_response(
+                "INTERNAL_SERVER_ERROR", "Failed to save audit", HTTPStatus.INTERNAL_SERVER_ERROR
+            )

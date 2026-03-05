@@ -118,7 +118,7 @@ class RateLimitService:
                     if datetime.fromisoformat(rate_limited_until) > now:
                         continue  # Still rate-limited, skip
                 except (ValueError, TypeError):
-                    pass
+                    pass  # Intentionally silenced: type mismatch handled gracefully
             available.append(account)
 
         if not available:
@@ -149,7 +149,7 @@ class RateLimitService:
                         is_limited = True
                         cooldown_remaining = int((limited_dt - now).total_seconds())
                 except (ValueError, TypeError):
-                    pass
+                    pass  # Intentionally silenced: type mismatch handled gracefully
 
             result.append(
                 {

@@ -93,7 +93,10 @@ class _WorkflowFileWatchHandler:
                     f"File watch trigger fired workflow {self.workflow_id} for path {src_path}"
                 )
         except Exception as e:
-            logger.error(f"Error firing file watch trigger for workflow {self.workflow_id}: {e}")
+            logger.error(
+                f"Error firing file watch trigger for workflow {self.workflow_id}: {e}",
+                exc_info=True,
+            )
 
     def stop(self) -> None:
         """Cancel any pending timer."""
@@ -147,7 +150,7 @@ class WorkflowTriggerService:
             cls._load_polling_triggers()
             cls._load_file_watch_triggers()
         except Exception as e:
-            logger.error(f"Error initializing workflow triggers: {e}")
+            logger.error(f"Error initializing workflow triggers: {e}", exc_info=True)
 
     @classmethod
     def shutdown(cls) -> None:
@@ -163,7 +166,9 @@ class WorkflowTriggerService:
                     if handler:
                         handler.stop()
                 except Exception as e:
-                    logger.error(f"Error stopping file watcher for workflow {wf_id}: {e}")
+                    logger.error(
+                        f"Error stopping file watcher for workflow {wf_id}: {e}", exc_info=True
+                    )
             cls._file_watchers.clear()
             cls._initialized = False
         logger.info("Workflow trigger service shutdown")
@@ -286,7 +291,9 @@ class WorkflowTriggerService:
                     f"(source={entity_type}/{entity_id}, depth={chain_depth + 1})"
                 )
             except Exception as e:
-                logger.error(f"Error firing completion trigger for workflow {wf_id}: {e}")
+                logger.error(
+                    f"Error firing completion trigger for workflow {wf_id}: {e}", exc_info=True
+                )
 
     @classmethod
     def _load_completion_triggers(cls) -> None:
@@ -312,7 +319,7 @@ class WorkflowTriggerService:
                         count += 1
             logger.info(f"Loaded {count} completion triggers from DB")
         except Exception as e:
-            logger.error(f"Error loading completion triggers: {e}")
+            logger.error(f"Error loading completion triggers: {e}", exc_info=True)
 
     # =========================================================================
     # 2. Full Cron Expression Support
@@ -403,7 +410,7 @@ class WorkflowTriggerService:
             WorkflowExecutionService.execute_workflow(workflow_id, trigger_type="cron")
             logger.info(f"Cron trigger fired workflow {workflow_id}")
         except Exception as e:
-            logger.error(f"Error firing cron workflow {workflow_id}: {e}")
+            logger.error(f"Error firing cron workflow {workflow_id}: {e}", exc_info=True)
 
     @classmethod
     def _load_cron_triggers(cls) -> None:
@@ -434,7 +441,7 @@ class WorkflowTriggerService:
                             )
             logger.info(f"Loaded {count} cron triggers from DB")
         except Exception as e:
-            logger.error(f"Error loading cron triggers: {e}")
+            logger.error(f"Error loading cron triggers: {e}", exc_info=True)
 
     # =========================================================================
     # 3. API Polling Trigger
@@ -571,7 +578,9 @@ class WorkflowTriggerService:
                 )
                 logger.info(f"Polling trigger fired workflow {workflow_id}")
             except Exception as e:
-                logger.error(f"Error firing polling trigger for workflow {workflow_id}: {e}")
+                logger.error(
+                    f"Error firing polling trigger for workflow {workflow_id}: {e}", exc_info=True
+                )
 
     @classmethod
     def unregister_polling_trigger(cls, workflow_id: str) -> None:
@@ -622,7 +631,7 @@ class WorkflowTriggerService:
                             logger.warning(f"Skipping polling trigger for workflow {wf['id']}: {e}")
             logger.info(f"Loaded {count} polling triggers from DB")
         except Exception as e:
-            logger.error(f"Error loading polling triggers: {e}")
+            logger.error(f"Error loading polling triggers: {e}", exc_info=True)
 
     # =========================================================================
     # 4. File System Watch Trigger
@@ -728,7 +737,7 @@ class WorkflowTriggerService:
                             )
             logger.info(f"Loaded {count} file watch triggers from DB")
         except Exception as e:
-            logger.error(f"Error loading file watch triggers: {e}")
+            logger.error(f"Error loading file watch triggers: {e}", exc_info=True)
 
     # =========================================================================
     # Trigger Registration (generic)

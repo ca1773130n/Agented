@@ -95,7 +95,7 @@ class GrdSyncService:
                     )
                     results["synced"] += 1
                 except Exception as e:
-                    logger.error(f"Error syncing ROADMAP.md: {e}")
+                    logger.error(f"Error syncing ROADMAP.md: {e}", exc_info=True)
                     results["errors"].append(f"ROADMAP.md: {e}")
 
         # If no milestone_id yet, try to get from existing milestones
@@ -333,7 +333,7 @@ class GrdSyncService:
                 results["errors"].append(f"{plan_file.name}: Failed to upsert plan")
 
         except Exception as e:
-            logger.error(f"Error syncing plan file {plan_file}: {e}")
+            logger.error(f"Error syncing plan file {plan_file}: {e}", exc_info=True)
             results["errors"].append(f"{plan_file.name}: {e}")
 
     @classmethod
@@ -404,7 +404,7 @@ class GrdSyncService:
             results["synced"] += 1
 
         except Exception as e:
-            logger.error(f"Error syncing summary file {summary_file}: {e}")
+            logger.error(f"Error syncing summary file {summary_file}: {e}", exc_info=True)
             results["errors"].append(f"{summary_file.name}: {e}")
 
     @classmethod
@@ -440,4 +440,6 @@ class GrdSyncService:
                 result["skipped"],
             )
         except Exception as e:
-            logger.error("Session-completion sync failed for project %s: %s", project_id, e)
+            logger.error(
+                "Session-completion sync failed for project %s: %s", project_id, e, exc_info=True
+            )

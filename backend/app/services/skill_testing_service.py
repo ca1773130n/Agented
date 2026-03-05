@@ -11,6 +11,8 @@ from http import HTTPStatus
 from queue import Empty, Queue
 from typing import Dict, Generator, List, Tuple
 
+from app.models.common import error_response
+
 from .skill_discovery_service import get_playground_working_dir
 
 logger = logging.getLogger(__name__)
@@ -188,7 +190,7 @@ class SkillTestingService:
                     try:
                         cls._test_subscribers[test_id].remove(queue)
                     except ValueError:
-                        pass
+                        pass  # Intentionally silenced: invalid value handled gracefully
 
     @classmethod
     def stop_test(cls, test_id: str) -> Tuple[dict, HTTPStatus]:
@@ -198,17 +200,17 @@ class SkillTestingService:
             session = cls._test_sessions.get(test_id)
 
         if not session:
-            return {"error": "Test not found"}, HTTPStatus.NOT_FOUND
+            return error_response("NOT_FOUND", "Test not found", HTTPStatus.NOT_FOUND)
 
         if session.get("status") != "running":
-            return {"error": "Test is not running"}, HTTPStatus.BAD_REQUEST
+            return error_response("BAD_REQUEST", "Test is not running", HTTPStatus.BAD_REQUEST)
 
         if process:
             try:
                 process.kill()
                 process.wait(timeout=5)
             except Exception:
-                pass
+                pass  # Intentionally silenced: failure is non-critical
 
         with cls._lock:
             if test_id in cls._test_sessions:

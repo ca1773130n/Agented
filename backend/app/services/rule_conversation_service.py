@@ -7,6 +7,8 @@ from http import HTTPStatus
 from queue import Queue
 from typing import Dict, List, Tuple
 
+from app.models.common import error_response
+
 from ..database import create_rule, get_rule
 from .base_conversation_service import BaseConversationService
 
@@ -80,7 +82,7 @@ class RuleConversationService(BaseConversationService):
     def _finalize_entity(cls, conv_id: str) -> Tuple[dict, HTTPStatus]:
         """Finalize the conversation and create the rule."""
         if conv_id not in cls._conversations:
-            return {"error": "Conversation not found"}, HTTPStatus.NOT_FOUND
+            return error_response("NOT_FOUND", "Conversation not found", HTTPStatus.NOT_FOUND)
 
         config = cls._extract_config_from_conversation(conv_id)
         if not config:
@@ -106,7 +108,11 @@ class RuleConversationService(BaseConversationService):
             )
 
             if not rule_id:
-                return {"error": "Failed to create rule"}, HTTPStatus.INTERNAL_SERVER_ERROR
+                return error_response(
+                    "INTERNAL_SERVER_ERROR",
+                    "Failed to create rule",
+                    HTTPStatus.INTERNAL_SERVER_ERROR,
+                )
 
             cls._conversations[conv_id]["finalized"] = True
             cls._cleanup_conversation(conv_id)
@@ -120,5 +126,9 @@ class RuleConversationService(BaseConversationService):
             }, HTTPStatus.CREATED
 
         except Exception as e:
-            logger.error(f"Failed to create rule: {e}")
-            return {"error": f"Failed to create rule: {str(e)}"}, HTTPStatus.INTERNAL_SERVER_ERROR
+            logger.error(f"Failed to create rule: {e}", exc_info=True)
+            return error_response(
+                "INTERNAL_SERVER_ERROR",
+                f"Failed to create rule: {str(e)}",
+                HTTPStatus.INTERNAL_SERVER_ERROR,
+            )

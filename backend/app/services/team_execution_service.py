@@ -140,7 +140,7 @@ class TeamExecutionService:
                     exec_entry["status"] = "completed"
             logger.info(f"Team execution completed: {team_exec_id}")
         except Exception as e:
-            logger.error(f"Team execution failed: {team_exec_id} - {e}")
+            logger.error(f"Team execution failed: {team_exec_id} - {e}", exc_info=True)
             with cls._lock:
                 cls._executions[team_exec_id]["status"] = "failed"
                 cls._executions[team_exec_id]["error"] = str(e)

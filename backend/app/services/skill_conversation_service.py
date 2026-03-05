@@ -14,6 +14,8 @@ from typing import Dict, Generator, List, Tuple
 
 logger = logging.getLogger(__name__)
 
+from app.models.common import error_response
+
 from ..database import (
     add_user_skill,
     get_user_skill,
@@ -111,7 +113,7 @@ class SkillConversationService:
     def get_conversation(cls, conv_id: str) -> Tuple[dict, HTTPStatus]:
         """Get conversation details and messages."""
         if conv_id not in cls._conversations:
-            return {"error": "Conversation not found"}, HTTPStatus.NOT_FOUND
+            return error_response("NOT_FOUND", "Conversation not found", HTTPStatus.NOT_FOUND)
 
         conv = cls._conversations[conv_id]
         messages = [asdict(m) for m in conv["messages"] if m.role != "system"]
@@ -133,11 +135,11 @@ class SkillConversationService:
     ) -> Tuple[dict, HTTPStatus]:
         """Send a user message and process with Claude."""
         if conv_id not in cls._conversations:
-            return {"error": "Conversation not found"}, HTTPStatus.NOT_FOUND
+            return error_response("NOT_FOUND", "Conversation not found", HTTPStatus.NOT_FOUND)
 
         conv = cls._conversations[conv_id]
         if conv.get("processing"):
-            return {"error": "Conversation is processing"}, HTTPStatus.CONFLICT
+            return error_response("CONFLICT", "Conversation is processing", HTTPStatus.CONFLICT)
 
         # Add user message
         user_msg = ConversationMessage(
@@ -197,7 +199,7 @@ class SkillConversationService:
     def finalize_skill(cls, conv_id: str) -> Tuple[dict, HTTPStatus]:
         """Finalize the conversation and create the skill."""
         if conv_id not in cls._conversations:
-            return {"error": "Conversation not found"}, HTTPStatus.NOT_FOUND
+            return error_response("NOT_FOUND", "Conversation not found", HTTPStatus.NOT_FOUND)
 
         conv = cls._conversations[conv_id]
 
@@ -212,7 +214,7 @@ class SkillConversationService:
                     skill_config = json.loads(config_str)
                     break
                 except (ValueError, json.JSONDecodeError) as e:
-                    logger.error(f"Failed to parse skill config: {e}")
+                    logger.error(f"Failed to parse skill config: {e}", exc_info=True)
                     continue
 
         if not skill_config:
@@ -261,7 +263,7 @@ Use this skill when:
                 f.write(skill_content)
             logger.info(f"Wrote SKILL.md to {abs_path}")
         except OSError as e:
-            logger.error(f"Failed to write SKILL.md to disk: {e}")
+            logger.error(f"Failed to write SKILL.md to disk: {e}", exc_info=True)
 
         # Add to database
         try:
@@ -281,7 +283,11 @@ Use this skill when:
             )
 
             if not skill_id:
-                return {"error": "Failed to create skill"}, HTTPStatus.INTERNAL_SERVER_ERROR
+                return error_response(
+                    "INTERNAL_SERVER_ERROR",
+                    "Failed to create skill",
+                    HTTPStatus.INTERNAL_SERVER_ERROR,
+                )
 
             # Mark conversation as finalized
             conv["finalized"] = True
@@ -298,14 +304,18 @@ Use this skill when:
             }, HTTPStatus.CREATED
 
         except Exception as e:
-            logger.error(f"Failed to create skill: {e}")
-            return {"error": f"Failed to create skill: {str(e)}"}, HTTPStatus.INTERNAL_SERVER_ERROR
+            logger.error(f"Failed to create skill: {e}", exc_info=True)
+            return error_response(
+                "INTERNAL_SERVER_ERROR",
+                f"Failed to create skill: {str(e)}",
+                HTTPStatus.INTERNAL_SERVER_ERROR,
+            )
 
     @classmethod
     def abandon_conversation(cls, conv_id: str) -> Tuple[dict, HTTPStatus]:
         """Abandon a conversation without creating a skill."""
         if conv_id not in cls._conversations:
-            return {"error": "Conversation not found"}, HTTPStatus.NOT_FOUND
+            return error_response("NOT_FOUND", "Conversation not found", HTTPStatus.NOT_FOUND)
 
         cls._cleanup_conversation(conv_id)
         return {"message": "Conversation abandoned"}, HTTPStatus.OK
@@ -376,7 +386,7 @@ Use this skill when:
             )
 
         except Exception as e:
-            logger.error(f"Error processing with Claude: {e}")
+            logger.error(f"Error processing with Claude: {e}", exc_info=True)
             cls._broadcast(conv_id, "error", {"error": str(e)})
         finally:
             conv["processing"] = False

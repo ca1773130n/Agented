@@ -109,7 +109,7 @@ class WebhookValidationService:
         try:
             payload_time = float(timestamp_header)
         except (ValueError, TypeError):
-            pass
+            pass  # Intentionally silenced: type mismatch handled gracefully
 
         # Try ISO 8601
         if payload_time is None:

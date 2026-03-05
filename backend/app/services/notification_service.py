@@ -88,7 +88,7 @@ class NotificationService:
                 },
             )
         except Exception as e:
-            logger.error("Notification to %s failed: %s", integration_id, e)
+            logger.error("Notification to %s failed: %s", integration_id, e, exc_info=True)
             AuditLogService.log(
                 action="notification.send",
                 entity_type="integration",

@@ -216,7 +216,7 @@ class GrdPlanningService:
                 try:
                     update_project(project_id, grd_init_status="failed")
                 except Exception:
-                    pass
+                    pass  # Intentionally silenced: failure is non-critical
 
         thread = threading.Thread(target=_run_init, daemon=True, name=f"grd-init-{project_id}")
         thread.start()

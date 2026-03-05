@@ -5,6 +5,8 @@ import logging
 from http import HTTPStatus
 from typing import Tuple
 
+from app.models.common import error_response
+
 from ..database import (
     add_user_skill,
     delete_user_skill,
@@ -38,7 +40,7 @@ class SkillHarnessService(SkillMarketplaceService):
         """Get a single user skill by ID."""
         skill = get_user_skill(skill_id)
         if not skill:
-            return {"error": "Skill not found"}, HTTPStatus.NOT_FOUND
+            return error_response("NOT_FOUND", "Skill not found", HTTPStatus.NOT_FOUND)
         return {"skill": skill}, HTTPStatus.OK
 
     @classmethod
@@ -48,12 +50,14 @@ class SkillHarnessService(SkillMarketplaceService):
         skill_path = data.get("skill_path")
 
         if not skill_name or not skill_path:
-            return {"error": "skill_name and skill_path are required"}, HTTPStatus.BAD_REQUEST
+            return error_response(
+                "BAD_REQUEST", "skill_name and skill_path are required", HTTPStatus.BAD_REQUEST
+            )
 
         # Check if skill already exists
         existing = get_user_skill_by_name(skill_name)
         if existing:
-            return {"error": "Skill already exists"}, HTTPStatus.CONFLICT
+            return error_response("CONFLICT", "Skill already exists", HTTPStatus.CONFLICT)
 
         skill_id = add_user_skill(
             skill_name=skill_name,
@@ -71,14 +75,16 @@ class SkillHarnessService(SkillMarketplaceService):
                 "skill_name": skill_name,
             }, HTTPStatus.CREATED
         else:
-            return {"error": "Failed to add skill"}, HTTPStatus.INTERNAL_SERVER_ERROR
+            return error_response(
+                "INTERNAL_SERVER_ERROR", "Failed to add skill", HTTPStatus.INTERNAL_SERVER_ERROR
+            )
 
     @classmethod
     def update_skill(cls, skill_id: int, data: dict) -> Tuple[dict, HTTPStatus]:
         """Update a user skill."""
         skill = get_user_skill(skill_id)
         if not skill:
-            return {"error": "Skill not found"}, HTTPStatus.NOT_FOUND
+            return error_response("NOT_FOUND", "Skill not found", HTTPStatus.NOT_FOUND)
 
         success = update_user_skill(
             skill_id,
@@ -93,20 +99,22 @@ class SkillHarnessService(SkillMarketplaceService):
         if success:
             return {"message": "Skill updated"}, HTTPStatus.OK
         else:
-            return {"error": "No changes made"}, HTTPStatus.BAD_REQUEST
+            return error_response("BAD_REQUEST", "No changes made", HTTPStatus.BAD_REQUEST)
 
     @classmethod
     def remove_skill(cls, skill_id: int) -> Tuple[dict, HTTPStatus]:
         """Remove a skill from the user's collection."""
         skill = get_user_skill(skill_id)
         if not skill:
-            return {"error": "Skill not found"}, HTTPStatus.NOT_FOUND
+            return error_response("NOT_FOUND", "Skill not found", HTTPStatus.NOT_FOUND)
 
         success = delete_user_skill(skill_id)
         if success:
             return {"message": "Skill removed"}, HTTPStatus.OK
         else:
-            return {"error": "Failed to remove skill"}, HTTPStatus.INTERNAL_SERVER_ERROR
+            return error_response(
+                "INTERNAL_SERVER_ERROR", "Failed to remove skill", HTTPStatus.INTERNAL_SERVER_ERROR
+            )
 
     # =========================================================================
     # Harness Integration
@@ -123,7 +131,7 @@ class SkillHarnessService(SkillMarketplaceService):
         """Toggle a skill's harness selection."""
         skill = get_user_skill(skill_id)
         if not skill:
-            return {"error": "Skill not found"}, HTTPStatus.NOT_FOUND
+            return error_response("NOT_FOUND", "Skill not found", HTTPStatus.NOT_FOUND)
 
         success = toggle_skill_harness(skill_id, selected)
         if success:
@@ -131,7 +139,9 @@ class SkillHarnessService(SkillMarketplaceService):
                 "message": f"Skill {'added to' if selected else 'removed from'} harness"
             }, HTTPStatus.OK
         else:
-            return {"error": "Failed to update"}, HTTPStatus.INTERNAL_SERVER_ERROR
+            return error_response(
+                "INTERNAL_SERVER_ERROR", "Failed to update", HTTPStatus.INTERNAL_SERVER_ERROR
+            )
 
     @classmethod
     def generate_harness_config(cls) -> Tuple[dict, HTTPStatus]:
@@ -172,7 +182,7 @@ class SkillHarnessService(SkillMarketplaceService):
 
         agent = get_agent(agent_id)
         if not agent:
-            return {"error": "Agent not found"}, HTTPStatus.NOT_FOUND
+            return error_response("NOT_FOUND", "Agent not found", HTTPStatus.NOT_FOUND)
 
         # Build YAML frontmatter
         frontmatter = {}
@@ -220,7 +230,7 @@ class SkillHarnessService(SkillMarketplaceService):
                 if triggers:
                     frontmatter["triggers"] = triggers
             except (json.JSONDecodeError, TypeError):
-                pass
+                pass  # Intentionally silenced: malformed data handled gracefully
 
         if agent.get("color"):
             frontmatter["color"] = agent["color"]
@@ -240,7 +250,7 @@ class SkillHarnessService(SkillMarketplaceService):
                 if tools:
                     frontmatter["tools"] = tools
             except (json.JSONDecodeError, TypeError):
-                pass
+                pass  # Intentionally silenced: malformed data handled gracefully
 
         if agent.get("autonomous"):
             frontmatter["autonomous"] = True
@@ -251,7 +261,7 @@ class SkillHarnessService(SkillMarketplaceService):
                 if allowed_tools:
                     frontmatter["allowed_tools"] = allowed_tools
             except (json.JSONDecodeError, TypeError):
-                pass
+                pass  # Intentionally silenced: malformed data handled gracefully
 
         # Generate markdown content
         import yaml

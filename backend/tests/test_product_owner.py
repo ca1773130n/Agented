@@ -8,7 +8,7 @@ from app.database import (
 from app.db import assign_team_to_project
 from app.db.connection import get_connection
 from app.db.projects import create_project
-from app.db.teams import create_team, add_team_member
+from app.db.teams import add_team_member, create_team
 
 # =============================================================================
 # Helpers

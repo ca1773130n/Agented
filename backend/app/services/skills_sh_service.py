@@ -12,6 +12,8 @@ import urllib.request
 from http import HTTPStatus
 from typing import Tuple
 
+from app.models.common import error_response
+
 logger = logging.getLogger(__name__)
 
 # In-memory cache (follows DeployService._marketplace_cache pattern)
@@ -63,10 +65,12 @@ class SkillsShService:
     def install_skill(cls, source: str, client_ip: str = "unknown") -> Tuple[dict, int]:
         """Install a skill via npx skills add."""
         if not source or not source.strip():
-            return {"error": "source is required"}, HTTPStatus.BAD_REQUEST
+            return error_response("BAD_REQUEST", "source is required", HTTPStatus.BAD_REQUEST)
 
         if not cls._is_npx_available():
-            return {"error": "npx is not available"}, HTTPStatus.SERVICE_UNAVAILABLE
+            return error_response(
+                "SERVICE_UNAVAILABLE", "npx is not available", HTTPStatus.SERVICE_UNAVAILABLE
+            )
 
         # Per-IP rate limiting: prevent one caller from monopolizing the semaphore
         with cls._install_lock:
@@ -146,12 +150,20 @@ class SkillsShService:
                     response["warning"] = registration_warning
                 return response, HTTPStatus.OK
             else:
-                return {"error": f"Install failed: {stderr_cleaned}"}, HTTPStatus.BAD_REQUEST
+                return error_response(
+                    "BAD_REQUEST", f"Install failed: {stderr_cleaned}", HTTPStatus.BAD_REQUEST
+                )
 
         except subprocess.TimeoutExpired:
-            return {"error": "Installation timed out"}, HTTPStatus.GATEWAY_TIMEOUT
+            return error_response(
+                "INTERNAL_SERVER_ERROR", "Installation timed out", HTTPStatus.GATEWAY_TIMEOUT
+            )
         except Exception as e:
-            return {"error": f"Install error: {str(e)}"}, HTTPStatus.INTERNAL_SERVER_ERROR
+            return error_response(
+                "INTERNAL_SERVER_ERROR",
+                f"Install error: {str(e)}",
+                HTTPStatus.INTERNAL_SERVER_ERROR,
+            )
         finally:
             cls._semaphore.release()
 

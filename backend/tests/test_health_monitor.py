@@ -8,8 +8,8 @@ from datetime import datetime, timedelta, timezone
 from app.db.health_alerts import get_recent_alerts
 from app.db.triggers import (
     add_pr_review,
-    create_trigger,
     create_execution_log,
+    create_trigger,
     update_execution_log,
     update_pr_review,
 )

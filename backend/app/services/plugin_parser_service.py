@@ -130,7 +130,7 @@ class PluginParserService:
         try:
             manifest = json.loads(agented_json_path.read_text(encoding="utf-8"))
         except (json.JSONDecodeError, OSError) as e:
-            logger.error("Failed to parse agented.json: %s", e)
+            logger.error("Failed to parse agented.json: %s", e, exc_info=True)
             raise
 
         name = manifest.get("name", package_path.name)

@@ -11,7 +11,7 @@ These tests verify that:
 import json
 
 from app.database import get_connection
-from app.db.teams import create_team, add_team_member, get_team_detail
+from app.db.teams import add_team_member, create_team, get_team_detail
 
 # ---------------------------------------------------------------------------
 # Helpers

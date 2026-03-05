@@ -124,10 +124,10 @@ class DiffContextService:
 
             return cls.extract_pr_diff_context(result.stdout, context_lines)
         except subprocess.TimeoutExpired:
-            logger.error("git diff timed out in %s", repo_path)
+            logger.error("git diff timed out in %s", repo_path, exc_info=True)
             return ""
         except Exception as e:
-            logger.error("Failed to extract diff from repo %s: %s", repo_path, e)
+            logger.error("Failed to extract diff from repo %s: %s", repo_path, e, exc_info=True)
             return ""
 
     @classmethod

@@ -191,7 +191,7 @@ class TeamMonitorService:
                                     {"type": "config", "data": team_data},
                                 )
             except Exception:
-                pass
+                pass  # Intentionally silenced: failure is non-critical
 
             # Check task files
             try:
@@ -218,9 +218,9 @@ class TeamMonitorService:
                                             {"type": "task", "data": task_data},
                                         )
                         except Exception:
-                            pass
+                            pass  # Intentionally silenced: failure is non-critical
             except Exception:
-                pass
+                pass  # Intentionally silenced: failure is non-critical
 
     @classmethod
     def stop_monitoring(cls, session_id: str) -> None:

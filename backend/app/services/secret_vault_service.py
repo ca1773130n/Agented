@@ -285,7 +285,9 @@ class SecretVaultService:
                 db_secrets.update_secret(secret_meta["id"], encrypted_value=new_ciphertext)
                 count += 1
             except Exception as e:
-                logger.error("Failed to rotate secret '%s': %s", secret_meta["name"], e)
+                logger.error(
+                    "Failed to rotate secret '%s': %s", secret_meta["name"], e, exc_info=True
+                )
         AuditLogService.log(
             action="secret.key_rotation",
             entity_type="vault",

@@ -1,11 +1,7 @@
 """Tests for standard 5-field cron expression support (API-10)."""
 
 import pytest
-
 from apscheduler.triggers.cron import CronTrigger
-
-from app.db.triggers import create_trigger
-
 
 # ---------------------------------------------------------------------------
 # Unit tests for CronTrigger.from_crontab parsing

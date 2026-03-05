@@ -239,7 +239,7 @@ class BaseGenerationService(ABC):
         try:
             return json.loads(text)
         except json.JSONDecodeError:
-            pass
+            pass  # Intentionally silenced: malformed data handled gracefully
 
         first_brace = text.find("{")
         last_brace = text.rfind("}")

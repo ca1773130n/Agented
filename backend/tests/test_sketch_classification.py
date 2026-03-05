@@ -100,7 +100,9 @@ class TestCacheLookup:
     def test_cache_finds_similar_sketch(self):
         """Add a classified sketch to DB, _check_cache with similar text returns classification."""
         # Create a classified sketch
-        sid = create_sketch("build REST API endpoints for user management", content="backend service")
+        sid = create_sketch(
+            "build REST API endpoints for user management", content="backend service"
+        )
         classification = {
             "phase": "execution",
             "domains": ["backend"],

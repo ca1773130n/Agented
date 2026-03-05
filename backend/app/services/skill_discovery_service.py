@@ -10,6 +10,7 @@ from typing import List, Optional, Tuple
 logger = logging.getLogger(__name__)
 
 from app.config import PROJECT_ROOT
+from app.models.common import error_response
 
 from ..database import (
     get_all_triggers,
@@ -288,7 +289,7 @@ class SkillDiscoveryService:
                     key, value = line.split(":", 1)
                     frontmatter[key.strip()] = value.strip().strip('"').strip("'")
         except ValueError:
-            pass
+            pass  # Intentionally silenced: invalid value handled gracefully
 
         return frontmatter
 
@@ -476,4 +477,4 @@ class SkillDiscoveryService:
         for skill in skills:
             if skill["name"] == skill_name:
                 return skill, HTTPStatus.OK
-        return {"error": "Skill not found"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "Skill not found", HTTPStatus.NOT_FOUND)

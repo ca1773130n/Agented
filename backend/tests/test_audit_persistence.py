@@ -9,7 +9,7 @@ Covers:
 
 import concurrent.futures
 
-from app.db.audit_events import create_audit_event, count_audit_events, query_audit_events
+from app.db.audit_events import count_audit_events, create_audit_event, query_audit_events
 from app.services.audit_log_service import AuditLogService
 
 

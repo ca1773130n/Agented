@@ -10,11 +10,7 @@ Covers:
 - Workflow analytics with empty data
 """
 
-import json
-from datetime import datetime, timezone
-
 import pytest
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -119,12 +115,8 @@ class TestExecutionPersistence:
         from app.db.triggers import get_all_execution_logs
 
         with get_connection() as conn:
-            _create_execution(
-                conn, "exec-old", "bot-security", "success", "2020-01-01T00:00:00"
-            )
-            _create_execution(
-                conn, "exec-recent", "bot-security", "success", "2026-03-01T00:00:00"
-            )
+            _create_execution(conn, "exec-old", "bot-security", "success", "2020-01-01T00:00:00")
+            _create_execution(conn, "exec-recent", "bot-security", "success", "2026-03-01T00:00:00")
 
         # Both should be present -- no cleanup runs by default
         logs = get_all_execution_logs(limit=100)

@@ -4,6 +4,8 @@ import logging
 from http import HTTPStatus
 from typing import Tuple
 
+from app.models.common import error_response
+
 from ..database import (
     add_pr_review,
     delete_pr_review,
@@ -49,7 +51,7 @@ class PrReviewService:
         """Get a single PR review."""
         review = get_pr_review(review_id)
         if not review:
-            return {"error": "PR review not found"}, HTTPStatus.NOT_FOUND
+            return error_response("NOT_FOUND", "PR review not found", HTTPStatus.NOT_FOUND)
         return review, HTTPStatus.OK
 
     @staticmethod
@@ -80,14 +82,18 @@ class PrReviewService:
                 "id": review_id,
             }, HTTPStatus.CREATED
         else:
-            return {"error": "Failed to create PR review"}, HTTPStatus.INTERNAL_SERVER_ERROR
+            return error_response(
+                "INTERNAL_SERVER_ERROR",
+                "Failed to create PR review",
+                HTTPStatus.INTERNAL_SERVER_ERROR,
+            )
 
     @staticmethod
     def update_review(review_id: int, data: dict) -> Tuple[dict, HTTPStatus]:
         """Update a PR review record."""
         existing = get_pr_review(review_id)
         if not existing:
-            return {"error": "PR review not found"}, HTTPStatus.NOT_FOUND
+            return error_response("NOT_FOUND", "PR review not found", HTTPStatus.NOT_FOUND)
 
         success = update_pr_review(
             review_id,
@@ -101,7 +107,7 @@ class PrReviewService:
         if success:
             return {"message": "PR review updated"}, HTTPStatus.OK
         else:
-            return {"error": "No changes made"}, HTTPStatus.BAD_REQUEST
+            return error_response("BAD_REQUEST", "No changes made", HTTPStatus.BAD_REQUEST)
 
     @staticmethod
     def get_stats(trigger_id: str = "bot-pr-review") -> Tuple[dict, HTTPStatus]:
@@ -114,13 +120,17 @@ class PrReviewService:
         """Delete a PR review record."""
         existing = get_pr_review(review_id)
         if not existing:
-            return {"error": "PR review not found"}, HTTPStatus.NOT_FOUND
+            return error_response("NOT_FOUND", "PR review not found", HTTPStatus.NOT_FOUND)
 
         success = delete_pr_review(review_id)
         if success:
             return {"message": "PR review deleted"}, HTTPStatus.OK
         else:
-            return {"error": "Failed to delete PR review"}, HTTPStatus.INTERNAL_SERVER_ERROR
+            return error_response(
+                "INTERNAL_SERVER_ERROR",
+                "Failed to delete PR review",
+                HTTPStatus.INTERNAL_SERVER_ERROR,
+            )
 
     @staticmethod
     def get_history(trigger_id: str = "bot-pr-review", days: int = 30) -> Tuple[dict, HTTPStatus]:

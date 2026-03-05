@@ -186,7 +186,7 @@ class ChatStateService:
                     try:
                         session["subscribers"].remove(queue)
                     except ValueError:
-                        pass
+                        pass  # Intentionally silenced: invalid value handled gracefully
 
     @classmethod
     def get_session_status(cls, session_id: str) -> Optional[str]:

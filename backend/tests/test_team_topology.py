@@ -1,9 +1,9 @@
 """Tests for team topology extensions: edges, SuperAgent members, and new topology types."""
 
 from app.db.teams import (
-    create_team,
     add_team_edge,
     add_team_member,
+    create_team,
     delete_team_edge,
     delete_team_edges_by_team,
     get_team_detail,

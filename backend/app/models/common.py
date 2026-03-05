@@ -45,7 +45,7 @@ def error_response(
         "details": details,
         "request_id": rid,
     }
-    return body, status.value
+    return body, status.value if isinstance(status, HTTPStatus) else int(status)
 
 
 class MessageResponse(BaseModel):

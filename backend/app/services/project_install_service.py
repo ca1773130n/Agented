@@ -144,14 +144,14 @@ class ProjectInstallService:
                 if os.path.isdir(skill_dir) and not os.listdir(skill_dir):
                     os.rmdir(skill_dir)
             except FileNotFoundError:
-                pass
+                pass  # Intentionally silenced: file may not exist, which is acceptable
         else:
             relative_path = f".claude/{subdir}/{name}.md"
             full_path = os.path.join(workspace, relative_path)
             try:
                 os.remove(full_path)
             except FileNotFoundError:
-                pass
+                pass  # Intentionally silenced: file may not exist, which is acceptable
 
         # 4. For hooks: also remove from settings.json
         if component_type == "hook" and component:

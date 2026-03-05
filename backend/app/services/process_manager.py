@@ -108,7 +108,9 @@ class ProcessManager:
                         e,
                     )
                 except Exception as e:
-                    logger.error(f"Force-kill failed for execution {execution_id}: {e}")
+                    logger.error(
+                        f"Force-kill failed for execution {execution_id}: {e}", exc_info=True
+                    )
 
             timer = threading.Timer(sigterm_timeout, _force_kill)
             timer.daemon = True
@@ -243,7 +245,7 @@ class ProcessManager:
             logger.info(f"Process already dead during auto-cancel of {execution_id}")
             return
         except Exception as e:
-            logger.error(f"SIGCONT failed during auto-cancel of {execution_id}: {e}")
+            logger.error(f"SIGCONT failed during auto-cancel of {execution_id}: {e}", exc_info=True)
 
         # Now gracefully cancel
         cls._cancelled.add(execution_id)
@@ -257,15 +259,15 @@ class ProcessManager:
                         os.killpg(info.pgid, signal.SIGKILL)
                         logger.info(f"Force-killed execution {execution_id} after auto-cancel")
                 except (ProcessLookupError, OSError):
-                    pass
+                    pass  # Intentionally silenced: process already terminated
 
             kill_timer = threading.Timer(10.0, _force_kill)
             kill_timer.daemon = True
             kill_timer.start()
         except ProcessLookupError:
-            pass
+            pass  # Intentionally silenced: process already terminated
         except Exception as e:
-            logger.error(f"SIGTERM failed during auto-cancel of {execution_id}: {e}")
+            logger.error(f"SIGTERM failed during auto-cancel of {execution_id}: {e}", exc_info=True)
 
         with cls._lock:
             info.pause_timer = None
@@ -325,4 +327,4 @@ class ProcessManager:
                 except ProcessLookupError as e:
                     logger.debug("Process already exited during shutdown: %s", e)
                 except Exception as e:
-                    logger.error(f"Failed to force-kill {info.execution_id}: {e}")
+                    logger.error(f"Failed to force-kill {info.execution_id}: {e}", exc_info=True)

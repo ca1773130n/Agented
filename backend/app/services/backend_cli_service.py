@@ -325,15 +325,15 @@ class BackendCLIService:
                                 try:
                                     os.close(master_fd)
                                 except OSError:
-                                    pass
+                                    pass  # Intentionally silenced: cleanup/IO operation is best-effort
                                 try:
                                     os.kill(pid, signal.SIGTERM)
                                 except ProcessLookupError:
-                                    pass
+                                    pass  # Intentionally silenced: process already terminated
                                 try:
                                     os.waitpid(pid, os.WNOHANG)
                                 except ChildProcessError:
-                                    pass
+                                    pass  # Intentionally silenced: child process already reaped
                                 cls._finish_session(session_id, "completed", 0, None)
                                 return
                     if (
@@ -359,7 +359,7 @@ class BackendCLIService:
                                 try:
                                     os.write(master_fd, (action_cmd + "\n").encode())
                                 except OSError:
-                                    pass
+                                    pass  # Intentionally silenced: cleanup/IO operation is best-effort
                                 resent_action = True
                                 idle_ticks = 0
                     continue
@@ -526,7 +526,7 @@ class BackendCLIService:
                                             },
                                         )
                     except (ValueError, OSError):
-                        pass
+                        pass  # Intentionally silenced: cleanup/IO operation is best-effort
 
                     interaction = cls._try_parse_menu(recent_lines)
                     if interaction:
@@ -534,7 +534,7 @@ class BackendCLIService:
                         cls._handle_interaction(session_id, master_fd, interaction)
                         interaction_count += 1
         except Exception as e:
-            logger.error(f"CLI {session_id}: PTY reader error: {e}")
+            logger.error(f"CLI {session_id}: PTY reader error: {e}", exc_info=True)
 
         # Flush remaining buffer
         if buffer.strip():
@@ -557,7 +557,7 @@ class BackendCLIService:
         try:
             os.close(master_fd)
         except OSError:
-            pass
+            pass  # Intentionally silenced: cleanup/IO operation is best-effort
 
         # Check if already cancelled
         with cls._lock:
@@ -752,7 +752,7 @@ class BackendCLIService:
                         "is_json_tool_use": True,
                     }
         except (json.JSONDecodeError, TypeError):
-            pass
+            pass  # Intentionally silenced: malformed data handled gracefully
 
         # Regex fallback: detect interactive CLI prompts.
         # Pattern: "? <prompt text>:" or "? <prompt text> [option1/option2]"
@@ -923,7 +923,7 @@ class BackendCLIService:
                     try:
                         cls._subscribers[session_id].remove(queue)
                     except ValueError:
-                        pass
+                        pass  # Intentionally silenced: invalid value handled gracefully
 
     @classmethod
     def get_status(cls, session_id: str) -> Optional[dict]:
@@ -963,14 +963,14 @@ class BackendCLIService:
             try:
                 os.killpg(os.getpgid(pid), signal.SIGTERM)
             except (ProcessLookupError, OSError):
-                pass
+                pass  # Intentionally silenced: process already terminated
 
         # Close the master fd to unblock the reader thread
         if master_fd is not None:
             try:
                 os.close(master_fd)
             except OSError:
-                pass
+                pass  # Intentionally silenced: cleanup/IO operation is best-effort
 
         cls._finish_session(session_id, "cancelled")
         return True

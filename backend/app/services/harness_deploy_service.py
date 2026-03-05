@@ -8,6 +8,8 @@ from typing import Tuple
 
 import yaml
 
+from app.models.common import error_response
+
 from ..database import (
     get_agent,
     get_project_detail,
@@ -33,7 +35,7 @@ class HarnessDeployService:
         """
         project = get_project_detail(project_id)
         if not project:
-            return {"error": "Project not found"}, HTTPStatus.NOT_FOUND
+            return error_response("NOT_FOUND", "Project not found", HTTPStatus.NOT_FOUND)
 
         github_repo = project.get("github_repo")
         if not github_repo:

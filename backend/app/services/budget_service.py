@@ -231,7 +231,7 @@ class BudgetService:
             if isinstance(obj, dict):
                 return obj
         except (json.JSONDecodeError, ValueError):
-            pass
+            pass  # Intentionally silenced: malformed data handled gracefully
         return None
 
     @classmethod

@@ -29,7 +29,7 @@ def _create_team_with_members(isolated_db, agent_ids, topology=None, topology_co
     which requires edges to exist, and for invalid-config tests).
     Returns (team_id, member_ids dict).
     """
-    from app.database import create_team, add_team_member, update_team
+    from app.database import add_team_member, create_team, update_team
 
     # Create agents
     for aid in agent_ids:

@@ -156,5 +156,5 @@ class IntegrationConfigService:
             else:
                 return False, "Adapter returned failure"
         except Exception as e:
-            logger.error("Integration test error: %s", e)
+            logger.error("Integration test error: %s", e, exc_info=True)
             return False, f"Error: {str(e)}"

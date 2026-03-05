@@ -5,8 +5,8 @@ import json
 import pytest
 
 from app.db.projects import (
-    create_project,
     add_project_team_edge,
+    create_project,
     delete_project_team_edge,
     delete_project_team_edges_by_project,
     get_project,

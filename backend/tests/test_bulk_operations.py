@@ -41,10 +41,7 @@ class TestBulkAgents:
         created = resp.get_json()["results"]
 
         # Update their names
-        updates = [
-            {"id": r["id"], "name": f"Updated Agent {i}"}
-            for i, r in enumerate(created)
-        ]
+        updates = [{"id": r["id"], "name": f"Updated Agent {i}"} for i, r in enumerate(created)]
         resp = client.post("/admin/bulk/agents", json={"action": "update", "items": updates})
         assert resp.status_code == 200
         data = resp.get_json()
@@ -123,9 +120,7 @@ class TestBulkAgents:
 
     def test_items_not_list(self, client):
         """Items not a list returns 400."""
-        resp = client.post(
-            "/admin/bulk/agents", json={"action": "create", "items": "not a list"}
-        )
+        resp = client.post("/admin/bulk/agents", json={"action": "create", "items": "not a list"})
         assert resp.status_code == 400
 
 
@@ -137,10 +132,7 @@ class TestBulkAgents:
 class TestBulkTriggers:
     def test_bulk_create_triggers(self, client):
         """Bulk create triggers."""
-        items = [
-            {"name": f"Trigger {i}", "prompt_template": f"Template {i}"}
-            for i in range(3)
-        ]
+        items = [{"name": f"Trigger {i}", "prompt_template": f"Template {i}"} for i in range(3)]
         resp = client.post("/admin/bulk/triggers", json={"action": "create", "items": items})
         assert resp.status_code == 200
         data = resp.get_json()

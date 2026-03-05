@@ -99,7 +99,9 @@ class RotationEvaluator:
             cls._cleanup_stale_state(active_execution_ids)
 
         except Exception as e:
-            logger.error(f"RotationEvaluator: unhandled error in evaluation loop: {e}")
+            logger.error(
+                f"RotationEvaluator: unhandled error in evaluation loop: {e}", exc_info=True
+            )
 
     @classmethod
     def _evaluate_single_execution(cls, execution_id, ExecutionLogService, RotationService) -> None:

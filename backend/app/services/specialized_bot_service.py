@@ -71,7 +71,7 @@ class SpecializedBotService:
             )
             return False
         except FileNotFoundError:
-            logger.error("gh CLI not found on PATH; cannot post PR comment")
+            logger.error("gh CLI not found on PATH; cannot post PR comment", exc_info=True)
             return False
         except Exception as e:
             logger.error(
@@ -139,13 +139,15 @@ class SpecializedBotService:
             )
             return []
         except FileNotFoundError:
-            logger.error("gh CLI not found on PATH; cannot list merged PRs")
+            logger.error("gh CLI not found on PATH; cannot list merged PRs", exc_info=True)
             return []
         except json.JSONDecodeError as e:
-            logger.error("Failed to parse gh output for %s: %s", repo_full_name, e)
+            logger.error("Failed to parse gh output for %s: %s", repo_full_name, e, exc_info=True)
             return []
         except Exception as e:
-            logger.error("Unexpected error listing merged PRs for %s: %s", repo_full_name, e)
+            logger.error(
+                "Unexpected error listing merged PRs for %s: %s", repo_full_name, e, exc_info=True
+            )
             return []
 
     @classmethod
@@ -169,13 +171,13 @@ class SpecializedBotService:
                 logger.warning("gh CLI is not authenticated: %s", result.stderr.strip())
                 return False
         except FileNotFoundError:
-            logger.error("gh CLI not found on PATH")
+            logger.error("gh CLI not found on PATH", exc_info=True)
             return False
         except subprocess.TimeoutExpired:
-            logger.error("Timeout checking gh auth status")
+            logger.error("Timeout checking gh auth status", exc_info=True)
             return False
         except Exception as e:
-            logger.error("Unexpected error checking gh auth: %s", e)
+            logger.error("Unexpected error checking gh auth: %s", e, exc_info=True)
             return False
 
     @classmethod

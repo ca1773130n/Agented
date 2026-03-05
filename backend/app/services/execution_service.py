@@ -527,7 +527,7 @@ class ExecutionService:
 
                         _os.killpg(_os.getpgid(process.pid), signal.SIGKILL)
                     except ProcessLookupError:
-                        pass
+                        pass  # Intentionally silenced: process already terminated
                     except Exception as kill_err:
                         logger.error(
                             "Failed to kill over-budget process for execution %s: %s",
@@ -1058,7 +1058,7 @@ class ExecutionService:
         except FileNotFoundError:
             backend = trigger.get("backend_type", "claude")
             error_msg = f"{backend} command not found"
-            logger.error("%s. Is %s CLI installed?", error_msg, backend)
+            logger.error("%s. Is %s CLI installed?", error_msg, backend, exc_info=True)
             if execution_id:
                 ExecutionLogService.finish_execution(
                     execution_id=execution_id, status=ExecutionState.FAILED, error_message=error_msg
@@ -1371,9 +1371,9 @@ class ExecutionService:
                 logger.info("Resolve output (stderr): %s", result.stderr)
             logger.info("Resolve exit code: %d", result.returncode)
         except subprocess.TimeoutExpired:
-            logger.error("Resolve command timed out after 15 minutes")
+            logger.error("Resolve command timed out after 15 minutes", exc_info=True)
         except FileNotFoundError:
-            logger.error("Claude command not found. Is Claude CLI installed?")
+            logger.error("Claude command not found. Is Claude CLI installed?", exc_info=True)
         except Exception:
             logger.exception("Error running resolve command")
 

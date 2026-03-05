@@ -469,7 +469,7 @@ class ProviderUsageClient:
                 try:
                     resets_at_str = reset_time if "T" in str(reset_time) else None
                 except (ValueError, TypeError):
-                    pass
+                    pass  # Intentionally silenced: type mismatch handled gracefully
 
             windows.append(
                 {
@@ -519,13 +519,13 @@ def _http_get(url: str, headers: dict) -> Optional[dict]:
                 return None
             return json.loads(resp.read().decode("utf-8"))
     except urllib.error.HTTPError as e:
-        logger.error(f"HTTP GET {url} failed: {e.code} {e.reason}")
+        logger.error(f"HTTP GET {url} failed: {e.code} {e.reason}", exc_info=True)
         return None
     except (urllib.error.URLError, TimeoutError, OSError) as e:
-        logger.error(f"HTTP GET {url} network error: {e}")
+        logger.error(f"HTTP GET {url} network error: {e}", exc_info=True)
         return None
     except json.JSONDecodeError:
-        logger.error(f"HTTP GET {url} returned invalid JSON")
+        logger.error(f"HTTP GET {url} returned invalid JSON", exc_info=True)
         return None
 
 
@@ -539,13 +539,13 @@ def _http_post(url: str, headers: dict, body: bytes) -> Optional[dict]:
                 return None
             return json.loads(resp.read().decode("utf-8"))
     except urllib.error.HTTPError as e:
-        logger.error(f"HTTP POST {url} failed: {e.code} {e.reason}")
+        logger.error(f"HTTP POST {url} failed: {e.code} {e.reason}", exc_info=True)
         return None
     except (urllib.error.URLError, TimeoutError, OSError) as e:
-        logger.error(f"HTTP POST {url} network error: {e}")
+        logger.error(f"HTTP POST {url} network error: {e}", exc_info=True)
         return None
     except json.JSONDecodeError:
-        logger.error(f"HTTP POST {url} returned invalid JSON")
+        logger.error(f"HTTP POST {url} returned invalid JSON", exc_info=True)
         return None
 
 
@@ -580,7 +580,7 @@ def _read_keychain_raw(service: str) -> Optional[str]:
         if result.returncode == 0 and result.stdout.strip():
             return result.stdout.strip()
     except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
-        pass
+        pass  # Intentionally silenced: cleanup/IO operation is best-effort
     return None
 
 
@@ -590,7 +590,7 @@ def _read_json_file(path: Path) -> Optional[dict]:
         if path.exists():
             return json.loads(path.read_text(encoding="utf-8"))
     except (json.JSONDecodeError, OSError, PermissionError):
-        pass
+        pass  # Intentionally silenced: cleanup/IO operation is best-effort
     return None
 
 

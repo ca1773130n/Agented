@@ -1,9 +1,8 @@
 """Tests for execution queue: enqueue, dispatcher, concurrency, FIFO ordering, circuit breaker."""
 
-import json
 import threading
 import time
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 

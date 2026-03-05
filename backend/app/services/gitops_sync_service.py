@@ -75,7 +75,7 @@ class GitOpsSyncService:
             current_sha = cls._ensure_repo(local_path, repo["repo_url"], repo["branch"])
         except subprocess.CalledProcessError as e:
             error_msg = f"Git operation failed: {e.stderr or e.stdout or str(e)}"
-            logger.error("GitOps sync failed for %s: %s", repo_id, error_msg)
+            logger.error("GitOps sync failed for %s: %s", repo_id, error_msg, exc_info=True)
             add_sync_log(
                 repo_id=repo_id,
                 commit_sha=None,
@@ -140,7 +140,9 @@ class GitOpsSyncService:
                     if change.get("conflict"):
                         files_conflicted += 1
             except Exception as e:
-                logger.error("Error processing %s: %s", os.path.basename(yaml_path), e)
+                logger.error(
+                    "Error processing %s: %s", os.path.basename(yaml_path), e, exc_info=True
+                )
                 changes.append(
                     {
                         "file": os.path.basename(yaml_path),
@@ -326,7 +328,7 @@ class GitOpsSyncService:
             try:
                 scheduler.remove_job(job_id)
             except Exception:
-                pass
+                pass  # Intentionally silenced: failure is non-critical
         cls._scheduler_jobs.clear()
 
     @classmethod
@@ -351,7 +353,7 @@ class GitOpsSyncService:
                 interval,
             )
         except Exception as e:
-            logger.error("Failed to register GitOps poll job: %s", e)
+            logger.error("Failed to register GitOps poll job: %s", e, exc_info=True)
 
     @classmethod
     def _poll_sync(cls, repo_id: str) -> None:
@@ -359,7 +361,7 @@ class GitOpsSyncService:
         try:
             cls.sync_repo(repo_id)
         except Exception as e:
-            logger.error("GitOps poll sync failed for %s: %s", repo_id, e)
+            logger.error("GitOps poll sync failed for %s: %s", repo_id, e, exc_info=True)
 
     @classmethod
     def init(cls) -> None:

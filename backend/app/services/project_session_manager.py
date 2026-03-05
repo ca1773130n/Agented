@@ -390,7 +390,7 @@ class ProjectSessionManager:
             try:
                 os.close(master_fd)
             except OSError:
-                pass
+                pass  # Intentionally silenced: cleanup/IO operation is best-effort
 
             # Flush remaining buffer content
             if buffer:
@@ -457,7 +457,7 @@ class ProjectSessionManager:
                     if row:
                         project_id = row["project_id"]
             except Exception:
-                pass
+                pass  # Intentionally silenced: failure is non-critical
 
             if project_id:
                 # Unregister from planning session tracker (no-op if not a planning session)
@@ -530,9 +530,9 @@ class ProjectSessionManager:
                 os.killpg(pgid, signal.SIGKILL)
                 logger.warning(f"Sent SIGKILL to session {session_id} pgid {pgid}")
             except ProcessLookupError:
-                pass
+                pass  # Intentionally silenced: process already terminated
             except OSError as e:
-                logger.error(f"SIGKILL to pgid {pgid} failed: {e}")
+                logger.error(f"SIGKILL to pgid {pgid} failed: {e}", exc_info=True)
 
         # Update DB
         status = "completed"
@@ -691,7 +691,7 @@ class ProjectSessionManager:
                     try:
                         cls._subscribers[session_id].remove(queue)
                     except ValueError:
-                        pass
+                        pass  # Intentionally silenced: invalid value handled gracefully
             return
 
         if current_status is None:
@@ -705,7 +705,7 @@ class ProjectSessionManager:
                     try:
                         cls._subscribers[session_id].remove(queue)
                     except ValueError:
-                        pass
+                        pass  # Intentionally silenced: invalid value handled gracefully
             return
 
         # Step 4: Stream live events
@@ -726,7 +726,7 @@ class ProjectSessionManager:
                     try:
                         cls._subscribers[session_id].remove(queue)
                     except ValueError:
-                        pass
+                        pass  # Intentionally silenced: invalid value handled gracefully
 
     @classmethod
     def _broadcast(cls, session_id: str, event_type: str, data: dict) -> None:

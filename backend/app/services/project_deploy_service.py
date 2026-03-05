@@ -7,6 +7,8 @@ from typing import Tuple
 
 import yaml
 
+from app.models.common import error_response
+
 from ..database import (
     get_project_detail,
     get_team_detail,
@@ -115,7 +117,7 @@ class ProjectDeployService:
         """
         project = get_project_detail(project_id)
         if not project:
-            return {"error": "Project not found"}, HTTPStatus.NOT_FOUND
+            return error_response("NOT_FOUND", "Project not found", HTTPStatus.NOT_FOUND)
 
         teams = project.get("teams", [])
         if not teams:

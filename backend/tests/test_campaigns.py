@@ -4,8 +4,8 @@ import time
 from unittest.mock import MagicMock, patch
 
 from app.db.campaigns import (
-    create_campaign_execution,
     create_campaign,
+    create_campaign_execution,
     delete_campaign,
     get_campaign,
     list_campaign_executions,

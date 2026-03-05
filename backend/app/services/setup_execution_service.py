@@ -216,7 +216,7 @@ class SetupExecutionService:
                         },
                     )
         except Exception as e:
-            logger.error(f"Setup {execution_id}: stdout stream error: {e}")
+            logger.error(f"Setup {execution_id}: stdout stream error: {e}", exc_info=True)
 
     @classmethod
     def _stream_stderr(cls, execution_id: str, stderr) -> None:
@@ -236,7 +236,7 @@ class SetupExecutionService:
                     },
                 )
         except Exception as e:
-            logger.error(f"Setup {execution_id}: stderr stream error: {e}")
+            logger.error(f"Setup {execution_id}: stderr stream error: {e}", exc_info=True)
 
     @classmethod
     def _wait_for_completion(cls, execution_id: str, process) -> None:
@@ -258,7 +258,7 @@ class SetupExecutionService:
             error_message = None if exit_code == 0 else f"Process exited with code {exit_code}"
             cls._finish_execution(execution_id, status, exit_code, error_message)
         except Exception as e:
-            logger.error(f"Setup {execution_id}: wait_for_completion error: {e}")
+            logger.error(f"Setup {execution_id}: wait_for_completion error: {e}", exc_info=True)
             cls._finish_execution(execution_id, "error", error_message=str(e))
 
     @classmethod
@@ -326,7 +326,7 @@ class SetupExecutionService:
                         "options": input_data.get("options"),
                     }
         except (json.JSONDecodeError, TypeError):
-            pass
+            pass  # Intentionally silenced: malformed data handled gracefully
 
         # Regex fallback: detect interactive CLI prompts (e.g., "? Enter API key:")
         match = re.match(r"^\?\s+(.+?)(?:\s*\[([^\]]+)\])?\s*$", content)
@@ -409,7 +409,7 @@ class SetupExecutionService:
                     try:
                         cls._subscribers[execution_id].remove(queue)
                     except ValueError:
-                        pass
+                        pass  # Intentionally silenced: invalid value handled gracefully
 
     @classmethod
     def get_status(cls, execution_id: str) -> Optional[dict]:

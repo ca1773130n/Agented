@@ -43,7 +43,9 @@ class TeamGenerationService(BaseGenerationService):
 
         if result.returncode != 0:
             stderr = result.stderr.strip() if result.stderr else "Unknown error"
-            logger.error("Claude CLI error: %s, stderr: %s", result.returncode, stderr)
+            logger.error(
+                "Claude CLI error: %s, stderr: %s", result.returncode, stderr, exc_info=True
+            )
 
         stdout = result.stdout.strip() if result.stdout else ""
         if not stdout:
@@ -316,5 +318,5 @@ class TeamGenerationService(BaseGenerationService):
                     str(r.get("id")) == str(entity_id) or r.get("name") == entity_id for r in rules
                 )
         except Exception:
-            pass
+            pass  # Intentionally silenced: failure is non-critical
         return False

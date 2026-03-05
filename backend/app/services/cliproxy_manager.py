@@ -151,7 +151,7 @@ class CLIProxyManager:
             except ProcessLookupError:
                 logger.debug("CLIProxyAPI process already exited during SIGKILL (pid=%d)", proc.pid)
         except Exception as exc:
-            logger.error("Error stopping CLIProxyAPI: %s", exc)
+            logger.error("Error stopping CLIProxyAPI: %s", exc, exc_info=True)
 
     # ------------------------------------------------------------------
     # Health & URL
@@ -295,7 +295,7 @@ class CLIProxyManager:
                             oauth_url = line
                             break
                 except Exception:
-                    pass
+                    pass  # Intentionally silenced: failure is non-critical
                 if oauth_url:
                     break
             # Also check if process already exited (error)
@@ -305,7 +305,7 @@ class CLIProxyManager:
                 try:
                     stderr_out = proc.stderr.read() if proc.stderr else ""
                 except Exception:
-                    pass
+                    pass  # Intentionally silenced: failure is non-critical
                 logger.warning(
                     "CLIProxy login process exited early: rc=%s stderr=%s",
                     rc,
@@ -424,7 +424,7 @@ class CLIProxyManager:
                     for line in fd:
                         logger.debug("CLIProxy codex drain: %s", line.rstrip())
             except Exception:
-                pass
+                pass  # Intentionally silenced: failure is non-critical
 
         threading.Thread(target=_drain, daemon=True).start()
 

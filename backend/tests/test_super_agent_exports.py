@@ -7,7 +7,7 @@ import zipfile
 
 import pytest
 
-from app.database import create_super_agent, add_super_agent_document, get_super_agent
+from app.database import add_super_agent_document, create_super_agent, get_super_agent
 
 
 @pytest.fixture

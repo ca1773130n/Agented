@@ -60,7 +60,7 @@ class GitHubService:
             if result.returncode == 0:
                 return True
         except (subprocess.TimeoutExpired, FileNotFoundError, Exception):
-            pass
+            pass  # Intentionally silenced: file may not exist, which is acceptable
 
         # Fallback: unauthenticated GitHub API check (public repos)
         try:
@@ -79,7 +79,7 @@ class GitHubService:
             if resp.status_code == 404:
                 return True  # Might be private; let clone discover the issue
         except Exception:
-            pass
+            pass  # Intentionally silenced: failure is non-critical
 
         # If everything failed (network down, etc.), still allow creation
         return True
@@ -129,7 +129,7 @@ class GitHubService:
                 logger.info("Cleaned up clone: %s", clone_path)
                 return True
         except Exception as e:
-            logger.error("Failed to clean up clone directory %s: %s", clone_path, e)
+            logger.error("Failed to clean up clone directory %s: %s", clone_path, e, exc_info=True)
         return False
 
     @staticmethod

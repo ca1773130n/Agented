@@ -14,15 +14,21 @@ import sqlite3
 import pytest
 
 from app.database import (
+    add_plugin_component,
+    add_team_agent_assignment,
+    add_team_member,
+    # Skill (user_skills) functions
+    add_user_skill,
+    assign_team_to_project,
     # Agent functions
     create_agent,
+    create_agent_conversation,
     # Command functions
     create_command,
     # Hook functions
     create_hook,
     # Plugin functions
     create_plugin,
-    add_plugin_component,
     # Product functions
     create_product,
     # Project functions
@@ -31,14 +37,8 @@ from app.database import (
     create_rule,
     # Team functions
     create_team,
-    add_team_agent_assignment,
-    add_team_member,
     # Trigger functions
     create_trigger,
-    # Skill (user_skills) functions
-    add_user_skill,
-    assign_team_to_project,
-    create_agent_conversation,
     delete_agent,
     delete_agent_conversation,
     delete_command,
@@ -1312,8 +1312,6 @@ class TestRuleCRUD:
 # =============================================================================
 
 from app.database import (
-    # Marketplace functions
-    create_marketplace,
     add_marketplace_plugin,
     # Plugin export functions
     add_plugin_export,
@@ -1325,6 +1323,8 @@ from app.database import (
     clear_project_skills,
     # Execution log functions
     create_execution_log,
+    # Marketplace functions
+    create_marketplace,
     delete_marketplace,
     delete_marketplace_plugin,
     delete_old_execution_logs,

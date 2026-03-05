@@ -75,13 +75,15 @@ def seed_executions(isolated_db):
                     f"claude -p 'test {i}'",
                 ),
             )
-            records.append({
-                "execution_id": execution_id,
-                "trigger_id": trigger_id,
-                "status": status,
-                "started_at": started_at,
-                "stdout_log": stdout_log,
-            })
+            records.append(
+                {
+                    "execution_id": execution_id,
+                    "trigger_id": trigger_id,
+                    "status": status,
+                    "started_at": started_at,
+                    "stdout_log": stdout_log,
+                }
+            )
 
         conn.commit()
 
@@ -134,9 +136,7 @@ class TestFilterByDateRange:
 
     def test_date_range(self, seed_executions):
         """date_from and date_to narrow results to the specified range."""
-        results = get_filtered_executions(
-            date_from="2026-03-01", date_to="2026-03-02T23:59:59"
-        )
+        results = get_filtered_executions(date_from="2026-03-01", date_to="2026-03-02T23:59:59")
         assert len(results) > 0
         for r in results:
             assert r["started_at"] >= "2026-03-01"
@@ -151,8 +151,10 @@ class TestFilterByTextSearch:
         results = get_filtered_executions(q="security")
         assert len(results) > 0
         for r in results:
-            has_match = "security" in (r.get("stdout_log") or "").lower() or \
-                        "security" in (r.get("stderr_log") or "").lower()
+            has_match = (
+                "security" in (r.get("stdout_log") or "").lower()
+                or "security" in (r.get("stderr_log") or "").lower()
+            )
             assert has_match
 
     def test_search_no_match(self, seed_executions):
@@ -180,8 +182,10 @@ class TestComposedFilters:
     def test_status_trigger_and_date(self, seed_executions):
         """Three-way AND: status + trigger_id + date range."""
         results = get_filtered_executions(
-            status="completed", trigger_id="trig-aaa",
-            date_from="2026-03-01", date_to="2026-03-01T23:59:59"
+            status="completed",
+            trigger_id="trig-aaa",
+            date_from="2026-03-01",
+            date_to="2026-03-01T23:59:59",
         )
         for r in results:
             assert r["status"] == "completed"

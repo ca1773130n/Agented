@@ -4,6 +4,8 @@ import logging
 from http import HTTPStatus
 from typing import Tuple
 
+from app.models.common import error_response
+
 from ..database import (
     create_marketplace,
     get_all_marketplaces,
@@ -43,7 +45,11 @@ class SetupBundleService:
         if not marketplace_id:
             marketplace_id = create_marketplace(BUNDLE_MARKETPLACE_NAME, BUNDLE_MARKETPLACE_URL)
             if not marketplace_id:
-                return {"error": "Failed to create marketplace"}, HTTPStatus.INTERNAL_SERVER_ERROR
+                return error_response(
+                    "INTERNAL_SERVER_ERROR",
+                    "Failed to create marketplace",
+                    HTTPStatus.INTERNAL_SERVER_ERROR,
+                )
             marketplace_created = True
 
         # Check already-installed plugins

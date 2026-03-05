@@ -379,7 +379,7 @@ class RotationService:
             return continuation_execution_id
 
         except Exception as e:
-            logger.error(f"Rotation failed for {execution_id}: {e}")
+            logger.error(f"Rotation failed for {execution_id}: {e}", exc_info=True)
             # Update rotation event to failed status
             if rotation_event_id:
                 try:
@@ -388,7 +388,9 @@ class RotationService:
                         rotation_status="failed",
                     )
                 except Exception as update_err:
-                    logger.error(f"Failed to update rotation event status: {update_err}")
+                    logger.error(
+                        f"Failed to update rotation event status: {update_err}", exc_info=True
+                    )
             try:
                 from .audit_log_service import AuditLogService
 
@@ -400,7 +402,7 @@ class RotationService:
                     details={"error": str(e), "rotation_event_id": rotation_event_id},
                 )
             except Exception:
-                pass
+                pass  # Intentionally silenced: failure is non-critical
             return None
 
     @classmethod
@@ -431,7 +433,7 @@ class RotationService:
             logger.info(f"Process {execution_id} exited after SIGTERM")
             return True
         except subprocess.TimeoutExpired:
-            pass
+            pass  # Intentionally silenced: timeout is expected in some cases
 
         # SIGKILL fallback
         try:

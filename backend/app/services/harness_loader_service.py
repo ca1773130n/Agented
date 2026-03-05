@@ -10,6 +10,8 @@ logger = logging.getLogger(__name__)
 
 import yaml
 
+from app.models.common import error_response
+
 from ..database import (
     add_project_skill,
     add_team_member,
@@ -56,7 +58,7 @@ class HarnessLoaderService(LayerDetectionService):
         """
         project = get_project_detail(project_id)
         if not project:
-            return {"error": "Project not found"}, HTTPStatus.NOT_FOUND
+            return error_response("NOT_FOUND", "Project not found", HTTPStatus.NOT_FOUND)
 
         github_repo = project.get("github_repo")
         if not github_repo:
@@ -111,7 +113,7 @@ class HarnessLoaderService(LayerDetectionService):
         """
         project = get_project_detail(project_id)
         if not project:
-            return {"error": "Project not found"}, HTTPStatus.NOT_FOUND
+            return error_response("NOT_FOUND", "Project not found", HTTPStatus.NOT_FOUND)
 
         github_repo = project.get("github_repo")
         if not github_repo:
@@ -241,7 +243,7 @@ class HarnessLoaderService(LayerDetectionService):
                         )
                         imported.append(agent_name)
                     except Exception as e:
-                        logger.error("Failed to import agent %s: %s", agent_name, e)
+                        logger.error("Failed to import agent %s: %s", agent_name, e, exc_info=True)
 
             # Also handle .md files directly in agents folder
             elif item.endswith(".md"):
@@ -289,7 +291,7 @@ class HarnessLoaderService(LayerDetectionService):
                     )
                     imported.append(agent_name)
                 except Exception as e:
-                    logger.error("Failed to import agent %s: %s", agent_name, e)
+                    logger.error("Failed to import agent %s: %s", agent_name, e, exc_info=True)
 
         return imported
 
@@ -315,7 +317,7 @@ class HarnessLoaderService(LayerDetectionService):
                         )
                         imported.append(skill_name)
                     except Exception as e:
-                        logger.error("Failed to import skill %s: %s", skill_name, e)
+                        logger.error("Failed to import skill %s: %s", skill_name, e, exc_info=True)
 
         return imported
 
@@ -364,7 +366,7 @@ class HarnessLoaderService(LayerDetectionService):
                 )
                 imported.append(hook_name)
             except Exception as e:
-                logger.error("Failed to import hook %s: %s", hook_name, e)
+                logger.error("Failed to import hook %s: %s", hook_name, e, exc_info=True)
 
         return imported
 
@@ -397,7 +399,7 @@ class HarnessLoaderService(LayerDetectionService):
                 )
                 imported.append(command_name)
             except Exception as e:
-                logger.error("Failed to import command %s: %s", command_name, e)
+                logger.error("Failed to import command %s: %s", command_name, e, exc_info=True)
 
         return imported
 
@@ -455,6 +457,6 @@ class HarnessLoaderService(LayerDetectionService):
 
                             imported.append(team_name)
                     except Exception as e:
-                        logger.error("Failed to import team %s: %s", team_name, e)
+                        logger.error("Failed to import team %s: %s", team_name, e, exc_info=True)
 
         return imported

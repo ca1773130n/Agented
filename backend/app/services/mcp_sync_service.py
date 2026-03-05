@@ -153,7 +153,9 @@ class McpSyncService:
         try:
             agented_entries = McpSyncService.build_merged_config(project_id)
         except Exception as e:
-            logger.error("Failed to build MCP config for project %s: %s", project_id, e)
+            logger.error(
+                "Failed to build MCP config for project %s: %s", project_id, e, exc_info=True
+            )
             return {"error": f"Failed to build config: {e}"}
 
         # Merge: preserved non-Agented entries + new Agented entries

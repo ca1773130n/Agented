@@ -151,19 +151,19 @@ class CLIProxyChatService:
                             )
 
         except httpx.TimeoutException:
-            logger.error("Proxy request timed out at %s", base_url)
+            logger.error("Proxy request timed out at %s", base_url, exc_info=True)
             yield ChatDelta(
                 type=ChatDeltaType.ERROR,
                 error_message="Proxy request timed out",
             )
         except httpx.ConnectError:
-            logger.error("Could not connect to proxy at %s", base_url)
+            logger.error("Could not connect to proxy at %s", base_url, exc_info=True)
             yield ChatDelta(
                 type=ChatDeltaType.ERROR,
                 error_message=f"Could not connect to proxy at {base_url}",
             )
         except Exception as exc:
-            logger.error("Unexpected error during chat streaming: %s", exc)
+            logger.error("Unexpected error during chat streaming: %s", exc, exc_info=True)
             yield ChatDelta(
                 type=ChatDeltaType.ERROR,
                 error_message=str(exc),
@@ -257,8 +257,8 @@ class CLIProxyChatService:
                     )
 
         except litellm.exceptions.APIError as exc:
-            logger.error("LiteLLM direct API error: %s", exc)
+            logger.error("LiteLLM direct API error: %s", exc, exc_info=True)
             yield ChatDelta(type=ChatDeltaType.ERROR, error_message=str(exc))
         except Exception as exc:
-            logger.error("Unexpected error during direct chat streaming: %s", exc)
+            logger.error("Unexpected error during direct chat streaming: %s", exc, exc_info=True)
             yield ChatDelta(type=ChatDeltaType.ERROR, error_message=str(exc))

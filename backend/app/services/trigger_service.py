@@ -5,6 +5,8 @@ from http import HTTPStatus
 from pathlib import Path
 from typing import Tuple
 
+from app.models.common import error_response
+
 from ..database import (
     PREDEFINED_TRIGGER_ID,
     add_github_repo,
@@ -56,7 +58,7 @@ class TriggerService:
         """Get a single trigger with paths."""
         trigger = get_trigger(trigger_id)
         if not trigger:
-            return {"error": "Trigger not found"}, HTTPStatus.NOT_FOUND
+            return error_response("NOT_FOUND", "Trigger not found", HTTPStatus.NOT_FOUND)
 
         trigger["paths"] = list_paths_for_trigger(trigger_id)
         trigger["execution_status"] = ExecutionService.get_status(trigger_id)
@@ -80,12 +82,16 @@ class TriggerService:
         group_id = data.get("group_id", 0)
 
         if not name or not prompt_template:
-            return {"error": "name and prompt_template required"}, HTTPStatus.BAD_REQUEST
+            return error_response(
+                "BAD_REQUEST", "name and prompt_template required", HTTPStatus.BAD_REQUEST
+            )
 
         # Reject duplicate trigger names
         existing = get_trigger_by_name(name)
         if existing:
-            return {"error": f"A trigger named '{name}' already exists"}, HTTPStatus.CONFLICT
+            return error_response(
+                "CONFLICT", f"A trigger named '{name}' already exists", HTTPStatus.CONFLICT
+            )
 
         # For webhook trigger, validate that match_field_path and match_field_value are provided together
         if trigger_source == "webhook":
@@ -97,10 +103,14 @@ class TriggerService:
         try:
             group_id = int(group_id) if group_id is not None else 0
         except (ValueError, TypeError):
-            return {"error": "group_id must be a number"}, HTTPStatus.BAD_REQUEST
+            return error_response(
+                "BAD_REQUEST", "group_id must be a number", HTTPStatus.BAD_REQUEST
+            )
 
         if backend_type not in ("claude", "opencode"):
-            return {"error": "backend_type must be 'claude' or 'opencode'"}, HTTPStatus.BAD_REQUEST
+            return error_response(
+                "BAD_REQUEST", "backend_type must be 'claude' or 'opencode'", HTTPStatus.BAD_REQUEST
+            )
 
         if trigger_source not in ("webhook", "github", "manual", "scheduled"):
             return {
@@ -155,7 +165,11 @@ class TriggerService:
 
                 _zi.ZoneInfo(schedule_timezone)
             except (KeyError, Exception):
-                return {"error": f"Invalid timezone: '{schedule_timezone}'"}, HTTPStatus.BAD_REQUEST
+                return error_response(
+                    "BAD_REQUEST",
+                    f"Invalid timezone: '{schedule_timezone}'",
+                    HTTPStatus.BAD_REQUEST,
+                )
 
         timeout_seconds = data.get("timeout_seconds")
         webhook_secret = data.get("webhook_secret")
@@ -209,21 +223,27 @@ class TriggerService:
                 "name": name,
             }, HTTPStatus.CREATED
         else:
-            return {"error": "Failed to create trigger"}, HTTPStatus.INTERNAL_SERVER_ERROR
+            return error_response(
+                "INTERNAL_SERVER_ERROR",
+                "Failed to create trigger",
+                HTTPStatus.INTERNAL_SERVER_ERROR,
+            )
 
     @staticmethod
     def update_trigger(trigger_id: str, data: dict) -> Tuple[dict, HTTPStatus]:
         """Update a trigger."""
         trigger = get_trigger(trigger_id)
         if not trigger:
-            return {"error": "Trigger not found"}, HTTPStatus.NOT_FOUND
+            return error_response("NOT_FOUND", "Trigger not found", HTTPStatus.NOT_FOUND)
 
         group_id = data.get("group_id")
         if group_id is not None:
             try:
                 group_id = int(group_id)
             except (ValueError, TypeError):
-                return {"error": "group_id must be a number"}, HTTPStatus.BAD_REQUEST
+                return error_response(
+                    "BAD_REQUEST", "group_id must be a number", HTTPStatus.BAD_REQUEST
+                )
 
         new_prompt_template = data.get("prompt_template")
         old_prompt_template = trigger.get("prompt_template")
@@ -271,17 +291,19 @@ class TriggerService:
             SchedulerService.reschedule_trigger(trigger_id)
             return {"message": "Trigger updated"}, HTTPStatus.OK
         else:
-            return {"error": "No changes made"}, HTTPStatus.BAD_REQUEST
+            return error_response("BAD_REQUEST", "No changes made", HTTPStatus.BAD_REQUEST)
 
     @staticmethod
     def delete_trigger(trigger_id: str) -> Tuple[dict, HTTPStatus]:
         """Delete a trigger (non-predefined only)."""
         trigger = get_trigger(trigger_id)
         if not trigger:
-            return {"error": "Trigger not found"}, HTTPStatus.NOT_FOUND
+            return error_response("NOT_FOUND", "Trigger not found", HTTPStatus.NOT_FOUND)
 
         if trigger["is_predefined"]:
-            return {"error": "Cannot delete predefined trigger"}, HTTPStatus.FORBIDDEN
+            return error_response(
+                "FORBIDDEN", "Cannot delete predefined trigger", HTTPStatus.FORBIDDEN
+            )
 
         # Unschedule if it was scheduled
         SchedulerService.unschedule_trigger(trigger_id)
@@ -300,14 +322,18 @@ class TriggerService:
             )
             return {"message": "Trigger deleted"}, HTTPStatus.OK
         else:
-            return {"error": "Failed to delete trigger"}, HTTPStatus.INTERNAL_SERVER_ERROR
+            return error_response(
+                "INTERNAL_SERVER_ERROR",
+                "Failed to delete trigger",
+                HTTPStatus.INTERNAL_SERVER_ERROR,
+            )
 
     @staticmethod
     def list_paths(trigger_id: str, limit=None, offset=0) -> Tuple[dict, HTTPStatus]:
         """List all paths for a trigger."""
         trigger = get_trigger(trigger_id)
         if not trigger:
-            return {"error": "Trigger not found"}, HTTPStatus.NOT_FOUND
+            return error_response("NOT_FOUND", "Trigger not found", HTTPStatus.NOT_FOUND)
 
         paths = list_paths_for_trigger(trigger_id, limit=limit, offset=offset)
         total_count = count_paths_for_trigger(trigger_id)
@@ -318,7 +344,7 @@ class TriggerService:
         """Add a project path or GitHub repo to a trigger."""
         trigger = get_trigger(trigger_id)
         if not trigger:
-            return {"error": "Trigger not found"}, HTTPStatus.NOT_FOUND
+            return error_response("NOT_FOUND", "Trigger not found", HTTPStatus.NOT_FOUND)
 
         github_repo_url = data.get("github_repo_url")
         local_project_path = data.get("local_project_path")
@@ -338,7 +364,9 @@ class TriggerService:
                     "path_type": "github",
                 }, HTTPStatus.CREATED
             else:
-                return {"error": "Repository already exists for this trigger"}, HTTPStatus.CONFLICT
+                return error_response(
+                    "CONFLICT", "Repository already exists for this trigger", HTTPStatus.CONFLICT
+                )
 
         elif local_project_path:
             # Validate path exists and is a directory
@@ -360,7 +388,9 @@ class TriggerService:
                     "path_type": "local",
                 }, HTTPStatus.CREATED
             else:
-                return {"error": "Path already exists for this trigger"}, HTTPStatus.CONFLICT
+                return error_response(
+                    "CONFLICT", "Path already exists for this trigger", HTTPStatus.CONFLICT
+                )
 
         else:
             return {
@@ -372,7 +402,7 @@ class TriggerService:
         """Remove a project path or GitHub repo from a trigger."""
         trigger = get_trigger(trigger_id)
         if not trigger:
-            return {"error": "Trigger not found"}, HTTPStatus.NOT_FOUND
+            return error_response("NOT_FOUND", "Trigger not found", HTTPStatus.NOT_FOUND)
 
         github_repo_url = data.get("github_repo_url")
         local_project_path = data.get("local_project_path")
@@ -382,14 +412,14 @@ class TriggerService:
             if success:
                 return {"message": "GitHub repository removed"}, HTTPStatus.OK
             else:
-                return {"error": "Repository not found"}, HTTPStatus.NOT_FOUND
+                return error_response("NOT_FOUND", "Repository not found", HTTPStatus.NOT_FOUND)
 
         elif local_project_path:
             success = remove_project_path(trigger_id, local_project_path)
             if success:
                 return {"message": "Path removed"}, HTTPStatus.OK
             else:
-                return {"error": "Path not found"}, HTTPStatus.NOT_FOUND
+                return error_response("NOT_FOUND", "Path not found", HTTPStatus.NOT_FOUND)
 
         else:
             return {
@@ -401,12 +431,12 @@ class TriggerService:
         """Add a project reference to a trigger."""
         trigger = get_trigger(trigger_id)
         if not trigger:
-            return {"error": "Trigger not found"}, HTTPStatus.NOT_FOUND
+            return error_response("NOT_FOUND", "Trigger not found", HTTPStatus.NOT_FOUND)
 
         # Validate project exists and has github_repo
         project = get_project(project_id)
         if not project:
-            return {"error": "Project not found"}, HTTPStatus.NOT_FOUND
+            return error_response("NOT_FOUND", "Project not found", HTTPStatus.NOT_FOUND)
 
         if not project.get("github_repo"):
             return {
@@ -422,20 +452,22 @@ class TriggerService:
                 "github_repo": project.get("github_repo"),
             }, HTTPStatus.CREATED
         else:
-            return {"error": "Project already added"}, HTTPStatus.CONFLICT
+            return error_response("CONFLICT", "Project already added", HTTPStatus.CONFLICT)
 
     @staticmethod
     def remove_project(trigger_id: str, project_id: str) -> Tuple[dict, HTTPStatus]:
         """Remove a project reference from a trigger."""
         trigger = get_trigger(trigger_id)
         if not trigger:
-            return {"error": "Trigger not found"}, HTTPStatus.NOT_FOUND
+            return error_response("NOT_FOUND", "Trigger not found", HTTPStatus.NOT_FOUND)
 
         success = remove_project_from_trigger(trigger_id, project_id)
         if success:
             return {"message": "Project removed from trigger"}, HTTPStatus.OK
         else:
-            return {"error": "Project not found on this trigger"}, HTTPStatus.NOT_FOUND
+            return error_response(
+                "NOT_FOUND", "Project not found on this trigger", HTTPStatus.NOT_FOUND
+            )
 
     @staticmethod
     def run(trigger_id: str, message: str = "") -> Tuple[dict, HTTPStatus]:
@@ -450,10 +482,10 @@ class TriggerService:
 
         trigger = get_trigger(trigger_id)
         if not trigger:
-            return {"error": "Trigger not found"}, HTTPStatus.NOT_FOUND
+            return error_response("NOT_FOUND", "Trigger not found", HTTPStatus.NOT_FOUND)
 
         if not trigger.get("enabled", True):
-            return {"error": "Trigger is disabled"}, HTTPStatus.BAD_REQUEST
+            return error_response("BAD_REQUEST", "Trigger is disabled", HTTPStatus.BAD_REQUEST)
 
         running = ExecutionLogService.get_running_for_trigger(trigger_id)
         if running:
@@ -485,7 +517,7 @@ class TriggerService:
         """Render a trigger's prompt template with sample data for dry-run preview."""
         trigger = get_trigger(trigger_id)
         if not trigger:
-            return {"error": "Trigger not found"}, HTTPStatus.NOT_FOUND
+            return error_response("NOT_FOUND", "Trigger not found", HTTPStatus.NOT_FOUND)
 
         prompt = trigger["prompt_template"]
 
@@ -529,7 +561,7 @@ class TriggerService:
         """Enable/disable auto-resolve for a trigger (security trigger only)."""
         trigger = get_trigger(trigger_id)
         if not trigger:
-            return {"error": "Trigger not found"}, HTTPStatus.NOT_FOUND
+            return error_response("NOT_FOUND", "Trigger not found", HTTPStatus.NOT_FOUND)
 
         if trigger_id != PREDEFINED_TRIGGER_ID:
             return {
@@ -542,14 +574,16 @@ class TriggerService:
                 "message": f"Auto-resolve {'enabled' if auto_resolve else 'disabled'}"
             }, HTTPStatus.OK
         else:
-            return {"error": "Failed to update"}, HTTPStatus.INTERNAL_SERVER_ERROR
+            return error_response(
+                "INTERNAL_SERVER_ERROR", "Failed to update", HTTPStatus.INTERNAL_SERVER_ERROR
+            )
 
     @staticmethod
     def rollback_prompt_template(trigger_id: str, version_id: int) -> Tuple[dict, HTTPStatus]:
         """Rollback a trigger's prompt template to a previous version."""
         trigger = get_trigger(trigger_id)
         if not trigger:
-            return {"error": "Trigger not found"}, HTTPStatus.NOT_FOUND
+            return error_response("NOT_FOUND", "Trigger not found", HTTPStatus.NOT_FOUND)
 
         # Find the history entry
         history = get_prompt_template_history(trigger_id, limit=1000)
@@ -560,10 +594,12 @@ class TriggerService:
                 break
 
         if not target_entry:
-            return {"error": "Version not found"}, HTTPStatus.NOT_FOUND
+            return error_response("NOT_FOUND", "Version not found", HTTPStatus.NOT_FOUND)
 
         if target_entry["trigger_id"] != trigger_id:
-            return {"error": "Version does not belong to this trigger"}, HTTPStatus.BAD_REQUEST
+            return error_response(
+                "BAD_REQUEST", "Version does not belong to this trigger", HTTPStatus.BAD_REQUEST
+            )
 
         current_template = trigger["prompt_template"]
         restored_template = target_entry["new_template"]
@@ -571,7 +607,9 @@ class TriggerService:
         # Update the trigger's prompt_template
         success = update_trigger(trigger_id, prompt_template=restored_template)
         if not success:
-            return {"error": "Failed to rollback"}, HTTPStatus.INTERNAL_SERVER_ERROR
+            return error_response(
+                "INTERNAL_SERVER_ERROR", "Failed to rollback", HTTPStatus.INTERNAL_SERVER_ERROR
+            )
 
         # Log the rollback as a new history entry
         log_prompt_template_change(
@@ -595,7 +633,7 @@ class TriggerService:
 
         trigger = get_trigger(trigger_id)
         if not trigger:
-            return {"error": "Trigger not found"}, HTTPStatus.NOT_FOUND
+            return error_response("NOT_FOUND", "Trigger not found", HTTPStatus.NOT_FOUND)
 
         from .prompt_renderer import PromptRenderer
 

@@ -241,7 +241,7 @@ class SketchRoutingService:
 
                 api_base = CLIProxyManager.get_base_url()
             except Exception:
-                pass
+                pass  # Intentionally silenced: failure is non-critical
 
             # Try to get model from settings, fall back to default
             model = cls.DEFAULT_LLM_MODEL

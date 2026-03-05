@@ -417,13 +417,13 @@ def _stream_via_proxy(
                         continue
 
     except httpx.TimeoutException:
-        logger.error("Proxy request timed out at %s", api_base)
+        logger.error("Proxy request timed out at %s", api_base, exc_info=True)
         yield "\n\n[Proxy request timed out]"
     except httpx.ConnectError:
-        logger.error("Could not connect to proxy at %s", api_base)
+        logger.error("Could not connect to proxy at %s", api_base, exc_info=True)
         yield f"\n\n[Could not connect to proxy at {api_base}]"
     except Exception as exc:
-        logger.error("Proxy streaming error: %s", exc)
+        logger.error("Proxy streaming error: %s", exc, exc_info=True)
         yield f"\n\n[Streaming error: {exc}]"
 
 
@@ -457,7 +457,7 @@ def _stream_via_litellm(
                 yield delta.content
 
     except Exception as exc:
-        logger.error("LiteLLM streaming error: %s", exc)
+        logger.error("LiteLLM streaming error: %s", exc, exc_info=True)
         yield f"\n\n[Streaming error: {exc}]"
 
 
@@ -500,7 +500,7 @@ def _stream_via_cli(
             try:
                 proc.kill()
             except OSError:
-                pass
+                pass  # Intentionally silenced: cleanup/IO operation is best-effort
 
         timer = threading.Timer(SUBPROCESS_TIMEOUT, _on_timeout)
         timer.start()
@@ -539,16 +539,18 @@ def _stream_via_cli(
                 stderr_output = proc.stderr.read().decode("utf-8", errors="replace").strip()
             except Exception as e:
                 logger.debug("Stderr read: %s", e)
-            logger.error("Claude CLI error (rc=%d): %s", proc.returncode, stderr_output)
+            logger.error(
+                "Claude CLI error (rc=%d): %s", proc.returncode, stderr_output, exc_info=True
+            )
             # Show the actual error — not a useless apology
             detail = stderr_output[:200] if stderr_output else f"exit code {proc.returncode}"
             yield f"\n\n[Claude CLI error: {detail}]"
 
     except FileNotFoundError:
-        logger.error("Claude CLI not found")
+        logger.error("Claude CLI not found", exc_info=True)
         yield "[Error: Claude CLI not found. Please install Claude Code CLI.]"
     except Exception as exc:
-        logger.error("CLI streaming error: %s", exc)
+        logger.error("CLI streaming error: %s", exc, exc_info=True)
         yield f"[Error: {exc}]"
 
 
@@ -593,7 +595,7 @@ def _stream_via_opencode_cli(
             try:
                 proc.kill()
             except OSError:
-                pass
+                pass  # Intentionally silenced: cleanup/IO operation is best-effort
 
         timer = threading.Timer(SUBPROCESS_TIMEOUT, _on_timeout)
         timer.start()
@@ -620,7 +622,7 @@ def _stream_via_opencode_cli(
                             yield text
                             continue
                     except json.JSONDecodeError:
-                        pass
+                        pass  # Intentionally silenced: malformed data handled gracefully
                 # Plain text output — yield directly
                 yield line
 
@@ -637,15 +639,17 @@ def _stream_via_opencode_cli(
                 stderr_output = proc.stderr.read().decode("utf-8", errors="replace").strip()
             except Exception as e:
                 logger.debug("Stderr read: %s", e)
-            logger.error("OpenCode CLI error (rc=%d): %s", proc.returncode, stderr_output)
+            logger.error(
+                "OpenCode CLI error (rc=%d): %s", proc.returncode, stderr_output, exc_info=True
+            )
             detail = stderr_output[:200] if stderr_output else f"exit code {proc.returncode}"
             yield f"\n\n[OpenCode CLI error: {detail}]"
 
     except FileNotFoundError:
-        logger.error("OpenCode CLI not found")
+        logger.error("OpenCode CLI not found", exc_info=True)
         yield "[Error: OpenCode CLI not found. Please install OpenCode.]"
     except Exception as exc:
-        logger.error("OpenCode CLI streaming error: %s", exc)
+        logger.error("OpenCode CLI streaming error: %s", exc, exc_info=True)
         yield f"[Error: {exc}]"
 
 

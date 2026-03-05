@@ -6,9 +6,12 @@ per Flask community conventions to enforce role-based access on routes.
 
 import functools
 import logging
+from http import HTTPStatus
 from typing import Callable, Optional
 
 from flask import request
+
+from app.models.common import error_response
 
 from ..db.rbac import count_user_roles, get_role_for_api_key
 from ..services.audit_log_service import AuditLogService
@@ -89,7 +92,7 @@ def require_role(*allowed_roles) -> Callable:
                     outcome="denied",
                     details={"reason": "missing_api_key", "endpoint": request.path},
                 )
-                return {"error": "API key required"}, 403
+                return error_response("FORBIDDEN", "API key required", HTTPStatus.FORBIDDEN)
 
             role = get_role_for_api_key(api_key)
             if role is None:
@@ -100,7 +103,7 @@ def require_role(*allowed_roles) -> Callable:
                     outcome="denied",
                     details={"reason": "unknown_api_key", "endpoint": request.path},
                 )
-                return {"error": "Invalid API key"}, 403
+                return error_response("FORBIDDEN", "Invalid API key", HTTPStatus.FORBIDDEN)
 
             if role not in allowed_roles:
                 AuditLogService.log(
@@ -115,7 +118,7 @@ def require_role(*allowed_roles) -> Callable:
                         "endpoint": request.path,
                     },
                 )
-                return {"error": "Insufficient permissions"}, 403
+                return error_response("FORBIDDEN", "Insufficient permissions", HTTPStatus.FORBIDDEN)
 
             return fn(*args, **kwargs)
 

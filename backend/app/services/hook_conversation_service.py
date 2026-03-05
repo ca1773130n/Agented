@@ -7,6 +7,8 @@ from http import HTTPStatus
 from queue import Queue
 from typing import Dict, List, Tuple
 
+from app.models.common import error_response
+
 from ..database import create_hook, get_hook
 from .base_conversation_service import BaseConversationService
 
@@ -84,7 +86,7 @@ class HookConversationService(BaseConversationService):
     def _finalize_entity(cls, conv_id: str) -> Tuple[dict, HTTPStatus]:
         """Finalize the conversation and create the hook."""
         if conv_id not in cls._conversations:
-            return {"error": "Conversation not found"}, HTTPStatus.NOT_FOUND
+            return error_response("NOT_FOUND", "Conversation not found", HTTPStatus.NOT_FOUND)
 
         config = cls._extract_config_from_conversation(conv_id)
         if not config:
@@ -108,7 +110,11 @@ class HookConversationService(BaseConversationService):
             )
 
             if not hook_id:
-                return {"error": "Failed to create hook"}, HTTPStatus.INTERNAL_SERVER_ERROR
+                return error_response(
+                    "INTERNAL_SERVER_ERROR",
+                    "Failed to create hook",
+                    HTTPStatus.INTERNAL_SERVER_ERROR,
+                )
 
             cls._conversations[conv_id]["finalized"] = True
             cls._cleanup_conversation(conv_id)
@@ -122,5 +128,9 @@ class HookConversationService(BaseConversationService):
             }, HTTPStatus.CREATED
 
         except Exception as e:
-            logger.error(f"Failed to create hook: {e}")
-            return {"error": f"Failed to create hook: {str(e)}"}, HTTPStatus.INTERNAL_SERVER_ERROR
+            logger.error(f"Failed to create hook: {e}", exc_info=True)
+            return error_response(
+                "INTERNAL_SERVER_ERROR",
+                f"Failed to create hook: {str(e)}",
+                HTTPStatus.INTERNAL_SERVER_ERROR,
+            )

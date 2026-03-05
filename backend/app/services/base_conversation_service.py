@@ -13,6 +13,8 @@ from http import HTTPStatus
 from queue import Empty, Queue
 from typing import Dict, Generator, List, Optional, Tuple
 
+from app.models.common import error_response
+
 from ..database import (
     create_design_conversation,
     delete_old_design_conversations,
@@ -167,7 +169,7 @@ class BaseConversationService(abc.ABC):
         # Try loading from DB
         db_conv = get_design_conversation(conv_id)
         if not db_conv:
-            return {"error": "Conversation not found"}, HTTPStatus.NOT_FOUND
+            return error_response("NOT_FOUND", "Conversation not found", HTTPStatus.NOT_FOUND)
 
         try:
             messages_raw = json.loads(db_conv["messages"] or "[]")
@@ -195,11 +197,11 @@ class BaseConversationService(abc.ABC):
             # Try to resume from DB first
             resumed, status = cls.resume_conversation(conv_id)
             if status != HTTPStatus.OK:
-                return {"error": "Conversation not found"}, HTTPStatus.NOT_FOUND
+                return error_response("NOT_FOUND", "Conversation not found", HTTPStatus.NOT_FOUND)
 
         conv = cls._conversations[conv_id]
         if conv.get("processing"):
-            return {"error": "Conversation is processing"}, HTTPStatus.CONFLICT
+            return error_response("CONFLICT", "Conversation is processing", HTTPStatus.CONFLICT)
 
         user_msg = ConversationMessage(
             role="user",
@@ -260,7 +262,7 @@ class BaseConversationService(abc.ABC):
             # Check DB
             db_conv = get_design_conversation(conv_id)
             if not db_conv:
-                return {"error": "Conversation not found"}, HTTPStatus.NOT_FOUND
+                return error_response("NOT_FOUND", "Conversation not found", HTTPStatus.NOT_FOUND)
 
         update_design_conversation(conv_id, status="abandoned")
         cls._cleanup_conversation(conv_id)
@@ -378,7 +380,7 @@ class BaseConversationService(abc.ABC):
                     config_str = msg.content[start:end].strip()
                     return json.loads(config_str)
                 except (ValueError, json.JSONDecodeError) as e:
-                    logger.error(f"Failed to parse entity config: {e}")
+                    logger.error(f"Failed to parse entity config: {e}", exc_info=True)
                     continue
 
         return None
@@ -400,10 +402,12 @@ class BaseConversationService(abc.ABC):
 
         db_conv = get_design_conversation(conv_id)
         if not db_conv:
-            return {"error": "Conversation not found"}, HTTPStatus.NOT_FOUND
+            return error_response("NOT_FOUND", "Conversation not found", HTTPStatus.NOT_FOUND)
 
         if db_conv["status"] != "active":
-            return {"error": "Conversation is no longer active"}, HTTPStatus.GONE
+            return error_response(
+                "INTERNAL_SERVER_ERROR", "Conversation is no longer active", HTTPStatus.GONE
+            )
 
         try:
             messages_raw = json.loads(db_conv["messages"] or "[]")

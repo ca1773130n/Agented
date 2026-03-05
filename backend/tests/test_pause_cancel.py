@@ -1,24 +1,18 @@
 """Tests for pause/resume/bulk-cancel execution management."""
 
-import os
 import signal
 import subprocess
-import threading
-import time
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.db.migrations import init_db
 from app.db.triggers import (
     create_execution_log,
     get_execution_log,
     get_execution_logs_filtered,
     update_execution_log,
-    update_execution_status_cas,
 )
-from app.services.process_manager import PAUSE_TIMEOUT, ProcessInfo, ProcessManager
-
+from app.services.process_manager import ProcessManager
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -226,9 +220,7 @@ class TestAutoCancel:
         # Use a very short timeout for testing
         with (
             patch("os.killpg") as mock_killpg,
-            patch(
-                "app.services.process_manager.PAUSE_TIMEOUT", 0.1
-            ),
+            patch("app.services.process_manager.PAUSE_TIMEOUT", 0.1),
         ):
             ProcessManager.pause("exec-020")
             # Cancel the real timer and invoke directly

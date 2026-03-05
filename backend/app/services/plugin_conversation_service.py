@@ -13,6 +13,8 @@ from typing import Dict, Generator, List, Tuple
 
 logger = logging.getLogger(__name__)
 
+from app.models.common import error_response
+
 from ..database import (
     add_plugin_component,
     create_plugin,
@@ -122,7 +124,7 @@ class PluginConversationService:
     def get_conversation(cls, conv_id: str) -> Tuple[dict, HTTPStatus]:
         """Get conversation details and messages."""
         if conv_id not in cls._conversations:
-            return {"error": "Conversation not found"}, HTTPStatus.NOT_FOUND
+            return error_response("NOT_FOUND", "Conversation not found", HTTPStatus.NOT_FOUND)
 
         conv = cls._conversations[conv_id]
         messages = [asdict(m) for m in conv["messages"] if m.role != "system"]
@@ -144,11 +146,11 @@ class PluginConversationService:
     ) -> Tuple[dict, HTTPStatus]:
         """Send a user message and process with Claude."""
         if conv_id not in cls._conversations:
-            return {"error": "Conversation not found"}, HTTPStatus.NOT_FOUND
+            return error_response("NOT_FOUND", "Conversation not found", HTTPStatus.NOT_FOUND)
 
         conv = cls._conversations[conv_id]
         if conv.get("processing"):
-            return {"error": "Conversation is processing"}, HTTPStatus.CONFLICT
+            return error_response("CONFLICT", "Conversation is processing", HTTPStatus.CONFLICT)
 
         user_msg = ConversationMessage(
             role="user",
@@ -203,7 +205,7 @@ class PluginConversationService:
     def finalize_plugin(cls, conv_id: str) -> Tuple[dict, HTTPStatus]:
         """Finalize the conversation and create the plugin."""
         if conv_id not in cls._conversations:
-            return {"error": "Conversation not found"}, HTTPStatus.NOT_FOUND
+            return error_response("NOT_FOUND", "Conversation not found", HTTPStatus.NOT_FOUND)
 
         conv = cls._conversations[conv_id]
 
@@ -218,7 +220,7 @@ class PluginConversationService:
                     plugin_config = json.loads(config_str)
                     break
                 except (ValueError, json.JSONDecodeError) as e:
-                    logger.error(f"Failed to parse plugin config: {e}")
+                    logger.error(f"Failed to parse plugin config: {e}", exc_info=True)
                     continue
 
         if not plugin_config:
@@ -240,7 +242,11 @@ class PluginConversationService:
             )
 
             if not plugin_id:
-                return {"error": "Failed to create plugin"}, HTTPStatus.INTERNAL_SERVER_ERROR
+                return error_response(
+                    "INTERNAL_SERVER_ERROR",
+                    "Failed to create plugin",
+                    HTTPStatus.INTERNAL_SERVER_ERROR,
+                )
 
             # Add components
             for comp in components:
@@ -263,14 +269,18 @@ class PluginConversationService:
             }, HTTPStatus.CREATED
 
         except Exception as e:
-            logger.error(f"Failed to create plugin: {e}")
-            return {"error": f"Failed to create plugin: {str(e)}"}, HTTPStatus.INTERNAL_SERVER_ERROR
+            logger.error(f"Failed to create plugin: {e}", exc_info=True)
+            return error_response(
+                "INTERNAL_SERVER_ERROR",
+                f"Failed to create plugin: {str(e)}",
+                HTTPStatus.INTERNAL_SERVER_ERROR,
+            )
 
     @classmethod
     def abandon_conversation(cls, conv_id: str) -> Tuple[dict, HTTPStatus]:
         """Abandon a conversation without creating a plugin."""
         if conv_id not in cls._conversations:
-            return {"error": "Conversation not found"}, HTTPStatus.NOT_FOUND
+            return error_response("NOT_FOUND", "Conversation not found", HTTPStatus.NOT_FOUND)
 
         cls._cleanup_conversation(conv_id)
         return {"message": "Conversation abandoned"}, HTTPStatus.OK
@@ -341,7 +351,7 @@ class PluginConversationService:
             )
 
         except Exception as e:
-            logger.error(f"Error processing with Claude: {e}")
+            logger.error(f"Error processing with Claude: {e}", exc_info=True)
             cls._broadcast(conv_id, "error", {"error": str(e)})
         finally:
             conv["processing"] = False

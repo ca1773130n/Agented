@@ -217,7 +217,7 @@ class AgentMessageBusService:
                     try:
                         cls._subscribers[agent_id].remove(queue)
                     except ValueError:
-                        pass
+                        pass  # Intentionally silenced: invalid value handled gracefully
 
     @staticmethod
     def _format_sse(event_type: str, data: dict) -> str:

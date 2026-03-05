@@ -11,7 +11,6 @@ import time
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Unit tests: validate_signature
 # ---------------------------------------------------------------------------
@@ -128,9 +127,7 @@ class TestValidateTimestamp:
         from app.services.webhook_validation_service import WebhookValidationService
 
         future_ts = str(int(time.time()) + 60)  # 1 minute in the future
-        assert (
-            WebhookValidationService.validate_timestamp(future_ts, tolerance_seconds=300) is True
-        )
+        assert WebhookValidationService.validate_timestamp(future_ts, tolerance_seconds=300) is True
 
     def test_future_timestamp_outside_tolerance(self):
         from app.services.webhook_validation_service import WebhookValidationService
@@ -308,9 +305,7 @@ class TestRouteIntegration:
 
     def test_github_webhook_invalid_signature_returns_403(self, client, monkeypatch):
         """GitHub webhook with invalid signature returns 403."""
-        monkeypatch.setattr(
-            "app.routes.github_webhook.GITHUB_WEBHOOK_SECRET", "real-secret"
-        )
+        monkeypatch.setattr("app.routes.github_webhook.GITHUB_WEBHOOK_SECRET", "real-secret")
 
         payload = json.dumps({"action": "opened"}).encode()
         resp = client.post(
