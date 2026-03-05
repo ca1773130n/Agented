@@ -116,6 +116,10 @@ class Trigger(BaseModel):
     schedule_time: Optional[str] = None  # HH:MM format
     schedule_day: Optional[int] = None  # 0-6 for weekly, 1-31 for monthly
     schedule_timezone: str = Field(default="Asia/Seoul")
+    cron_expression: Optional[str] = Field(
+        None,
+        description="Standard 5-field cron expression (e.g., '*/15 9-17 * * 1-5'). Takes precedence over schedule_type/schedule_time/schedule_day.",
+    )
     next_run_at: Optional[str] = None
     last_run_at: Optional[str] = None
     skill_command: Optional[str] = None
@@ -173,6 +177,10 @@ class CreateTriggerRequest(BaseModel):
     schedule_time: Optional[str] = None
     schedule_day: Optional[int] = None
     schedule_timezone: str = Field(default="Asia/Seoul")
+    cron_expression: Optional[str] = Field(
+        None,
+        description="Standard 5-field cron expression (e.g., '*/15 9-17 * * 1-5')",
+    )
     skill_command: Optional[str] = None
     model: Optional[str] = None
     execution_mode: Optional[str] = Field(default="direct")
@@ -213,6 +221,7 @@ class UpdateTriggerRequest(BaseModel):
     schedule_time: Optional[str] = None
     schedule_day: Optional[int] = None
     schedule_timezone: Optional[str] = None
+    cron_expression: Optional[str] = None
     skill_command: Optional[str] = None
     model: Optional[str] = None
     execution_mode: Optional[str] = None

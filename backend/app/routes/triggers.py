@@ -249,6 +249,73 @@ def preview_trigger_prompt_full(path: TriggerPath):
     return result, status
 
 
+@triggers_bp.post("/validate-cron")
+@require_role("viewer", "operator", "editor", "admin")
+def validate_cron_expression():
+    """Validate a standard 5-field cron expression (API-10)."""
+    from ..models.common import error_response
+    from ..utils.timezone import get_local_timezone
+
+    try:
+        import pytz
+        from apscheduler.triggers.cron import CronTrigger
+    except ImportError:
+        return error_response(
+            "SCHEDULER_UNAVAILABLE",
+            "APScheduler not installed",
+            HTTPStatus.SERVICE_UNAVAILABLE,
+        )
+
+    data = request.get_json()
+    if not data or "expression" not in data:
+        return error_response(
+            "INVALID_REQUEST", "Missing 'expression' field", HTTPStatus.BAD_REQUEST
+        )
+
+    expr = data["expression"]
+    timezone_str = data.get("timezone") or get_local_timezone()
+
+    try:
+        tz = pytz.timezone(timezone_str)
+    except Exception:
+        return error_response(
+            "INVALID_TIMEZONE",
+            f"Unknown timezone: {timezone_str}",
+            HTTPStatus.BAD_REQUEST,
+        )
+
+    try:
+        from datetime import datetime
+
+        trigger = CronTrigger.from_crontab(expr, timezone=tz)
+        # Calculate next 5 fire times for preview
+        next_fires = []
+        fire_time = datetime.now(tz)
+        for _ in range(5):
+            fire_time = trigger.get_next_fire_time(None, fire_time)
+            if fire_time:
+                next_fires.append(fire_time.isoformat())
+                # Advance slightly so we get the next distinct fire time
+                from datetime import timedelta
+
+                fire_time = fire_time + timedelta(seconds=1)
+            else:
+                break
+        return {
+            "valid": True,
+            "expression": expr,
+            "timezone": timezone_str,
+            "next_fires": next_fires,
+        }, HTTPStatus.OK
+    except (ValueError, TypeError) as e:
+        return error_response(
+            "INVALID_CRON",
+            f"Invalid cron expression: {str(e)}",
+            HTTPStatus.BAD_REQUEST,
+            details={"expression": expr},
+        )
+
+
 @triggers_bp.post("/<trigger_id>/dry-run")
 @require_role("viewer", "operator", "editor", "admin")
 def dry_run_trigger(path: TriggerPath):

@@ -183,16 +183,33 @@ class SchedulerService:
 
     @classmethod
     def _build_cron_trigger(cls, trigger_data: dict) -> Optional["CronTrigger"]:
-        """Build APScheduler CronTrigger from trigger schedule config."""
-        schedule_type = trigger_data.get("schedule_type")
-        schedule_time = trigger_data.get("schedule_time", "00:00")
-        schedule_day = trigger_data.get("schedule_day", 0)
+        """Build APScheduler CronTrigger from trigger schedule config.
+
+        If ``cron_expression`` is present, it takes precedence over the legacy
+        structured schedule fields (schedule_type/schedule_time/schedule_day).
+        """
         timezone_str = trigger_data.get("schedule_timezone") or get_local_timezone()
 
         try:
             tz = pytz.timezone(timezone_str)
         except Exception:
             tz = pytz.UTC
+
+        # Prefer cron_expression if provided (standard 5-field cron syntax)
+        cron_expr = trigger_data.get("cron_expression")
+        if cron_expr:
+            try:
+                return CronTrigger.from_crontab(cron_expr, timezone=tz)
+            except (ValueError, TypeError) as e:
+                logger.warning(
+                    "Invalid cron expression %r for trigger: %s", cron_expr, e
+                )
+                return None
+
+        # Fall back to legacy structured schedule fields
+        schedule_type = trigger_data.get("schedule_type")
+        schedule_time = trigger_data.get("schedule_time", "00:00")
+        schedule_day = trigger_data.get("schedule_day", 0)
 
         # Parse time
         try:

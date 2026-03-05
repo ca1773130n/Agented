@@ -3353,6 +3353,15 @@ def _migrate_v74_add_execution_queue_table(conn):
     conn.commit()
 
 
+def _migrate_v75_trigger_cron_expression(conn):
+    """Add cron_expression column to triggers table for standard 5-field cron support."""
+    try:
+        conn.execute("ALTER TABLE triggers ADD COLUMN cron_expression TEXT")
+        conn.commit()
+    except Exception:
+        pass  # Column already exists
+
+
 VERSIONED_MIGRATIONS = [
     (1, "add_github_columns", _migrate_add_github_columns),
     (2, "add_pr_reviews_table", _migrate_add_pr_reviews_table),
@@ -3433,4 +3442,6 @@ VERSIONED_MIGRATIONS = [
     # v0.2.0 resilience infrastructure
     (73, "add_circuit_breakers_table", _migrate_v73_add_circuit_breakers_table),
     (74, "add_execution_queue_table", _migrate_v74_add_execution_queue_table),
+    # v0.2.0 API hardening
+    (75, "trigger_cron_expression", _migrate_v75_trigger_cron_expression),
 ]

@@ -47,6 +47,7 @@ def create_fresh_schema(conn):
             webhook_secret TEXT,
             allowed_tools TEXT,
             sigterm_grace_seconds INTEGER,
+            cron_expression TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """)
