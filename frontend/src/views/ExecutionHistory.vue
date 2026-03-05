@@ -39,7 +39,7 @@ useFocusTrap(logModalRef, logModalOpen);
 
 // Collaborative viewer state
 const collaborativeExecutionId = ref('');
-const { viewers, comments, isJoined, postComment } = useCollaborativeViewer(
+const { viewers, isJoined } = useCollaborativeViewer(
   collaborativeExecutionId,
   `User-${Math.random().toString(36).slice(2, 6)}`,
   () => null, // EventSource will be attached when execution log modal is open
@@ -282,9 +282,11 @@ onMounted(loadData);
                 />
               </td>
             </tr>
-            <tr
+            <template
               v-for="(execution, index) in filteredExecutions"
               :key="execution.execution_id"
+            >
+            <tr
               :style="{ '--delay': `${index * 20}ms` }"
             >
               <td v-if="!triggerId" class="cell-trigger">
@@ -401,6 +403,7 @@ onMounted(loadData);
                 <BranchNavigator :conversation-id="execution.execution_id" />
               </td>
             </tr>
+            </template>
           </tbody>
         </table>
       </div>

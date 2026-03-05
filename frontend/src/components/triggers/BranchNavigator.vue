@@ -17,7 +17,6 @@ const {
   loadBranches,
   selectBranch,
   createBranch,
-  addMessage,
 } = useConversationBranch(conversationIdRef);
 
 const forkingAtIndex = ref<number | null>(null);
@@ -161,7 +160,7 @@ loadBranches();
 
         <div v-else class="message-thread">
           <div
-            v-for="(msg, index) in messages"
+            v-for="msg in messages"
             :key="msg.id"
             class="message-item"
             :class="msg.role"
