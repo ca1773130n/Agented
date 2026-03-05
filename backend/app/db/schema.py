@@ -101,6 +101,49 @@ def create_fresh_schema(conn):
     )
     conn.execute("CREATE INDEX IF NOT EXISTS idx_execution_logs_status ON execution_logs(status)")
 
+    # FTS5 virtual table for full-text search over execution logs (BM25 ranking)
+    conn.execute("""
+        CREATE VIRTUAL TABLE IF NOT EXISTS execution_logs_fts
+        USING fts5(
+            stdout_content,
+            stderr_content,
+            prompt,
+            content=execution_logs,
+            content_rowid=id,
+            tokenize='porter unicode61'
+        )
+    """)
+
+    # Sync triggers to keep FTS5 index in sync with execution_logs
+    conn.execute("""
+        CREATE TRIGGER IF NOT EXISTS execution_logs_fts_insert
+        AFTER INSERT ON execution_logs
+        BEGIN
+            INSERT INTO execution_logs_fts(rowid, stdout_content, stderr_content, prompt)
+            VALUES (new.id, COALESCE(new.stdout_log, ''), COALESCE(new.stderr_log, ''), COALESCE(new.prompt, ''));
+        END
+    """)
+
+    conn.execute("""
+        CREATE TRIGGER IF NOT EXISTS execution_logs_fts_update
+        AFTER UPDATE OF stdout_log, stderr_log ON execution_logs
+        BEGIN
+            INSERT INTO execution_logs_fts(execution_logs_fts, rowid, stdout_content, stderr_content, prompt)
+            VALUES ('delete', old.id, COALESCE(old.stdout_log, ''), COALESCE(old.stderr_log, ''), COALESCE(old.prompt, ''));
+            INSERT INTO execution_logs_fts(rowid, stdout_content, stderr_content, prompt)
+            VALUES (new.id, COALESCE(new.stdout_log, ''), COALESCE(new.stderr_log, ''), COALESCE(new.prompt, ''));
+        END
+    """)
+
+    conn.execute("""
+        CREATE TRIGGER IF NOT EXISTS execution_logs_fts_delete
+        AFTER DELETE ON execution_logs
+        BEGIN
+            INSERT INTO execution_logs_fts(execution_logs_fts, rowid, stdout_content, stderr_content, prompt)
+            VALUES ('delete', old.id, COALESCE(old.stdout_log, ''), COALESCE(old.stderr_log, ''), COALESCE(old.prompt, ''));
+        END
+    """)
+
     # Prompt snippets (reusable prompt fragments for {{snippet}} resolution)
     conn.execute("""
         CREATE TABLE IF NOT EXISTS prompt_snippets (

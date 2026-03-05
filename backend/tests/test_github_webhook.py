@@ -230,10 +230,13 @@ class TestTriggerSourceFiltering:
         """get_triggers_by_trigger_source should return matching triggers."""
         from app.database import get_triggers_by_trigger_source
 
-        # Get GitHub-triggered triggers
+        # Get GitHub-triggered triggers (bot-pr-review, bot-test-coverage, bot-pr-summary)
         github_triggers = get_triggers_by_trigger_source("github")
-        assert len(github_triggers) == 1
-        assert github_triggers[0]["id"] == "bot-pr-review"
+        assert len(github_triggers) == 3
+        github_ids = {t["id"] for t in github_triggers}
+        assert "bot-pr-review" in github_ids
+        assert "bot-test-coverage" in github_ids
+        assert "bot-pr-summary" in github_ids
 
         # Get webhook-triggered triggers
         webhook_triggers = get_triggers_by_trigger_source("webhook")

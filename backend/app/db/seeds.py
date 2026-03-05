@@ -169,7 +169,7 @@ def seed_predefined_triggers():
     with get_connection() as conn:
         for trigger_def in PREDEFINED_TRIGGERS:
             cursor = conn.execute(
-                "SELECT id, prompt_template, trigger_source, match_field_path, match_field_value, text_field_path FROM triggers WHERE id = ?",
+                "SELECT id, prompt_template, trigger_source, match_field_path, match_field_value, text_field_path, schedule_type, schedule_time, schedule_day FROM triggers WHERE id = ?",
                 (trigger_def["id"],),
             )
             row = cursor.fetchone()
@@ -177,8 +177,9 @@ def seed_predefined_triggers():
                 conn.execute(
                     """
                     INSERT INTO triggers (id, name, group_id, detection_keyword, prompt_template, backend_type,
-                                          trigger_source, match_field_path, match_field_value, text_field_path, is_predefined)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                          trigger_source, match_field_path, match_field_value, text_field_path,
+                                          is_predefined, schedule_type, schedule_time, schedule_day)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                     (
                         trigger_def["id"],
@@ -192,6 +193,9 @@ def seed_predefined_triggers():
                         trigger_def.get("match_field_value"),
                         trigger_def.get("text_field_path", "text"),
                         trigger_def["is_predefined"],
+                        trigger_def.get("schedule_type"),
+                        trigger_def.get("schedule_time"),
+                        trigger_def.get("schedule_day"),
                     ),
                 )
                 print(f"Seeded predefined trigger: {trigger_def['name']} ({trigger_def['id']})")
@@ -214,6 +218,15 @@ def seed_predefined_triggers():
                 if row["text_field_path"] != trigger_def.get("text_field_path", "text"):
                     updates.append("text_field_path = ?")
                     values.append(trigger_def.get("text_field_path", "text"))
+                if row["schedule_type"] != trigger_def.get("schedule_type"):
+                    updates.append("schedule_type = ?")
+                    values.append(trigger_def.get("schedule_type"))
+                if row["schedule_time"] != trigger_def.get("schedule_time"):
+                    updates.append("schedule_time = ?")
+                    values.append(trigger_def.get("schedule_time"))
+                if row["schedule_day"] != trigger_def.get("schedule_day"):
+                    updates.append("schedule_day = ?")
+                    values.append(trigger_def.get("schedule_day"))
                 if updates:
                     values.append(trigger_def["id"])
                     conn.execute(f"UPDATE triggers SET {', '.join(updates)} WHERE id = ?", values)

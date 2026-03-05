@@ -224,10 +224,12 @@ def test_github_dispatch_delegates_to_team(isolated_db):
     call_args = mock_execute_team.call_args
     assert call_args[0][0] == team_id
     assert call_args[0][3] == "github_webhook"
-    # OrchestrationService is called for the predefined bot-pr-review (direct mode),
-    # but NOT for our team-mode test trigger. Verify only 1 orchestration call
-    # (the predefined trigger) -- our test trigger should have been delegated to team.
-    assert mock_orchestration.call_count == 1
-    # Verify the orchestration call was for the predefined trigger, not our test trigger
-    orch_trigger = mock_orchestration.call_args[0][0]
-    assert orch_trigger["id"] == "bot-pr-review"
+    # OrchestrationService is called for all predefined github triggers in direct mode
+    # (bot-pr-review, bot-test-coverage, bot-pr-summary), but NOT for our team-mode
+    # test trigger. Verify 3 orchestration calls (the predefined triggers).
+    assert mock_orchestration.call_count == 3
+    # Verify the orchestration calls were for predefined triggers, not our test trigger
+    orch_trigger_ids = {call[0][0]["id"] for call in mock_orchestration.call_args_list}
+    assert "bot-pr-review" in orch_trigger_ids
+    assert "bot-test-coverage" in orch_trigger_ids
+    assert "bot-pr-summary" in orch_trigger_ids

@@ -3277,6 +3277,59 @@ def _migrate_v71_template_history_author_diff(conn):
     conn.commit()
 
 
+def _migrate_v72_add_execution_logs_fts(conn):
+    """Add FTS5 virtual table and sync triggers for full-text search over execution logs."""
+    conn.execute("""
+        CREATE VIRTUAL TABLE IF NOT EXISTS execution_logs_fts
+        USING fts5(
+            stdout_content,
+            stderr_content,
+            prompt,
+            content=execution_logs,
+            content_rowid=id,
+            tokenize='porter unicode61'
+        )
+    """)
+
+    conn.execute("""
+        CREATE TRIGGER IF NOT EXISTS execution_logs_fts_insert
+        AFTER INSERT ON execution_logs
+        BEGIN
+            INSERT INTO execution_logs_fts(rowid, stdout_content, stderr_content, prompt)
+            VALUES (new.id, COALESCE(new.stdout_log, ''), COALESCE(new.stderr_log, ''), COALESCE(new.prompt, ''));
+        END
+    """)
+
+    conn.execute("""
+        CREATE TRIGGER IF NOT EXISTS execution_logs_fts_update
+        AFTER UPDATE OF stdout_log, stderr_log ON execution_logs
+        BEGIN
+            INSERT INTO execution_logs_fts(execution_logs_fts, rowid, stdout_content, stderr_content, prompt)
+            VALUES ('delete', old.id, COALESCE(old.stdout_log, ''), COALESCE(old.stderr_log, ''), COALESCE(old.prompt, ''));
+            INSERT INTO execution_logs_fts(rowid, stdout_content, stderr_content, prompt)
+            VALUES (new.id, COALESCE(new.stdout_log, ''), COALESCE(new.stderr_log, ''), COALESCE(new.prompt, ''));
+        END
+    """)
+
+    conn.execute("""
+        CREATE TRIGGER IF NOT EXISTS execution_logs_fts_delete
+        AFTER DELETE ON execution_logs
+        BEGIN
+            INSERT INTO execution_logs_fts(execution_logs_fts, rowid, stdout_content, stderr_content, prompt)
+            VALUES ('delete', old.id, COALESCE(old.stdout_log, ''), COALESCE(old.stderr_log, ''), COALESCE(old.prompt, ''));
+        END
+    """)
+
+    # Rebuild the FTS index from existing execution_logs data
+    conn.execute("""
+        INSERT INTO execution_logs_fts(rowid, stdout_content, stderr_content, prompt)
+        SELECT id, COALESCE(stdout_log, ''), COALESCE(stderr_log, ''), COALESCE(prompt, '')
+        FROM execution_logs
+    """)
+
+    conn.commit()
+
+
 VERSIONED_MIGRATIONS = [
     (1, "add_github_columns", _migrate_add_github_columns),
     (2, "add_pr_reviews_table", _migrate_add_pr_reviews_table),
@@ -3353,4 +3406,5 @@ VERSIONED_MIGRATIONS = [
     (69, "bot_templates_table", _migrate_v69_bot_templates_table),
     (70, "prompt_snippets_table", _migrate_v70_prompt_snippets_table),
     (71, "template_history_author_diff", _migrate_v71_template_history_author_diff),
+    (72, "add_execution_logs_fts", _migrate_v72_add_execution_logs_fts),
 ]
