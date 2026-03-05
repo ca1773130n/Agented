@@ -20,7 +20,7 @@
 | Phase | Name | Status | Verification |
 |-------|------|--------|--------------|
 | 7 | Workflow Automation & Pipeline Intelligence | Complete (3/3) — Verified | proxy |
-| 8 | Execution Intelligence & Replay | In Progress (1/5) | proxy |
+| 8 | Execution Intelligence & Replay | In Progress (2/5) | proxy |
 | 9 | Bot Authoring & Template Ecosystem | Pending | proxy |
 | 10 | Analytics & Monitoring Dashboards | In Progress (4/5) | proxy |
 | 11 | Enterprise Integrations & Governance | Pending | proxy |
@@ -73,6 +73,9 @@
 - [Phase 10]: SuccessRateChart 80% baseline via custom Chart.js afterDraw plugin
 - [Phase 8]: PR diff fetched via {pr_url}.diff URL pattern using urllib for DiffContextService injection
 - [Phase 8]: Comparison record persisted before subprocess start to survive crashes per 08-RESEARCH.md
+- [Phase 8]: Explicit max_chars overrides SIZE_THRESHOLD for fine-grained chunking control
+- [Phase 8]: Chunk overlap capped at min(OVERLAP_CHARS, chunk_size/5) for proportional scaling
+- [Phase 8]: Background chunk dispatch uses Semaphore(3) per 08-RESEARCH.md anti-pattern guidance
 
 ## Blockers
 
@@ -101,8 +104,9 @@ None -- no phases have deferred verification level in this milestone.
 | 16 | 04 | ~20min | 3 | 4 |
 | 16 | 05 | ~15min | 2 | 17 |
 | 08 | 01 | 15min | 2 | 12 |
+| 08 | 02 | 17min | 3 | 11 |
 
 ## Session Log
 
 - **Last session:** 2026-03-05
-- **Stopped at:** Completed 08-01-PLAN.md (execution replay service, diff-context service, and API endpoints)
+- **Stopped at:** Completed 08-02-PLAN.md (smart chunking, conversation branching, chunked execution pipeline)
