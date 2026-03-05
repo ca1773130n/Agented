@@ -18,6 +18,7 @@ def register_blueprints(app):
     from .conversation_branches import conversation_branches_bp
     from .config_export import config_export_bp
     from .commands import commands_bp
+    from .execution_search import execution_search_bp
     from .executions import executions_bp
     from .github_webhook import github_webhook_bp
     from .gitops import gitops_bp
@@ -83,6 +84,7 @@ def register_blueprints(app):
             triggers_bp,
             audit_bp,
             utility_bp,
+            execution_search_bp,
             executions_bp,
             pr_reviews_bp,
             agents_bp,
@@ -149,6 +151,7 @@ def register_blueprints(app):
     app.register_api(triggers_bp)
     app.register_api(audit_bp)
     app.register_api(utility_bp)
+    app.register_api(execution_search_bp)
     app.register_api(executions_bp)
     app.register_api(pr_reviews_bp)
     app.register_api(agents_bp)
