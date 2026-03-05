@@ -261,6 +261,11 @@ class ExecutionQueueService:
         cls._concurrency_caps[trigger_id] = max(1, cap)
 
     @classmethod
+    def get_queue_summary(cls) -> list:
+        """Return per-trigger pending/dispatching counts for admin visibility."""
+        return get_queue_summary()
+
+    @classmethod
     def reset(cls) -> None:
         """Reset all in-memory state. Used for testing."""
         cls.stop_dispatcher()

@@ -309,6 +309,12 @@ def create_app(config=None):
             )
             _startup_warnings.append(f"pending_retry_restore: {_retry_restore_err}")
 
+        # Start execution queue dispatcher (recovers stale entries, polls every 1s)
+        from .services.execution_queue_service import ExecutionQueueService
+
+        ExecutionQueueService.start_dispatcher()
+        atexit.register(ExecutionQueueService.stop_dispatcher)
+
         # Initialize agent message bus (TTL sweep background worker)
         from .services.agent_message_bus_service import AgentMessageBusService
 

@@ -1272,28 +1272,24 @@ class ExecutionService:
             logger.info("Trigger '%s' triggered by webhook", trigger["name"])
             cls.save_trigger_event(trigger, payload)
 
-            # Delegate to team execution if execution_mode is 'team'
-            if trigger.get("execution_mode") == "team" and trigger.get("team_id"):
-                from .team_execution_service import TeamExecutionService
+            # Enqueue for dispatch via ExecutionQueueService (replaces direct thread spawn)
+            from .execution_queue_service import ExecutionQueueService, QueueFullError
 
-                thread = threading.Thread(
-                    target=TeamExecutionService.execute_team,
-                    args=(trigger["team_id"], text, payload, "webhook"),
-                    daemon=True,
+            try:
+                ExecutionQueueService.enqueue(
+                    trigger_id=trigger["id"],
+                    trigger_type="webhook",
+                    message_text=text,
+                    event_data=payload,
                 )
-                thread.start()
                 triggered = True
-                continue  # Skip normal dispatch for this trigger
-
-            from .orchestration_service import OrchestrationService
-
-            thread = threading.Thread(
-                target=OrchestrationService.execute_with_fallback,
-                args=(trigger, text, payload, "webhook"),
-                daemon=True,
-            )
-            thread.start()
-            triggered = True
+            except QueueFullError:
+                logger.warning(
+                    "Queue depth limit exceeded for trigger '%s' (%s); rejecting webhook dispatch",
+                    trigger["name"],
+                    trigger["id"],
+                )
+                continue
 
         # --- Team dispatch ---
         from ..database import get_webhook_teams
@@ -1432,29 +1428,24 @@ class ExecutionService:
             # Save trigger event
             cls.save_trigger_event(trigger, event)
 
-            # Delegate to team execution if execution_mode is 'team'
-            if trigger.get("execution_mode") == "team" and trigger.get("team_id"):
-                from .team_execution_service import TeamExecutionService
+            # Enqueue for dispatch via ExecutionQueueService (replaces direct thread spawn)
+            from .execution_queue_service import ExecutionQueueService, QueueFullError
 
-                thread = threading.Thread(
-                    target=TeamExecutionService.execute_team,
-                    args=(trigger["team_id"], message_text, event, "github_webhook"),
-                    daemon=True,
+            try:
+                ExecutionQueueService.enqueue(
+                    trigger_id=trigger["id"],
+                    trigger_type="github",
+                    message_text=message_text,
+                    event_data=event,
                 )
-                thread.start()
                 triggered = True
-                continue  # Skip normal dispatch for this trigger
-
-            # Run trigger in background thread via orchestration (handles fallback chains)
-            from .orchestration_service import OrchestrationService
-
-            thread = threading.Thread(
-                target=OrchestrationService.execute_with_fallback,
-                args=(trigger, message_text, event, "github_webhook"),
-                daemon=True,
-            )
-            thread.start()
-            triggered = True
+            except QueueFullError:
+                logger.warning(
+                    "Queue depth limit exceeded for trigger '%s' (%s); rejecting GitHub dispatch",
+                    trigger["name"],
+                    trigger["id"],
+                )
+                continue
 
         # --- Team dispatch ---
         from ..database import get_teams_by_trigger_source

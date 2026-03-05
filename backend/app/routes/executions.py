@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 
 from ..database import get_trigger
 from ..services.execution_log_service import ExecutionLogService
+from ..services.execution_queue_service import ExecutionQueueService
 
 tag = Tag(name="executions", description="Execution log operations")
 executions_bp = APIBlueprint("executions", __name__, url_prefix="/admin", abp_tags=[tag])
@@ -300,4 +301,71 @@ def bulk_cancel_executions(body: BulkCancelRequest):
         "cancelled": cancelled,
         "failed": failed,
         "details": results,
+    }, HTTPStatus.OK
+
+
+# --- Execution Queue API ---
+
+
+@executions_bp.get("/executions/queue")
+def get_queue_status():
+    """Get execution queue summary with per-trigger pending/dispatching counts."""
+    from ..db.execution_queue import get_queue_depth
+
+    summary = ExecutionQueueService.get_queue_summary()
+    total_pending = get_queue_depth()
+
+    return {
+        "queue": summary,
+        "total_pending": total_pending,
+    }, HTTPStatus.OK
+
+
+class QueueTriggerPath(BaseModel):
+    trigger_id: str = Field(..., description="Trigger ID")
+
+
+@executions_bp.get("/executions/queue/<trigger_id>")
+def get_queue_for_trigger(path: QueueTriggerPath):
+    """Get queue depth for a specific trigger."""
+    from ..db.execution_queue import get_queue_depth
+
+    depth = get_queue_depth(path.trigger_id)
+    return {
+        "trigger_id": path.trigger_id,
+        "pending": depth,
+    }, HTTPStatus.OK
+
+
+@executions_bp.delete("/executions/queue/<trigger_id>")
+def cancel_queue_for_trigger(path: QueueTriggerPath):
+    """Cancel all pending queue entries for a specific trigger."""
+    from ..db.execution_queue import cancel_pending_entries
+
+    cancelled = cancel_pending_entries(path.trigger_id)
+    return {"cancelled": cancelled}, HTTPStatus.OK
+
+
+# --- Pending Retries API ---
+
+
+@executions_bp.get("/executions/retries")
+def get_pending_retries():
+    """Get pending rate-limit retries from the pending_retries table."""
+    from ..db.monitoring import get_all_pending_retries
+
+    retries = get_all_pending_retries()
+    result = []
+    for row in retries:
+        result.append({
+            "trigger_id": row["trigger_id"],
+            "cooldown_seconds": row.get("cooldown_seconds", 0),
+            "retry_at": row.get("retry_at", ""),
+            "trigger_type": row.get("trigger_type", "webhook"),
+            "created_at": row.get("created_at", ""),
+        })
+
+    return {
+        "retries": result,
+        "total": len(result),
     }, HTTPStatus.OK

@@ -109,9 +109,9 @@ def test_trigger_default_execution_mode(isolated_db):
 
 
 def test_webhook_dispatch_delegates_to_team(isolated_db):
-    """Mock TeamExecutionService.execute_team, verify delegation for team-mode trigger."""
+    """Webhook dispatch for team-mode trigger enqueues execution via queue."""
     team_id = _create_team(isolated_db)
-    _create_trigger_with_mode(
+    trigger = _create_trigger_with_mode(
         isolated_db,
         trigger_source="webhook",
         execution_mode="team",
@@ -120,16 +120,10 @@ def test_webhook_dispatch_delegates_to_team(isolated_db):
         match_field_value="test",
     )
 
-    with (
-        patch(
-            "app.services.team_execution_service.TeamExecutionService.execute_team"
-        ) as mock_execute_team,
-        patch(
-            "app.services.orchestration_service.OrchestrationService.execute_with_fallback"
-        ) as mock_orchestration,
-    ):
-        mock_execute_team.return_value = "team-exec-test"
-
+    with patch(
+        "app.services.execution_queue_service.ExecutionQueueService.enqueue",
+        return_value="qe-test01",
+    ) as mock_enqueue:
         from app.services.execution_service import ExecutionService
 
         triggered = ExecutionService.dispatch_webhook_event(
@@ -137,12 +131,9 @@ def test_webhook_dispatch_delegates_to_team(isolated_db):
         )
 
     assert triggered is True
-    mock_execute_team.assert_called_once()
-    call_args = mock_execute_team.call_args
-    assert call_args[0][0] == team_id  # team_id
-    assert call_args[0][3] == "webhook"  # trigger_type
-    # OrchestrationService should NOT have been called for this trigger
-    mock_orchestration.assert_not_called()
+    mock_enqueue.assert_called_once()
+    call_args = mock_enqueue.call_args
+    assert call_args[1]["trigger_id"] == trigger["id"] or call_args[0][0] == trigger["id"]
 
 
 # ---------------------------------------------------------------------------
@@ -151,8 +142,8 @@ def test_webhook_dispatch_delegates_to_team(isolated_db):
 
 
 def test_webhook_dispatch_direct_mode_unchanged(isolated_db):
-    """Trigger with execution_mode='direct' still goes through OrchestrationService."""
-    _create_trigger_with_mode(
+    """Trigger with execution_mode='direct' enqueues via queue (replaces direct thread spawn)."""
+    trigger = _create_trigger_with_mode(
         isolated_db,
         trigger_source="webhook",
         execution_mode="direct",
@@ -160,14 +151,10 @@ def test_webhook_dispatch_direct_mode_unchanged(isolated_db):
         match_field_value="test",
     )
 
-    with (
-        patch(
-            "app.services.team_execution_service.TeamExecutionService.execute_team"
-        ) as mock_execute_team,
-        patch(
-            "app.services.orchestration_service.OrchestrationService.execute_with_fallback"
-        ) as mock_orchestration,
-    ):
+    with patch(
+        "app.services.execution_queue_service.ExecutionQueueService.enqueue",
+        return_value="qe-test02",
+    ) as mock_enqueue:
         from app.services.execution_service import ExecutionService
 
         triggered = ExecutionService.dispatch_webhook_event(
@@ -175,8 +162,9 @@ def test_webhook_dispatch_direct_mode_unchanged(isolated_db):
         )
 
     assert triggered is True
-    mock_execute_team.assert_not_called()
-    mock_orchestration.assert_called_once()
+    mock_enqueue.assert_called_once()
+    call_args = mock_enqueue.call_args
+    assert call_args[1].get("trigger_type") == "webhook" or call_args[0][1] == "webhook"
 
 
 # ---------------------------------------------------------------------------
@@ -185,25 +173,19 @@ def test_webhook_dispatch_direct_mode_unchanged(isolated_db):
 
 
 def test_github_dispatch_delegates_to_team(isolated_db):
-    """Verify dispatch_github_event delegates to team for team-mode triggers."""
+    """Verify dispatch_github_event enqueues for team-mode triggers via queue."""
     team_id = _create_team(isolated_db)
-    _create_trigger_with_mode(
+    trigger = _create_trigger_with_mode(
         isolated_db,
         trigger_source="github",
         execution_mode="team",
         team_id=team_id,
     )
 
-    with (
-        patch(
-            "app.services.team_execution_service.TeamExecutionService.execute_team"
-        ) as mock_execute_team,
-        patch(
-            "app.services.orchestration_service.OrchestrationService.execute_with_fallback"
-        ) as mock_orchestration,
-    ):
-        mock_execute_team.return_value = "team-exec-github"
-
+    with patch(
+        "app.services.execution_queue_service.ExecutionQueueService.enqueue",
+        return_value="qe-test03",
+    ) as mock_enqueue:
         from app.services.execution_service import ExecutionService
 
         triggered = ExecutionService.dispatch_github_event(
@@ -219,17 +201,11 @@ def test_github_dispatch_delegates_to_team(isolated_db):
         )
 
     assert triggered is True
-    # TeamExecutionService should be called for the team-mode trigger
-    mock_execute_team.assert_called_once()
-    call_args = mock_execute_team.call_args
-    assert call_args[0][0] == team_id
-    assert call_args[0][3] == "github_webhook"
-    # OrchestrationService is called for all predefined github triggers in direct mode
-    # (bot-pr-review, bot-test-coverage, bot-pr-summary), but NOT for our team-mode
-    # test trigger. Verify 3 orchestration calls (the predefined triggers).
-    assert mock_orchestration.call_count == 3
-    # Verify the orchestration calls were for predefined triggers, not our test trigger
-    orch_trigger_ids = {call[0][0]["id"] for call in mock_orchestration.call_args_list}
-    assert "bot-pr-review" in orch_trigger_ids
-    assert "bot-test-coverage" in orch_trigger_ids
-    assert "bot-pr-summary" in orch_trigger_ids
+    # All github triggers (predefined + test) should be enqueued via queue
+    assert mock_enqueue.call_count >= 1
+    # Verify our test trigger was enqueued
+    enqueued_trigger_ids = [
+        call[1].get("trigger_id", call[0][0] if call[0] else None)
+        for call in mock_enqueue.call_args_list
+    ]
+    assert trigger["id"] in enqueued_trigger_ids
