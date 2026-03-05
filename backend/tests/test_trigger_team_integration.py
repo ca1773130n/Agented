@@ -143,7 +143,7 @@ def test_webhook_dispatch_delegates_to_team(isolated_db):
 
 def test_webhook_dispatch_direct_mode_unchanged(isolated_db):
     """Trigger with execution_mode='direct' enqueues via queue (replaces direct thread spawn)."""
-    trigger = _create_trigger_with_mode(
+    _create_trigger_with_mode(
         isolated_db,
         trigger_source="webhook",
         execution_mode="direct",
