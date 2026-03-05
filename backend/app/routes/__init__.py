@@ -5,6 +5,7 @@ def register_blueprints(app):
     """Register all route blueprints with the Flask app."""
     from .agent_conversations import agent_conversations_bp
     from .agents import agents_bp
+    from .analytics import analytics_bp
     from .audit import audit_bp
     from .backends import backends_bp
     from .bookmarks import bookmarks_bp
@@ -116,6 +117,7 @@ def register_blueprints(app):
             bookmarks_bp,
             integrations_bp,
             campaigns_bp,
+            analytics_bp,
         ]
         for bp in admin_blueprints:
             limiter.limit("120/minute")(bp)
@@ -174,6 +176,7 @@ def register_blueprints(app):
     app.register_api(integrations_bp)
     app.register_api(slack_command_bp)
     app.register_api(campaigns_bp)
+    app.register_api(analytics_bp)
 
     # SPA catch-all: MUST be registered LAST so API routes take priority
     app.register_blueprint(spa_bp)
