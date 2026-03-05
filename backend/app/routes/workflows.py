@@ -68,7 +68,7 @@ def list_workflows():
 
 @workflows_bp.post("/")
 def create_workflow():
-    """Create a new workflow."""
+    """Create a new workflow with optional DAG validation."""
     data = request.get_json()
     if not data:
         return {"error": "JSON body required"}, HTTPStatus.BAD_REQUEST
@@ -76,6 +76,15 @@ def create_workflow():
     name = data.get("name")
     if not name:
         return {"error": "name is required"}, HTTPStatus.BAD_REQUEST
+
+    # Validate graph if provided at creation time
+    graph = data.get("graph")
+    if graph:
+        from ..services.workflow_validation_service import validate_workflow_dag
+
+        is_valid, errors = validate_workflow_dag(graph)
+        if not is_valid:
+            return {"error": "DAG validation failed", "errors": errors}, HTTPStatus.BAD_REQUEST
 
     workflow_id = add_workflow(
         name=name,
@@ -100,10 +109,19 @@ def get_workflow_endpoint(path: WorkflowPath):
 
 @workflows_bp.put("/<workflow_id>")
 def update_workflow_endpoint(path: WorkflowPath):
-    """Update a workflow."""
+    """Update a workflow with optional DAG validation."""
     data = request.get_json()
     if not data:
         return {"error": "JSON body required"}, HTTPStatus.BAD_REQUEST
+
+    # Validate graph if provided during update
+    graph = data.get("graph")
+    if graph:
+        from ..services.workflow_validation_service import validate_workflow_dag
+
+        is_valid, errors = validate_workflow_dag(graph)
+        if not is_valid:
+            return {"error": "DAG validation failed", "errors": errors}, HTTPStatus.BAD_REQUEST
 
     if not update_workflow(
         path.workflow_id,
@@ -376,6 +394,26 @@ def workflow_execution_timeline(path: WorkflowExecutionPath):
         "workflow_id": execution.get("workflow_id"),
         "status": execution.get("status"),
     }, HTTPStatus.OK
+
+
+# =============================================================================
+# DAG Validation Endpoint
+# =============================================================================
+
+
+@workflows_bp.post("/validate")
+def validate_workflow():
+    """Validate a workflow DAG without saving (API-09)."""
+    from ..services.workflow_validation_service import validate_workflow_dag
+
+    data = request.get_json()
+    if not data:
+        return {"error": "JSON body required"}, HTTPStatus.BAD_REQUEST
+
+    graph = data.get("graph", {})
+    is_valid, errors = validate_workflow_dag(graph)
+    status = HTTPStatus.OK if is_valid else HTTPStatus.BAD_REQUEST
+    return {"valid": is_valid, "errors": errors}, status
 
 
 # =============================================================================
