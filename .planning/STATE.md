@@ -2,7 +2,7 @@
 
 **Milestone:** v0.1.0 -- Production Hardening (active) / v0.2.0 -- Miscellaneous
 **Current Phase:** Phase 14 (autopilot: executing)
-**Current Plan:** 02 of 04
+**Current Plan:** 04 of 04
 **Status:** executing
 
 **Progress:** [██████████] 90%
@@ -11,8 +11,8 @@
 
 ## Position
 
-- **Last completed:** Phase 14 Plan 02 (Pagination & Execution Filtering)
-- **Next up:** Phase 14 Plan 03
+- **Last completed:** Phase 14 Plan 04 (Bulk Operations & DAG Validation)
+- **Next up:** Phase 14 complete; next milestone phase TBD
 - **Blocked by:** Nothing
 
 ## Phase Summary
@@ -26,7 +26,7 @@
 | 11 | Enterprise Integrations & Governance | Pending | proxy |
 | 12 | Specialized Automation Bots | Complete (3/3) | proxy |
 | 13 | Execution Resilience & Infrastructure | Complete (4/4) — Verified | proxy |
-| 14 | API Hardening & Developer Experience | In Progress (2/4) | proxy |
+| 14 | API Hardening & Developer Experience | Complete (4/4) | proxy |
 | 15 | Code Consistency & Standards | Pending | sanity |
 | 16 | Frontend Quality & User Experience | In Progress (5/5) | sanity |
 
@@ -128,6 +128,10 @@
 - [Phase 14]: 429 handler returns explicit Response with Retry-After header (not plain tuple) to propagate header
 - [Phase 14]: SQL LIMIT/OFFSET pushed to DB layer (not Python list slicing) for all 15+ list endpoints
 - [Phase 14]: Composable WHERE clause builder with parameterized queries for execution filtering (AND logic)
+- [Phase 14]: Per-item independent processing (no shared transaction) for bulk ops per 14-RESEARCH.md
+- [Phase 14]: Handler lookup table pattern for entity_type/action dispatch in BulkService
+- [Phase 14]: AST-based dangerous construct detection via ast.walk for condition expression validation
+- [Phase 14]: Separate workflow_validation_service.py for DAG validation (not in workflow_execution_service.py)
 
 ## Blockers
 
@@ -174,8 +178,9 @@ None -- no phases have deferred verification level in this milestone.
 | 13 | 04 | 38min | 2 | 12 |
 | 14 | 01 | 14min | 2 | 5 |
 | 14 | 02 | ~20min | 2 | 30 |
+| 14 | 04 | 9min | 2 | 7 |
 
 ## Session Log
 
 - **Last session:** 2026-03-06
-- **Stopped at:** Completed 14-02-PLAN.md (Pagination & Execution Filtering)
+- **Stopped at:** Completed 14-04-PLAN.md (Bulk Operations & DAG Validation)
