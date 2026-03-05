@@ -3,7 +3,7 @@
 **Milestone:** v0.1.0 -- Production Hardening (active) / v0.2.0 -- Miscellaneous
 **Current Phase:** Phase 15 (complete)
 **Current Plan:** 03 of 03
-**Status:** phase_complete
+**Status:** v0.2.0 milestone complete
 
 **Progress:** [██████████] 95%
 

@@ -1,16 +1,16 @@
 # Phase 12: Specialized Automation Bots - Research
 
 **Researched:** 2026-03-04
-**Domain:** Bot automation platform -- predefined specialized bots for engineering workflows
-**Confidence:** HIGH
+**Domain:** Engineering automation bots (vulnerability triage, code tours, test coverage, incident postmortems, changelog, PR summaries, NL log search)
+**Confidence:** MEDIUM-HIGH
 
 ## Summary
 
-Phase 12 adds seven predefined specialized bots to the existing Agented bot automation infrastructure. The platform already has a mature bot execution pipeline: triggers (with `is_predefined=1`) are seeded into the SQLite database at startup, each with a `prompt_template` that references Claude skills (e.g., `/weekly-security-audit {paths}`). Execution flows through `OrchestrationService` -> `ExecutionService.run_trigger()` -> `subprocess.Popen` -> CLI tool (claude/opencode/gemini/codex). The two existing predefined bots (`bot-security` for weekly security audits, `bot-pr-review` for PR reviews) provide a proven template.
+Phase 12 adds seven specialized pre-built bots to the Agented platform, each implemented as a predefined trigger with a tailored prompt template and supporting backend service. The platform already has a mature bot execution infrastructure: predefined triggers (`bot-security`, `bot-pr-review`), prompt template rendering via `PromptRenderer`, CLI subprocess execution via `ExecutionService.run_trigger()`, scheduled execution via `SchedulerService`, GitHub webhook dispatch via `dispatch_github_event()`, and execution log persistence in SQLite.
 
-The implementation pattern is clear: each new bot requires (1) a predefined trigger definition in `PREDEFINED_TRIGGERS`, (2) a Claude skill file with the prompt logic, (3) appropriate trigger source and placeholders, and optionally (4) new API endpoints for bot-specific data views. The most technically novel requirement is BOT-07 (natural language log search), which requires SQLite FTS5 for full-text search over execution log data. The remaining six bots follow the established pattern of prompt-template-driven CLI execution with different trigger sources (scheduled, github, webhook, manual).
+The primary implementation pattern for all seven bots is: (1) define a new predefined trigger with an appropriate `trigger_source`, `prompt_template`, and `skill_command`; (2) create or extend a Claude skill (markdown instruction file) that guides the AI through the specific task; (3) add a supporting service for any data pre-processing (e.g., parsing package manifests, querying CVE databases, aggregating merged PRs); (4) add an API endpoint for bot-specific results; (5) add a frontend view for displaying results. The natural language log search (BOT-07) is the most architecturally distinct requirement, needing SQLite FTS5 for efficient full-text search across execution logs.
 
-**Primary recommendation:** Implement all seven bots using the existing predefined trigger + Claude skill pattern. Add SQLite FTS5 virtual tables for BOT-07 log search. Use the OSV.dev API for BOT-01 CVE cross-referencing. Leverage `gh pr list --state merged --json` for BOT-05 changelog generation.
+**Primary recommendation:** Implement each bot as a predefined trigger + Claude skill pair, following the existing `bot-security` / `bot-pr-review` pattern. Use SQLite FTS5 for natural language log search. Leverage `osv-scanner` CLI or the OSV.dev API for vulnerability scanning. Use `gh` CLI for posting PR comments (test coverage gaps, PR summaries). Use `gh` CLI's `pr list --state merged` for changelog generation.
 
 ## Standard Stack
 
@@ -18,33 +18,35 @@ The implementation pattern is clear: each new bot requires (1) a predefined trig
 
 | Library | Version | Purpose | Why Standard |
 |---------|---------|---------|--------------|
-| SQLite FTS5 | Built-in | Full-text search for BOT-07 log search | Ships with Python's sqlite3 module; zero dependencies; proven BM25 ranking |
-| `urllib.request` | stdlib | OSV.dev API calls for BOT-01 | Already used throughout codebase for provider APIs; no new dependencies |
-| `gh` CLI | Existing | PR listing for BOT-05/BOT-06 | Already integrated via `GitHubService`; `gh pr list --state merged --json` |
-| APScheduler | Existing | Scheduled trigger execution for BOT-01/BOT-05 | Already integrated via `SchedulerService` |
-| Claude CLI | Existing | Bot execution backend | Core execution path via `CommandBuilder.build()` |
+| Flask + flask-openapi3 | 2.x / 3.x | API endpoints for bot results and management | Already in use; all routes use `APIBlueprint` |
+| SQLite + FTS5 | Built-in | Full-text search on execution logs (BOT-07) | FTS5 ships with Python's `sqlite3` module; no external dependency needed |
+| APScheduler | 3.10+ | Scheduled bot execution (BOT-01 daily/weekly scans) | Already in use for scheduled triggers |
+| subprocess | stdlib | CLI invocation of `claude`, `gh`, `osv-scanner` | Already the execution model for all bot runs |
+| Pydantic v2 | 2.x | Request/response validation for bot-specific models | Already in use across all API endpoints |
 
 ### Supporting
 
 | Library | Version | Purpose | When to Use |
 |---------|---------|---------|-------------|
-| `json` | stdlib | OSV API response parsing, CHANGELOG formatting | BOT-01 CVE data, BOT-05 changelog structure |
-| `re` | stdlib | Conventional commit message parsing for BOT-05 | Grouping PRs by type (feat/fix/breaking) |
-| `subprocess` | stdlib | `gh` CLI calls for PR data, `coverage.py` for BOT-03 | BOT-03/BOT-05/BOT-06 data gathering |
+| `osv-scanner` CLI | 2.x | Vulnerability scanning of package manifests (BOT-01) | Invoked via subprocess for dependency vulnerability triage |
+| `gh` CLI | 2.x | PR comment posting (BOT-03, BOT-06), merged PR listing (BOT-05) | Already available on the system; used by `GitHubService` |
+| `httpx` | 0.28+ | OSV.dev API queries for CVE cross-referencing (BOT-01) | Already a dependency in `pyproject.toml` |
 
 ### Alternatives Considered
 
 | Instead of | Could Use | Tradeoff | Rationale |
 |------------|-----------|----------|-----------|
-| OSV.dev API | `osv-scanner` CLI | CLI requires Go install; API is HTTP-only, zero deps | Use API -- platform already uses `urllib.request` for provider APIs |
-| SQLite FTS5 | Elasticsearch/Meilisearch | External service dependency; overkill for single-user platform | FTS5 is built into SQLite, zero infrastructure |
-| Custom changelog parser | `release-please` / `conventional-changelog` | External tools with own opinionated workflow | Custom parsing via `gh pr list` keeps it simple and platform-native |
-| Custom coverage analysis | `coverage.py` report parsing | coverage.py requires project-specific test runner setup | Let the AI (Claude) analyze the diff directly -- it can reason about untested paths |
+| `osv-scanner` CLI | Direct OSV.dev REST API (`https://api.osv.dev/v1/query`) | API is simpler to integrate but lacks lockfile parsing; CLI handles 19+ lockfile formats natively | Use CLI for manifest scanning, API for supplemental CVE details |
+| SQLite FTS5 | Elasticsearch / Meilisearch | External dependency, operational overhead | FTS5 is zero-dependency (built into Python's sqlite3), sufficient for single-instance deployment |
+| `gh pr comment` | GitHub REST API via `httpx` | REST API requires token management; `gh` CLI handles auth automatically | Use `gh` CLI for all GitHub interactions, consistent with existing `GitHubService` |
 
 **Installation:**
 ```bash
-# No new dependencies required -- all capabilities are built-in or already installed
-# FTS5 is compiled into Python's sqlite3 by default on all major platforms
+# osv-scanner (Go binary, install via brew or download)
+brew install osv-scanner
+# OR: go install github.com/google/osv-scanner/cmd/osv-scanner@latest
+
+# No new Python dependencies required — all libraries already in pyproject.toml
 ```
 
 ## Architecture Patterns
@@ -54,235 +56,322 @@ The implementation pattern is clear: each new bot requires (1) a predefined trig
 ```
 backend/app/
 ├── db/
-│   ├── triggers.py          # Extended: new PREDEFINED_TRIGGERS entries
-│   ├── migrations.py        # Extended: same PREDEFINED_TRIGGERS list
-│   ├── seeds.py             # Extended: same seeding logic
-│   └── search.py            # NEW: FTS5 search functions for BOT-07
-├── services/
-│   ├── execution_service.py # Extended: bot-specific prompt preprocessing
-│   ├── prompt_renderer.py   # Extended: new placeholder names
-│   ├── bot_data_service.py  # NEW: data gathering for specialized bots (OSV, gh pr list, etc.)
-│   └── log_search_service.py # NEW: FTS5 search service for BOT-07
+│   ├── specialized_bots.py          # New: CRUD for bot-specific result tables
+│   └── schema.py                    # Modified: add FTS5 virtual table, bot result tables
 ├── models/
-│   └── trigger.py           # Extended: new response models for bot-specific views
-└── routes/
-    └── bot_dashboard.py     # NEW: bot-specific dashboard endpoints (optional)
-.claude/skills/
-├── weekly-security-audit/   # Existing
-├── pr-review/               # NEW: skill for BOT-06 (auto PR summaries)
-├── vulnerability-triage/    # NEW: skill for BOT-01
-├── code-tour/               # NEW: skill for BOT-02
-├── test-coverage-gap/       # NEW: skill for BOT-03
-├── incident-postmortem/     # NEW: skill for BOT-04
-├── changelog-generator/     # NEW: skill for BOT-05
-└── log-search/              # NEW: skill for BOT-07 (optional, may be API-only)
+│   ├── specialized_bot.py           # New: Pydantic models for bot-specific results
+│   └── ...
+├── routes/
+│   ├── specialized_bots.py          # New: API endpoints for specialized bot operations
+│   └── ...
+├── services/
+│   ├── vulnerability_scan_service.py     # New: BOT-01 vulnerability scanning logic
+│   ├── code_tour_service.py              # New: BOT-02 code tour generation logic
+│   ├── test_coverage_service.py          # New: BOT-03 test coverage gap detection
+│   ├── postmortem_service.py             # New: BOT-04 incident postmortem logic
+│   ├── changelog_service.py              # New: BOT-05 changelog generation logic
+│   ├── pr_summary_service.py             # New: BOT-06 PR summary posting logic
+│   ├── execution_search_service.py       # New: BOT-07 NL log search via FTS5
+│   └── ...
+└── ...
+
+frontend/src/
+├── views/
+│   ├── VulnerabilityScanPage.vue         # New: Vulnerability scan results view
+│   ├── CodeTourPage.vue                  # New: Code tour output view
+│   └── ...
+├── components/
+│   ├── specialized-bots/                 # New: Bot-specific components
+│   └── ...
+└── services/api/
+    ├── specialized-bots.ts               # New: API client for specialized bot endpoints
+    └── ...
 ```
 
-### Pattern 1: Predefined Trigger Registration
+### Pattern 1: Predefined Trigger + Skill Pair
 
-**What:** Each specialized bot is registered as a predefined trigger with `is_predefined=1`, a fixed `bot-*` ID, and a prompt template referencing a Claude skill.
+**What:** Each specialized bot is a predefined trigger (seeded on startup) paired with a Claude skill markdown file that provides task-specific instructions.
 
-**When to use:** For every new bot (BOT-01 through BOT-07).
+**When to use:** For all seven bots.
 
 **Example:**
 ```python
-# Source: backend/app/db/triggers.py (existing pattern)
-PREDEFINED_TRIGGERS = [
-    # ... existing entries ...
-    {
-        "id": "bot-vuln-triage",
-        "name": "Dependency Vulnerability Triage",
-        "group_id": 0,
-        "detection_keyword": "",
-        "prompt_template": "/vulnerability-triage {paths}",
-        "backend_type": "claude",
-        "trigger_source": "scheduled",
-        "match_field_path": None,
-        "match_field_value": None,
-        "text_field_path": "text",
-        "is_predefined": 1,
-    },
-]
+# In backend/app/db/triggers.py — PREDEFINED_TRIGGERS list
+{
+    "id": "bot-vuln-scan",
+    "name": "Dependency Vulnerability Scanner",
+    "group_id": 0,
+    "detection_keyword": "",
+    "prompt_template": "/vulnerability-scan {paths}",
+    "backend_type": "claude",
+    "trigger_source": "scheduled",
+    "schedule_type": "weekly",
+    "schedule_time": "02:00",
+    "schedule_day": 1,  # Monday
+    "match_field_path": None,
+    "match_field_value": None,
+    "text_field_path": "text",
+    "is_predefined": 1,
+},
 ```
 
-### Pattern 2: Claude Skill as Bot Brain
-
-**What:** Each bot's intelligence lives in a Claude skill file (markdown with instructions). The prompt template invokes the skill via `/skill-name`. Claude CLI reads the skill and follows its instructions.
-
-**When to use:** For all bots that need complex reasoning (all seven).
-
-**Example:**
 ```markdown
-<!-- .claude/skills/vulnerability-triage/instructions.md -->
-# Vulnerability Triage Skill
+# .claude/skills/vulnerability-scan/INSTRUCTIONS.md
+# Claude skill instructions for dependency vulnerability scanning
 
-When invoked, perform these steps:
-1. Read the project's package manifests (package.json, requirements.txt, Cargo.toml)
-2. For each dependency, query the OSV.dev API for known vulnerabilities
-3. Score exploitability based on CVSS/EPSS data
-4. Produce a prioritized finding list with fix recommendations
+You are a dependency vulnerability scanner. Given project paths, you must:
+1. Find package manifest files (package.json, requirements.txt, pyproject.toml, Cargo.toml, go.mod)
+2. Run `osv-scanner --format json --lockfile <lockfile>` for each manifest
+3. Parse the JSON output to extract vulnerability details
+4. Cross-reference each CVE with severity scores
+5. Produce a prioritized findings report with fix recommendations
+...
 ```
 
-### Pattern 3: FTS5 External Content Table (BOT-07)
+### Pattern 2: GitHub Event-Triggered Bot with PR Comment Output
 
-**What:** Create an FTS5 virtual table that indexes execution log stdout content, linked to the existing `execution_logs` table via external content pattern. Keep canonical data in the normal table, FTS5 as search index.
+**What:** Bots triggered by GitHub PR events that post results as PR comments via `gh pr comment`.
 
-**When to use:** BOT-07 natural language log search only.
-
-**Example:**
-```sql
--- Source: SQLite FTS5 official documentation (https://sqlite.org/fts5.html)
-CREATE VIRTUAL TABLE IF NOT EXISTS execution_logs_fts USING fts5(
-    prompt,
-    stdout_log,
-    content='execution_logs',
-    content_rowid='id',
-    tokenize='porter unicode61'
-);
-
--- Search query with BM25 ranking
-SELECT e.execution_id, e.trigger_id, e.started_at,
-       snippet(execution_logs_fts, 1, '<mark>', '</mark>', '...', 32) as matched_snippet,
-       rank
-FROM execution_logs_fts
-JOIN execution_logs e ON e.id = execution_logs_fts.rowid
-WHERE execution_logs_fts MATCH ?
-ORDER BY rank;
-```
-
-### Pattern 4: Prompt Template Placeholders
-
-**What:** The `PromptRenderer` substitutes `{placeholder}` tokens in prompt templates. New bots may need additional placeholders beyond the existing set (`{paths}`, `{message}`, `{pr_url}`, `{pr_title}`, `{pr_author}`, `{repo_url}`, `{repo_full_name}`).
-
-**When to use:** When a bot needs context injected into its prompt (e.g., `{incident_id}` for BOT-04, `{last_release_tag}` for BOT-05).
+**When to use:** For BOT-03 (test coverage gaps) and BOT-06 (PR summaries).
 
 **Example:**
 ```python
-# Source: backend/app/services/prompt_renderer.py (extended)
-_KNOWN_PLACEHOLDERS = {
-    # existing...
-    "incident_id",       # BOT-04
-    "last_release_tag",  # BOT-05
-    "search_query",      # BOT-07
-}
+# Service method for posting a PR comment
+@staticmethod
+def post_pr_comment(repo_full_name: str, pr_number: int, body: str) -> bool:
+    """Post a comment on a GitHub PR using gh CLI."""
+    try:
+        result = subprocess.run(
+            ["gh", "pr", "comment", str(pr_number),
+             "--repo", repo_full_name,
+             "--body", body],
+            capture_output=True, text=True, timeout=30
+        )
+        return result.returncode == 0
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        return False
+```
+
+### Pattern 3: SQLite FTS5 for Natural Language Log Search
+
+**What:** A virtual FTS5 table that indexes execution log content for efficient full-text search.
+
+**When to use:** For BOT-07 (natural language log search).
+
+**Example:**
+```python
+# Schema addition in backend/app/db/schema.py
+conn.execute("""
+    CREATE VIRTUAL TABLE IF NOT EXISTS execution_logs_fts
+    USING fts5(
+        execution_id UNINDEXED,
+        trigger_id UNINDEXED,
+        trigger_name UNINDEXED,
+        stdout_content,
+        stderr_content,
+        prompt,
+        content=execution_logs,
+        content_rowid=id,
+        tokenize='porter unicode61'
+    )
+""")
+```
+
+```python
+# Search service method
+@staticmethod
+def search_logs(query: str, limit: int = 50) -> list:
+    """Search execution logs using FTS5 with BM25 ranking."""
+    with get_connection() as conn:
+        cursor = conn.execute("""
+            SELECT e.execution_id, e.trigger_id, t.name as trigger_name,
+                   e.started_at, e.status,
+                   snippet(execution_logs_fts, 3, '<mark>', '</mark>', '...', 32) as match_context,
+                   rank
+            FROM execution_logs_fts
+            JOIN execution_logs e ON execution_logs_fts.rowid = e.id
+            LEFT JOIN triggers t ON e.trigger_id = t.id
+            WHERE execution_logs_fts MATCH ?
+            ORDER BY rank
+            LIMIT ?
+        """, (query, limit))
+        return [dict(row) for row in cursor.fetchall()]
 ```
 
 ### Anti-Patterns to Avoid
 
-- **Hardcoding bot logic in Python services:** The intelligence should live in Claude skills (markdown), not in Python code. Python code handles data gathering and plumbing; the AI does the analysis. This is the pattern established by `bot-security`.
-- **Creating separate execution pipelines per bot:** All bots should use the same `ExecutionService.run_trigger()` pipeline. Bot-specific preprocessing (like `save_threat_report` for bot-security) should be minimal and added to `run_trigger()` with pattern matching.
-- **Putting FTS5 tables in the main schema creation:** FTS5 virtual tables should be created via a schema migration, not in `create_fresh_schema()`, to avoid breaking existing databases.
-- **Duplicating PREDEFINED_TRIGGERS across files:** Currently the list exists in both `triggers.py` and `migrations.py`. New bots must be added to BOTH lists. Consider consolidating to a single source of truth.
+- **Hardcoding bot logic in ExecutionService:** Each bot's pre/post-processing logic must live in its own service class, not in the already-large `execution_service.py` (currently 1300+ lines). The existing `save_threat_report()` method embedded in `ExecutionService` for `bot-security` is a pattern to avoid repeating.
+
+- **Building a separate search engine for BOT-07:** SQLite FTS5 is sufficient. Do not introduce Elasticsearch, Redis Search, or any external search infrastructure. The execution logs table already stores `stdout_log` and `stderr_log` as TEXT columns — FTS5 can index these directly.
+
+- **Polling for PR events from the bot itself:** The platform already has a GitHub webhook receiver (`/api/webhooks/github/`) that dispatches to matching triggers. New PR-triggered bots (BOT-03, BOT-06) should register as GitHub-sourced triggers and use the existing dispatch pipeline.
+
+- **Creating separate database files for bot results:** All data must go into the single `agented.db` SQLite database, following the established pattern. Do not create per-bot SQLite files.
 
 ## Don't Hand-Roll
 
 | Problem | Don't Build | Use Instead | Why |
 |---------|-------------|-------------|-----|
-| CVE database lookup | Custom vulnerability database | OSV.dev API (`POST https://api.osv.dev/v1/query`) | Aggregates GitHub Advisory, PyPA, RustSec, NVD; free; no API key needed; covers npm, pip, cargo ecosystems |
-| Full-text search | Custom text search with LIKE/regex | SQLite FTS5 with BM25 ranking | Built into Python's sqlite3; handles tokenization, stemming, ranking; orders of magnitude faster than LIKE |
-| Merged PR listing | Custom GitHub API pagination | `gh pr list --state merged --json title,mergedAt,labels,url --limit N` | Already integrated; handles auth, pagination, rate limiting |
-| PR diff retrieval | Custom GitHub diff parsing | `gh pr diff <number>` or `gh api repos/{owner}/{repo}/pulls/{number}` | Already integrated; handles large diffs, binary files |
-| Commit type parsing | Custom regex parser | Simple regex `^(feat|fix|docs|chore|refactor|perf|test|ci|build|style)(\(.+\))?!?:` | Conventional commits spec is well-defined; no library needed |
-| Incident timeline construction | Custom log correlator | Let Claude analyze raw execution logs + PR history | AI excels at narrative synthesis from structured data |
+| Package manifest parsing | Custom lockfile parsers | `osv-scanner` CLI (supports 19+ lockfile formats) | Lockfile formats change frequently; `osv-scanner` v2 handles edge cases (e.g., workspace packages, nested deps) |
+| CVE database | Local CVE mirror or custom scraper | OSV.dev API (`https://api.osv.dev/v1/query`) | Aggregates GitHub Advisory, PyPA, RustSec, NVD data; stays current without maintenance |
+| Full-text search | Custom tokenizer + inverted index | SQLite FTS5 with `porter` tokenizer | Built into Python's sqlite3; handles stemming, ranking (BM25), snippets natively |
+| PR comment posting | GitHub REST API client with token management | `gh pr comment` CLI | Handles auth, pagination, rate limiting automatically; already used pattern in `GitHubService` |
+| Merged PR listing for changelog | Custom GitHub API pagination | `gh pr list --state merged --json number,title,labels,mergedAt` | Handles pagination and auth; outputs structured JSON |
+| Cron scheduling | Custom scheduler thread | APScheduler CronTrigger (already in `SchedulerService`) | Already powers all scheduled triggers; battle-tested |
 
-**Key insight:** The platform's architecture is "AI does the thinking, Python does the plumbing." Bot-specific data gathering (OSV queries, `gh` commands, FTS5 searches) belongs in Python services. Analysis, synthesis, and report generation belong in Claude skill prompts.
+**Key insight:** The platform's architecture already solves the hardest infrastructure problems (trigger dispatch, subprocess execution, log streaming, scheduling). The specialized bots are primarily prompt engineering + data pre-processing/post-processing, not new infrastructure.
 
 ## Common Pitfalls
 
-### Pitfall 1: FTS5 Index Drift
+### Pitfall 1: FTS5 Index Synchronization
 
-**What goes wrong:** The FTS5 virtual table gets out of sync with the `execution_logs` table when logs are inserted or deleted without updating the FTS index.
-**Why it happens:** External content FTS5 tables don't auto-sync -- inserts/updates/deletes to the content table don't propagate to the FTS index.
-**How to avoid:** Use SQLite triggers to keep the FTS index in sync, OR rebuild the index periodically. The recommended approach is SQLite triggers:
+**What goes wrong:** FTS5 content tables require explicit synchronization when the source table is modified. If execution logs are updated (e.g., `stdout_log` written on completion) without updating the FTS index, search results become stale or incomplete.
+
+**Why it happens:** FTS5 with `content=` (external content) tables does not auto-sync.
+
+**How to avoid:** Use SQLite triggers to keep the FTS index in sync:
 ```sql
 CREATE TRIGGER execution_logs_ai AFTER INSERT ON execution_logs BEGIN
-    INSERT INTO execution_logs_fts(rowid, prompt, stdout_log)
-    VALUES (new.id, new.prompt, new.stdout_log);
+    INSERT INTO execution_logs_fts(rowid, execution_id, trigger_id, trigger_name, stdout_content, stderr_content, prompt)
+    VALUES (new.id, new.execution_id, new.trigger_id, '', COALESCE(new.stdout_log, ''), COALESCE(new.stderr_log, ''), COALESCE(new.prompt, ''));
+END;
+CREATE TRIGGER execution_logs_au AFTER UPDATE ON execution_logs BEGIN
+    INSERT INTO execution_logs_fts(execution_logs_fts, rowid, execution_id, trigger_id, trigger_name, stdout_content, stderr_content, prompt)
+    VALUES ('delete', old.id, old.execution_id, old.trigger_id, '', COALESCE(old.stdout_log, ''), COALESCE(old.stderr_log, ''), COALESCE(old.prompt, ''));
+    INSERT INTO execution_logs_fts(rowid, execution_id, trigger_id, trigger_name, stdout_content, stderr_content, prompt)
+    VALUES (new.id, new.execution_id, new.trigger_id, '', COALESCE(new.stdout_log, ''), COALESCE(new.stderr_log, ''), COALESCE(new.prompt, ''));
 END;
 ```
-**Warning signs:** Search returns stale or missing results; search returns results for deleted executions.
-**Source:** [SQLite FTS5 official docs](https://sqlite.org/fts5.html) -- External Content Tables section.
 
-### Pitfall 2: PREDEFINED_TRIGGERS List Duplication
+**Warning signs:** Search returning no results for recently completed executions; search returning stale content for re-run executions.
 
-**What goes wrong:** New bot definitions are added to `triggers.py` but not `migrations.py` (or vice versa), causing the bot to exist in new databases but not upgraded ones.
-**Why it happens:** The `PREDEFINED_TRIGGERS` list is duplicated in two files: `backend/app/db/triggers.py` and `backend/app/db/migrations.py`.
-**How to avoid:** Add new bots to both files simultaneously. Better yet, consolidate to a single source of truth by having `migrations.py` import from `triggers.py`.
-**Warning signs:** Bot appears after fresh install but not after upgrade (or vice versa).
+### Pitfall 2: Bot Prompt Template Overcrowding
 
-### Pitfall 3: Prompt Template Too Large
+**What goes wrong:** Cramming all bot instructions into the `prompt_template` field, making templates unwieldy and hard to iterate on.
 
-**What goes wrong:** Bot prompt templates that include too much context (e.g., full PR diffs, full package manifests) exceed Claude CLI's prompt length limits or cause slow execution.
-**Why it happens:** Attempting to pass all data inline in the prompt template instead of having the Claude skill read files from the filesystem.
-**How to avoid:** Use `{paths}` to point Claude at the project directory. Let the Claude skill use its file-reading tools (Read, Glob, Grep, Bash) to gather data at execution time. Only pass metadata (PR URL, incident ID, search query) in the prompt.
-**Warning signs:** Execution timeouts, truncated prompts, OOM in subprocess.
+**Why it happens:** The existing `bot-security` uses a simple template (`/weekly-security-audit {paths}`) that delegates to a Claude skill file. Developers unfamiliar with this pattern may try to put all instructions in the template itself.
 
-### Pitfall 4: OSV API Rate Limiting
+**How to avoid:** Use the `skill_command` field to reference a Claude skill, keeping the `prompt_template` focused on context variables. The skill file (`.claude/skills/<bot-name>/INSTRUCTIONS.md`) contains the detailed instructions. This matches the existing `bot-security` pattern exactly.
 
-**What goes wrong:** BOT-01 makes too many OSV API calls when scanning a large project with hundreds of dependencies.
-**Why it happens:** Querying each dependency individually without batching.
-**How to avoid:** Use the OSV batch query endpoint (`POST https://api.osv.dev/v1/querybatch`) which accepts up to 1000 queries per request. Alternatively, have the Claude skill parse the manifest and make targeted queries.
-**Warning signs:** 429 responses from OSV API, slow scan times.
-**Source:** [OSV.dev API docs](https://google.github.io/osv.dev/)
+**Warning signs:** Prompt templates exceeding 500 characters; difficulty iterating on bot behavior without restarting the server.
 
-### Pitfall 5: Scheduled Bot Overload
+### Pitfall 3: PR Comment Bot Latency (BOT-06 60-Second SLA)
 
-**What goes wrong:** Multiple scheduled bots (BOT-01, BOT-05) fire at the same time, competing for the single CLI backend.
-**Why it happens:** Default schedule times are too close together.
-**How to avoid:** Stagger schedule times for different bots (e.g., BOT-01 at 02:00, BOT-05 at 04:00). The existing `OrchestrationService` handles fallback chains, but concurrent executions still compete for CPU.
-**Warning signs:** Execution timeouts, backed-up scheduler queue.
+**What goes wrong:** The 60-second SLA for PR summary comments cannot be met if the bot execution pipeline has cold-start overhead or if multiple PRs arrive simultaneously.
 
-### Pitfall 6: GitHub Event Trigger Overlap
+**Why it happens:** The current execution pipeline involves: GitHub webhook receipt -> trigger dispatch -> subprocess spawn -> CLI startup -> AI processing -> output. Claude CLI cold start can take 5-10 seconds; AI processing for a meaningful PR summary takes 15-30 seconds.
 
-**What goes wrong:** BOT-03 (test coverage gap), BOT-06 (PR summary), and the existing `bot-pr-review` all trigger on the same GitHub PR event, causing three concurrent executions.
-**Why it happens:** All three bots have `trigger_source: "github"` and match on `pull_request` events.
-**How to avoid:** This is actually acceptable -- each bot serves a different purpose. But ensure the per-repo rate limiting (currently 60 seconds in `github_webhook.py`) is adjusted or the bots are dispatched sequentially. Consider adding a priority/ordering mechanism.
-**Warning signs:** Rate limit rejections for legitimate PR events, out-of-order PR comments.
+**How to avoid:** (1) Use a lightweight prompt that focuses on the diff summary rather than deep code analysis. (2) Set a `timeout_seconds` of 55 on the trigger. (3) Use the existing rate limiting (60s per repo) in `github_webhook.py` to prevent concurrent executions for the same repo. (4) Consider using `litellm` direct API calls instead of CLI subprocess for latency-sensitive bots.
+
+**Warning signs:** PR comments appearing >60 seconds after PR creation; timeout errors in execution logs for the PR summary bot.
+
+### Pitfall 4: Predefined Trigger ID Collisions
+
+**What goes wrong:** Adding new predefined triggers with IDs that collide with user-created triggers.
+
+**Why it happens:** Predefined triggers use hardcoded `bot-*` IDs (e.g., `bot-security`, `bot-pr-review`). User-created triggers use randomly generated IDs with `trigger-` prefix. New predefined bots must use the `bot-` prefix consistently.
+
+**How to avoid:** Use the established naming convention: `bot-vuln-scan`, `bot-code-tour`, `bot-test-coverage`, `bot-postmortem`, `bot-changelog`, `bot-pr-summary`, `bot-log-search`. Add all new IDs to `PREDEFINED_TRIGGER_IDS` set. Ensure `delete_trigger()` protection continues to work (it checks `is_predefined = 0`).
+
+### Pitfall 5: Execution Log Size for FTS5 Indexing
+
+**What goes wrong:** Large execution logs (security audit stdout can exceed 100KB) cause FTS5 index bloat and slow search performance.
+
+**Why it happens:** FTS5 indexes all content. If execution logs contain verbose debug output or binary-like content, the index grows disproportionately.
+
+**How to avoid:** (1) Only index the first N kilobytes of stdout/stderr (e.g., 32KB). (2) Use the `execution_logs` 30-day retention cleanup (already scheduled in `SchedulerService`) to keep the FTS index bounded. (3) Run `INSERT INTO execution_logs_fts(execution_logs_fts) VALUES('optimize')` periodically to compact the index.
+
+## Paper-Backed Recommendations
+
+### Recommendation 1: BM25 Ranking for Log Search (BOT-07)
+
+**Recommendation:** Use SQLite FTS5's built-in BM25 ranking function for natural language log search rather than implementing custom relevance scoring.
+
+**Evidence:**
+- Robertson & Zaragoza (2009) "The Probabilistic Relevance Framework: BM25 and Beyond" — Established BM25 as the standard baseline for information retrieval. BM25 consistently outperforms TF-IDF on text retrieval benchmarks.
+- SQLite FTS5 documentation (sqlite.org/fts5.html) — FTS5 implements BM25 natively via the `rank` column and `bm25()` auxiliary function with configurable per-column weights.
+- Craswell et al. (2020) "Overview of the TREC 2019 Deep Learning Track" — Shows BM25 remains competitive with neural approaches on ad-hoc retrieval, especially for short queries against document collections <100K docs (our expected scale).
+
+**Confidence:** HIGH — BM25 is the most-validated ranking function in information retrieval. FTS5's implementation is well-tested.
+
+**Expected improvement:** Meaningful ranked results for free-text queries like "show me all PRs where the bot flagged SQL injection" — BM25 handles term frequency, document length normalization, and inverse document frequency automatically.
+
+**Caveats:** BM25 is lexical (keyword matching), not semantic. Queries like "security problems" won't match logs containing "vulnerability" unless both terms appear. This is acceptable for v0.1.0; semantic search can be added later with embeddings.
+
+### Recommendation 2: Structured Output Parsing for Bot Results
+
+**Recommendation:** Instruct bots to produce structured JSON output (via Claude's `--output-format json`) and parse results in the post-processing service rather than relying on free-text parsing.
+
+**Evidence:**
+- The existing `bot-security` already uses `--output-format json` in `CommandBuilder.build()` (line 67: `"--output-format", "json"`).
+- OpenAI (2024) "Structured Outputs" technical report — Demonstrates that constraining LLM output to JSON schemas significantly reduces parsing errors (from ~15% to <1% failure rate).
+- Agented codebase convention — All CLI backends already support JSON output (`--output-format json` for claude, `--format json` for opencode, `--json` for codex).
+
+**Confidence:** HIGH — This is already the standard pattern in the codebase.
+
+### Recommendation 3: Prompt Engineering with Chain-of-Thought for Complex Bots
+
+**Recommendation:** Use chain-of-thought (CoT) prompting in skill files for complex analytical bots (BOT-01 vulnerability triage, BOT-03 test coverage analysis, BOT-04 incident postmortem).
+
+**Evidence:**
+- Wei et al. (2022) "Chain-of-Thought Prompting Elicits Reasoning in Large Language Models" — CoT improves reasoning accuracy on multi-step tasks by 10-30% across GPT-3.5/4 class models.
+- The existing weekly security audit skill already uses structured step-by-step instructions implicitly (scan -> parse -> score -> report).
+
+**Confidence:** MEDIUM-HIGH — CoT is well-established for reasoning tasks; benefit varies by model and task complexity.
+
+### Recommendation 4: Conventional Commits Parsing for Changelog (BOT-05)
+
+**Recommendation:** Parse merged PR titles using the Conventional Commits specification (`feat:`, `fix:`, `breaking:`) for automatic categorization in changelog generation, falling back to AI-based classification for non-conforming titles.
+
+**Evidence:**
+- Conventional Commits specification (conventionalcommits.org v1.0.0) — Industry-standard commit message format used by Angular, Vue.js, Lerna, and 100K+ repos on GitHub.
+- `git-cliff` tool documentation — Demonstrates the pattern of parsing commit messages into structured changelog sections (Features, Bug Fixes, Breaking Changes).
+
+**Confidence:** HIGH — Conventional Commits is the de facto standard for automated changelog generation.
 
 ## Experiment Design
 
 ### Recommended Experimental Setup
 
 **Independent variables:**
-- Bot type (BOT-01 through BOT-07)
-- Project size (small: <10 deps, medium: 10-100 deps, large: 100+ deps)
-- Execution backend (claude, gemini)
+- Bot prompt template content (instructions, output format, examples)
+- Trigger configuration (timeout, schedule, trigger source)
+- FTS5 tokenizer choice (porter vs. unicode61 vs. trigram)
 
 **Dependent variables:**
-- Execution time (seconds)
-- Output quality (structured output conformance)
-- Success rate (exit code 0)
-- FTS5 search relevance (precision@10 for BOT-07)
+- Bot output quality (correct identification of vulnerabilities, accurate PR summaries, relevant log search results)
+- Execution latency (time from trigger to completion)
+- PR comment posting latency for BOT-06 (must be <60 seconds)
 
 **Controlled variables:**
-- Same project paths across runs
-- Same backend account (no fallback chain variation)
-- Same Claude CLI version
+- Backend type (claude for all bots initially)
+- Database (single SQLite instance)
+- CLI tool versions
 
 **Baseline comparison:**
-- Method: Manual execution of equivalent tasks (manual CVE lookup, manual changelog writing, etc.)
-- Expected performance: 10-30 minutes for manual tasks
-- Our target: <5 minutes per bot execution, >80% output quality
+- Method: Manual execution of each bot's task (e.g., manually running `npm audit`, manually writing PR summaries)
+- Expected performance: Human takes 5-30 minutes per task; bot should complete in <2 minutes
+- Our target: <60 seconds for PR-triggered bots; <5 minutes for scheduled bots
 
 **Ablation plan:**
-1. Bot with full Claude skill vs. bare prompt (no skill file) -- tests skill file value
-2. FTS5 search vs. LIKE-based search -- tests search quality improvement for BOT-07
-3. OSV API batch vs. individual queries -- tests BOT-01 scan time
+1. Bot with full CoT skill file vs. minimal prompt — tests prompt engineering impact on output quality
+2. FTS5 with porter tokenizer vs. trigram tokenizer — tests search recall for log queries
+3. `osv-scanner` CLI vs. direct OSV.dev API — tests vulnerability detection completeness
 
 **Statistical rigor:**
-- Number of runs: 3 per bot per project size
-- Success measured as: structured output contains all required sections
-- Timing measured as: `duration_ms` from `execution_logs` table
+- Number of runs: 5 runs per bot per test scenario (ensures consistency)
+- Success criteria: 4/5 runs produce acceptable output
+- Latency measurement: Median across 5 runs (avoid outlier skew from cold starts)
 
 ### Recommended Metrics
 
 | Metric | Why | How to Compute | Baseline |
 |--------|-----|----------------|----------|
-| Execution success rate | Core reliability | `COUNT(status='success') / COUNT(*)` from execution_logs | 100% target |
-| Execution duration | User experience | `duration_ms` from execution_logs | <300s per bot |
-| Output section completeness | Quality | Parse stdout for required sections per bot type | >80% |
-| FTS5 search precision@10 | BOT-07 relevance | Manual review of top 10 results for 5 test queries | >70% |
-| PR comment latency | BOT-06 SLA | Time from PR webhook to comment posted | <60s target |
+| Vulnerability detection recall | BOT-01 must find known CVEs | Compare bot findings against `osv-scanner` raw output | 100% of `osv-scanner` findings should appear in bot output |
+| Code tour section count | BOT-02 success criterion: >=5 sections | Count distinct annotated sections in output | Manual tour: typically 5-10 sections |
+| PR comment latency | BOT-06 SLA: <60 seconds | `finished_at - started_at` in execution_logs | N/A (new capability) |
+| Search result relevance (FTS5) | BOT-07 must return relevant results | Manual evaluation: 10 test queries, check top-5 relevance | Simple LIKE search: ~30% precision |
+| Changelog accuracy | BOT-05 must correctly categorize PR types | Compare auto-categorization against manual labels | N/A (new capability) |
 
 ## Verification Strategy
 
@@ -290,353 +379,325 @@ END;
 
 | Item | Recommended Tier | Rationale |
 |------|-----------------|-----------|
-| Predefined triggers seeded correctly | Level 1 (Sanity) | Check DB after init_db() |
-| Claude skill files exist and are valid markdown | Level 1 (Sanity) | File existence check |
-| FTS5 virtual table created successfully | Level 1 (Sanity) | SQL query after migration |
-| OSV API returns results for known vulnerable package | Level 2 (Proxy) | Integration test with real API |
-| `gh pr list --state merged` returns valid JSON | Level 2 (Proxy) | Subprocess check |
-| Each bot produces structured output with required sections | Level 2 (Proxy) | Parse stdout of test execution |
-| FTS5 search returns relevant results for test queries | Level 2 (Proxy) | Compare search results to expected |
-| BOT-06 posts PR comment within 60 seconds | Level 3 (Deferred) | End-to-end with live GitHub repo |
-| BOT-01 finds real CVEs in a known-vulnerable project | Level 3 (Deferred) | End-to-end with real project scan |
-| All bots work reliably under production load | Level 3 (Deferred) | Production monitoring |
+| Predefined triggers seed correctly on startup | Level 1 (Sanity) | Database seeding is testable with `isolated_db` fixture |
+| Prompt templates render without unresolved placeholders | Level 1 (Sanity) | `PromptRenderer.warn_unresolved()` already exists |
+| FTS5 virtual table creation and basic search | Level 1 (Sanity) | SQL query against test data |
+| `osv-scanner` CLI integration produces parseable JSON | Level 1 (Sanity) | Run against a known test manifest |
+| `gh pr comment` posts successfully | Level 2 (Proxy) | Requires a test repo; mock in unit tests, verify in integration |
+| BOT-01 finds known vulnerability in test package.json | Level 2 (Proxy) | Use a manifest with a known CVE |
+| BOT-02 generates >=5 annotated sections for a small repo | Level 2 (Proxy) | Run against the Agented repo itself |
+| BOT-03 identifies untested functions in a test PR | Level 2 (Proxy) | Create a PR with known untested code |
+| BOT-05 correctly groups PRs by conventional commit type | Level 2 (Proxy) | Use mock PR data with known types |
+| BOT-06 posts comment within 60 seconds of PR event | Level 2 (Proxy) | Measure wall-clock time in integration test |
+| BOT-07 returns relevant results for 10 test queries | Level 2 (Proxy) | Seed execution logs with known content, evaluate search |
+| All bots work end-to-end with real GitHub repos | Level 3 (Deferred) | Requires real webhook events and repos |
+| BOT-04 produces complete postmortem from real incident | Level 3 (Deferred) | Requires incident context data |
 
 **Level 1 checks to always include:**
-- All seven predefined trigger entries exist in database after `seed_predefined_triggers()`
-- Each trigger has valid `prompt_template`, `trigger_source`, `backend_type`
-- FTS5 virtual table `execution_logs_fts` exists after schema migration
-- New `_KNOWN_PLACEHOLDERS` are registered in `PromptRenderer`
-- Claude skill files exist at expected paths
+- All 7 new predefined triggers exist in DB after `seed_predefined_triggers()` runs
+- Each trigger's `prompt_template` renders cleanly with test data via `PromptRenderer.render()`
+- FTS5 table accepts inserts and returns results for basic keyword queries
+- New API endpoints return 200 for valid requests, 404 for missing entities
+- Frontend builds without TypeScript errors (`just build`)
 
 **Level 2 proxy metrics:**
-- Manual trigger execution for each bot with test input produces non-empty stdout
-- Bot output contains expected sections (e.g., BOT-01 output has "vulnerabilities", "recommendations")
-- FTS5 search for a known execution log phrase returns the correct execution
-- `seed_predefined_triggers()` is idempotent (running twice doesn't duplicate)
+- BOT-01: Run against a `package.json` containing `lodash@4.17.20` (has known CVE-2021-23337); verify CVE appears in output
+- BOT-02: Run against this repo; verify output has >=5 sections with labels like "entry points", "data flow", etc.
+- BOT-05: Feed 10 mock merged PRs with `feat:`, `fix:`, `chore:` prefixes; verify correct grouping
+- BOT-06: Measure time from `dispatch_github_event()` call to `gh pr comment` completion
+- BOT-07: Insert 20 execution logs with varied content; verify 10 test queries return relevant results
 
 **Level 3 deferred items:**
-- End-to-end GitHub PR workflow for BOT-03 and BOT-06
-- Real CVE scanning against known-vulnerable package manifests
-- Production-scale FTS5 performance with 10,000+ execution logs
-- Multi-bot concurrent execution stress test
+- Full end-to-end test with real GitHub webhook for PR-triggered bots
+- Vulnerability scan against production package manifests
+- Incident postmortem with real incident data
+- Changelog generation for an actual release cycle
 
 ## Production Considerations
 
 ### Known Failure Modes
 
-- **Claude CLI not installed:** All bots depend on the Claude CLI being available. The platform already handles this gracefully via `backend_detection_service.py`, but new bots should log clear error messages if the CLI is missing.
-  - Prevention: Check CLI availability at startup; disable bots if CLI unavailable.
-  - Detection: `ExecutionService.build_command()` will fail with `FileNotFoundError`.
+- **osv-scanner CLI not installed:** The vulnerability scan bot (BOT-01) depends on `osv-scanner` being available on PATH. Must fail gracefully with a clear error message if not found (same pattern as `BackendDetectionService` for `claude`, `opencode` etc.).
+  - Prevention: Add `osv-scanner` detection to startup health checks
+  - Detection: Check `shutil.which("osv-scanner")` before dispatching BOT-01
 
-- **OSV API downtime (BOT-01):** The OSV API is a free, Google-maintained service. Outages are rare but possible.
-  - Prevention: Cache last-known vulnerability data; allow manual re-scan.
-  - Detection: HTTP timeout or 5xx response from `api.osv.dev`.
+- **gh CLI not authenticated:** PR comment posting (BOT-03, BOT-06) and merged PR listing (BOT-05) require `gh auth status` to be valid.
+  - Prevention: Verify `gh auth status` in service initialization
+  - Detection: Check `gh auth status` return code; log warning if unauthenticated
 
-- **GitHub rate limiting (BOT-03, BOT-05, BOT-06):** `gh` CLI respects GitHub API rate limits (5000 req/hour for authenticated users).
-  - Prevention: The existing per-repo rate limiting (60s) in `github_webhook.py` helps. BOT-05 changelog generation should be scheduled, not triggered per-merge.
-  - Detection: `gh` CLI prints rate limit warnings to stderr; `RateLimitService` already monitors stderr.
+- **Large execution logs causing FTS5 slowdown:** If execution logs grow beyond 30 days of retention, FTS5 index size may degrade search performance.
+  - Prevention: Rely on existing 30-day cleanup in `SchedulerService`; add FTS5 `optimize` command to cleanup job
+  - Detection: Monitor search query latency; alert if >500ms
 
 ### Scaling Concerns
 
-- **FTS5 index size (BOT-07):** At current scale (hundreds of executions), FTS5 will perform well. At 100,000+ execution logs, the FTS index may consume significant disk space.
-  - At current scale: No optimization needed.
-  - At production scale: Consider periodic FTS index rebuild (`INSERT INTO execution_logs_fts(execution_logs_fts) VALUES('rebuild')`), or limit FTS indexing to recent logs (last 90 days).
+- **Concurrent PR events for BOT-06:** Multiple PRs opened simultaneously could overwhelm the execution pipeline. The existing per-repo rate limit (60s) in `github_webhook.py` already mitigates this, but multiple repos sending PRs concurrently could still queue many executions.
+  - At current scale: Acceptable; single-user/small-team usage unlikely to generate concurrent bursts
+  - At production scale: Consider a dedicated execution queue with concurrency limits per bot type
 
-- **Concurrent GitHub-triggered bots:** Three bots (existing `bot-pr-review`, new BOT-03, new BOT-06) all trigger on PR events. This triples the execution load per PR.
-  - At current scale: Acceptable -- PRs are infrequent enough.
-  - At production scale: Consider a unified GitHub bot that handles all PR-related tasks in a single execution, or sequential dispatch with priority ordering.
+- **FTS5 index size:** With 30-day retention and ~10 executions/day, expect ~300 indexed documents with avg 10KB each = ~3MB index. This is well within SQLite FTS5's comfortable range (<100MB).
+  - At current scale: No concern
+  - At production scale: If execution volume exceeds 1000/day, consider periodic `optimize` and possibly sharding by time period
 
 ### Common Implementation Traps
 
-- **Trap: Adding bot logic to Python instead of Claude skills**
-  - Correct approach: Python gathers data (OSV API, `gh` output, FTS5 results). Claude skill analyzes and generates reports. This keeps bots updatable without code changes.
+- **Modifying `execution_service.py` directly:** The file is already 1300+ lines. Do not add bot-specific logic there. Create separate service classes per bot.
+  - Correct approach: Bot services import from `execution_service` where needed, not the reverse.
 
-- **Trap: Creating new database tables per bot type**
-  - Correct approach: All bots use the existing `triggers` + `execution_logs` tables. Bot-specific structured output is stored in `stdout_log`. Only BOT-07 needs a new table (the FTS5 virtual table).
+- **Blocking the webhook handler for PR bots:** The GitHub webhook handler must return quickly (GitHub expects <10s response). Bot execution is already dispatched in background threads via `threading.Thread(daemon=True)` — maintain this pattern for BOT-03 and BOT-06.
+  - Correct approach: Webhook handler dispatches, returns 200 immediately; bot execution and PR comment posting happen asynchronously.
 
-- **Trap: Writing bot-specific execution services**
-  - Correct approach: All bots flow through `ExecutionService.run_trigger()`. Bot-specific preprocessing (data gathering, file preparation) is minimal and pattern-matched on trigger ID or skill command.
+- **Not handling the case where Claude skill files are missing:** If a skill file referenced by `skill_command` does not exist, the CLI will fail silently or produce garbage output.
+  - Correct approach: Validate skill file existence at trigger seed time; log warnings if files are missing.
 
 ## Code Examples
 
-Verified patterns from the existing codebase:
-
-### Adding a New Predefined Trigger
+### Adding a New Predefined Trigger (Seeds)
 
 ```python
-# Source: backend/app/db/triggers.py (existing pattern)
-# Must be added to BOTH triggers.py AND migrations.py
-PREDEFINED_TRIGGERS = [
-    # ... existing entries ...
-    {
-        "id": "bot-changelog",
-        "name": "Changelog Generator",
-        "group_id": 0,
-        "detection_keyword": "",
-        "prompt_template": "/changelog-generator {paths} {last_release_tag}",
-        "backend_type": "claude",
-        "trigger_source": "scheduled",  # or "manual"
-        "match_field_path": None,
-        "match_field_value": None,
-        "text_field_path": "text",
-        "is_predefined": 1,
-    },
-]
+# In backend/app/db/triggers.py — extend PREDEFINED_TRIGGERS list
+{
+    "id": "bot-vuln-scan",
+    "name": "Dependency Vulnerability Scanner",
+    "group_id": 0,
+    "detection_keyword": "",
+    "prompt_template": "/vulnerability-scan {paths}",
+    "backend_type": "claude",
+    "trigger_source": "scheduled",
+    "match_field_path": None,
+    "match_field_value": None,
+    "text_field_path": "text",
+    "is_predefined": 1,
+},
+{
+    "id": "bot-pr-summary",
+    "name": "PR Summary",
+    "group_id": 0,
+    "detection_keyword": "",
+    "prompt_template": "/pr-summary {pr_url} {pr_title} {pr_author} {repo_full_name}",
+    "backend_type": "claude",
+    "trigger_source": "github",
+    "match_field_path": None,
+    "match_field_value": None,
+    "text_field_path": "text",
+    "is_predefined": 1,
+},
 ```
 
-### Creating FTS5 Virtual Table via Migration
+### FTS5 Table Creation and Sync Triggers
 
 ```python
-# Source: backend/app/db/migrations.py (new versioned migration)
-def _migrate_add_fts5_search(conn):
-    """Add FTS5 full-text search index for execution logs."""
-    conn.execute("""
-        CREATE VIRTUAL TABLE IF NOT EXISTS execution_logs_fts USING fts5(
-            prompt,
-            stdout_log,
-            content='execution_logs',
-            content_rowid='id',
-            tokenize='porter unicode61'
-        )
-    """)
-    # Sync triggers to keep FTS in sync with execution_logs
-    conn.execute("""
-        CREATE TRIGGER IF NOT EXISTS execution_logs_fts_insert
-        AFTER INSERT ON execution_logs BEGIN
-            INSERT INTO execution_logs_fts(rowid, prompt, stdout_log)
-            VALUES (new.id, new.prompt, new.stdout_log);
-        END
-    """)
-    conn.execute("""
-        CREATE TRIGGER IF NOT EXISTS execution_logs_fts_update
-        AFTER UPDATE OF stdout_log ON execution_logs BEGIN
-            INSERT INTO execution_logs_fts(execution_logs_fts, rowid, prompt, stdout_log)
-            VALUES ('delete', old.id, old.prompt, old.stdout_log);
-            INSERT INTO execution_logs_fts(rowid, prompt, stdout_log)
-            VALUES (new.id, new.prompt, new.stdout_log);
-        END
-    """)
-    conn.execute("""
-        CREATE TRIGGER IF NOT EXISTS execution_logs_fts_delete
-        AFTER DELETE ON execution_logs BEGIN
-            INSERT INTO execution_logs_fts(execution_logs_fts, rowid, prompt, stdout_log)
-            VALUES ('delete', old.id, old.prompt, old.stdout_log);
-        END
-    """)
-    # Populate FTS index from existing data
-    conn.execute("""
-        INSERT INTO execution_logs_fts(rowid, prompt, stdout_log)
-        SELECT id, prompt, stdout_log FROM execution_logs
-        WHERE stdout_log IS NOT NULL
-    """)
+# In backend/app/db/schema.py — add to create_fresh_schema()
+conn.execute("""
+    CREATE VIRTUAL TABLE IF NOT EXISTS execution_logs_fts
+    USING fts5(
+        stdout_content,
+        stderr_content,
+        prompt,
+        content=execution_logs,
+        content_rowid=id,
+        tokenize='porter unicode61'
+    )
+""")
+
+# Sync triggers (keep FTS in sync with source table)
+conn.execute("""
+    CREATE TRIGGER IF NOT EXISTS execution_logs_fts_insert
+    AFTER INSERT ON execution_logs BEGIN
+        INSERT INTO execution_logs_fts(rowid, stdout_content, stderr_content, prompt)
+        VALUES (new.id, COALESCE(new.stdout_log, ''), COALESCE(new.stderr_log, ''), COALESCE(new.prompt, ''));
+    END
+""")
+
+conn.execute("""
+    CREATE TRIGGER IF NOT EXISTS execution_logs_fts_update
+    AFTER UPDATE OF stdout_log, stderr_log ON execution_logs BEGIN
+        INSERT INTO execution_logs_fts(execution_logs_fts, rowid, stdout_content, stderr_content, prompt)
+        VALUES ('delete', old.id, COALESCE(old.stdout_log, ''), COALESCE(old.stderr_log, ''), COALESCE(old.prompt, ''));
+        INSERT INTO execution_logs_fts(rowid, stdout_content, stderr_content, prompt)
+        VALUES (new.id, COALESCE(new.stdout_log, ''), COALESCE(new.stderr_log, ''), COALESCE(new.prompt, ''));
+    END
+""")
+
+conn.execute("""
+    CREATE TRIGGER IF NOT EXISTS execution_logs_fts_delete
+    AFTER DELETE ON execution_logs BEGIN
+        INSERT INTO execution_logs_fts(execution_logs_fts, rowid, stdout_content, stderr_content, prompt)
+        VALUES ('delete', old.id, COALESCE(old.stdout_log, ''), COALESCE(old.stderr_log, ''), COALESCE(old.prompt, ''));
+    END
+""")
 ```
 
-### FTS5 Search Query
+### Execution Log Search Service
 
 ```python
-# Source: New service -- backend/app/services/log_search_service.py
-from app.db.connection import get_connection
+# backend/app/services/execution_search_service.py
+import logging
+from typing import List, Optional
 
-class LogSearchService:
-    """Full-text search over execution logs using SQLite FTS5."""
+from ..db.connection import get_connection
+
+logger = logging.getLogger(__name__)
+
+
+class ExecutionSearchService:
+    """Full-text search across execution logs using SQLite FTS5."""
 
     @staticmethod
-    def search(query: str, limit: int = 20, offset: int = 0) -> list:
+    def search(query: str, limit: int = 50, trigger_id: Optional[str] = None) -> List[dict]:
         """Search execution logs using natural language query.
 
-        Args:
-            query: Plain English search query (e.g., "SQL injection findings")
-            limit: Maximum results to return
-            offset: Pagination offset
-
-        Returns:
-            List of dicts with execution metadata and highlighted snippets
+        Uses FTS5 BM25 ranking for relevance ordering.
+        Returns matching executions with highlighted context snippets.
         """
         with get_connection() as conn:
-            # FTS5 MATCH with BM25 ranking
-            cursor = conn.execute("""
-                SELECT e.execution_id, e.trigger_id, e.started_at, e.status,
-                       e.backend_type, t.name as trigger_name,
-                       snippet(execution_logs_fts, 1, '<mark>', '</mark>', '...', 64)
-                           as matched_snippet,
-                       rank
-                FROM execution_logs_fts
-                JOIN execution_logs e ON e.id = execution_logs_fts.rowid
-                LEFT JOIN triggers t ON e.trigger_id = t.id
-                WHERE execution_logs_fts MATCH ?
-                ORDER BY rank
-                LIMIT ? OFFSET ?
-            """, (query, limit, offset))
+            if trigger_id:
+                cursor = conn.execute("""
+                    SELECT e.execution_id, e.trigger_id, t.name as trigger_name,
+                           e.started_at, e.status, e.prompt,
+                           snippet(execution_logs_fts, 0, '<mark>', '</mark>', '...', 32) as stdout_match,
+                           snippet(execution_logs_fts, 1, '<mark>', '</mark>', '...', 32) as stderr_match
+                    FROM execution_logs_fts
+                    JOIN execution_logs e ON execution_logs_fts.rowid = e.id
+                    LEFT JOIN triggers t ON e.trigger_id = t.id
+                    WHERE execution_logs_fts MATCH ?
+                      AND e.trigger_id = ?
+                    ORDER BY rank
+                    LIMIT ?
+                """, (query, trigger_id, limit))
+            else:
+                cursor = conn.execute("""
+                    SELECT e.execution_id, e.trigger_id, t.name as trigger_name,
+                           e.started_at, e.status, e.prompt,
+                           snippet(execution_logs_fts, 0, '<mark>', '</mark>', '...', 32) as stdout_match,
+                           snippet(execution_logs_fts, 1, '<mark>', '</mark>', '...', 32) as stderr_match
+                    FROM execution_logs_fts
+                    JOIN execution_logs e ON execution_logs_fts.rowid = e.id
+                    LEFT JOIN triggers t ON e.trigger_id = t.id
+                    WHERE execution_logs_fts MATCH ?
+                    ORDER BY rank
+                    LIMIT ?
+                """, (query, limit))
             return [dict(row) for row in cursor.fetchall()]
 ```
 
-### OSV API Query for BOT-01
+### Posting PR Comments via gh CLI
 
 ```python
-# Source: New service or Claude skill data preparation
-import json
-import urllib.request
+# backend/app/services/pr_summary_service.py
+import logging
+import subprocess
+from typing import Optional
 
-def query_osv_vulnerabilities(package_name: str, ecosystem: str, version: str = None) -> list:
-    """Query OSV.dev API for known vulnerabilities.
+logger = logging.getLogger(__name__)
 
-    Source: https://google.github.io/osv.dev/post-v1-query/
-    """
-    payload = {
-        "package": {
-            "name": package_name,
-            "ecosystem": ecosystem,
-        }
-    }
-    if version:
-        payload["version"] = version
 
-    data = json.dumps(payload).encode("utf-8")
-    req = urllib.request.Request(
-        "https://api.osv.dev/v1/query",
-        data=data,
-        headers={"Content-Type": "application/json"},
-    )
-    with urllib.request.urlopen(req, timeout=30) as resp:
-        result = json.loads(resp.read())
-    return result.get("vulns", [])
+class PrSummaryService:
+    """Service for posting AI-generated PR summary comments."""
+
+    GH_TIMEOUT = 30  # seconds
+
+    @classmethod
+    def post_comment(cls, repo_full_name: str, pr_number: int, body: str) -> bool:
+        """Post a comment on a GitHub PR using gh CLI.
+
+        Args:
+            repo_full_name: "owner/repo" format
+            pr_number: PR number
+            body: Markdown comment body
+
+        Returns:
+            True if comment was posted successfully
+        """
+        try:
+            result = subprocess.run(
+                ["gh", "pr", "comment", str(pr_number),
+                 "--repo", repo_full_name,
+                 "--body", body],
+                capture_output=True,
+                text=True,
+                timeout=cls.GH_TIMEOUT,
+            )
+            if result.returncode == 0:
+                logger.info("Posted PR comment on %s#%d", repo_full_name, pr_number)
+                return True
+            else:
+                logger.warning(
+                    "Failed to post PR comment on %s#%d: %s",
+                    repo_full_name, pr_number, result.stderr
+                )
+                return False
+        except subprocess.TimeoutExpired:
+            logger.error("gh pr comment timed out for %s#%d", repo_full_name, pr_number)
+            return False
+        except FileNotFoundError:
+            logger.error("gh CLI not found; cannot post PR comments")
+            return False
 ```
-
-### Bot-Specific Preprocessing in ExecutionService
-
-```python
-# Source: backend/app/services/execution_service.py (extend existing pattern)
-# In run_trigger(), after prompt rendering:
-
-# Existing pattern for bot-security:
-if "/weekly-security-audit" in prompt:
-    threat_report_path = cls.save_threat_report(trigger_id, message_text)
-    prompt = prompt.replace(
-        "/weekly-security-audit", f"/weekly-security-audit {threat_report_path}"
-    )
-
-# New pattern for bot-changelog:
-if "/changelog-generator" in prompt and "{last_release_tag}" in prompt:
-    last_tag = cls._get_last_release_tag(effective_paths)
-    prompt = prompt.replace("{last_release_tag}", last_tag or "v0.0.0")
-```
-
-## Paper-Backed Recommendations
-
-### Recommendation 1: SQLite FTS5 with BM25 for Log Search (BOT-07)
-
-**Recommendation:** Use SQLite FTS5 with the `porter unicode61` tokenizer and built-in BM25 ranking for natural language search over execution logs.
-
-**Evidence:**
-- SQLite FTS5 official documentation (2024) -- FTS5 provides "full-text search functionality to database applications" with built-in BM25 scoring that "assigns a relevance score based on term frequency and other signals."
-- Sling Academy best practices guide (2025) -- Recommends "external content tables" pattern: "store canonical data in normal tables, and keep an FTS5 table as an index" for production apps.
-- TheLinuxCode practical guide (2025) -- Confirms FTS5 with porter stemming enables "token-aware matching, phrase queries, prefix search, and relevance ranking."
-
-**Confidence:** HIGH -- FTS5 is a mature, well-documented SQLite extension included in Python's standard library.
-**Expected improvement:** Full-text search over 10,000+ logs in <10ms vs. seconds with LIKE-based search.
-**Caveats:** FTS5 external content tables require sync triggers or periodic rebuild. Porter stemmer may produce surprising results for technical terms.
-
-### Recommendation 2: OSV.dev API for Vulnerability Lookup (BOT-01)
-
-**Recommendation:** Use the OSV.dev REST API (`POST https://api.osv.dev/v1/query`) for dependency vulnerability cross-referencing. Use the batch endpoint (`/v1/querybatch`) for projects with many dependencies.
-
-**Evidence:**
-- OSV.dev official documentation (Google, 2024-2025) -- Aggregates vulnerabilities from "GitHub Security Advisories, PyPA, RustSec, and Global Security Database" covering Python, JavaScript, Go, Rust, and more.
-- OSV-Scanner documentation (Google, 2025) -- Demonstrates scanning of "package.json, package-lock.json, yarn.lock, requirements.txt, Pipfile.lock, poetry.lock, pdm.lock, uv.lock" and other manifest files.
-
-**Confidence:** HIGH -- OSV.dev is Google-maintained, free, requires no API key, and is the standard for open-source vulnerability lookup.
-**Expected improvement:** Automated CVE identification in <30 seconds per project vs. manual NVD search.
-**Caveats:** API is case-sensitive; ecosystem names must match exactly (e.g., "PyPI" not "pypi"). Rate limiting may apply for very large batch queries.
-
-### Recommendation 3: Conventional Commits Parsing for Changelog (BOT-05)
-
-**Recommendation:** Parse PR titles and commit messages using the Conventional Commits specification (`^(feat|fix|docs|chore|refactor|perf|test|ci|build|style)(\(.+\))?!?:`) to group changelog entries by type.
-
-**Evidence:**
-- Conventional Commits specification v1.0.0 (2019, widely adopted) -- "fix type commits should be translated to PATCH releases. feat type commits should be translated to MINOR releases."
-- Google's Release Please (2024-2025) -- "parses your git history, looking for Conventional Commit messages" to generate changelogs grouped by type.
-- conventional-changelog (2025, 5.6k GitHub stars) -- Standard tool that demonstrates the grouping pattern.
-
-**Confidence:** HIGH -- Conventional Commits is the dominant standard for changelog generation.
-**Expected improvement:** Consistent, well-structured changelogs generated in seconds vs. hours of manual work.
-**Caveats:** Requires PRs to follow conventional commit conventions; bot should handle non-conforming PR titles gracefully (group as "Other").
-
-### Recommendation 4: AI-Driven Postmortem Generation (BOT-04)
-
-**Recommendation:** Use Claude's narrative synthesis capability to draft structured postmortems. Provide raw data (execution logs, PR history, deployment timeline) as context and let Claude generate the timeline, root cause, impact, and action items sections.
-
-**Evidence:**
-- Rootly SRE documentation (2025) -- "AI-generated postmortems offer a smarter way to handle incident reviews by automating data collection and report generation." AI "synthesizes this timeline into a coherent narrative summary."
-- Atlassian Incident Management Handbook (2025) -- Standard postmortem template includes: "Summary, Impact, Timeline, Root Cause, Trigger, Resolution, Action Items."
-
-**Confidence:** MEDIUM -- AI postmortem generation is an emerging practice (2024-2025); effectiveness depends heavily on prompt quality and available incident data.
-**Expected improvement:** Draft postmortem in <5 minutes vs. 1-2 hours of manual writing.
-**Caveats:** AI may hallucinate root causes if insufficient data is provided; always requires human review.
 
 ## State of the Art
 
 | Old Approach | Current Approach | When Changed | Impact |
 |--------------|------------------|--------------|--------|
-| Manual CVE lookup in NVD | Automated OSV.dev API scanning | 2022-2024 | Scan hundreds of deps in seconds |
-| Manual changelog writing | Conventional Commits + auto-generation | 2019-2024 | Consistent, typed changelogs |
-| LIKE-based text search | FTS5 with BM25 ranking | Mature since SQLite 3.9 (2015) | Orders of magnitude faster search |
-| Manual postmortem writing | AI-assisted draft generation | 2024-2025 | Draft in minutes, human refines |
-| Manual PR review | AI code review bots | 2023-2025 | Immediate feedback on PRs |
+| Custom CVE scrapers | OSV.dev aggregated API + osv-scanner CLI | 2023-2025 | Single source for all ecosystem vulnerabilities; 19+ lockfile formats supported |
+| Manual changelog writing | Conventional Commits + automated tools (git-cliff, changelogen) | 2019-present | Machine-parseable commit messages enable fully automated changelogs |
+| Keyword-based log search (LIKE) | FTS5 with BM25 ranking | SQLite 3.9.0 (2015), mature | 10-100x faster than LIKE for large text; relevance-ranked results |
+| Static code tour documentation | AI-generated walkthroughs | 2024-2025 | LLMs can analyze codebase structure and generate contextual tours dynamically |
+| Manual incident postmortems | AI-assisted postmortem drafting | 2024-2025 | AI aggregates logs, PRs, and deployment history into structured templates |
 
 **Deprecated/outdated:**
-- **FTS3/FTS4:** Superseded by FTS5 which adds better ranking (BM25), column filters, and external content table support.
-- **NVD API v1.0:** Replaced by NVD API v2.0 (2023), but OSV.dev aggregates NVD data anyway.
+- FTS3/FTS4: Replaced by FTS5 which offers better performance, BM25 ranking, and column filters. Do not use FTS3/FTS4.
+- `npm audit` / `pip-audit` individually: Replaced by `osv-scanner` which handles all ecosystems in a single tool.
 
 ## Open Questions
 
-1. **Per-repo rate limiting for multiple GitHub-triggered bots**
-   - What we know: Currently, `github_webhook.py` enforces 60-second rate limiting per repo. With three bots (bot-pr-review, BOT-03, BOT-06) all triggering on PR events, only the first bot would fire; subsequent events within 60s are rejected.
-   - What's unclear: Should all three bots be dispatched from a single webhook event (bypassing per-repo rate limit), or should they be dispatched sequentially with delays?
-   - Recommendation: Modify `dispatch_github_event()` to dispatch all matching triggers from a single webhook receipt (which it already does -- the rate limit is per-webhook-receipt, not per-trigger). Verify this by reading `dispatch_github_event()` more carefully. The existing code dispatches all matching triggers in threads from a single webhook call, so the rate limit only prevents duplicate webhook deliveries, not duplicate trigger dispatches.
+1. **Skill file location standardization**
+   - What we know: The existing `bot-security` uses `.claude/skills/weekly-security-audit/` with reports stored there
+   - What's unclear: Should all 7 bots follow this exact pattern, or should skills be organized differently (e.g., `.claude/skills/bots/vulnerability-scan/`)?
+   - Recommendation: Follow the existing flat pattern (`.claude/skills/<bot-slug>/INSTRUCTIONS.md`) for consistency. Each bot gets its own skill directory.
 
-2. **Claude skill discovery mechanism**
-   - What we know: The existing `bot-security` uses a `/weekly-security-audit` skill command. The skill is referenced by name in the prompt template.
-   - What's unclear: How does Claude CLI discover and load skill files? Are they auto-discovered from `.claude/skills/` or must they be configured somewhere?
-   - Recommendation: Investigate Claude CLI skill loading mechanism. The `SkillDiscoveryService` in the codebase may provide answers.
+2. **BOT-04 incident data sources**
+   - What we know: The success criteria says "given an incident identifier, pulls relevant logs and PR context"
+   - What's unclear: What constitutes an "incident identifier" in this platform? There is no incident management system integrated. The platform has execution logs and PR reviews, but no incident tracking.
+   - Recommendation: Define "incident" as a time range + optional trigger/repo filter. The postmortem bot aggregates execution logs and PR reviews from that time range. This avoids needing external incident management integration.
 
-3. **FTS5 initial population for existing databases**
-   - What we know: New databases will create the FTS5 table and start indexing from the beginning. Existing databases need a one-time population of the FTS index.
-   - What's unclear: How long does initial FTS5 population take for a database with thousands of execution logs?
-   - Recommendation: Include `INSERT INTO execution_logs_fts SELECT ... FROM execution_logs` in the migration. For large databases, this may take a few seconds but is a one-time cost.
+3. **BOT-07 query syntax — plain English vs. FTS5 syntax**
+   - What we know: FTS5 supports both simple terms and advanced syntax (AND, OR, NOT, phrase matching)
+   - What's unclear: Should the API expose raw FTS5 query syntax or translate natural language to FTS5 queries?
+   - Recommendation: Accept plain English queries and pass them directly to FTS5 MATCH. FTS5 handles individual words as implicit OR by default, which maps well to natural language. For v0.1.0, this is sufficient. Add query translation (NL -> FTS5 syntax) as a future enhancement.
 
-4. **BOT-04 incident identifier format**
-   - What we know: The spec says "given an incident identifier, pulls relevant logs and PR context."
-   - What's unclear: What constitutes an "incident identifier" in Agented? There is no incident tracking system in the platform.
-   - Recommendation: Define incident identifier as an execution_id, a date range, or a free-text description. BOT-04 can accept any of these via `{message}` placeholder and search execution logs for context.
+4. **PR comment bot identity**
+   - What we know: `gh pr comment` posts as the authenticated GitHub user
+   - What's unclear: Should the bot comments be identifiable as bot-generated (e.g., with a footer like "Posted by Agented BOT-06")?
+   - Recommendation: Yes, always include a footer identifying the bot to avoid confusion with human comments. Use a consistent format: `---\n*Generated by [Bot Name] via Agented*`
 
 ## Sources
 
 ### Primary (HIGH confidence)
-- [SQLite FTS5 Extension](https://sqlite.org/fts5.html) -- Official FTS5 documentation, virtual table creation, BM25 ranking, external content tables
-- [OSV.dev API](https://google.github.io/osv.dev/) -- Vulnerability query API, batch queries, supported ecosystems
-- [OSV-Scanner](https://google.github.io/osv-scanner/) -- Supported manifest files, scan capabilities
-- [Conventional Commits v1.0.0](https://www.conventionalcommits.org/en/v1.0.0/) -- Commit type specification (feat/fix/breaking)
-- [GitHub CLI Manual: gh pr list](https://cli.github.com/manual/gh_pr_list) -- Merged PR listing, JSON output format
-- Existing codebase: `backend/app/db/triggers.py`, `backend/app/db/seeds.py`, `backend/app/services/execution_service.py`, `backend/app/services/prompt_renderer.py`
+- SQLite FTS5 documentation (sqlite.org/fts5.html) — FTS5 API, tokenizers, ranking functions, content tables
+- OSV.dev documentation (google.github.io/osv.dev/) — API endpoints, query format, supported ecosystems
+- Conventional Commits specification (conventionalcommits.org v1.0.0) — Commit message format for changelog automation
+- Agented codebase analysis (.planning/codebase/ARCHITECTURE.md, STRUCTURE.md, INTEGRATIONS.md) — Existing patterns and conventions
 
 ### Secondary (MEDIUM confidence)
-- [Sling Academy FTS5 Best Practices](https://www.slingacademy.com/article/best-practices-for-using-fts-virtual-tables-in-sqlite-applications/) -- External content table pattern, sync triggers
-- [Google Release Please](https://github.com/googleapis/release-please) -- Conventional commit changelog generation pattern
-- [Rootly AI Postmortems](https://rootly.com/sre/ai-generated-postmortems-rootlys-automated-rca-tool) -- AI-driven postmortem generation patterns
-- [Atlassian Postmortem Handbook](https://www.atlassian.com/incident-management/handbook/postmortems) -- Standard postmortem template structure
-- [Claude Prompting Best Practices](https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices) -- XML tags for structured prompts
+- Robertson & Zaragoza (2009) "The Probabilistic Relevance Framework: BM25 and Beyond" — BM25 ranking theory
+- Wei et al. (2022) "Chain-of-Thought Prompting Elicits Reasoning in Large Language Models" — CoT prompt engineering
+- Google Security Blog (2025) "Announcing OSV-Scanner V2" — osv-scanner v2 capabilities and container scanning
+- google/osv-scanner GitHub repository — CLI tool documentation and supported lockfile formats
+- Craswell et al. (2020) "Overview of the TREC 2019 Deep Learning Track" — BM25 competitiveness vs. neural approaches
 
 ### Tertiary (LOW confidence)
-- [Merged PRs Changelog Gist](https://gist.github.com/motss/d9d6c58ca7b064982dcdbb5e663f047f) -- Example `gh pr list` changelog script (community source, needs validation)
+- Various blog posts on AI-powered PR review tools (dev.to, medium.com) — Community patterns for LLM-based PR summaries
+- Rootly, incident.io documentation — Incident postmortem automation patterns (commercial tools, not directly applicable)
 
 ## Metadata
 
 **Confidence breakdown:**
-- Standard stack: HIGH -- No new dependencies; all capabilities are built-in or already integrated
-- Architecture: HIGH -- Follows established predefined trigger + Claude skill pattern from existing bots
-- Paper recommendations: HIGH -- FTS5, OSV.dev, and Conventional Commits are mature, well-documented standards
-- Pitfalls: HIGH -- Identified from codebase analysis (PREDEFINED_TRIGGERS duplication, FTS sync, rate limiting)
-- Experiment design: MEDIUM -- Proxy metrics are well-defined; end-to-end validation depends on real project data
+- Standard stack: HIGH — All libraries already in use or built into Python stdlib
+- Architecture: HIGH — Follows established codebase patterns exactly (predefined triggers, skills, services)
+- Paper recommendations: MEDIUM-HIGH — BM25 and CoT are well-established; specific bot quality outcomes depend on prompt engineering
+- Pitfalls: HIGH — Based on direct codebase analysis (FTS5 sync, execution_service size, webhook threading)
+- Production considerations: MEDIUM — Based on codebase patterns and scaling analysis; not yet tested at production scale
 
 **Research date:** 2026-03-04
-**Valid until:** 2026-04-04 (stable domain -- no fast-moving components)
+**Valid until:** 2026-04-04 (30 days — stable domain, no fast-moving dependencies)

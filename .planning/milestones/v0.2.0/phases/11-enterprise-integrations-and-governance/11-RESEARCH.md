@@ -1,246 +1,243 @@
 # Phase 11: Enterprise Integrations & Governance - Research
 
 **Researched:** 2026-03-04
-**Domain:** Enterprise integration (chat ops, issue tracking, RBAC, secrets, GitOps, multi-repo orchestration)
+**Domain:** External integrations (Slack, Teams, JIRA, Linear), RBAC, audit trails, secrets management, GitOps, multi-repo orchestration, execution bookmarking
 **Confidence:** MEDIUM-HIGH
 
 ## Summary
 
-Phase 11 adds eight capabilities to Agented: Slack/Teams chat-ops (INT-01), JIRA/Linear auto-issue creation (INT-02), bot config import/export with GitOps sync (INT-03), role-based access control (INT-04), full audit trail (INT-05), encrypted secrets vault (INT-06), multi-repo campaigns (INT-07), and execution bookmarking (INT-08). The codebase already provides key infrastructure that these features build on: an `AuditLogService` with in-memory ring buffer (500 events), an API key `before_request` guard, `ExecutionLogService.finish_execution()` as a natural post-execution hook point, YAML parsing via `pyyaml`, `cryptography` library for encryption, `WorkflowTriggerService.on_execution_complete()` for chaining, and a robust settings key-value store.
+Phase 11 covers eight requirements spanning external collaboration integrations (Slack/Teams, JIRA/Linear), configuration-as-code with GitOps, role-based access control, persistent audit trails, encrypted secrets management, multi-repo campaign execution, and execution bookmarking. The codebase already has strong foundations: an `AuditLogService` with in-memory ring buffer and field-change diffing, `watchdog`-based file system watchers, `cryptography` library already in dependencies, YAML parsing via `pyyaml`, and a proven export/import pattern from `SuperAgentExportService` and `ExportService`.
 
-The recommended approach uses the existing `cryptography` dependency (Fernet symmetric encryption) for the secrets vault, extends the `before_request` middleware pattern for RBAC, adds a notification dispatcher as a post-execution hook in `ExecutionLogService.finish_execution()`, and leverages the established YAML frontmatter export patterns already used by plugins, agents, and skills for bot configuration export/import.
+The primary challenge is scope breadth -- eight distinct requirements touching different domains. The recommended approach is to implement a lightweight integration adapter pattern where each external service (Slack, Teams, JIRA, Linear) is encapsulated behind a unified `IntegrationService` interface. RBAC should use a decorator-based approach consistent with the existing Flask route patterns rather than introducing a heavyweight framework. The secrets vault should leverage the `cryptography.fernet` module (already a dependency) for AES-128-CBC symmetric encryption with `MultiFernet` for key rotation.
 
-**Primary recommendation:** Build all eight features as independent service modules (`notification_service.py`, `rbac_service.py`, `secret_vault_service.py`, `config_export_service.py`, `campaign_service.py`, `bookmark_service.py`) following the existing classmethod/static-method singleton pattern, each with its own DB module, Pydantic models, and route blueprint -- keeping the architecture consistent with the 90+ services already in the codebase.
+**Primary recommendation:** Build a pluggable integration adapter layer with a shared `NotificationService` for outbound notifications and a `SlashCommandService` for inbound triggers, implement RBAC as a Flask decorator checking roles from a `user_roles` DB table, persist audit events to SQLite instead of the current in-memory-only ring buffer, and use Fernet symmetric encryption for the secrets vault.
 
 ## Paper-Backed Recommendations
 
-Every recommendation below cites specific evidence.
+### Recommendation 1: Role-Based Access Control via Decorator Pattern
 
-### Recommendation 1: Event-Driven Notification Dispatch via Post-Execution Hooks
-
-**Recommendation:** Use an observer/hook pattern at `ExecutionLogService.finish_execution()` to dispatch notifications to Slack, Teams, JIRA, and Linear after execution completes.
+**Recommendation:** Implement RBAC using a Python decorator (`@require_role("editor")`) that wraps Flask route handlers, checking the user's role against a permission matrix before allowing access.
 
 **Evidence:**
-- Gamma et al. (1994) *Design Patterns* -- The Observer pattern decouples event sources from consumers, enabling extensible notification without modifying the execution pipeline. Chapter 5 documents this as the standard pattern for one-to-many dependencies.
-- The codebase already implements this pattern: `WorkflowTriggerService.on_execution_complete()` (line 233 of `workflow_trigger_service.py`) fires registered callbacks after execution completion. The notification dispatcher follows the same model.
-- Slack official docs (https://api.slack.com/messaging/webhooks) confirm incoming webhooks accept JSON POST with `text` field for channel posting; the `slack-sdk` `WebhookClient` wraps this cleanly.
+- Ferraiolo & Kuhn, "Role-Based Access Controls" (1992, NIST) -- Established the foundational RBAC model with Users, Roles, Permissions, and Sessions. The four-level RBAC model (Core, Hierarchical, Constrained, Symmetric) is the industry standard.
+- Sandhu et al., "Role-Based Access Control Models" (IEEE Computer, 1996) -- Formalized RBAC0-RBAC3 models. For this application, RBAC0 (flat roles without hierarchy) is sufficient given only 4 roles.
+- Flask community pattern -- Decorator-based RBAC is the standard Flask pattern, documented across official Flask extensions (Flask-RBAC, Flask-Principal) and community guides.
 
-**Confidence:** HIGH -- Pattern already proven in the codebase; Slack/JIRA APIs are stable and well-documented.
-**Expected improvement:** Execution results reach team collaboration tools within 30 seconds of completion.
-**Caveats:** Notification delivery is best-effort; if the external service is down, failures should be logged but not block the execution pipeline.
+**Confidence:** HIGH -- RBAC is a well-established security pattern with decades of research and industry adoption.
+**Expected improvement:** Clear separation of authorization concerns from business logic. Four roles (Viewer, Operator, Editor, Admin) map directly to RBAC0 model.
+**Caveats:** Without a proper authentication system in place, RBAC enforcement depends on correctly identifying the current user. The current app has no user authentication -- a minimal user identity mechanism is needed or RBAC operates on API-key-based identity.
 
 ### Recommendation 2: Fernet Symmetric Encryption for Secrets Vault
 
-**Recommendation:** Use `cryptography.fernet.Fernet` with `MultiFernet` for key rotation to encrypt secrets at rest in SQLite.
+**Recommendation:** Use `cryptography.fernet.Fernet` for encrypting secrets at rest in SQLite, with `MultiFernet` for key rotation support. Derive the encryption key from an environment variable using PBKDF2.
 
 **Evidence:**
-- The `cryptography` library (already a dependency, `>=41.0.0` in `pyproject.toml`) provides `Fernet` -- AES-128-CBC with HMAC-SHA256 authentication. Official docs (https://cryptography.io/en/latest/fernet/) document it as the recommended approach for symmetric encryption of small values.
-- `MultiFernet` enables key rotation without re-encrypting all values at once, which is the NIST-recommended approach to cryptographic key management (NIST SP 800-57 Part 1, Rev. 5, 2020).
-- The codebase already uses `cryptography` in `cliproxy_manager.py` for AES-CBC decryption of Chrome-stored OAuth tokens, establishing precedent.
+- Cryptography.io official documentation -- Fernet provides authenticated encryption using AES-128-CBC + HMAC-SHA256, preventing both data exposure and tampering. The library is already in `pyproject.toml` (`cryptography>=41.0.0`).
+- NIST SP 800-132 (2010) -- Recommends PBKDF2 for key derivation from passwords/passphrases with minimum 1000 iterations (modern recommendation: 600,000+ for SHA-256).
+- MultiFernet documentation -- Supports transparent key rotation by attempting decryption with each key in order, encrypting new values with the primary key.
 
-**Confidence:** HIGH -- Library already in dependency tree; Fernet is the Python standard for symmetric encryption of configuration secrets.
-**Expected improvement:** Credentials stored encrypted at rest, never exposed in API responses or logs.
-**Caveats:** Master key must be stored securely (env var or file with restrictive permissions, following the existing `_get_secret_key()` pattern in `__init__.py`). Fernet tokens are ~1.5x plaintext size.
+**Confidence:** HIGH -- `cryptography` is already a project dependency (used for Chrome cookie decryption in `cliproxy_manager.py`). Fernet is the standard Python approach for application-level symmetric encryption.
+**Expected improvement:** Secrets encrypted at rest with authenticated encryption; key rotation without downtime; audit trail on every access.
+**Caveats:** The master encryption key must be stored securely (environment variable or OS keychain), not in the database. If the key is lost, all encrypted secrets are unrecoverable.
 
-### Recommendation 3: Decorator-Based RBAC on Flask before_request
+### Recommendation 3: Adapter Pattern for External Integrations
 
-**Recommendation:** Extend the existing `_require_api_key()` `before_request` handler to support role-based tokens (Viewer, Operator, Editor, Admin), using a per-route permission decorator.
-
-**Evidence:**
-- The codebase already has a working `before_request` API key guard (`__init__.py` lines 125-152) that validates `X-API-Key` headers. Extending this to map keys to roles is architecturally minimal.
-- Flask-RBAC (https://flask-rbac.readthedocs.io/) and community patterns (GeeksforGeeks Flask RBAC guide, Permit.io Flask RBAC guide) all recommend decorator-based role checks as the standard Flask approach.
-- OWASP Application Security Verification Standard (ASVS) 4.0 section V4 (Access Control) requires that every API endpoint explicitly checks permissions, which decorator-based RBAC enforces at the route level.
-
-**Confidence:** HIGH -- Extends existing infrastructure; well-established Flask pattern.
-**Expected improvement:** Four distinct permission levels enforced on all admin/API endpoints.
-**Caveats:** Since the system currently uses a single API key, the migration path must support backward compatibility (single key = Admin role).
-
-### Recommendation 4: YAML/JSON Export with Git Repository Watching for GitOps
-
-**Recommendation:** Use the existing `pyyaml` + YAML frontmatter patterns for bot config export/import, and `watchdog` (already a dependency) or periodic `git pull` (already implemented in `ProjectWorkspaceService`) for GitOps sync.
+**Recommendation:** Implement external integrations (Slack, Teams, JIRA, Linear) using a pluggable adapter pattern with a shared `IntegrationAdapter` base class. Each adapter handles authentication, message formatting, and error handling for its specific service.
 
 **Evidence:**
-- The codebase has extensive YAML frontmatter export patterns: `plugin_export_service.py`, `project_install_service.py`, `harness_deploy_service.py`, `skill_discovery_service.py`, and `sync_persistence_service.py` all use `yaml.dump()` with frontmatter delimiters and `parse_yaml_frontmatter()` for import.
-- GitOps best practices (CNCF GitOps Working Group, 2025; https://www.gitops.tech/) define the pattern as: declarative desired state in Git, automated reconciliation. The existing `ProjectWorkspaceService` already does `git fetch`/`git pull` on a 30-minute schedule via APScheduler.
-- `watchdog` (`>=6.0.0` in `pyproject.toml`) is already used for filesystem monitoring in `plugin_file_watcher.py` and `team_monitor_service.py`.
+- Gamma et al., "Design Patterns" (1994) -- The Adapter pattern enables incompatible interfaces to work together. The Strategy pattern allows runtime selection of integration behavior.
+- Slack Python SDK (`slack-sdk`) -- Official SDK provides `WebClient` for API calls and supports both token-based and OAuth authentication. Version 3.x is current and actively maintained.
+- Atlassian Python API (`atlassian-python-api`) -- Community-maintained library with 1.7k+ GitHub stars for JIRA, Confluence, and Bitbucket integration.
+- Linear API -- GraphQL-based API with webhook support and HMAC-SHA256 signature verification.
+- Microsoft Teams -- Incoming Webhooks use simple HTTP POST with JSON Adaptive Card payloads; no SDK required.
 
-**Confidence:** HIGH -- All required libraries already installed; established patterns exist in the codebase.
-**Expected improvement:** Bot configs can be version-controlled and synced automatically from a Git repo.
-**Caveats:** Conflict resolution when both UI edits and Git changes occur simultaneously must be handled (Git wins for GitOps-managed bots).
+**Confidence:** MEDIUM-HIGH -- Individual integrations are well-documented, but the unified adapter pattern is an architectural decision that needs validation through implementation.
 
-### Recommendation 5: Persistent Audit Trail in SQLite
+### Recommendation 4: Event-Sourced Audit Trail with SQLite Persistence
 
-**Recommendation:** Extend the existing `AuditLogService` from in-memory ring buffer to a persistent `audit_events` SQLite table, with who/what/when/before-after state tracking.
+**Recommendation:** Extend the existing `AuditLogService` to persist events to a new `audit_events` SQLite table with indexed columns for entity, actor, and date range queries, while keeping the in-memory ring buffer for real-time SSE streaming.
 
 **Evidence:**
-- The existing `AuditLogService` (`audit_log_service.py`) already emits structured JSON events with `action`, `entity_type`, `entity_id`, `outcome`, and field-level diffs. The `log_field_changes()` method already computes before/after state diffs.
-- The current implementation stores events only in a `collections.deque(maxlen=500)` ring buffer -- events are lost on restart and limited to 500. Persisting to SQLite is the natural evolution.
-- OWASP Logging Cheat Sheet (2024 revision) recommends: who, what, when, where, outcome, and severity for all audit events. The existing event structure covers all fields except "who" (actor), which is the key addition.
+- Fowler, "Event Sourcing" pattern (2005) -- Storing state changes as a sequence of events enables complete audit reconstruction. The existing `log_field_changes()` method already captures before/after diffs.
+- OWASP Logging Cheat Sheet -- Recommends structured logging with who (actor), what (action), when (timestamp), where (entity), and outcome for security audit trails.
+- The current `AuditLogService` already implements the event format (`ts`, `action`, `entity_type`, `entity_id`, `outcome`, `details`) -- only persistence to SQLite is missing.
 
-**Confidence:** HIGH -- Direct extension of existing infrastructure.
-**Expected improvement:** Full queryable audit trail that survives restarts, filterable by entity, actor, and date range.
-**Caveats:** High-volume operations (e.g., batch imports) should batch audit inserts to avoid SQLite write contention.
+**Confidence:** HIGH -- The existing implementation provides 80% of the needed functionality. Adding SQLite persistence is a straightforward extension.
+
+### Recommendation 5: Git-Based Configuration Sync for GitOps
+
+**Recommendation:** Use the existing `watchdog` library (already in dependencies) combined with `subprocess` git operations and `pyyaml` for parsing to implement GitOps sync. The sync engine should poll a configured git remote, detect changes via `git diff`, and apply YAML configuration changes to the database.
+
+**Evidence:**
+- GitOps principles (Weaveworks, 2017) -- Git as single source of truth; pull-based reconciliation; declarative desired state.
+- Existing codebase patterns -- `GrdSyncService` already syncs filesystem state to database. `PluginFileWatcher` uses `watchdog` for real-time file change detection. Both patterns can be extended for GitOps.
+- `pyyaml>=6.0.0` is already in `pyproject.toml` -- used across 8+ service files for YAML parsing.
+
+**Confidence:** MEDIUM -- The GitOps sync pattern is well-established in the Kubernetes ecosystem but requires careful adaptation for this application's SQLite-based configuration model. Conflict resolution needs design attention.
 
 ## Standard Stack
 
-### Core
+### Core (Already in Project)
 
 | Library | Version | Purpose | Why Standard |
 |---------|---------|---------|--------------|
-| `slack-sdk` | `>=3.33.0` | Slack API (WebhookClient, slash commands) | Official Slack SDK for Python; actively maintained by Slack |
-| `pymsteams` | `>=0.2.5` | MS Teams incoming webhook messages | Most popular Python Teams webhook library; simple API |
-| `jira` | `>=3.10.0` | JIRA issue creation and management | Official Atlassian-community library; REST v3 compatible |
-| `cryptography` | `>=41.0.0` | Fernet encryption for secrets vault | Already in `pyproject.toml`; Python standard for symmetric encryption |
-| `pyyaml` | `>=6.0.0` | Bot config YAML export/import | Already in `pyproject.toml`; used extensively in codebase |
-| `watchdog` | `>=6.0.0` | Filesystem monitoring for GitOps sync | Already in `pyproject.toml`; used in plugin_file_watcher.py |
+| `cryptography` | >=41.0.0 | Fernet encryption for secrets vault | Already a dependency; industry standard for Python encryption |
+| `pyyaml` | >=6.0.0 | YAML parsing for config export/import and GitOps | Already a dependency; used in 8+ services |
+| `watchdog` | >=6.0.0 | File system watching for GitOps sync | Already a dependency; used in plugin/team file watchers |
+| `httpx` | >=0.28.1 | HTTP client for external API calls (Teams, Linear) | Already a dependency; async support for non-blocking integrations |
+| `APScheduler` | >=3.10.0 | Background job scheduling for GitOps polling | Already a dependency; scheduler infrastructure exists |
 
-### Supporting
+### New Dependencies
 
 | Library | Version | Purpose | When to Use |
 |---------|---------|---------|-------------|
-| `httpx` | `>=0.28.1` | HTTP client for Linear GraphQL API | Already in `pyproject.toml`; for Linear API calls (no SDK needed) |
-| `APScheduler` | `>=3.10.0` | Periodic GitOps sync polling | Already in `pyproject.toml`; scheduled repo sync |
+| `slack-sdk` | >=3.27.0 | Slack WebClient for posting messages and handling slash commands | Slack integration (INT-01) |
+| `jira` | >=3.8.0 | JIRA REST API client for issue creation | JIRA integration (INT-02) |
 
 ### Alternatives Considered
 
-| Instead of | Could Use | Tradeoff | Decision Rationale |
-|------------|-----------|----------|-------------------|
-| `slack-sdk` | `slack-bolt` (full framework) | Bolt adds slash command server; heavier dependency for webhook-only use | Use `slack-sdk` for outbound webhooks, add Bolt only if slash commands need a dedicated listener |
-| `pymsteams` | Direct `httpx` POST to Teams webhook URL | pymsteams handles card formatting; raw HTTP is simpler but less ergonomic | Use `pymsteams` for structured Adaptive Cards support |
-| `jira` | `atlassian-python-api` | atlassian-python-api covers more Atlassian products; `jira` is lighter and purpose-built | Use `jira` for focused JIRA issue creation |
-| SQLite audit table | Separate audit database / log file | SQLite keeps audit data queryable via existing DB patterns; separate DB adds operational complexity | SQLite is sufficient for single-instance deployment |
-| Fernet | `nacl.secret.SecretBox` (libsodium) | NaCl uses XSalsa20-Poly1305 (256-bit); Fernet uses AES-128-CBC + HMAC-SHA256 | Fernet is already available via `cryptography` dependency; both are secure for config secrets |
+| Instead of | Could Use | Tradeoff |
+|------------|-----------|----------|
+| `slack-sdk` | Raw `httpx` calls | `slack-sdk` handles token rotation, rate limiting, retry logic; raw HTTP loses these |
+| `jira` library | `atlassian-python-api` | `jira` is more focused and lighter; `atlassian-python-api` covers more Atlassian products but larger footprint |
+| `jira` library for Linear | `httpx` + GraphQL | Linear has no official Python SDK; use raw GraphQL queries via httpx |
+| Flask-RBAC extension | Custom decorator | Custom decorator is simpler and more consistent with existing codebase patterns; Flask-RBAC adds unnecessary abstraction |
+| SQLite for audit persistence | Dedicated log service (ELK) | SQLite keeps the single-binary deployment model; ELK adds infrastructure complexity |
 
 **Installation:**
 ```bash
-cd backend && uv add slack-sdk pymsteams jira
+cd backend && uv add slack-sdk jira
 ```
-
-No frontend npm additions required -- all integrations are backend-only with UI configuration via existing settings patterns.
 
 ## Architecture Patterns
 
 ### Recommended Project Structure
 
-New files for Phase 11 (following existing codebase conventions):
-
 ```
 backend/app/
-├── db/
-│   ├── audit_events.py       # Persistent audit event CRUD
-│   ├── secrets.py             # Encrypted secrets vault CRUD
-│   ├── integrations.py        # Integration config CRUD (Slack, JIRA, etc.)
-│   ├── rbac.py                # API key-to-role mapping CRUD
-│   ├── campaigns.py           # Multi-repo campaign CRUD
-│   └── bookmarks.py           # Execution bookmark CRUD
-├── models/
-│   ├── integration.py         # Pydantic models for integrations
-│   ├── rbac.py                # Pydantic models for RBAC
-│   ├── secret.py              # Pydantic models for secrets
-│   ├── campaign.py            # Pydantic models for campaigns
-│   └── bookmark.py            # Pydantic models for bookmarks
-├── services/
-│   ├── notification_service.py    # Dispatches to Slack/Teams/JIRA/Linear
-│   ├── slack_service.py           # Slack-specific operations
-│   ├── teams_service.py           # MS Teams-specific operations
-│   ├── jira_service.py            # JIRA-specific operations
-│   ├── linear_service.py          # Linear-specific operations
-│   ├── rbac_service.py            # RBAC enforcement logic
-│   ├── secret_vault_service.py    # Encrypted secrets management
-│   ├── config_export_service.py   # Bot config YAML/JSON export/import
-│   ├── gitops_sync_service.py     # GitOps repository watching and sync
-│   ├── campaign_service.py        # Multi-repo campaign orchestration
-│   └── bookmark_service.py        # Execution bookmarking
-├── routes/
-│   ├── integrations.py        # /admin/integrations/*
-│   ├── rbac.py                # /admin/rbac/*
-│   ├── secrets.py             # /admin/secrets/*
-│   ├── campaigns.py           # /admin/campaigns/*
-│   └── bookmarks.py           # /admin/bookmarks/*
-frontend/src/
-├── services/api/
-│   ├── integrations.ts        # integrationApi
-│   ├── rbac.ts                # rbacApi
-│   ├── secrets.ts             # secretApi
-│   ├── campaigns.ts           # campaignApi
-│   └── bookmarks.ts           # bookmarkApi
-├── views/
-│   ├── IntegrationsPage.vue   # Integration configuration UI
-│   ├── RbacPage.vue           # RBAC management UI
-│   ├── SecretsPage.vue        # Secrets vault UI
-│   └── CampaignsPage.vue     # Multi-repo campaign UI
-└── components/
-    ├── integrations/          # Integration-specific components
-    ├── secrets/               # Secret management components
-    └── campaigns/             # Campaign components
+  services/
+    integrations/
+      __init__.py              # IntegrationAdapter base class, registry
+      slack_adapter.py          # Slack WebClient adapter
+      teams_adapter.py          # Teams webhook adapter
+      jira_adapter.py           # JIRA issue creation adapter
+      linear_adapter.py         # Linear GraphQL adapter
+    notification_service.py     # Unified notification dispatch (uses adapters)
+    integration_config_service.py # Integration CRUD and config management
+    rbac_service.py             # Role checking, permission matrix
+    secret_vault_service.py     # Fernet encrypt/decrypt with audit logging
+    config_export_service.py    # Bot config YAML/JSON export/import
+    gitops_sync_service.py      # Git repo sync engine
+    campaign_service.py         # Multi-repo campaign orchestration
+    bookmark_service.py         # Execution bookmarking and deep links
+  db/
+    integrations.py             # Integration config CRUD
+    audit_events.py             # Persistent audit event CRUD
+    secrets.py                  # Encrypted secrets CRUD
+    bookmarks.py                # Bookmark CRUD
+    rbac.py                     # User roles CRUD
+  models/
+    integration.py              # Integration Pydantic models
+    rbac.py                     # RBAC Pydantic models
+    secret.py                   # Secret vault Pydantic models
+    bookmark.py                 # Bookmark Pydantic models
+  routes/
+    integrations.py             # /admin/integrations/* endpoints
+    rbac.py                     # /admin/rbac/* endpoints
+    secrets.py                  # /admin/secrets/* endpoints
+    bookmarks.py                # /admin/bookmarks/* endpoints
+    gitops.py                   # /admin/gitops/* endpoints
+    campaigns.py                # /admin/campaigns/* endpoints
 ```
 
-### Pattern 1: Notification Dispatcher (Observer/Hook)
+### Pattern 1: Integration Adapter Pattern
 
-**What:** A central `NotificationService` that registers as a post-execution hook and fans out to configured integration channels.
-**When to use:** After any execution completes (trigger, workflow, team, campaign).
+**What:** Each external integration (Slack, Teams, JIRA, Linear) implements a common interface with `send_notification()`, `create_ticket()`, and `validate_config()` methods.
+**When to use:** Any time a new external service needs to be integrated.
 **Example:**
 ```python
-# Source: Existing pattern from WorkflowTriggerService.on_execution_complete()
-class NotificationService:
-    """Dispatches execution result notifications to configured integration channels."""
+# Source: Design Patterns (Gamma et al.) + codebase conventions
+from abc import ABC, abstractmethod
+from typing import Dict, Optional, Tuple
+from http import HTTPStatus
 
-    @classmethod
-    def on_execution_complete(
-        cls,
-        trigger_id: str,
-        execution_id: str,
-        status: str,
-        summary: str,
-    ) -> None:
-        """Called by ExecutionLogService.finish_execution() after DB flush."""
-        configs = get_integration_configs(trigger_id)
-        for config in configs:
-            try:
-                if config["type"] == "slack":
-                    SlackService.post_execution_summary(config, execution_id, status, summary)
-                elif config["type"] == "teams":
-                    TeamsService.post_execution_summary(config, execution_id, status, summary)
-                elif config["type"] == "jira":
-                    JiraService.create_issue_from_execution(config, execution_id, status, summary)
-                elif config["type"] == "linear":
-                    LinearService.create_issue_from_execution(config, execution_id, status, summary)
-            except Exception:
-                logger.exception(f"Notification failed for {config['type']}")
+class IntegrationAdapter(ABC):
+    """Base class for external service integrations."""
+
+    @abstractmethod
+    def send_notification(self, channel: str, message: str, metadata: dict = None) -> bool:
+        """Send a notification to the external service."""
+        ...
+
+    @abstractmethod
+    def validate_config(self, config: dict) -> Tuple[bool, Optional[str]]:
+        """Validate integration configuration. Returns (valid, error_message)."""
+        ...
+
+class SlackAdapter(IntegrationAdapter):
+    def __init__(self, token: str):
+        from slack_sdk import WebClient
+        self.client = WebClient(token=token)
+
+    def send_notification(self, channel: str, message: str, metadata: dict = None) -> bool:
+        try:
+            self.client.chat_postMessage(channel=channel, text=message)
+            return True
+        except Exception:
+            return False
+
+    def validate_config(self, config: dict) -> Tuple[bool, Optional[str]]:
+        if not config.get("token"):
+            return False, "Slack bot token required"
+        return True, None
 ```
 
-### Pattern 2: RBAC Middleware Extension
+### Pattern 2: RBAC Decorator Pattern
 
-**What:** Extend `_require_api_key()` to resolve API keys to roles, then check per-route permissions.
-**When to use:** On every authenticated request.
+**What:** A `@require_role()` decorator that checks the current user's role before allowing route handler execution.
+**When to use:** Every route that needs authorization beyond authentication.
 **Example:**
 ```python
-# Source: Existing pattern from __init__.py lines 125-152
-# Role hierarchy: Admin > Editor > Operator > Viewer
-ROLE_HIERARCHY = {"admin": 4, "editor": 3, "operator": 2, "viewer": 1}
+# Source: Flask community RBAC patterns + NIST RBAC model
+import functools
+from http import HTTPStatus
+from flask import request
 
-def require_role(min_role: str):
-    """Decorator for route-level RBAC enforcement."""
-    def decorator(f):
-        @functools.wraps(f)
+# Permission matrix: role -> set of allowed permissions
+ROLE_PERMISSIONS = {
+    "viewer":   {"read"},
+    "operator": {"read", "execute"},
+    "editor":   {"read", "execute", "edit"},
+    "admin":    {"read", "execute", "edit", "manage"},
+}
+
+def require_role(*allowed_roles):
+    """Decorator that checks user role before allowing access."""
+    def decorator(func):
+        @functools.wraps(func)
         def wrapper(*args, **kwargs):
-            current_role = getattr(request, '_user_role', None)
-            if not current_role:
-                return {"error": "Unauthorized"}, 401
-            if ROLE_HIERARCHY.get(current_role, 0) < ROLE_HIERARCHY[min_role]:
-                return {"error": "Forbidden"}, 403
-            return f(*args, **kwargs)
+            user_role = _get_current_user_role(request)
+            if user_role not in allowed_roles:
+                return {"error": "Insufficient permissions"}, HTTPStatus.FORBIDDEN
+            return func(*args, **kwargs)
         return wrapper
     return decorator
+
+# Usage in route:
+@triggers_bp.post("/<trigger_id>/execute")
+@require_role("operator", "editor", "admin")
+def execute_trigger(path: TriggerPath):
+    ...
 ```
 
-### Pattern 3: Secrets Vault with Fernet
+### Pattern 3: Secrets Vault with Audit Trail
 
-**What:** Encrypt secrets before storing in SQLite, decrypt at execution time, audit every access.
-**When to use:** For any credential that bots need at execution time.
+**What:** Encrypted secret storage with every access logged to the audit trail.
+**When to use:** Storing API keys, tokens, and credentials.
 **Example:**
 ```python
-# Source: cryptography official docs (https://cryptography.io/en/latest/fernet/)
+# Source: cryptography.io Fernet docs + NIST SP 800-132
+import os
 from cryptography.fernet import Fernet, MultiFernet
 
 class SecretVaultService:
@@ -249,120 +246,148 @@ class SecretVaultService:
     @classmethod
     def _get_fernet(cls) -> MultiFernet:
         if cls._fernet is None:
-            # Load master key from env or persisted file (same pattern as SECRET_KEY)
-            master_key = os.environ.get("AGENTED_VAULT_KEY", "")
-            if not master_key:
-                master_key = cls._load_or_generate_key()
-            keys = [Fernet(k) for k in master_key.split(",")]
+            keys_str = os.environ.get("AGENTED_VAULT_KEYS", "")
+            if not keys_str:
+                raise RuntimeError("AGENTED_VAULT_KEYS environment variable not set")
+            keys = [Fernet(k.strip()) for k in keys_str.split(",")]
             cls._fernet = MultiFernet(keys)
         return cls._fernet
 
     @classmethod
     def encrypt(cls, plaintext: str) -> str:
-        return cls._get_fernet().encrypt(plaintext.encode()).decode()
+        f = cls._get_fernet()
+        return f.encrypt(plaintext.encode("utf-8")).decode("utf-8")
 
     @classmethod
-    def decrypt(cls, token: str) -> str:
-        return cls._get_fernet().decrypt(token.encode()).decode()
+    def decrypt(cls, ciphertext: str, purpose: str = "", accessor: str = "") -> str:
+        AuditLogService.log(
+            action="secret.access",
+            entity_type="secret",
+            entity_id=purpose,
+            outcome="accessed",
+            details={"accessor": accessor},
+        )
+        f = cls._get_fernet()
+        return f.decrypt(ciphertext.encode("utf-8")).decode("utf-8")
+```
+
+### Pattern 4: Post-Execution Hook for Notifications
+
+**What:** A hook point in `ExecutionLogService.finish_execution()` that dispatches notifications to configured integrations after execution completes.
+**When to use:** Sending Slack/Teams messages and creating JIRA/Linear tickets after bot runs finish.
+**Example:**
+```python
+# In execution_log_service.py finish_execution():
+# After broadcasting completion to SSE subscribers, dispatch to integrations
+from .notification_service import NotificationService
+NotificationService.on_execution_complete(
+    execution_id=execution_id,
+    trigger_id=trigger_id,
+    status=status,
+    duration_ms=duration_ms,
+)
 ```
 
 ### Anti-Patterns to Avoid
 
-- **Storing secrets in the settings table:** The existing `settings` table is unencrypted key-value; secrets must go in a dedicated `secrets` table with encryption. Never reuse the `set_setting()` function for credentials.
-- **Synchronous notification delivery in the request path:** Notifications to Slack/JIRA must happen asynchronously (in a background thread or via the existing `threading.Thread` pattern) to avoid blocking the execution flow.
-- **Hardcoding integration credentials in service code:** All integration tokens/URLs must come from the database (encrypted) or environment variables, never from source code.
-- **Checking roles with string equality instead of hierarchy:** Use `ROLE_HIERARCHY[current] >= ROLE_HIERARCHY[required]` instead of `current == required` to support hierarchical permissions (Admin can do everything Editor can do).
+- **Inline integration logic in routes:** Keep all external API calls in service layer adapters, never in route handlers. Route handlers remain thin.
+- **Storing encryption keys in the database:** The vault encryption key MUST come from an environment variable, never from SQLite. Storing the key alongside the encrypted data defeats the purpose.
+- **Synchronous external API calls in the request path:** Slack/JIRA API calls should happen in background threads (using the existing threaded execution pattern) to avoid blocking webhook responses.
+- **Polling-only GitOps:** Use webhook notifications from the Git host where possible, with polling as a fallback. Pure polling introduces unnecessary latency.
+- **Hardcoded role checks:** Use the permission matrix pattern, not `if role == "admin"` scattered throughout the code.
 
 ## Don't Hand-Roll
 
 | Problem | Don't Build | Use Instead | Why |
 |---------|-------------|-------------|-----|
-| Slack message posting | Custom HTTP POST to Slack | `slack_sdk.webhook.WebhookClient` | Handles retries, rate limits, message formatting |
-| Teams message cards | Custom JSON construction | `pymsteams.connectorcard` | Handles Adaptive Card formatting, sections, actions |
-| JIRA issue creation | Direct REST calls to JIRA API | `jira.JIRA.create_issue()` | Handles auth, field validation, project key resolution |
-| Symmetric encryption | Custom AES implementation | `cryptography.fernet.Fernet` | Handles IV generation, HMAC verification, padding |
-| Key rotation | Manual key migration scripts | `cryptography.fernet.MultiFernet` | Handles multi-key decryption, transparent rotation |
-| YAML serialization | Custom string formatting | `yaml.dump()` / `yaml.safe_load()` | Handles escaping, multiline, complex types |
+| Slack API interaction | Custom HTTP client for Slack | `slack-sdk` WebClient | Handles token rotation, rate limiting, retry, pagination, type safety |
+| JIRA issue creation | Raw REST calls to JIRA | `jira` library | Handles auth (Basic, OAuth, PAT), field validation, JQL queries |
+| Symmetric encryption | Custom AES implementation | `cryptography.fernet.Fernet` | Authenticated encryption (AES+HMAC), key rotation via MultiFernet, timestamp validation |
+| YAML serialization | Custom config format parser | `pyyaml` | Already a dependency; handles anchors, aliases, multi-doc streams |
+| File watching | Custom inotify/kqueue wrapper | `watchdog` Observer | Cross-platform (macOS FSEvents, Linux inotify, Windows), already used in 3 services |
+| Webhook signature verification | Custom HMAC computation | `hmac.compare_digest()` | Timing-safe comparison prevents timing attacks; already used in GitHub webhook handler |
 
-**Key insight:** Every external integration has an official or well-maintained SDK. Hand-rolling HTTP calls introduces edge cases around authentication, error handling, and rate limiting that the SDKs handle.
+**Key insight:** The codebase already has patterns and dependencies for most of these problems. The phase is about composition and extension of existing infrastructure, not building from scratch.
 
 ## Common Pitfalls
 
-### Pitfall 1: Notification Delivery Blocking Execution Pipeline
+### Pitfall 1: Slack Token Scope Misconfiguration
 
-**What goes wrong:** Posting to Slack/JIRA synchronously in `finish_execution()` adds latency and can fail, causing execution status to appear stuck.
-**Why it happens:** Developers add the notification call directly in the finish path without threading.
-**How to avoid:** Dispatch notifications in a daemon thread (same pattern as `_stream_pipe` threads in `execution_service.py`). Use `threading.Thread(target=..., daemon=True).start()`.
-**Warning signs:** Execution completion times increase; SSE `complete` events are delayed.
+**What goes wrong:** Slack bot token lacks required OAuth scopes, causing `chat_postMessage` to fail silently or with cryptic errors.
+**Why it happens:** Slack requires explicit scopes per API method (`chat:write`, `commands`, `incoming-webhook`).
+**How to avoid:** Validate scopes at integration configuration time using `auth.test` API method. Document required scopes in integration setup UI.
+**Warning signs:** 403 errors from Slack API, `missing_scope` error codes.
 
-### Pitfall 2: Vault Master Key Loss
+### Pitfall 2: Secrets Leaked in Logs or API Responses
 
-**What goes wrong:** If the `AGENTED_VAULT_KEY` is lost, all encrypted secrets become unrecoverable.
-**Why it happens:** Key stored only in env var on a single machine with no backup.
-**How to avoid:** Follow the existing `_get_secret_key()` pattern: check env var first, then fall back to a persisted `.vault_key` file with `0o600` permissions. Document key backup in deployment docs.
-**Warning signs:** After server migration, all secrets return decryption errors.
+**What goes wrong:** Encrypted secrets get decrypted and appear in execution stdout/stderr logs or API response bodies.
+**Why it happens:** Environment variables injected at execution time appear in process output; API serialization includes sensitive fields.
+**How to avoid:** The existing `_REDACTED_FIELDS` frozenset in `AuditLogService` already filters `webhook_secret`, `api_key`, `password`, `token`. Extend this pattern to all API responses. Use `AGENTED_SECRET_*` naming convention for injected env vars and strip them from log output.
+**Warning signs:** Plaintext credentials visible in execution log viewer.
 
-### Pitfall 3: RBAC Bypass via Direct DB Access
+### Pitfall 3: GitOps Sync Conflicts Causing Data Loss
 
-**What goes wrong:** Services that import from `app.db` directly can bypass RBAC checks that only exist in route handlers.
-**Why it happens:** RBAC is enforced at the HTTP layer; internal service calls have no auth context.
-**How to avoid:** RBAC enforcement should be exclusively at the route/middleware layer. Services should not make authorization decisions. This matches the existing architecture where routes are thin wrappers that delegate to services.
-**Warning signs:** A service function modifies data without any caller checking permissions.
+**What goes wrong:** Simultaneous edits via UI and Git repository cause one set of changes to be silently overwritten.
+**Why it happens:** Last-write-wins without conflict detection.
+**How to avoid:** Use content hashing (like `content_hash()` in existing `plugin_format.py`) to detect conflicts. When both sides have changed, flag as conflict and require manual resolution rather than auto-merging.
+**Warning signs:** Users report configurations reverting after Git sync cycles.
 
-### Pitfall 4: GitOps Sync Race Condition with UI Edits
+### Pitfall 4: RBAC Bypass via Direct API Calls
 
-**What goes wrong:** User edits a bot in the UI at the same time a GitOps sync pulls a different version from Git, causing data loss.
-**Why it happens:** No conflict detection between UI writes and Git-synced writes.
-**How to avoid:** Add a `managed_by` field to the `triggers` table (values: `"ui"` or `"gitops"`). GitOps-managed bots are read-only in the UI; UI-managed bots are not overwritten by GitOps sync.
-**Warning signs:** Bot configuration reverts unexpectedly after Git push.
+**What goes wrong:** Some routes lack the `@require_role()` decorator, allowing unauthorized access.
+**Why it happens:** Developer forgets to add decorator when creating new routes.
+**How to avoid:** Add a startup check that verifies all non-health, non-public routes have RBAC decorators. Use a deny-by-default approach where undecorated routes return 403.
+**Warning signs:** Viewers able to trigger executions or edit bots.
 
-### Pitfall 5: Audit Table Growth Without Pruning
+### Pitfall 5: Multi-Repo Campaign Execution Timeout
 
-**What goes wrong:** The `audit_events` table grows unboundedly, eventually slowing queries and consuming disk.
-**Why it happens:** Every API mutation, every execution, and every secret access generates an audit record.
-**How to avoid:** Add an APScheduler job to prune audit records older than a configurable retention period (default 90 days). Add an index on `created_at` for efficient range queries.
-**Warning signs:** Query latency on `/admin/audit-events` increases over time; SQLite file size grows unexpectedly.
+**What goes wrong:** Running a bot across 10+ repos simultaneously exhausts system resources or hits rate limits.
+**Why it happens:** Each repo clone + CLI execution spawns a subprocess. No concurrency limit.
+**How to avoid:** Implement a semaphore-based concurrency limit (e.g., max 5 concurrent repos). Use a queue-based approach where repos are processed in batches.
+**Warning signs:** System memory exhaustion, rate limit errors cascading across all repos.
 
-### Pitfall 6: Leaking Secrets in Audit Logs
+### Pitfall 6: Audit Trail Storage Growth
 
-**What goes wrong:** When a secret is updated, the `log_field_changes()` method includes old/new values in the diff.
-**Why it happens:** The existing `_REDACTED_FIELDS` set covers `webhook_secret`, `api_key`, `password`, `token`, but may miss new field names.
-**How to avoid:** Ensure the secret vault service uses `AuditLogService.log()` directly (not `log_field_changes()`) with only the secret name/ID, never the value. Extend `_REDACTED_FIELDS` to include any new sensitive field names.
-**Warning signs:** Decrypted secret values appear in audit event `details.changes`.
+**What goes wrong:** Audit events table grows unbounded, slowing queries and consuming disk.
+**Why it happens:** Every configuration change and secret access creates a row.
+**How to avoid:** Implement retention policy (configurable, default 90 days). Add periodic cleanup job to APScheduler. Index `created_at` column for efficient range queries and deletion.
+**Warning signs:** Slow audit history page loads, growing database file size.
 
 ## Experiment Design
 
 ### Recommended Experimental Setup
 
-**Independent variables:** Integration type (Slack, Teams, JIRA, Linear), notification payload size, concurrent execution count
-**Dependent variables:** Notification delivery latency (time from `finish_execution()` to external API acknowledgment), throughput (notifications/second), error rate
-**Controlled variables:** Network conditions, SQLite write concurrency, vault key configuration
+This phase is primarily integration engineering, not ML/research. Experiments focus on correctness, performance, and security validation.
+
+**Independent variables:** Integration type (Slack/Teams/JIRA/Linear), payload size, concurrent execution count (for campaigns), number of secrets in vault
+**Dependent variables:** Notification delivery latency, API response time, encryption/decryption throughput, audit query performance
+**Controlled variables:** Database state, network conditions (use mocked external APIs for testing)
 
 **Baseline comparison:**
-- Method: No notifications (current behavior)
-- Expected performance: `finish_execution()` completes in <10ms (DB update + SSE broadcast)
-- Our target: Adding notifications should not increase `finish_execution()` latency by more than 5ms (notification dispatched asynchronously)
+- Method: Current system without integrations (manual notification via log checking)
+- Expected performance: Notification delivery time = infinity (manual); audit query = in-memory only (500 events max)
+- Our target: Notification delivery <30 seconds; audit query <500ms for 10K events; encryption <10ms per secret
 
 **Ablation plan:**
-1. Notifications enabled vs. disabled -- tests that notification dispatch does not degrade execution pipeline performance
-2. Encrypted vs. plaintext secrets -- tests encryption/decryption overhead on execution startup
-3. RBAC checks enabled vs. disabled -- tests authorization overhead per request
+1. Integrations with vs. without background threading -- tests impact of async notification dispatch on webhook response latency
+2. Audit trail with vs. without SQLite persistence -- tests query performance vs. in-memory ring buffer
+3. GitOps with webhook-triggered vs. polling-only sync -- tests latency difference
 
 **Statistical rigor:**
-- Number of runs: 5 per configuration
-- Confidence intervals: 95% CI via Student's t-test
-- Significance testing: Paired t-test for latency comparisons
+- Number of runs: 3 runs per integration test scenario
+- Confidence intervals: Mean +/- standard deviation
+- Significance testing: Not applicable (pass/fail correctness tests, not statistical comparisons)
 
 ### Recommended Metrics
 
 | Metric | Why | How to Compute | Baseline |
 |--------|-----|----------------|----------|
-| Notification delivery latency | Core SLA: 30s for Slack/Teams | Timestamp diff: `finish_execution()` to external API HTTP 200 | N/A (new feature) |
-| JIRA ticket creation time | Core SLA: 60s for issue trackers | Timestamp diff: execution end to JIRA issue created_at | N/A (new feature) |
-| RBAC check overhead | Must not degrade API response time | Per-request `before_request` duration (add timing in middleware) | ~0.1ms (current API key check) |
-| Secret decrypt latency | Must not delay execution startup | Time to call `SecretVaultService.decrypt()` | N/A (new feature) |
-| Audit write throughput | Must not cause SQLite contention | Writes/second to `audit_events` table under concurrent executions | N/A (new feature) |
-| Config export/import round-trip fidelity | 100% field preservation required | Export bot, import on clean instance, diff all fields | N/A (new feature) |
+| Notification latency | INT-01 requires <30s | Timestamp diff: execution finish to Slack message timestamp | N/A (new feature) |
+| JIRA ticket creation time | INT-02 requires <60s | Timestamp diff: execution finish to JIRA issue created_at | N/A (new feature) |
+| RBAC enforcement accuracy | INT-04 security | % of unauthorized requests correctly blocked | 100% target |
+| Audit query time (10K events) | INT-05 usability | SQLite `EXPLAIN QUERY PLAN` + timing | N/A (currently in-memory only) |
+| Secret encrypt/decrypt time | INT-06 performance | `time.perf_counter()` around Fernet ops | <10ms per operation |
+| Campaign completion time | INT-07 performance | Wall clock for 3-repo simultaneous execution | Single-repo time x 1.5 (target) |
 
 ## Verification Strategy
 
@@ -370,272 +395,354 @@ class SecretVaultService:
 
 | Item | Recommended Tier | Rationale |
 |------|-----------------|-----------|
-| RBAC decorator blocks unauthorized access | Level 1 (Sanity) | Can test immediately with Flask test client |
-| Secret encryption/decryption round-trip | Level 1 (Sanity) | Pure function test, no external deps |
-| Bot config YAML export/import fidelity | Level 1 (Sanity) | Deterministic serialization test |
-| Audit event persistence and querying | Level 1 (Sanity) | DB CRUD test with isolated_db fixture |
-| Execution bookmarks CRUD + deep links | Level 1 (Sanity) | Standard DB + API test |
-| Slack webhook delivery (mocked) | Level 2 (Proxy) | Mock external API, verify payload structure |
-| JIRA issue creation (mocked) | Level 2 (Proxy) | Mock JIRA client, verify issue fields |
-| Teams message posting (mocked) | Level 2 (Proxy) | Mock pymsteams, verify card content |
-| Linear issue creation (mocked) | Level 2 (Proxy) | Mock httpx POST, verify GraphQL mutation |
-| Multi-repo campaign across 3 repos | Level 2 (Proxy) | Mock repo clones, verify parallel dispatch |
-| GitOps sync detects and applies changes | Level 2 (Proxy) | Create temp git repo, modify, verify sync |
-| Notification delivery within 30s SLA | Level 3 (Deferred) | Requires live Slack/Teams workspace |
-| JIRA ticket appears within 60s SLA | Level 3 (Deferred) | Requires live JIRA instance |
-| End-to-end RBAC with real API keys | Level 3 (Deferred) | Requires multi-user setup |
+| RBAC decorator blocks unauthorized roles | Level 1 (Sanity) | Unit test with mocked request context |
+| Secret encryption round-trip (encrypt then decrypt) | Level 1 (Sanity) | Pure function test, no external deps |
+| Audit event persisted to SQLite | Level 1 (Sanity) | DB insert + query, no external deps |
+| Config YAML export produces valid YAML | Level 1 (Sanity) | Serialize + parse roundtrip |
+| Config import recreates identical bot | Level 1 (Sanity) | Export, clear, import, compare |
+| Bookmark CRUD operations | Level 1 (Sanity) | Standard DB CRUD test |
+| Slack notification sends message | Level 2 (Proxy) | Mock Slack WebClient, verify API call shape |
+| JIRA ticket creation from findings | Level 2 (Proxy) | Mock JIRA client, verify issue fields |
+| Teams webhook notification | Level 2 (Proxy) | Mock httpx, verify POST payload |
+| Multi-repo campaign orchestration | Level 2 (Proxy) | Mock execution service, verify parallel dispatch |
+| GitOps sync detects config changes | Level 2 (Proxy) | Mock git operations, verify DB updates |
+| Notification delivery <30s end-to-end | Level 3 (Deferred) | Requires live Slack workspace |
+| JIRA ticket appears in project | Level 3 (Deferred) | Requires live JIRA instance |
+| GitOps full cycle (push to git, auto-apply) | Level 3 (Deferred) | Requires git repository with webhook |
+| RBAC with real auth flow | Level 3 (Deferred) | Requires authentication system integration |
 
 **Level 1 checks to always include:**
-- Fernet encrypt/decrypt round-trip preserves plaintext exactly
-- RBAC decorator returns 403 for insufficient role, 200 for sufficient role
-- Audit events include `actor`, `action`, `entity_type`, `entity_id`, `outcome`, `timestamp`
-- Bot config YAML export then import produces identical trigger configuration
-- Bookmark creation returns valid deep-link URL format
-- Secret values never appear in any API response body
+- Fernet encrypt/decrypt roundtrip with key rotation
+- RBAC permission matrix: each role tested against each permission
+- Audit event serialization includes all required fields (who, what, when, before/after)
+- YAML export/import produces byte-identical trigger configuration
+- Bookmark deep-link URL format is valid and resolvable
+- Secrets never appear in API response JSON
 
 **Level 2 proxy metrics:**
-- Slack `WebhookClient.send()` called with correct channel and formatted summary (mock)
-- `jira.JIRA.create_issue()` called with correct project key, issue type, severity field (mock)
-- Multi-repo campaign dispatches `ExecutionService.run_trigger()` for each repo in parallel threads
-- GitOps sync detects file changes in watched repository and calls `update_trigger()` with new config
+- Slack adapter called with correct channel and formatted message (mocked)
+- JIRA adapter called with correct project, issue type, severity mapping (mocked)
+- Campaign service dispatches to N repos and collects N results
+- GitOps sync correctly applies YAML changes to DB trigger records
 
 **Level 3 deferred items:**
-- Live Slack workspace receives actual message within 30 seconds
-- Live JIRA project shows created ticket within 60 seconds
-- GitOps sync from real GitHub repository applies config changes on push
-- Multi-repo campaign across 3 real GitHub repositories produces consolidated findings view
+- End-to-end integration with live Slack workspace
+- End-to-end integration with live JIRA/Linear instance
+- GitOps with real GitHub/GitLab webhook
+- Load testing audit trail queries with 100K+ events
+- Multi-repo campaign with 10+ real repositories
 
 ## Production Considerations
 
 ### Known Failure Modes
 
-- **External API downtime:** Slack, Teams, JIRA, or Linear may be temporarily unavailable.
-  - Prevention: Wrap all external API calls in try/except; log errors to audit trail; never block execution pipeline.
-  - Detection: Monitor notification failure count via audit events with `outcome: "notification_failed"`.
+- **External API downtime:** Slack, JIRA, or Linear APIs may be temporarily unavailable.
+  - Prevention: Implement retry with exponential backoff (pattern already exists in `apiFetch` frontend client and `OrchestrationService` backend)
+  - Detection: Health check endpoint that verifies integration connectivity; log warnings on consecutive failures
 
-- **Vault master key rotation breaks existing secrets:** Rotating the master key without re-encrypting existing secrets makes them unreadable.
-  - Prevention: Use `MultiFernet` with the new key first in the list; old keys remain for decryption. Provide a migration command that re-encrypts all secrets with the new primary key.
-  - Detection: `SecretVaultService.decrypt()` raises `InvalidToken` exception.
+- **Encryption key loss:** If `AGENTED_VAULT_KEYS` environment variable is lost, all encrypted secrets become unrecoverable.
+  - Prevention: Document key backup procedure. Support multiple keys via MultiFernet for rotation without downtime.
+  - Detection: Startup check that verifies at least one existing secret can be decrypted. Alert if decryption fails.
 
-- **SQLite write contention from audit logging:** Under concurrent executions, frequent audit writes can hit the 5-second busy timeout.
-  - Prevention: Batch audit writes (collect events in a buffer, flush periodically). The existing `_log_buffers` pattern in `ExecutionLogService` shows the approach.
-  - Detection: `sqlite3.OperationalError: database is locked` in logs.
+- **Audit trail corruption:** SQLite WAL mode can have issues with concurrent writes from multiple threads.
+  - Prevention: Use the existing `get_connection()` context manager with `busy_timeout=5000`. Audit writes are low-frequency enough that contention is unlikely.
+  - Detection: Periodic integrity check via `PRAGMA integrity_check`.
 
 ### Scaling Concerns
 
-- **Audit table size:** At current scale (10-20 executions/day), 90-day retention produces ~50K records, well within SQLite capacity. At production scale (1000+ executions/day), consider archiving old records to a separate file or migrating to PostgreSQL.
-  - At current scale: SQLite with indexed queries is sufficient.
-  - At production scale: Add `VACUUM` schedule, consider partitioned tables or external audit sink.
+- **Audit event volume:** Every config change and secret access creates a row. At high usage, this table grows fast.
+  - At current scale: SQLite handles millions of rows with proper indexing. Add `created_at` and `entity_type` indexes.
+  - At production scale: Implement retention policy with background cleanup job. Consider archiving old events to compressed files.
 
-- **Notification fan-out:** At current scale, sequential notification dispatch is acceptable. At high concurrency, use a thread pool (matching the existing `threading.Thread` pattern).
-  - At current scale: One daemon thread per notification.
-  - At production scale: `concurrent.futures.ThreadPoolExecutor(max_workers=10)`.
+- **Multi-repo campaign concurrency:** Each repo execution spawns a subprocess.
+  - At current scale: Semaphore limiting to 5 concurrent executions is sufficient.
+  - At production scale: Queue-based execution with worker pool. Consider deferring to background job system.
 
-- **Multi-repo campaigns:** Parallel execution across repos creates N concurrent subprocess executions.
-  - At current scale: 3-5 repos is manageable.
-  - At production scale: Add a campaign execution queue with configurable concurrency limit.
+- **GitOps polling frequency:** Polling a git remote every N seconds creates network overhead.
+  - At current scale: 60-second polling interval is acceptable for a single-user platform.
+  - At production scale: Webhook-triggered sync from GitHub/GitLab with polling as fallback only.
 
 ### Common Implementation Traps
 
-- **Trap:** Adding `slack-bolt` as a full app server alongside Flask for slash commands.
-  - Correct approach: Register a Flask route (`/api/integrations/slack/commands`) that handles Slack's POST payload directly using `slack-sdk` verification utilities. Do not run a separate Bolt server.
+- **Blocking the webhook response:** External API calls (Slack, JIRA) in the webhook handler path cause timeouts.
+  - Correct approach: Use `threading.Thread` for notification dispatch (consistent with existing `_stream_pipe` pattern in `ExecutionService`).
 
-- **Trap:** Storing RBAC roles in the session (Flask session is cookie-based, not suitable for API key auth).
-  - Correct approach: Store API key -> role mappings in SQLite. Look up role in `before_request`. Attach to `request._user_role = role` (or `g.user_role`).
+- **Storing plaintext fallback:** Developers add a "fallback" that stores the unencrypted secret alongside the encrypted version "for debugging."
+  - Correct approach: Never store plaintext. Debug by verifying encryption roundtrip in tests, not by exposing secrets.
 
-- **Trap:** Exporting bot config including computed/runtime fields (like `next_run_at`, `last_run_at`).
-  - Correct approach: Define an explicit allowlist of exportable fields. Exclude timestamps, execution history, and runtime state.
+- **RBAC decorator ordering:** Placing `@require_role()` before the flask-openapi3 route decorator breaks OpenAPI schema generation.
+  - Correct approach: Apply `@require_role()` after the route decorator (closer to the function).
 
 ## Code Examples
 
-Verified patterns from official sources and codebase conventions:
+### Slack Notification After Execution
 
-### Slack Incoming Webhook Post
 ```python
-# Source: slack-sdk official docs (https://slack.dev/python-slack-sdk/webhook/)
-from slack_sdk.webhook import WebhookClient
+# Source: slack-sdk official docs (https://github.com/slackapi/python-slack-sdk)
+from slack_sdk import WebClient
+from slack_sdk.errors import SlackApiError
 
-def post_to_slack(webhook_url: str, text: str, blocks: list = None) -> bool:
-    """Post a message to a Slack channel via incoming webhook."""
-    client = WebhookClient(webhook_url)
-    response = client.send(text=text, blocks=blocks)
-    return response.status_code == 200
+class SlackAdapter(IntegrationAdapter):
+    def __init__(self, token: str):
+        self.client = WebClient(token=token)
+
+    def send_notification(self, channel: str, message: str, metadata: dict = None) -> bool:
+        try:
+            blocks = self._format_execution_summary(message, metadata)
+            self.client.chat_postMessage(
+                channel=channel,
+                text=message,  # Fallback for notifications
+                blocks=blocks,
+            )
+            return True
+        except SlackApiError as e:
+            logger.warning("Slack notification failed: %s", e.response["error"])
+            return False
+
+    def _format_execution_summary(self, message: str, metadata: dict) -> list:
+        status_emoji = ":white_check_mark:" if metadata.get("status") == "success" else ":x:"
+        return [
+            {"type": "section", "text": {"type": "mrkdwn", "text": f"{status_emoji} *{message}*"}},
+            {"type": "section", "fields": [
+                {"type": "mrkdwn", "text": f"*Bot:* {metadata.get('trigger_name', 'Unknown')}"},
+                {"type": "mrkdwn", "text": f"*Duration:* {metadata.get('duration_ms', 0)}ms"},
+            ]},
+        ]
 ```
 
-### JIRA Issue Creation
+### JIRA Issue Creation from Findings
+
 ```python
-# Source: jira library official docs (https://jira.readthedocs.io/)
+# Source: jira library docs (https://jira.readthedocs.io/examples.html)
 from jira import JIRA
 
-def create_jira_issue(server: str, token: str, project_key: str,
-                      summary: str, description: str, issue_type: str = "Bug",
-                      priority: str = "Medium") -> str:
-    """Create a JIRA issue and return the issue key."""
-    jira = JIRA(server=server, token_auth=token)
-    issue = jira.create_issue(fields={
-        "project": {"key": project_key},
-        "summary": summary,
-        "description": description,
-        "issuetype": {"name": issue_type},
-        "priority": {"name": priority},
-    })
-    return issue.key
+class JiraAdapter(IntegrationAdapter):
+    def __init__(self, server: str, email: str, api_token: str):
+        self.client = JIRA(server=server, basic_auth=(email, api_token))
+
+    def create_ticket(self, project_key: str, finding: dict) -> str:
+        severity_to_priority = {
+            "critical": "Highest",
+            "high": "High",
+            "medium": "Medium",
+            "low": "Low",
+        }
+        issue = self.client.create_issue(fields={
+            "project": {"key": project_key},
+            "summary": finding.get("title", "Bot finding"),
+            "description": finding.get("description", ""),
+            "issuetype": {"name": "Bug"},
+            "priority": {"name": severity_to_priority.get(
+                finding.get("severity", "medium"), "Medium"
+            )},
+            "labels": ["agented", "automated"],
+        })
+        return issue.key
 ```
 
-### Linear Issue Creation via GraphQL
+### Teams Incoming Webhook Notification
+
 ```python
-# Source: Linear API docs (https://linear.app/developers/graphql)
+# Source: Microsoft Teams docs (https://learn.microsoft.com/en-us/microsoftteams/platform/webhooks-and-connectors/how-to/add-incoming-webhook)
 import httpx
 
-def create_linear_issue(api_key: str, team_id: str,
-                        title: str, description: str,
-                        priority: int = 2) -> str:
-    """Create a Linear issue via GraphQL API and return the issue ID."""
-    mutation = """
-    mutation CreateIssue($input: IssueCreateInput!) {
-        issueCreate(input: $input) {
-            success
-            issue { id identifier url }
+class TeamsAdapter(IntegrationAdapter):
+    def __init__(self, webhook_url: str):
+        self.webhook_url = webhook_url
+
+    def send_notification(self, channel: str, message: str, metadata: dict = None) -> bool:
+        status = metadata.get("status", "unknown") if metadata else "unknown"
+        color = "00FF00" if status == "success" else "FF0000"
+        payload = {
+            "@type": "MessageCard",
+            "themeColor": color,
+            "summary": message,
+            "sections": [{
+                "activityTitle": f"Agented Execution: {message}",
+                "facts": [
+                    {"name": "Status", "value": status},
+                    {"name": "Duration", "value": f"{metadata.get('duration_ms', 0)}ms"},
+                ],
+            }],
         }
-    }
-    """
-    response = httpx.post(
-        "https://api.linear.app/graphql",
-        headers={"Authorization": api_key, "Content-Type": "application/json"},
-        json={
-            "query": mutation,
-            "variables": {
-                "input": {
-                    "teamId": team_id,
-                    "title": title,
-                    "description": description,
-                    "priority": priority,
-                }
-            },
-        },
-        timeout=30,
-    )
-    data = response.json()
-    return data["data"]["issueCreate"]["issue"]["id"]
+        try:
+            resp = httpx.post(self.webhook_url, json=payload, timeout=10)
+            return resp.status_code == 200
+        except httpx.HTTPError:
+            return False
 ```
 
-### Bot Config YAML Export
+### Config Export as YAML
+
 ```python
-# Source: Existing pattern from plugin_export_service.py, project_install_service.py
+# Source: pyyaml docs + existing SuperAgentExportService pattern
 import yaml
+from app.database import get_trigger, list_paths_for_trigger
 
-# Exportable fields allowlist (excludes runtime/computed fields)
-_EXPORTABLE_TRIGGER_FIELDS = [
-    "name", "prompt_template", "backend_type", "trigger_source",
-    "detection_keyword", "match_field_path", "match_field_value",
-    "text_field_path", "enabled", "auto_resolve", "schedule_type",
-    "schedule_time", "schedule_day", "schedule_timezone", "skill_command",
-    "model", "execution_mode", "timeout_seconds", "allowed_tools",
-    "sigterm_grace_seconds",
-]
-
-def export_trigger_as_yaml(trigger: dict) -> str:
-    """Export a trigger configuration as YAML."""
-    config = {k: trigger[k] for k in _EXPORTABLE_TRIGGER_FIELDS if k in trigger}
-    # Include project paths
-    paths = get_paths_for_trigger_detailed(trigger["id"])
-    if paths:
-        config["project_paths"] = [
-            {"path": p["local_project_path"], "type": p["path_type"],
-             "github_url": p.get("github_repo_url")}
-            for p in paths
-        ]
-    return yaml.dump(config, default_flow_style=False, sort_keys=False)
+class ConfigExportService:
+    @staticmethod
+    def export_trigger(trigger_id: str) -> str:
+        trigger = get_trigger(trigger_id)
+        if not trigger:
+            raise ValueError(f"Trigger {trigger_id} not found")
+        paths = list_paths_for_trigger(trigger_id)
+        config = {
+            "version": "1.0",
+            "kind": "trigger",
+            "metadata": {
+                "name": trigger["name"],
+                "backend_type": trigger["backend_type"],
+                "trigger_source": trigger["trigger_source"],
+            },
+            "spec": {
+                "prompt_template": trigger["prompt_template"],
+                "model": trigger.get("model"),
+                "execution_mode": trigger.get("execution_mode", "direct"),
+                "timeout_seconds": trigger.get("timeout_seconds"),
+                "allowed_tools": trigger.get("allowed_tools"),
+                "paths": [{"local": p["local_project_path"], "type": p["path_type"]}
+                          for p in paths],
+            },
+        }
+        if trigger["trigger_source"] == "scheduled":
+            config["spec"]["schedule"] = {
+                "type": trigger.get("schedule_type"),
+                "time": trigger.get("schedule_time"),
+                "day": trigger.get("schedule_day"),
+                "timezone": trigger.get("schedule_timezone"),
+            }
+        return yaml.dump(config, default_flow_style=False, sort_keys=False)
 ```
 
-### Execution Bookmark Schema
+### Audit Event Persistence
+
 ```python
-# Source: Follows existing schema.py CREATE TABLE pattern
-"""
-CREATE TABLE IF NOT EXISTS execution_bookmarks (
-    id TEXT PRIMARY KEY,
-    execution_id TEXT NOT NULL,
-    trigger_id TEXT NOT NULL,
-    user_label TEXT,
-    notes TEXT,
-    tags TEXT,
-    pinned_log_line INTEGER,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (execution_id) REFERENCES execution_logs(execution_id) ON DELETE CASCADE,
-    FOREIGN KEY (trigger_id) REFERENCES triggers(id) ON DELETE CASCADE
-)
-"""
+# Source: Existing AuditLogService pattern + SQLite persistence
+from app.db.connection import get_connection
+
+def add_audit_event(
+    action: str, entity_type: str, entity_id: str,
+    outcome: str, actor: str = "system",
+    details: dict = None,
+) -> bool:
+    """Persist an audit event to SQLite."""
+    import json
+    with get_connection() as conn:
+        conn.execute(
+            """INSERT INTO audit_events
+               (action, entity_type, entity_id, outcome, actor, details, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)""",
+            (action, entity_type, entity_id, outcome, actor,
+             json.dumps(details) if details else None),
+        )
+        conn.commit()
+        return True
+```
+
+### RBAC Decorator
+
+```python
+# Source: Flask RBAC community patterns + NIST RBAC0 model
+import functools
+from http import HTTPStatus
+from flask import request
+
+def require_role(*roles):
+    """Decorator: restrict route to users with one of the given roles."""
+    def decorator(func):
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            api_key = request.headers.get("X-API-Key", "")
+            if not api_key:
+                return {"error": "API key required"}, HTTPStatus.UNAUTHORIZED
+            from app.db.rbac import get_role_for_api_key
+            user_role = get_role_for_api_key(api_key)
+            if user_role not in roles:
+                AuditLogService.log(
+                    action="rbac.denied",
+                    entity_type="route",
+                    entity_id=request.path,
+                    outcome="forbidden",
+                    details={"role": user_role, "required": list(roles)},
+                )
+                return {"error": "Insufficient permissions"}, HTTPStatus.FORBIDDEN
+            return func(*args, **kwargs)
+        return wrapper
+    return decorator
 ```
 
 ## State of the Art
 
 | Old Approach | Current Approach | When Changed | Impact |
 |--------------|------------------|--------------|--------|
-| Slack Legacy Tokens | Slack Bot Tokens + OAuth 2.0 | 2023 | Legacy tokens deprecated; use Bot tokens with scopes |
-| JIRA REST API v2 | JIRA REST API v3 | 2024-2025 | v2 endpoints being deprecated; `jira>=3.10` defaults to v3 |
-| Teams O365 Connectors | Teams Incoming Webhooks (Workflows) | 2024 | O365 Connectors deprecated; use Power Automate Workflows or webhook URLs |
-| Manual RBAC in views | Middleware/decorator RBAC | Standard | Decorator-based RBAC is the established Flask pattern |
-| `.env` file secrets | Encrypted vault with key rotation | Standard | Plaintext secrets in files violate OWASP ASVS v4 |
+| Slack `slackclient` library | `slack-sdk` v3.x | 2020 | New SDK with better async, Socket Mode, retry handlers |
+| JIRA basic auth with password | JIRA PAT (Personal Access Token) or OAuth 2.0 | 2022 | Atlassian deprecated basic auth with passwords for Cloud |
+| Teams Office 365 Connectors | Teams Workflows (Power Automate) for webhooks | 2024 | Microsoft deprecated O365 Connectors; Incoming Webhooks via Workflows now standard |
+| Custom file polling for GitOps | `watchdog` + webhook-triggered sync | 2019 | watchdog provides cross-platform native event support |
+| Application-level AES | Fernet (AES+HMAC) | 2014 | Fernet adds authenticated encryption, preventing tampering |
 
 **Deprecated/outdated:**
-- Slack Legacy Tokens: Deprecated since 2020; use Bot tokens with `chat:write` scope.
-- Office 365 Connectors for Teams: Microsoft deprecated O365 Connectors in late 2024; incoming webhooks via Workflows app are the replacement.
-- JIRA API v2 search endpoint `/rest/api/2/search`: Migrated to `/rest/api/3/search/jql` in 2025; the `jira` library >=3.10 handles this automatically.
+- `slackclient` package: Replaced by `slack-sdk`. The old package is no longer maintained.
+- JIRA Cloud basic auth with passwords: Atlassian requires API tokens or OAuth 2.0 for Cloud instances.
+- Office 365 Connectors for Teams: Microsoft has deprecated these in favor of Power Automate Workflows for incoming webhooks.
 
 ## Open Questions
 
-1. **Slash command routing: Flask route vs. Bolt server?**
-   - What we know: Slack slash commands POST to a configurable URL. Flask can handle this as a regular POST route.
-   - What's unclear: Whether Socket Mode (for apps behind firewalls without public URLs) is needed. Socket Mode requires `slack-bolt`.
-   - Recommendation: Start with a Flask route for slash commands (simpler, no extra server). Add Socket Mode via Bolt only if users need it behind firewalls.
+1. **Authentication mechanism for RBAC**
+   - What we know: The current app has no user authentication system. RBAC requires knowing who the user is.
+   - What's unclear: Should RBAC use API keys, session-based auth, or defer to an external auth provider?
+   - Recommendation: Use API-key-based identity for Phase 11 (simplest). Each API key maps to a role. Full auth (login, sessions, OAuth) can be added in a future phase. This matches the existing `X-Webhook-Signature-256` header pattern.
 
-2. **Linear vs. JIRA: Which gets priority?**
-   - What we know: Both are issue trackers with well-documented APIs. JIRA has a dedicated Python library; Linear uses GraphQL via httpx.
-   - What's unclear: Which is more commonly used by the target user base.
-   - Recommendation: Implement both behind a common `IssueTrackerService` interface. JIRA first (has SDK), Linear second (raw GraphQL).
+2. **Linear SDK availability**
+   - What we know: Linear uses a GraphQL API. There is no official Python SDK.
+   - What's unclear: Whether `linear-py` (community package) is stable enough for production use.
+   - Recommendation: Use raw `httpx` with GraphQL queries for Linear integration. The API is simple enough (create issue mutation) that a full SDK is unnecessary.
 
-3. **GitOps: Poll-based vs. webhook-based sync?**
-   - What we know: The codebase already has `ProjectWorkspaceService` doing periodic `git pull` (30-minute interval). Webhook-based sync is more responsive but requires a public URL.
-   - What's unclear: Whether users will have publicly accessible Agented instances for GitHub webhooks.
-   - Recommendation: Start with poll-based sync (configurable interval, default 5 minutes for GitOps repos). The existing GitHub webhook infrastructure (`/api/webhooks/github/`) can be extended to trigger GitOps sync on push events.
+3. **GitOps conflict resolution strategy**
+   - What we know: GitOps requires a strategy when both UI and Git changes exist.
+   - What's unclear: Should Git always win (standard GitOps), or should conflicts be flagged?
+   - Recommendation: Git wins by default (standard GitOps principle), but log a warning audit event when overwriting UI changes. Provide a "dry-run" mode that shows what would change without applying.
 
-4. **Multi-repo campaign: Parallel vs. sequential execution?**
-   - What we know: The existing `ExecutionService.run_trigger()` runs executions in background threads. Multiple concurrent executions are already supported.
-   - What's unclear: Resource limits when running 10+ repos simultaneously.
-   - Recommendation: Parallel execution with configurable concurrency limit (default 3). Use `concurrent.futures.ThreadPoolExecutor` to cap concurrent subprocess count.
+4. **Multi-repo campaign result aggregation**
+   - What we know: Each repo execution produces independent stdout/stderr logs.
+   - What's unclear: How to parse and aggregate findings across repos (output formats vary by bot).
+   - Recommendation: Store each repo's execution independently with a shared `campaign_id` foreign key. Aggregation is done at the presentation layer, not the execution layer. Findings can be structured later via post-processing.
+
+5. **Execution bookmark deep-link format**
+   - What we know: Need to link to specific log lines within an execution.
+   - What's unclear: How to create stable line references when logs are streaming.
+   - Recommendation: Use log line sequence numbers (already tracked in `LogLine` dataclass in `ExecutionLogService`). Deep-link format: `/executions/{exec_id}#line-{seq}`. Frontend scrolls to the referenced line on load.
 
 ## Sources
 
 ### Primary (HIGH confidence)
-- `cryptography` library official docs (https://cryptography.io/en/latest/fernet/) -- Fernet API, MultiFernet key rotation
-- Slack SDK Python official docs (https://slack.dev/python-slack-sdk/webhook/) -- WebhookClient API
-- Slack Bolt Python official docs (https://tools.slack.dev/bolt-python/concepts/commands) -- Slash command handling
-- JIRA Python library official docs (https://jira.readthedocs.io/) -- Issue creation API
-- Linear GraphQL API docs (https://linear.app/developers/graphql) -- Mutation schema for issue creation
-- NIST SP 800-57 Part 1 Rev. 5 (2020) -- Cryptographic key management recommendations
-- OWASP ASVS v4.0 Section V4 -- Access control verification requirements
-- OWASP Logging Cheat Sheet (2024) -- Audit trail field requirements
-- Gamma et al. (1994) *Design Patterns: Elements of Reusable Object-Oriented Software* -- Observer pattern (Chapter 5)
+- [Cryptography.io Fernet documentation](https://cryptography.io/en/latest/fernet/) -- Fernet API, MultiFernet key rotation, encryption semantics
+- [Slack Python SDK GitHub](https://github.com/slackapi/python-slack-sdk) -- WebClient API, chat_postMessage, slash commands
+- [JIRA Python library docs](https://jira.readthedocs.io/examples.html) -- Issue creation, field mapping, authentication patterns
+- [Microsoft Teams Incoming Webhooks](https://learn.microsoft.com/en-us/microsoftteams/platform/webhooks-and-connectors/how-to/add-incoming-webhook) -- Teams webhook payload format, Adaptive Cards
+- NIST SP 800-132 -- Key derivation function recommendations for password-based encryption
+- Ferraiolo & Kuhn, "Role-Based Access Controls" (1992, NIST) -- Foundational RBAC model
+- Sandhu et al., "Role-Based Access Control Models" (IEEE Computer, 1996) -- RBAC0-RBAC3 formalization
 
 ### Secondary (MEDIUM confidence)
-- pymsteams GitHub repository (https://github.com/rveachkc/pymsteams) -- Teams webhook API
-- atlassian-python-api GitHub repository (https://github.com/atlassian-api/atlassian-python-api) -- Alternative JIRA SDK
-- CNCF GitOps Working Group (https://www.gitops.tech/) -- GitOps principles and patterns
-- Flask-RBAC docs (https://flask-rbac.readthedocs.io/) -- Flask RBAC patterns
+- [Linear API Developers](https://linear.app/developers/webhooks) -- Webhook setup, GraphQL mutations, HMAC verification
+- [Flask RBAC community patterns](https://www.geeksforgeeks.org/python/flask-role-based-access-control/) -- Decorator-based RBAC implementation
+- [Atlassian Python API](https://github.com/atlassian-api/atlassian-python-api) -- Alternative JIRA client library
+- [GitOps principles](https://www.gitops.tech/) -- Git as source of truth, pull-based reconciliation
+- Existing codebase: `AuditLogService`, `SuperAgentExportService`, `PluginFileWatcher`, `TeamMonitorService` patterns
 
 ### Tertiary (LOW confidence)
-- GeeksforGeeks Flask RBAC guide -- General Flask RBAC tutorial
-- Permit.io Flask RBAC blog -- Decorator-based RBAC patterns
-- PyPI `linear-api` package -- Python Linear wrapper (limited adoption, verify API compatibility)
+- `linear-py` community package stability -- needs validation before adoption
+- Teams Workflows vs. Incoming Webhooks migration timeline -- Microsoft documentation evolving
 
 ## Metadata
 
 **Confidence breakdown:**
-- Standard stack: HIGH -- All libraries are established, most already in dependency tree
-- Architecture: HIGH -- Follows existing codebase patterns exactly (services, db modules, routes, models)
-- Paper recommendations: MEDIUM-HIGH -- Observer pattern and encryption are well-established; integration-specific recommendations based on official SDK docs
-- Pitfalls: MEDIUM-HIGH -- Based on codebase analysis and known SQLite/threading constraints
-- Experiment design: MEDIUM -- Baselines are limited (new features with no prior data)
+- Standard stack: HIGH - All core libraries already in project dependencies; only `slack-sdk` and `jira` are new
+- Architecture: HIGH - Adapter pattern, decorator RBAC, and service layer patterns consistent with existing codebase
+- Paper recommendations: MEDIUM-HIGH - RBAC and encryption are well-established patterns; integration patterns are industry standard
+- Pitfalls: MEDIUM - Based on common integration failure modes and codebase-specific patterns
+- Experiment design: MEDIUM - Integration testing requires mocked external services; latency targets from requirements
 
 **Research date:** 2026-03-04
-**Valid until:** 2026-04-04 (30 days -- stable domain, APIs change slowly)
+**Valid until:** 2026-04-03 (30 days -- stable domain, library versions unlikely to change significantly)

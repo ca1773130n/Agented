@@ -1,127 +1,235 @@
 # Phase 9: Bot Authoring & Template Ecosystem - Research
 
 **Researched:** 2026-03-04
-**Domain:** Bot configuration management, prompt engineering tooling, template ecosystems
+**Domain:** Bot template management, prompt engineering infrastructure, webhook testing
 **Confidence:** HIGH
 
 ## Summary
 
-Phase 9 introduces five interconnected features that transform the trigger/bot system from manual configuration into an ecosystem with templates, AI generation, snippet reuse, version tracking, and dry-run testing. The codebase already has substantial infrastructure to build on: a `trigger_template_history` table (migration v50), a `preview_prompt` endpoint, a `BaseGenerationService` pattern for Claude CLI-based AI generation, an existing plugin marketplace system, and the `PromptRenderer` class for placeholder substitution.
+Phase 9 builds five features on top of the existing trigger/bot CRUD system: a bot template marketplace (TPL-01), natural language bot creator (TPL-02), reusable prompt snippet library (TPL-03), prompt template version control (TPL-04), and webhook payload test console (TPL-05). The codebase already provides substantial infrastructure that each requirement can extend rather than build from scratch.
 
-The primary approach is to leverage existing patterns wholesale. The template marketplace follows the existing plugin marketplace pattern (curated JSON catalog + one-click deploy via `add_trigger`). The NL bot creator extends `BaseGenerationService` which already handles Claude CLI streaming, JSON parsing, and validation. Prompt snippets use a new `prompt_snippets` table with `{{snippet_name}}` syntax resolved at render time in `PromptRenderer`. Version control extends the existing `trigger_template_history` table with author metadata and a rollback endpoint. The webhook test console extends the existing `preview_prompt` with payload-driven rendering and `CommandBuilder.build()` for command preview.
+The existing plugin marketplace (`marketplaces` + `marketplace_plugins` tables, `marketplace_bp` routes, `marketplaceApi` frontend client) provides a proven pattern for TPL-01. The `BaseGenerationService` + streaming SSE pattern (used by `PluginGenerationService`, `CommandGenerationService`, `TeamGenerationService`, `RuleGenerationService`, `HookGenerationService`) provides an established pattern for TPL-02. The `trigger_template_history` table and `log_prompt_template_change()` / `get_prompt_template_history()` functions already implement basic version tracking for TPL-04. The `preview-prompt` endpoint on `TriggerService` already renders prompt templates with sample data for TPL-05.
 
-**Primary recommendation:** Build all five features using existing codebase patterns -- no new libraries, no new architectural concepts. Each feature maps cleanly to an established pattern in the codebase.
+**Primary recommendation:** Extend existing patterns rather than introducing new architectural concepts. Use in-DB curated templates for the marketplace (no external repo needed), extend `BaseGenerationService` for NL bot creation, add a `prompt_snippets` table with `{{snippet_name}}` variable resolution in `PromptRenderer`, enhance `trigger_template_history` with author/diff fields, and expand the `preview-prompt` endpoint to return the full CLI command preview.
+
+## Paper-Backed Recommendations
+
+Every recommendation below cites specific evidence.
+
+### Recommendation 1: Immutable Prompt Versioning with Automatic Change Tracking
+
+**Recommendation:** Store every prompt template edit as an immutable version record with author, timestamp, old/new content, and a computed unified diff. Never mutate historical versions.
+
+**Evidence:**
+- [Prompt Versioning Best Practices](https://dev.to/kuldeep_paul/mastering-prompt-versioning-best-practices-for-scalable-llm-development-2mgm) (2024) -- Establishes that immutability is critical: "once a prompt version is created, it should never be modified. If a change is required, a new version is generated." This enables reliable tracing and regression debugging.
+- [Braintrust: Best Prompt Versioning Tools](https://www.braintrust.dev/articles/best-prompt-versioning-tools-2025) (2025) -- Confirms that continuous versioning creates "an unbroken audit trail showing how prompts evolved over time, which helps in debugging regressions."
+- [Maxim: Prompt Versioning Practices](https://www.getmaxim.ai/articles/prompt-versioning-and-its-best-practices-2025/) (2025) -- Recommends tracking changes with metadata including who made the change, when, and why.
+- Python stdlib `difflib.unified_diff` -- Provides zero-dependency unified diff computation, already standard in the Python ecosystem.
+
+**Confidence:** HIGH -- Multiple authoritative sources agree on immutability + metadata pattern.
+**Expected improvement:** Full regression traceability; ability to identify which prompt change caused a behavior difference.
+**Caveats:** The existing `trigger_template_history` table stores `old_template` and `new_template` but lacks `author` and `diff` columns. Migration needed.
+
+### Recommendation 2: Variable Interpolation for Prompt Snippets via Delimiter Convention
+
+**Recommendation:** Use `{{snippet_name}}` double-curly-brace syntax for snippet references (distinct from the existing `{placeholder}` single-brace syntax for runtime variables like `{paths}`, `{message}`, `{pr_url}`). Resolve snippets at render time in `PromptRenderer.render()` before runtime placeholder substitution.
+
+**Evidence:**
+- [Kinde: Prompt Patterns That Scale](https://www.kinde.com/learn/ai-for-software-engineering/prompting/prompt-patterns-that-scale-reusable-llm-prompts-for-dev-eams/) (2025) -- Documents the pattern of reusable prompt templates with named variable substitution using `{{variable}}` notation.
+- [LangChain Prompt Templates](https://latenode.com/blog/ai-frameworks-technical-infrastructure/langchain-setup-tools-agents-memory/langchain-prompt-templates-complete-guide-with-examples) (2025) -- Uses `{variable}` for runtime values; the convention of using double braces `{{...}}` for template-level references is well established in Jinja2/Mustache ecosystems.
+- Codebase analysis: The existing `PromptRenderer._KNOWN_PLACEHOLDERS` uses single braces (`{paths}`, `{message}`, etc.). Using `{{...}}` avoids collision.
+
+**Confidence:** HIGH -- The `{{...}}` convention is widely established across Jinja2, Mustache, Handlebars, and LangChain.
+**Expected improvement:** Prompt DRY-ness; update a snippet once, all referencing bots pick up the change on next execution.
+**Caveats:** Need to ensure `{{...}}` in prompt templates that are not snippet references (e.g., literal JSON examples) can be escaped. Use `\{\{` escape sequence.
+
+### Recommendation 3: In-Database Curated Bot Templates (No External Repository)
+
+**Recommendation:** Store bot templates as seed data in a `bot_templates` table rather than fetching from an external Git repository. Templates are curated JSON configurations that map 1:1 to `CreateTriggerRequest` fields. One-click deploy calls the existing `TriggerService.create_trigger()`.
+
+**Evidence:**
+- Codebase analysis: The existing plugin marketplace uses Git-based external repositories (`marketplaces.url`), which adds complexity (cloning, caching, network dependencies). For 5 curated bot templates that ship with the product, this overhead is unnecessary.
+- [Engati Bot Marketplace](https://www.engati.ai/chatbot-templates) (2025) -- Demonstrates the curated template gallery pattern where templates are pre-built configurations ready for one-click deployment.
+- [Workativ Chatbot Marketplace](https://workativ.com/conversational-ai-platform/chatbot-marketplace-templates) (2025) -- Confirms that marketplace templates work best as pre-configured, ready-to-use definitions.
+- Codebase: `PREDEFINED_TRIGGERS` in `backend/app/db/triggers.py` already seeds two bot configurations at startup -- extending this pattern to a templates table is natural.
+
+**Confidence:** HIGH -- The seed-data approach is simpler and the codebase already demonstrates it.
+**Expected improvement:** Zero external dependencies, instant loading, offline-capable.
+**Caveats:** Future phases could add user-contributed templates or external template sources. The table schema should include a `source` column to differentiate built-in vs. user-created templates.
+
+### Recommendation 4: Extend BaseGenerationService for NL Bot Creator
+
+**Recommendation:** Create `TriggerGenerationService(BaseGenerationService)` following the exact pattern of `PluginGenerationService`, `CommandGenerationService`, etc. The service accepts a natural language description, gathers context (existing triggers, available backends, available skills), builds a prompt that instructs Claude to generate a `CreateTriggerRequest`-compatible JSON, and returns the result via SSE streaming.
+
+**Evidence:**
+- Codebase: Five existing generation services (`PluginGenerationService`, `CommandGenerationService`, `HookGenerationService`, `RuleGenerationService`, `TeamGenerationService`) all extend `BaseGenerationService` with the same pattern: `_gather_context()` -> `_build_prompt()` -> `generate_streaming()` -> SSE response.
+- Codebase: The `BaseGenerationService.generate_streaming()` method handles all subprocess management, stdout/stderr threading, JSON parsing, and SSE protocol -- no need to reimplement.
+- [LaunchDarkly: Prompt Management](https://launchdarkly.com/blog/prompt-versioning-and-management/) (2025) -- Recommends treating AI-generated configurations as structured outputs that undergo validation before deployment.
+
+**Confidence:** HIGH -- This is a direct extension of a proven codebase pattern with five prior implementations.
+**Expected improvement:** Consistent UX with existing AI generation features; minimal new code required.
+**Caveats:** Claude CLI must be installed for the generation to work. The generated config must be validated against `CreateTriggerRequest` Pydantic model constraints.
+
+### Recommendation 5: Expand preview-prompt to Full CLI Command Preview
+
+**Recommendation:** Extend the existing `TriggerService.preview_prompt()` (already at `POST /admin/triggers/{id}/preview-prompt`) to additionally return the full CLI command that would be executed, the backend type, and the model selection. For TPL-05, add a new "standalone" preview endpoint that accepts an arbitrary JSON payload (not just sample placeholder values) and renders the full execution plan.
+
+**Evidence:**
+- Codebase: `TriggerService.preview_prompt()` already performs placeholder substitution with sample data and returns `rendered_prompt`, `unresolved_placeholders`.
+- Codebase: `ExecutionService.build_command()` already constructs the CLI command array from backend type, prompt, paths, and model.
+- [Webhook.site](https://webhook.site/) and [TypedWebhook.tools](https://typedwebhook.tools/) -- Demonstrate the pattern of accepting arbitrary payloads and showing how they would be processed.
+- [Hevo: Webhooks Testing](https://hevodata.com/learn/webhooks-testing/) (2025) -- Recommends testing with custom and recorded payloads to validate handling before production.
+
+**Confidence:** HIGH -- The foundation already exists; this is an enhancement, not a new system.
+**Expected improvement:** Users can validate trigger configuration without risking real subprocess execution.
+**Caveats:** Must ensure the preview does NOT spawn any subprocess (the success criteria explicitly requires "no actual subprocess is spawned").
 
 ## Standard Stack
 
 ### Core
 
-No new libraries are required. All features build on the existing stack.
-
 | Library | Version | Purpose | Why Standard |
 |---------|---------|---------|--------------|
-| Flask / flask-openapi3 | 2.x / 3.x | API endpoints for all five features | Existing backend framework |
-| Pydantic v2 | 2.x | Request/response models for new endpoints | Existing validation layer |
-| SQLite (stdlib) | 3.x | New tables for snippets; extend template history | Existing database |
-| Vue 3 + TypeScript | 3.5 / 5.4 | Frontend views for marketplace, creator, snippets, history, test console | Existing frontend framework |
-| Claude CLI | latest | NL bot creator via `BaseGenerationService` subprocess pattern | Existing AI generation infrastructure |
+| Flask + flask-openapi3 | 2.x / 3.x | API routes for new endpoints | Existing framework; all routes use `APIBlueprint` |
+| Pydantic v2 | 2.x | Request/response validation for new models | Existing validation layer; all models use BaseModel |
+| SQLite (stdlib) | N/A | New tables for templates, snippets, enhanced history | Existing DB pattern; raw SQL with `get_connection()` |
+| Vue 3 + TypeScript | 3.5 / 5.4 | Frontend views for marketplace, snippet library, etc. | Existing frontend stack |
+| Python `difflib` | stdlib | Unified diff computation for template version diffs | Zero-dependency, built into Python |
 
 ### Supporting
 
 | Library | Version | Purpose | When to Use |
 |---------|---------|---------|-------------|
-| `difflib` (Python stdlib) | 3.x | Compute unified diffs for template version comparison | TPL-04 version history diff view |
-| `json` (Python stdlib) | 3.x | Parse/validate webhook test payloads | TPL-05 test console |
-| `re` (Python stdlib) | 3.x | `{{snippet_name}}` resolution in PromptRenderer | TPL-03 snippet substitution |
+| `BaseGenerationService` | internal | NL bot creator SSE streaming | TPL-02 NL generation |
+| `PromptRenderer` | internal | Snippet variable resolution at render time | TPL-03 snippet interpolation |
+| `TriggerService` | internal | Create trigger from template, preview prompt | TPL-01 deploy, TPL-05 preview |
 
 ### Alternatives Considered
 
-| Instead of | Could Use | Tradeoff | Decision |
+| Instead of | Could Use | Tradeoff | Evidence |
 |------------|-----------|----------|----------|
-| Claude CLI subprocess for NL generation | LiteLLM direct API call | LiteLLM already used in `conversation_streaming.py`; CLI gives richer streaming with thinking blocks | Use Claude CLI via `BaseGenerationService` -- it is the established pattern for generation services (TeamGenerationService, PluginGenerationService, etc.) |
-| SQLite for template versions | Git-backed version control | Git would provide true branching/merging but adds massive complexity | SQLite -- existing `trigger_template_history` table already captures old/new pairs |
-| Static JSON template catalog | Database-stored templates with admin CRUD | DB-stored templates need admin UI for management | Static JSON file in codebase -- simpler, version-controlled, no admin UI needed |
+| In-DB templates | Git-based marketplace (like plugins) | Adds network dependency, caching complexity; overkill for 5 curated templates | Plugin marketplace uses Git but adds `DeployService.discover_available_plugins_cached()` complexity |
+| `{{snippet}}` syntax | Jinja2 template engine | Full Jinja2 is powerful but brings injection risks and complexity for simple variable substitution | Simple `.replace()` chain in `PromptRenderer` is safer and consistent with existing pattern |
+| `difflib.unified_diff` | External diff library | No benefit; stdlib is sufficient for text diffs | `difflib` is standard Python, zero install |
+| LiteLLM for NL generation | Claude CLI subprocess | LiteLLM adds API key dependency; CLI subprocess matches all 5 existing generation services | `BaseGenerationService` uses `claude -p` subprocess |
+
+**Installation:**
+```bash
+# No new dependencies needed -- all features use existing stack
+# Backend: Python stdlib (difflib, json, re, sqlite3)
+# Frontend: No new npm packages
+```
 
 ## Architecture Patterns
 
 ### Recommended Project Structure
 
-**Backend additions:**
 ```
 backend/app/
 ├── db/
-│   ├── snippets.py              # prompt_snippets CRUD
-│   └── bot_templates.py         # template catalog loader (reads JSON)
+│   ├── bot_templates.py       # Bot template CRUD (TPL-01)
+│   ├── prompt_snippets.py     # Prompt snippet CRUD (TPL-03)
+│   └── triggers.py            # Enhanced: version history additions (TPL-04)
 ├── models/
-│   └── bot_template.py          # Pydantic models for templates, snippets, version history
+│   ├── bot_template.py        # Template request/response models (TPL-01)
+│   └── prompt_snippet.py      # Snippet request/response models (TPL-03)
 ├── routes/
-│   ├── bot_templates.py         # /admin/bot-templates/* endpoints
-│   └── prompt_snippets.py       # /admin/prompt-snippets/* endpoints
+│   ├── bot_templates.py       # Template marketplace API (TPL-01)
+│   ├── prompt_snippets.py     # Snippet library API (TPL-03)
+│   └── triggers.py            # Enhanced: NL generate, history, preview (TPL-02/04/05)
 ├── services/
-│   ├── bot_template_service.py  # Template catalog, deploy, NL generation
-│   └── prompt_snippet_service.py # Snippet CRUD, resolution
-└── data/
-    └── bot_templates.json       # Curated template catalog (static)
-```
+│   ├── trigger_generation_service.py  # NL bot creator (TPL-02)
+│   ├── prompt_snippet_service.py      # Snippet resolution logic (TPL-03)
+│   └── prompt_renderer.py             # Enhanced: snippet resolution before placeholders
+└── ...
 
-**Frontend additions:**
-```
 frontend/src/
 ├── views/
-│   ├── BotTemplatePage.vue      # Template marketplace gallery
-│   └── BotCreatorPage.vue       # NL bot creator wizard
+│   ├── BotTemplateMarketplace.vue     # Template gallery (TPL-01)
+│   ├── PromptSnippetLibrary.vue       # Snippet management (TPL-03)
+│   └── TriggerManagement.vue          # Enhanced: NL creator, history, preview tabs
 ├── components/
-│   ├── templates/
-│   │   ├── TemplateCard.vue     # Individual template display card
-│   │   └── TemplateDeployModal.vue # One-click deploy confirmation
-│   ├── triggers/
-│   │   ├── PromptSnippetPanel.vue   # Snippet library management
-│   │   ├── PromptVersionHistory.vue # Version history with diff view
-│   │   └── WebhookTestConsole.vue   # Payload test/preview panel
-│   └── ...
+│   ├── templates/                     # Template card, deploy modal (TPL-01)
+│   ├── snippets/                      # Snippet editor, reference list (TPL-03)
+│   └── triggers/
+│       ├── PromptVersionHistory.vue   # Version timeline with diff view (TPL-04)
+│       └── WebhookTestConsole.vue     # Payload test panel (TPL-05)
 ├── services/api/
-│   └── bot-templates.ts         # API client for templates and snippets
+│   ├── bot-templates.ts               # Template marketplace API client
+│   └── prompt-snippets.ts             # Snippet library API client
 └── router/routes/
-    └── (extend triggers.ts)     # Add template and creator routes
+    └── triggers.ts                    # New routes for marketplace, snippets
 ```
 
-### Pattern 1: Static Template Catalog (TPL-01)
+### Pattern 1: Seed-Data Template Marketplace
 
-**What:** Bot templates defined as a static JSON file in the backend, loaded at request time. Each template is a complete trigger configuration (name, prompt_template, backend_type, trigger_source, model, etc.) with metadata (description, category, icon, required_placeholders).
+**What:** Store curated bot templates as rows in a `bot_templates` table, seeded at startup via migrations. Each template is a JSON configuration blob matching `CreateTriggerRequest` fields. One-click deploy calls `TriggerService.create_trigger()` with the template's config.
 
-**When to use:** When the catalog is curated by developers, not user-generated content.
-
-**Rationale:** The existing plugin marketplace uses GitHub repos for discovery; bot templates are simpler -- a static JSON catalog avoids external dependencies and is version-controlled with the codebase. Templates are deployed by calling the existing `add_trigger()` function with the template's configuration.
+**When to use:** When the template catalog is curated (not user-generated) and small (<50 items).
 
 **Example:**
 ```python
-# backend/app/data/bot_templates.json
-[
+# backend/app/db/bot_templates.py
+CURATED_TEMPLATES = [
     {
         "slug": "pr-reviewer",
         "name": "PR Reviewer",
-        "description": "Reviews pull requests for code quality, security issues, and best practices",
+        "description": "Automatically review pull requests for code quality",
         "category": "code-review",
-        "icon": "code-review",
+        "icon": "git-pull-request",
         "config": {
-            "prompt_template": "Review this pull request: {pr_url}\n\nTitle: {pr_title}\nAuthor: {pr_author}\n\nProvide feedback on code quality, potential bugs, security issues, and adherence to best practices.",
+            "name": "PR Reviewer",
+            "prompt_template": "Review this pull request: {pr_url}\n\nTitle: {pr_title}\nAuthor: {pr_author}\n\n...",
             "backend_type": "claude",
             "trigger_source": "github",
-            "model": null
+            "model": None,
         },
-        "required_paths": false,
-        "placeholders": ["pr_url", "pr_title", "pr_author"]
-    }
+    },
+    # ... 4 more templates
 ]
+
+def get_all_templates() -> List[dict]:
+    with get_connection() as conn:
+        cursor = conn.execute("SELECT * FROM bot_templates ORDER BY sort_order ASC")
+        return [dict(row) for row in cursor.fetchall()]
+
+def deploy_template(template_id: str) -> Optional[str]:
+    """Deploy a template by creating a trigger from its config."""
+    template = get_template(template_id)
+    if not template:
+        return None
+    config = json.loads(template["config_json"])
+    return add_trigger(**config)
 ```
 
-### Pattern 2: NL Bot Creator via BaseGenerationService (TPL-02)
+### Pattern 2: Snippet Resolution Pipeline
 
-**What:** Extend `BaseGenerationService` to create a `TriggerGenerationService` that accepts a natural language description and generates a complete trigger configuration JSON. Uses Claude CLI subprocess with streaming output (same pattern as `TeamGenerationService`, `PluginGenerationService`).
+**What:** `PromptRenderer.render()` gains a pre-processing step that resolves `{{snippet_name}}` references before performing standard `{placeholder}` substitution. Snippets are loaded from the `prompt_snippets` table. This is a two-phase render: (1) snippet expansion, (2) runtime placeholder substitution.
 
-**When to use:** When the user provides a free-text description of what they want automated.
+**When to use:** When prompt templates reference shared text fragments.
 
-**Rationale:** Five existing generation services already follow this pattern. The prompt includes context about available backends, trigger sources, placeholder variables, and existing triggers to avoid name collisions.
+**Example:**
+```python
+# Enhanced PromptRenderer.render()
+@staticmethod
+def render(trigger, trigger_id, message_text, paths_str, event=None):
+    prompt = trigger["prompt_template"]
+
+    # Phase 1: Resolve snippet references ({{snippet_name}})
+    prompt = SnippetService.resolve_snippets(prompt)
+
+    # Phase 2: Standard placeholder substitution ({paths}, {message}, etc.)
+    prompt = prompt.replace("{trigger_id}", trigger_id)
+    prompt = prompt.replace("{paths}", paths_str)
+    prompt = prompt.replace("{message}", message_text)
+    # ... rest of existing logic
+```
+
+### Pattern 3: BaseGenerationService Extension for NL Bot Creator
+
+**What:** `TriggerGenerationService` extends `BaseGenerationService` exactly like `PluginGenerationService` does. Accepts a natural language description ("I want a bot that reviews PRs every day at 9am"), generates a complete trigger configuration as JSON, returns it via SSE streaming.
+
+**When to use:** TPL-02 natural language bot creation.
 
 **Example:**
 ```python
@@ -129,264 +237,122 @@ frontend/src/
 class TriggerGenerationService(BaseGenerationService):
     @classmethod
     def _gather_context(cls) -> dict:
-        return {"triggers": get_all_triggers()}
+        return {
+            "triggers": get_all_triggers(),
+            "backends": ["claude", "opencode", "gemini", "codex"],
+        }
 
     @classmethod
     def _build_prompt(cls, description: str, context: dict) -> str:
-        return f"""You are a trigger configuration generator for Agented.
-Generate a JSON trigger config from this description: {description}
-
-Available backends: claude, opencode, gemini, codex
-Available trigger sources: webhook, github, manual, scheduled
-Available placeholders: {{trigger_id}}, {{paths}}, {{message}}, {{pr_url}}, {{pr_number}}, {{pr_title}}, {{pr_author}}, {{repo_url}}, {{repo_full_name}}
-
-Return ONLY valid JSON with these fields:
-{{
-  "name": "...",
-  "prompt_template": "...",
-  "backend_type": "claude",
-  "trigger_source": "...",
-  "model": null,
-  ...
-}}"""
+        sections = [
+            "You are a bot/trigger configuration generator for an AI agent platform.",
+            "Generate a complete trigger configuration that matches the user's description.",
+        ]
+        # ... context injection and JSON schema
+        sections.append(f"User's description: {description}")
+        return "\n\n".join(sections)
 
     @classmethod
     def _validate(cls, config: dict) -> tuple:
         warnings = []
-        if "name" not in config:
-            config["name"] = "Generated Trigger"
-            warnings.append("No name generated; using default")
-        if "prompt_template" not in config:
-            warnings.append("No prompt_template generated")
+        if not config.get("name"):
+            warnings.append("Missing trigger name")
+        if not config.get("prompt_template"):
+            warnings.append("Missing prompt template")
+        # Validate trigger_source, backend_type, schedule fields...
         return config, warnings
-```
-
-### Pattern 3: Snippet Variable Resolution in PromptRenderer (TPL-03)
-
-**What:** Prompt snippets are named reusable text blocks stored in a `prompt_snippets` table. They are referenced in prompt templates using `{{snippet_name}}` syntax (double braces to distinguish from `{placeholder}` single-brace variables). Resolution happens in `PromptRenderer.render()` before standard placeholder substitution.
-
-**When to use:** When multiple triggers share common prompt sections (e.g., security checklists, coding standards, output format instructions).
-
-**Rationale:** The existing `PromptRenderer` already handles `{placeholder}` substitution. Adding `{{snippet}}` resolution as a pre-pass is a clean extension. The double-brace syntax avoids conflicts with existing single-brace placeholders.
-
-**Example:**
-```python
-# Extension to PromptRenderer.render()
-@staticmethod
-def resolve_snippets(prompt: str) -> str:
-    """Replace {{snippet_name}} references with snippet content."""
-    from ..db.snippets import get_snippet_by_name
-
-    def replacer(match):
-        name = match.group(1).strip()
-        snippet = get_snippet_by_name(name)
-        return snippet["content"] if snippet else match.group(0)
-
-    return re.sub(r"\{\{(\w[\w\s-]*)\}\}", replacer, prompt)
-```
-
-### Pattern 4: Extended Template Version History (TPL-04)
-
-**What:** The existing `trigger_template_history` table already captures `(trigger_id, old_template, new_template, changed_at)`. Extend with an `author` column and add a rollback endpoint that reads a historical `new_template` and applies it as the current template via `update_trigger()`.
-
-**When to use:** When users need to audit prompt changes and revert to a known-good state.
-
-**Rationale:** The foundation already exists (migration v50). Extending it avoids creating a parallel versioning system. Rollback is simply reading a past entry's `old_template` value and writing it back via the existing `update_trigger` function, which in turn logs the change as a new history entry -- creating a full audit trail.
-
-**Example:**
-```python
-# Rollback endpoint
-@triggers_bp.post("/<trigger_id>/prompt-history/<version_id>/rollback")
-def rollback_prompt(path: ...):
-    history_entry = get_template_history_entry(version_id)
-    old_template = history_entry["old_template"]
-    # Use existing update_trigger which auto-logs the change
-    TriggerService.update_trigger(trigger_id, {"prompt_template": old_template})
-```
-
-### Pattern 5: Webhook Test Console with CommandBuilder Preview (TPL-05)
-
-**What:** Extend the existing `preview_prompt` endpoint to also accept a raw JSON webhook payload, extract text using the trigger's `text_field_path` and `match_field_path` configuration, render the prompt, and return the CLI command that would be built via `CommandBuilder.build()`. No subprocess is spawned.
-
-**When to use:** Before deploying a new webhook trigger to production, to validate that payloads will render correctly.
-
-**Rationale:** The `preview_prompt` endpoint already renders prompts with sample data. The test console extends this by: (1) accepting a full JSON payload instead of individual fields, (2) applying the trigger's payload extraction logic (same as `dispatch_webhook_event`), and (3) calling `CommandBuilder.build()` to show the exact CLI command.
-
-**Example:**
-```python
-# Extended preview with payload simulation
-@triggers_bp.post("/<trigger_id>/test-webhook")
-def test_webhook_payload(path: TriggerPath):
-    data = request.get_json()
-    payload = data.get("payload", {})
-    trigger = get_trigger(path.trigger_id)
-
-    # Extract text using trigger's text_field_path
-    text = get_nested_value(payload, trigger["text_field_path"]) or ""
-
-    # Check match_field_path/match_field_value
-    match_value = get_nested_value(payload, trigger["match_field_path"]) if trigger["match_field_path"] else None
-    would_match = str(match_value) == trigger["match_field_value"] if trigger["match_field_value"] else True
-
-    # Render prompt
-    paths = get_symlink_paths_for_trigger(trigger["id"])
-    prompt = PromptRenderer.render(trigger, trigger["id"], text, ", ".join(paths))
-
-    # Build command preview
-    command = CommandBuilder.build(trigger["backend_type"], prompt, paths, trigger.get("model"))
-
-    return {
-        "would_match": would_match,
-        "extracted_text": text,
-        "rendered_prompt": prompt,
-        "cli_command": " ".join(command),
-        "trigger_name": trigger["name"],
-    }
 ```
 
 ### Anti-Patterns to Avoid
 
-- **Over-engineering the template catalog:** Do not build a full marketplace with user submissions, ratings, and reviews. A static curated catalog is sufficient for v0.2.0. User-generated templates can be a v0.3.0+ feature.
-- **Custom diff engine:** Do not hand-roll a text diff algorithm. Use Python's `difflib.unified_diff()` or `difflib.HtmlDiff()` for the version comparison view.
-- **Snippet circular references:** Do not allow snippets to reference other snippets (no recursive resolution). A single-pass resolution is simpler, more predictable, and avoids infinite loops.
-- **Spawning subprocesses in test console:** The webhook test console must NEVER run actual CLI commands. It only previews what would run.
+- **Over-engineering the template marketplace with Git integration:** For 5 curated templates, a Git-backed marketplace adds clone/cache/refresh complexity. Use in-DB seeds. Reserve Git integration for a future "community templates" feature.
+- **Using Jinja2 for snippet resolution:** Jinja2 enables arbitrary code execution in templates (loops, conditionals, filters). This is an injection risk and unnecessary for simple named-variable substitution. Stick with `re.sub()` or `.replace()`.
+- **Storing diffs as binary patches:** Unified text diffs via `difflib.unified_diff()` are human-readable and sufficient for prompt text. Binary patches add complexity with no benefit.
+- **Creating a separate version table per trigger:** One `trigger_template_history` table with a `trigger_id` foreign key is correct (already implemented). Do not create per-entity version tables.
 
 ## Don't Hand-Roll
 
 | Problem | Don't Build | Use Instead | Why |
 |---------|-------------|-------------|-----|
-| Text diffing for template versions | Custom diff algorithm | `difflib.unified_diff()` (Python stdlib) | Handles edge cases (whitespace, encoding), well-tested, standard output format |
-| AI config generation | Custom LLM integration | `BaseGenerationService` (existing) | Handles CLI streaming, JSON extraction, error handling, timeout management |
-| Trigger creation from template | New trigger creation logic | Existing `add_trigger()` DB function | All validation, ID generation, and constraint enforcement already handled |
-| Prompt placeholder substitution | New renderer | Extend existing `PromptRenderer` class | Already handles all known placeholders, unresolved warnings |
-| JSON path extraction from payload | Custom nested key walker | Existing `get_nested_value()` from `app/utils/json_path.py` | Already handles dot-notation paths like `event.group_id` |
-| Webhook payload matching | New matching logic | Existing `dispatch_webhook_event` pattern | Match logic already validated in production |
+| Text diffing | Custom diff algorithm | Python `difflib.unified_diff()` | Handles edge cases (empty lines, encoding); stdlib, zero-install |
+| SSE streaming for AI generation | Custom subprocess + threading | `BaseGenerationService.generate_streaming()` | Already handles stdout/stderr threading, JSON parsing, progress extraction, error handling |
+| Trigger creation from template | Custom trigger insertion logic | `TriggerService.create_trigger(data)` | Already validates all fields, handles scheduling, audit logging, duplicate name check |
+| Prompt placeholder substitution | Custom regex engine | Extend `PromptRenderer.render()` | Already handles all known placeholders, `skill_command` prepending, unresolved detection |
+| CLI command building | Inline command array construction | `ExecutionService.build_command()` | Already handles backend-specific flags, model selection, path allowlisting |
 
-**Key insight:** Every feature in this phase maps to an existing pattern in the codebase. The risk is not technical complexity but scope creep. Keep each feature minimal and focused.
+**Key insight:** Every Phase 9 feature maps to an extension of an existing service, not a greenfield build. The risk of reimplementing existing logic (trigger creation validation, CLI command building, SSE streaming) far exceeds the cost of extending the existing services.
 
 ## Common Pitfalls
 
-### Pitfall 1: Template Deployment Creating Duplicate Names
+### Pitfall 1: Snippet Circular References
 
-**What goes wrong:** A user deploys a template that creates a trigger with a name that already exists, causing a database IntegrityError or confusing the user.
-**Why it happens:** The template catalog uses fixed names, and users may deploy the same template twice.
-**How to avoid:** The deploy endpoint should append a counter suffix to the trigger name if a trigger with that name already exists (e.g., "PR Reviewer (2)"). The existing `get_trigger_by_name()` function already supports this check.
-**Warning signs:** IntegrityError in logs when deploying templates.
+**What goes wrong:** Snippet A references snippet B which references snippet A, causing infinite recursion during resolution.
+**Why it happens:** No depth limit or cycle detection in snippet expansion.
+**How to avoid:** Implement a max recursion depth (e.g., 5 levels) and a visited-set to detect cycles. Return the unresolved `{{snippet_name}}` with a warning if a cycle is detected.
+**Warning signs:** Stack overflow or timeout during `PromptRenderer.render()`.
 
-### Pitfall 2: Snippet Resolution Breaking Existing Prompts
+### Pitfall 2: Template Deploy Creating Duplicate Names
 
-**What goes wrong:** Introducing `{{snippet}}` resolution could accidentally transform existing prompt text that happens to contain double braces.
-**Why it happens:** Some prompt templates might contain literal `{{` for other purposes (e.g., Jinja2-like syntax or documentation examples).
-**How to avoid:** Only resolve snippets that match a pattern of `{{word_characters}}` AND exist in the snippets table. If a snippet name is not found, leave the `{{...}}` text unchanged. This is a "resolve-if-exists" pattern.
-**Warning signs:** Existing prompts producing different output after snippet resolution is enabled.
+**What goes wrong:** Deploying the same template twice creates a name conflict since `TriggerService.create_trigger()` rejects duplicate names.
+**Why it happens:** Templates have fixed names; deploying twice hits the `get_trigger_by_name()` uniqueness check.
+**How to avoid:** Append a numeric suffix to the trigger name if a duplicate exists (e.g., "PR Reviewer (2)"), or allow the user to customize the name during deploy.
+**Warning signs:** 409 Conflict response on deploy.
 
-### Pitfall 3: Version History Rollback Losing the "Current" State
+### Pitfall 3: Snippet Content Update Not Visible Until Next Execution
 
-**What goes wrong:** A user rolls back to version N, but the rollback action itself creates a new history entry (version N+1), making the version they just left from (the "current" before rollback) harder to find.
-**Why it happens:** The existing `update_trigger` + `log_prompt_template_change` pipeline always logs changes, including rollback-induced changes.
-**How to avoid:** This is actually correct behavior -- every state transition is logged. The UI should clearly label rollback-induced entries (e.g., "Rolled back to version #5") by adding a `change_type` field (`edit` vs `rollback`) to the history table.
-**Warning signs:** Users confused about which version is "the original" vs "the rollback."
+**What goes wrong:** User updates a snippet and expects all bots to immediately reflect the change. But snippets are resolved at execution time, not at edit time.
+**Why it happens:** This is actually correct behavior per the requirements ("propagates to all bots referencing it on next execution"), but users may not understand the delayed propagation.
+**How to avoid:** Show a clear UX message: "Snippet changes take effect on the next bot execution." Provide a "Preview with current snippets" button that shows the rendered prompt with current snippet values.
+**Warning signs:** User confusion about when changes take effect.
 
-### Pitfall 4: NL Bot Creator Generating Invalid Configurations
+### Pitfall 4: Preview Endpoint Accidentally Spawning Processes
 
-**What goes wrong:** Claude generates a trigger config with an invalid `backend_type`, missing `prompt_template`, or incompatible field combinations (e.g., `trigger_source: scheduled` without `schedule_type`).
-**Why it happens:** LLM outputs are non-deterministic and may not always conform to the schema.
-**How to avoid:** The `_validate()` method in `TriggerGenerationService` must enforce all the same constraints as `TriggerService.create_trigger()`. Apply sensible defaults for missing fields. Present warnings to the user for any fields that were auto-corrected.
-**Warning signs:** Generated triggers that fail on first execution.
+**What goes wrong:** The webhook test console inadvertently calls `ExecutionService.run_trigger()` instead of just rendering the prompt and building the command string.
+**Why it happens:** Developer confusion between "preview" and "run" code paths.
+**How to avoid:** The preview endpoint must ONLY call `PromptRenderer.render()` and `ExecutionService.build_command()`. It must NOT call `subprocess.Popen()` or `ExecutionService.run_trigger()`. Add an explicit "dry_run=True" flag that prevents process spawning.
+**Warning signs:** Execution logs appearing during preview operations.
 
-### Pitfall 5: Test Console with Large Payloads
+### Pitfall 5: Version History Growing Unbounded
 
-**What goes wrong:** A user pastes a very large JSON payload (e.g., a full GitHub webhook event with hundreds of KB of data) into the test console, causing slow rendering or timeouts.
-**Why it happens:** GitHub webhook payloads can be 200KB+ with full diff content.
-**How to avoid:** Enforce a payload size limit (e.g., 64KB) on the test console endpoint. Truncate the extracted text in the response if it exceeds a reasonable length. Add a loading indicator in the UI.
-**Warning signs:** Frontend becoming unresponsive when pasting large payloads.
-
-## Paper-Backed Recommendations
-
-### Recommendation 1: Content-Addressable Version Tracking
-
-**Recommendation:** Store template versions with content-based identification (hash of the template content) alongside sequential version numbers, following the content-addressable versioning pattern.
-
-**Evidence:**
-- Braintrust prompt versioning system (2025) uses content-addressable IDs where "the same prompt always produces the same ID, ensuring reproducibility." This prevents duplicate history entries when a template is changed and then changed back to the same content.
-- Git's content-addressable storage (Torvalds, 2005) -- the foundational pattern for content-based deduplication.
-
-**Confidence:** HIGH -- Well-established pattern used by multiple production systems.
-**Expected improvement:** Eliminates duplicate history entries, enables efficient deduplication.
-**Caveats:** Adds a computed column but minimal complexity for SQLite.
-
-### Recommendation 2: Environment-Independent Rollback via Reassociation
-
-**Recommendation:** Implement rollback as "set current template to the content of version X" rather than "delete versions after X." All versions remain immutable in the history table.
-
-**Evidence:**
-- Braintrust (2025): "All versions remain accessible indefinitely. Nothing gets deleted when you create new versions." Rollback operates through reassociation rather than deletion.
-- LaunchDarkly prompt versioning (2025): Feature-flag-style rollback where the "active" version pointer moves without modifying history.
-
-**Confidence:** HIGH -- Industry-standard approach for audit-critical versioning.
-**Expected improvement:** Full audit trail preserved; no data loss during rollback.
-**Caveats:** History table grows monotonically. Consider periodic archival for very active triggers (not needed at current scale).
-
-### Recommendation 3: Structured Output via Prompt Engineering (not JSON Schema Constraints)
-
-**Recommendation:** For the NL bot creator, use prompt engineering with examples and explicit JSON schema in the prompt (same as existing `BaseGenerationService` pattern), not structured output / constrained decoding.
-
-**Evidence:**
-- Gao et al. (2025) "Generating Structured Outputs from Language Models: Benchmark and Studies" (arXiv:2501.10868) found that grammar-constrained decoding can degrade quality compared to unconstrained generation with post-hoc parsing for simpler schemas.
-- The existing `BaseGenerationService._parse_json()` handles mixed text + JSON output robustly with fallback extraction.
-- Five existing generation services in the codebase use this same approach successfully.
-
-**Confidence:** HIGH -- Pattern proven in production within this codebase.
-**Expected improvement:** Consistent with existing codebase patterns; avoids adding new dependencies.
-**Caveats:** Occasional malformed JSON from LLM; the existing `_parse_json` fallback handles this.
-
-### Recommendation 4: Single-Pass Snippet Resolution
-
-**Recommendation:** Resolve snippets in a single regex pass before placeholder substitution. Do not support nested snippets or recursive resolution.
-
-**Evidence:**
-- Fabric pattern system (danielmiessler/fabric, 2024): Uses flat file-based patterns with `{{variable}}` syntax. No nested pattern references. Simplicity is a deliberate design choice -- "patterns are reusable, structured prompt templates stored as files on disk."
-- VS Code prompt files (2025): Supports `#file` references but explicitly does not support nested references to avoid complexity.
-
-**Confidence:** HIGH -- Multiple production systems deliberately avoid recursive resolution.
-**Expected improvement:** Predictable behavior, no circular reference risk, O(n) resolution time.
-**Caveats:** Users wanting to compose snippets from other snippets must inline the content manually.
+**What goes wrong:** Every minor prompt edit creates a version record. Over time, the `trigger_template_history` table grows large for frequently-edited triggers.
+**Why it happens:** No retention policy.
+**How to avoid:** Add a configurable retention limit (e.g., keep last 100 versions per trigger). Optionally add a cleanup migration or scheduled task.
+**Warning signs:** Slow queries on `get_prompt_template_history()` for triggers with hundreds of versions.
 
 ## Experiment Design
 
 ### Recommended Experimental Setup
 
-This phase is feature development, not research. Experiments are validation-focused.
+**Independent variables:** Template deploy method (one-click vs. manual config), NL description complexity (simple vs. complex), snippet nesting depth (0, 1, 3, 5 levels)
 
-**Independent variables:** Template catalog size (5, 10, 15 templates), NL description complexity (simple/medium/complex), snippet library size (0, 5, 10 snippets).
+**Dependent variables:** Deploy success rate, NL generation accuracy (does generated bot run without manual editing?), snippet resolution time, version history query time
 
-**Dependent variables:**
-- Template deploy success rate (should be 100%)
-- NL bot creator valid config rate (target: >90%)
-- Snippet resolution correctness (should be 100%)
-- Version rollback accuracy (should be 100%)
-- Test console response time (<200ms for payloads under 64KB)
+**Controlled variables:** Backend type (claude), database size, template count (5)
 
 **Baseline comparison:**
-- Current state: Manual trigger creation via form, no templates, no NL generation, no snippets, basic template history exists but no UI, preview_prompt exists but no payload simulation.
-- Target: All five features functional with success criteria met.
+- Method: Manual trigger creation via existing AddTriggerModal
+- Expected performance: 100% success (user fills all fields manually)
+- Our target: NL bot creator generates valid, runnable config >80% of the time without manual editing
 
-**Validation plan:**
-1. Deploy all 5 curated templates -- verify each creates a runnable trigger
-2. Generate 10 triggers via NL description -- verify >90% produce valid configs
-3. Create 5 snippets, reference in 3 triggers -- verify resolution works
-4. Edit a template 3 times -- verify history shows all versions, rollback works
-5. Send 3 different webhook payloads to test console -- verify rendered prompt and command preview
+**Ablation plan:**
+1. NL creator with vs. without context injection (existing triggers list) -- tests whether context improves generation quality
+2. Snippet resolution with vs. without cycle detection -- tests whether cycle detection adds measurable latency
+3. Template deploy with vs. without name customization step -- tests user experience friction
+
+**Statistical rigor:**
+- Number of runs: 5 per NL description complexity level
+- Confidence intervals: Standard deviation across runs
+- Significance testing: Manual assessment (qualitative for NL generation quality)
 
 ### Recommended Metrics
 
-| Metric | Why | How to Compute | Target |
-|--------|-----|----------------|--------|
-| Template deploy success rate | Core TPL-01 functionality | Deployed templates / total templates | 100% |
-| NL config generation validity | Core TPL-02 functionality | Valid configs / total generations | >90% |
-| Snippet resolution accuracy | Core TPL-03 functionality | Correctly resolved snippets / total references | 100% |
-| Rollback restoration accuracy | Core TPL-04 functionality | Successful rollbacks / total rollback attempts | 100% |
-| Test console response time | UX requirement for TPL-05 | API response time for preview endpoint | <200ms |
+| Metric | Why | How to Compute | Baseline |
+|--------|-----|----------------|----------|
+| Template deploy success rate | Core TPL-01 metric | Deploys resulting in runnable trigger / total deploys | 100% (manual) |
+| NL generation validity | Core TPL-02 metric | Generated configs passing `CreateTriggerRequest` validation / total generations | N/A (new feature) |
+| Snippet resolution latency | Performance check for TPL-03 | Time for `resolve_snippets()` with 0-5 nested snippets | <10ms target |
+| Version history load time | Performance check for TPL-04 | Time for `get_prompt_template_history()` with 100 versions | <50ms target |
+| Preview render time | Performance check for TPL-05 | Time for `preview_prompt()` with all placeholders + snippets | <20ms target |
 
 ## Verification Strategy
 
@@ -394,274 +360,244 @@ This phase is feature development, not research. Experiments are validation-focu
 
 | Item | Recommended Tier | Rationale |
 |------|-----------------|-----------|
-| Template catalog loads and lists correctly | Level 1 (Sanity) | Static JSON parse, no external deps |
-| Template deploy creates valid trigger | Level 1 (Sanity) | Uses existing `add_trigger`, can unit test |
-| NL bot creator returns valid JSON config | Level 2 (Proxy) | Depends on Claude CLI availability |
-| Snippet CRUD operations | Level 1 (Sanity) | Standard DB CRUD |
-| Snippet resolution in PromptRenderer | Level 1 (Sanity) | Pure function, unit testable |
-| Version history records changes | Level 1 (Sanity) | Already implemented, needs UI + API |
-| Version rollback restores previous template | Level 1 (Sanity) | DB read + existing update_trigger |
-| Test console renders prompt from payload | Level 1 (Sanity) | Pure function composition |
-| Test console shows CLI command preview | Level 1 (Sanity) | Uses existing CommandBuilder |
-| End-to-end: template deploy + execute | Level 2 (Proxy) | Needs running backend + CLI |
-| End-to-end: NL create + execute | Level 3 (Deferred) | Needs Claude CLI + real execution |
+| Bot template table seeds correctly at startup | Level 1 (Sanity) | Can check with a DB query in test |
+| Template deploy creates a valid, enabled trigger | Level 1 (Sanity) | Can verify with `get_trigger()` after deploy |
+| NL generation returns valid JSON matching schema | Level 2 (Proxy) | Requires Claude CLI; mock in unit tests, real in integration |
+| Snippet resolution replaces `{{name}}` correctly | Level 1 (Sanity) | Pure function, easy to unit test |
+| Snippet cycle detection prevents infinite loop | Level 1 (Sanity) | Unit test with circular references |
+| Version history records author, timestamp, diff | Level 1 (Sanity) | DB insert + query test |
+| Version rollback restores previous prompt | Level 1 (Sanity) | Update trigger with old version, verify |
+| Preview endpoint returns rendered prompt + command | Level 1 (Sanity) | HTTP test with mock trigger |
+| Preview endpoint does NOT spawn subprocess | Level 1 (Sanity) | Verify no `subprocess.Popen` call in preview path |
+| Frontend template gallery renders 5 templates | Level 2 (Proxy) | Vitest + happy-dom component test |
+| Frontend version history shows diff view | Level 2 (Proxy) | Component test with mock history data |
+| Full E2E: deploy template, run bot, verify output | Level 3 (Deferred) | Needs running backend + Claude CLI |
 
 **Level 1 checks to always include:**
-- Template catalog JSON parses without errors
-- Template deploy creates trigger with all expected fields
-- Snippet CRUD: create, read, update, delete, list
-- Snippet resolution: `{{known_snippet}}` replaced, `{{unknown}}` left unchanged
-- Version history: 3 edits produce 3 history entries with correct old/new values
-- Rollback: restoring version 1 after 3 edits produces the original template text
-- Test console: payload extraction matches trigger's `text_field_path` / `match_field_path`
+- All 5 curated templates seed correctly in `bot_templates` table
+- `deploy_template()` returns a valid trigger_id
+- `resolve_snippets("Hello {{greeting}}")` returns "Hello [greeting content]" when snippet exists
+- `resolve_snippets("Hello {{missing}}")` returns "Hello {{missing}}" with warning when snippet missing
+- Circular snippet reference `A->B->A` terminates within 5 iterations
+- `log_prompt_template_change()` stores diff in addition to old/new templates
+- `get_prompt_template_history()` returns records with `changed_at`, `author`, `diff_text`
+- Preview endpoint returns `rendered_prompt`, `cli_command`, `unresolved_placeholders`
 
 **Level 2 proxy metrics:**
-- NL bot creator generates valid config for "create a bot that reviews PRs" description
-- Generated trigger can be saved to database without validation errors
-- Frontend build succeeds with all new components (vue-tsc type checking)
+- NL bot creator generates valid trigger config for 3 test descriptions (mocked Claude response)
+- Frontend build passes with new components (`vue-tsc` type check)
+- All new API endpoints return correct HTTP status codes
 
 **Level 3 deferred items:**
-- Generated bots actually execute successfully against real CLI
-- Snippet-referenced prompts produce expected output from real CLI execution
-- Template marketplace UX usability testing
+- NL bot creator with real Claude CLI generates runnable bot
+- Deployed template bot executes successfully end-to-end
+- Snippet propagation verified across multiple bot executions
 
-## Production Considerations
+## Production Considerations (from KNOWHOW.md)
+
+Note: KNOWHOW.md is not yet populated. The following considerations are derived from codebase analysis.
 
 ### Known Failure Modes
 
-- **Claude CLI unavailable for NL generation:** The NL bot creator depends on the Claude CLI being installed. If unavailable, the `BaseGenerationService` already returns an SSE error event: `"Claude CLI not found."` The UI should show a clear error message and suggest manual creation as fallback.
-  - Prevention: Check CLI availability before showing the NL creator option
-  - Detection: Frontend checks backend health/utility endpoint for CLI status
+- **Claude CLI not installed:** `BaseGenerationService` catches `FileNotFoundError` and returns an SSE error event. The NL bot creator must handle this gracefully.
+  - Prevention: Check CLI availability before showing the NL creator UI (frontend already calls `utilityApi.checkBackend()`)
+  - Detection: SSE error event with "Claude CLI not found" message
 
-- **Template catalog schema drift:** If the `bot_templates.json` schema changes, old templates may fail to deploy.
-  - Prevention: Version the catalog schema; validate on load
-  - Detection: Startup validation of catalog JSON against Pydantic model
+- **SQLite busy timeout on concurrent template deploys:** Multiple users deploying templates simultaneously could hit the 5-second busy timeout.
+  - Prevention: The existing `get_connection()` sets `PRAGMA busy_timeout = 5000`; this is sufficient for low concurrency
+  - Detection: `sqlite3.OperationalError: database is locked`
 
 ### Scaling Concerns
 
-- **Version history table growth:** At current scale (tens of triggers, few edits per day), the `trigger_template_history` table will remain small. At scale (hundreds of triggers, frequent automated edits), consider:
-  - At current scale: No concerns. Simple SELECT with LIMIT/OFFSET.
-  - At production scale: Add pagination to history API (already planned via PaginationQuery pattern). Consider archiving entries older than 1 year.
+- **Version history table growth:** At current scale (single user, <50 triggers), unbounded history is fine. At production scale with frequent edits, add a retention policy.
+  - At current scale: No action needed; default LIMIT 50 on queries
+  - At production scale: Add `DELETE FROM trigger_template_history WHERE trigger_id = ? AND id NOT IN (SELECT id FROM trigger_template_history WHERE trigger_id = ? ORDER BY changed_at DESC LIMIT 100)`
 
-- **Snippet resolution performance:** Each prompt render now requires N snippet lookups (where N = number of `{{...}}` references in the template).
-  - At current scale: Negligible -- snippets are small, SQLite is fast for single-row lookups.
-  - At production scale: Cache snippets in-memory with a 60-second TTL (similar to `ExecutionLogService._log_buffers` pattern).
+- **Snippet resolution at execution time:** Adding a DB query to every trigger execution adds latency.
+  - At current scale: <5ms per query; negligible
+  - At production scale: Cache snippets in-memory with a 60-second TTL
 
 ### Common Implementation Traps
 
-- **Forgetting to extend `PromptRenderer._KNOWN_PLACEHOLDERS`:** If new placeholders are added for templates, they must be added to `_KNOWN_PLACEHOLDERS` to avoid false "unresolved placeholder" warnings.
-  - Correct approach: Keep `_KNOWN_PLACEHOLDERS` as the single source of truth; update when adding new built-in placeholders.
+- **Modifying `PromptRenderer.render()` signature:** The `render()` method is called from `ExecutionService.run_trigger()`. Any signature change breaks the call site.
+  - Correct approach: Add snippet resolution as internal logic within `render()`, fetching snippets inside the method. Do not change the external API.
 
-- **Not registering new blueprints:** New route files must be registered in `backend/app/routes/__init__.py` via `app.register_api(bp)`.
-  - Correct approach: Add blueprint registration alongside existing registrations, before the SPA catch-all.
-
-- **Frontend type drift:** All new API types must be added to `frontend/src/services/api/types.ts` and new API functions to domain-specific modules, re-exported from `index.ts`.
-  - Correct approach: Follow the existing pattern in `triggers.ts` for new template/snippet API functions.
+- **Adding snippet resolution to `TriggerService.preview_prompt()`:** The preview method has its own placeholder substitution logic (duplicated from `PromptRenderer`). Adding snippet support to preview requires updating both places.
+  - Correct approach: Refactor `preview_prompt()` to use `PromptRenderer.render()` internally, then snippet resolution works in both places automatically.
 
 ## Code Examples
 
-### Template Catalog JSON Structure
+Verified patterns from the existing codebase:
 
-```json
-[
+### Bot Template Seeding (following PREDEFINED_TRIGGERS pattern)
+```python
+# Source: backend/app/db/triggers.py lines 31-58 (PREDEFINED_TRIGGERS pattern)
+CURATED_BOT_TEMPLATES = [
     {
         "slug": "pr-reviewer",
         "name": "PR Reviewer",
-        "description": "Reviews pull requests for code quality, security, and best practices",
+        "description": "Automatically review pull requests for code quality, security, and best practices",
         "category": "code-review",
-        "icon": "git-pull-request",
-        "tags": ["github", "code-quality"],
-        "config": {
-            "prompt_template": "Review this pull request thoroughly:\n\nPR: {pr_url}\nTitle: {pr_title}\nAuthor: {pr_author}\n\nAnalyze for:\n1. Code quality and readability\n2. Potential bugs or edge cases\n3. Security vulnerabilities\n4. Performance implications\n5. Test coverage gaps\n\nProvide actionable, specific feedback.",
+        "config_json": json.dumps({
+            "name": "PR Reviewer",
+            "prompt_template": "Review this pull request thoroughly:\n\nURL: {pr_url}\nTitle: {pr_title}\nAuthor: {pr_author}\n\nProvide feedback on code quality, potential bugs, security issues, and adherence to best practices.",
             "backend_type": "claude",
             "trigger_source": "github",
-            "model": null,
-            "allowed_tools": "Read,Glob,Grep,Bash"
-        }
+        }),
     },
-    {
-        "slug": "dependency-updater",
-        "name": "Dependency Updater",
-        "description": "Scans and updates outdated dependencies across project files",
-        "category": "maintenance",
-        "icon": "package",
-        "tags": ["dependencies", "security"],
-        "config": {
-            "prompt_template": "Scan {paths} for outdated dependencies.\n\nFor each outdated package:\n1. Check the latest stable version\n2. Review the changelog for breaking changes\n3. Update the dependency if safe\n4. Run tests to verify compatibility\n\nReport all changes made.",
-            "backend_type": "claude",
-            "trigger_source": "manual",
-            "model": null,
-            "allowed_tools": "Read,Glob,Grep,Bash"
-        }
-    },
-    {
-        "slug": "security-scanner",
-        "name": "Security Scanner",
-        "description": "Performs comprehensive security audit of the codebase",
-        "category": "security",
-        "icon": "shield",
-        "tags": ["security", "audit"],
-        "config": {
-            "prompt_template": "Perform a comprehensive security audit of {paths}.\n\nCheck for:\n1. Hardcoded secrets and credentials\n2. SQL injection vulnerabilities\n3. XSS attack vectors\n4. Insecure dependencies\n5. Authentication/authorization issues\n6. Sensitive data exposure\n\nFor each finding, rate severity (critical/high/medium/low) and provide a fix.",
-            "backend_type": "claude",
-            "trigger_source": "webhook",
-            "model": null,
-            "allowed_tools": "Read,Glob,Grep,Bash"
-        }
-    },
-    {
-        "slug": "changelog-generator",
-        "name": "Changelog Generator",
-        "description": "Generates a changelog from recent git commits",
-        "category": "documentation",
-        "icon": "file-text",
-        "tags": ["documentation", "git"],
-        "config": {
-            "prompt_template": "Generate a changelog for {paths} from recent git commits.\n\n{message}\n\nGroup changes by:\n- Features (new functionality)\n- Fixes (bug fixes)\n- Improvements (enhancements)\n- Breaking Changes\n\nUse conventional commit format. Include commit hashes.",
-            "backend_type": "claude",
-            "trigger_source": "manual",
-            "model": null,
-            "allowed_tools": "Read,Glob,Grep,Bash"
-        }
-    },
-    {
-        "slug": "test-writer",
-        "name": "Test Writer",
-        "description": "Generates unit tests for untested or under-tested code",
-        "category": "testing",
-        "icon": "check-circle",
-        "tags": ["testing", "code-quality"],
-        "config": {
-            "prompt_template": "Analyze {paths} and write unit tests for code that lacks test coverage.\n\n{message}\n\nRequirements:\n1. Identify files/functions without tests\n2. Write comprehensive test cases\n3. Cover edge cases and error paths\n4. Follow existing test conventions in the project\n5. Use the project's test framework",
-            "backend_type": "claude",
-            "trigger_source": "manual",
-            "model": null,
-            "allowed_tools": "Read,Glob,Grep,Bash"
-        }
-    }
+    # ... dependency-updater, security-scanner, changelog-generator, test-writer
 ]
 ```
 
-### Prompt Snippet DB Schema
-
-```sql
-CREATE TABLE IF NOT EXISTS prompt_snippets (
-    id TEXT PRIMARY KEY,
-    name TEXT NOT NULL UNIQUE,
-    description TEXT DEFAULT '',
-    content TEXT NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-CREATE INDEX IF NOT EXISTS idx_prompt_snippets_name ON prompt_snippets(name);
-```
-
-### Version History Table Extension
-
-```sql
--- Add author and change_type columns to existing trigger_template_history
-ALTER TABLE trigger_template_history ADD COLUMN author TEXT DEFAULT 'user';
-ALTER TABLE trigger_template_history ADD COLUMN change_type TEXT DEFAULT 'edit';
--- change_type: 'edit' | 'rollback' | 'deploy'
-```
-
-### Diff Computation (Python stdlib)
-
+### NL Generation Route (following commands.py pattern)
 ```python
-import difflib
+# Source: backend/app/routes/commands.py lines 114-131
+@triggers_bp.post("/generate/stream")
+def generate_trigger_stream():
+    """Generate a trigger config from a natural language description (streaming)."""
+    from ..services.trigger_generation_service import TriggerGenerationService
 
-def compute_template_diff(old_template: str, new_template: str) -> str:
-    """Compute a unified diff between two template versions."""
-    old_lines = old_template.splitlines(keepends=True)
-    new_lines = new_template.splitlines(keepends=True)
-    diff = difflib.unified_diff(old_lines, new_lines, fromfile="previous", tofile="current")
-    return "".join(diff)
+    data = request.get_json()
+    if not data:
+        return {"error": "JSON body required"}, HTTPStatus.BAD_REQUEST
+
+    description = (data.get("description") or "").strip()
+    if len(description) < 10:
+        return {"error": "Description must be at least 10 characters"}, HTTPStatus.BAD_REQUEST
+
+    return Response(
+        TriggerGenerationService.generate_streaming(description),
+        mimetype="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 ```
 
-### Frontend Template Card Component Pattern
+### Snippet Resolution (extending PromptRenderer pattern)
+```python
+# Source: backend/app/services/prompt_renderer.py (extension)
+import re
+from ..db.prompt_snippets import get_snippet_by_name
 
-```vue
-<!-- Source: follows existing card patterns in components/triggers/BackendStatusCard.vue -->
-<script setup lang="ts">
-defineProps<{
-  template: {
-    slug: string;
-    name: string;
-    description: string;
-    category: string;
-    icon: string;
-    tags: string[];
-  };
-}>();
+class SnippetService:
+    MAX_DEPTH = 5
 
-const emit = defineEmits<{
-  deploy: [slug: string];
-}>();
-</script>
+    @classmethod
+    def resolve_snippets(cls, text: str, depth: int = 0, visited: set = None) -> str:
+        if depth >= cls.MAX_DEPTH:
+            return text
+        if visited is None:
+            visited = set()
+
+        def replacer(match):
+            name = match.group(1).strip()
+            if name in visited:
+                return match.group(0)  # Circular reference; leave unresolved
+            snippet = get_snippet_by_name(name)
+            if not snippet:
+                return match.group(0)  # Unknown snippet; leave unresolved
+            visited.add(name)
+            # Recursively resolve nested snippets
+            return cls.resolve_snippets(snippet["content"], depth + 1, visited)
+
+        return re.sub(r"\{\{(\w[\w\-]*)\}\}", replacer, text)
+```
+
+### Enhanced Preview Endpoint (extending TriggerService pattern)
+```python
+# Source: backend/app/services/trigger_service.py lines 473-514 (extension)
+@staticmethod
+def preview_prompt_full(trigger_id: str, payload: dict) -> Tuple[dict, HTTPStatus]:
+    """Full dry-run preview: render prompt with payload, show CLI command."""
+    trigger = get_trigger(trigger_id)
+    if not trigger:
+        return {"error": "Trigger not found"}, HTTPStatus.NOT_FOUND
+
+    # Use PromptRenderer for consistent rendering (includes snippet resolution)
+    prompt = PromptRenderer.render(
+        trigger, trigger_id,
+        message_text=payload.get("message", ""),
+        paths_str=payload.get("paths", "/path/to/project"),
+        event=payload.get("event"),
+    )
+
+    # Build CLI command without executing
+    cmd = ExecutionService.build_command(
+        backend=trigger["backend_type"],
+        prompt=prompt,
+        model=trigger.get("model"),
+        allowed_tools=trigger.get("allowed_tools"),
+    )
+
+    return {
+        "rendered_prompt": prompt,
+        "cli_command": " ".join(cmd),
+        "cli_command_parts": cmd,
+        "backend_type": trigger["backend_type"],
+        "model": trigger.get("model"),
+        "trigger_name": trigger["name"],
+        "unresolved_placeholders": re.findall(r"\{[^}]+\}", prompt),
+        "unresolved_snippets": re.findall(r"\{\{[\w\-]+\}\}", prompt),
+    }, HTTPStatus.OK
 ```
 
 ## State of the Art
 
-| Old Approach | Current Approach | When Changed | Impact |
-|--------------|------------------|--------------|--------|
-| Manual trigger config via form | Template marketplace + NL creator | This phase | Reduces time-to-first-bot from minutes to seconds |
-| Inline prompt text, copy-paste reuse | Named snippet library with variable references | This phase | Single source of truth for shared prompt sections |
-| No prompt history (before migration v50) | Template version history with diff and rollback | This phase (extends v50) | Full audit trail, safe experimentation |
-| preview_prompt with manual field entry | Webhook test console with payload simulation | This phase (extends preview) | Realistic dry-run testing before deployment |
+| Old Approach | Current Approach | When Changed | Impact | Evidence |
+|--------------|------------------|--------------|--------|---------|
+| Hardcoded prompts in source code | Prompts as managed artifacts with versioning | 2024-2025 | Enables hot-fix without redeploy, audit trail | [LaunchDarkly](https://launchdarkly.com/blog/prompt-versioning-and-management/), [Maxim](https://www.getmaxim.ai/articles/prompt-versioning-and-its-best-practices-2025/) |
+| Manual bot configuration | NL-to-config generation via LLM | 2024-2025 | Reduces configuration time from minutes to seconds | Codebase: 5 existing `*GenerationService` classes |
+| Copy-paste prompt fragments | Shared snippet libraries with variable resolution | 2024-2025 | DRY prompts, centralized updates | [Kinde](https://www.kinde.com/learn/ai-for-software-engineering/prompting/prompt-patterns-that-scale-reusable-llm-prompts-for-dev-eams/) |
 
-**Building on existing foundations:**
-- `trigger_template_history` table (migration v50) -- already captures old/new template pairs
-- `preview_prompt` endpoint -- already renders templates with sample data
-- `BaseGenerationService` -- already handles Claude CLI streaming for config generation
-- `PromptRenderer` -- already handles placeholder substitution
-- `CommandBuilder` -- already builds CLI commands from config
-- `get_nested_value()` -- already extracts values from nested JSON by dot-path
+**Deprecated/outdated:**
+- Static `{placeholder}` substitution without snippet support: Still valid for runtime variables but insufficient for shared prompt fragments. The codebase's `PromptRenderer` should be extended, not replaced.
 
 ## Open Questions
 
-1. **Template catalog updates**
-   - What we know: Static JSON in codebase works for curated templates. Five templates specified in requirements.
-   - What's unclear: Should templates be hot-reloadable without backend restart? Current implementation would require restart.
-   - Recommendation: Load JSON on each request (it's tiny). This avoids caching and restart issues.
+1. **User-contributed templates in future phases?**
+   - What we know: TPL-01 requires only 5 curated templates. The `bot_templates` table should support future user contributions.
+   - What's unclear: Whether user-contributed templates need review/approval workflow.
+   - Recommendation: Add a `source` column (`built-in` vs `user`) and an `is_published` flag. Defer the review workflow.
 
-2. **Snippet scope**
-   - What we know: Snippets are global (available to all triggers). The `{{snippet_name}}` syntax is clear and unambiguous.
-   - What's unclear: Should snippets support markdown/rich text, or plain text only?
-   - Recommendation: Plain text only for v0.2.0. Snippets are inserted into CLI prompts where markdown formatting is handled by the LLM, not the snippet system.
+2. **Snippet ownership and permissions?**
+   - What we know: The requirements say "shared named snippets." Single-user context (no multi-tenancy).
+   - What's unclear: Whether snippets should have per-trigger visibility or be globally shared.
+   - Recommendation: All snippets are global. Add an `is_global` flag for future per-trigger scoping.
 
-3. **NL creator model selection**
-   - What we know: The `BaseGenerationService` uses `claude -p` (default model). The NL creator prompt should be optimized for structured output.
-   - What's unclear: Should users be able to choose which model generates the config?
-   - Recommendation: Use default Claude model. The generation prompt is simple enough that model selection is unnecessary overhead for v0.2.0.
+3. **How should the NL bot creator handle ambiguous descriptions?**
+   - What we know: The existing `BaseGenerationService` pattern generates a single JSON config and validates it.
+   - What's unclear: What happens when the description is too vague ("make a bot").
+   - Recommendation: The validation step should return warnings for missing critical fields (trigger_source, prompt_template). The frontend should show these warnings and let the user edit before deploying.
 
 ## Sources
 
 ### Primary (HIGH confidence)
-- Agented codebase analysis: `backend/app/db/triggers.py` -- trigger CRUD, template history, preview_prompt
-- Agented codebase analysis: `backend/app/services/prompt_renderer.py` -- placeholder substitution engine
-- Agented codebase analysis: `backend/app/services/base_generation_service.py` -- Claude CLI generation pattern
-- Agented codebase analysis: `backend/app/services/command_builder.py` -- CLI command construction
-- Agented codebase analysis: `backend/app/services/trigger_service.py` -- trigger service with template change logging
-- Agented codebase analysis: `backend/app/routes/triggers.py` -- existing trigger API with preview_prompt endpoint
-- Agented codebase analysis: `backend/app/utils/json_path.py` -- nested JSON value extraction
+- Codebase analysis: `backend/app/db/triggers.py` -- trigger CRUD, `trigger_template_history` table, `PREDEFINED_TRIGGERS` seed pattern
+- Codebase analysis: `backend/app/services/prompt_renderer.py` -- `PromptRenderer.render()`, `_KNOWN_PLACEHOLDERS`, placeholder substitution
+- Codebase analysis: `backend/app/services/base_generation_service.py` -- `BaseGenerationService.generate_streaming()`, SSE protocol, subprocess management
+- Codebase analysis: `backend/app/services/trigger_service.py` -- `TriggerService.preview_prompt()`, `TriggerService.create_trigger()`
+- Codebase analysis: `backend/app/routes/marketplace.py` -- plugin marketplace pattern (`marketplaces` table, CRUD endpoints)
+- Codebase analysis: `backend/app/db/schema.py` -- `trigger_template_history` table schema, `marketplaces` table schema
+- Python stdlib documentation: `difflib.unified_diff()` -- text diff computation
 
 ### Secondary (MEDIUM confidence)
-- Braintrust prompt versioning (2025) -- content-addressable versioning, immutable history, environment-based rollback
-- Gao et al. "Generating Structured Outputs from Language Models" (arXiv:2501.10868, 2025) -- constrained vs unconstrained generation comparison
-- Fabric pattern system (danielmiessler/fabric, GitHub) -- flat file-based reusable prompt patterns with variable syntax
-- LaunchDarkly prompt versioning guide (2025) -- environment-based deployment, feature-flag rollback
-- Workativ chatbot marketplace (2025) -- pre-built bot template gallery with one-click deployment
+- [Prompt Versioning Best Practices (DEV.to)](https://dev.to/kuldeep_paul/mastering-prompt-versioning-best-practices-for-scalable-llm-development-2mgm) -- Immutable versioning principle
+- [Braintrust: Best Prompt Versioning Tools 2025](https://www.braintrust.dev/articles/best-prompt-versioning-tools-2025) -- Continuous versioning audit trail
+- [Maxim: Prompt Versioning Practices 2025](https://www.getmaxim.ai/articles/prompt-versioning-and-its-best-practices-2025/) -- Metadata tracking (who, when, why)
+- [LaunchDarkly: Prompt Versioning & Management](https://launchdarkly.com/blog/prompt-versioning-and-management/) -- Prompts as managed artifacts
+- [Kinde: Prompt Patterns That Scale](https://www.kinde.com/learn/ai-for-software-engineering/prompting/prompt-patterns-that-scale-reusable-llm-prompts-for-dev-eams/) -- Reusable prompt templates with variables
+- [Engati Bot Marketplace](https://www.engati.ai/chatbot-templates) -- Curated template gallery pattern
+- [Workativ Chatbot Marketplace](https://workativ.com/conversational-ai-platform/chatbot-marketplace-templates) -- Pre-built template deployment
 
 ### Tertiary (LOW confidence)
-- General webhook testing patterns from Zuplo, Paddle, Beeceptor documentation -- payload simulation and dry-run preview concepts
+- [Hevo: Webhooks Testing](https://hevodata.com/learn/webhooks-testing/) -- Webhook test best practices (general; not specific to this codebase)
 
 ## Metadata
 
 **Confidence breakdown:**
-- Standard stack: HIGH -- No new libraries needed; all features build on existing codebase patterns
-- Architecture: HIGH -- Every feature maps to an established pattern in the codebase
-- Paper recommendations: MEDIUM -- Versioning patterns well-established but not from academic papers; LLM generation patterns from recent pre-print
-- Pitfalls: HIGH -- Identified from direct codebase analysis and existing production patterns
+- Standard stack: HIGH -- No new dependencies; all features extend existing patterns
+- Architecture: HIGH -- Every component maps to a proven codebase pattern with prior implementations
+- Paper recommendations: MEDIUM -- Industry best practices (not academic papers; this is an engineering domain, not ML research)
+- Pitfalls: HIGH -- Identified from codebase analysis and existing patterns; specific to this implementation
 
 **Research date:** 2026-03-04
 **Valid until:** 2026-04-04 (30 days -- stable domain, no fast-moving dependencies)
