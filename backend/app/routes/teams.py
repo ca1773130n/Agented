@@ -9,6 +9,8 @@ import uuid
 from http import HTTPStatus
 from typing import Optional
 
+from app.models.common import error_response
+
 logger = logging.getLogger(__name__)
 
 # third-party
@@ -194,18 +196,22 @@ def create_team():
     """Create a new team."""
     data = request.get_json()
     if not data:
-        return {"error": "JSON body required"}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", "JSON body required", HTTPStatus.BAD_REQUEST)
 
     name = data.get("name")
     if not name:
-        return {"error": "name is required"}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", "name is required", HTTPStatus.BAD_REQUEST)
     name = name.strip()
     if len(name) < 1:
-        return {"error": "name must not be empty"}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", "name must not be empty", HTTPStatus.BAD_REQUEST)
     if len(name) > 255:
-        return {"error": "name must not exceed 255 characters"}, HTTPStatus.BAD_REQUEST
+        return error_response(
+            "BAD_REQUEST", "name must not exceed 255 characters", HTTPStatus.BAD_REQUEST
+        )
     if get_team_by_name(name):
-        return {"error": "A team with this name already exists"}, HTTPStatus.CONFLICT
+        return error_response(
+            "CONFLICT", "A team with this name already exists", HTTPStatus.CONFLICT
+        )
 
     team_id = add_team(
         name=name,
@@ -218,7 +224,9 @@ def create_team():
         trigger_config=data.get("trigger_config"),
     )
     if not team_id:
-        return {"error": "Failed to create team"}, HTTPStatus.INTERNAL_SERVER_ERROR
+        return error_response(
+            "INTERNAL_SERVER_ERROR", "Failed to create team", HTTPStatus.INTERNAL_SERVER_ERROR
+        )
 
     # Auto-add leader as team member if leader_id was provided
     leader_id = data.get("leader_id")
@@ -239,13 +247,15 @@ def generate_team_config():
     """
     data = request.get_json()
     if not data:
-        return {"error": "JSON body required"}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", "JSON body required", HTTPStatus.BAD_REQUEST)
 
     description = data.get("description", "")
     if not description or len(description) < 10:
-        return {
-            "error": "description is required and must be at least 10 characters"
-        }, HTTPStatus.BAD_REQUEST
+        return error_response(
+            "BAD_REQUEST",
+            "description is required and must be at least 10 characters",
+            HTTPStatus.BAD_REQUEST,
+        )
 
     job_id = f"gen-{uuid.uuid4().hex[:8]}"
 
@@ -288,7 +298,7 @@ def get_generation_job(path: GenerateJobPath):
     with _jobs_lock:
         job = dict(_generation_jobs.get(path.job_id, {}))
     if not job:
-        return {"error": "Job not found"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "Job not found", HTTPStatus.NOT_FOUND)
     if job["status"] == "error":
         error_msg = job.get("error", "Unknown error")
         status_code = (
@@ -296,7 +306,12 @@ def get_generation_job(path: GenerateJobPath):
             if "timed out" in error_msg or "not found" in error_msg.lower()
             else HTTPStatus.INTERNAL_SERVER_ERROR
         )
-        return {"error": error_msg}, status_code
+        error_code = (
+            "SERVICE_UNAVAILABLE"
+            if status_code == HTTPStatus.SERVICE_UNAVAILABLE
+            else "INTERNAL_SERVER_ERROR"
+        )
+        return error_response(error_code, error_msg, status_code)
     return job, HTTPStatus.OK
 
 
@@ -306,13 +321,15 @@ def generate_team_config_stream():
     """Stream team configuration generation with real-time AI output via SSE."""
     data = request.get_json()
     if not data:
-        return {"error": "JSON body required"}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", "JSON body required", HTTPStatus.BAD_REQUEST)
 
     description = data.get("description", "")
     if not description or len(description) < 10:
-        return {
-            "error": "description is required and must be at least 10 characters"
-        }, HTTPStatus.BAD_REQUEST
+        return error_response(
+            "BAD_REQUEST",
+            "description is required and must be at least 10 characters",
+            HTTPStatus.BAD_REQUEST,
+        )
 
     def generate():
         """Yield SSE events from the team configuration generation stream."""
@@ -335,7 +352,7 @@ def get_team_detail_endpoint(path: TeamPath):
     """Get team details with members."""
     team = get_team_detail(path.team_id)
     if not team:
-        return {"error": "Team not found"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "Team not found", HTTPStatus.NOT_FOUND)
     return team, HTTPStatus.OK
 
 
@@ -345,18 +362,22 @@ def update_team_endpoint(path: TeamPath):
     """Update a team."""
     data = request.get_json()
     if not data:
-        return {"error": "JSON body required"}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", "JSON body required", HTTPStatus.BAD_REQUEST)
 
     new_name = data.get("name")
     if new_name is not None:
         new_name = new_name.strip()
         if len(new_name) < 1:
-            return {"error": "name must not be empty"}, HTTPStatus.BAD_REQUEST
+            return error_response("BAD_REQUEST", "name must not be empty", HTTPStatus.BAD_REQUEST)
         if len(new_name) > 255:
-            return {"error": "name must not exceed 255 characters"}, HTTPStatus.BAD_REQUEST
+            return error_response(
+                "BAD_REQUEST", "name must not exceed 255 characters", HTTPStatus.BAD_REQUEST
+            )
         existing = get_team_by_name(new_name)
         if existing and existing["id"] != path.team_id:
-            return {"error": "A team with this name already exists"}, HTTPStatus.CONFLICT
+            return error_response(
+                "CONFLICT", "A team with this name already exists", HTTPStatus.CONFLICT
+            )
 
     if not update_team(
         path.team_id,
@@ -365,7 +386,9 @@ def update_team_endpoint(path: TeamPath):
         color=data.get("color"),
         leader_id=data.get("leader_id"),
     ):
-        return {"error": "Team not found or no changes made"}, HTTPStatus.NOT_FOUND
+        return error_response(
+            "NOT_FOUND", "Team not found or no changes made", HTTPStatus.NOT_FOUND
+        )
 
     team = get_team_detail(path.team_id)
     return team, HTTPStatus.OK
@@ -376,7 +399,7 @@ def update_team_endpoint(path: TeamPath):
 def delete_team_endpoint(path: TeamPath):
     """Delete a team."""
     if not delete_team(path.team_id):
-        return {"error": "Team not found"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "Team not found", HTTPStatus.NOT_FOUND)
     return {"message": "Team deleted"}, HTTPStatus.OK
 
 
@@ -395,7 +418,7 @@ def add_member(path: TeamPath):
     """Add a member to the team."""
     data = request.get_json()
     if not data:
-        return {"error": "JSON body required"}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", "JSON body required", HTTPStatus.BAD_REQUEST)
 
     name = data.get("name")
     agent_id = data.get("agent_id")
@@ -403,7 +426,9 @@ def add_member(path: TeamPath):
 
     # At least one identifier is required
     if not name and not agent_id and not super_agent_id:
-        return {"error": "name, agent_id, or super_agent_id is required"}, HTTPStatus.BAD_REQUEST
+        return error_response(
+            "BAD_REQUEST", "name, agent_id, or super_agent_id is required", HTTPStatus.BAD_REQUEST
+        )
 
     member_id = add_team_member(
         team_id=path.team_id,
@@ -417,7 +442,9 @@ def add_member(path: TeamPath):
         tier=data.get("tier"),
     )
     if not member_id:
-        return {"error": "Failed to add member"}, HTTPStatus.INTERNAL_SERVER_ERROR
+        return error_response(
+            "INTERNAL_SERVER_ERROR", "Failed to add member", HTTPStatus.INTERNAL_SERVER_ERROR
+        )
 
     # Return the member data
     members = get_team_members(path.team_id)
@@ -431,7 +458,7 @@ def update_member(path: MemberPath):
     """Update a team member."""
     data = request.get_json()
     if not data:
-        return {"error": "JSON body required"}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", "JSON body required", HTTPStatus.BAD_REQUEST)
 
     if not update_team_member(
         path.member_id,
@@ -442,7 +469,9 @@ def update_member(path: MemberPath):
         description=data.get("description"),
         tier=data.get("tier"),
     ):
-        return {"error": "Member not found or no changes made"}, HTTPStatus.NOT_FOUND
+        return error_response(
+            "NOT_FOUND", "Member not found or no changes made", HTTPStatus.NOT_FOUND
+        )
 
     members = get_team_members(path.team_id)
     member = next((m for m in members if m["id"] == path.member_id), None)
@@ -454,7 +483,7 @@ def update_member(path: MemberPath):
 def delete_member(path: MemberPath):
     """Remove a member from the team."""
     if not remove_team_member(path.member_id):
-        return {"error": "Member not found"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "Member not found", HTTPStatus.NOT_FOUND)
     return {"message": "Member removed"}, HTTPStatus.OK
 
 
@@ -486,7 +515,7 @@ def create_team_connection(path: TeamPath, body: TeamConnectionBody):
         description=body.description,
     )
     if not conn_id:
-        return {"error": "Failed to create connection"}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", "Failed to create connection", HTTPStatus.BAD_REQUEST)
     return {"message": "Connection created", "id": conn_id}, HTTPStatus.CREATED
 
 
@@ -497,7 +526,7 @@ def remove_team_connection(path: ConnectionPath):
     from ..db.rotations import delete_team_connection
 
     if not delete_team_connection(path.connection_id):
-        return {"error": "Connection not found"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "Connection not found", HTTPStatus.NOT_FOUND)
     return {"message": "Connection deleted"}, HTTPStatus.OK
 
 
@@ -512,25 +541,31 @@ def add_agent_assignment(path: TeamAgentPath):
     """Add an entity assignment (skill/command/hook/rule) for an agent within a team."""
     team = get_team(path.team_id)
     if not team:
-        return {"error": "Team not found"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "Team not found", HTTPStatus.NOT_FOUND)
 
     if not TeamService.is_agent_team_member(path.team_id, path.agent_id):
-        return {"error": "Agent is not a member of this team"}, HTTPStatus.BAD_REQUEST
+        return error_response(
+            "BAD_REQUEST", "Agent is not a member of this team", HTTPStatus.BAD_REQUEST
+        )
 
     data = request.get_json()
     if not data:
-        return {"error": "JSON body required"}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", "JSON body required", HTTPStatus.BAD_REQUEST)
 
     entity_type = data.get("entity_type")
     entity_id = data.get("entity_id")
 
     if not entity_type or not entity_id:
-        return {"error": "entity_type and entity_id are required"}, HTTPStatus.BAD_REQUEST
+        return error_response(
+            "BAD_REQUEST", "entity_type and entity_id are required", HTTPStatus.BAD_REQUEST
+        )
 
     if entity_type not in VALID_ENTITY_TYPES:
-        return {
-            "error": f"Invalid entity_type. Must be one of: {', '.join(VALID_ENTITY_TYPES)}"
-        }, HTTPStatus.BAD_REQUEST
+        return error_response(
+            "BAD_REQUEST",
+            f"Invalid entity_type. Must be one of: {', '.join(VALID_ENTITY_TYPES)}",
+            HTTPStatus.BAD_REQUEST,
+        )
 
     assignment_id = add_team_agent_assignment(
         team_id=path.team_id,
@@ -541,7 +576,9 @@ def add_agent_assignment(path: TeamAgentPath):
     )
 
     if assignment_id is None:
-        return {"error": "Assignment already exists or failed to create"}, HTTPStatus.CONFLICT
+        return error_response(
+            "CONFLICT", "Assignment already exists or failed to create", HTTPStatus.CONFLICT
+        )
 
     # Fetch the created assignment
     assignments = get_team_agent_assignments(path.team_id, path.agent_id)
@@ -574,7 +611,7 @@ def list_team_assignments(path: TeamPath):
 def delete_assignment(path: AssignmentPath):
     """Delete a single assignment."""
     if not delete_team_agent_assignment(path.assignment_id):
-        return {"error": "Assignment not found"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "Assignment not found", HTTPStatus.NOT_FOUND)
     return {"message": "Assignment deleted"}, HTTPStatus.OK
 
 
@@ -613,21 +650,25 @@ def create_edge(path: TeamPath):
     """Create a directed edge between two team members."""
     data = request.get_json()
     if not data:
-        return {"error": "JSON body required"}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", "JSON body required", HTTPStatus.BAD_REQUEST)
 
     source_member_id = data.get("source_member_id")
     target_member_id = data.get("target_member_id")
     edge_type = data.get("edge_type", "delegation")
 
     if source_member_id is None or target_member_id is None:
-        return {
-            "error": "source_member_id and target_member_id are required"
-        }, HTTPStatus.BAD_REQUEST
+        return error_response(
+            "BAD_REQUEST",
+            "source_member_id and target_member_id are required",
+            HTTPStatus.BAD_REQUEST,
+        )
 
     if edge_type not in VALID_EDGE_TYPES:
-        return {
-            "error": f"Invalid edge_type. Must be one of: {', '.join(VALID_EDGE_TYPES)}"
-        }, HTTPStatus.BAD_REQUEST
+        return error_response(
+            "BAD_REQUEST",
+            f"Invalid edge_type. Must be one of: {', '.join(VALID_EDGE_TYPES)}",
+            HTTPStatus.BAD_REQUEST,
+        )
 
     edge_id = add_team_edge(
         team_id=path.team_id,
@@ -638,7 +679,9 @@ def create_edge(path: TeamPath):
         weight=data.get("weight", 1),
     )
     if edge_id is None:
-        return {"error": "Failed to create edge (self-loop or duplicate)"}, HTTPStatus.BAD_REQUEST
+        return error_response(
+            "BAD_REQUEST", "Failed to create edge (self-loop or duplicate)", HTTPStatus.BAD_REQUEST
+        )
 
     # Fetch the created edge
     edges = get_team_edges(path.team_id)
@@ -651,7 +694,7 @@ def create_edge(path: TeamPath):
 def delete_edge(path: EdgePath):
     """Delete a single edge."""
     if not delete_team_edge(path.edge_id):
-        return {"error": "Edge not found"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "Edge not found", HTTPStatus.NOT_FOUND)
     return {"message": "Edge deleted"}, HTTPStatus.OK
 
 
@@ -677,7 +720,7 @@ def update_topology(path: TeamPath, body: TeamTopologyBody):
     """Update team topology configuration."""
     team = get_team(path.team_id)
     if not team:
-        return {"error": "Team not found"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "Team not found", HTTPStatus.NOT_FOUND)
 
     _UNSET = object()
     # Use model_fields_set to distinguish "not provided" from "explicitly null"
@@ -686,15 +729,17 @@ def update_topology(path: TeamPath, body: TeamTopologyBody):
 
     # Validate topology value (allow None to clear)
     if topology is not _UNSET and topology is not None and topology not in VALID_TOPOLOGIES:
-        return {
-            "error": f"Invalid topology. Must be one of: {', '.join(VALID_TOPOLOGIES)}"
-        }, HTTPStatus.BAD_REQUEST
+        return error_response(
+            "BAD_REQUEST",
+            f"Invalid topology. Must be one of: {', '.join(VALID_TOPOLOGIES)}",
+            HTTPStatus.BAD_REQUEST,
+        )
 
     # Validate topology config if both provided
     if topology_config is not _UNSET and topology is not _UNSET and topology is not None:
         config_err = TeamService.validate_topology_config(path.team_id, topology, topology_config)
         if config_err:
-            return {"error": config_err}, HTTPStatus.BAD_REQUEST
+            return error_response("BAD_REQUEST", config_err, HTTPStatus.BAD_REQUEST)
 
     # Serialize topology_config to JSON string if it's a dict
     config_str = _UNSET
@@ -738,7 +783,7 @@ def update_trigger(path: TeamPath, body: TeamTriggerBody):
     """Update team trigger configuration."""
     team = get_team(path.team_id)
     if not team:
-        return {"error": "Team not found"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "Team not found", HTTPStatus.NOT_FOUND)
 
     trigger_source = body.trigger_source
     trigger_config = body.trigger_config
@@ -746,9 +791,11 @@ def update_trigger(path: TeamPath, body: TeamTriggerBody):
 
     # Validate trigger_source
     if trigger_source is not None and trigger_source not in VALID_TRIGGER_SOURCES:
-        return {
-            "error": f"Invalid trigger_source. Must be one of: {', '.join(VALID_TRIGGER_SOURCES)}"
-        }, HTTPStatus.BAD_REQUEST
+        return error_response(
+            "BAD_REQUEST",
+            f"Invalid trigger_source. Must be one of: {', '.join(VALID_TRIGGER_SOURCES)}",
+            HTTPStatus.BAD_REQUEST,
+        )
 
     # Serialize trigger_config to JSON string if it's a dict
     config_str = None
@@ -779,10 +826,10 @@ def manual_run(path: TeamPath):
     """Manually trigger a team execution."""
     team = get_team(path.team_id)
     if not team:
-        return {"error": "Team not found"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "Team not found", HTTPStatus.NOT_FOUND)
 
     if not team.get("enabled", 1):
-        return {"error": "Team is disabled"}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", "Team is disabled", HTTPStatus.BAD_REQUEST)
 
     data = request.get_json(silent=True) or {}
     message = data.get("message", "")
@@ -797,7 +844,7 @@ def manual_run(path: TeamPath):
             trigger_type="manual",
         )
     except ValueError as e:
-        return {"error": str(e)}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", str(e), HTTPStatus.BAD_REQUEST)
 
     return {
         "message": "Team execution started",

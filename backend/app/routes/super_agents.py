@@ -11,6 +11,8 @@ from flask import Response, request
 from flask_openapi3 import APIBlueprint, Tag
 from pydantic import BaseModel, Field
 
+from app.models.common import error_response
+
 logger = logging.getLogger(__name__)
 
 from ..database import (
@@ -70,11 +72,11 @@ def create_super_agent():
     """Create a new super agent."""
     data = request.get_json()
     if not data:
-        return {"error": "JSON body required"}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", "JSON body required", HTTPStatus.BAD_REQUEST)
 
     name = data.get("name")
     if not name:
-        return {"error": "name is required"}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", "name is required", HTTPStatus.BAD_REQUEST)
 
     sa_id = add_super_agent(
         name=name,
@@ -87,7 +89,11 @@ def create_super_agent():
         config_json=data.get("config_json"),
     )
     if not sa_id:
-        return {"error": "Failed to create super agent"}, HTTPStatus.INTERNAL_SERVER_ERROR
+        return error_response(
+            "INTERNAL_SERVER_ERROR",
+            "Failed to create super agent",
+            HTTPStatus.INTERNAL_SERVER_ERROR,
+        )
 
     return {"message": "SuperAgent created", "super_agent_id": sa_id}, HTTPStatus.CREATED
 
@@ -97,7 +103,7 @@ def get_super_agent_endpoint(path: SuperAgentPath):
     """Get a super agent by ID."""
     sa = get_super_agent(path.super_agent_id)
     if not sa:
-        return {"error": "SuperAgent not found"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "SuperAgent not found", HTTPStatus.NOT_FOUND)
     return sa, HTTPStatus.OK
 
 
@@ -106,7 +112,7 @@ def update_super_agent_endpoint(path: SuperAgentPath):
     """Update a super agent."""
     data = request.get_json()
     if not data:
-        return {"error": "JSON body required"}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", "JSON body required", HTTPStatus.BAD_REQUEST)
 
     if not update_super_agent(
         path.super_agent_id,
@@ -120,7 +126,9 @@ def update_super_agent_endpoint(path: SuperAgentPath):
         enabled=data.get("enabled"),
         config_json=data.get("config_json"),
     ):
-        return {"error": "SuperAgent not found or no changes made"}, HTTPStatus.NOT_FOUND
+        return error_response(
+            "NOT_FOUND", "SuperAgent not found or no changes made", HTTPStatus.NOT_FOUND
+        )
 
     return {"message": "SuperAgent updated"}, HTTPStatus.OK
 
@@ -129,7 +137,7 @@ def update_super_agent_endpoint(path: SuperAgentPath):
 def delete_super_agent_endpoint(path: SuperAgentPath):
     """Delete a super agent."""
     if not delete_super_agent(path.super_agent_id):
-        return {"error": "SuperAgent not found"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "SuperAgent not found", HTTPStatus.NOT_FOUND)
     return {"message": "SuperAgent deleted"}, HTTPStatus.OK
 
 
@@ -150,15 +158,15 @@ def create_document(path: SuperAgentPath):
     """Create a document for a super agent."""
     data = request.get_json()
     if not data:
-        return {"error": "JSON body required"}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", "JSON body required", HTTPStatus.BAD_REQUEST)
 
     doc_type = data.get("doc_type")
     if not doc_type:
-        return {"error": "doc_type is required"}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", "doc_type is required", HTTPStatus.BAD_REQUEST)
 
     title = data.get("title")
     if not title:
-        return {"error": "title is required"}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", "title is required", HTTPStatus.BAD_REQUEST)
 
     doc_id = add_super_agent_document(
         super_agent_id=path.super_agent_id,
@@ -167,7 +175,9 @@ def create_document(path: SuperAgentPath):
         content=data.get("content", ""),
     )
     if doc_id is None:
-        return {"error": "Invalid doc_type or failed to create document"}, HTTPStatus.BAD_REQUEST
+        return error_response(
+            "BAD_REQUEST", "Invalid doc_type or failed to create document", HTTPStatus.BAD_REQUEST
+        )
 
     return {"message": "Document created", "document_id": doc_id}, HTTPStatus.CREATED
 
@@ -177,7 +187,7 @@ def get_document_endpoint(path: DocumentPath):
     """Get a document by ID."""
     doc = get_super_agent_document(path.doc_id)
     if not doc:
-        return {"error": "Document not found"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "Document not found", HTTPStatus.NOT_FOUND)
     return doc, HTTPStatus.OK
 
 
@@ -186,14 +196,16 @@ def update_document_endpoint(path: DocumentPath):
     """Update a document."""
     data = request.get_json()
     if not data:
-        return {"error": "JSON body required"}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", "JSON body required", HTTPStatus.BAD_REQUEST)
 
     if not update_super_agent_document(
         path.doc_id,
         title=data.get("title"),
         content=data.get("content"),
     ):
-        return {"error": "Document not found or no changes made"}, HTTPStatus.NOT_FOUND
+        return error_response(
+            "NOT_FOUND", "Document not found or no changes made", HTTPStatus.NOT_FOUND
+        )
 
     return {"message": "Document updated"}, HTTPStatus.OK
 
@@ -202,7 +214,7 @@ def update_document_endpoint(path: DocumentPath):
 def delete_document_endpoint(path: DocumentPath):
     """Delete a document."""
     if not delete_super_agent_document(path.doc_id):
-        return {"error": "Document not found"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "Document not found", HTTPStatus.NOT_FOUND)
     return {"message": "Document deleted"}, HTTPStatus.OK
 
 
@@ -224,8 +236,8 @@ def create_session(path: SuperAgentPath):
     session_id, error = SuperAgentSessionService.create_session(path.super_agent_id)
     if error:
         if "not found" in error.lower():
-            return {"error": error}, HTTPStatus.NOT_FOUND
-        return {"error": error}, HTTPStatus.BAD_REQUEST
+            return error_response("NOT_FOUND", error, HTTPStatus.NOT_FOUND)
+        return error_response("BAD_REQUEST", error, HTTPStatus.BAD_REQUEST)
 
     # Initialize chat state for versioned SSE delivery
     from ..services.chat_state_service import ChatStateService
@@ -240,7 +252,7 @@ def get_session_endpoint(path: SessionPath):
     """Get a session by ID."""
     session = get_super_agent_session(path.session_id)
     if not session:
-        return {"error": "Session not found"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "Session not found", HTTPStatus.NOT_FOUND)
     return session, HTTPStatus.OK
 
 
@@ -249,17 +261,17 @@ def send_session_message(path: SessionPath):
     """Send a message to a session."""
     data = request.get_json()
     if not data:
-        return {"error": "JSON body required"}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", "JSON body required", HTTPStatus.BAD_REQUEST)
 
     message = data.get("message")
     if not message:
-        return {"error": "message is required"}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", "message is required", HTTPStatus.BAD_REQUEST)
 
     success, error = SuperAgentSessionService.send_message(path.session_id, message)
     if not success:
         if "not found" in error.lower():
-            return {"error": error}, HTTPStatus.NOT_FOUND
-        return {"error": error}, HTTPStatus.BAD_REQUEST
+            return error_response("NOT_FOUND", error, HTTPStatus.NOT_FOUND)
+        return error_response("BAD_REQUEST", error, HTTPStatus.BAD_REQUEST)
     return {"message": "Message sent"}, HTTPStatus.OK
 
 
@@ -268,7 +280,7 @@ def end_session(path: SessionPath):
     """End a session."""
     success, error = SuperAgentSessionService.end_session(path.session_id)
     if not success:
-        return {"error": error}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", error, HTTPStatus.NOT_FOUND)
 
     # Clean up chat state and poison-pill subscriber queues
     from ..services.chat_state_service import ChatStateService
@@ -375,11 +387,11 @@ def send_chat_message(path: SessionPath):
 
     data = request.get_json()
     if not data:
-        return {"error": "JSON body required"}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", "JSON body required", HTTPStatus.BAD_REQUEST)
 
     content = data.get("content", "").strip()
     if not content:
-        return {"error": "content is required"}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", "content is required", HTTPStatus.BAD_REQUEST)
 
     backend = data.get("backend", "auto")
     account_id = data.get("account_id")
@@ -388,9 +400,9 @@ def send_chat_message(path: SessionPath):
     # Verify session exists and is active
     session = get_super_agent_session(path.session_id)
     if not session:
-        return {"error": "Session not found"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "Session not found", HTTPStatus.NOT_FOUND)
     if session.get("status") != "active":
-        return {"error": "Session is not active"}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", "Session is not active", HTTPStatus.BAD_REQUEST)
 
     # Determine effective backend (resolve before persisting so both
     # user and assistant messages carry backend attribution in the log)
@@ -404,7 +416,7 @@ def send_chat_message(path: SessionPath):
         path.session_id, content, backend=effective_backend
     )
     if not success:
-        return {"error": error}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", error, HTTPStatus.BAD_REQUEST)
 
     # Generate a message ID for this user message
     message_id = _generate_message_id()
@@ -592,11 +604,11 @@ def send_agent_message(path: SuperAgentPath):
 
     data = request.get_json()
     if not data:
-        return {"error": "JSON body required"}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", "JSON body required", HTTPStatus.BAD_REQUEST)
 
     content = data.get("content", "").strip()
     if not content:
-        return {"error": "content is required"}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", "content is required", HTTPStatus.BAD_REQUEST)
 
     msg_id = AgentMessageBusService.send_message(
         from_agent_id=path.super_agent_id,
@@ -608,7 +620,9 @@ def send_agent_message(path: SuperAgentPath):
         ttl_seconds=data.get("ttl_seconds"),
     )
     if not msg_id:
-        return {"error": "Failed to send message"}, HTTPStatus.INTERNAL_SERVER_ERROR
+        return error_response(
+            "INTERNAL_SERVER_ERROR", "Failed to send message", HTTPStatus.INTERNAL_SERVER_ERROR
+        )
 
     return {"message": "Message sent", "message_id": msg_id}, HTTPStatus.CREATED
 
@@ -638,7 +652,7 @@ def mark_message_read(path: MessagePath):
     from ..db.messages import update_message_status
 
     if not update_message_status(path.message_id, "read"):
-        return {"error": "Message not found"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "Message not found", HTTPStatus.NOT_FOUND)
 
     return {"message": "Message marked as read"}, HTTPStatus.OK
 

@@ -6,6 +6,8 @@ from flask import request
 from flask_openapi3 import APIBlueprint, Tag
 from pydantic import BaseModel, Field
 
+from app.models.common import error_response
+
 from ..services.pr_review_service import PrReviewService
 
 tag = Tag(name="pr-reviews", description="PR review operations")
@@ -59,7 +61,7 @@ def create_pr_review():
     """Create a new PR review record."""
     data = request.get_json()
     if not data:
-        return {"error": "JSON body required"}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", "JSON body required", HTTPStatus.BAD_REQUEST)
     result, status = PrReviewService.create_review(data)
     return result, status
 
@@ -69,7 +71,7 @@ def update_pr_review(path: PrReviewIdPath):
     """Update a PR review record."""
     data = request.get_json()
     if not data:
-        return {"error": "JSON body required"}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", "JSON body required", HTTPStatus.BAD_REQUEST)
     result, status = PrReviewService.update_review(path.review_id, data)
     return result, status
 

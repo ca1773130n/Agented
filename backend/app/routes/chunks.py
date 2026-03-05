@@ -15,6 +15,8 @@ from flask import request
 from flask_openapi3 import APIBlueprint, Tag
 from pydantic import BaseModel, Field
 
+from app.models.common import error_response
+
 from ..db.chunk_results import (
     create_chunk_result,
     create_chunked_execution,
@@ -164,12 +166,14 @@ def run_chunked(path: BotPath):
     """
     bot = get_trigger(path.bot_id)
     if not bot:
-        return {"error": "Bot not found"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "Bot not found", HTTPStatus.NOT_FOUND)
 
     body = request.get_json(silent=True) or {}
     content = body.get("content")
     if not content:
-        return {"error": "Missing required field: content"}, HTTPStatus.BAD_REQUEST
+        return error_response(
+            "BAD_REQUEST", "Missing required field: content", HTTPStatus.BAD_REQUEST
+        )
 
     max_chunk_chars = body.get("max_chunk_chars")
 
@@ -179,7 +183,11 @@ def run_chunked(path: BotPath):
     # Create chunked execution record
     chunked_execution_id = create_chunked_execution(path.bot_id, len(chunks))
     if not chunked_execution_id:
-        return {"error": "Failed to create chunked execution"}, HTTPStatus.INTERNAL_SERVER_ERROR
+        return error_response(
+            "INTERNAL_SERVER_ERROR",
+            "Failed to create chunked execution",
+            HTTPStatus.INTERNAL_SERVER_ERROR,
+        )
 
     # Create chunk result records and spawn background threads
     for idx, chunk_content in enumerate(chunks):
@@ -214,7 +222,7 @@ def get_chunked_execution_status(path: ChunkedExecutionPath):
     """
     execution = get_chunked_execution(path.chunked_execution_id)
     if not execution:
-        return {"error": "Chunked execution not found"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "Chunked execution not found", HTTPStatus.NOT_FOUND)
     return execution, HTTPStatus.OK
 
 
@@ -227,7 +235,7 @@ def get_chunked_execution_results(path: ChunkedExecutionPath):
     """
     execution = get_chunked_execution(path.chunked_execution_id)
     if not execution:
-        return {"error": "Chunked execution not found"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "Chunked execution not found", HTTPStatus.NOT_FOUND)
 
     if execution["status"] not in ("completed", "failed"):
         return {

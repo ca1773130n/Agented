@@ -6,6 +6,8 @@ from flask import request
 from flask_openapi3 import APIBlueprint, Tag
 from pydantic import BaseModel, Field
 
+from app.models.common import error_response
+
 from ..database import (
     add_workflow,
     add_workflow_version_raw,
@@ -71,11 +73,11 @@ def create_workflow():
     """Create a new workflow with optional DAG validation."""
     data = request.get_json()
     if not data:
-        return {"error": "JSON body required"}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", "JSON body required", HTTPStatus.BAD_REQUEST)
 
     name = data.get("name")
     if not name:
-        return {"error": "name is required"}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", "name is required", HTTPStatus.BAD_REQUEST)
 
     # Validate graph if provided at creation time
     graph = data.get("graph")
@@ -84,7 +86,12 @@ def create_workflow():
 
         is_valid, errors = validate_workflow_dag(graph)
         if not is_valid:
-            return {"error": "DAG validation failed", "errors": errors}, HTTPStatus.BAD_REQUEST
+            return error_response(
+                "BAD_REQUEST",
+                "DAG validation failed",
+                HTTPStatus.BAD_REQUEST,
+                details={"errors": errors},
+            )
 
     workflow_id = add_workflow(
         name=name,
@@ -93,7 +100,9 @@ def create_workflow():
         trigger_config=data.get("trigger_config"),
     )
     if not workflow_id:
-        return {"error": "Failed to create workflow"}, HTTPStatus.INTERNAL_SERVER_ERROR
+        return error_response(
+            "INTERNAL_SERVER_ERROR", "Failed to create workflow", HTTPStatus.INTERNAL_SERVER_ERROR
+        )
 
     return {"message": "Workflow created", "workflow_id": workflow_id}, HTTPStatus.CREATED
 
@@ -103,7 +112,7 @@ def get_workflow_endpoint(path: WorkflowPath):
     """Get a single workflow by ID."""
     workflow = get_workflow(path.workflow_id)
     if not workflow:
-        return {"error": "Workflow not found"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "Workflow not found", HTTPStatus.NOT_FOUND)
     return workflow, HTTPStatus.OK
 
 
@@ -112,7 +121,7 @@ def update_workflow_endpoint(path: WorkflowPath):
     """Update a workflow with optional DAG validation."""
     data = request.get_json()
     if not data:
-        return {"error": "JSON body required"}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", "JSON body required", HTTPStatus.BAD_REQUEST)
 
     # Validate graph if provided during update
     graph = data.get("graph")
@@ -121,7 +130,12 @@ def update_workflow_endpoint(path: WorkflowPath):
 
         is_valid, errors = validate_workflow_dag(graph)
         if not is_valid:
-            return {"error": "DAG validation failed", "errors": errors}, HTTPStatus.BAD_REQUEST
+            return error_response(
+                "BAD_REQUEST",
+                "DAG validation failed",
+                HTTPStatus.BAD_REQUEST,
+                details={"errors": errors},
+            )
 
     if not update_workflow(
         path.workflow_id,
@@ -131,7 +145,9 @@ def update_workflow_endpoint(path: WorkflowPath):
         trigger_config=data.get("trigger_config"),
         enabled=data.get("enabled"),
     ):
-        return {"error": "Workflow not found or no changes made"}, HTTPStatus.NOT_FOUND
+        return error_response(
+            "NOT_FOUND", "Workflow not found or no changes made", HTTPStatus.NOT_FOUND
+        )
 
     workflow = get_workflow(path.workflow_id)
     return workflow, HTTPStatus.OK
@@ -141,7 +157,7 @@ def update_workflow_endpoint(path: WorkflowPath):
 def delete_workflow_endpoint(path: WorkflowPath):
     """Delete a workflow (cascades to versions and executions)."""
     if not delete_workflow(path.workflow_id):
-        return {"error": "Workflow not found"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "Workflow not found", HTTPStatus.NOT_FOUND)
     return {"message": "Workflow deleted"}, HTTPStatus.OK
 
 
@@ -155,20 +171,20 @@ def create_version(path: WorkflowPath):
     """Create a new version for a workflow with DAG validation."""
     data = request.get_json()
     if not data:
-        return {"error": "JSON body required"}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", "JSON body required", HTTPStatus.BAD_REQUEST)
 
     graph_json = data.get("graph_json")
     if not graph_json:
-        return {"error": "graph_json is required"}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", "graph_json is required", HTTPStatus.BAD_REQUEST)
 
     # Check workflow exists
     workflow = get_workflow(path.workflow_id)
     if not workflow:
-        return {"error": "Workflow not found"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "Workflow not found", HTTPStatus.NOT_FOUND)
 
     version, error = add_workflow_version_raw(path.workflow_id, graph_json)
     if version is None:
-        return {"error": error}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", error, HTTPStatus.BAD_REQUEST)
 
     return {"message": "Version created", "version": version}, HTTPStatus.CREATED
 
@@ -185,7 +201,7 @@ def get_latest_version_endpoint(path: WorkflowPath):
     """Get the latest version for a workflow."""
     version = get_latest_workflow_version(path.workflow_id)
     if not version:
-        return {"error": "No versions found"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "No versions found", HTTPStatus.NOT_FOUND)
     return version, HTTPStatus.OK
 
 
@@ -219,11 +235,15 @@ def run_workflow(path: WorkflowPath):
         try:
             timeout_seconds = int(timeout_seconds)
             if timeout_seconds <= 0:
-                return {
-                    "error": "timeout_seconds must be a positive integer"
-                }, HTTPStatus.BAD_REQUEST
+                return error_response(
+                    "BAD_REQUEST",
+                    "timeout_seconds must be a positive integer",
+                    HTTPStatus.BAD_REQUEST,
+                )
         except (TypeError, ValueError):
-            return {"error": "timeout_seconds must be an integer"}, HTTPStatus.BAD_REQUEST
+            return error_response(
+                "BAD_REQUEST", "timeout_seconds must be an integer", HTTPStatus.BAD_REQUEST
+            )
 
     try:
         execution_id = WorkflowExecutionService.execute_workflow(
@@ -235,8 +255,8 @@ def run_workflow(path: WorkflowPath):
     except ValueError as e:
         error_msg = str(e)
         if "not found" in error_msg.lower():
-            return {"error": error_msg}, HTTPStatus.NOT_FOUND
-        return {"error": error_msg}, HTTPStatus.BAD_REQUEST
+            return error_response("NOT_FOUND", error_msg, HTTPStatus.NOT_FOUND)
+        return error_response("BAD_REQUEST", error_msg, HTTPStatus.BAD_REQUEST)
 
     return (
         {"message": "Workflow execution started", "execution_id": execution_id},
@@ -256,7 +276,7 @@ def get_execution_detail(path: WorkflowExecutionPath):
     """Get execution details including node executions."""
     execution = get_workflow_execution(path.execution_id)
     if not execution:
-        return {"error": "Execution not found"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "Execution not found", HTTPStatus.NOT_FOUND)
 
     node_executions = get_workflow_node_executions(path.execution_id)
     return {
@@ -272,7 +292,9 @@ def cancel_workflow_execution(path: WorkflowExecutionIdPath):
 
     success = WorkflowExecutionService.cancel_execution(path.execution_id)
     if not success:
-        return {"error": "Execution not found or not running"}, HTTPStatus.NOT_FOUND
+        return error_response(
+            "NOT_FOUND", "Execution not found or not running", HTTPStatus.NOT_FOUND
+        )
 
     return {"message": "Execution cancelled"}, HTTPStatus.OK
 
@@ -372,7 +394,7 @@ def workflow_analytics(path: WorkflowPath):
     """Get per-node success/failure rates and aggregate stats for a workflow."""
     workflow = get_workflow(path.workflow_id)
     if not workflow:
-        return {"error": "Workflow not found"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "Workflow not found", HTTPStatus.NOT_FOUND)
 
     days = request.args.get("days", 30, type=int)
     nodes = get_workflow_node_analytics(path.workflow_id)
@@ -386,7 +408,7 @@ def workflow_execution_timeline(path: WorkflowExecutionPath):
     """Get ordered node execution timeline for debugging a workflow execution."""
     execution = get_workflow_execution(path.execution_id)
     if not execution:
-        return {"error": "Execution not found"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "Execution not found", HTTPStatus.NOT_FOUND)
 
     nodes = get_workflow_execution_timeline(path.execution_id)
     return {
@@ -408,7 +430,7 @@ def validate_workflow():
 
     data = request.get_json()
     if not data:
-        return {"error": "JSON body required"}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", "JSON body required", HTTPStatus.BAD_REQUEST)
 
     graph = data.get("graph", {})
     is_valid, errors = validate_workflow_dag(graph)
@@ -433,7 +455,9 @@ def approve_workflow_node(path: ApprovalNodePath):
         path.execution_id, path.node_id, resolved_by=resolved_by
     )
     if not success:
-        return {"error": "Approval not found or node is not pending approval"}, HTTPStatus.NOT_FOUND
+        return error_response(
+            "NOT_FOUND", "Approval not found or node is not pending approval", HTTPStatus.NOT_FOUND
+        )
 
     return {"message": "Node approved", "execution_id": path.execution_id}, HTTPStatus.OK
 
@@ -450,7 +474,9 @@ def reject_workflow_node(path: ApprovalNodePath):
         path.execution_id, path.node_id, resolved_by=resolved_by
     )
     if not success:
-        return {"error": "Approval not found or node is not pending approval"}, HTTPStatus.NOT_FOUND
+        return error_response(
+            "NOT_FOUND", "Approval not found or node is not pending approval", HTTPStatus.NOT_FOUND
+        )
 
     return {"message": "Node rejected", "execution_id": path.execution_id}, HTTPStatus.OK
 
@@ -476,27 +502,31 @@ def register_trigger(path: WorkflowPath):
 
     workflow = get_workflow(path.workflow_id)
     if not workflow:
-        return {"error": "Workflow not found"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "Workflow not found", HTTPStatus.NOT_FOUND)
 
     trigger_type = workflow.get("trigger_type", "manual")
     if trigger_type == "manual":
-        return {
-            "error": "Manual workflows do not have registerable triggers"
-        }, HTTPStatus.BAD_REQUEST
+        return error_response(
+            "BAD_REQUEST",
+            "Manual workflows do not have registerable triggers",
+            HTTPStatus.BAD_REQUEST,
+        )
 
     config_str = workflow.get("trigger_config")
     if not config_str:
-        return {"error": "Workflow has no trigger_config"}, HTTPStatus.BAD_REQUEST
+        return error_response(
+            "BAD_REQUEST", "Workflow has no trigger_config", HTTPStatus.BAD_REQUEST
+        )
 
     try:
         config = json.loads(config_str)
     except (json.JSONDecodeError, TypeError):
-        return {"error": "Invalid trigger_config JSON"}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", "Invalid trigger_config JSON", HTTPStatus.BAD_REQUEST)
 
     try:
         WorkflowTriggerService.register_trigger(path.workflow_id, trigger_type, config)
     except ValueError as e:
-        return {"error": str(e)}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", str(e), HTTPStatus.BAD_REQUEST)
 
     return {"message": f"Trigger registered for workflow {path.workflow_id}"}, HTTPStatus.OK
 
@@ -508,17 +538,19 @@ def unregister_trigger(path: WorkflowPath):
 
     workflow = get_workflow(path.workflow_id)
     if not workflow:
-        return {"error": "Workflow not found"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "Workflow not found", HTTPStatus.NOT_FOUND)
 
     trigger_type = workflow.get("trigger_type", "manual")
     if trigger_type == "manual":
-        return {
-            "error": "Manual workflows do not have registerable triggers"
-        }, HTTPStatus.BAD_REQUEST
+        return error_response(
+            "BAD_REQUEST",
+            "Manual workflows do not have registerable triggers",
+            HTTPStatus.BAD_REQUEST,
+        )
 
     try:
         WorkflowTriggerService.unregister_trigger(path.workflow_id, trigger_type)
     except ValueError as e:
-        return {"error": str(e)}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", str(e), HTTPStatus.BAD_REQUEST)
 
     return {"message": f"Trigger unregistered for workflow {path.workflow_id}"}, HTTPStatus.OK

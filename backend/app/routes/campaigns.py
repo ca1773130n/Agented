@@ -4,6 +4,8 @@ from http import HTTPStatus
 
 from flask_openapi3 import APIBlueprint, Tag
 
+from app.models.common import error_response
+
 from ..db.campaigns import (
     delete_campaign,
     get_campaign,
@@ -31,7 +33,9 @@ def create_campaign(body: CampaignCreate):
         repo_urls=body.repo_urls,
     )
     if not campaign_id:
-        return {"error": "Failed to create campaign"}, HTTPStatus.INTERNAL_SERVER_ERROR
+        return error_response(
+            "INTERNAL_SERVER_ERROR", "Failed to create campaign", HTTPStatus.INTERNAL_SERVER_ERROR
+        )
 
     campaign = get_campaign(campaign_id)
     return {"campaign": campaign}, HTTPStatus.CREATED
@@ -52,7 +56,7 @@ def get_campaign_detail(path: CampaignPath):
     """Get campaign detail with all repo execution statuses."""
     campaign = get_campaign(path.campaign_id)
     if not campaign:
-        return {"error": "Campaign not found"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "Campaign not found", HTTPStatus.NOT_FOUND)
 
     executions = list_campaign_executions(path.campaign_id)
     return {
@@ -66,7 +70,7 @@ def get_campaign_results_view(path: CampaignPath):
     """Get consolidated campaign results grouped by repo."""
     results = get_campaign_results(path.campaign_id)
     if not results:
-        return {"error": "Campaign not found"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "Campaign not found", HTTPStatus.NOT_FOUND)
 
     return results
 
@@ -76,7 +80,7 @@ def delete_campaign_view(path: CampaignPath):
     """Delete a campaign record."""
     deleted = delete_campaign(path.campaign_id)
     if not deleted:
-        return {"error": "Campaign not found"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "Campaign not found", HTTPStatus.NOT_FOUND)
 
     return {"deleted": True}
 

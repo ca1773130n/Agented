@@ -6,6 +6,8 @@ from flask import Response, request
 from flask_openapi3 import APIBlueprint, Tag
 from pydantic import BaseModel, Field
 
+from app.models.common import error_response
+
 from ..database import (
     add_plugin,
     add_plugin_component,
@@ -47,11 +49,11 @@ def create_plugin():
     """Create a new plugin."""
     data = request.get_json()
     if not data:
-        return {"error": "JSON body required"}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", "JSON body required", HTTPStatus.BAD_REQUEST)
 
     name = data.get("name")
     if not name:
-        return {"error": "name is required"}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", "name is required", HTTPStatus.BAD_REQUEST)
 
     plugin_id = add_plugin(
         name=name,
@@ -61,7 +63,9 @@ def create_plugin():
         author=data.get("author"),
     )
     if not plugin_id:
-        return {"error": "Failed to create plugin"}, HTTPStatus.INTERNAL_SERVER_ERROR
+        return error_response(
+            "INTERNAL_SERVER_ERROR", "Failed to create plugin", HTTPStatus.INTERNAL_SERVER_ERROR
+        )
 
     plugin = get_plugin(plugin_id)
     return {"message": "Plugin created", "plugin": plugin}, HTTPStatus.CREATED
@@ -72,7 +76,7 @@ def get_plugin_detail_endpoint(path: PluginPath):
     """Get plugin details with components."""
     plugin = get_plugin_detail(path.plugin_id)
     if not plugin:
-        return {"error": "Plugin not found"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "Plugin not found", HTTPStatus.NOT_FOUND)
     return plugin, HTTPStatus.OK
 
 
@@ -81,7 +85,7 @@ def update_plugin_endpoint(path: PluginPath):
     """Update a plugin."""
     data = request.get_json()
     if not data:
-        return {"error": "JSON body required"}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", "JSON body required", HTTPStatus.BAD_REQUEST)
 
     if not update_plugin(
         path.plugin_id,
@@ -91,7 +95,9 @@ def update_plugin_endpoint(path: PluginPath):
         status=data.get("status"),
         author=data.get("author"),
     ):
-        return {"error": "Plugin not found or no changes made"}, HTTPStatus.NOT_FOUND
+        return error_response(
+            "NOT_FOUND", "Plugin not found or no changes made", HTTPStatus.NOT_FOUND
+        )
 
     plugin = get_plugin(path.plugin_id)
     return plugin, HTTPStatus.OK
@@ -101,7 +107,7 @@ def update_plugin_endpoint(path: PluginPath):
 def delete_plugin_endpoint(path: PluginPath):
     """Delete a plugin."""
     if not delete_plugin(path.plugin_id):
-        return {"error": "Plugin not found"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "Plugin not found", HTTPStatus.NOT_FOUND)
     return {"message": "Plugin deleted"}, HTTPStatus.OK
 
 
@@ -118,12 +124,12 @@ def add_component(path: PluginPath):
     """Add a component to the plugin."""
     data = request.get_json()
     if not data:
-        return {"error": "JSON body required"}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", "JSON body required", HTTPStatus.BAD_REQUEST)
 
     name = data.get("name")
     component_type = data.get("type")
     if not name or not component_type:
-        return {"error": "name and type are required"}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", "name and type are required", HTTPStatus.BAD_REQUEST)
 
     component_id = add_plugin_component(
         plugin_id=path.plugin_id,
@@ -132,7 +138,9 @@ def add_component(path: PluginPath):
         content=data.get("content"),
     )
     if not component_id:
-        return {"error": "Failed to add component"}, HTTPStatus.INTERNAL_SERVER_ERROR
+        return error_response(
+            "INTERNAL_SERVER_ERROR", "Failed to add component", HTTPStatus.INTERNAL_SERVER_ERROR
+        )
 
     components = get_plugin_components(path.plugin_id)
     component = next((c for c in components if c["id"] == component_id), None)
@@ -144,7 +152,7 @@ def update_component(path: ComponentPath):
     """Update a plugin component."""
     data = request.get_json()
     if not data:
-        return {"error": "JSON body required"}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", "JSON body required", HTTPStatus.BAD_REQUEST)
 
     if not update_plugin_component(
         path.component_id,
@@ -152,7 +160,9 @@ def update_component(path: ComponentPath):
         component_type=data.get("type"),
         content=data.get("content"),
     ):
-        return {"error": "Component not found or no changes made"}, HTTPStatus.NOT_FOUND
+        return error_response(
+            "NOT_FOUND", "Component not found or no changes made", HTTPStatus.NOT_FOUND
+        )
 
     components = get_plugin_components(path.plugin_id)
     component = next((c for c in components if c["id"] == path.component_id), None)
@@ -163,7 +173,7 @@ def update_component(path: ComponentPath):
 def remove_component(path: ComponentPath):
     """Delete a plugin component."""
     if not delete_plugin_component(path.component_id):
-        return {"error": "Component not found"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "Component not found", HTTPStatus.NOT_FOUND)
     return {"message": "Component deleted"}, HTTPStatus.OK
 
 
@@ -174,11 +184,13 @@ def generate_plugin_stream():
 
     data = request.get_json()
     if not data:
-        return {"error": "JSON body required"}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", "JSON body required", HTTPStatus.BAD_REQUEST)
 
     description = (data.get("description") or "").strip()
     if len(description) < 10:
-        return {"error": "Description must be at least 10 characters"}, HTTPStatus.BAD_REQUEST
+        return error_response(
+            "BAD_REQUEST", "Description must be at least 10 characters", HTTPStatus.BAD_REQUEST
+        )
 
     return Response(
         PluginGenerationService.generate_streaming(description),

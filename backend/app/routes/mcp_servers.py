@@ -4,6 +4,8 @@ from http import HTTPStatus
 
 from flask_openapi3 import APIBlueprint, Tag
 
+from app.models.common import error_response
+
 from ..database import (
     add_mcp_server,
     assign_mcp_to_project,
@@ -63,7 +65,7 @@ def get_mcp_server_endpoint(path: McpServerIdPath):
     """Get a single MCP server by ID."""
     server = get_mcp_server(path.server_id)
     if not server:
-        return {"error": "MCP server not found"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "MCP server not found", HTTPStatus.NOT_FOUND)
     return server, HTTPStatus.OK
 
 
@@ -88,7 +90,9 @@ def create_mcp_server(body: CreateMcpServerRequest):
         npm_package=body.npm_package,
     )
     if not server_id:
-        return {"error": "Failed to create MCP server (duplicate name?)"}, HTTPStatus.BAD_REQUEST
+        return error_response(
+            "BAD_REQUEST", "Failed to create MCP server (duplicate name?)", HTTPStatus.BAD_REQUEST
+        )
     return {"id": server_id}, HTTPStatus.CREATED
 
 
@@ -97,7 +101,7 @@ def update_mcp_server_endpoint(path: McpServerIdPath, body: UpdateMcpServerReque
     """Update an MCP server. Cannot change preset name or is_preset flag."""
     server = get_mcp_server(path.server_id)
     if not server:
-        return {"error": "MCP server not found"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "MCP server not found", HTTPStatus.NOT_FOUND)
 
     # Build update kwargs, filtering out None values
     updates = {}
@@ -124,10 +128,12 @@ def update_mcp_server_endpoint(path: McpServerIdPath, body: UpdateMcpServerReque
 
     # Prevent changing preset name
     if server.get("is_preset") and "name" in updates:
-        return {"error": "Cannot change name of a preset MCP server"}, HTTPStatus.BAD_REQUEST
+        return error_response(
+            "BAD_REQUEST", "Cannot change name of a preset MCP server", HTTPStatus.BAD_REQUEST
+        )
 
     if not updates:
-        return {"error": "No fields to update"}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", "No fields to update", HTTPStatus.BAD_REQUEST)
 
     update_mcp_server(path.server_id, **updates)
     updated = get_mcp_server(path.server_id)
@@ -139,10 +145,12 @@ def delete_mcp_server_endpoint(path: McpServerIdPath):
     """Delete an MCP server. Presets cannot be deleted."""
     server = get_mcp_server(path.server_id)
     if not server:
-        return {"error": "MCP server not found"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "MCP server not found", HTTPStatus.NOT_FOUND)
 
     if server.get("is_preset"):
-        return {"error": "Cannot delete a preset MCP server"}, HTTPStatus.BAD_REQUEST
+        return error_response(
+            "BAD_REQUEST", "Cannot delete a preset MCP server", HTTPStatus.BAD_REQUEST
+        )
 
     delete_mcp_server(path.server_id)
     return {"message": "Deleted"}, HTTPStatus.OK
@@ -158,12 +166,12 @@ def sync_mcp_to_project(path: SyncProjectPath):
     """Sync MCP config to project's .mcp.json file."""
     project = get_project(path.project_id)
     if not project:
-        return {"error": "Project not found"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "Project not found", HTTPStatus.NOT_FOUND)
 
     try:
         local_path = ProjectWorkspaceService.resolve_working_directory(path.project_id)
     except ValueError as e:
-        return {"error": str(e)}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", str(e), HTTPStatus.BAD_REQUEST)
 
     result = McpSyncService.sync_project(path.project_id, local_path, dry_run=False)
     if "error" in result:
@@ -176,12 +184,12 @@ def preview_mcp_sync(path: SyncProjectPath):
     """Preview (dry-run) sync: show what would change in .mcp.json."""
     project = get_project(path.project_id)
     if not project:
-        return {"error": "Project not found"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "Project not found", HTTPStatus.NOT_FOUND)
 
     try:
         local_path = ProjectWorkspaceService.resolve_working_directory(path.project_id)
     except ValueError as e:
-        return {"error": str(e)}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", str(e), HTTPStatus.BAD_REQUEST)
 
     result = McpSyncService.sync_project(path.project_id, local_path, dry_run=True)
     if "error" in result:
@@ -210,7 +218,9 @@ def assign_mcp_to_project_endpoint(path: ProjectMcpPath, body: AssignMcpToProjec
         env_overrides_json=body.env_overrides_json if body else None,
     )
     if result is None:
-        return {"error": "Assignment already exists or invalid IDs"}, HTTPStatus.BAD_REQUEST
+        return error_response(
+            "BAD_REQUEST", "Assignment already exists or invalid IDs", HTTPStatus.BAD_REQUEST
+        )
     return {"message": "Assigned"}, HTTPStatus.CREATED
 
 
@@ -226,7 +236,7 @@ def update_project_mcp_assignment_endpoint(
         env_overrides_json=body.env_overrides_json if body else None,
     )
     if not success:
-        return {"error": "Assignment not found"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "Assignment not found", HTTPStatus.NOT_FOUND)
     return {"message": "Updated"}, HTTPStatus.OK
 
 
@@ -235,5 +245,5 @@ def unassign_mcp_from_project_endpoint(path: ProjectMcpPath):
     """Unassign an MCP server from a project."""
     success = unassign_mcp_from_project(project_id=path.project_id, mcp_server_id=path.server_id)
     if not success:
-        return {"error": "Assignment not found"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "Assignment not found", HTTPStatus.NOT_FOUND)
     return {"message": "Unassigned"}, HTTPStatus.OK

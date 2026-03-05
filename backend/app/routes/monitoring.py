@@ -5,6 +5,8 @@ from http import HTTPStatus
 from flask import request
 from flask_openapi3 import APIBlueprint, Tag
 
+from app.models.common import error_response
+
 from ..database import get_monitoring_config, get_snapshot_history
 from ..models.common import PaginationQuery
 from ..services.monitoring_service import MonitoringService
@@ -25,28 +27,36 @@ def post_config():
     """Save monitoring configuration and reconfigure the APScheduler job."""
     data = request.get_json()
     if not data:
-        return {"error": "JSON body required"}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", "JSON body required", HTTPStatus.BAD_REQUEST)
 
     # Validate polling_minutes
     polling_minutes = data.get("polling_minutes", 5)
     if polling_minutes not in (1, 5, 15, 30, 60):
-        return {
-            "error": "polling_minutes must be one of [1, 5, 15, 30, 60]"
-        }, HTTPStatus.BAD_REQUEST
+        return error_response(
+            "BAD_REQUEST",
+            "polling_minutes must be one of [1, 5, 15, 30, 60]",
+            HTTPStatus.BAD_REQUEST,
+        )
 
     # Validate accounts structure — must be a dict of str → dict
     accounts = data.get("accounts", {})
     if not isinstance(accounts, dict):
-        return {"error": "accounts must be a JSON object"}, HTTPStatus.BAD_REQUEST
+        return error_response(
+            "BAD_REQUEST", "accounts must be a JSON object", HTTPStatus.BAD_REQUEST
+        )
     for k, v in accounts.items():
         if not isinstance(k, str):
-            return {
-                "error": f"accounts keys must be strings, got {type(k).__name__}"
-            }, HTTPStatus.BAD_REQUEST
+            return error_response(
+                "BAD_REQUEST",
+                f"accounts keys must be strings, got {type(k).__name__}",
+                HTTPStatus.BAD_REQUEST,
+            )
         if not isinstance(v, dict):
-            return {
-                "error": f"accounts[{k!r}] must be a JSON object, got {type(v).__name__}"
-            }, HTTPStatus.BAD_REQUEST
+            return error_response(
+                "BAD_REQUEST",
+                f"accounts[{k!r}] must be a JSON object, got {type(v).__name__}",
+                HTTPStatus.BAD_REQUEST,
+            )
 
     # Build config dict
     config = {
@@ -74,7 +84,9 @@ def poll_now():
     try:
         MonitoringService._poll_usage()
     except Exception as e:
-        return {"error": f"Poll failed: {e}"}, HTTPStatus.INTERNAL_SERVER_ERROR
+        return error_response(
+            "INTERNAL_SERVER_ERROR", f"Poll failed: {e}", HTTPStatus.INTERNAL_SERVER_ERROR
+        )
 
     status = MonitoringService.get_monitoring_status()
     return status, HTTPStatus.OK
@@ -96,13 +108,18 @@ def get_history(query: PaginationQuery):
     minutes = request.args.get("minutes", 360, type=int)
 
     if account_id is None or not window_type:
-        return {
-            "error": "account_id and window_type are required query parameters"
-        }, HTTPStatus.BAD_REQUEST
+        return error_response(
+            "BAD_REQUEST",
+            "account_id and window_type are required query parameters",
+            HTTPStatus.BAD_REQUEST,
+        )
 
     history = get_snapshot_history(
-        account_id, window_type, since_minutes=minutes,
-        limit=query.limit, offset=query.offset or 0,
+        account_id,
+        window_type,
+        since_minutes=minutes,
+        limit=query.limit,
+        offset=query.offset or 0,
     )
 
     formatted = [

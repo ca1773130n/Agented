@@ -5,6 +5,8 @@ from http import HTTPStatus
 from flask import Response
 from flask_openapi3 import APIBlueprint, Tag
 
+from app.models.common import error_response
+
 from ..database import get_project
 from ..models.setup import (
     SetupExecutionPath,
@@ -24,7 +26,7 @@ def start_setup(body: StartSetupRequest):
     """Start an interactive setup execution for a project."""
     project = get_project(body.project_id)
     if not project:
-        return {"error": "Project not found"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "Project not found", HTTPStatus.NOT_FOUND)
 
     try:
         execution_id = SetupExecutionService.start_setup(
@@ -32,9 +34,11 @@ def start_setup(body: StartSetupRequest):
             command=body.command,
         )
     except ValueError as e:
-        return {"error": str(e)}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", str(e), HTTPStatus.BAD_REQUEST)
     except Exception as e:
-        return {"error": f"Failed to start setup: {e}"}, HTTPStatus.INTERNAL_SERVER_ERROR
+        return error_response(
+            "INTERNAL_SERVER_ERROR", f"Failed to start setup: {e}", HTTPStatus.INTERNAL_SERVER_ERROR
+        )
 
     return (
         StartSetupResponse(
@@ -58,7 +62,7 @@ def stream_setup(path: SetupExecutionPath):
     """
     status = SetupExecutionService.get_status(path.execution_id)
     if not status:
-        return {"error": "Setup execution not found"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "Setup execution not found", HTTPStatus.NOT_FOUND)
 
     def generate():
         """Yield SSE events from the setup execution subscription."""
@@ -81,7 +85,7 @@ def respond_setup(path: SetupExecutionPath, body: SetupResponseRequest):
     """Submit a user response to an interactive setup question."""
     status = SetupExecutionService.get_status(path.execution_id)
     if not status:
-        return {"error": "Setup execution not found"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "Setup execution not found", HTTPStatus.NOT_FOUND)
 
     success = SetupExecutionService.submit_response(
         execution_id=path.execution_id,
@@ -90,7 +94,7 @@ def respond_setup(path: SetupExecutionPath, body: SetupResponseRequest):
     )
 
     if not success:
-        return {"error": "No pending interaction found"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "No pending interaction found", HTTPStatus.NOT_FOUND)
 
     return {"status": "ok"}, HTTPStatus.OK
 
@@ -100,7 +104,7 @@ def get_setup_status(path: SetupExecutionPath):
     """Get the current status of a setup execution."""
     status = SetupExecutionService.get_status(path.execution_id)
     if not status:
-        return {"error": "Setup execution not found"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "Setup execution not found", HTTPStatus.NOT_FOUND)
 
     return status, HTTPStatus.OK
 
@@ -110,7 +114,7 @@ def cancel_setup(path: SetupExecutionPath):
     """Cancel a running setup execution."""
     status = SetupExecutionService.get_status(path.execution_id)
     if not status:
-        return {"error": "Setup execution not found"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "Setup execution not found", HTTPStatus.NOT_FOUND)
 
     SetupExecutionService.cancel_setup(path.execution_id)
     return {"message": "Setup cancelled"}, HTTPStatus.OK

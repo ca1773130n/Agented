@@ -9,6 +9,8 @@ from http import HTTPStatus
 from flask import request
 from flask_openapi3 import APIBlueprint, Tag
 
+from app.models.common import error_response
+
 from ..database import add_pr_review
 from ..services.execution_service import ExecutionService
 from ..services.webhook_validation_service import WebhookValidationService
@@ -50,20 +52,26 @@ def github_webhook():
     Requires X-Hub-Signature-256 header for signature verification.
     """
     if request.content_length and request.content_length > MAX_GITHUB_WEBHOOK_PAYLOAD_BYTES:
-        return {"error": "Payload too large"}, HTTPStatus.REQUEST_ENTITY_TOO_LARGE
+        return error_response(
+            "REQUEST_ENTITY_TOO_LARGE", "Payload too large", HTTPStatus.REQUEST_ENTITY_TOO_LARGE
+        )
 
     # Get raw payload for signature verification
     payload = request.get_data()
 
     # Guard against payloads that omit Content-Length (bypassing the header-based check above)
     if len(payload) > MAX_GITHUB_WEBHOOK_PAYLOAD_BYTES:
-        return {"error": "Payload too large"}, HTTPStatus.REQUEST_ENTITY_TOO_LARGE
+        return error_response(
+            "REQUEST_ENTITY_TOO_LARGE", "Payload too large", HTTPStatus.REQUEST_ENTITY_TOO_LARGE
+        )
 
     # Verify signature using unified validation service
-    is_valid, error_reason = WebhookValidationService.validate_github(request, GITHUB_WEBHOOK_SECRET)
+    is_valid, error_reason = WebhookValidationService.validate_github(
+        request, GITHUB_WEBHOOK_SECRET
+    )
     if not is_valid:
         logger.warning("GitHub webhook signature verification failed: %s", error_reason)
-        return {"error": error_reason}, HTTPStatus.FORBIDDEN
+        return error_response("FORBIDDEN", error_reason, HTTPStatus.FORBIDDEN)
 
     # Get event type
     event_type = request.headers.get("X-GitHub-Event", "")
@@ -80,9 +88,13 @@ def github_webhook():
     # Parse and validate JSON — these are client errors (400)
     data = request.get_json(silent=True)
     if data is None:
-        return {"error": "Content-Type must be application/json"}, HTTPStatus.BAD_REQUEST
+        return error_response(
+            "BAD_REQUEST", "Content-Type must be application/json", HTTPStatus.BAD_REQUEST
+        )
     if not isinstance(data, dict):
-        return {"error": "Invalid JSON body: expected object"}, HTTPStatus.BAD_REQUEST
+        return error_response(
+            "BAD_REQUEST", "Invalid JSON body: expected object", HTTPStatus.BAD_REQUEST
+        )
 
     action = data.get("action", "")
 
@@ -103,7 +115,7 @@ def github_webhook():
     repo_url = repo.get("html_url", "")
 
     if not all([pr_number, pr_url, repo_full_name]):
-        return {"error": "Missing required PR data"}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", "Missing required PR data", HTTPStatus.BAD_REQUEST)
 
     # Per-repo rate limiting: reject if same repo sent an actionable event recently
     now = time.time()
@@ -159,4 +171,6 @@ def github_webhook():
 
     except Exception:
         logger.exception("GitHub webhook error")
-        return {"error": "Internal server error"}, HTTPStatus.INTERNAL_SERVER_ERROR
+        return error_response(
+            "INTERNAL_SERVER_ERROR", "Internal server error", HTTPStatus.INTERNAL_SERVER_ERROR
+        )

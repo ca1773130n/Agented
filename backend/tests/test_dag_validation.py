@@ -229,7 +229,7 @@ class TestValidateEndpoint:
         )
         assert resp.status_code == 400
         data = resp.get_json()
-        assert "errors" in data
+        assert "errors" in data or ("details" in data and "errors" in data["details"])
 
     def test_workflow_creation_without_graph_passes(self, client):
         """Creating a workflow without a graph still works (no validation needed)."""

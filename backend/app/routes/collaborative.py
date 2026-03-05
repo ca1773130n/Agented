@@ -11,6 +11,8 @@ from flask import request
 from flask_openapi3 import APIBlueprint, Tag
 from pydantic import BaseModel, Field
 
+from app.models.common import error_response
+
 from ..db.viewer_comments import delete_comment, get_comment
 from ..services.collaborative_viewer_service import CollaborativeViewerService
 
@@ -70,7 +72,9 @@ def join_execution_viewer(path: ExecutionPath):
     name = body.get("name")
 
     if not viewer_id or not name:
-        return {"error": "viewer_id and name are required"}, HTTPStatus.BAD_REQUEST
+        return error_response(
+            "BAD_REQUEST", "viewer_id and name are required", HTTPStatus.BAD_REQUEST
+        )
 
     viewers = CollaborativeViewerService.join(path.execution_id, viewer_id, name)
     return {"viewers": viewers}, HTTPStatus.OK
@@ -87,7 +91,7 @@ def leave_execution_viewer(path: ExecutionPath):
     viewer_id = body.get("viewer_id")
 
     if not viewer_id:
-        return {"error": "viewer_id is required"}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", "viewer_id is required", HTTPStatus.BAD_REQUEST)
 
     CollaborativeViewerService.leave(path.execution_id, viewer_id)
     return {"status": "left"}, HTTPStatus.OK
@@ -104,7 +108,7 @@ def viewer_heartbeat(path: ExecutionPath):
     viewer_id = body.get("viewer_id")
 
     if not viewer_id:
-        return {"error": "viewer_id is required"}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", "viewer_id is required", HTTPStatus.BAD_REQUEST)
 
     CollaborativeViewerService.heartbeat(path.execution_id, viewer_id)
     return {"status": "ok"}, HTTPStatus.OK
@@ -131,9 +135,11 @@ def post_inline_comment(path: ExecutionPath):
     content = body.get("content")
 
     if not all([viewer_id, viewer_name, content]) or line_number is None:
-        return {
-            "error": "viewer_id, viewer_name, line_number, and content are required"
-        }, HTTPStatus.BAD_REQUEST
+        return error_response(
+            "BAD_REQUEST",
+            "viewer_id, viewer_name, line_number, and content are required",
+            HTTPStatus.BAD_REQUEST,
+        )
 
     try:
         comment = CollaborativeViewerService.post_comment(
@@ -145,7 +151,7 @@ def post_inline_comment(path: ExecutionPath):
         )
         return comment, HTTPStatus.CREATED
     except ValueError as e:
-        return {"error": str(e)}, HTTPStatus.INTERNAL_SERVER_ERROR
+        return error_response("INTERNAL_SERVER_ERROR", str(e), HTTPStatus.INTERNAL_SERVER_ERROR)
 
 
 @collaborative_bp.get("/executions/<execution_id>/comments")
@@ -164,7 +170,7 @@ def delete_inline_comment(path: CommentPath):
     """Delete an inline comment by ID."""
     existing = get_comment(path.comment_id)
     if not existing:
-        return {"error": "Comment not found"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "Comment not found", HTTPStatus.NOT_FOUND)
 
     delete_comment(path.comment_id)
     return {"status": "deleted"}, HTTPStatus.OK

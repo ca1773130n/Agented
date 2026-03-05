@@ -6,6 +6,8 @@ from flask import Response, request
 from flask_openapi3 import APIBlueprint, Tag
 from pydantic import BaseModel, Field
 
+from app.models.common import error_response
+
 from ..services.hook_conversation_service import HookConversationService
 
 tag = Tag(name="hook-conversations", description="Hook creation conversations")
@@ -44,7 +46,7 @@ def send_message(path: ConversationPath):
     """Send a message to the conversation."""
     data = request.get_json()
     if not data or not data.get("message"):
-        return {"error": "message is required"}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", "message is required", HTTPStatus.BAD_REQUEST)
     result, status = HookConversationService.send_message(
         path.conv_id,
         data["message"],

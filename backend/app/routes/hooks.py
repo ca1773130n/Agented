@@ -6,6 +6,8 @@ from flask import Response, request
 from flask_openapi3 import APIBlueprint, Tag
 from pydantic import BaseModel, Field
 
+from app.models.common import error_response
+
 from ..database import (
     add_hook,
     count_hooks,
@@ -58,19 +60,21 @@ def create_hook():
     """Create a new hook."""
     data = request.get_json()
     if not data:
-        return {"error": "JSON body required"}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", "JSON body required", HTTPStatus.BAD_REQUEST)
 
     name = data.get("name")
     event = data.get("event")
 
     if not name:
-        return {"error": "name is required"}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", "name is required", HTTPStatus.BAD_REQUEST)
     if not event:
-        return {"error": "event is required"}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", "event is required", HTTPStatus.BAD_REQUEST)
     if event not in VALID_EVENTS:
-        return {
-            "error": f"Invalid event type. Must be one of: {', '.join(VALID_EVENTS)}"
-        }, HTTPStatus.BAD_REQUEST
+        return error_response(
+            "BAD_REQUEST",
+            f"Invalid event type. Must be one of: {', '.join(VALID_EVENTS)}",
+            HTTPStatus.BAD_REQUEST,
+        )
 
     hook_id = add_hook(
         name=name,
@@ -83,7 +87,9 @@ def create_hook():
     )
 
     if not hook_id:
-        return {"error": "Failed to create hook"}, HTTPStatus.INTERNAL_SERVER_ERROR
+        return error_response(
+            "INTERNAL_SERVER_ERROR", "Failed to create hook", HTTPStatus.INTERNAL_SERVER_ERROR
+        )
 
     hook = get_hook(hook_id)
     return {"message": "Hook created", "hook": hook}, HTTPStatus.CREATED
@@ -94,7 +100,7 @@ def get_hook_endpoint(path: HookPath):
     """Get hook details."""
     hook = get_hook(path.hook_id)
     if not hook:
-        return {"error": "Hook not found"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "Hook not found", HTTPStatus.NOT_FOUND)
     return hook, HTTPStatus.OK
 
 
@@ -103,13 +109,15 @@ def update_hook_endpoint(path: HookPath):
     """Update a hook."""
     data = request.get_json()
     if not data:
-        return {"error": "JSON body required"}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", "JSON body required", HTTPStatus.BAD_REQUEST)
 
     event = data.get("event")
     if event and event not in VALID_EVENTS:
-        return {
-            "error": f"Invalid event type. Must be one of: {', '.join(VALID_EVENTS)}"
-        }, HTTPStatus.BAD_REQUEST
+        return error_response(
+            "BAD_REQUEST",
+            f"Invalid event type. Must be one of: {', '.join(VALID_EVENTS)}",
+            HTTPStatus.BAD_REQUEST,
+        )
 
     if not update_hook(
         path.hook_id,
@@ -119,7 +127,9 @@ def update_hook_endpoint(path: HookPath):
         content=data.get("content"),
         enabled=data.get("enabled"),
     ):
-        return {"error": "Hook not found or no changes made"}, HTTPStatus.NOT_FOUND
+        return error_response(
+            "NOT_FOUND", "Hook not found or no changes made", HTTPStatus.NOT_FOUND
+        )
 
     hook = get_hook(path.hook_id)
     return hook, HTTPStatus.OK
@@ -129,7 +139,7 @@ def update_hook_endpoint(path: HookPath):
 def delete_hook_endpoint(path: HookPath):
     """Delete a hook."""
     if not delete_hook(path.hook_id):
-        return {"error": "Hook not found"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "Hook not found", HTTPStatus.NOT_FOUND)
     return {"message": "Hook deleted"}, HTTPStatus.OK
 
 
@@ -150,9 +160,11 @@ def list_project_hooks(path: ProjectHooksPath):
 def list_hooks_by_event(event: str):
     """List enabled hooks for a specific event type."""
     if event not in VALID_EVENTS:
-        return {
-            "error": f"Invalid event type. Must be one of: {', '.join(VALID_EVENTS)}"
-        }, HTTPStatus.BAD_REQUEST
+        return error_response(
+            "BAD_REQUEST",
+            f"Invalid event type. Must be one of: {', '.join(VALID_EVENTS)}",
+            HTTPStatus.BAD_REQUEST,
+        )
     hooks = get_hooks_by_event(event)
     return {"hooks": hooks, "event": event}, HTTPStatus.OK
 
@@ -164,11 +176,13 @@ def generate_hook_stream():
 
     data = request.get_json()
     if not data:
-        return {"error": "JSON body required"}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", "JSON body required", HTTPStatus.BAD_REQUEST)
 
     description = (data.get("description") or "").strip()
     if len(description) < 10:
-        return {"error": "Description must be at least 10 characters"}, HTTPStatus.BAD_REQUEST
+        return error_response(
+            "BAD_REQUEST", "Description must be at least 10 characters", HTTPStatus.BAD_REQUEST
+        )
 
     return Response(
         HookGenerationService.generate_streaming(description),

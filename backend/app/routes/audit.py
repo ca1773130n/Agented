@@ -6,6 +6,8 @@ from flask import request
 from flask_openapi3 import APIBlueprint, Tag
 from pydantic import BaseModel, Field
 
+from app.models.common import error_response
+
 from ..models.common import PaginationQuery
 from ..services.audit_log_service import AuditLogService
 from ..services.audit_service import AuditService
@@ -28,8 +30,10 @@ def get_audit_history(query: PaginationQuery):
     project_path = request.args.get("project_path", "")
     trigger_id = request.args.get("trigger_id", "")
     result, status = AuditService.get_history(
-        limit=query.limit, offset=query.offset or 0,
-        project_path=project_path, trigger_id=trigger_id,
+        limit=query.limit,
+        offset=query.offset or 0,
+        project_path=project_path,
+        trigger_id=trigger_id,
     )
     return result, status
 
@@ -62,7 +66,7 @@ def add_audit():
     """Add a new audit result."""
     data = request.get_json()
     if not data:
-        return {"error": "JSON body required"}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", "JSON body required", HTTPStatus.BAD_REQUEST)
     result, status = AuditService.add_audit(data)
     return result, status
 

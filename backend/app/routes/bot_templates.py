@@ -6,6 +6,8 @@ from http import HTTPStatus
 from flask_openapi3 import APIBlueprint, Tag
 from pydantic import BaseModel, Field
 
+from app.models.common import error_response
+
 from ..db.bot_templates import deploy_template, get_all_templates, get_template
 from ..services.rbac_service import require_role
 
@@ -33,7 +35,7 @@ def get_template_detail(path: TemplatePath):
     """Get a single bot template by ID."""
     template = get_template(path.template_id)
     if not template:
-        return {"error": "Template not found"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "Template not found", HTTPStatus.NOT_FOUND)
     return template, HTTPStatus.OK
 
 
@@ -43,11 +45,13 @@ def deploy_template_endpoint(path: TemplatePath):
     """Deploy a bot template by creating a new trigger from its configuration."""
     template = get_template(path.template_id)
     if not template:
-        return {"error": "Template not found"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "Template not found", HTTPStatus.NOT_FOUND)
 
     trigger_id = deploy_template(path.template_id)
     if not trigger_id:
-        return {"error": "Failed to deploy template"}, HTTPStatus.INTERNAL_SERVER_ERROR
+        return error_response(
+            "INTERNAL_SERVER_ERROR", "Failed to deploy template", HTTPStatus.INTERNAL_SERVER_ERROR
+        )
 
     # Determine the trigger name that was actually used
     try:

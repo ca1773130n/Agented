@@ -6,6 +6,8 @@ from flask import Response, request
 from flask_openapi3 import APIBlueprint, Tag
 from pydantic import BaseModel, Field
 
+from app.models.common import error_response
+
 from ..database import get_trigger
 from ..models.common import PaginationQuery
 from ..services.budget_service import BudgetService
@@ -25,9 +27,7 @@ class TriggerPath(BaseModel):
 @require_role("viewer", "operator", "editor", "admin")
 def list_triggers(query: PaginationQuery):
     """List all triggers with path counts and execution status."""
-    result, status = TriggerService.list_triggers(
-        limit=query.limit, offset=query.offset or 0
-    )
+    result, status = TriggerService.list_triggers(limit=query.limit, offset=query.offset or 0)
     return result, status
 
 
@@ -37,7 +37,7 @@ def create_trigger():
     """Create a new trigger."""
     data = request.get_json()
     if not data:
-        return {"error": "JSON body required"}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", "JSON body required", HTTPStatus.BAD_REQUEST)
     result, status = TriggerService.create_trigger(data)
     return result, status
 
@@ -56,7 +56,7 @@ def update_trigger(path: TriggerPath):
     """Update a trigger."""
     data = request.get_json()
     if not data:
-        return {"error": "JSON body required"}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", "JSON body required", HTTPStatus.BAD_REQUEST)
     result, status = TriggerService.update_trigger(path.trigger_id, data)
     return result, status
 
@@ -85,7 +85,7 @@ def add_trigger_path(path: TriggerPath):
     """Add a project path to a trigger."""
     data = request.get_json()
     if not data:
-        return {"error": "JSON body required"}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", "JSON body required", HTTPStatus.BAD_REQUEST)
     result, status = TriggerService.add_path(path.trigger_id, data)
     return result, status
 
@@ -96,7 +96,7 @@ def remove_trigger_path(path: TriggerPath):
     """Remove a project path from a trigger."""
     data = request.get_json()
     if not data:
-        return {"error": "JSON body required"}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", "JSON body required", HTTPStatus.BAD_REQUEST)
     result, status = TriggerService.remove_path(path.trigger_id, data)
     return result, status
 
@@ -112,10 +112,10 @@ def add_trigger_project(path: TriggerPath):
     """Add a project reference to a trigger."""
     data = request.get_json()
     if not data:
-        return {"error": "JSON body required"}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", "JSON body required", HTTPStatus.BAD_REQUEST)
     project_id = data.get("project_id")
     if not project_id:
-        return {"error": "project_id is required"}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", "project_id is required", HTTPStatus.BAD_REQUEST)
     result, status = TriggerService.add_project(path.trigger_id, project_id)
     return result, status
 
@@ -134,7 +134,7 @@ def set_auto_resolve(path: TriggerPath):
     """Enable/disable auto-resolve and PR creation for the security trigger."""
     data = request.get_json()
     if not data:
-        return {"error": "JSON body required"}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", "JSON body required", HTTPStatus.BAD_REQUEST)
     auto_resolve = bool(data.get("auto_resolve", False))
     result, status = TriggerService.update_auto_resolve(path.trigger_id, auto_resolve)
     return result, status
@@ -146,7 +146,7 @@ def get_trigger_status(path: TriggerPath):
     """Get execution status for a trigger."""
     trigger = get_trigger(path.trigger_id)
     if not trigger:
-        return {"error": "Trigger not found"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "Trigger not found", HTTPStatus.NOT_FOUND)
 
     status = ExecutionService.get_status(path.trigger_id)
     return status, HTTPStatus.OK
@@ -205,7 +205,7 @@ def get_prompt_history(path: TriggerPath):
 
     trigger = get_trigger(path.trigger_id)
     if not trigger:
-        return {"error": "Trigger not found"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "Trigger not found", HTTPStatus.NOT_FOUND)
 
     history = get_prompt_template_history(path.trigger_id, limit=50)
     return {"history": history}, HTTPStatus.OK
@@ -221,16 +221,18 @@ def rollback_prompt(path: TriggerPath):
     """
     data = request.get_json()
     if not data:
-        return {"error": "JSON body required"}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", "JSON body required", HTTPStatus.BAD_REQUEST)
 
     version_id = data.get("version_id")
     if version_id is None:
-        return {"error": "version_id is required"}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", "version_id is required", HTTPStatus.BAD_REQUEST)
 
     try:
         version_id = int(version_id)
     except (ValueError, TypeError):
-        return {"error": "version_id must be an integer"}, HTTPStatus.BAD_REQUEST
+        return error_response(
+            "BAD_REQUEST", "version_id must be an integer", HTTPStatus.BAD_REQUEST
+        )
 
     result, status = TriggerService.rollback_prompt_template(path.trigger_id, version_id)
     return result, status
@@ -348,11 +350,13 @@ def generate_trigger_stream():
 
     data = request.get_json()
     if not data:
-        return {"error": "JSON body required"}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", "JSON body required", HTTPStatus.BAD_REQUEST)
 
     description = (data.get("description") or "").strip()
     if len(description) < 10:
-        return {"error": "Description must be at least 10 characters"}, HTTPStatus.BAD_REQUEST
+        return error_response(
+            "BAD_REQUEST", "Description must be at least 10 characters", HTTPStatus.BAD_REQUEST
+        )
 
     return Response(
         TriggerGenerationService.generate_streaming(description),

@@ -7,6 +7,8 @@ from flask import request
 from flask_openapi3 import APIBlueprint, Tag
 from pydantic import BaseModel, Field
 
+from app.models.common import error_response
+
 from ..db.sketches import (
     add_sketch,
     count_sketches,
@@ -42,11 +44,11 @@ def create_sketch():
     """Create a new sketch."""
     data = request.get_json()
     if not data:
-        return {"error": "JSON body required"}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", "JSON body required", HTTPStatus.BAD_REQUEST)
 
     title = data.get("title")
     if not title:
-        return {"error": "title is required"}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", "title is required", HTTPStatus.BAD_REQUEST)
 
     sketch_id = add_sketch(
         title=title,
@@ -54,7 +56,9 @@ def create_sketch():
         project_id=data.get("project_id"),
     )
     if not sketch_id:
-        return {"error": "Failed to create sketch"}, HTTPStatus.INTERNAL_SERVER_ERROR
+        return error_response(
+            "INTERNAL_SERVER_ERROR", "Failed to create sketch", HTTPStatus.INTERNAL_SERVER_ERROR
+        )
 
     return {"message": "Sketch created", "sketch_id": sketch_id}, HTTPStatus.CREATED
 
@@ -64,7 +68,7 @@ def get_sketch_endpoint(path: SketchPath):
     """Get a single sketch by ID."""
     sketch = get_sketch(path.sketch_id)
     if not sketch:
-        return {"error": "Sketch not found"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "Sketch not found", HTTPStatus.NOT_FOUND)
     return sketch, HTTPStatus.OK
 
 
@@ -73,7 +77,7 @@ def update_sketch_endpoint(path: SketchPath):
     """Update a sketch."""
     data = request.get_json()
     if not data:
-        return {"error": "JSON body required"}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", "JSON body required", HTTPStatus.BAD_REQUEST)
 
     allowed_fields = {
         "title",
@@ -87,7 +91,9 @@ def update_sketch_endpoint(path: SketchPath):
     kwargs = {k: v for k, v in data.items() if k in allowed_fields}
 
     if not update_sketch(path.sketch_id, **kwargs):
-        return {"error": "Sketch not found or no changes made"}, HTTPStatus.NOT_FOUND
+        return error_response(
+            "NOT_FOUND", "Sketch not found or no changes made", HTTPStatus.NOT_FOUND
+        )
 
     return {"message": "Sketch updated"}, HTTPStatus.OK
 
@@ -96,7 +102,7 @@ def update_sketch_endpoint(path: SketchPath):
 def delete_sketch_endpoint(path: SketchPath):
     """Delete a sketch."""
     if not delete_sketch(path.sketch_id):
-        return {"error": "Sketch not found"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "Sketch not found", HTTPStatus.NOT_FOUND)
     return {"message": "Sketch deleted"}, HTTPStatus.OK
 
 
@@ -105,7 +111,7 @@ def classify_sketch_endpoint(path: SketchPath):
     """Classify a sketch using hybrid keyword/LLM pipeline."""
     sketch = get_sketch(path.sketch_id)
     if not sketch:
-        return {"error": "Sketch not found"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "Sketch not found", HTTPStatus.NOT_FOUND)
 
     from ..services.sketch_routing_service import SketchRoutingService
 
@@ -123,10 +129,12 @@ def route_sketch_endpoint(path: SketchPath):
     """Route a classified sketch to a SuperAgent or team target."""
     sketch = get_sketch(path.sketch_id)
     if not sketch:
-        return {"error": "Sketch not found"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "Sketch not found", HTTPStatus.NOT_FOUND)
 
     if sketch.get("classification_json") is None:
-        return {"error": "Sketch must be classified first"}, HTTPStatus.BAD_REQUEST
+        return error_response(
+            "BAD_REQUEST", "Sketch must be classified first", HTTPStatus.BAD_REQUEST
+        )
 
     classification = json.loads(sketch["classification_json"])
 

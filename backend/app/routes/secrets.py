@@ -10,6 +10,8 @@ from flask import request
 from flask_openapi3 import APIBlueprint, Tag
 from pydantic import BaseModel, Field
 
+from app.models.common import error_response
+
 from ..services.secret_vault_service import SecretVaultService
 
 tag = Tag(name="secrets", description="Encrypted secrets vault management")
@@ -56,12 +58,12 @@ def create_secret():
 
     data = request.get_json()
     if not data:
-        return {"error": "JSON body required"}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", "JSON body required", HTTPStatus.BAD_REQUEST)
 
     name = data.get("name")
     value = data.get("value")
     if not name or not value:
-        return {"error": "name and value are required"}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", "name and value are required", HTTPStatus.BAD_REQUEST)
 
     description = data.get("description", "")
     scope = data.get("scope", "global")
@@ -72,8 +74,10 @@ def create_secret():
         )
     except Exception as e:
         if "UNIQUE constraint failed" in str(e):
-            return {"error": f"Secret with name '{name}' already exists"}, HTTPStatus.CONFLICT
-        return {"error": str(e)}, HTTPStatus.INTERNAL_SERVER_ERROR
+            return error_response(
+                "CONFLICT", f"Secret with name '{name}' already exists", HTTPStatus.CONFLICT
+            )
+        return error_response("INTERNAL_SERVER_ERROR", str(e), HTTPStatus.INTERNAL_SERVER_ERROR)
 
     from app.db.secrets import get_secret
 
@@ -105,7 +109,7 @@ def get_secret_detail(path: SecretPath):
 
     secret = get_secret(path.secret_id)
     if not secret:
-        return {"error": "Secret not found"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "Secret not found", HTTPStatus.NOT_FOUND)
 
     return _secret_metadata(secret), HTTPStatus.OK
 
@@ -122,7 +126,7 @@ def reveal_secret(path: SecretPath):
 
     value = SecretVaultService.get_secret_value(path.secret_id, accessor="api")
     if value is None:
-        return {"error": "Secret not found"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "Secret not found", HTTPStatus.NOT_FOUND)
 
     from app.db.secrets import get_secret
 
@@ -143,19 +147,23 @@ def update_secret(path: SecretPath):
 
     data = request.get_json()
     if not data:
-        return {"error": "JSON body required"}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", "JSON body required", HTTPStatus.BAD_REQUEST)
 
     value = data.get("value")
     description = data.get("description")
 
     if value is None and description is None:
-        return {"error": "At least one of value or description is required"}, HTTPStatus.BAD_REQUEST
+        return error_response(
+            "BAD_REQUEST",
+            "At least one of value or description is required",
+            HTTPStatus.BAD_REQUEST,
+        )
 
     updated = SecretVaultService.update_secret(
         secret_id=path.secret_id, value=value, description=description
     )
     if not updated:
-        return {"error": "Secret not found"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "Secret not found", HTTPStatus.NOT_FOUND)
 
     from app.db.secrets import get_secret
 
@@ -172,7 +180,7 @@ def delete_secret(path: SecretPath):
 
     deleted = SecretVaultService.delete_secret(path.secret_id)
     if not deleted:
-        return {"error": "Secret not found"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "Secret not found", HTTPStatus.NOT_FOUND)
 
     return {"message": "Secret deleted"}, HTTPStatus.OK
 

@@ -10,8 +10,8 @@ def register_blueprints(app):
     from .backends import backends_bp
     from .bookmarks import bookmarks_bp
     from .bot_templates import bot_templates_bp
-    from .bulk import bulk_bp
     from .budgets import budgets_bp
+    from .bulk import bulk_bp
     from .campaigns import campaigns_bp
     from .chunks import chunks_bp
     from .collaborative import collaborative_bp

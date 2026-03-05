@@ -6,7 +6,8 @@ from http import HTTPStatus
 from flask import Response, request
 from flask_openapi3 import APIBlueprint
 
-from ..models.common import PaginationQuery
+from app.models.common import error_response
+
 from ..models.backend import (
     BackendAccountPath,
     BackendPath,
@@ -19,6 +20,7 @@ from ..models.backend_cli import (
     TestPromptRequest,
     TestStreamPath,
 )
+from ..models.common import PaginationQuery
 from ..services.backend_cli_service import BackendCLIService
 from ..services.backend_service import BackendService
 
@@ -98,7 +100,7 @@ def stream_connect(path: BackendConnectSessionPath):
     """SSE endpoint for real-time CLI login streaming."""
     status = BackendCLIService.get_status(path.session_id)
     if not status:
-        return {"error": "Session not found"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "Session not found", HTTPStatus.NOT_FOUND)
 
     def generate():
         """Yield SSE events from the backend CLI session subscription."""
@@ -121,7 +123,7 @@ def respond_connect(path: BackendConnectSessionPath, body: SessionResponseReques
     """Submit a user response to an interactive CLI session."""
     status = BackendCLIService.get_status(path.session_id)
     if not status:
-        return {"error": "Session not found"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "Session not found", HTTPStatus.NOT_FOUND)
 
     success = BackendCLIService.submit_response(
         session_id=path.session_id,
@@ -130,7 +132,7 @@ def respond_connect(path: BackendConnectSessionPath, body: SessionResponseReques
     )
 
     if not success:
-        return {"error": "No pending interaction found"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "No pending interaction found", HTTPStatus.NOT_FOUND)
 
     return {"status": "ok"}, HTTPStatus.OK
 
@@ -140,7 +142,7 @@ def cancel_connect(path: BackendConnectSessionPath):
     """Cancel a running CLI login session."""
     status = BackendCLIService.get_status(path.session_id)
     if not status:
-        return {"error": "Session not found"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "Session not found", HTTPStatus.NOT_FOUND)
 
     BackendCLIService.cancel_session(path.session_id)
     return {"message": "Session cancelled"}, HTTPStatus.OK
@@ -289,7 +291,7 @@ def proxy_callback_forward():
     body = request.get_json(silent=True) or {}
     callback_url = body.get("callback_url", "")
     if not callback_url:
-        return {"error": "callback_url is required"}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", "callback_url is required", HTTPStatus.BAD_REQUEST)
 
     # Parse code and state from the callback URL
     parsed = urlparse(callback_url)
@@ -299,7 +301,9 @@ def proxy_callback_forward():
     port = parsed.port or 54545
 
     if not code:
-        return {"error": "No 'code' parameter found in URL"}, HTTPStatus.BAD_REQUEST
+        return error_response(
+            "BAD_REQUEST", "No 'code' parameter found in URL", HTTPStatus.BAD_REQUEST
+        )
 
     # Forward to cliproxyapi's local callback server on the server
     try:

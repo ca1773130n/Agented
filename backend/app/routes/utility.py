@@ -10,6 +10,7 @@ from flask import request
 from flask_openapi3 import APIBlueprint, Tag
 
 from app.config import PROJECT_ROOT
+from app.models.common import error_response
 
 from ..database import get_paths_for_trigger, get_trigger
 from ..services.execution_service import ExecutionService
@@ -58,7 +59,9 @@ def check_backend():
     backend_name = request.args.get("name", "").lower()
 
     if backend_name not in ("claude", "opencode"):
-        return {"error": "Invalid backend. Use 'claude' or 'opencode'"}, HTTPStatus.BAD_REQUEST
+        return error_response(
+            "BAD_REQUEST", "Invalid backend. Use 'claude' or 'opencode'", HTTPStatus.BAD_REQUEST
+        )
 
     try:
         result = subprocess.run(
@@ -95,13 +98,13 @@ def validate_path():
     """Validate if a path exists and is a directory (restricted to home dir or /tmp)."""
     path = request.args.get("path", "")
     if not path:
-        return {"error": "Path parameter required"}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", "Path parameter required", HTTPStatus.BAD_REQUEST)
 
     path_obj = Path(path)
     try:
         resolved = path_obj.resolve()
     except (OSError, ValueError):
-        return {"error": "Invalid path"}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", "Invalid path", HTTPStatus.BAD_REQUEST)
 
     allowed_bases = [Path.home(), Path("/tmp")]
     if not any(str(resolved).startswith(str(base)) for base in allowed_bases):
@@ -128,7 +131,7 @@ def validate_github_url():
     """Validate if a GitHub repo URL is accessible."""
     url = request.args.get("url", "")
     if not url:
-        return {"error": "url parameter required"}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", "url parameter required", HTTPStatus.BAD_REQUEST)
 
     valid = GitHubService.validate_repo_url(url)
     owner, repo = None, None
@@ -150,15 +153,15 @@ def resolve_issues():
     """Run Claude with edit permissions to resolve security issues."""
     data = request.get_json()
     if not data:
-        return {"error": "JSON body required"}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", "JSON body required", HTTPStatus.BAD_REQUEST)
 
     audit_summary = data.get("audit_summary", "")
     project_paths = data.get("project_paths", [])
 
     if not audit_summary:
-        return {"error": "audit_summary required"}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", "audit_summary required", HTTPStatus.BAD_REQUEST)
     if not project_paths:
-        return {"error": "project_paths required"}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", "project_paths required", HTTPStatus.BAD_REQUEST)
 
     thread = threading.Thread(
         target=ExecutionService.run_resolve_command,
@@ -187,7 +190,7 @@ def discover_skills():
     if trigger_id:
         trigger = get_trigger(trigger_id)
         if not trigger:
-            return {"error": "Trigger not found"}, HTTPStatus.NOT_FOUND
+            return error_response("NOT_FOUND", "Trigger not found", HTTPStatus.NOT_FOUND)
         scan_paths = get_paths_for_trigger(trigger_id)
     elif paths_param:
         scan_paths = [p.strip() for p in paths_param.split(",") if p.strip()]

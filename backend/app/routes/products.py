@@ -6,6 +6,8 @@ from flask import request
 from flask_openapi3 import APIBlueprint, Tag
 from pydantic import BaseModel, Field
 
+from app.models.common import error_response
+
 from ..database import (
     add_product,
     count_products,
@@ -38,11 +40,11 @@ def create_product():
     """Create a new product."""
     data = request.get_json()
     if not data:
-        return {"error": "JSON body required"}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", "JSON body required", HTTPStatus.BAD_REQUEST)
 
     name = data.get("name")
     if not name:
-        return {"error": "name is required"}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", "name is required", HTTPStatus.BAD_REQUEST)
 
     product_id = add_product(
         name=name,
@@ -51,7 +53,9 @@ def create_product():
         owner_team_id=data.get("owner_team_id"),
     )
     if not product_id:
-        return {"error": "Failed to create product"}, HTTPStatus.INTERNAL_SERVER_ERROR
+        return error_response(
+            "INTERNAL_SERVER_ERROR", "Failed to create product", HTTPStatus.INTERNAL_SERVER_ERROR
+        )
 
     product = get_product(product_id)
     return {"message": "Product created", "product": product}, HTTPStatus.CREATED
@@ -62,7 +66,7 @@ def get_product_detail_endpoint(path: ProductPath):
     """Get product details with projects."""
     product = get_product_detail(path.product_id)
     if not product:
-        return {"error": "Product not found"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "Product not found", HTTPStatus.NOT_FOUND)
     return product, HTTPStatus.OK
 
 
@@ -71,7 +75,7 @@ def update_product_endpoint(path: ProductPath):
     """Update a product."""
     data = request.get_json()
     if not data:
-        return {"error": "JSON body required"}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", "JSON body required", HTTPStatus.BAD_REQUEST)
 
     if not update_product(
         path.product_id,
@@ -80,7 +84,9 @@ def update_product_endpoint(path: ProductPath):
         status=data.get("status"),
         owner_team_id=data.get("owner_team_id"),
     ):
-        return {"error": "Product not found or no changes made"}, HTTPStatus.NOT_FOUND
+        return error_response(
+            "NOT_FOUND", "Product not found or no changes made", HTTPStatus.NOT_FOUND
+        )
 
     product = get_product(path.product_id)
     return product, HTTPStatus.OK
@@ -90,5 +96,5 @@ def update_product_endpoint(path: ProductPath):
 def delete_product_endpoint(path: ProductPath):
     """Delete a product."""
     if not delete_product(path.product_id):
-        return {"error": "Product not found"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "Product not found", HTTPStatus.NOT_FOUND)
     return {"message": "Product deleted"}, HTTPStatus.OK

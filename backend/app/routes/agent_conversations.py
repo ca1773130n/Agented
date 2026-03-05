@@ -6,6 +6,8 @@ from flask import Response, request
 from flask_openapi3 import APIBlueprint, Tag
 from pydantic import BaseModel, Field
 
+from app.models.common import error_response
+
 from ..services.agent_conversation_service import AgentConversationService
 
 tag = Tag(name="agent-conversations", description="Agent creation conversations")
@@ -37,7 +39,7 @@ def send_message(path: ConversationPath):
     """Send a message to the conversation."""
     data = request.get_json()
     if not data or not data.get("message"):
-        return {"error": "message is required"}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", "message is required", HTTPStatus.BAD_REQUEST)
     result, status = AgentConversationService.send_message(
         path.conv_id,
         data["message"],

@@ -6,6 +6,8 @@ from flask import Response, request
 from flask_openapi3 import APIBlueprint, Tag
 from pydantic import BaseModel, Field
 
+from app.models.common import error_response
+
 from ..database import (
     add_command,
     count_commands,
@@ -43,11 +45,11 @@ def create_command():
     """Create a new command."""
     data = request.get_json()
     if not data:
-        return {"error": "JSON body required"}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", "JSON body required", HTTPStatus.BAD_REQUEST)
 
     name = data.get("name")
     if not name:
-        return {"error": "name is required"}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", "name is required", HTTPStatus.BAD_REQUEST)
 
     command_id = add_command(
         name=name,
@@ -60,7 +62,9 @@ def create_command():
     )
 
     if not command_id:
-        return {"error": "Failed to create command"}, HTTPStatus.INTERNAL_SERVER_ERROR
+        return error_response(
+            "INTERNAL_SERVER_ERROR", "Failed to create command", HTTPStatus.INTERNAL_SERVER_ERROR
+        )
 
     command = get_command(command_id)
     return {"message": "Command created", "command": command}, HTTPStatus.CREATED
@@ -71,7 +75,7 @@ def get_command_endpoint(path: CommandPath):
     """Get command details."""
     command = get_command(path.command_id)
     if not command:
-        return {"error": "Command not found"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "Command not found", HTTPStatus.NOT_FOUND)
     return command, HTTPStatus.OK
 
 
@@ -80,7 +84,7 @@ def update_command_endpoint(path: CommandPath):
     """Update a command."""
     data = request.get_json()
     if not data:
-        return {"error": "JSON body required"}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", "JSON body required", HTTPStatus.BAD_REQUEST)
 
     if not update_command(
         path.command_id,
@@ -90,7 +94,9 @@ def update_command_endpoint(path: CommandPath):
         arguments=data.get("arguments"),
         enabled=data.get("enabled"),
     ):
-        return {"error": "Command not found or no changes made"}, HTTPStatus.NOT_FOUND
+        return error_response(
+            "NOT_FOUND", "Command not found or no changes made", HTTPStatus.NOT_FOUND
+        )
 
     command = get_command(path.command_id)
     return command, HTTPStatus.OK
@@ -100,7 +106,7 @@ def update_command_endpoint(path: CommandPath):
 def delete_command_endpoint(path: CommandPath):
     """Delete a command."""
     if not delete_command(path.command_id):
-        return {"error": "Command not found"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "Command not found", HTTPStatus.NOT_FOUND)
     return {"message": "Command deleted"}, HTTPStatus.OK
 
 
@@ -118,11 +124,13 @@ def generate_command_stream():
 
     data = request.get_json()
     if not data:
-        return {"error": "JSON body required"}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", "JSON body required", HTTPStatus.BAD_REQUEST)
 
     description = (data.get("description") or "").strip()
     if len(description) < 10:
-        return {"error": "Description must be at least 10 characters"}, HTTPStatus.BAD_REQUEST
+        return error_response(
+            "BAD_REQUEST", "Description must be at least 10 characters", HTTPStatus.BAD_REQUEST
+        )
 
     return Response(
         CommandGenerationService.generate_streaming(description),

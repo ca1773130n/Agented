@@ -7,6 +7,8 @@ from http import HTTPStatus
 from flask_openapi3 import APIBlueprint
 from pydantic import BaseModel, Field
 
+from app.models.common import error_response
+
 # database
 from ..database import (
     delete_fallback_chain,
@@ -66,13 +68,17 @@ def set_trigger_fallback_chain(path: TriggerFallbackPath, body: SetFallbackChain
     """Set (replace) the fallback chain for a trigger."""
     error = OrchestrationService.validate_fallback_chain_entries(body.entries)
     if error:
-        return {"error": error}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", error, HTTPStatus.BAD_REQUEST)
 
     entries = [e.model_dump() for e in body.entries]
     success = set_fallback_chain("trigger", path.trigger_id, entries)
 
     if not success:
-        return {"error": "Failed to set fallback chain"}, HTTPStatus.INTERNAL_SERVER_ERROR
+        return error_response(
+            "INTERNAL_SERVER_ERROR",
+            "Failed to set fallback chain",
+            HTTPStatus.INTERNAL_SERVER_ERROR,
+        )
 
     chain = get_fallback_chain("trigger", path.trigger_id)
     result_entries = [
@@ -110,5 +116,5 @@ def clear_account_rate_limit(path: AccountClearPath):
     """Manually clear rate limit for an account."""
     success = RateLimitService.clear_rate_limit(path.account_id)
     if not success:
-        return {"error": "Account not found"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "Account not found", HTTPStatus.NOT_FOUND)
     return {"message": "Rate limit cleared"}, HTTPStatus.OK

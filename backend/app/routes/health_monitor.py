@@ -5,6 +5,8 @@ from http import HTTPStatus
 from flask import request
 from flask_openapi3 import APIBlueprint, Tag
 
+from app.models.common import error_response
+
 from ..db.health_alerts import acknowledge_alert, get_recent_alerts
 from ..services.health_monitor_service import HealthMonitorService
 from ..services.report_service import ReportService
@@ -43,7 +45,7 @@ def acknowledge(alert_id: int):
     success = acknowledge_alert(alert_id)
     if success:
         return {"message": "Alert acknowledged"}, HTTPStatus.OK
-    return {"error": "Alert not found"}, HTTPStatus.NOT_FOUND
+    return error_response("NOT_FOUND", "Alert not found", HTTPStatus.NOT_FOUND)
 
 
 @health_monitor_bp.get("/report")

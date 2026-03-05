@@ -6,6 +6,8 @@ from flask import request
 from flask_openapi3 import APIBlueprint, Tag
 from pydantic import BaseModel, Field
 
+from app.models.common import error_response
+
 from ..db.prompt_snippets import (
     add_snippet,
     delete_snippet,
@@ -41,36 +43,42 @@ def create_snippet():
     """Create a new prompt snippet."""
     data = request.get_json()
     if not data:
-        return {"error": "JSON body required"}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", "JSON body required", HTTPStatus.BAD_REQUEST)
 
     name = data.get("name", "").strip()
     content = data.get("content", "").strip()
     description = data.get("description", "")
 
     if not name:
-        return {"error": "name is required"}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", "name is required", HTTPStatus.BAD_REQUEST)
     if not content:
-        return {"error": "content is required"}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", "content is required", HTTPStatus.BAD_REQUEST)
 
     # Validate name format
     import re
 
     if not re.match(r"^[\w][\w-]*$", name):
-        return {
-            "error": "name must start with a word character and contain only word characters and hyphens"
-        }, HTTPStatus.BAD_REQUEST
+        return error_response(
+            "BAD_REQUEST",
+            "name must start with a word character and contain only word characters and hyphens",
+            HTTPStatus.BAD_REQUEST,
+        )
 
     # Check uniqueness
     existing = get_snippet_by_name(name)
     if existing:
-        return {"error": f"A snippet named '{name}' already exists"}, HTTPStatus.CONFLICT
+        return error_response(
+            "CONFLICT", f"A snippet named '{name}' already exists", HTTPStatus.CONFLICT
+        )
 
     snippet_id = add_snippet(name=name, content=content, description=description)
     if snippet_id:
         snippet = get_snippet(snippet_id)
         return {"message": "Snippet created", "snippet": snippet}, HTTPStatus.CREATED
     else:
-        return {"error": "Failed to create snippet"}, HTTPStatus.INTERNAL_SERVER_ERROR
+        return error_response(
+            "INTERNAL_SERVER_ERROR", "Failed to create snippet", HTTPStatus.INTERNAL_SERVER_ERROR
+        )
 
 
 @prompt_snippets_bp.get("/<snippet_id>")
@@ -79,7 +87,7 @@ def get_snippet_detail(path: SnippetPath):
     """Get a single prompt snippet."""
     snippet = get_snippet(path.snippet_id)
     if not snippet:
-        return {"error": "Snippet not found"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "Snippet not found", HTTPStatus.NOT_FOUND)
     return snippet, HTTPStatus.OK
 
 
@@ -89,11 +97,11 @@ def update_snippet_endpoint(path: SnippetPath):
     """Update a prompt snippet."""
     data = request.get_json()
     if not data:
-        return {"error": "JSON body required"}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", "JSON body required", HTTPStatus.BAD_REQUEST)
 
     snippet = get_snippet(path.snippet_id)
     if not snippet:
-        return {"error": "Snippet not found"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "Snippet not found", HTTPStatus.NOT_FOUND)
 
     name = data.get("name")
     if name is not None:
@@ -101,14 +109,18 @@ def update_snippet_endpoint(path: SnippetPath):
 
         name = name.strip()
         if not re.match(r"^[\w][\w-]*$", name):
-            return {
-                "error": "name must start with a word character and contain only word characters and hyphens"
-            }, HTTPStatus.BAD_REQUEST
+            return error_response(
+                "BAD_REQUEST",
+                "name must start with a word character and contain only word characters and hyphens",
+                HTTPStatus.BAD_REQUEST,
+            )
         # Check uniqueness if name changed
         if name != snippet["name"]:
             existing = get_snippet_by_name(name)
             if existing:
-                return {"error": f"A snippet named '{name}' already exists"}, HTTPStatus.CONFLICT
+                return error_response(
+                    "CONFLICT", f"A snippet named '{name}' already exists", HTTPStatus.CONFLICT
+                )
 
     success = update_snippet(
         path.snippet_id,
@@ -120,7 +132,7 @@ def update_snippet_endpoint(path: SnippetPath):
         updated = get_snippet(path.snippet_id)
         return {"message": "Snippet updated", "snippet": updated}, HTTPStatus.OK
     else:
-        return {"error": "No changes made"}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", "No changes made", HTTPStatus.BAD_REQUEST)
 
 
 @prompt_snippets_bp.delete("/<snippet_id>")
@@ -129,13 +141,15 @@ def delete_snippet_endpoint(path: SnippetPath):
     """Delete a prompt snippet."""
     snippet = get_snippet(path.snippet_id)
     if not snippet:
-        return {"error": "Snippet not found"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "Snippet not found", HTTPStatus.NOT_FOUND)
 
     success = delete_snippet(path.snippet_id)
     if success:
         return {"message": "Snippet deleted"}, HTTPStatus.OK
     else:
-        return {"error": "Failed to delete snippet"}, HTTPStatus.INTERNAL_SERVER_ERROR
+        return error_response(
+            "INTERNAL_SERVER_ERROR", "Failed to delete snippet", HTTPStatus.INTERNAL_SERVER_ERROR
+        )
 
 
 @prompt_snippets_bp.post("/resolve")
@@ -144,11 +158,11 @@ def resolve_snippets():
     """Resolve {{snippet}} references in text (for debugging/testing)."""
     data = request.get_json()
     if not data:
-        return {"error": "JSON body required"}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", "JSON body required", HTTPStatus.BAD_REQUEST)
 
     text = data.get("text", "")
     if not text:
-        return {"error": "text is required"}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", "text is required", HTTPStatus.BAD_REQUEST)
 
     resolved = SnippetService.resolve_snippets(text)
     return {"original": text, "resolved": resolved}, HTTPStatus.OK

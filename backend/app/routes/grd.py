@@ -11,6 +11,8 @@ from flask import Response, request
 from flask_openapi3 import APIBlueprint, Tag
 from pydantic import BaseModel, Field
 
+from app.models.common import error_response
+
 from ..database import (
     add_project_phase,
     add_project_plan,
@@ -161,7 +163,7 @@ def get_sync_status(path: ProjectIdPath):
     """Return sync metadata for a project."""
     project = get_project(path.project_id)
     if not project:
-        return {"error": "Project not found"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "Project not found", HTTPStatus.NOT_FOUND)
 
     states = get_project_sync_states(path.project_id)
     return {
@@ -176,12 +178,12 @@ def trigger_sync(path: ProjectIdPath):
     """Trigger a full GRD sync for a project."""
     project = get_project(path.project_id)
     if not project:
-        return {"error": "Project not found"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "Project not found", HTTPStatus.NOT_FOUND)
 
     try:
         local_path = ProjectWorkspaceService.resolve_working_directory(path.project_id)
     except ValueError as e:
-        return {"error": str(e)}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", str(e), HTTPStatus.BAD_REQUEST)
 
     planning_dir = str(Path(local_path).expanduser().resolve() / ".planning")
     result = GrdSyncService.sync_project(path.project_id, planning_dir)
@@ -201,7 +203,7 @@ def list_milestones(path: ProjectIdPath, query: PaginationQuery):
     """List all milestones for a project."""
     project = get_project(path.project_id)
     if not project:
-        return {"error": "Project not found"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "Project not found", HTTPStatus.NOT_FOUND)
 
     milestones = get_milestones_by_project(
         path.project_id, limit=query.limit, offset=query.offset or 0
@@ -217,7 +219,7 @@ def list_phases(path: ProjectIdPath, query: MilestoneIdQuery):
     """List phases for a project, optionally filtered by milestone."""
     project = get_project(path.project_id)
     if not project:
-        return {"error": "Project not found"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "Project not found", HTTPStatus.NOT_FOUND)
 
     if query.milestone_id:
         phases = get_phases_by_milestone(query.milestone_id)
@@ -236,13 +238,15 @@ def create_phase(path: ProjectIdPath, body: CreatePhaseBody):
     """Create a new phase within a milestone."""
     project = get_project(path.project_id)
     if not project:
-        return {"error": "Project not found"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "Project not found", HTTPStatus.NOT_FOUND)
 
     # Verify milestone belongs to this project
     milestones = get_milestones_by_project(path.project_id)
     ms_ids = {m["id"] for m in milestones}
     if body.milestone_id not in ms_ids:
-        return {"error": "Milestone not found in this project"}, HTTPStatus.NOT_FOUND
+        return error_response(
+            "NOT_FOUND", "Milestone not found in this project", HTTPStatus.NOT_FOUND
+        )
 
     # Auto-compute phase_number as max + 1
     existing_phases = get_phases_by_milestone(body.milestone_id)
@@ -255,7 +259,9 @@ def create_phase(path: ProjectIdPath, body: CreatePhaseBody):
         goal=body.goal,
     )
     if not phase_id:
-        return {"error": "Failed to create phase"}, HTTPStatus.INTERNAL_SERVER_ERROR
+        return error_response(
+            "INTERNAL_SERVER_ERROR", "Failed to create phase", HTTPStatus.INTERNAL_SERVER_ERROR
+        )
 
     return {
         "message": "Phase created",
@@ -278,7 +284,7 @@ def list_plans(path: ProjectIdPath, query: PhaseIdQuery):
     """List plans for a project, optionally filtered by phase."""
     project = get_project(path.project_id)
     if not project:
-        return {"error": "Project not found"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "Project not found", HTTPStatus.NOT_FOUND)
 
     if query.phase_id:
         plans = get_plans_by_phase(query.phase_id)
@@ -298,17 +304,19 @@ def update_plan_status(path: PlanStatusPath, body: UpdatePlanStatusBody):
     """Update a plan's status (triggers GRD CLI file write if available)."""
     project = get_project(path.project_id)
     if not project:
-        return {"error": "Project not found"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "Project not found", HTTPStatus.NOT_FOUND)
 
     plan = get_project_plan(path.plan_id)
     if not plan:
-        return {"error": "Plan not found"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "Plan not found", HTTPStatus.NOT_FOUND)
 
     valid_statuses = {"pending", "in_progress", "completed", "failed", "in_review"}
     if body.status not in valid_statuses:
-        return {
-            "error": f"Invalid status: {body.status}. Must be one of: {', '.join(sorted(valid_statuses))}"
-        }, HTTPStatus.BAD_REQUEST
+        return error_response(
+            "BAD_REQUEST",
+            f"Invalid status: {body.status}. Must be one of: {', '.join(sorted(valid_statuses))}",
+            HTTPStatus.BAD_REQUEST,
+        )
 
     # Update DB immediately
     update_project_plan(path.plan_id, status=body.status)
@@ -355,7 +363,7 @@ def create_plan(path: ProjectIdPath, body: CreatePlanBody):
     """Create a new plan in a phase."""
     project = get_project(path.project_id)
     if not project:
-        return {"error": "Project not found"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "Project not found", HTTPStatus.NOT_FOUND)
 
     # Auto-compute plan_number as max(existing) + 1
     existing = get_plans_by_phase(body.phase_id)
@@ -369,7 +377,9 @@ def create_plan(path: ProjectIdPath, body: CreatePlanBody):
         tasks_json=body.tasks_json,
     )
     if not plan_id:
-        return {"error": "Failed to create plan"}, HTTPStatus.INTERNAL_SERVER_ERROR
+        return error_response(
+            "INTERNAL_SERVER_ERROR", "Failed to create plan", HTTPStatus.INTERNAL_SERVER_ERROR
+        )
 
     # Set initial status if not default
     if body.status and body.status != "pending":
@@ -384,11 +394,11 @@ def update_plan(path: PlanStatusPath, body: UpdatePlanBody):
     """Update plan fields (title, description, status, tasks_json)."""
     project = get_project(path.project_id)
     if not project:
-        return {"error": "Project not found"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "Project not found", HTTPStatus.NOT_FOUND)
 
     plan = get_project_plan(path.plan_id)
     if not plan:
-        return {"error": "Plan not found"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "Plan not found", HTTPStatus.NOT_FOUND)
 
     kwargs = {}
     if body.title is not None:
@@ -412,10 +422,10 @@ def delete_plan(path: PlanStatusPath):
     """Delete a plan."""
     project = get_project(path.project_id)
     if not project:
-        return {"error": "Project not found"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "Project not found", HTTPStatus.NOT_FOUND)
 
     if not delete_project_plan(path.plan_id):
-        return {"error": "Plan not found"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "Plan not found", HTTPStatus.NOT_FOUND)
 
     return {"message": "Plan deleted"}, HTTPStatus.OK
 
@@ -484,11 +494,15 @@ def project_chat(path: ProjectIdPath, body: ProjectChatBody):
 
     project = get_project(path.project_id)
     if not project:
-        return {"error": "Project not found"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "Project not found", HTTPStatus.NOT_FOUND)
 
     sa_id = _resolve_manager_agent(project)
     if not sa_id:
-        return {"error": "Failed to resolve manager agent"}, HTTPStatus.INTERNAL_SERVER_ERROR
+        return error_response(
+            "INTERNAL_SERVER_ERROR",
+            "Failed to resolve manager agent",
+            HTTPStatus.INTERNAL_SERVER_ERROR,
+        )
 
     # Create or reuse active session
     session_id, error = SuperAgentSessionService.create_session(sa_id)
@@ -501,7 +515,11 @@ def project_chat(path: ProjectIdPath, body: ProjectChatBody):
         if active:
             session_id = active[0]["id"]
         else:
-            return {"error": error or "Failed to create session"}, HTTPStatus.INTERNAL_SERVER_ERROR
+            return error_response(
+                "INTERNAL_SERVER_ERROR",
+                error or "Failed to create session",
+                HTTPStatus.INTERNAL_SERVER_ERROR,
+            )
 
     # Ensure ChatStateService tracks this session
     ChatStateService.init_session(session_id)
@@ -512,7 +530,7 @@ def project_chat(path: ProjectIdPath, body: ProjectChatBody):
     # Add user message
     success, msg_error = SuperAgentSessionService.send_message(session_id, body.content)
     if not success:
-        return {"error": msg_error}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", msg_error, HTTPStatus.BAD_REQUEST)
 
     # Push user message delta
     ChatStateService.push_delta(session_id, "message", {"role": "user", "content": body.content})
@@ -592,11 +610,11 @@ def project_chat_stream(path: ProjectIdPath):
 
     project = get_project(path.project_id)
     if not project:
-        return {"error": "Project not found"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "Project not found", HTTPStatus.NOT_FOUND)
 
     sa_id = project.get("manager_super_agent_id")
     if not sa_id:
-        return {"error": "No manager agent configured"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "No manager agent configured", HTTPStatus.NOT_FOUND)
 
     # Find active session for this super agent
     from ..database import get_super_agent_sessions
@@ -604,7 +622,7 @@ def project_chat_stream(path: ProjectIdPath):
     sessions = get_super_agent_sessions(sa_id)
     active = [s for s in sessions if s.get("status") == "active"]
     if not active:
-        return {"error": "No active chat session"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "No active chat session", HTTPStatus.NOT_FOUND)
 
     session_id = active[0]["id"]
 
@@ -652,7 +670,7 @@ def get_planning_status(path: ProjectIdPath):
     """Get GRD initialization status and active planning session for a project."""
     project = get_project(path.project_id)
     if not project:
-        return {"error": "Project not found"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "Project not found", HTTPStatus.NOT_FOUND)
 
     active_session_id = GrdPlanningService.get_active_planning_session(path.project_id)
     grd_init_status = GrdPlanningService.get_init_status(path.project_id)
@@ -672,18 +690,20 @@ def create_session(path: ProjectIdPath, body: CreateSessionBody):
     """Create a new PTY session for a project."""
     project = get_project(path.project_id)
     if not project:
-        return {"error": "Project not found"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "Project not found", HTTPStatus.NOT_FOUND)
 
     handler = get_handler(body.execution_type)
     if not handler:
-        return {"error": f"Unknown execution_type: {body.execution_type}"}, HTTPStatus.BAD_REQUEST
+        return error_response(
+            "BAD_REQUEST", f"Unknown execution_type: {body.execution_type}", HTTPStatus.BAD_REQUEST
+        )
 
     cwd = body.cwd
     if not cwd:
         try:
             cwd = ProjectWorkspaceService.resolve_working_directory(path.project_id)
         except ValueError as e:
-            return {"error": str(e)}, HTTPStatus.BAD_REQUEST
+            return error_response("BAD_REQUEST", str(e), HTTPStatus.BAD_REQUEST)
 
     session_config = {
         "project_id": path.project_id,
@@ -705,11 +725,9 @@ def list_sessions(path: ProjectIdPath, query: PaginationQuery):
     """List all sessions for a project."""
     project = get_project(path.project_id)
     if not project:
-        return {"error": "Project not found"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "Project not found", HTTPStatus.NOT_FOUND)
 
-    sessions = get_sessions_by_project(
-        path.project_id, limit=query.limit, offset=query.offset or 0
-    )
+    sessions = get_sessions_by_project(path.project_id, limit=query.limit, offset=query.offset or 0)
     from ..db.grd import count_sessions_by_project
 
     total_count = count_sessions_by_project(path.project_id)
@@ -753,7 +771,9 @@ def stop_session(path: SessionPath):
     """Stop a running session."""
     success = ProjectSessionManager.stop_session(path.session_id)
     if not success:
-        return {"error": "Session not found or already stopped"}, HTTPStatus.NOT_FOUND
+        return error_response(
+            "NOT_FOUND", "Session not found or already stopped", HTTPStatus.NOT_FOUND
+        )
     return {"message": "Session stopped", "session_id": path.session_id}, HTTPStatus.OK
 
 
@@ -762,7 +782,7 @@ def pause_session(path: SessionPath):
     """Pause SSE broadcasting for a session (process keeps running)."""
     success = ProjectSessionManager.pause_session(path.session_id)
     if not success:
-        return {"error": "Session not found"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "Session not found", HTTPStatus.NOT_FOUND)
     return {"message": "Session paused", "session_id": path.session_id}, HTTPStatus.OK
 
 
@@ -771,7 +791,7 @@ def resume_session(path: SessionPath):
     """Resume SSE broadcasting for a paused session."""
     success = ProjectSessionManager.resume_session(path.session_id)
     if not success:
-        return {"error": "Session not found"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "Session not found", HTTPStatus.NOT_FOUND)
     return {"message": "Session resumed", "session_id": path.session_id}, HTTPStatus.OK
 
 
@@ -785,7 +805,7 @@ def send_session_input(path: SessionPath, body: SessionInputBody):
     )
     success = ProjectSessionManager.send_input(path.session_id, sanitized)
     if not success:
-        return {"error": "Session not found or not active"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "Session not found or not active", HTTPStatus.NOT_FOUND)
     return {"message": "Input sent", "session_id": path.session_id}, HTTPStatus.OK
 
 
@@ -799,18 +819,22 @@ def create_ralph_session(path: ProjectIdPath, body: CreateRalphSessionBody):
     """Create a new Ralph loop session for a project."""
     project = get_project(path.project_id)
     if not project:
-        return {"error": "Project not found"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "Project not found", HTTPStatus.NOT_FOUND)
 
     cwd = body.cwd
     if not cwd:
         try:
             cwd = ProjectWorkspaceService.resolve_working_directory(path.project_id)
         except ValueError as e:
-            return {"error": str(e)}, HTTPStatus.BAD_REQUEST
+            return error_response("BAD_REQUEST", str(e), HTTPStatus.BAD_REQUEST)
 
     handler = get_handler("ralph_loop")
     if not handler:
-        return {"error": "Ralph loop handler not registered"}, HTTPStatus.INTERNAL_SERVER_ERROR
+        return error_response(
+            "INTERNAL_SERVER_ERROR",
+            "Ralph loop handler not registered",
+            HTTPStatus.INTERNAL_SERVER_ERROR,
+        )
 
     session_config = {
         "project_id": path.project_id,
@@ -834,18 +858,22 @@ def create_team_session(path: ProjectIdPath, body: CreateTeamSessionBody):
     """Create a new team spawn session for a project."""
     project = get_project(path.project_id)
     if not project:
-        return {"error": "Project not found"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "Project not found", HTTPStatus.NOT_FOUND)
 
     cwd = body.cwd
     if not cwd:
         try:
             cwd = ProjectWorkspaceService.resolve_working_directory(path.project_id)
         except ValueError as e:
-            return {"error": str(e)}, HTTPStatus.BAD_REQUEST
+            return error_response("BAD_REQUEST", str(e), HTTPStatus.BAD_REQUEST)
 
     handler = get_handler("team_spawn")
     if not handler:
-        return {"error": "Team spawn handler not registered"}, HTTPStatus.INTERNAL_SERVER_ERROR
+        return error_response(
+            "INTERNAL_SERVER_ERROR",
+            "Team spawn handler not registered",
+            HTTPStatus.INTERNAL_SERVER_ERROR,
+        )
 
     session_config = {
         "project_id": path.project_id,
@@ -886,12 +914,14 @@ def monitor_session(path: SessionPath):
                 (path.session_id,),
             ).fetchone()
         if not row:
-            return {"error": "Session not found"}, HTTPStatus.NOT_FOUND
+            return error_response("NOT_FOUND", "Session not found", HTTPStatus.NOT_FOUND)
         execution_type = row["execution_type"] if row["execution_type"] else "direct"
 
     handler = get_handler(execution_type)
     if not handler:
-        return {"error": f"No handler for execution_type: {execution_type}"}, HTTPStatus.NOT_FOUND
+        return error_response(
+            "NOT_FOUND", f"No handler for execution_type: {execution_type}", HTTPStatus.NOT_FOUND
+        )
 
     result = handler.monitor(path.session_id)
     result["session_id"] = path.session_id

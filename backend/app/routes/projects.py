@@ -6,6 +6,8 @@ from flask import request
 from flask_openapi3 import APIBlueprint, Tag
 from pydantic import BaseModel, Field
 
+from app.models.common import error_response
+
 from ..database import (
     add_project,
     add_project_skill,
@@ -69,11 +71,11 @@ def create_project():
     """Create a new project."""
     data = request.get_json()
     if not data:
-        return {"error": "JSON body required"}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", "JSON body required", HTTPStatus.BAD_REQUEST)
 
     name = data.get("name")
     if not name:
-        return {"error": "name is required"}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", "name is required", HTTPStatus.BAD_REQUEST)
 
     github_repo_raw = data.get("github_repo")
     local_path = data.get("local_path")
@@ -89,9 +91,11 @@ def create_project():
     if github_repo:
         full_url = f"https://{github_host}/{github_repo}"
         if not GitHubService.validate_repo_url(full_url):
-            return {
-                "error": f"Invalid or inaccessible GitHub repo: {github_repo}"
-            }, HTTPStatus.BAD_REQUEST
+            return error_response(
+                "BAD_REQUEST",
+                f"Invalid or inaccessible GitHub repo: {github_repo}",
+                HTTPStatus.BAD_REQUEST,
+            )
 
     project_id = add_project(
         name=name,
@@ -104,7 +108,9 @@ def create_project():
         github_host=github_host,
     )
     if not project_id:
-        return {"error": "Failed to create project"}, HTTPStatus.INTERNAL_SERVER_ERROR
+        return error_response(
+            "INTERNAL_SERVER_ERROR", "Failed to create project", HTTPStatus.INTERNAL_SERVER_ERROR
+        )
 
     # Auto-clone if github_repo provided (async background clone)
     if github_repo:
@@ -160,7 +166,7 @@ def get_project_detail_endpoint(path: ProjectPath):
     """Get project details with teams."""
     project = get_project_detail(path.project_id)
     if not project:
-        return {"error": "Project not found"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "Project not found", HTTPStatus.NOT_FOUND)
     return project, HTTPStatus.OK
 
 
@@ -169,7 +175,7 @@ def update_project_endpoint(path: ProjectPath):
     """Update a project."""
     data = request.get_json()
     if not data:
-        return {"error": "JSON body required"}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", "JSON body required", HTTPStatus.BAD_REQUEST)
 
     if not update_project(
         path.project_id,
@@ -182,7 +188,9 @@ def update_project_endpoint(path: ProjectPath):
         local_path=data.get("local_path"),
         github_host=data.get("github_host"),
     ):
-        return {"error": "Project not found or no changes made"}, HTTPStatus.NOT_FOUND
+        return error_response(
+            "NOT_FOUND", "Project not found or no changes made", HTTPStatus.NOT_FOUND
+        )
 
     project = get_project(path.project_id)
     return project, HTTPStatus.OK
@@ -192,7 +200,7 @@ def update_project_endpoint(path: ProjectPath):
 def delete_project_endpoint(path: ProjectPath):
     """Delete a project."""
     if not delete_project(path.project_id):
-        return {"error": "Project not found"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "Project not found", HTTPStatus.NOT_FOUND)
     return {"message": "Project deleted"}, HTTPStatus.OK
 
 
@@ -208,7 +216,9 @@ def list_project_teams(path: ProjectPath):
 def assign_team(path: TeamAssignPath):
     """Assign a team to the project."""
     if not assign_team_to_project(path.project_id, path.team_id):
-        return {"error": "Failed to assign team (may already be assigned)"}, HTTPStatus.BAD_REQUEST
+        return error_response(
+            "BAD_REQUEST", "Failed to assign team (may already be assigned)", HTTPStatus.BAD_REQUEST
+        )
     return {"message": "Team assigned"}, HTTPStatus.OK
 
 
@@ -216,7 +226,7 @@ def assign_team(path: TeamAssignPath):
 def unassign_team(path: TeamAssignPath):
     """Remove a team from the project."""
     if not unassign_team_from_project(path.project_id, path.team_id):
-        return {"error": "Team assignment not found"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "Team assignment not found", HTTPStatus.NOT_FOUND)
     return {"message": "Team removed"}, HTTPStatus.OK
 
 
@@ -227,12 +237,12 @@ def run_team_in_project(path: TeamAssignPath):
     # Validate project exists
     project = get_project(path.project_id)
     if not project:
-        return {"error": "Project not found"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "Project not found", HTTPStatus.NOT_FOUND)
 
     # Validate team exists
     team = get_team_detail(path.team_id)
     if not team:
-        return {"error": "Team not found"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "Team not found", HTTPStatus.NOT_FOUND)
 
     # Validate team is assigned to this project
     project_teams = get_project_teams(path.project_id)
@@ -240,13 +250,15 @@ def run_team_in_project(path: TeamAssignPath):
     if project.get("owner_team_id") and project["owner_team_id"] not in team_ids:
         team_ids.append(project["owner_team_id"])
     if path.team_id not in team_ids:
-        return {"error": "Team is not assigned to this project"}, HTTPStatus.BAD_REQUEST
+        return error_response(
+            "BAD_REQUEST", "Team is not assigned to this project", HTTPStatus.BAD_REQUEST
+        )
 
     # Resolve working directory
     try:
         working_directory = ProjectWorkspaceService.resolve_working_directory(path.project_id)
     except ValueError as e:
-        return {"error": str(e)}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", str(e), HTTPStatus.BAD_REQUEST)
 
     # Get optional message from request body
     data = request.get_json(silent=True) or {}
@@ -267,7 +279,7 @@ def run_team_in_project(path: TeamAssignPath):
             "working_directory": working_directory,
         }, HTTPStatus.OK
     except ValueError as e:
-        return {"error": str(e)}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", str(e), HTTPStatus.BAD_REQUEST)
 
 
 # Deploy routes
@@ -335,11 +347,11 @@ def add_skill_to_project(path: ProjectPath):
     """Add a skill to a project."""
     data = request.get_json()
     if not data:
-        return {"error": "JSON body required"}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", "JSON body required", HTTPStatus.BAD_REQUEST)
 
     skill_name = data.get("skill_name")
     if not skill_name:
-        return {"error": "skill_name is required"}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", "skill_name is required", HTTPStatus.BAD_REQUEST)
 
     skill_id = add_project_skill(
         project_id=path.project_id,
@@ -348,7 +360,9 @@ def add_skill_to_project(path: ProjectPath):
         source=data.get("source", "manual"),
     )
     if not skill_id:
-        return {"error": "Failed to add skill (may already exist)"}, HTTPStatus.BAD_REQUEST
+        return error_response(
+            "BAD_REQUEST", "Failed to add skill (may already exist)", HTTPStatus.BAD_REQUEST
+        )
 
     return {"message": "Skill added", "skill_id": skill_id}, HTTPStatus.CREATED
 
@@ -362,7 +376,7 @@ class SkillPath(BaseModel):
 def remove_skill_from_project(path: SkillPath):
     """Remove a skill from a project."""
     if not delete_project_skill_by_id(path.skill_id):
-        return {"error": "Skill not found"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "Skill not found", HTTPStatus.NOT_FOUND)
     return {"message": "Skill removed"}, HTTPStatus.OK
 
 
@@ -377,7 +391,7 @@ def list_installations(path: ProjectPath):
         )
         return {"installations": installations}, HTTPStatus.OK
     except ValueError as e:
-        return {"error": str(e)}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", str(e), HTTPStatus.BAD_REQUEST)
 
 
 @projects_bp.post("/<project_id>/install")
@@ -385,7 +399,7 @@ def install_component(path: ProjectPath):
     """Install a component to the project's .claude/ directory."""
     data = request.get_json()
     if not data:
-        return {"error": "JSON body required"}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", "JSON body required", HTTPStatus.BAD_REQUEST)
 
     component_type = data.get("component_type")
     component_id = data.get("component_id")
@@ -397,12 +411,14 @@ def install_component(path: ProjectPath):
         "command",
         "rule",
     ):
-        return {
-            "error": "Valid component_type required (agent, skill, hook, command, rule)"
-        }, HTTPStatus.BAD_REQUEST
+        return error_response(
+            "BAD_REQUEST",
+            "Valid component_type required (agent, skill, hook, command, rule)",
+            HTTPStatus.BAD_REQUEST,
+        )
 
     if not component_id:
-        return {"error": "component_id is required"}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", "component_id is required", HTTPStatus.BAD_REQUEST)
 
     try:
         result = ProjectInstallService.install_component(
@@ -410,9 +426,11 @@ def install_component(path: ProjectPath):
         )
         return result, HTTPStatus.OK
     except ValueError as e:
-        return {"error": str(e)}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", str(e), HTTPStatus.BAD_REQUEST)
     except Exception as e:
-        return {"error": f"Install failed: {str(e)}"}, HTTPStatus.INTERNAL_SERVER_ERROR
+        return error_response(
+            "INTERNAL_SERVER_ERROR", f"Install failed: {str(e)}", HTTPStatus.INTERNAL_SERVER_ERROR
+        )
 
 
 @projects_bp.post("/<project_id>/uninstall")
@@ -420,7 +438,7 @@ def uninstall_component(path: ProjectPath):
     """Uninstall a component from the project's .claude/ directory."""
     data = request.get_json()
     if not data:
-        return {"error": "JSON body required"}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", "JSON body required", HTTPStatus.BAD_REQUEST)
 
     component_type = data.get("component_type")
     component_id = data.get("component_id")
@@ -432,10 +450,12 @@ def uninstall_component(path: ProjectPath):
         "command",
         "rule",
     ):
-        return {"error": "Valid component_type required"}, HTTPStatus.BAD_REQUEST
+        return error_response(
+            "BAD_REQUEST", "Valid component_type required", HTTPStatus.BAD_REQUEST
+        )
 
     if not component_id:
-        return {"error": "component_id is required"}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", "component_id is required", HTTPStatus.BAD_REQUEST)
 
     try:
         result = ProjectInstallService.uninstall_component(
@@ -443,9 +463,11 @@ def uninstall_component(path: ProjectPath):
         )
         return result, HTTPStatus.OK
     except ValueError as e:
-        return {"error": str(e)}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", str(e), HTTPStatus.BAD_REQUEST)
     except Exception as e:
-        return {"error": f"Uninstall failed: {str(e)}"}, HTTPStatus.INTERNAL_SERVER_ERROR
+        return error_response(
+            "INTERNAL_SERVER_ERROR", f"Uninstall failed: {str(e)}", HTTPStatus.INTERNAL_SERVER_ERROR
+        )
 
 
 # Project team topology routes
@@ -461,12 +483,14 @@ def create_team_edge(path: ProjectPath):
     """Create a team-to-team edge in project org chart."""
     data = request.get_json()
     if not data:
-        return {"error": "JSON body required"}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", "JSON body required", HTTPStatus.BAD_REQUEST)
 
     source_team_id = data.get("source_team_id")
     target_team_id = data.get("target_team_id")
     if not source_team_id or not target_team_id:
-        return {"error": "source_team_id and target_team_id required"}, HTTPStatus.BAD_REQUEST
+        return error_response(
+            "BAD_REQUEST", "source_team_id and target_team_id required", HTTPStatus.BAD_REQUEST
+        )
 
     edge_id = add_project_team_edge(
         project_id=path.project_id,
@@ -477,7 +501,9 @@ def create_team_edge(path: ProjectPath):
         weight=data.get("weight", 1),
     )
     if not edge_id:
-        return {"error": "Failed to create edge (may already exist)"}, HTTPStatus.BAD_REQUEST
+        return error_response(
+            "BAD_REQUEST", "Failed to create edge (may already exist)", HTTPStatus.BAD_REQUEST
+        )
 
     return {"message": "Edge created", "edge_id": edge_id}, HTTPStatus.CREATED
 
@@ -486,7 +512,7 @@ def create_team_edge(path: ProjectPath):
 def delete_team_edge(path: TeamEdgePath):
     """Delete a team-to-team edge."""
     if not delete_project_team_edge(path.edge_id):
-        return {"error": "Edge not found"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "Edge not found", HTTPStatus.NOT_FOUND)
     return {"message": "Edge deleted"}, HTTPStatus.OK
 
 
@@ -495,7 +521,7 @@ def update_team_topology(path: ProjectPath):
     """Update project team topology config (canvas positions)."""
     data = request.get_json()
     if not data:
-        return {"error": "JSON body required"}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", "JSON body required", HTTPStatus.BAD_REQUEST)
 
     config = data.get("team_topology_config", "{}")
     if isinstance(config, dict):
@@ -516,7 +542,7 @@ def sync_project_repo(path: ProjectPath):
     """
     project = get_project(path.project_id)
     if not project:
-        return {"error": "Project not found"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "Project not found", HTTPStatus.NOT_FOUND)
 
     clone_status = project.get("clone_status", "none")
     if clone_status in ("error", "none") and project.get("github_repo"):
@@ -533,7 +559,7 @@ def get_clone_status(path: ProjectPath):
     """Get the current clone status for a project."""
     project = get_project(path.project_id)
     if not project:
-        return {"error": "Project not found"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "Project not found", HTTPStatus.NOT_FOUND)
 
     return {
         "clone_status": project.get("clone_status", "none"),
@@ -552,7 +578,7 @@ def get_or_create_manager(path: ProjectPath):
     """
     project = get_project(path.project_id)
     if not project:
-        return {"error": "Project not found"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "Project not found", HTTPStatus.NOT_FOUND)
 
     sa_id = project.get("manager_super_agent_id")
 
@@ -571,7 +597,11 @@ def get_or_create_manager(path: ProjectPath):
         backend_type="claude",
     )
     if not sa_id:
-        return {"error": "Failed to create manager agent"}, HTTPStatus.INTERNAL_SERVER_ERROR
+        return error_response(
+            "INTERNAL_SERVER_ERROR",
+            "Failed to create manager agent",
+            HTTPStatus.INTERNAL_SERVER_ERROR,
+        )
 
     role_content = (
         f"You are the project manager for '{project_name}'.\n\n"

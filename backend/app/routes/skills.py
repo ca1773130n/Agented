@@ -8,6 +8,8 @@ from flask import Response, request
 from flask_openapi3 import APIBlueprint, Tag
 from pydantic import BaseModel, Field
 
+from app.models.common import error_response
+
 from ..services.skills_service import SkillsService, get_playground_working_dir
 
 tag = Tag(name="skills", description="Skills management and playground")
@@ -73,7 +75,7 @@ def add_user_skill():
     """Add a skill to the user's collection."""
     data = request.get_json()
     if not data:
-        return {"error": "JSON body required"}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", "JSON body required", HTTPStatus.BAD_REQUEST)
     result, status = SkillsService.add_skill(data)
     return result, status
 
@@ -83,7 +85,7 @@ def update_user_skill(path: SkillIdPath):
     """Update a user skill."""
     data = request.get_json()
     if not data:
-        return {"error": "JSON body required"}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", "JSON body required", HTTPStatus.BAD_REQUEST)
     result, status = SkillsService.update_skill(path.skill_id, data)
     return result, status
 
@@ -112,7 +114,7 @@ def toggle_harness_skill(path: SkillIdPath):
     """Toggle a skill's harness selection."""
     data = request.get_json()
     if data is None:
-        return {"error": "JSON body required"}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", "JSON body required", HTTPStatus.BAD_REQUEST)
     selected = bool(data.get("selected", False))
     result, status = SkillsService.toggle_harness_selection(path.skill_id, selected)
     return result, status
@@ -215,7 +217,7 @@ def test_skill():
     """Start a skill test in the playground."""
     data = request.get_json()
     if not data or not data.get("skill_name"):
-        return {"error": "skill_name is required"}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", "skill_name is required", HTTPStatus.BAD_REQUEST)
     skill_name = data["skill_name"]
     test_input = data.get("input", "")
     result, status = SkillsService.test_skill(skill_name, test_input)
@@ -277,7 +279,7 @@ def install_skills_sh():
     """Install a skill from skills.sh."""
     data = request.get_json()
     if not data or not data.get("source"):
-        return {"error": "source is required"}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", "source is required", HTTPStatus.BAD_REQUEST)
     from ..services.skills_sh_service import SkillsShService
 
     client_ip = request.remote_addr or "unknown"

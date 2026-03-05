@@ -5,6 +5,8 @@ from http import HTTPStatus
 from flask_openapi3 import APIBlueprint, Tag
 from pydantic import BaseModel, Field
 
+from app.models.common import error_response
+
 from ..models.config_export import (
     ConfigFormatQuery,
     ConfigImportRequest,
@@ -33,11 +35,13 @@ def export_trigger_config(path: TriggerIdPath, query: ConfigFormatQuery):
     """Export a single trigger configuration as YAML or JSON."""
     fmt = query.format or "yaml"
     if fmt not in ("yaml", "json"):
-        return {"error": "format must be 'yaml' or 'json'"}, HTTPStatus.BAD_REQUEST
+        return error_response(
+            "BAD_REQUEST", "format must be 'yaml' or 'json'", HTTPStatus.BAD_REQUEST
+        )
 
     result = export_trigger(path.trigger_id, format=fmt)
     if result is None:
-        return {"error": "Trigger not found"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "Trigger not found", HTTPStatus.NOT_FOUND)
 
     content_type = "application/json" if fmt == "json" else "text/yaml"
     return result, HTTPStatus.OK, {"Content-Type": content_type}
@@ -47,7 +51,9 @@ def export_trigger_config(path: TriggerIdPath, query: ConfigFormatQuery):
 def import_trigger_config(body: ConfigImportRequest):
     """Import a trigger from YAML or JSON configuration."""
     if body.format not in ("yaml", "json"):
-        return {"error": "format must be 'yaml' or 'json'"}, HTTPStatus.BAD_REQUEST
+        return error_response(
+            "BAD_REQUEST", "format must be 'yaml' or 'json'", HTTPStatus.BAD_REQUEST
+        )
 
     try:
         trigger_id, status = import_trigger(
@@ -56,7 +62,7 @@ def import_trigger_config(body: ConfigImportRequest):
             upsert=body.upsert,
         )
     except ValueError as e:
-        return {"error": str(e)}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", str(e), HTTPStatus.BAD_REQUEST)
 
     result = ConfigImportResult(
         trigger_id=trigger_id,
@@ -79,7 +85,9 @@ def import_trigger_config(body: ConfigImportRequest):
 def validate_trigger_config(body: ConfigValidateRequest):
     """Validate a trigger configuration without importing."""
     if body.format not in ("yaml", "json"):
-        return {"error": "format must be 'yaml' or 'json'"}, HTTPStatus.BAD_REQUEST
+        return error_response(
+            "BAD_REQUEST", "format must be 'yaml' or 'json'", HTTPStatus.BAD_REQUEST
+        )
 
     valid, error = validate_config(body.config, format=body.format)
     return {"valid": valid, "error": error}, HTTPStatus.OK
@@ -90,7 +98,9 @@ def export_all_trigger_configs(query: ConfigFormatQuery):
     """Export all trigger configurations as YAML or JSON."""
     fmt = query.format or "yaml"
     if fmt not in ("yaml", "json"):
-        return {"error": "format must be 'yaml' or 'json'"}, HTTPStatus.BAD_REQUEST
+        return error_response(
+            "BAD_REQUEST", "format must be 'yaml' or 'json'", HTTPStatus.BAD_REQUEST
+        )
 
     result = export_all_triggers(format=fmt)
     content_type = "application/json" if fmt == "json" else "text/yaml"

@@ -6,6 +6,8 @@ from flask import request
 from flask_openapi3 import APIBlueprint, Tag
 from pydantic import BaseModel, Field
 
+from app.models.common import error_response
+
 from ..database import delete_setting, get_all_settings, get_setting, set_setting
 
 tag = Tag(name="settings", description="Application settings management")
@@ -35,11 +37,11 @@ def set_setting_endpoint(path: SettingPath):
     """Set a setting value."""
     data = request.get_json()
     if not data:
-        return {"error": "JSON body required"}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", "JSON body required", HTTPStatus.BAD_REQUEST)
 
     value = data.get("value")
     if value is None:
-        return {"error": "value is required"}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", "value is required", HTTPStatus.BAD_REQUEST)
 
     set_setting(path.key, str(value))
     return {"key": path.key, "value": value}, HTTPStatus.OK
@@ -49,7 +51,7 @@ def set_setting_endpoint(path: SettingPath):
 def delete_setting_endpoint(path: SettingPath):
     """Delete a setting."""
     if not delete_setting(path.key):
-        return {"error": "Setting not found"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "Setting not found", HTTPStatus.NOT_FOUND)
     return {"message": "Setting deleted"}, HTTPStatus.OK
 
 
@@ -74,7 +76,7 @@ def set_harness_plugin():
     """Set the harness plugin selection."""
     data = request.get_json()
     if not data:
-        return {"error": "JSON body required"}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", "JSON body required", HTTPStatus.BAD_REQUEST)
 
     plugin_id = data.get("plugin_id")
     marketplace_id = data.get("marketplace_id")

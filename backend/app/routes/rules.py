@@ -6,6 +6,8 @@ from flask import Response, request
 from flask_openapi3 import APIBlueprint, Tag
 from pydantic import BaseModel, Field
 
+from app.models.common import error_response
+
 from ..database import (
     add_rule,
     count_rules,
@@ -52,17 +54,19 @@ def create_rule():
     """Create a new rule."""
     data = request.get_json()
     if not data:
-        return {"error": "JSON body required"}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", "JSON body required", HTTPStatus.BAD_REQUEST)
 
     name = data.get("name")
     rule_type = data.get("rule_type", "validation")
 
     if not name:
-        return {"error": "name is required"}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", "name is required", HTTPStatus.BAD_REQUEST)
     if rule_type not in VALID_RULE_TYPES:
-        return {
-            "error": f"Invalid rule type. Must be one of: {', '.join(VALID_RULE_TYPES)}"
-        }, HTTPStatus.BAD_REQUEST
+        return error_response(
+            "BAD_REQUEST",
+            f"Invalid rule type. Must be one of: {', '.join(VALID_RULE_TYPES)}",
+            HTTPStatus.BAD_REQUEST,
+        )
 
     rule_id = add_rule(
         name=name,
@@ -76,7 +80,9 @@ def create_rule():
     )
 
     if not rule_id:
-        return {"error": "Failed to create rule"}, HTTPStatus.INTERNAL_SERVER_ERROR
+        return error_response(
+            "INTERNAL_SERVER_ERROR", "Failed to create rule", HTTPStatus.INTERNAL_SERVER_ERROR
+        )
 
     rule = get_rule(rule_id)
     return {"message": "Rule created", "rule": rule}, HTTPStatus.CREATED
@@ -87,7 +93,7 @@ def get_rule_endpoint(path: RulePath):
     """Get rule details."""
     rule = get_rule(path.rule_id)
     if not rule:
-        return {"error": "Rule not found"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "Rule not found", HTTPStatus.NOT_FOUND)
     return rule, HTTPStatus.OK
 
 
@@ -96,13 +102,15 @@ def update_rule_endpoint(path: RulePath):
     """Update a rule."""
     data = request.get_json()
     if not data:
-        return {"error": "JSON body required"}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", "JSON body required", HTTPStatus.BAD_REQUEST)
 
     rule_type = data.get("rule_type")
     if rule_type and rule_type not in VALID_RULE_TYPES:
-        return {
-            "error": f"Invalid rule type. Must be one of: {', '.join(VALID_RULE_TYPES)}"
-        }, HTTPStatus.BAD_REQUEST
+        return error_response(
+            "BAD_REQUEST",
+            f"Invalid rule type. Must be one of: {', '.join(VALID_RULE_TYPES)}",
+            HTTPStatus.BAD_REQUEST,
+        )
 
     if not update_rule(
         path.rule_id,
@@ -113,7 +121,9 @@ def update_rule_endpoint(path: RulePath):
         action=data.get("action"),
         enabled=data.get("enabled"),
     ):
-        return {"error": "Rule not found or no changes made"}, HTTPStatus.NOT_FOUND
+        return error_response(
+            "NOT_FOUND", "Rule not found or no changes made", HTTPStatus.NOT_FOUND
+        )
 
     rule = get_rule(path.rule_id)
     return rule, HTTPStatus.OK
@@ -123,7 +133,7 @@ def update_rule_endpoint(path: RulePath):
 def delete_rule_endpoint(path: RulePath):
     """Delete a rule."""
     if not delete_rule(path.rule_id):
-        return {"error": "Rule not found"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "Rule not found", HTTPStatus.NOT_FOUND)
     return {"message": "Rule deleted"}, HTTPStatus.OK
 
 
@@ -144,9 +154,11 @@ def list_project_rules(path: ProjectRulesPath):
 def list_rules_by_type(rule_type: str):
     """List enabled rules for a specific type."""
     if rule_type not in VALID_RULE_TYPES:
-        return {
-            "error": f"Invalid rule type. Must be one of: {', '.join(VALID_RULE_TYPES)}"
-        }, HTTPStatus.BAD_REQUEST
+        return error_response(
+            "BAD_REQUEST",
+            f"Invalid rule type. Must be one of: {', '.join(VALID_RULE_TYPES)}",
+            HTTPStatus.BAD_REQUEST,
+        )
     rules = get_rules_by_type(rule_type)
     return {"rules": rules, "rule_type": rule_type}, HTTPStatus.OK
 
@@ -156,7 +168,7 @@ def export_rule(path: RulePath):
     """Export a rule as a deployable configuration."""
     rule = get_rule(path.rule_id)
     if not rule:
-        return {"error": "Rule not found"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "Rule not found", HTTPStatus.NOT_FOUND)
 
     # Generate export format
     export_data = {
@@ -178,11 +190,13 @@ def generate_rule_stream():
 
     data = request.get_json()
     if not data:
-        return {"error": "JSON body required"}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", "JSON body required", HTTPStatus.BAD_REQUEST)
 
     description = (data.get("description") or "").strip()
     if len(description) < 10:
-        return {"error": "Description must be at least 10 characters"}, HTTPStatus.BAD_REQUEST
+        return error_response(
+            "BAD_REQUEST", "Description must be at least 10 characters", HTTPStatus.BAD_REQUEST
+        )
 
     return Response(
         RuleGenerationService.generate_streaming(description),

@@ -4,6 +4,8 @@ from http import HTTPStatus
 
 from flask_openapi3 import APIBlueprint, Tag
 
+from app.models.common import error_response
+
 from ..db.gitops import (
     create_gitops_repo,
     delete_gitops_repo,
@@ -51,7 +53,7 @@ def get_repo(path: GitOpsRepoPath):
     """Get GitOps repository detail with last sync info."""
     repo = get_gitops_repo(path.repo_id)
     if not repo:
-        return {"error": "GitOps repo not found"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "GitOps repo not found", HTTPStatus.NOT_FOUND)
     return repo
 
 
@@ -63,11 +65,11 @@ def update_repo(path: GitOpsRepoPath, body: GitOpsRepoUpdate):
         updates["enabled"] = 1 if updates["enabled"] else 0
 
     if not updates:
-        return {"error": "No fields to update"}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", "No fields to update", HTTPStatus.BAD_REQUEST)
 
     found = update_gitops_repo(path.repo_id, **updates)
     if not found:
-        return {"error": "GitOps repo not found"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "GitOps repo not found", HTTPStatus.NOT_FOUND)
 
     repo = get_gitops_repo(path.repo_id)
     return repo
@@ -78,7 +80,7 @@ def delete_repo(path: GitOpsRepoPath):
     """Remove a watched GitOps repository."""
     found = delete_gitops_repo(path.repo_id)
     if not found:
-        return {"error": "GitOps repo not found"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "GitOps repo not found", HTTPStatus.NOT_FOUND)
     return {"message": "GitOps repo deleted"}, HTTPStatus.OK
 
 
@@ -90,12 +92,12 @@ def trigger_sync(path: GitOpsRepoPath, query: GitOpsSyncQuery):
     """
     repo = get_gitops_repo(path.repo_id)
     if not repo:
-        return {"error": "GitOps repo not found"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "GitOps repo not found", HTTPStatus.NOT_FOUND)
 
     try:
         result = GitOpsSyncService.sync_repo(path.repo_id, dry_run=bool(query.dry_run))
     except ValueError as e:
-        return {"error": str(e)}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", str(e), HTTPStatus.BAD_REQUEST)
 
     return result
 
@@ -105,7 +107,7 @@ def get_sync_logs(path: GitOpsRepoPath, query: GitOpsSyncLogQuery):
     """List sync history for a GitOps repository."""
     repo = get_gitops_repo(path.repo_id)
     if not repo:
-        return {"error": "GitOps repo not found"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "GitOps repo not found", HTTPStatus.NOT_FOUND)
 
     logs = list_sync_logs(path.repo_id, limit=query.limit or 20)
     return logs

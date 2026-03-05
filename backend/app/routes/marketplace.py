@@ -6,6 +6,8 @@ from flask import request
 from flask_openapi3 import APIBlueprint, Tag
 from pydantic import BaseModel, Field
 
+from app.models.common import error_response
+
 from ..database import (
     add_marketplace,
     add_marketplace_plugin,
@@ -94,24 +96,26 @@ def create_marketplace():
     """Create a new marketplace."""
     data = request.get_json()
     if not data:
-        return {"error": "JSON body required"}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", "JSON body required", HTTPStatus.BAD_REQUEST)
 
     name = data.get("name")
     if not name:
-        return {"error": "name is required"}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", "name is required", HTTPStatus.BAD_REQUEST)
 
     url = data.get("url")
     if not url:
-        return {"error": "url is required"}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", "url is required", HTTPStatus.BAD_REQUEST)
 
     marketplace_type = data.get("type", "git")
 
     # Validate GitHub URL format for git type marketplaces
     if marketplace_type == "git" and url.startswith(("https://", "http://")):
         if not GitHubService.validate_github_url_format(url):
-            return {
-                "error": f"Invalid GitHub URL format: {url}. Expected format: https://github.com/owner/repo"
-            }, HTTPStatus.BAD_REQUEST
+            return error_response(
+                "BAD_REQUEST",
+                f"Invalid GitHub URL format: {url}. Expected format: https://github.com/owner/repo",
+                HTTPStatus.BAD_REQUEST,
+            )
 
     marketplace_id = add_marketplace(
         name=name,
@@ -120,7 +124,11 @@ def create_marketplace():
         is_default=data.get("is_default", False),
     )
     if not marketplace_id:
-        return {"error": "Failed to create marketplace"}, HTTPStatus.INTERNAL_SERVER_ERROR
+        return error_response(
+            "INTERNAL_SERVER_ERROR",
+            "Failed to create marketplace",
+            HTTPStatus.INTERNAL_SERVER_ERROR,
+        )
 
     marketplace = get_marketplace(marketplace_id)
     return {"message": "Marketplace created", "marketplace": marketplace}, HTTPStatus.CREATED
@@ -131,7 +139,7 @@ def get_marketplace_detail(path: MarketplacePath):
     """Get marketplace details."""
     marketplace = get_marketplace(path.marketplace_id)
     if not marketplace:
-        return {"error": "Marketplace not found"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "Marketplace not found", HTTPStatus.NOT_FOUND)
     return marketplace, HTTPStatus.OK
 
 
@@ -140,7 +148,7 @@ def update_marketplace_endpoint(path: MarketplacePath):
     """Update a marketplace."""
     data = request.get_json()
     if not data:
-        return {"error": "JSON body required"}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", "JSON body required", HTTPStatus.BAD_REQUEST)
 
     if not update_marketplace(
         path.marketplace_id,
@@ -149,7 +157,9 @@ def update_marketplace_endpoint(path: MarketplacePath):
         marketplace_type=data.get("type"),
         is_default=data.get("is_default"),
     ):
-        return {"error": "Marketplace not found or no changes made"}, HTTPStatus.NOT_FOUND
+        return error_response(
+            "NOT_FOUND", "Marketplace not found or no changes made", HTTPStatus.NOT_FOUND
+        )
 
     marketplace = get_marketplace(path.marketplace_id)
     return marketplace, HTTPStatus.OK
@@ -159,7 +169,7 @@ def update_marketplace_endpoint(path: MarketplacePath):
 def delete_marketplace_endpoint(path: MarketplacePath):
     """Delete a marketplace."""
     if not delete_marketplace(path.marketplace_id):
-        return {"error": "Marketplace not found"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "Marketplace not found", HTTPStatus.NOT_FOUND)
     return {"message": "Marketplace deleted"}, HTTPStatus.OK
 
 
@@ -180,7 +190,7 @@ def discover_marketplace_plugins(path: MarketplacePath):
         result = DeployService.discover_available_plugins(path.marketplace_id)
         return result, HTTPStatus.OK
     except (ValueError, RuntimeError) as e:
-        return {"error": str(e)}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", str(e), HTTPStatus.BAD_REQUEST)
 
 
 @marketplace_bp.post("/<marketplace_id>/plugins")
@@ -188,11 +198,11 @@ def install_plugin(path: MarketplacePath):
     """Install a plugin from a marketplace."""
     data = request.get_json()
     if not data:
-        return {"error": "JSON body required"}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", "JSON body required", HTTPStatus.BAD_REQUEST)
 
     remote_name = data.get("remote_name")
     if not remote_name:
-        return {"error": "remote_name is required"}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", "remote_name is required", HTTPStatus.BAD_REQUEST)
 
     plugin_id = add_marketplace_plugin(
         marketplace_id=path.marketplace_id,
@@ -201,7 +211,9 @@ def install_plugin(path: MarketplacePath):
         version=data.get("version"),
     )
     if not plugin_id:
-        return {"error": "Failed to install plugin"}, HTTPStatus.INTERNAL_SERVER_ERROR
+        return error_response(
+            "INTERNAL_SERVER_ERROR", "Failed to install plugin", HTTPStatus.INTERNAL_SERVER_ERROR
+        )
 
     plugins = get_marketplace_plugins(path.marketplace_id)
     plugin = next((p for p in plugins if p["id"] == plugin_id), None)
@@ -212,5 +224,5 @@ def install_plugin(path: MarketplacePath):
 def uninstall_plugin(path: MarketplacePluginPath):
     """Uninstall a plugin from a marketplace."""
     if not delete_marketplace_plugin(path.plugin_id):
-        return {"error": "Plugin not found"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "Plugin not found", HTTPStatus.NOT_FOUND)
     return {"message": "Plugin uninstalled"}, HTTPStatus.OK

@@ -4,6 +4,8 @@ from http import HTTPStatus
 
 from flask_openapi3 import APIBlueprint, Tag
 
+from app.models.common import error_response
+
 from ..db.rbac import (
     create_user_role,
     delete_user_role,
@@ -36,7 +38,9 @@ def create_role(body: UserRoleCreate):
         role=body.role,
     )
     if not role_id:
-        return {"error": "Failed to create role (duplicate API key?)"}, HTTPStatus.CONFLICT
+        return error_response(
+            "CONFLICT", "Failed to create role (duplicate API key?)", HTTPStatus.CONFLICT
+        )
     role = get_user_role(role_id)
     return {"message": "Role created", "role": role}, HTTPStatus.CREATED
 
@@ -47,7 +51,7 @@ def get_role_detail(path: RolePath):
     """Get a single user role by ID."""
     role = get_user_role(path.role_id)
     if not role:
-        return {"error": "Role not found"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "Role not found", HTTPStatus.NOT_FOUND)
     return role, HTTPStatus.OK
 
 
@@ -56,7 +60,7 @@ def get_role_detail(path: RolePath):
 def update_role(path: RolePath, body: UserRoleUpdate):
     """Update a user role."""
     if not update_user_role(path.role_id, label=body.label, role=body.role):
-        return {"error": "Role not found or no changes"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "Role not found or no changes", HTTPStatus.NOT_FOUND)
     role = get_user_role(path.role_id)
     return role, HTTPStatus.OK
 
@@ -66,7 +70,7 @@ def update_role(path: RolePath, body: UserRoleUpdate):
 def delete_role(path: RolePath):
     """Delete a user role."""
     if not delete_user_role(path.role_id):
-        return {"error": "Role not found"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "Role not found", HTTPStatus.NOT_FOUND)
     return {"message": "Role deleted"}, HTTPStatus.OK
 
 

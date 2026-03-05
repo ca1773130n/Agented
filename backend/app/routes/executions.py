@@ -7,9 +7,11 @@ from flask import Response, request
 from flask_openapi3 import APIBlueprint, Tag
 from pydantic import BaseModel, Field
 
+from app.models.common import error_response
+
 from ..database import get_trigger
 from ..db.executions import count_filtered_executions, get_filtered_executions
-from ..models.common import ExecutionFilterQuery, PaginationQuery
+from ..models.common import ExecutionFilterQuery
 from ..services.execution_log_service import ExecutionLogService
 from ..services.execution_queue_service import ExecutionQueueService
 
@@ -30,19 +32,26 @@ def list_trigger_executions(path: TriggerPath, query: ExecutionFilterQuery):
     """List execution history for a trigger with optional filters."""
     trigger = get_trigger(path.trigger_id)
     if not trigger:
-        return {"error": "Trigger not found"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "Trigger not found", HTTPStatus.NOT_FOUND)
 
     limit = min(query.limit or 50, 500)
     offset = query.offset or 0
 
     executions = get_filtered_executions(
-        limit=limit, offset=offset,
-        status=query.status, trigger_id=path.trigger_id,
-        date_from=query.date_from, date_to=query.date_to, q=query.q,
+        limit=limit,
+        offset=offset,
+        status=query.status,
+        trigger_id=path.trigger_id,
+        date_from=query.date_from,
+        date_to=query.date_to,
+        q=query.q,
     )
     total_count = count_filtered_executions(
-        status=query.status, trigger_id=path.trigger_id,
-        date_from=query.date_from, date_to=query.date_to, q=query.q,
+        status=query.status,
+        trigger_id=path.trigger_id,
+        date_from=query.date_from,
+        date_to=query.date_to,
+        q=query.q,
     )
 
     # Get currently running execution if any
@@ -63,13 +72,20 @@ def list_all_executions(query: ExecutionFilterQuery):
     offset = query.offset or 0
 
     executions = get_filtered_executions(
-        limit=limit, offset=offset,
-        status=query.status, trigger_id=query.trigger_id,
-        date_from=query.date_from, date_to=query.date_to, q=query.q,
+        limit=limit,
+        offset=offset,
+        status=query.status,
+        trigger_id=query.trigger_id,
+        date_from=query.date_from,
+        date_to=query.date_to,
+        q=query.q,
     )
     total_count = count_filtered_executions(
-        status=query.status, trigger_id=query.trigger_id,
-        date_from=query.date_from, date_to=query.date_to, q=query.q,
+        status=query.status,
+        trigger_id=query.trigger_id,
+        date_from=query.date_from,
+        date_to=query.date_to,
+        q=query.q,
     )
 
     return {
@@ -90,7 +106,7 @@ def get_execution(path: ExecutionPath):
     """
     execution = ExecutionLogService.get_execution(path.execution_id)
     if not execution:
-        return {"error": "Execution not found"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "Execution not found", HTTPStatus.NOT_FOUND)
 
     q = request.args.get("q", "").strip()
     if q:
@@ -121,7 +137,7 @@ def stream_execution(path: ExecutionPath):
     """
     execution = ExecutionLogService.get_execution(path.execution_id)
     if not execution:
-        return {"error": "Execution not found"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "Execution not found", HTTPStatus.NOT_FOUND)
 
     def generate():
         """Yield SSE events from the execution log subscription."""
@@ -154,18 +170,22 @@ def cancel_execution(path: ExecutionPath):
 
     execution = ExecutionLogService.get_execution(path.execution_id)
     if not execution:
-        return {"error": "Execution not found"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "Execution not found", HTTPStatus.NOT_FOUND)
     if execution["status"] != "running":
-        return {
-            "error": f'Can only cancel running executions. Current status is "{execution["status"]}". Wait until execution starts.'
-        }, HTTPStatus.CONFLICT
+        return error_response(
+            "CONFLICT",
+            f'Can only cancel running executions. Current status is "{execution["status"]}". Wait until execution starts.',
+            HTTPStatus.CONFLICT,
+        )
 
     grace = _get_sigterm_grace(execution)
     success = ProcessManager.cancel_graceful(path.execution_id, sigterm_timeout=grace)
     if success:
         return {"message": "Execution cancellation initiated"}, HTTPStatus.OK
 
-    return {"error": "Failed to cancel execution"}, HTTPStatus.INTERNAL_SERVER_ERROR
+    return error_response(
+        "INTERNAL_SERVER_ERROR", "Failed to cancel execution", HTTPStatus.INTERNAL_SERVER_ERROR
+    )
 
 
 @executions_bp.post("/executions/<execution_id>/cancel")
@@ -175,18 +195,22 @@ def cancel_execution_graceful(path: ExecutionPath):
 
     execution = ExecutionLogService.get_execution(path.execution_id)
     if not execution:
-        return {"error": "Execution not found"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "Execution not found", HTTPStatus.NOT_FOUND)
     if execution["status"] != "running":
-        return {
-            "error": f'Can only cancel running executions. Current status is "{execution["status"]}". Wait until execution starts.'
-        }, HTTPStatus.CONFLICT
+        return error_response(
+            "CONFLICT",
+            f'Can only cancel running executions. Current status is "{execution["status"]}". Wait until execution starts.',
+            HTTPStatus.CONFLICT,
+        )
 
     grace = _get_sigterm_grace(execution)
     success = ProcessManager.cancel_graceful(path.execution_id, sigterm_timeout=grace)
     if success:
         return {"message": "Cancellation signal sent"}, HTTPStatus.OK
 
-    return {"error": "Failed to cancel execution"}, HTTPStatus.INTERNAL_SERVER_ERROR
+    return error_response(
+        "INTERNAL_SERVER_ERROR", "Failed to cancel execution", HTTPStatus.INTERNAL_SERVER_ERROR
+    )
 
 
 @executions_bp.get("/triggers/<trigger_id>/executions/running")
@@ -194,7 +218,7 @@ def get_running_trigger_execution(path: TriggerPath):
     """Get the currently running execution for a trigger, if any."""
     trigger = get_trigger(path.trigger_id)
     if not trigger:
-        return {"error": "Trigger not found"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "Trigger not found", HTTPStatus.NOT_FOUND)
 
     running = ExecutionLogService.get_running_for_trigger(path.trigger_id)
     if not running:
@@ -223,17 +247,21 @@ def pause_execution(path: ExecutionPath):
 
     execution = ExecutionLogService.get_execution(path.execution_id)
     if not execution:
-        return {"error": "Execution not found"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "Execution not found", HTTPStatus.NOT_FOUND)
     if execution["status"] != "running":
-        return {
-            "error": f'Can only pause running executions. Current status is "{execution["status"]}".'
-        }, HTTPStatus.CONFLICT
+        return error_response(
+            "CONFLICT",
+            f'Can only pause running executions. Current status is "{execution["status"]}".',
+            HTTPStatus.CONFLICT,
+        )
 
     success = ProcessManager.pause(path.execution_id)
     if success:
         return {"status": "paused", "execution_id": path.execution_id}, HTTPStatus.OK
 
-    return {"error": "Failed to pause execution"}, HTTPStatus.INTERNAL_SERVER_ERROR
+    return error_response(
+        "INTERNAL_SERVER_ERROR", "Failed to pause execution", HTTPStatus.INTERNAL_SERVER_ERROR
+    )
 
 
 @executions_bp.post("/executions/<execution_id>/resume")
@@ -243,17 +271,21 @@ def resume_execution(path: ExecutionPath):
 
     execution = ExecutionLogService.get_execution(path.execution_id)
     if not execution:
-        return {"error": "Execution not found"}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "Execution not found", HTTPStatus.NOT_FOUND)
     if execution["status"] != "paused":
-        return {
-            "error": f'Can only resume paused executions. Current status is "{execution["status"]}".'
-        }, HTTPStatus.CONFLICT
+        return error_response(
+            "CONFLICT",
+            f'Can only resume paused executions. Current status is "{execution["status"]}".',
+            HTTPStatus.CONFLICT,
+        )
 
     success = ProcessManager.resume(path.execution_id)
     if success:
         return {"status": "running", "execution_id": path.execution_id}, HTTPStatus.OK
 
-    return {"error": "Failed to resume execution"}, HTTPStatus.INTERNAL_SERVER_ERROR
+    return error_response(
+        "INTERNAL_SERVER_ERROR", "Failed to resume execution", HTTPStatus.INTERNAL_SERVER_ERROR
+    )
 
 
 @executions_bp.post("/executions/bulk-cancel")
@@ -271,9 +303,7 @@ def bulk_cancel_executions(body: BulkCancelRequest):
         target_ids = body.execution_ids
     else:
         # Query by filters
-        matching = get_execution_logs_filtered(
-            status=body.status, trigger_id=body.trigger_id
-        )
+        matching = get_execution_logs_filtered(status=body.status, trigger_id=body.trigger_id)
         target_ids = [ex["execution_id"] for ex in matching]
 
     for eid in target_ids:
@@ -295,11 +325,13 @@ def bulk_cancel_executions(body: BulkCancelRequest):
         elif current_status == "running":
             success = ProcessManager.cancel_graceful(eid)
         else:
-            results.append({
-                "execution_id": eid,
-                "success": False,
-                "reason": f"status is {current_status}",
-            })
+            results.append(
+                {
+                    "execution_id": eid,
+                    "success": False,
+                    "reason": f"status is {current_status}",
+                }
+            )
             failed += 1
             continue
 
@@ -370,13 +402,15 @@ def get_pending_retries():
     retries = get_all_pending_retries()
     result = []
     for row in retries:
-        result.append({
-            "trigger_id": row["trigger_id"],
-            "cooldown_seconds": row.get("cooldown_seconds", 0),
-            "retry_at": row.get("retry_at", ""),
-            "trigger_type": row.get("trigger_type", "webhook"),
-            "created_at": row.get("created_at", ""),
-        })
+        result.append(
+            {
+                "trigger_id": row["trigger_id"],
+                "cooldown_seconds": row.get("cooldown_seconds", 0),
+                "retry_at": row.get("retry_at", ""),
+                "trigger_type": row.get("trigger_type", "webhook"),
+                "created_at": row.get("created_at", ""),
+            }
+        )
 
     return {
         "retries": result,

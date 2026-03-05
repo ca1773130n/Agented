@@ -5,6 +5,8 @@ from http import HTTPStatus
 from flask import request
 from flask_openapi3 import APIBlueprint, Tag
 
+from app.models.common import error_response
+
 from ..services.analytics_service import AnalyticsService
 
 tag = Tag(name="analytics", description="Analytics and metrics")
@@ -20,7 +22,9 @@ def get_cost_analytics():
     entity_type = request.args.get("entity_type")
 
     if group_by not in ("day", "week", "month"):
-        return {"error": "group_by must be 'day', 'week', or 'month'"}, HTTPStatus.BAD_REQUEST
+        return error_response(
+            "BAD_REQUEST", "group_by must be 'day', 'week', or 'month'", HTTPStatus.BAD_REQUEST
+        )
 
     result = AnalyticsService.get_cost_summary(
         entity_type=entity_type,
@@ -41,7 +45,9 @@ def get_execution_analytics():
     team_id = request.args.get("team_id")
 
     if group_by not in ("day", "week", "month"):
-        return {"error": "group_by must be 'day', 'week', or 'month'"}, HTTPStatus.BAD_REQUEST
+        return error_response(
+            "BAD_REQUEST", "group_by must be 'day', 'week', or 'month'", HTTPStatus.BAD_REQUEST
+        )
 
     result = AnalyticsService.get_execution_summary(
         group_by=group_by,
@@ -62,7 +68,9 @@ def get_effectiveness_analytics():
     end_date = request.args.get("end_date")
 
     if group_by not in ("day", "week", "month"):
-        return {"error": "group_by must be 'day', 'week', or 'month'"}, HTTPStatus.BAD_REQUEST
+        return error_response(
+            "BAD_REQUEST", "group_by must be 'day', 'week', or 'month'", HTTPStatus.BAD_REQUEST
+        )
 
     result = AnalyticsService.get_effectiveness(
         trigger_id=trigger_id,

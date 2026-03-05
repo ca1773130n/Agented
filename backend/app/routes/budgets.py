@@ -7,6 +7,8 @@ from flask import request
 from flask_openapi3 import APIBlueprint, Tag
 from pydantic import BaseModel, Field
 
+from app.models.common import error_response
+
 from ..database import (
     delete_budget_limit,
     get_all_budget_limits,
@@ -66,7 +68,9 @@ def get_budget_limit_detail(path: BudgetEntityPath):
     """Get budget limit for a specific entity."""
     limit = get_budget_limit(path.entity_type, path.entity_id)
     if not limit:
-        return {"error": "No budget limit found for this entity"}, HTTPStatus.NOT_FOUND
+        return error_response(
+            "NOT_FOUND", "No budget limit found for this entity", HTTPStatus.NOT_FOUND
+        )
 
     current_spend = get_current_period_spend(
         path.entity_type, path.entity_id, limit.get("period", "monthly")
@@ -81,37 +85,47 @@ def set_budget_limit_endpoint():
     """Set or update a budget limit."""
     data = request.get_json()
     if not data:
-        return {"error": "JSON body required"}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", "JSON body required", HTTPStatus.BAD_REQUEST)
 
     # Validate required fields
     entity_type = data.get("entity_type")
     entity_id = data.get("entity_id")
     if not entity_type or not entity_id:
-        return {"error": "entity_type and entity_id are required"}, HTTPStatus.BAD_REQUEST
+        return error_response(
+            "BAD_REQUEST", "entity_type and entity_id are required", HTTPStatus.BAD_REQUEST
+        )
 
     if entity_type not in ("agent", "team", "trigger"):
-        return {
-            "error": "entity_type must be 'agent', 'team', or 'trigger'"
-        }, HTTPStatus.BAD_REQUEST
+        return error_response(
+            "BAD_REQUEST",
+            "entity_type must be 'agent', 'team', or 'trigger'",
+            HTTPStatus.BAD_REQUEST,
+        )
 
     period = data.get("period", "monthly")
     if period not in ("daily", "weekly", "monthly"):
-        return {"error": "period must be 'daily', 'weekly', or 'monthly'"}, HTTPStatus.BAD_REQUEST
+        return error_response(
+            "BAD_REQUEST", "period must be 'daily', 'weekly', or 'monthly'", HTTPStatus.BAD_REQUEST
+        )
 
     soft_limit_usd = data.get("soft_limit_usd")
     hard_limit_usd = data.get("hard_limit_usd")
 
     if soft_limit_usd is None and hard_limit_usd is None:
-        return {
-            "error": "At least one of soft_limit_usd or hard_limit_usd must be set"
-        }, HTTPStatus.BAD_REQUEST
+        return error_response(
+            "BAD_REQUEST",
+            "At least one of soft_limit_usd or hard_limit_usd must be set",
+            HTTPStatus.BAD_REQUEST,
+        )
 
     if (
         soft_limit_usd is not None
         and hard_limit_usd is not None
         and hard_limit_usd < soft_limit_usd
     ):
-        return {"error": "hard_limit_usd must be >= soft_limit_usd"}, HTTPStatus.BAD_REQUEST
+        return error_response(
+            "BAD_REQUEST", "hard_limit_usd must be >= soft_limit_usd", HTTPStatus.BAD_REQUEST
+        )
 
     success = set_budget_limit(
         entity_type=entity_type,
@@ -122,7 +136,9 @@ def set_budget_limit_endpoint():
     )
 
     if not success:
-        return {"error": "Failed to set budget limit"}, HTTPStatus.INTERNAL_SERVER_ERROR
+        return error_response(
+            "INTERNAL_SERVER_ERROR", "Failed to set budget limit", HTTPStatus.INTERNAL_SERVER_ERROR
+        )
 
     # Return the saved limit
     limit = get_budget_limit(entity_type, entity_id)
@@ -137,7 +153,9 @@ def delete_budget_limit_endpoint(path: BudgetEntityPath):
     """Delete a budget limit."""
     deleted = delete_budget_limit(path.entity_type, path.entity_id)
     if not deleted:
-        return {"error": "No budget limit found for this entity"}, HTTPStatus.NOT_FOUND
+        return error_response(
+            "NOT_FOUND", "No budget limit found for this entity", HTTPStatus.NOT_FOUND
+        )
     return "", HTTPStatus.NO_CONTENT
 
 
@@ -146,12 +164,14 @@ def check_budget_endpoint():
     """Pre-execution budget check."""
     data = request.get_json()
     if not data:
-        return {"error": "JSON body required"}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", "JSON body required", HTTPStatus.BAD_REQUEST)
 
     entity_type = data.get("entity_type")
     entity_id = data.get("entity_id")
     if not entity_type or not entity_id:
-        return {"error": "entity_type and entity_id are required"}, HTTPStatus.BAD_REQUEST
+        return error_response(
+            "BAD_REQUEST", "entity_type and entity_id are required", HTTPStatus.BAD_REQUEST
+        )
 
     result = BudgetService.check_budget(entity_type, entity_id)
 
@@ -167,11 +187,11 @@ def estimate_cost_endpoint():
     """Estimate execution cost."""
     data = request.get_json()
     if not data:
-        return {"error": "JSON body required"}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", "JSON body required", HTTPStatus.BAD_REQUEST)
 
     prompt = data.get("prompt")
     if not prompt:
-        return {"error": "prompt is required"}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", "prompt is required", HTTPStatus.BAD_REQUEST)
 
     model = data.get("model", "claude-sonnet-4")
     entity_type = data.get("entity_type")
@@ -236,7 +256,9 @@ def get_usage_summary():
     end_date = request.args.get("end_date")
 
     if group_by not in ("day", "week", "month"):
-        return {"error": "group_by must be 'day', 'week', or 'month'"}, HTTPStatus.BAD_REQUEST
+        return error_response(
+            "BAD_REQUEST", "group_by must be 'day', 'week', or 'month'", HTTPStatus.BAD_REQUEST
+        )
 
     summary = get_usage_aggregated_summary(
         group_by=group_by,
@@ -279,7 +301,9 @@ def collect_session_usage():
         results = SessionUsageCollector.collect_all()
         return {"collected": results}, HTTPStatus.OK
     except Exception as e:
-        return {"error": f"Collection failed: {e}"}, HTTPStatus.INTERNAL_SERVER_ERROR
+        return error_response(
+            "INTERNAL_SERVER_ERROR", f"Collection failed: {e}", HTTPStatus.INTERNAL_SERVER_ERROR
+        )
 
 
 @budgets_bp.get("/session-stats")
@@ -298,7 +322,9 @@ def get_history_stats():
     months_back = request.args.get("months_back", 6, type=int)
 
     if period not in ("weekly", "monthly"):
-        return {"error": "period must be 'weekly' or 'monthly'"}, HTTPStatus.BAD_REQUEST
+        return error_response(
+            "BAD_REQUEST", "period must be 'weekly' or 'monthly'", HTTPStatus.BAD_REQUEST
+        )
 
     group_by = "week" if period == "weekly" else "month"
 

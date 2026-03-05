@@ -6,6 +6,8 @@ from flask import request
 from flask_openapi3 import APIBlueprint, Tag
 from pydantic import BaseModel, Field
 
+from app.models.common import error_response
+
 from ..models.common import PaginationQuery
 from ..services.agent_service import AgentService
 from ..services.skills_service import SkillsService
@@ -30,7 +32,7 @@ def create_agent():
     """Create a new agent."""
     data = request.get_json()
     if not data:
-        return {"error": "JSON body required"}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", "JSON body required", HTTPStatus.BAD_REQUEST)
     result, status = AgentService.create_agent(data)
     return result, status
 
@@ -47,7 +49,7 @@ def update_agent(path: AgentPath):
     """Update an agent."""
     data = request.get_json()
     if not data:
-        return {"error": "JSON body required"}, HTTPStatus.BAD_REQUEST
+        return error_response("BAD_REQUEST", "JSON body required", HTTPStatus.BAD_REQUEST)
     result, status = AgentService.update_agent_data(path.agent_id, data)
     return result, status
 

@@ -6,6 +6,8 @@ from flask import request
 from flask_openapi3 import APIBlueprint, Tag
 from pydantic import BaseModel, Field
 
+from app.models.common import error_response
+
 from ..services.conversation_branch_service import ConversationBranchService
 
 tag = Tag(
@@ -36,12 +38,16 @@ def create_branch(path: ConversationPath):
     fork_message_index = body.get("fork_message_index")
 
     if fork_message_index is None:
-        return {"error": "Missing required field: fork_message_index"}, HTTPStatus.BAD_REQUEST
+        return error_response(
+            "BAD_REQUEST", "Missing required field: fork_message_index", HTTPStatus.BAD_REQUEST
+        )
 
     try:
         fork_message_index = int(fork_message_index)
     except (TypeError, ValueError):
-        return {"error": "fork_message_index must be an integer"}, HTTPStatus.BAD_REQUEST
+        return error_response(
+            "BAD_REQUEST", "fork_message_index must be an integer", HTTPStatus.BAD_REQUEST
+        )
 
     name = body.get("name")
 
@@ -53,8 +59,8 @@ def create_branch(path: ConversationPath):
     except ValueError as e:
         msg = str(e)
         if "not found" in msg:
-            return {"error": msg}, HTTPStatus.NOT_FOUND
-        return {"error": msg}, HTTPStatus.BAD_REQUEST
+            return error_response("NOT_FOUND", msg, HTTPStatus.NOT_FOUND)
+        return error_response("BAD_REQUEST", msg, HTTPStatus.BAD_REQUEST)
 
 
 @conversation_branches_bp.get("/conversations/<conversation_id>/branches")
@@ -81,7 +87,7 @@ def get_branch_messages(path: BranchPath):
         messages = ConversationBranchService.get_branch_messages(path.branch_id)
         return {"messages": messages, "total": len(messages)}, HTTPStatus.OK
     except ValueError as e:
-        return {"error": str(e)}, HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", str(e), HTTPStatus.NOT_FOUND)
 
 
 @conversation_branches_bp.post("/branches/<branch_id>/messages")
@@ -96,7 +102,9 @@ def add_branch_message(path: BranchPath):
     content = body.get("content")
 
     if not role or not content:
-        return {"error": "Missing required fields: role, content"}, HTTPStatus.BAD_REQUEST
+        return error_response(
+            "BAD_REQUEST", "Missing required fields: role, content", HTTPStatus.BAD_REQUEST
+        )
 
     try:
         message = ConversationBranchService.add_message(path.branch_id, role, content)
@@ -104,5 +112,5 @@ def add_branch_message(path: BranchPath):
     except ValueError as e:
         msg = str(e)
         if "not found" in msg:
-            return {"error": msg}, HTTPStatus.NOT_FOUND
-        return {"error": msg}, HTTPStatus.BAD_REQUEST
+            return error_response("NOT_FOUND", msg, HTTPStatus.NOT_FOUND)
+        return error_response("BAD_REQUEST", msg, HTTPStatus.BAD_REQUEST)
