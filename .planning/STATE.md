@@ -115,6 +115,11 @@
 - [Phase 13]: SIGCONT always sent before SIGTERM on paused processes to ensure signal delivery
 - [Phase 13]: Auto-cancel timer uses threading.Timer with daemon=True for 30-minute pause timeout
 - [Phase 13]: SSE subscribe treats "paused" as non-terminal status to keep stream open during pause
+- [Phase 13]: Queue dispatcher polls every 1 second with threading.Event.wait for clean shutdown
+- [Phase 13]: Per-trigger queue depth capped at 100 with QueueFullError exception
+- [Phase 13]: CAS status updates in queue prevent dispatch races between threads
+- [Phase 13]: Stale dispatching entries reset to pending on server restart for crash recovery
+- [Phase 13]: Team-mode and direct-mode triggers both route through the queue uniformly
 
 ## Blockers
 
@@ -156,9 +161,10 @@ None -- no phases have deferred verification level in this milestone.
 | 12 | 02 | 12min | 2 | 8 |
 | 12 | 03 | 14min | 2 | 8 |
 | 13 | 01 | 14min | 2 | 7 |
+| 13 | 02 | 13min | 2 | 9 |
 | 13 | 03 | 8min | 2 | 7 |
 
 ## Session Log
 
 - **Last session:** 2026-03-05
-- **Stopped at:** Completed 13-03-PLAN.md (Pause/Resume & Bulk Cancel)
+- **Stopped at:** Completed 13-02-PLAN.md (Execution Queue Service)
