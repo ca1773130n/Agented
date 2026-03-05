@@ -1,7 +1,7 @@
 # GRD Execution State
 
 **Milestone:** v0.1.0 -- Production Hardening (active) / v0.2.0 -- Miscellaneous
-**Current Phase:** Phase 9 (autopilot: executing)
+**Current Phase:** Phase 8 (autopilot: executing)
 **Current Plan:** 03 (completed)
 **Status:** phase-verified
 
@@ -20,7 +20,7 @@
 | Phase | Name | Status | Verification |
 |-------|------|--------|--------------|
 | 7 | Workflow Automation & Pipeline Intelligence | Complete (3/3) — Verified | proxy |
-| 8 | Execution Intelligence & Replay | Pending | proxy |
+| 8 | Execution Intelligence & Replay | In Progress (1/5) | proxy |
 | 9 | Bot Authoring & Template Ecosystem | Pending | proxy |
 | 10 | Analytics & Monitoring Dashboards | In Progress (4/5) | proxy |
 | 11 | Enterprise Integrations & Governance | Pending | proxy |
@@ -71,6 +71,8 @@
 - [Phase 10]: Used chartjs-adapter-date-fns time scale for analytics chart x-axes, matching CombinedUsageChart pattern
 - [Phase 10]: BotEffectivenessChart uses dual charts (doughnut + line) in single component for compact 2x2 grid layout
 - [Phase 10]: SuccessRateChart 80% baseline via custom Chart.js afterDraw plugin
+- [Phase 8]: PR diff fetched via {pr_url}.diff URL pattern using urllib for DiffContextService injection
+- [Phase 8]: Comparison record persisted before subprocess start to survive crashes per 08-RESEARCH.md
 
 ## Blockers
 
@@ -98,8 +100,9 @@ None -- no phases have deferred verification level in this milestone.
 | 10 | 04 | 5min | 2 | 10 |
 | 16 | 04 | ~20min | 3 | 4 |
 | 16 | 05 | ~15min | 2 | 17 |
+| 08 | 01 | 15min | 2 | 12 |
 
 ## Session Log
 
-- **Last session:** 2026-03-04
-- **Stopped at:** Completed 16-05-PLAN.md (consistent error handling with toast notifications across all 21 async views)
+- **Last session:** 2026-03-05
+- **Stopped at:** Completed 08-01-PLAN.md (execution replay service, diff-context service, and API endpoints)
