@@ -213,6 +213,18 @@ from .audit_events import (  # noqa: F401
     query_audit_events,
 )
 
+# Conversation branches (tree-structured conversation branching)
+from .conversation_branches import (  # noqa: F401
+    create_branch,
+    create_message,
+    count_messages_for_branch,
+    get_branch,
+    get_branches_for_conversation,
+    get_message,
+    get_messages_for_branch,
+    update_branch_status,
+)
+
 # Replay comparisons (execution replay A/B comparison)
 from .replay import (  # noqa: F401
     create_replay_comparison,

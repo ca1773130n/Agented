@@ -1512,4 +1512,78 @@ def create_fresh_schema(conn):
         "ON replay_comparisons(original_execution_id)"
     )
 
+    # Conversation messages (EXE-04: tree-structured conversation branching)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS conversation_messages (
+            id TEXT PRIMARY KEY,
+            conversation_id TEXT NOT NULL,
+            branch_id TEXT NOT NULL,
+            parent_message_id TEXT,
+            message_index INTEGER NOT NULL,
+            role TEXT NOT NULL,
+            content TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (conversation_id) REFERENCES agent_conversations(id) ON DELETE CASCADE
+        )
+    """)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_conv_msg_conv_branch "
+        "ON conversation_messages(conversation_id, branch_id)"
+    )
+
+    # Conversation branches (EXE-04: ContextBranch paper arXiv:2512.13914)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS conversation_branches (
+            id TEXT PRIMARY KEY,
+            conversation_id TEXT NOT NULL,
+            parent_branch_id TEXT,
+            fork_message_id TEXT,
+            name TEXT,
+            status TEXT DEFAULT 'active',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (conversation_id) REFERENCES agent_conversations(id) ON DELETE CASCADE
+        )
+    """)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_conv_branch_conv "
+        "ON conversation_branches(conversation_id)"
+    )
+
+    # Chunked executions (EXE-03: smart chunking with merge/dedup)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS chunked_executions (
+            id TEXT PRIMARY KEY,
+            bot_id TEXT NOT NULL,
+            total_chunks INTEGER NOT NULL,
+            completed_chunks INTEGER DEFAULT 0,
+            status TEXT DEFAULT 'pending',
+            merged_output TEXT,
+            unique_findings_count INTEGER,
+            duplicate_count INTEGER,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            completed_at TIMESTAMP,
+            FOREIGN KEY (bot_id) REFERENCES triggers(id) ON DELETE CASCADE
+        )
+    """)
+
+    # Chunk results (EXE-03: per-chunk bot output storage)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS chunk_results (
+            id TEXT PRIMARY KEY,
+            chunked_execution_id TEXT NOT NULL,
+            chunk_index INTEGER NOT NULL,
+            chunk_content TEXT NOT NULL,
+            bot_output TEXT,
+            token_count INTEGER DEFAULT 0,
+            status TEXT DEFAULT 'pending',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            completed_at TIMESTAMP,
+            FOREIGN KEY (chunked_execution_id) REFERENCES chunked_executions(id) ON DELETE CASCADE
+        )
+    """)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_chunk_results_exec "
+        "ON chunk_results(chunked_execution_id)"
+    )
+
     conn.commit()
