@@ -213,6 +213,17 @@ from .audit_events import (  # noqa: F401
     query_audit_events,
 )
 
+# Chunk results (smart chunking pipeline)
+from .chunk_results import (  # noqa: F401
+    create_chunk_result,
+    create_chunked_execution,
+    get_chunk_results,
+    get_chunked_execution,
+    increment_completed_chunks,
+    update_chunk_result,
+    update_chunked_execution_status,
+)
+
 # Conversation branches (tree-structured conversation branching)
 from .conversation_branches import (  # noqa: F401
     create_branch,

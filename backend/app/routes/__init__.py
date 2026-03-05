@@ -12,6 +12,7 @@ def register_blueprints(app):
     from .budgets import budgets_bp
     from .campaigns import campaigns_bp
     from .command_conversations import command_conversations_bp
+    from .chunks import chunks_bp
     from .conversation_branches import conversation_branches_bp
     from .config_export import config_export_bp
     from .commands import commands_bp
@@ -122,6 +123,7 @@ def register_blueprints(app):
             analytics_bp,
             replay_bp,
             conversation_branches_bp,
+            chunks_bp,
         ]
         for bp in admin_blueprints:
             limiter.limit("120/minute")(bp)
@@ -183,6 +185,7 @@ def register_blueprints(app):
     app.register_api(analytics_bp)
     app.register_api(replay_bp)
     app.register_api(conversation_branches_bp)
+    app.register_api(chunks_bp)
 
     # SPA catch-all: MUST be registered LAST so API routes take priority
     app.register_blueprint(spa_bp)
