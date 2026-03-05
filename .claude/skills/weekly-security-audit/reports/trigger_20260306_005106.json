@@ -1,0 +1,12 @@
+{
+  "trigger_id": "trig-5puuqi",
+  "timestamp": "2026-03-06T00:51:06.997954",
+  "trigger_name": "Test Trigger",
+  "trigger_source": "webhook",
+  "original_event": {
+    "event": {
+      "type": "test",
+      "text": "hello world"
+    }
+  }
+}

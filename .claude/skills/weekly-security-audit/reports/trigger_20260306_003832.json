@@ -1,0 +1,12 @@
+{
+  "trigger_id": "trig-vpznwa",
+  "timestamp": "2026-03-06T00:38:32.986020",
+  "trigger_name": "Test Trigger",
+  "trigger_source": "webhook",
+  "original_event": {
+    "event": {
+      "type": "test",
+      "text": "hello world"
+    }
+  }
+}

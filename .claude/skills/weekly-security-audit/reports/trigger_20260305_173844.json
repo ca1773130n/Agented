@@ -1,0 +1,12 @@
+{
+  "trigger_id": "trig-zuy5v4",
+  "timestamp": "2026-03-05T17:38:44.976664",
+  "trigger_name": "Test Trigger",
+  "trigger_source": "webhook",
+  "original_event": {
+    "event": {
+      "type": "test",
+      "text": "hello world"
+    }
+  }
+}
