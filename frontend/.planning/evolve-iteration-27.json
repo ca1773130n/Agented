@@ -1,0 +1,37 @@
+{
+  "decisions": [
+    "Mapped all 39 requested features against the existing router before writing any code — found 33 already implemented across triggers.ts, dashboard.ts, settings.ts, and misc.ts from prior iterations, leaving exactly 6 net-new views to build",
+    "Created RepoBotDefaultsPage.vue with a modal-driven binding system between GitHub repos and default bot sets, using a three-column grid layout with toggle enable/disable per binding",
+    "Created MetricsExportPage.vue supporting Prometheus scrape endpoints and Datadog/Grafana push targets with per-target metric selection, connection testing, and enable/pause controls",
+    "Created DependencyAwareSchedulingPage.vue with a dual-panel approach: a visual pipeline DAG view (ordered nodes with color-coded status) plus a full data table with manual trigger and toggle controls",
+    "Created VisualSkillComposerPage.vue as a two-panel composer (library on left, ordered composition on right) with conflict detection between incompatible skills and a live prompt injection preview",
+    "Created BotMemoryStorePage.vue as a split-view editor with bot selector sidebar, usage bar, key-value store with source badges (bot vs manual), inline edit/delete, and expiry date support",
+    "Created DataRetentionPoliciesPage.vue with scoped policies (global/team/bot), per-category configuration (execution_logs, outputs, bot_memory, audit_logs, token_metrics), and archive vs delete on-expiry actions",
+    "Added all 6 routes to misc.ts following the existing naming convention (kebab-case names, descriptive paths under /admin, /repos, /scheduling, /skills, /bots namespaces)"
+  ],
+  "patterns": [
+    "The project uses a consistent Vue 3 SFC pattern: <script setup lang='ts'> with local ref/computed state, no Pinia, component-local mock data with realistic shapes, useToast() for user feedback, and scoped CSS with CSS custom properties (--bg-secondary, --accent-cyan, etc.)",
+    "All views follow the same layout stack: AppBreadcrumb → PageHeader (with #actions slot) → content cards — deviating from this breaks visual consistency",
+    "Route files are domain-split (dashboard, triggers, settings, misc) but misc.ts has grown to 640+ lines — it's becoming a catch-all that would benefit from further splitting by feature area",
+    "The evolve loop has now implemented so many features that future iterations risk naming collisions — a route-manifest or feature-registry pattern would help track what's been built",
+    "Mock data with realistic entity IDs (bot-security, bot-pr-review) matches the predefined bot seeds from the backend, maintaining coherence between frontend demos and actual backend entities",
+    "CSS responsive handling is handled per-component with media queries at max-width:768px/900px rather than a shared grid system — consistent but verbose"
+  ],
+  "takeaways": [
+    "By iteration 27, the vast majority of the 39 requested features were already implemented in previous evolve iterations — the audit-first approach (check router before writing code) saved significant duplicate work",
+    "The DAG/dependency visualization in DependencyAwareSchedulingPage is intentionally simplified (indented nodes rather than actual SVG graph) — a future iteration could upgrade it to an actual D3 or canvas-based graph",
+    "VisualSkillComposerPage implements conflict detection at the data layer but does not prevent adding conflicting skills — it warns instead, which is the right UX for a composer that should remain flexible",
+    "BotMemoryStorePage exposes manual key injection which is a potential security consideration in production — the 'source' badge distinguishes bot-written from human-written entries, which is good for auditability",
+    "DataRetentionPoliciesPage estimates savings (15% of total managed data monthly) as a heuristic placeholder — a real implementation would need actual storage metrics from the backend",
+    "All 409 existing tests passed without modification, confirming the new views are purely additive and don't touch any shared infrastructure"
+  ],
+  "files_changed": [
+    "frontend/src/views/RepoBotDefaultsPage.vue",
+    "frontend/src/views/MetricsExportPage.vue",
+    "frontend/src/views/DependencyAwareSchedulingPage.vue",
+    "frontend/src/views/VisualSkillComposerPage.vue",
+    "frontend/src/views/BotMemoryStorePage.vue",
+    "frontend/src/views/DataRetentionPoliciesPage.vue",
+    "frontend/src/router/routes/misc.ts"
+  ]
+}

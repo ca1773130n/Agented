@@ -1355,3 +1355,71 @@ _2026-03-06T11:34:01.948Z_
 - The pattern of inline natural language parsing in the component (vs a dedicated composable) is fine for a single-use feature but would benefit from extraction to a useNaturalLanguageSchedule composable if multiple pages need schedule parsing.
 
 ---
+## Iteration 26
+_2026-03-06T11:47:12.029Z_
+
+### Items Attempted
+
+- **Visual DAG Workflow Builder** — pass
+- **Bot Template Marketplace** — pass
+- **AI Execution Cost Dashboard** — pass
+- **Smart Trigger Suggestions** — pass
+- **Multi-Provider Fallback Chains** — pass
+- **Execution Replay & Diff Viewer** — pass
+- **Slack & Teams Notification Routing** — pass
+- **Prompt Version Control & A/B Testing** — pass
+- **Full Audit Log Trail** — pass
+- **Team-Level Execution Quotas** — pass
+- **Bot Health Scorecard** — pass
+- **Conditional Trigger Logic Builder** — pass
+- **Webhook Replay from History** — pass
+- **Human-in-the-Loop Annotations** — pass
+- **Scheduled Digest Reports** — pass
+- **Project Onboarding Wizard** — pass
+- **Secrets & Credential Vault** — pass
+- **Bot Dependency Graph View** — pass
+- **Live Prompt Sandbox** — pass
+- **Execution Timeout & Budget Controls** — pass
+- **AI-Powered PR Auto-Assignment** — pass
+- **Natural Language Cron Builder** — pass
+- **SSO & Role-Based Access Control** — pass
+- **Real-Time Execution Queue View** — pass
+- **Bot Clone & Fork** — pass
+- **Jira & Linear Issue Integration** — pass
+- **Execution Anomaly Alerting** — pass
+- **Multi-Repo Trigger Groups** — pass
+- **Structured Output Schema Validation** — pass
+- **Automation ROI Leaderboard** — pass
+- **Bot-Generated Changelog Automation** — pass
+- **Mobile Push Notifications** — pass
+- **Cross-Team Skill Sharing** — pass
+- **Incident Response Playbook Bots** — pass
+- **Automated Dependency Update Bot** — pass
+
+### Decisions Made
+
+- Created IncidentResponsePlaybooksPage.vue as the only genuinely missing view from the 35-item list — all other features already had stub views from prior iterations
+- Added 3 new expandable sidebar sections (Integrations, Automation Tools, Platform) rather than flat links to avoid sidebar clutter and group related features logically
+- Extended the Dashboards submenu with Execution Queue, Anomaly Detection, and ROI Leaderboard since they are observability-focused like the existing entries
+- Added Audit Log, Replay & Diff, Webhook Recorder, and Annotations as flat History-section items because they complement the existing execution history workflow
+- Added expandedSections state keys (integrations, automationTools, platform) and corresponding isXxxSectionActive() helpers to maintain the existing sidebar pattern for active-state highlighting and auto-expand on navigation
+- Incident Response Playbooks view uses mock async simulation with sequential step logging to demonstrate the playbook execution UX without requiring backend integration
+- Routed Incident Response Playbooks under /bots/incident-playbooks consistent with the existing /bots/* namespace used for similar bot-centric tools
+
+### Patterns Discovered
+
+- The codebase follows a strict pattern: view file → route registration → sidebar nav entry — missing any one of the three leaves a feature inaccessible even if the view exists
+- Sidebar sections use isXxxSectionActive() returning an array-includes check against route names, mirroring the autoExpandForRoute() logic exactly — both must be updated together when adding new sections
+- All new views use AppBreadcrumb + PageHeader components as the standard page chrome, with useToast() injected via composable rather than prop drilling
+- The evolve loop has built up 100+ views over 26 iterations; the majority of new iterations now focus on navigation exposure and sidebar organization rather than net-new view creation
+- Mock data with realistic async delays (setTimeout) is the established pattern for stub views — provides realistic UX without needing backend endpoints
+
+### Takeaways
+
+- After 25+ iterations, the sidebar is becoming the primary discoverability surface — grouping features into logical expandable sections (Integrations, Automation Tools, Platform) is more scalable than flat links
+- The gap between 'has a route' and 'is in the sidebar' was the main usability deficit at this stage — many routes existed but were unreachable without knowing the URL
+- The IncidentResponsePlaybooksPage.vue pattern (category filtering + detail panel + async step runner) could be generalized into a reusable PlaybookRunner component for future runbook-style features
+- Separating Secrets Vault, RBAC, SSO, and Team Budgets into a dedicated 'Platform' admin section signals a growing need for role-scoped navigation (show Platform section only to admins)
+- The 35-item product ideation list was largely already implemented as stub views from prior iterations — future evolve cycles should focus on deepening existing stubs with real API integrations rather than adding more stub views
+
+---

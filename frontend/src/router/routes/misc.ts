@@ -631,4 +631,46 @@ export const miscRoutes: RouteRecordRaw[] = [
     component: () => import('../../views/IncidentResponsePlaybooksPage.vue'),
     meta: { title: 'Incident Response Playbooks' },
   },
+  // Repository-Level Default Bots (feature 21)
+  {
+    path: '/repos/default-bots',
+    name: 'repo-bot-defaults',
+    component: () => import('../../views/RepoBotDefaultsPage.vue'),
+    meta: { title: 'Repository Default Bots' },
+  },
+  // Metrics Export to Grafana/Datadog (feature 25)
+  {
+    path: '/admin/metrics-export',
+    name: 'metrics-export',
+    component: () => import('../../views/MetricsExportPage.vue'),
+    meta: { title: 'Metrics Export' },
+  },
+  // Dependency-Aware Scheduling (feature 30)
+  {
+    path: '/scheduling/dependency',
+    name: 'dependency-aware-scheduling',
+    component: () => import('../../views/DependencyAwareSchedulingPage.vue'),
+    meta: { title: 'Dependency-Aware Scheduling' },
+  },
+  // Visual Skill Composer (feature 31)
+  {
+    path: '/skills/composer',
+    name: 'visual-skill-composer',
+    component: () => import('../../views/VisualSkillComposerPage.vue'),
+    meta: { title: 'Visual Skill Composer' },
+  },
+  // Per-Bot Persistent Memory (feature 35)
+  {
+    path: '/bots/memory',
+    name: 'bot-memory-store',
+    component: () => import('../../views/BotMemoryStorePage.vue'),
+    meta: { title: 'Bot Memory Store' },
+  },
+  // Configurable Data Retention Policies (feature 39)
+  {
+    path: '/admin/retention',
+    name: 'data-retention-policies',
+    component: () => import('../../views/DataRetentionPoliciesPage.vue'),
+    meta: { title: 'Data Retention Policies' },
+  },
 ];
