@@ -624,4 +624,11 @@ export const miscRoutes: RouteRecordRaw[] = [
     component: () => import('../../views/ExecutionTimelinePage.vue'),
     meta: { title: 'Execution Timeline' },
   },
+  // Incident Response Playbook Bots (item 34)
+  {
+    path: '/bots/incident-playbooks',
+    name: 'incident-response-playbooks',
+    component: () => import('../../views/IncidentResponsePlaybooksPage.vue'),
+    meta: { title: 'Incident Response Playbooks' },
+  },
 ];

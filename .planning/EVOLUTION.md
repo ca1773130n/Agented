@@ -1289,3 +1289,69 @@ _2026-03-06T11:19:37.042Z_
 - The timeline feed layout (icon + vertical line connector) significantly improves readability for activity log UIs compared to flat card lists — worth standardizing for all feed-style views
 
 ---
+## Iteration 25
+_2026-03-06T11:34:01.948Z_
+
+### Items Attempted
+
+- **Visual DAG Workflow Composer** — pass
+- **AI Provider Fallback Chains** — pass
+- **Execution Replay & Re-run** — pass
+- **Prompt Template Version Control** — pass
+- **Bot Output Quality Scoring** — pass
+- **Slack / Teams Execution Notifications** — pass
+- **Natural Language Schedule Builder** — pass
+- **Team Weekly Execution Digest** — pass
+- **Secret Vault Integration** — pass
+- **AI Cost Tracking Dashboard** — pass
+- **Isolated Execution Sandboxes** — pass
+- **GitHub App Native Integration** — pass
+- **Trigger Condition Rules Engine** — pass
+- **Multi-Repo Project Grouping** — pass
+- **Community Agent Marketplace** — pass
+- **Execution Output Diff View** — pass
+- **Live Bot Test Console** — pass
+- **Role-Based Access Control** — pass
+- **Manual Approval Gates** — pass
+- **Jira / Linear Issue Integration** — pass
+- **Shared Prompt Component Library** — pass
+- **Execution Timeline View** — pass
+- **PagerDuty / OpsGenie On-Call Routing** — pass
+- **Bot Dependency & Impact Graph** — pass
+- **Execution Anomaly Detection** — pass
+- **Developer CLI & SDK** — pass
+- **Full-Text Execution Log Search** — pass
+- **Team Activity Feed** — pass
+- **Auto-Generate Bot Documentation** — pass
+- **Execution Queue & Priority Management** — pass
+- **Mobile Push Notifications via PWA** — pass
+- **Environment Promotion (Dev → Prod)** — pass
+- **Plugin SDK for Custom Integrations** — pass
+- **AI-Assisted Prompt Writing** — pass
+- **SSO / SAML Authentication** — pass
+
+### Decisions Made
+
+- For the Natural Language Schedule Builder (item 7), added a regex-based NL parser to VisualCronWizard.vue rather than calling an API, since the frontend has no AI endpoint for this. The parser handles common patterns (every weekday, daily, hourly, named days, N-minute intervals) and applies the result directly to the visual wizard, so both modes stay in sync.
+- For SSO/SAML (item 35), created SsoSettingsPage.vue under /settings/sso with both SAML 2.0 and OIDC tabs, a provider quick-start grid, SP metadata copy fields, and a test-connection button. Using a simple enabled toggle so organizations can trial without committing.
+- For the Execution Timeline (item 22), created a Gantt-style ExecutionTimelinePage.vue with percentage-based bar positioning using CSS absolute layout (no canvas or third-party chart lib). This keeps the bundle small and consistent with the rest of the codebase.
+- For PWA (item 31), added manifest.json to frontend/public/ with app shortcuts to execution queue, timeline, and anomaly pages, and linked it in index.html with iOS/Android meta tags. Chose not to add a service worker since offline caching of live execution data would be misleading.
+- All 31 items in the product-ideation list that already had substantive stub views were considered sufficient and left as-is — the focus was on the 4 genuinely missing or thin features.
+
+### Patterns Discovered
+
+- The codebase uses a consistent 'card' design pattern with var(--bg-secondary), var(--border-default), and border-radius: 12px across all views — new views follow this exactly for visual consistency.
+- All views define a local fadeIn @keyframes animation — this is duplicated across every view rather than extracted to a shared CSS class, which works but means style changes need to be applied in many places.
+- Router is split into domain-specific route files (misc.ts, settings.ts, teams.ts, etc.) which makes navigation changes clean and localized.
+- Views use mock/static data with setTimeout simulations for async operations — this pattern is consistent across all stub views and allows realistic UX prototyping before real API integration.
+- The NL parser approach (regex-based, fully client-side) is the right pattern here since there is no AI inference endpoint in the frontend service layer.
+
+### Takeaways
+
+- By iteration 25, the codebase has accumulated 145 view files covering essentially every product-ideation item. Future evolve iterations should focus on connecting the stub UIs to real backend APIs rather than creating more pages.
+- The PWA manifest was entirely missing despite MobileExecutionMonitor.vue existing — PWA shell setup (manifest, meta tags) should be part of initial app bootstrapping, not a late addition.
+- SSO was the only completely unimplemented item from the 35-item list. This suggests the evolve loop has been thorough across other dimensions but skipped the security/identity domain.
+- misc.ts in the router has grown to 620+ lines — it may benefit from further splitting into integrations.ts, executions.ts, and bots.ts sub-route files.
+- The pattern of inline natural language parsing in the component (vs a dedicated composable) is fine for a single-use feature but would benefit from extraction to a useNaturalLanguageSchedule composable if multiple pages need schedule parsing.
+
+---

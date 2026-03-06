@@ -55,6 +55,9 @@ const expandedSections = ref<Record<string, boolean>>({
   watchTower: false,
   aiBackends: false,
   workflows: false,
+  integrations: false,
+  automationTools: false,
+  platform: false,
 });
 
 function toggleSection(section: string) {
@@ -115,6 +118,15 @@ function autoExpandForRoute() {
   }
   if (['ai-backends', 'backend-detail', 'service-health'].includes(name)) {
     expandedSections.value.aiBackends = true;
+  }
+  if (['slack-notifications', 'pr-auto-assignment', 'integration-ticketing', 'multi-provider-fallback', 'multi-repo-fan-out', 'github-actions', 'on-call-escalation', 'github-app-install'].includes(name)) {
+    expandedSections.value.integrations = true;
+  }
+  if (['bot-recommendation-engine', 'bot-clone-fork', 'bot-dependency-graph', 'changelog-generator', 'dependency-impact-bot', 'incident-response-playbooks', 'cross-team-bot-sharing', 'inline-prompt-editor', 'prompt-ab-testing', 'visual-cron-wizard', 'guided-onboarding-wizard', 'structured-output', 'bot-runbooks'].includes(name)) {
+    expandedSections.value.automationTools = true;
+  }
+  if (['secrets-vault', 'rbac-settings', 'sso-settings', 'team-budgets', 'report-digests', 'execution-quota-controls', 'team-leaderboard', 'bot-sla-uptime', 'mobile-execution-monitor', 'audit-history'].includes(name)) {
+    expandedSections.value.platform = true;
   }
 }
 
@@ -208,6 +220,18 @@ function isMcpServersSectionActive(): boolean {
 
 function isWorkflowsSectionActive(): boolean {
   return ['workflows', 'workflow-builder', 'workflow-playground'].includes(currentRouteName.value);
+}
+
+function isIntegrationsSectionActive(): boolean {
+  return ['slack-notifications', 'pr-auto-assignment', 'integration-ticketing', 'multi-provider-fallback', 'multi-repo-fan-out', 'github-actions', 'on-call-escalation', 'github-app-install'].includes(currentRouteName.value);
+}
+
+function isAutomationToolsSectionActive(): boolean {
+  return ['bot-recommendation-engine', 'bot-clone-fork', 'bot-dependency-graph', 'changelog-generator', 'dependency-impact-bot', 'incident-response-playbooks', 'cross-team-bot-sharing', 'inline-prompt-editor', 'prompt-ab-testing', 'visual-cron-wizard', 'guided-onboarding-wizard', 'structured-output', 'bot-runbooks'].includes(currentRouteName.value);
+}
+
+function isPlatformSectionActive(): boolean {
+  return ['secrets-vault', 'rbac-settings', 'sso-settings', 'team-budgets', 'report-digests', 'execution-quota-controls', 'team-leaderboard', 'bot-sla-uptime', 'mobile-execution-monitor', 'audit-history'].includes(currentRouteName.value);
 }
 
 // Helper: navigate via router (mobile auto-close handled by router.afterEach)
@@ -388,6 +412,24 @@ function handleSidebarKeydown(e: KeyboardEvent) {
           :aria-current="sidebarActive('team-impact-report') ? 'page' : undefined"
           @click="navTo('team-impact-report')">
           Impact Report
+        </button>
+        <button type="button" class="submenu-item"
+          :class="{ active: sidebarActive('execution-queue-dashboard') }"
+          :aria-current="sidebarActive('execution-queue-dashboard') ? 'page' : undefined"
+          @click="navTo('execution-queue-dashboard')">
+          Execution Queue
+        </button>
+        <button type="button" class="submenu-item"
+          :class="{ active: sidebarActive('execution-anomaly-detection') }"
+          :aria-current="sidebarActive('execution-anomaly-detection') ? 'page' : undefined"
+          @click="navTo('execution-anomaly-detection')">
+          Anomaly Detection
+        </button>
+        <button type="button" class="submenu-item"
+          :class="{ active: sidebarActive('team-leaderboard') }"
+          :aria-current="sidebarActive('team-leaderboard') ? 'page' : undefined"
+          @click="navTo('team-leaderboard')">
+          ROI Leaderboard
         </button>
         <button v-for="b in props.customTriggers" :key="b.id" type="button" class="submenu-item"
           :class="{ active: currentRouteName === 'trigger-dashboard' && route.params.triggerId === b.id }"
@@ -776,6 +818,101 @@ function handleSidebarKeydown(e: KeyboardEvent) {
         <span class="nav-indicator"></span>
       </button>
 
+      <!-- Integrations (expandable) -->
+      <button type="button" class="nav-group-toggle" :class="{ active: isIntegrationsSectionActive() }" :aria-expanded="expandedSections.integrations" :aria-current="isIntegrationsSectionActive() ? 'page' : undefined" :title="isCollapsedDesktop() ? 'Integrations' : undefined" @click="toggleSection('integrations')">
+        <span class="nav-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3"/>
+          </svg>
+        </span>
+        <span class="nav-text">Integrations</span>
+        <svg class="chevron-icon" :class="{ expanded: expandedSections.integrations }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="9,18 15,12 9,6"/>
+        </svg>
+        <span class="nav-indicator"></span>
+      </button>
+      <div v-show="expandedSections.integrations" class="nav-submenu" role="region" aria-label="Integrations">
+        <button type="button" class="submenu-item" :class="{ active: sidebarActive('slack-notifications') }" :aria-current="sidebarActive('slack-notifications') ? 'page' : undefined" @click="navTo('slack-notifications')">
+          Slack Notifications
+        </button>
+        <button type="button" class="submenu-item" :class="{ active: sidebarActive('pr-auto-assignment') }" :aria-current="sidebarActive('pr-auto-assignment') ? 'page' : undefined" @click="navTo('pr-auto-assignment')">
+          PR Auto-Assignment
+        </button>
+        <button type="button" class="submenu-item" :class="{ active: sidebarActive('integration-ticketing') }" :aria-current="sidebarActive('integration-ticketing') ? 'page' : undefined" @click="navTo('integration-ticketing')">
+          Jira / Linear
+        </button>
+        <button type="button" class="submenu-item" :class="{ active: sidebarActive('multi-provider-fallback') }" :aria-current="sidebarActive('multi-provider-fallback') ? 'page' : undefined" @click="navTo('multi-provider-fallback')">
+          Provider Fallback
+        </button>
+        <button type="button" class="submenu-item" :class="{ active: sidebarActive('multi-repo-fan-out') }" :aria-current="sidebarActive('multi-repo-fan-out') ? 'page' : undefined" @click="navTo('multi-repo-fan-out')">
+          Multi-Repo Groups
+        </button>
+        <button type="button" class="submenu-item" :class="{ active: sidebarActive('github-actions') }" :aria-current="sidebarActive('github-actions') ? 'page' : undefined" @click="navTo('github-actions')">
+          GitHub Actions
+        </button>
+        <button type="button" class="submenu-item" :class="{ active: sidebarActive('on-call-escalation') }" :aria-current="sidebarActive('on-call-escalation') ? 'page' : undefined" @click="navTo('on-call-escalation')">
+          On-Call Escalation
+        </button>
+      </div>
+
+      <!-- Automation Tools (expandable) -->
+      <button type="button" class="nav-group-toggle" :class="{ active: isAutomationToolsSectionActive() }" :aria-expanded="expandedSections.automationTools" :aria-current="isAutomationToolsSectionActive() ? 'page' : undefined" :title="isCollapsedDesktop() ? 'Automation Tools' : undefined" @click="toggleSection('automationTools')">
+        <span class="nav-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+          </svg>
+        </span>
+        <span class="nav-text">Automation Tools</span>
+        <svg class="chevron-icon" :class="{ expanded: expandedSections.automationTools }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="9,18 15,12 9,6"/>
+        </svg>
+        <span class="nav-indicator"></span>
+      </button>
+      <div v-show="expandedSections.automationTools" class="nav-submenu" role="region" aria-label="Automation Tools">
+        <button type="button" class="submenu-item" :class="{ active: sidebarActive('bot-recommendation-engine') }" :aria-current="sidebarActive('bot-recommendation-engine') ? 'page' : undefined" @click="navTo('bot-recommendation-engine')">
+          Smart Suggestions
+        </button>
+        <button type="button" class="submenu-item" :class="{ active: sidebarActive('bot-clone-fork') }" :aria-current="sidebarActive('bot-clone-fork') ? 'page' : undefined" @click="navTo('bot-clone-fork')">
+          Clone &amp; Fork Bot
+        </button>
+        <button type="button" class="submenu-item" :class="{ active: sidebarActive('bot-dependency-graph') }" :aria-current="sidebarActive('bot-dependency-graph') ? 'page' : undefined" @click="navTo('bot-dependency-graph')">
+          Dependency Graph
+        </button>
+        <button type="button" class="submenu-item" :class="{ active: sidebarActive('changelog-generator') }" :aria-current="sidebarActive('changelog-generator') ? 'page' : undefined" @click="navTo('changelog-generator')">
+          Changelog Generator
+        </button>
+        <button type="button" class="submenu-item" :class="{ active: sidebarActive('incident-response-playbooks') }" :aria-current="sidebarActive('incident-response-playbooks') ? 'page' : undefined" @click="navTo('incident-response-playbooks')">
+          Incident Playbooks
+        </button>
+        <button type="button" class="submenu-item" :class="{ active: sidebarActive('dependency-impact-bot') }" :aria-current="sidebarActive('dependency-impact-bot') ? 'page' : undefined" @click="navTo('dependency-impact-bot')">
+          Dependency Updates
+        </button>
+        <button type="button" class="submenu-item" :class="{ active: sidebarActive('cross-team-bot-sharing') }" :aria-current="sidebarActive('cross-team-bot-sharing') ? 'page' : undefined" @click="navTo('cross-team-bot-sharing')">
+          Cross-Team Sharing
+        </button>
+        <button type="button" class="submenu-item" :class="{ active: sidebarActive('inline-prompt-editor') }" :aria-current="sidebarActive('inline-prompt-editor') ? 'page' : undefined" @click="navTo('inline-prompt-editor')">
+          Live Prompt Sandbox
+        </button>
+        <button type="button" class="submenu-item" :class="{ active: sidebarActive('prompt-ab-testing') }" :aria-current="sidebarActive('prompt-ab-testing') ? 'page' : undefined" @click="navTo('prompt-ab-testing')">
+          Prompt A/B Testing
+        </button>
+        <button type="button" class="submenu-item" :class="{ active: sidebarActive('structured-output') }" :aria-current="sidebarActive('structured-output') ? 'page' : undefined" @click="navTo('structured-output')">
+          Structured Output
+        </button>
+        <button type="button" class="submenu-item" :class="{ active: sidebarActive('visual-cron-wizard') }" :aria-current="sidebarActive('visual-cron-wizard') ? 'page' : undefined" @click="navTo('visual-cron-wizard')">
+          NL Cron Builder
+        </button>
+        <button type="button" class="submenu-item" :class="{ active: sidebarActive('conditional-trigger-rules') }" :aria-current="sidebarActive('conditional-trigger-rules') ? 'page' : undefined" @click="navTo('conditional-trigger-rules')">
+          Trigger Conditions
+        </button>
+        <button type="button" class="submenu-item" :class="{ active: sidebarActive('guided-onboarding-wizard') }" :aria-current="sidebarActive('guided-onboarding-wizard') ? 'page' : undefined" @click="navTo('guided-onboarding-wizard')">
+          Onboarding Wizard
+        </button>
+        <button type="button" class="submenu-item" :class="{ active: sidebarActive('bot-runbooks') }" :aria-current="sidebarActive('bot-runbooks') ? 'page' : undefined" @click="navTo('bot-runbooks')">
+          Bot Runbooks
+        </button>
+      </div>
+
       <!-- Bot Templates (flat link) -->
       <button type="button" :class="{ active: sidebarActive('bot-templates') }" :aria-current="sidebarActive('bot-templates') ? 'page' : undefined" :title="isCollapsedDesktop() ? 'Bot Templates' : undefined" @click="navTo('bot-templates')">
         <span class="nav-icon">
@@ -830,6 +967,53 @@ function handleSidebarKeydown(e: KeyboardEvent) {
           {{ b.name }}
         </button>
       </div>
+
+      <!-- Audit Log Trail (standalone nav item) -->
+      <button type="button" :class="{ active: sidebarActive('audit-history') }" :aria-current="sidebarActive('audit-history') ? 'page' : undefined" :title="isCollapsedDesktop() ? 'Audit Log' : undefined" @click="navTo('audit-history')">
+        <span class="nav-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z"/>
+          </svg>
+        </span>
+        <span class="nav-text">Audit Log</span>
+        <span class="nav-indicator"></span>
+      </button>
+
+      <!-- Execution Replay (standalone nav item) -->
+      <button type="button" :class="{ active: sidebarActive('execution-replay-diff') }" :aria-current="sidebarActive('execution-replay-diff') ? 'page' : undefined" :title="isCollapsedDesktop() ? 'Replay & Diff' : undefined" @click="navTo('execution-replay-diff')">
+        <span class="nav-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M1 4v6h6M23 20v-6h-6"/>
+            <path d="M20.49 9A9 9 0 005.64 5.64L1 10M23 14l-4.64 4.36A9 9 0 013.51 15"/>
+          </svg>
+        </span>
+        <span class="nav-text">Replay & Diff</span>
+        <span class="nav-indicator"></span>
+      </button>
+
+      <!-- Webhook Recorder (standalone nav item) -->
+      <button type="button" :class="{ active: sidebarActive('webhook-recorder') }" :aria-current="sidebarActive('webhook-recorder') ? 'page' : undefined" :title="isCollapsedDesktop() ? 'Webhook Recorder' : undefined" @click="navTo('webhook-recorder')">
+        <span class="nav-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <circle cx="12" cy="12" r="3"/>
+            <path d="M12 2v3M12 19v3M4.22 4.22l2.12 2.12M17.66 17.66l2.12 2.12M2 12h3M19 12h3M4.22 19.78l2.12-2.12M17.66 6.34l2.12-2.12"/>
+          </svg>
+        </span>
+        <span class="nav-text">Webhook Recorder</span>
+        <span class="nav-indicator"></span>
+      </button>
+
+      <!-- Execution Annotations -->
+      <button type="button" :class="{ active: sidebarActive('execution-annotation') }" :aria-current="sidebarActive('execution-annotation') ? 'page' : undefined" :title="isCollapsedDesktop() ? 'Annotations' : undefined" @click="navTo('execution-annotation')">
+        <span class="nav-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/>
+            <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>
+          </svg>
+        </span>
+        <span class="nav-text">Annotations</span>
+        <span class="nav-indicator"></span>
+      </button>
 
       <!-- Execution Search (standalone nav item) -->
       <button type="button" class="nav-group-toggle" :class="{ active: currentRouteName === 'execution-search' }" :aria-current="currentRouteName === 'execution-search' ? 'page' : undefined" :title="isCollapsedDesktop() ? 'Execution Search' : undefined" @click="navTo('execution-search')">
@@ -911,6 +1095,50 @@ function handleSidebarKeydown(e: KeyboardEvent) {
           {{ b.name }}
         </button>
       </div>
+      <!-- Platform Admin (expandable) -->
+      <button type="button" class="nav-group-toggle" :class="{ active: isPlatformSectionActive() }" :aria-expanded="expandedSections.platform" :aria-current="isPlatformSectionActive() ? 'page' : undefined" :title="isCollapsedDesktop() ? 'Platform' : undefined" @click="toggleSection('platform')">
+        <span class="nav-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <rect x="2" y="3" width="20" height="14" rx="2"/>
+            <path d="M8 21h8M12 17v4"/>
+          </svg>
+        </span>
+        <span class="nav-text">Platform</span>
+        <svg class="chevron-icon" :class="{ expanded: expandedSections.platform }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="9,18 15,12 9,6"/>
+        </svg>
+        <span class="nav-indicator"></span>
+      </button>
+      <div v-show="expandedSections.platform" class="nav-submenu" role="region" aria-label="Platform">
+        <button type="button" class="submenu-item" :class="{ active: sidebarActive('secrets-vault') }" :aria-current="sidebarActive('secrets-vault') ? 'page' : undefined" @click="navTo('secrets-vault')">
+          Secrets Vault
+        </button>
+        <button type="button" class="submenu-item" :class="{ active: sidebarActive('rbac-settings') }" :aria-current="sidebarActive('rbac-settings') ? 'page' : undefined" @click="navTo('rbac-settings')">
+          RBAC Settings
+        </button>
+        <button type="button" class="submenu-item" :class="{ active: sidebarActive('sso-settings') }" :aria-current="sidebarActive('sso-settings') ? 'page' : undefined" @click="navTo('sso-settings')">
+          SSO / SAML
+        </button>
+        <button type="button" class="submenu-item" :class="{ active: sidebarActive('team-budgets') }" :aria-current="sidebarActive('team-budgets') ? 'page' : undefined" @click="navTo('team-budgets')">
+          Team Budgets
+        </button>
+        <button type="button" class="submenu-item" :class="{ active: sidebarActive('execution-quota-controls') }" :aria-current="sidebarActive('execution-quota-controls') ? 'page' : undefined" @click="navTo('execution-quota-controls')">
+          Execution Quotas
+        </button>
+        <button type="button" class="submenu-item" :class="{ active: sidebarActive('report-digests') }" :aria-current="sidebarActive('report-digests') ? 'page' : undefined" @click="navTo('report-digests')">
+          Digest Reports
+        </button>
+        <button type="button" class="submenu-item" :class="{ active: sidebarActive('mobile-execution-monitor') }" :aria-current="sidebarActive('mobile-execution-monitor') ? 'page' : undefined" @click="navTo('mobile-execution-monitor')">
+          Mobile Monitor
+        </button>
+        <button type="button" class="submenu-item" :class="{ active: sidebarActive('bot-sla-uptime') }" :aria-current="sidebarActive('bot-sla-uptime') ? 'page' : undefined" @click="navTo('bot-sla-uptime')">
+          Bot SLA &amp; Uptime
+        </button>
+        <button type="button" class="submenu-item" :class="{ active: sidebarActive('api-keys') }" :aria-current="sidebarActive('api-keys') ? 'page' : undefined" @click="navTo('api-keys')">
+          API Keys
+        </button>
+      </div>
+
       <!-- Settings (flat link) -->
       <button type="button" :class="{ active: sidebarActive('settings') }" :aria-current="sidebarActive('settings') ? 'page' : undefined" :title="isCollapsedDesktop() ? 'Settings' : undefined" @click="navTo('settings')">
         <span class="nav-icon">
