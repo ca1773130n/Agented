@@ -86,8 +86,8 @@ export function useConversationBranch(conversationId: Ref<string>) {
       if (msg) {
         messages.value.push(msg);
       }
-    } catch {
-      // Message add failed
+    } catch (e) {
+      console.warn('[useConversationBranch] Failed to add message:', e);
     }
   }
 

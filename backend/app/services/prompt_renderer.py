@@ -18,18 +18,53 @@ logger = logging.getLogger(__name__)
 class PromptRenderer:
     """Stateless renderer for trigger prompt templates."""
 
-    # All placeholder names that the rendering pipeline is expected to resolve.
+    # ── Known prompt-template placeholders ──────────────────────────────
+    #
+    # Every placeholder below can appear as ``{name}`` in a trigger's
+    # ``prompt_template``.  The ``render()`` method resolves them using
+    # values from the trigger context or event payload.
+    #
+    # Universal placeholders (available for all trigger sources):
+    #   trigger_id  – The trigger's unique ID (e.g. "trg-abc123").
+    #                 Source: passed directly to render().
+    #   bot_id      – Legacy alias for trigger_id; kept for backward compat.
+    #   paths       – Newline-separated list of project paths configured on
+    #                 the trigger.  Source: computed by ExecutionService from
+    #                 the trigger's ``paths`` field.
+    #   message     – Free-text message supplied by the caller.  For webhook
+    #                 triggers this is the payload body; for manual triggers
+    #                 it's the user-provided text.
+    #
+    # GitHub PR placeholders (resolved only when event["type"] == "github_pr"):
+    #   pr_url        – Full URL of the pull request (e.g. "https://github.com/…/pull/42").
+    #   pr_number     – PR number as a string (e.g. "42").
+    #   pr_title      – Title of the pull request.
+    #   pr_author     – GitHub username of the PR author.
+    #   repo_url      – Clone URL of the repository.
+    #   repo_full_name – "owner/repo" identifier (e.g. "acme/widget").
+    #   All sourced from the GitHub webhook event dict built by
+    #   ``routes/github_webhook.py``.
+    #
+    # Adding a new placeholder:
+    #   1. Add the name to ``_KNOWN_PLACEHOLDERS`` below.
+    #   2. Perform the substitution in ``render()`` (use
+    #      ``prompt.replace("{name}", value)``).
+    #   3. If the value comes from a new event type, gate on
+    #      ``event.get("type")`` like the GitHub PR block does.
+    #   4. Add the placeholder to ``TriggerGenerationService.PLACEHOLDERS_BY_SOURCE``
+    #      so the AI trigger generator knows about it.
+    # ─────────────────────────────────────────────────────────────────────
     _KNOWN_PLACEHOLDERS = {
-        "trigger_id",
-        "bot_id",
-        "paths",
-        "message",
-        "pr_url",
-        "pr_number",
-        "pr_title",
-        "pr_author",
-        "repo_url",
-        "repo_full_name",
+        "trigger_id",   # Universal – the trigger's unique ID
+        "bot_id",       # Universal – legacy alias for trigger_id
+        "paths",        # Universal – newline-separated project paths
+        "message",      # Universal – incoming message / webhook body
+        "pr_url",       # GitHub PR – full pull-request URL
+        "pr_number",    # GitHub PR – pull-request number (string)
+        "pr_title",     # GitHub PR – pull-request title
+        "pr_author",    # GitHub PR – PR author's GitHub username
+        "repo_url",     # GitHub PR – repository clone URL
+        "repo_full_name",  # GitHub PR – "owner/repo" identifier
     }
 
     @staticmethod
@@ -105,9 +140,16 @@ class PromptRenderer:
         """
         unresolved = re.findall(r"\{(\w+)\}", prompt)
         unknown = [p for p in unresolved if p not in cls._KNOWN_PLACEHOLDERS]
+        known_unresolved = [p for p in unresolved if p in cls._KNOWN_PLACEHOLDERS]
         if unknown:
             logger.warning(
-                "Trigger '%s' has unresolved placeholders: %s",
+                "Trigger '%s' has unknown unresolved placeholders: %s",
                 trigger_name,
                 ", ".join(f"{{{p}}}" for p in unknown),
+            )
+        if known_unresolved:
+            logger.warning(
+                "Trigger '%s' has known but unresolved placeholders (missing context?): %s",
+                trigger_name,
+                ", ".join(f"{{{p}}}" for p in known_unresolved),
             )

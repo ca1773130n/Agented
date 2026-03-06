@@ -1,6 +1,9 @@
 """Utility API endpoints."""
 
+import logging
 import shutil
+
+logger = logging.getLogger(__name__)
 import subprocess
 import threading
 from http import HTTPStatus
@@ -50,6 +53,7 @@ def get_version():
         return {"version": "unknown"}, HTTPStatus.OK
 
     except Exception:
+        logger.debug("Failed to determine CLI version", exc_info=True)
         return {"version": "unknown"}, HTTPStatus.OK
 
 

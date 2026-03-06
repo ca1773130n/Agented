@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { mount } from '@vue/test-utils';
 import { defineComponent, nextTick } from 'vue';
-import { useEventSource, type UseEventSourceOptions, type SSEStatus } from '../useEventSource';
+import { useEventSource, safeParseSSE, type UseEventSourceOptions, type SSEStatus } from '../useEventSource';
 
 // Mock the API client module so tests don't make real network requests.
 vi.mock('../../services/api/client', () => ({
@@ -224,5 +224,33 @@ describe('useEventSource', () => {
     wrapper.vm.connect();
     expect(mockSource.onmessage).toBe(messageHandler);
     wrapper.unmount();
+  });
+});
+
+describe('safeParseSSE', () => {
+  it('parses valid JSON and returns the object', () => {
+    const event = new MessageEvent('message', { data: '{"status":"ok"}' });
+    const result = safeParseSSE<{ status: string }>(event);
+    expect(result).toEqual({ status: 'ok' });
+  });
+
+  it('returns null and warns on invalid JSON', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const event = new MessageEvent('message', { data: 'not json' });
+    const result = safeParseSSE(event, 'test/label');
+    expect(result).toBeNull();
+    expect(warnSpy).toHaveBeenCalledWith(
+      '[SSE test/label] Received non-JSON event data:',
+      'not json',
+    );
+    warnSpy.mockRestore();
+  });
+
+  it('returns null on empty string data', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const event = new MessageEvent('message', { data: '' });
+    const result = safeParseSSE(event);
+    expect(result).toBeNull();
+    warnSpy.mockRestore();
   });
 });

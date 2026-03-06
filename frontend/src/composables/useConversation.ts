@@ -2,7 +2,7 @@ import { ref, shallowRef, nextTick } from 'vue';
 import type { ConversationMessage } from '../services/api';
 import { ApiError } from '../services/api';
 import { useStreamingParser } from './useStreamingParser';
-import { useEventSource } from './useEventSource';
+import { useEventSource, safeParseSSE } from './useEventSource';
 import { useToast } from './useToast';
 
 /**
@@ -101,11 +101,12 @@ export function useConversation<TConfig>(
     sourceFactory: () => api.stream(conversationId.value!),
     events: {
       message: (event) => {
-        const data = JSON.parse(event.data);
+        const data = safeParseSSE<ConversationMessage>(event, 'conversation/message');
+        if (!data) return;
         if (data.role !== 'system') {
           // De-duplicate: skip if a message with the same timestamp and content already exists
           const isDuplicate = messages.value.some(
-            (m) => m.timestamp === data.timestamp && m.content === data.content,
+            (m: ConversationMessage) => m.timestamp === data.timestamp && m.content === data.content,
           );
           if (!isDuplicate) {
             messages.value.push(data);
@@ -118,16 +119,18 @@ export function useConversation<TConfig>(
         streamingContent.value = '';
       },
       response_chunk: (event) => {
-        const data = JSON.parse(event.data);
+        const data = safeParseSSE<{ content: string }>(event, 'conversation/response_chunk');
+        if (!data) return;
         // Accumulate raw text for response_complete fallback
         streamingContent.value += data.content;
         // Feed to smd.js via rAF batch
         streamingParser.write(data.content);
       },
       response_complete: (event) => {
-        const data = JSON.parse(event.data);
+        const data = safeParseSSE<{ content?: string; backend?: string }>(event, 'conversation/response_complete');
         isProcessing.value = false;
         streamingParser.finalize();
+        if (!data) { streamingContent.value = ''; return; }
 
         if (data.content) {
           const resolvedBackend = data.backend || (selectedBackend.value !== 'auto' ? selectedBackend.value : undefined);
@@ -289,7 +292,7 @@ export function useConversation<TConfig>(
       const result = await api.list();
       activeConversations.value = result.conversations || [];
     } catch {
-      // Silently fail
+      // Best-effort: background poll for active conversations, failure is non-critical
     }
   }
 

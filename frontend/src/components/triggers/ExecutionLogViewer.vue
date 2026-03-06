@@ -2,6 +2,7 @@
 import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue';
 import type { Execution, LogLine, AuthenticatedEventSource } from '../../services/api';
 import { executionApi } from '../../services/api';
+import { safeParseSSE } from '../../composables/useEventSource';
 import { useToast } from '../../composables/useToast';
 
 const props = defineProps<{
@@ -111,20 +112,29 @@ function startStreaming() {
   });
 
   eventSource.value.addEventListener('log', (event) => {
-    const data = JSON.parse(event.data) as LogLine;
+    const data = safeParseSSE<LogLine>(event as MessageEvent, 'execution/log');
+    if (!data) return;
     logLines.value.push(data);
     scrollToBottom();
   });
 
   eventSource.value.addEventListener('status', (event) => {
-    const data = JSON.parse(event.data);
+    const data = safeParseSSE<{ status: Execution['status'] }>(event as MessageEvent, 'execution/status');
+    if (!data) return;
     if (execution.value) {
       execution.value.status = data.status;
     }
   });
 
   eventSource.value.addEventListener('complete', (event) => {
-    const data = JSON.parse(event.data);
+    const data = safeParseSSE<{
+      status: Execution['status'];
+      exit_code?: number;
+      error_message?: string;
+      duration_ms?: number;
+      finished_at?: string;
+    }>(event as MessageEvent, 'execution/complete');
+    if (!data) { stopStreaming(); return; }
     if (execution.value) {
       execution.value.status = data.status;
       execution.value.exit_code = data.exit_code;

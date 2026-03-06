@@ -1,6 +1,9 @@
 """Marketplace management API endpoints."""
 
+import logging
 from http import HTTPStatus
+
+logger = logging.getLogger(__name__)
 
 from flask import request
 from flask_openapi3 import APIBlueprint, Tag
@@ -74,7 +77,8 @@ def search_marketplace_items():
                         }
                     )
         except Exception:
-            continue  # Skip unreachable marketplaces gracefully
+            logger.debug("Skipping unreachable marketplace: %s", url)
+            continue
 
     return {
         "results": results,

@@ -5,6 +5,25 @@ import {
 } from '../services/api/client';
 
 /**
+ * Safely parse SSE event data as JSON.
+ *
+ * Returns the parsed object on success, or `null` if the data is not valid
+ * JSON.  Logs a warning with the event type and raw data so malformed
+ * server messages are visible in devtools without crashing the consumer.
+ */
+export function safeParseSSE<T = unknown>(event: MessageEvent, label?: string): T | null {
+  try {
+    return JSON.parse(event.data) as T;
+  } catch {
+    console.warn(
+      `[SSE${label ? ` ${label}` : ''}] Received non-JSON event data:`,
+      event.data,
+    );
+    return null;
+  }
+}
+
+/**
  * Reactive SSE connection status.
  * - idle: no connection attempt made yet
  * - connecting: connection initiated but not yet open

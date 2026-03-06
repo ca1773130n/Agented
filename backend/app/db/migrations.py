@@ -8,6 +8,7 @@ Seed functions and preset data have been moved to seeds.py.
 
 import logging
 import os
+import re
 
 import app.config as config
 
@@ -16,6 +17,23 @@ from .ids import generate_trigger_id
 from .schema import create_fresh_schema
 
 logger = logging.getLogger(__name__)
+
+_SAFE_IDENTIFIER_RE = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
+
+
+def _validate_sql_identifier(name: str, kind: str = "identifier") -> str:
+    """Validate that a string is a safe SQL identifier (table or column name).
+
+    SQLite parameterized queries (?) cannot be used for table/column names,
+    so string formatting is necessary for DDL. This function ensures only
+    safe alphanumeric + underscore identifiers are allowed.
+
+    Returns the validated name for convenient inline use.
+    """
+    if not _SAFE_IDENTIFIER_RE.match(name):
+        raise ValueError(f"Invalid SQL {kind}: {name!r}")
+    return name
+
 
 # Valid backend types
 VALID_BACKENDS = ("claude", "opencode", "gemini", "codex")
@@ -338,11 +356,21 @@ def _create_migration_only_tables(conn):
     conn.execute("CREATE INDEX IF NOT EXISTS idx_dc_status ON design_conversations(status)")
 
 
+_REBUILD_TABLE_ALLOWLIST = {"project_paths", "execution_logs", "pr_reviews"}
+
+
 def _rebuild_table_fk(conn, table_name):
     """Rebuild a table to fix FK references from bots to triggers.
 
     Uses the CREATE new table, INSERT INTO...SELECT, DROP old, RENAME pattern.
     """
+    _validate_sql_identifier(table_name, "table name")
+    if table_name not in _REBUILD_TABLE_ALLOWLIST:
+        raise ValueError(
+            f"Table '{table_name}' is not in the FK rebuild allowlist: "
+            f"{sorted(_REBUILD_TABLE_ALLOWLIST)}"
+        )
+
     # Get the current CREATE TABLE statement
     cursor = conn.execute(
         "SELECT sql FROM sqlite_master WHERE type='table' AND name=?", (table_name,)
@@ -672,6 +700,7 @@ def _migrate_add_agents_tables(conn):
         ]
         for col_name, col_type in new_columns:
             if col_name not in columns:
+                _validate_sql_identifier(col_name, "column name")
                 conn.execute(f"ALTER TABLE agents ADD COLUMN {col_name} {col_type}")
         conn.commit()
 
@@ -1776,6 +1805,7 @@ def _migrate_bots_to_triggers(conn):
 
     # Verify FKs reference triggers table (not bots)
     for tbl in ("project_paths", "execution_logs", "pr_reviews"):
+        _validate_sql_identifier(tbl, "table name")
         fks = conn.execute(f"PRAGMA foreign_key_list({tbl})").fetchall()
         for fk in fks:
             if fk[2] == "bots":
@@ -2336,6 +2366,7 @@ def _migrate_add_grd_tables(conn):
     ]
     for col_name, col_type in new_cols:
         if col_name not in columns:
+            _validate_sql_identifier(col_name, "column name")
             conn.execute(f"ALTER TABLE projects ADD COLUMN {col_name} {col_type}")
             logger.info("Added %s column to projects", col_name)
 
@@ -2605,6 +2636,7 @@ def _migrate_add_session_process_columns(conn):
     ]
     for col_name, col_type in new_cols:
         if col_name not in columns:
+            _validate_sql_identifier(col_name, "column name")
             conn.execute(f"ALTER TABLE project_sessions ADD COLUMN {col_name} {col_type}")
             logger.info("Added %s column to project_sessions", col_name)
 
@@ -2624,9 +2656,10 @@ def _migrate_v43_expand_mcp_schema(conn):
     ]
     for col_name, col_def in mcp_cols:
         try:
+            _validate_sql_identifier(col_name, "column name")
             conn.execute(f"ALTER TABLE mcp_servers ADD COLUMN {col_name} {col_def}")
-        except Exception:
-            pass  # Column already exists
+        except Exception as e:
+            logger.debug("mcp_servers column %s already exists: %s", col_name, e)
 
     # Add columns to project_mcp_servers
     pms_cols = [
@@ -2635,9 +2668,10 @@ def _migrate_v43_expand_mcp_schema(conn):
     ]
     for col_name, col_def in pms_cols:
         try:
+            _validate_sql_identifier(col_name, "column name")
             conn.execute(f"ALTER TABLE project_mcp_servers ADD COLUMN {col_name} {col_def}")
-        except Exception:
-            pass  # Column already exists
+        except Exception as e:
+            logger.debug("project_mcp_servers column %s already exists: %s", col_name, e)
 
     # Backfill display_name from name where NULL
     conn.execute("UPDATE mcp_servers SET display_name = name WHERE display_name IS NULL")
@@ -3249,12 +3283,12 @@ def _migrate_v71_template_history_author_diff(conn):
     """Add author and diff_text columns to trigger_template_history."""
     try:
         conn.execute("ALTER TABLE trigger_template_history ADD COLUMN author TEXT DEFAULT 'system'")
-    except Exception:
-        pass  # Column may already exist
+    except Exception as e:
+        logger.debug("trigger_template_history.author column already exists: %s", e)
     try:
         conn.execute("ALTER TABLE trigger_template_history ADD COLUMN diff_text TEXT DEFAULT ''")
-    except Exception:
-        pass  # Column may already exist
+    except Exception as e:
+        logger.debug("trigger_template_history.diff_text column already exists: %s", e)
     conn.commit()
 
 
@@ -3358,8 +3392,8 @@ def _migrate_v75_trigger_cron_expression(conn):
     try:
         conn.execute("ALTER TABLE triggers ADD COLUMN cron_expression TEXT")
         conn.commit()
-    except Exception:
-        pass  # Column already exists
+    except Exception as e:
+        logger.debug("triggers.cron_expression column already exists: %s", e)
 
 
 VERSIONED_MIGRATIONS = [

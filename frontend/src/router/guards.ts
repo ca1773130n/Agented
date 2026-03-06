@@ -21,7 +21,13 @@ import {
  */
 function makeEntityValidator(fetchFn: (id: string) => Promise<unknown>): (id: string) => Promise<boolean> {
   return async (id: string) => {
-    try { await fetchFn(id); return true; } catch { return false; }
+    try {
+      await fetchFn(id);
+      return true;
+    } catch (err) {
+      console.warn(`[Router Guard] Entity validation failed for id="${id}":`, err);
+      return false;
+    }
   };
 }
 
@@ -121,8 +127,9 @@ export function registerGuards(router: Router): void {
         return { name: 'not-found' };
       }
       validatedCache.set(cacheKey, Date.now());
-    } catch {
+    } catch (err) {
       // Fail open on network errors -- let the component handle it
+      console.warn(`[Router Guard] Network error validating ${entityParam}="${entityId}", failing open:`, err);
     }
   });
 }

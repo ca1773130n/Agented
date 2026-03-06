@@ -1,10 +1,13 @@
 """Shared pytest fixtures for Agented tests."""
 
+import logging
 import os
 import sys
 import warnings
 
 import pytest
+
+logger = logging.getLogger(__name__)
 
 # Ensure the backend app package is importable
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
@@ -66,11 +69,11 @@ def reset_github_webhook_rate_limit():
 
         _repo_last_event.clear()
     except ImportError:
-        pass
+        logger.debug("Could not import _repo_last_event for pre-test cleanup (module not loaded)")
     yield
     try:
         from app.routes.github_webhook import _repo_last_event
 
         _repo_last_event.clear()
     except ImportError:
-        pass
+        logger.debug("Could not import _repo_last_event for post-test cleanup (module not loaded)")

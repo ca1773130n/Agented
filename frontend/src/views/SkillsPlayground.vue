@@ -5,6 +5,7 @@ import type { FileNode, AuthenticatedEventSource } from '../services/api';
 import { skillsApi, userSkillsApi, ApiError } from '../services/api';
 import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import { useToast } from '../composables/useToast';
+import { safeParseSSE } from '../composables/useEventSource';
 import { useWebMcpTool } from '../composables/useWebMcpTool';
 
 const router = useRouter();
@@ -139,17 +140,20 @@ function connectToStream(testId: string) {
   });
 
   eventSource.value.addEventListener('output', (event) => {
-    const data = JSON.parse(event.data);
+    const data = safeParseSSE<{ content: string }>(event as MessageEvent, 'skill/output');
+    if (!data) return;
     testOutput.value.push(data.content);
   });
 
   eventSource.value.addEventListener('error_output', (event) => {
-    const data = JSON.parse(event.data);
+    const data = safeParseSSE<{ content: string }>(event as MessageEvent, 'skill/error_output');
+    if (!data) return;
     testOutput.value.push(`[stderr] ${data.content}`);
   });
 
   eventSource.value.addEventListener('complete', (event) => {
-    const data = JSON.parse(event.data);
+    const data = safeParseSSE<{ status: string; exit_code?: number }>(event as MessageEvent, 'skill/complete');
+    if (!data) { isRunning.value = false; eventSource.value?.close(); return; }
     testStatus.value = data.status === 'completed' ? 'completed' : 'failed';
     testOutput.value.push('');
     testOutput.value.push(`> Test ${data.status} (exit code: ${data.exit_code ?? 'unknown'})`);

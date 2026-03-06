@@ -87,6 +87,71 @@ class TestValidateSignature:
         tampered = b'{"event": "hacked"}'
         assert WebhookValidationService.validate_signature(tampered, sig, secret) is False
 
+    def test_bare_hex_without_prefix_uses_default_algo(self):
+        from app.services.webhook_validation_service import WebhookValidationService
+
+        payload = b'{"event": "test"}'
+        secret = "test-secret"
+        digest = hmac.new(secret.encode("utf-8"), payload, hashlib.sha256).hexdigest()
+        # Bare hex (no prefix) should use the default algorithm
+        assert WebhookValidationService.validate_signature(payload, digest, secret) is True
+
+    def test_wrong_secret_rejected(self):
+        from app.services.webhook_validation_service import WebhookValidationService
+
+        payload = b'{"event": "test"}'
+        sig = self._sign(payload, "correct-secret")
+        assert WebhookValidationService.validate_signature(payload, sig, "wrong-secret") is False
+
+    def test_unicode_payload(self):
+        from app.services.webhook_validation_service import WebhookValidationService
+
+        payload = '{"message": "héllo wörld"}'.encode("utf-8")
+        secret = "unicode-secret"
+        sig = self._sign(payload, secret)
+        assert WebhookValidationService.validate_signature(payload, sig, secret) is True
+
+    def test_empty_payload(self):
+        from app.services.webhook_validation_service import WebhookValidationService
+
+        payload = b""
+        secret = "test-secret"
+        sig = self._sign(payload, secret)
+        assert WebhookValidationService.validate_signature(payload, sig, secret) is True
+
+    def test_large_payload(self):
+        from app.services.webhook_validation_service import WebhookValidationService
+
+        payload = b"x" * 1_000_000  # 1MB
+        secret = "test-secret"
+        sig = self._sign(payload, secret)
+        assert WebhookValidationService.validate_signature(payload, sig, secret) is True
+
+    def test_sha1_header_autodetected_over_default(self):
+        """Header prefix sha1= should override the default sha256 algorithm."""
+        from app.services.webhook_validation_service import WebhookValidationService
+
+        payload = b'{"event": "test"}'
+        secret = "test-secret"
+        sig = self._sign(payload, secret, "sha1")
+        # Default is sha256, but header says sha1= — should auto-detect sha1
+        assert WebhookValidationService.validate_signature(payload, sig, secret, algorithm="sha256") is True
+
+    def test_signature_with_extra_whitespace_rejected(self):
+        from app.services.webhook_validation_service import WebhookValidationService
+
+        payload = b'{"event": "test"}'
+        secret = "test-secret"
+        sig = self._sign(payload, secret)
+        # Add trailing whitespace — should not match
+        assert WebhookValidationService.validate_signature(payload, sig + " ", secret) is False
+
+    def test_none_secret_rejected(self):
+        from app.services.webhook_validation_service import WebhookValidationService
+
+        payload = b'{"event": "test"}'
+        assert WebhookValidationService.validate_signature(payload, "sha256=abc", None) is False
+
 
 # ---------------------------------------------------------------------------
 # Unit tests: validate_timestamp
@@ -136,6 +201,39 @@ class TestValidateTimestamp:
         assert (
             WebhookValidationService.validate_timestamp(far_future, tolerance_seconds=300) is False
         )
+
+    def test_garbage_timestamp_rejected(self):
+        from app.services.webhook_validation_service import WebhookValidationService
+
+        assert WebhookValidationService.validate_timestamp("not-a-timestamp") is False
+
+    def test_iso8601_with_z_suffix(self):
+        from datetime import datetime, timezone
+
+        from app.services.webhook_validation_service import WebhookValidationService
+
+        now_z = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        assert WebhookValidationService.validate_timestamp(now_z, tolerance_seconds=300) is True
+
+    def test_float_epoch_timestamp(self):
+        from app.services.webhook_validation_service import WebhookValidationService
+
+        ts = str(time.time())  # Float with decimals
+        assert WebhookValidationService.validate_timestamp(ts, tolerance_seconds=300) is True
+
+    def test_just_within_tolerance(self):
+        from app.services.webhook_validation_service import WebhookValidationService
+
+        # 299 seconds ago — comfortably within 300s tolerance
+        boundary_ts = str(int(time.time()) - 299)
+        assert WebhookValidationService.validate_timestamp(boundary_ts, tolerance_seconds=300) is True
+
+    def test_zero_tolerance(self):
+        """With 0 tolerance, only the exact current second should pass."""
+        from app.services.webhook_validation_service import WebhookValidationService
+
+        old_ts = str(int(time.time()) - 2)
+        assert WebhookValidationService.validate_timestamp(old_ts, tolerance_seconds=0) is False
 
 
 # ---------------------------------------------------------------------------

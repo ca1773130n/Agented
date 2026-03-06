@@ -44,8 +44,10 @@ def vault_status():
             from app.db.secrets import count_secrets
 
             count = count_secrets()
-        except Exception:
-            pass
+        except Exception as e:
+            import logging
+
+            logging.getLogger(__name__).warning("Failed to count secrets: %s", e)
     return {"configured": configured, "secret_count": count}, HTTPStatus.OK
 
 

@@ -152,8 +152,8 @@ export function useCollaborativeViewer(
       if (comment && !comments.value.some(c => c.id === comment.id)) {
         comments.value.push(comment);
       }
-    } catch {
-      // Comment post failed -- silent for now
+    } catch (e) {
+      console.warn('[useCollaborativeViewer] Failed to post comment:', e);
     }
   }
 

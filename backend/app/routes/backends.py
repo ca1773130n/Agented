@@ -1,7 +1,10 @@
 """AI Backends API routes."""
 
+import logging
 import subprocess
 from http import HTTPStatus
+
+logger = logging.getLogger(__name__)
 
 from flask import Response, request
 from flask_openapi3 import APIBlueprint
@@ -247,7 +250,7 @@ def start_proxy_login():
         try:
             proc.kill()
         except Exception:
-            pass
+            logger.debug("Failed to kill cliproxy process during cleanup", exc_info=True)
         return {
             "status": "error",
             "message": "Failed to capture auth URL from cliproxyapi",
@@ -261,7 +264,7 @@ def start_proxy_login():
         except subprocess.TimeoutExpired:
             proc.kill()
         except Exception:
-            pass
+            logger.debug("Background cliproxy wait failed", exc_info=True)
 
     threading.Thread(target=_wait_bg, daemon=True).start()
     result = {
