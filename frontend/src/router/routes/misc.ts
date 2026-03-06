@@ -680,4 +680,32 @@ export const miscRoutes: RouteRecordRaw[] = [
     component: () => import('../../views/FindingsTriageBoardPage.vue'),
     meta: { title: 'Findings Triage Board' },
   },
+  // PR Review Learning Loop (feature 7)
+  {
+    path: '/integrations/pr-review-learning',
+    name: 'pr-review-learning-loop',
+    component: () => import('../../views/PrReviewLearningLoopPage.vue'),
+    meta: { title: 'PR Review Learning Loop' },
+  },
+  // Full Conversation History Viewer (feature 33)
+  {
+    path: '/executions/conversation-history',
+    name: 'conversation-history-viewer',
+    component: () => import('../../views/ConversationHistoryViewer.vue'),
+    meta: { title: 'Conversation History' },
+  },
+  // Skill & Plugin Version Pinning (feature 34)
+  {
+    path: '/settings/version-pinning',
+    name: 'skill-version-pinning',
+    component: () => import('../../views/SkillVersionPinningPage.vue'),
+    meta: { title: 'Skill & Plugin Version Pinning' },
+  },
+  // Repository Scope Filters for Bots (feature 15)
+  {
+    path: '/bots/repo-scope-filters',
+    name: 'repo-scope-filters',
+    component: () => import('../../views/RepoScopeFiltersPage.vue'),
+    meta: { title: 'Repository Scope Filters' },
+  },
 ];

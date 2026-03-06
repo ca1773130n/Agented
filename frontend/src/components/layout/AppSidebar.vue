@@ -119,13 +119,13 @@ function autoExpandForRoute() {
   if (['ai-backends', 'backend-detail', 'service-health'].includes(name)) {
     expandedSections.value.aiBackends = true;
   }
-  if (['slack-notifications', 'pr-auto-assignment', 'integration-ticketing', 'multi-provider-fallback', 'multi-repo-fan-out', 'github-actions', 'on-call-escalation', 'github-app-install'].includes(name)) {
+  if (['slack-notifications', 'pr-auto-assignment', 'integration-ticketing', 'multi-provider-fallback', 'multi-repo-fan-out', 'github-actions', 'on-call-escalation', 'github-app-install', 'pr-review-learning-loop'].includes(name)) {
     expandedSections.value.integrations = true;
   }
-  if (['bot-recommendation-engine', 'bot-clone-fork', 'bot-dependency-graph', 'changelog-generator', 'dependency-impact-bot', 'incident-response-playbooks', 'cross-team-bot-sharing', 'inline-prompt-editor', 'prompt-ab-testing', 'visual-cron-wizard', 'guided-onboarding-wizard', 'structured-output', 'bot-runbooks'].includes(name)) {
+  if (['bot-recommendation-engine', 'bot-clone-fork', 'bot-dependency-graph', 'changelog-generator', 'dependency-impact-bot', 'incident-response-playbooks', 'cross-team-bot-sharing', 'inline-prompt-editor', 'prompt-ab-testing', 'visual-cron-wizard', 'guided-onboarding-wizard', 'structured-output', 'bot-runbooks', 'repo-scope-filters'].includes(name)) {
     expandedSections.value.automationTools = true;
   }
-  if (['secrets-vault', 'rbac-settings', 'sso-settings', 'team-budgets', 'report-digests', 'execution-quota-controls', 'team-leaderboard', 'bot-sla-uptime', 'mobile-execution-monitor', 'audit-history', 'findings-triage-board'].includes(name)) {
+  if (['secrets-vault', 'rbac-settings', 'sso-settings', 'team-budgets', 'report-digests', 'execution-quota-controls', 'team-leaderboard', 'bot-sla-uptime', 'mobile-execution-monitor', 'audit-history', 'findings-triage-board', 'skill-version-pinning', 'conversation-history-viewer'].includes(name)) {
     expandedSections.value.platform = true;
   }
 }
@@ -223,15 +223,15 @@ function isWorkflowsSectionActive(): boolean {
 }
 
 function isIntegrationsSectionActive(): boolean {
-  return ['slack-notifications', 'pr-auto-assignment', 'integration-ticketing', 'multi-provider-fallback', 'multi-repo-fan-out', 'github-actions', 'on-call-escalation', 'github-app-install'].includes(currentRouteName.value);
+  return ['slack-notifications', 'pr-auto-assignment', 'integration-ticketing', 'multi-provider-fallback', 'multi-repo-fan-out', 'github-actions', 'on-call-escalation', 'github-app-install', 'pr-review-learning-loop'].includes(currentRouteName.value);
 }
 
 function isAutomationToolsSectionActive(): boolean {
-  return ['bot-recommendation-engine', 'bot-clone-fork', 'bot-dependency-graph', 'changelog-generator', 'dependency-impact-bot', 'incident-response-playbooks', 'cross-team-bot-sharing', 'inline-prompt-editor', 'prompt-ab-testing', 'visual-cron-wizard', 'guided-onboarding-wizard', 'structured-output', 'bot-runbooks'].includes(currentRouteName.value);
+  return ['bot-recommendation-engine', 'bot-clone-fork', 'bot-dependency-graph', 'changelog-generator', 'dependency-impact-bot', 'incident-response-playbooks', 'cross-team-bot-sharing', 'inline-prompt-editor', 'prompt-ab-testing', 'visual-cron-wizard', 'guided-onboarding-wizard', 'structured-output', 'bot-runbooks', 'repo-scope-filters'].includes(currentRouteName.value);
 }
 
 function isPlatformSectionActive(): boolean {
-  return ['secrets-vault', 'rbac-settings', 'sso-settings', 'team-budgets', 'report-digests', 'execution-quota-controls', 'team-leaderboard', 'bot-sla-uptime', 'mobile-execution-monitor', 'audit-history', 'findings-triage-board'].includes(currentRouteName.value);
+  return ['secrets-vault', 'rbac-settings', 'sso-settings', 'team-budgets', 'report-digests', 'execution-quota-controls', 'team-leaderboard', 'bot-sla-uptime', 'mobile-execution-monitor', 'audit-history', 'findings-triage-board', 'skill-version-pinning', 'conversation-history-viewer'].includes(currentRouteName.value);
 }
 
 // Helper: navigate via router (mobile auto-close handled by router.afterEach)
@@ -853,6 +853,9 @@ function handleSidebarKeydown(e: KeyboardEvent) {
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('on-call-escalation') }" :aria-current="sidebarActive('on-call-escalation') ? 'page' : undefined" @click="navTo('on-call-escalation')">
           On-Call Escalation
         </button>
+        <button type="button" class="submenu-item" :class="{ active: sidebarActive('pr-review-learning-loop') }" :aria-current="sidebarActive('pr-review-learning-loop') ? 'page' : undefined" @click="navTo('pr-review-learning-loop')">
+          PR Review Learning
+        </button>
       </div>
 
       <!-- Automation Tools (expandable) -->
@@ -910,6 +913,9 @@ function handleSidebarKeydown(e: KeyboardEvent) {
         </button>
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('bot-runbooks') }" :aria-current="sidebarActive('bot-runbooks') ? 'page' : undefined" @click="navTo('bot-runbooks')">
           Bot Runbooks
+        </button>
+        <button type="button" class="submenu-item" :class="{ active: sidebarActive('repo-scope-filters') }" :aria-current="sidebarActive('repo-scope-filters') ? 'page' : undefined" @click="navTo('repo-scope-filters')">
+          Repo Scope Filters
         </button>
       </div>
 
@@ -1139,6 +1145,12 @@ function handleSidebarKeydown(e: KeyboardEvent) {
         </button>
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('findings-triage-board') }" :aria-current="sidebarActive('findings-triage-board') ? 'page' : undefined" @click="navTo('findings-triage-board')">
           Findings Triage
+        </button>
+        <button type="button" class="submenu-item" :class="{ active: sidebarActive('skill-version-pinning') }" :aria-current="sidebarActive('skill-version-pinning') ? 'page' : undefined" @click="navTo('skill-version-pinning')">
+          Version Pinning
+        </button>
+        <button type="button" class="submenu-item" :class="{ active: sidebarActive('conversation-history-viewer') }" :aria-current="sidebarActive('conversation-history-viewer') ? 'page' : undefined" @click="navTo('conversation-history-viewer')">
+          Conversation History
         </button>
       </div>
 

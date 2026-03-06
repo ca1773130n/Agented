@@ -1,0 +1,35 @@
+{
+  "decisions": [
+    "Created 4 net-new Vue views for the 4 product-ideation items genuinely absent from the codebase: PrReviewLearningLoopPage.vue (acceptance signal analytics and refinement suggestions), ConversationHistoryViewer.vue (multi-turn AI conversation replay with tool call inspection), SkillVersionPinningPage.vue (per-bot component version locking with changelog awareness), and RepoScopeFiltersPage.vue (regex-based repo/branch/author include/exclude with live test sandbox). The other 35 items already had corresponding views from iterations 1–28.",
+    "Placed PrReviewLearningLoopPage at /integrations/pr-review-learning under the Integrations sidebar section — distinct from PrReviewDashboard which shows aggregate PR stats, whereas this view is specifically about feedback signal capture and prompt refinement.",
+    "Placed ConversationHistoryViewer at /executions/conversation-history and added it to the Platform sidebar section alongside Secrets Vault and RBAC — execution debugging tools are an administrative/investigative concern, not a daily workflow feature.",
+    "Placed SkillVersionPinningPage at /settings/version-pinning and added it to the Platform section — version pinning is a stability configuration concern shared by admins, not a per-team feature.",
+    "Placed RepoScopeFiltersPage at /bots/repo-scope-filters in the Automation Tools sidebar section — repo scoping is directly a bot configuration tool, not an integration or platform setting.",
+    "Used inline mock data with realistic types across all 4 views, matching the codebase pattern of optimistic rendering with a fallback fetch pattern rather than purely API-driven views.",
+    "The PR Review Learning Loop view uses a threshold system (25% low, 75% high) to classify finding patterns and auto-generate refinement suggestions — this surfaces actionable insights without requiring users to manually interpret raw accept/dismiss counts.",
+    "The Conversation History Viewer supports click-to-expand turns with a progressive disclosure pattern (truncated preview → full content on select) to avoid overwhelming the reader with full stdout for all turns simultaneously."
+  ],
+  "patterns": [
+    "The codebase maintains a strict 1:1 view-to-feature mapping — every product capability lives in one top-level .vue file in src/views/. Co-locating sub-components inline (rather than extracting to src/components/) is acceptable for view-specific UI like turn items or pattern rows.",
+    "AppSidebar.vue has three manually maintained arrays per section (autoExpandForRoute, isXxxSectionActive, and template buttons) that must be kept in sync — a significant maintenance risk. Adding a route requires updating all three locations.",
+    "All four new views follow the AppBreadcrumb + PageHeader scaffold pattern. Deviating from this would break visual consistency across the ~100 existing views.",
+    "The test suite (409 tests, 33 files) remains entirely unit/integration level with no snapshot tests — new views can be added without touching test infrastructure unless they introduce new composables or services.",
+    "Route names use kebab-case and conventionally omit the 'Page' suffix from the view filename (e.g. RepoScopeFiltersPage.vue → repo-scope-filters)."
+  ],
+  "takeaways": [
+    "After 29 iterations, the views directory now has 120+ files. The next high-value investment is depth — many existing views are well-scaffolded but backed by mock data rather than real API calls. A backend-connectivity pass would meaningfully increase platform utility.",
+    "The sidebar's manually maintained triple-array pattern for section active detection is the single most error-prone part of adding new routes. A declarative nav config (array of {routeName, section, label}) that auto-derives both the template and the active-state logic would eliminate 3-location edits per new route.",
+    "PR Review Learning Loop is semantically distinct from PR Review Dashboard — both exist in the codebase now, and future iterations should cross-reference them to avoid functional duplication (e.g. stats shown in both places).",
+    "The Conversation History Viewer addresses a genuine debugging gap: LiveExecutionTerminal.vue streams stdout in real-time but does not show the structured AI conversation turns (tool calls, model reasoning). The new viewer complements rather than replaces it.",
+    "The 39 product-ideation items in this iteration covered the full lifecycle of a mature bot automation platform: observability (health dashboard, token cost), safety (secrets vault, RBAC, scope filters), collaboration (team feed, digest reports), and developer experience (NL builder, CLI testing, dry run). The codebase now has a view for every major capability in this ideation batch."
+  ],
+  "files_changed": [
+    "frontend/src/views/PrReviewLearningLoopPage.vue",
+    "frontend/src/views/ConversationHistoryViewer.vue",
+    "frontend/src/views/SkillVersionPinningPage.vue",
+    "frontend/src/views/RepoScopeFiltersPage.vue",
+    "frontend/src/router/routes/misc.ts",
+    "frontend/src/components/layout/AppSidebar.vue",
+    ".planning/PRODUCT-IDEAS-AGENTED.md"
+  ]
+}
