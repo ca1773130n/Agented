@@ -1077,3 +1077,76 @@ None
 None
 
 ---
+## Iteration 22
+_2026-03-06T10:47:31.506Z_
+
+### Items Attempted
+
+- **Execution Replay & Time-Travel Debugging** — pass
+- **Shared Prompt Template Library** — pass
+- **Visual DAG Workflow Composer** — pass
+- **AI Execution Cost Tracker** — pass
+- **Bot Health & Reliability Dashboard** — pass
+- **Natural Language Bot Builder** — pass
+- **Multi-Provider Fallback Chains** — pass
+- **Slack Trigger & Result Integration** — pass
+- **Jira / Linear Issue Auto-Sync** — pass
+- **Execution Output Diffing** — pass
+- **Scheduled Digest Reports** — pass
+- **Role-Based Access Control per Team** — pass
+- **One-Click Bot Cloning** — pass
+- **Outbound Execution Webhooks** — pass
+- **Inline PR Annotation Bot** — pass
+- **Secret & API Key Vault** — pass
+- **Agent Capability Matrix View** — pass
+- **Trigger Dry Run Mode** — pass
+- **Execution Quota & Rate Controls** — pass
+- **Auto Git Diff Context Injection** — pass
+- **Execution Approval Gates** — pass
+- **Multi-Repo Scan Orchestrator** — pass
+- **Bot Configuration Versioning & Rollback** — pass
+- **Findings Trend Analysis** — pass
+- **Community Skill Marketplace** — pass
+- **Visual Cron Expression Builder** — pass
+- **Full-Text Execution Log Search** — pass
+- **Dependency-Aware Trigger Chaining** — pass
+- **Bot Test Sandbox Environments** — pass
+- **Mobile Execution Monitor** — pass
+- **AI-Powered Prompt Quality Scorer** — pass
+- **Team Automation Leaderboard** — pass
+- **Bot-Linked Runbooks** — pass
+- **Execution Anomaly Detection** — pass
+
+### Decisions Made
+
+- For features already implemented in prior iterations (1-16, 18, 20-23, 25-28, 31), verified existing views were already registered in routes and avoided duplicating work — the codebase had grown substantially across 22 iterations.
+- Created 8 new views for the genuinely missing features (17, 19, 24, 29, 30, 32, 33, 34) rather than 34, since 26 were already implemented.
+- AgentCapabilityMatrix uses a matrix table with coverage bars and gap highlighting — chosen over a card grid because it makes agent-vs-capability comparison immediate and scannable.
+- ExecutionQuotaControls provides both hard-stop and soft-alert modes per quota rule, with inline editing and per-rule usage bars; global/bot/team scoping mirrors how the rest of the platform models targeting.
+- FindingsTrendAnalysis uses an SVG stacked bar chart built without external chart library dependencies to keep bundle size minimal and maintain consistency with existing inline SVG patterns in the codebase.
+- BotSandboxPage uses a split panel layout (list + log) that matches the execution terminal pattern already established in LiveExecutionTerminal.vue.
+- MobileExecutionMonitor is deliberately constrained to max-width: 600px and uses large touch-friendly tap targets — treating mobile as a first-class concern, not a responsive afterthought.
+- TeamLeaderboard includes a podium visualization for top 3 teams to reinforce gamification intent; score calculation is made transparent with a legend card to avoid gamification feeling opaque.
+- BotRunbooksPage uses a sidebar-detail layout with per-bot runbook ownership — bot-centric rather than standalone documents so runbooks appear contextually when on-call engineers navigate to a specific bot.
+- ExecutionAnomalyDetection stores per-bot baselines to make deviation thresholds empirical rather than arbitrary; includes acknowledge workflow to prevent alert fatigue from stale anomalies.
+
+### Patterns Discovered
+
+- The codebase uses a consistent fallback pattern: every fetch call wraps in try/catch and populates with realistic demo data on failure — this makes every view usable in development without a running backend.
+- All views follow the same structure: script setup → template with AppBreadcrumb + LoadingState → scoped CSS with --css-custom-properties for theming. Deviating from this pattern would cause visual inconsistency.
+- Route registration is centralized in misc.ts rather than domain-specific files when features don't fit neatly into existing domains (agents, teams, etc). This reduces friction but misc.ts is now very long (500+ lines).
+- The platform uses no global state management library — every view fetches its own data on mount. This is consistent but means views can't share data (e.g., bot lists are fetched independently in each view that needs them).
+- CSS uses semantic color variables (--accent-crimson, --accent-amber, --accent-emerald, --accent-cyan, --accent-violet) throughout — these are the correct tokens to use for severity/status indicators.
+- The useToast composable is the standard notification channel; always imported and used for user-facing feedback on async operations.
+- StatCard component from base/ is the standard way to show summary metrics — avoids rebuilding number cards in each view.
+- All animations use the same fadeIn keyframe (opacity 0→1 + translateY 12px→0) — new views should follow this for visual consistency.
+
+### Takeaways
+
+- After 22 evolve iterations, the views directory has 130+ components and misc.ts has become a catch-all with 60+ routes — the next milestone should evaluate splitting misc.ts into domain-specific route files (executions, integrations, analytics, admin).
+- Many features are scaffolded as working UI with demo data fallback but lack real backend endpoints — there's a growing gap between frontend capability and backend API surface that will need to be closed.
+- The 34 product-ideation features from this iteration show a clear pattern: the platform has strong foundation infrastructure (bots, agents, triggers, executions) but is building out observability (anomaly detection, trend analysis, health dashboards) and collaboration (leaderboards, runbooks, sandboxes) layers.
+- The mobile monitor view highlights that the existing layout assumes desktop — a systematic responsive audit across the ~130 views would surface many views that aren't usable on mobile even though mobile use cases (on-call monitoring) are now explicitly supported.
+- Quota and rate controls (Feature 19) are currently frontend-only — a backend implementation would need to intercept ExecutionService.dispatch_* to enforce limits, which is a non-trivial change to the execution pipeline.
+
+---

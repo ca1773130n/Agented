@@ -540,4 +540,46 @@ export const miscRoutes: RouteRecordRaw[] = [
     component: () => import('../../views/ExecutionAnomalyDetection.vue'),
     meta: { title: 'Execution Anomaly Detection' },
   },
+  // On-Demand Code Explanation Bot (Feature 10)
+  {
+    path: '/tools/code-explanation',
+    name: 'code-explanation-bot',
+    component: () => import('../../views/CodeExplanationBotPage.vue'),
+    meta: { title: 'Code Explanation Bot' },
+  },
+  // One-Click GitHub App Install (Feature 14)
+  {
+    path: '/integrations/github-app-install',
+    name: 'github-app-install',
+    component: () => import('../../views/GitHubAppInstallPage.vue'),
+    meta: { title: 'GitHub App Install' },
+  },
+  // Execution Output Artifacts (Feature 34)
+  {
+    path: '/executions/artifacts',
+    name: 'execution-artifacts',
+    component: () => import('../../views/ExecutionArtifactsPage.vue'),
+    meta: { title: 'Execution Artifacts' },
+  },
+  // Cross-Repo Impact Analysis Bot (Feature 35)
+  {
+    path: '/tools/cross-repo-impact',
+    name: 'cross-repo-impact-bot',
+    component: () => import('../../views/CrossRepoImpactBotPage.vue'),
+    meta: { title: 'Cross-Repo Impact Analysis' },
+  },
+  // Plugin Execution Sandboxing (Feature 37)
+  {
+    path: '/plugins/sandbox',
+    name: 'plugin-sandbox',
+    component: () => import('../../views/PluginSandboxPage.vue'),
+    meta: { title: 'Plugin Sandbox' },
+  },
+  // Bot SLA & Uptime Tracking (Feature 39)
+  {
+    path: '/dashboards/bot-sla',
+    name: 'bot-sla-uptime',
+    component: () => import('../../views/BotSlaUptimePage.vue'),
+    meta: { title: 'Bot SLA & Uptime' },
+  },
 ];
