@@ -743,4 +743,46 @@ export const miscRoutes: RouteRecordRaw[] = [
     component: () => import('../../views/ExecutionTaggingPage.vue'),
     meta: { title: 'Execution Tagging & Search' },
   },
+  // Prompt Template Playground (Feature 2)
+  {
+    path: '/bots/prompt-playground',
+    name: 'prompt-template-playground',
+    component: () => import('../../views/PromptTemplatePlayground.vue'),
+    meta: { title: 'Prompt Template Playground' },
+  },
+  // AI Cost Dashboard (Feature 4)
+  {
+    path: '/dashboards/ai-cost',
+    name: 'ai-cost-dashboard',
+    component: () => import('../../views/AiCostDashboard.vue'),
+    meta: { title: 'AI Cost Dashboard' },
+  },
+  // GitOps Bot Configuration Sync (Feature 28)
+  {
+    path: '/settings/gitops-sync',
+    name: 'gitops-sync',
+    component: () => import('../../views/GitOpsSyncPage.vue'),
+    meta: { title: 'GitOps Sync' },
+  },
+  // Shareable Execution Live Links (Feature 34)
+  {
+    path: '/executions/share',
+    name: 'shareable-execution-links',
+    component: () => import('../../views/ShareableExecutionLinksPage.vue'),
+    meta: { title: 'Shareable Execution Links' },
+  },
+  // Webhook Payload Transformer (Feature 37)
+  {
+    path: '/webhooks/transformer',
+    name: 'webhook-payload-transformer',
+    component: () => import('../../views/WebhookPayloadTransformerPage.vue'),
+    meta: { title: 'Webhook Payload Transformer' },
+  },
+  // Non-English Prompt Localization (Feature 38)
+  {
+    path: '/bots/prompt-localization',
+    name: 'prompt-localization',
+    component: () => import('../../views/PromptLocalizationPage.vue'),
+    meta: { title: 'Prompt Localization' },
+  },
 ];
