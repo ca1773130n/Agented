@@ -1224,3 +1224,68 @@ _2026-03-06T11:03:31.481Z_
 - BotSlaUptimePage fills a genuine operational gap — bots silently missing schedules is a real pain point and the uptime bar visualization with per-bot alert toggles is a practical first step toward SLA-driven bot operations
 
 ---
+## Iteration 24
+_2026-03-06T11:19:37.042Z_
+
+### Items Attempted
+
+- **Visual DAG Workflow Builder** — pass
+- **Execution Replay & Re-run** — pass
+- **Prompt Version History** — pass
+- **Multi-Provider Fallback Chains** — pass
+- **Bot Template Marketplace** — pass
+- **AI Cost & Token Usage Dashboard** — pass
+- **Slack Execution Notifications** — pass
+- **Human-in-the-Loop Approval Gates** — pass
+- **In-Platform Prompt Playground** — pass
+- **Execution Digest Reports** — pass
+- **Secrets & Credential Vault** — pass
+- **Conditional Trigger Rules Engine** — pass
+- **Execution Log Annotations** — pass
+- **Agent Quality Scoring** — pass
+- **Issue Tracker Integration (Jira / Linear)** — pass
+- **Execution Rate Limits & Quotas** — pass
+- **Team Activity Feed** — pass
+- **One-Click Bot Cloning** — pass
+- **Context File Attachments for Bots** — pass
+- **Execution Dependency Graph** — pass
+- **Role-Based Access Control (RBAC)** — pass
+- **GitHub App Installation Flow** — pass
+- **Structured Output Action Blocks** — pass
+- **Dry-Run Mode** — pass
+- **AI-Powered Trigger Suggestions** — pass
+- **Full-Text Execution Log Search** — pass
+- **Incoming Webhook Inspector** — pass
+- **Programmatic API Keys** — pass
+- **Auto-Generated Changelogs** — pass
+- **Guided Onboarding Wizard** — pass
+
+### Decisions Made
+
+- Created 5 net-new Vue views rather than forcing all 30 features into existing pages — 25 features already had adequate dedicated views from prior iterations, and creating redundant stubs would add noise without value
+- Mapped feature 7 (Slack Execution Notifications) to a new SlackNotificationsPage distinct from SlackCommandGatewayPage — the existing page handles slash commands, not execution result routing, so separation preserves single-responsibility
+- Mapped feature 12 (Conditional Trigger Rules) to a new ConditionalTriggerRulesPage rather than extending NLTriggerRuleEditor — condition-based filters (field/operator/value triples) are structurally different from natural-language rule descriptions
+- Used the same sidebar+editor layout pattern as MultiProviderFallback.vue for both SlackNotificationsPage and ConditionalTriggerRulesPage to maintain UI consistency across configuration-heavy pages
+- Implemented AgentQualityScoringPage with a mini sparkline-style bar chart built from plain divs rather than importing Chart.js — avoids heavy dependency for a micro-visualization
+- TeamActivityFeedPage uses a timeline layout with connector lines rather than a flat list, improving scanability for chronological event streams
+- GuidedOnboardingWizardPage implements a 5-step wizard with local state per step rather than a global wizard store — consistent with the project's no-state-management-library convention
+- Routes for new views follow established prefix conventions: /integrations/ for Slack, /triggers/ for conditional rules, /agents/ for quality scoring, /teams/ for activity feed, /onboarding for the wizard
+
+### Patterns Discovered
+
+- The project accumulates views aggressively across iterations — 100+ views now exist, many as stubs. The pattern of 'create a view per feature idea' is effective for rapid prototyping but risks view sprawl without a discovery/navigation surface to surface them
+- Sidebar + editor grid (220px sidebar, 1fr content) is the de facto layout for configuration pages — MultiProviderFallback, SlackCommandGateway, and the new pages all use this pattern
+- Mock data with realistic IDs and timestamps is consistently used in lieu of backend API calls for prototype views — this makes views visually complete while deferring backend implementation
+- CSS custom properties (--bg-secondary, --border-default, --accent-cyan, --text-primary etc.) are used uniformly — no hardcoded colors outside status indicators, making theming consistent
+- The misc.ts route file has grown to 620+ lines covering 55+ routes — it may benefit from splitting into domain-specific route files (e.g., integrations.ts, admin.ts) in a future iteration
+- Views use scoped CSS with @keyframes fadeIn for entry animation — this pattern appears in nearly every view and could be extracted to a shared utility class
+
+### Takeaways
+
+- Before creating new views, checking existing views against feature descriptions prevents duplication — 25 of 30 features already had dedicated implementations from prior iterations
+- The distinction between conceptually similar features (Slack command gateway vs. Slack notifications, NL trigger rules vs. conditional filter rules) matters for UX — conflating them would create confusing multi-purpose pages
+- The wizard pattern (multi-step with sidebar progress) is a natural fit for onboarding flows and should be the default for any 'first run' or 'create entity' flow with 4+ steps
+- Star rating UI for quality feedback requires careful CSS — using button elements with font glyphs rather than SVGs keeps markup minimal while enabling hover/click states
+- The timeline feed layout (icon + vertical line connector) significantly improves readability for activity log UIs compared to flat card lists — worth standardizing for all feed-style views
+
+---

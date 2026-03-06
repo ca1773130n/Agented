@@ -1,0 +1,39 @@
+{
+  "name": "Agented",
+  "short_name": "Agented",
+  "description": "AI-powered bot automation platform — manage, run, and monitor bots from anywhere.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0a0a0f",
+  "theme_color": "#06b6d4",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/agented.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["developer", "productivity", "utilities"],
+  "shortcuts": [
+    {
+      "name": "Execution Queue",
+      "short_name": "Queue",
+      "url": "/executions/queue",
+      "description": "View pending and running bot executions"
+    },
+    {
+      "name": "Execution Timeline",
+      "short_name": "Timeline",
+      "url": "/executions/timeline",
+      "description": "Gantt-style execution timeline"
+    },
+    {
+      "name": "Anomaly Alerts",
+      "short_name": "Alerts",
+      "url": "/executions/anomalies",
+      "description": "View execution anomalies and alerts"
+    }
+  ]
+}

@@ -8,6 +8,117 @@ import { useToast } from '../composables/useToast';
 const router = useRouter();
 const showToast = useToast();
 
+// Natural language input
+const nlInput = ref('');
+const nlParsed = ref<string | null>(null);
+const nlHuman = ref<string | null>(null);
+
+function parseNaturalLanguage(text: string): { cron: string; human: string } | null {
+  const t = text.toLowerCase().trim();
+  // "every hour" / "hourly"
+  if (/\bhourly\b|every hour\b/.test(t)) {
+    const minMatch = t.match(/(?:at\s+)?:(\d+)/);
+    const m = minMatch ? minMatch[1].padStart(2, '0') : '00';
+    return { cron: `${m} * * * *`, human: `Every hour at :${m}` };
+  }
+  // "every N hours"
+  const everyNHours = t.match(/every\s+(\d+)\s+hours?/);
+  if (everyNHours) {
+    const n = everyNHours[1];
+    return { cron: `0 */${n} * * *`, human: `Every ${n} hours` };
+  }
+  // "every N minutes"
+  const everyNMin = t.match(/every\s+(\d+)\s+min(?:utes?)?/);
+  if (everyNMin) {
+    const n = everyNMin[1];
+    return { cron: `*/${n} * * * *`, human: `Every ${n} minutes` };
+  }
+  // Parse time like "9am", "9:30am", "14:00"
+  function parseTime(s: string): { h: number; m: number } | null {
+    const t12 = s.match(/(\d{1,2})(?::(\d{2}))?\s*(am|pm)/i);
+    if (t12) {
+      let h = parseInt(t12[1]);
+      const m = parseInt(t12[2] || '0');
+      const ampm = t12[3].toLowerCase();
+      if (ampm === 'pm' && h !== 12) h += 12;
+      if (ampm === 'am' && h === 12) h = 0;
+      return { h, m };
+    }
+    const t24 = s.match(/(\d{1,2}):(\d{2})/);
+    if (t24) return { h: parseInt(t24[1]), m: parseInt(t24[2]) };
+    return null;
+  }
+  const timeMatch = parseTime(t);
+  const h = timeMatch?.h ?? 9;
+  const m = timeMatch?.m ?? 0;
+  const ms = m.toString().padStart(2, '0');
+  // "every weekday" / "monday through friday"
+  if (/weekday|mon.*fri|business day/.test(t)) {
+    const tz = parseTimezone(t);
+    return { cron: `${ms} ${h} * * 1-5`, human: `Every weekday at ${fmt(h, m)}${tz}` };
+  }
+  // "every weekend"
+  if (/weekend/.test(t)) {
+    return { cron: `${ms} ${h} * * 0,6`, human: `Every weekend day at ${fmt(h, m)}` };
+  }
+  // "every monday", "every tuesday", etc.
+  const dayNames = ['sunday','monday','tuesday','wednesday','thursday','friday','saturday'];
+  for (let i = 0; i < dayNames.length; i++) {
+    if (t.includes(dayNames[i])) {
+      return { cron: `${ms} ${h} * * ${i}`, human: `Every ${capitalize(dayNames[i])} at ${fmt(h, m)}` };
+    }
+  }
+  // "every day" / "daily"
+  if (/\bdaily\b|every day\b/.test(t)) {
+    const tz = parseTimezone(t);
+    return { cron: `${ms} ${h} * * *`, human: `Every day at ${fmt(h, m)}${tz}` };
+  }
+  // "every week" / "weekly"
+  if (/\bweekly\b|every week\b/.test(t)) {
+    return { cron: `${ms} ${h} * * 1`, human: `Every Monday at ${fmt(h, m)}` };
+  }
+  // "every month" / "monthly" / "on the 1st"
+  const monthDay = t.match(/(?:on the\s+)?(\d+)(?:st|nd|rd|th)?\s+(?:of each|of every|each)?\s*month/);
+  if (monthDay || /\bmonthly\b/.test(t)) {
+    const d = monthDay ? monthDay[1] : '1';
+    return { cron: `${ms} ${h} ${d} * *`, human: `On day ${d} of every month at ${fmt(h, m)}` };
+  }
+  return null;
+}
+
+function parseTimezone(text: string): string {
+  if (/\bpt\b|pacific/.test(text)) return ' PT';
+  if (/\bet\b|eastern/.test(text)) return ' ET';
+  if (/\bct\b|central/.test(text)) return ' CT';
+  if (/\bmt\b|mountain/.test(text)) return ' MT';
+  if (/\butc\b/.test(text)) return ' UTC';
+  return '';
+}
+
+function fmt(h: number, m: number): string {
+  const period = h >= 12 ? 'PM' : 'AM';
+  const dh = h === 0 ? 12 : h > 12 ? h - 12 : h;
+  return `${dh}:${m.toString().padStart(2, '0')} ${period}`;
+}
+
+function capitalize(s: string): string { return s.charAt(0).toUpperCase() + s.slice(1); }
+
+function applyNLSchedule() {
+  const result = parseNaturalLanguage(nlInput.value);
+  if (!result) {
+    nlParsed.value = null;
+    nlHuman.value = null;
+    showToast('Could not parse schedule. Try "every weekday at 9am" or "daily at 6pm".', 'error');
+    return;
+  }
+  nlParsed.value = result.cron;
+  nlHuman.value = result.human;
+  // Apply to visual wizard
+  customCron.value = result.cron;
+  frequency.value = 'custom';
+  showToast('Schedule applied from natural language!', 'success');
+}
+
 type Frequency = 'hourly' | 'daily' | 'weekly' | 'monthly' | 'custom';
 
 const frequency = ref<Frequency>('daily');
@@ -98,9 +209,36 @@ async function handleSave() {
     ]" />
 
     <PageHeader
-      title="Visual Schedule / Cron Wizard"
-      subtitle="Build bot schedules visually with a human-readable preview and next-run display."
+      title="Natural Language Schedule Builder"
+      subtitle="Type a schedule in plain English or use the visual builder — generates a valid cron expression with a human-readable preview."
     />
+
+    <!-- Natural language input -->
+    <div class="card nl-card">
+      <div class="nl-header">
+        <span class="nl-icon">✦</span>
+        <span class="nl-title">Natural Language Input</span>
+        <span class="nl-hint">e.g. "every weekday at 9am PT", "daily at 6pm", "every Monday at 10:30am"</span>
+      </div>
+      <div class="nl-body">
+        <div class="nl-input-row">
+          <input
+            v-model="nlInput"
+            class="nl-input"
+            placeholder="every weekday at 9am PT"
+            @keyup.enter="applyNLSchedule"
+          />
+          <button class="btn btn-primary" @click="applyNLSchedule">Parse Schedule</button>
+        </div>
+        <div v-if="nlParsed" class="nl-result">
+          <div class="nl-result-human">{{ nlHuman }}</div>
+          <code class="nl-result-cron">{{ nlParsed }}</code>
+          <span class="nl-applied-badge">Applied to visual builder</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="section-divider">— or configure visually —</div>
 
     <div class="layout">
       <div class="wizard-col">
@@ -260,5 +398,21 @@ async function handleSave() {
 .run-num { width: 22px; height: 22px; border-radius: 50%; background: rgba(6,182,212,0.1); color: var(--accent-cyan); font-size: 0.72rem; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
 .run-time { font-size: 0.78rem; color: var(--text-secondary); }
 
-@media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+.nl-card { background: var(--bg-secondary); border: 1px solid var(--border-default); border-radius: 12px; overflow: hidden; }
+.nl-header { display: flex; align-items: center; gap: 10px; padding: 14px 20px; border-bottom: 1px solid var(--border-default); }
+.nl-icon { color: var(--accent-cyan); font-size: 1rem; }
+.nl-title { font-size: 0.88rem; font-weight: 700; color: var(--text-primary); }
+.nl-hint { font-size: 0.75rem; color: var(--text-muted); margin-left: 8px; }
+.nl-body { padding: 16px 20px; display: flex; flex-direction: column; gap: 12px; }
+.nl-input-row { display: flex; gap: 10px; }
+.nl-input { flex: 1; padding: 10px 14px; background: var(--bg-tertiary); border: 1px solid var(--border-default); border-radius: 8px; color: var(--text-primary); font-size: 0.9rem; font-style: italic; }
+.nl-input:focus { outline: none; border-color: var(--accent-cyan); font-style: normal; }
+.nl-result { display: flex; align-items: center; gap: 14px; padding: 10px 14px; background: rgba(6,182,212,0.06); border-radius: 8px; border: 1px solid rgba(6,182,212,0.2); flex-wrap: wrap; }
+.nl-result-human { font-size: 0.88rem; font-weight: 600; color: var(--text-primary); }
+.nl-result-cron { font-family: monospace; font-size: 0.82rem; color: var(--accent-cyan); background: var(--bg-tertiary); padding: 3px 8px; border-radius: 4px; }
+.nl-applied-badge { font-size: 0.72rem; color: #34d399; font-weight: 600; margin-left: auto; }
+
+.section-divider { text-align: center; font-size: 0.75rem; color: var(--text-muted); letter-spacing: 0.08em; padding: 4px 0; }
+
+@media (max-width: 900px) { .layout { grid-template-columns: 1fr; } .nl-input-row { flex-direction: column; } .nl-hint { display: none; } }
 </style>

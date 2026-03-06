@@ -7,4 +7,11 @@ export const settingsRoutes: RouteRecordRaw[] = [
     component: () => import('../../views/SettingsPage.vue'),
     meta: { title: 'Settings' },
   },
+  // SSO / SAML Authentication (item 35)
+  {
+    path: '/settings/sso',
+    name: 'sso-settings',
+    component: () => import('../../views/SsoSettingsPage.vue'),
+    meta: { title: 'SSO / SAML' },
+  },
 ];

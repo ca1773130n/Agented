@@ -617,4 +617,11 @@ export const miscRoutes: RouteRecordRaw[] = [
     component: () => import('../../views/GuidedOnboardingWizardPage.vue'),
     meta: { title: 'Get Started' },
   },
+  // Execution Timeline — Gantt-style view (item 22)
+  {
+    path: '/executions/timeline',
+    name: 'execution-timeline',
+    component: () => import('../../views/ExecutionTimelinePage.vue'),
+    meta: { title: 'Execution Timeline' },
+  },
 ];
