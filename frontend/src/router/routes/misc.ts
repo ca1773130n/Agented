@@ -785,4 +785,25 @@ export const miscRoutes: RouteRecordRaw[] = [
     component: () => import('../../views/PromptLocalizationPage.vue'),
     meta: { title: 'Prompt Localization' },
   },
+  // Prompt Template Version History (item 3)
+  {
+    path: '/bots/prompt-versions',
+    name: 'prompt-version-history',
+    component: () => import('../../views/PromptVersionHistoryPage.vue'),
+    meta: { title: 'Prompt Version History' },
+  },
+  // Smart Alert Rules on Findings (item 8)
+  {
+    path: '/monitoring/alert-rules',
+    name: 'smart-alert-rules',
+    component: () => import('../../views/SmartAlertRulesPage.vue'),
+    meta: { title: 'Smart Alert Rules' },
+  },
+  // Skill Marketplace & Sharing (item 10)
+  {
+    path: '/skills/marketplace',
+    name: 'skill-marketplace',
+    component: () => import('../../views/SkillMarketplacePage.vue'),
+    meta: { title: 'Skill Marketplace' },
+  },
 ];

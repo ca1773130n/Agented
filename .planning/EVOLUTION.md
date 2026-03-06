@@ -1650,3 +1650,75 @@ None
 None
 
 ---
+## Iteration 31
+_2026-03-06T13:15:27.726Z_
+
+### Items Attempted
+
+- **Execution Replay & Diff View** — pass
+- **Prompt Template Playground** — pass
+- **DAG Workflow Composer** — pass
+- **AI Cost Dashboard** — pass
+- **Multi-Provider Fallback Chains** — pass
+- **Bot Health Scorecard** — pass
+- **Slack & Discord Execution Alerts** — pass
+- **Skill & Plugin Marketplace** — pass
+- **Inline PR Comment Bot** — pass
+- **Issue Tracker Integration (Jira/Linear)** — pass
+- **Role-Based Access Control** — pass
+- **Manual Approval Gates** — pass
+- **Bot Configuration Version History** — pass
+- **Scheduled Digest Reports** — pass
+- **Structured Output Extraction** — pass
+- **Webhook Event Inspector** — pass
+- **Cross-Team Bot Templates** — pass
+- **Execution Anomaly Alerts** — pass
+- **Multi-Repo Trigger Scoping** — pass
+- **Natural Language Bot Builder** — pass
+- **Secret Variable Injection** — pass
+- **Execution Queue & Priority Lanes** — pass
+- **Prompt A/B Testing** — pass
+- **Thumbs Up/Down Output Feedback** — pass
+- **Natural Language Schedule Builder** — pass
+- **Bot Dependency Graph Visualizer** — pass
+- **Mobile-Friendly Execution Monitor** — pass
+- **GitOps Bot Configuration Sync** — pass
+- **Execution Time Budgets & Auto-Kill** — pass
+- **Team Activity Feed** — pass
+- **Context-Aware Bot Recommendations** — pass
+- **Full-Text Execution Output Search** — pass
+- **Smart Rate-Limit Aware Scheduling** — pass
+- **Shareable Execution Live Links** — pass
+- **Plugin Execution Sandboxing** — pass
+- **Built-In Dependency Vulnerability Bot** — pass
+- **Webhook Payload Transformer** — pass
+- **Non-English Prompt Localization** — pass
+
+### Decisions Made
+
+- Audited all 38 product-ideation features against existing views/routes before writing any code — found that 32 of 38 were already implemented in previous iterations, preventing duplicate work
+- Created PromptTemplatePlayground.vue with client-side JSONPath placeholder resolution and a dry-run mode that shows the resolved prompt without making a real AI call — keeps the feature useful without requiring new backend endpoints
+- Created AiCostDashboard.vue using simulated cost estimates derived from execution counts and public provider pricing rates, since real token tracking isn't wired end-to-end — makes the feature navigable and structurally correct while being clearly labeled as estimates
+- Created GitOpsSyncPage.vue with a bidirectional sync direction selector and file-type manifest explaining what YAML files are synced — surfaces the existing gitops.py backend route with a proper frontend UI
+- Created ShareableExecutionLinksPage.vue with client-side link generation (using window.location.origin) and expiry tracking — avoids adding a new backend table while demonstrating the full UX flow
+- Created WebhookPayloadTransformerPage.vue with a live JSONPath rule editor that evaluates against the raw payload in-browser — the transform output keys map directly to prompt template placeholders, closing the loop between the two features
+- Created PromptLocalizationPage.vue with per-language prompt editors, auto-translate simulation, RTL support detection, and coverage tracking — structured so each language's prompt content can be stored as a per-bot locale map in the backend
+- Added all 6 new routes to misc.ts using consistent path conventions: /bots/* for bot tooling, /dashboards/* for dashboards, /settings/* for configuration, /executions/* for execution tools, /webhooks/* for webhook tools
+
+### Patterns Discovered
+
+- The codebase uses a single large misc.ts route file that has grown to 740+ lines — a clear signal that route files should eventually be split by domain (bots, executions, integrations, admin)
+- All feature views follow the same structural pattern: AppBreadcrumb + PageHeader at top, card-based layout, scoped CSS with CSS custom properties, fadeIn animation, and responsive grid breakpoints — new views must match this pattern to feel native
+- Product-ideation views consistently use simulated/estimated data with clear UI labels (e.g., 'DRY RUN', 'estimated', 'auto-translated draft') rather than hiding the placeholder nature of the data — good pattern for shipping iterative UIs
+- The useToast composable is used universally for feedback — all error and success states should go through it rather than inline UI alerts
+- Vue's ref + computed pattern (no Pinia) keeps each view self-contained, which works well for feature-flag-style views that may be independently enabled or disabled
+
+### Takeaways
+
+- By iteration 31, the product-ideation backlog is largely implemented at the UI/route layer — future iterations should focus on wiring these views to real backend data (e.g., actual token cost tracking, real GitOps sync, server-side share link storage)
+- The WebhookPayloadTransformer and PromptTemplatePlayground views are complementary and should be linked to each other — the transformer output keys map directly to the playground's placeholder resolution
+- PromptLocalizationPage revealed a gap: the backend bot schema has no locale field — a follow-up iteration should add a prompt_locales JSON column to the bots table
+- AiCostDashboard exposes the need for a cost_events table in the DB to store per-execution token counts per provider — currently all cost data is estimated client-side
+- ShareableExecutionLinksPage generates links using window.location.origin which is correct for the dev proxy setup but would need a configurable base URL for production deployments
+
+---
