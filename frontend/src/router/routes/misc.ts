@@ -582,4 +582,39 @@ export const miscRoutes: RouteRecordRaw[] = [
     component: () => import('../../views/BotSlaUptimePage.vue'),
     meta: { title: 'Bot SLA & Uptime' },
   },
+  // Slack Execution Notifications (Feature 7)
+  {
+    path: '/integrations/slack-notifications',
+    name: 'slack-notifications',
+    component: () => import('../../views/SlackNotificationsPage.vue'),
+    meta: { title: 'Slack Notifications' },
+  },
+  // Conditional Trigger Rules Engine (Feature 12)
+  {
+    path: '/triggers/conditional-rules',
+    name: 'conditional-trigger-rules',
+    component: () => import('../../views/ConditionalTriggerRulesPage.vue'),
+    meta: { title: 'Conditional Trigger Rules' },
+  },
+  // Agent Quality Scoring (Feature 14)
+  {
+    path: '/agents/quality-scoring',
+    name: 'agent-quality-scoring',
+    component: () => import('../../views/AgentQualityScoringPage.vue'),
+    meta: { title: 'Agent Quality Scoring' },
+  },
+  // Team Activity Feed (Feature 17)
+  {
+    path: '/teams/activity-feed',
+    name: 'team-activity-feed',
+    component: () => import('../../views/TeamActivityFeedPage.vue'),
+    meta: { title: 'Team Activity Feed' },
+  },
+  // Guided Onboarding Wizard (Feature 30)
+  {
+    path: '/onboarding',
+    name: 'guided-onboarding-wizard',
+    component: () => import('../../views/GuidedOnboardingWizardPage.vue'),
+    meta: { title: 'Get Started' },
+  },
 ];
