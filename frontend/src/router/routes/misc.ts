@@ -673,4 +673,11 @@ export const miscRoutes: RouteRecordRaw[] = [
     component: () => import('../../views/DataRetentionPoliciesPage.vue'),
     meta: { title: 'Data Retention Policies' },
   },
+  // Findings Triage Board (feature 13)
+  {
+    path: '/dashboards/findings-triage',
+    name: 'findings-triage-board',
+    component: () => import('../../views/FindingsTriageBoardPage.vue'),
+    meta: { title: 'Findings Triage Board' },
+  },
 ];

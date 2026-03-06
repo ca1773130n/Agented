@@ -1,0 +1,27 @@
+{
+  "decisions": [
+    "Created FindingsTriageBoardPage.vue as the sole net-new view for this iteration — all other 34 features in the list already had corresponding views and routes from prior iterations, so only the Kanban triage board was genuinely missing.",
+    "Added the route at /dashboards/findings-triage (name: findings-triage-board) in misc.ts to be consistent with the /dashboards/* prefix used by related analytics routes (findings-trend-analysis, analytics-dashboard, etc.).",
+    "Placed the sidebar entry inside the existing 'Platform' collapsible section alongside Secrets Vault and RBAC Settings, since the triage board is an operational/admin concern rather than a feature-building tool.",
+    "Used native HTML5 drag-and-drop (draggable attribute + dragstart/drop events) rather than a third-party library to keep the implementation dependency-free and consistent with the rest of the codebase.",
+    "Added a slide-in drawer for finding detail instead of a modal, matching the pattern used in ExecutionHistory and other list-detail views, since findings have multiple metadata fields that benefit from persistent side-by-side context."
+  ],
+  "patterns": [
+    "The codebase follows a strict view-per-feature pattern: each product feature maps to exactly one top-level .vue file in src/views/, never co-located with components.",
+    "All views use AppBreadcrumb + PageHeader as the standard page scaffold — deviating from this breaks visual consistency.",
+    "Mock/demo data is always defined inline with realistic type interfaces rather than fetched from a live API, with a fallback fetch attempted first (pattern seen in FindingsTrendAnalysis, ExecutionReplayDiff, etc.).",
+    "The sidebar autoExpandForRoute() function and isPlatformSectionActive()/isAutomationToolsSectionActive() functions must be kept in sync whenever a new route is added to a collapsible section — this is a fragile manual coupling.",
+    "Route names use kebab-case and match the view filename without the 'Page' or 'Dashboard' suffix (e.g. FindingsTriageBoardPage.vue → findings-triage-board)."
+  ],
+  "takeaways": [
+    "After 27 previous iterations, the views directory is very dense (100+ files). Future iterations should audit for quality/completeness of existing stubs rather than only adding new files.",
+    "The sidebar navigation is a single 1200-line file with manually maintained arrays of route names for section active-state detection — this would benefit from a declarative nav config object that auto-derives both the template buttons and the active-state checks.",
+    "The /dashboard/* route namespace is shared between analytical dashboards and now the triage board; a /triage/* namespace might be clearer for future triage-related pages.",
+    "The product-ideation feature list included several features (e.g. Agent Specialization Profiles, Auto Git Context Enrichment) that map to existing views with slightly different names — better cross-referencing between the feature list and the file inventory would avoid confusion in future iterations."
+  ],
+  "files_changed": [
+    "frontend/src/views/FindingsTriageBoardPage.vue",
+    "frontend/src/router/routes/misc.ts",
+    "frontend/src/components/layout/AppSidebar.vue"
+  ]
+}

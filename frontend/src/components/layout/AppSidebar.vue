@@ -125,7 +125,7 @@ function autoExpandForRoute() {
   if (['bot-recommendation-engine', 'bot-clone-fork', 'bot-dependency-graph', 'changelog-generator', 'dependency-impact-bot', 'incident-response-playbooks', 'cross-team-bot-sharing', 'inline-prompt-editor', 'prompt-ab-testing', 'visual-cron-wizard', 'guided-onboarding-wizard', 'structured-output', 'bot-runbooks'].includes(name)) {
     expandedSections.value.automationTools = true;
   }
-  if (['secrets-vault', 'rbac-settings', 'sso-settings', 'team-budgets', 'report-digests', 'execution-quota-controls', 'team-leaderboard', 'bot-sla-uptime', 'mobile-execution-monitor', 'audit-history'].includes(name)) {
+  if (['secrets-vault', 'rbac-settings', 'sso-settings', 'team-budgets', 'report-digests', 'execution-quota-controls', 'team-leaderboard', 'bot-sla-uptime', 'mobile-execution-monitor', 'audit-history', 'findings-triage-board'].includes(name)) {
     expandedSections.value.platform = true;
   }
 }
@@ -231,7 +231,7 @@ function isAutomationToolsSectionActive(): boolean {
 }
 
 function isPlatformSectionActive(): boolean {
-  return ['secrets-vault', 'rbac-settings', 'sso-settings', 'team-budgets', 'report-digests', 'execution-quota-controls', 'team-leaderboard', 'bot-sla-uptime', 'mobile-execution-monitor', 'audit-history'].includes(currentRouteName.value);
+  return ['secrets-vault', 'rbac-settings', 'sso-settings', 'team-budgets', 'report-digests', 'execution-quota-controls', 'team-leaderboard', 'bot-sla-uptime', 'mobile-execution-monitor', 'audit-history', 'findings-triage-board'].includes(currentRouteName.value);
 }
 
 // Helper: navigate via router (mobile auto-close handled by router.afterEach)
@@ -1136,6 +1136,9 @@ function handleSidebarKeydown(e: KeyboardEvent) {
         </button>
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('api-keys') }" :aria-current="sidebarActive('api-keys') ? 'page' : undefined" @click="navTo('api-keys')">
           API Keys
+        </button>
+        <button type="button" class="submenu-item" :class="{ active: sidebarActive('findings-triage-board') }" :aria-current="sidebarActive('findings-triage-board') ? 'page' : undefined" @click="navTo('findings-triage-board')">
+          Findings Triage
         </button>
       </div>
 
