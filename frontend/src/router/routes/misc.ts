@@ -708,4 +708,39 @@ export const miscRoutes: RouteRecordRaw[] = [
     component: () => import('../../views/RepoScopeFiltersPage.vue'),
     meta: { title: 'Repository Scope Filters' },
   },
+  // Bot Performance Benchmarks (feature 7)
+  {
+    path: '/bots/benchmarks',
+    name: 'bot-performance-benchmarks',
+    component: () => import('../../views/BotPerformanceBenchmarksPage.vue'),
+    meta: { title: 'Bot Performance Benchmarks' },
+  },
+  // Smart Schedule Optimizer (feature 37)
+  {
+    path: '/scheduling/optimizer',
+    name: 'smart-schedule-optimizer',
+    component: () => import('../../views/SmartScheduleOptimizerPage.vue'),
+    meta: { title: 'Smart Schedule Optimizer' },
+  },
+  // Cross-Team Insights Dashboard (feature 33)
+  {
+    path: '/dashboards/cross-team-insights',
+    name: 'cross-team-insights',
+    component: () => import('../../views/CrossTeamInsightsDashboard.vue'),
+    meta: { title: 'Cross-Team Insights' },
+  },
+  // Slack & Teams Notification Channels (feature 9)
+  {
+    path: '/integrations/notification-channels',
+    name: 'notification-channels',
+    component: () => import('../../views/TeamsNotificationChannelsPage.vue'),
+    meta: { title: 'Notification Channels' },
+  },
+  // Execution Tagging & Full-Text Search (feature 23)
+  {
+    path: '/executions/tagging',
+    name: 'execution-tagging',
+    component: () => import('../../views/ExecutionTaggingPage.vue'),
+    meta: { title: 'Execution Tagging & Search' },
+  },
 ];

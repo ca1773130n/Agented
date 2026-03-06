@@ -67,7 +67,7 @@ function toggleSection(section: string) {
 // Auto-expand the section matching the current route on initial load and route changes
 function autoExpandForRoute() {
   const name = String(route.name || '');
-  if (['dashboards', 'security-dashboard', 'pr-review-dashboard', 'trigger-dashboard', 'token-usage', 'products-summary', 'projects-summary', 'teams-summary', 'agents-summary', 'rotation-dashboard', 'analytics-dashboard', 'health-dashboard', 'team-impact-report'].includes(name)) {
+  if (['dashboards', 'security-dashboard', 'pr-review-dashboard', 'trigger-dashboard', 'token-usage', 'products-summary', 'projects-summary', 'teams-summary', 'agents-summary', 'rotation-dashboard', 'analytics-dashboard', 'health-dashboard', 'team-impact-report', 'cross-team-insights'].includes(name)) {
     expandedSections.value.dashboards = true;
     expandedSections.value.watchTower = true;
   }
@@ -119,10 +119,10 @@ function autoExpandForRoute() {
   if (['ai-backends', 'backend-detail', 'service-health'].includes(name)) {
     expandedSections.value.aiBackends = true;
   }
-  if (['slack-notifications', 'pr-auto-assignment', 'integration-ticketing', 'multi-provider-fallback', 'multi-repo-fan-out', 'github-actions', 'on-call-escalation', 'github-app-install', 'pr-review-learning-loop'].includes(name)) {
+  if (['slack-notifications', 'pr-auto-assignment', 'integration-ticketing', 'multi-provider-fallback', 'multi-repo-fan-out', 'github-actions', 'on-call-escalation', 'github-app-install', 'pr-review-learning-loop', 'notification-channels'].includes(name)) {
     expandedSections.value.integrations = true;
   }
-  if (['bot-recommendation-engine', 'bot-clone-fork', 'bot-dependency-graph', 'changelog-generator', 'dependency-impact-bot', 'incident-response-playbooks', 'cross-team-bot-sharing', 'inline-prompt-editor', 'prompt-ab-testing', 'visual-cron-wizard', 'guided-onboarding-wizard', 'structured-output', 'bot-runbooks', 'repo-scope-filters'].includes(name)) {
+  if (['bot-recommendation-engine', 'bot-clone-fork', 'bot-dependency-graph', 'changelog-generator', 'dependency-impact-bot', 'incident-response-playbooks', 'cross-team-bot-sharing', 'inline-prompt-editor', 'prompt-ab-testing', 'visual-cron-wizard', 'guided-onboarding-wizard', 'structured-output', 'bot-runbooks', 'repo-scope-filters', 'bot-performance-benchmarks', 'smart-schedule-optimizer', 'execution-tagging'].includes(name)) {
     expandedSections.value.automationTools = true;
   }
   if (['secrets-vault', 'rbac-settings', 'sso-settings', 'team-budgets', 'report-digests', 'execution-quota-controls', 'team-leaderboard', 'bot-sla-uptime', 'mobile-execution-monitor', 'audit-history', 'findings-triage-board', 'skill-version-pinning', 'conversation-history-viewer'].includes(name)) {
@@ -167,7 +167,7 @@ function sidebarActive(page: string): boolean {
 }
 
 function isDashboardSectionActive(): boolean {
-  return ['dashboards', 'security-dashboard', 'pr-review-dashboard', 'trigger-dashboard', 'token-usage', 'products-summary', 'projects-summary', 'teams-summary', 'agents-summary', 'rotation-dashboard', 'analytics-dashboard', 'health-dashboard', 'team-impact-report'].includes(currentRouteName.value);
+  return ['dashboards', 'security-dashboard', 'pr-review-dashboard', 'trigger-dashboard', 'token-usage', 'products-summary', 'projects-summary', 'teams-summary', 'agents-summary', 'rotation-dashboard', 'analytics-dashboard', 'health-dashboard', 'team-impact-report', 'cross-team-insights'].includes(currentRouteName.value);
 }
 
 function isHistorySectionActive(): boolean {
@@ -223,11 +223,11 @@ function isWorkflowsSectionActive(): boolean {
 }
 
 function isIntegrationsSectionActive(): boolean {
-  return ['slack-notifications', 'pr-auto-assignment', 'integration-ticketing', 'multi-provider-fallback', 'multi-repo-fan-out', 'github-actions', 'on-call-escalation', 'github-app-install', 'pr-review-learning-loop'].includes(currentRouteName.value);
+  return ['slack-notifications', 'pr-auto-assignment', 'integration-ticketing', 'multi-provider-fallback', 'multi-repo-fan-out', 'github-actions', 'on-call-escalation', 'github-app-install', 'pr-review-learning-loop', 'notification-channels'].includes(currentRouteName.value);
 }
 
 function isAutomationToolsSectionActive(): boolean {
-  return ['bot-recommendation-engine', 'bot-clone-fork', 'bot-dependency-graph', 'changelog-generator', 'dependency-impact-bot', 'incident-response-playbooks', 'cross-team-bot-sharing', 'inline-prompt-editor', 'prompt-ab-testing', 'visual-cron-wizard', 'guided-onboarding-wizard', 'structured-output', 'bot-runbooks', 'repo-scope-filters'].includes(currentRouteName.value);
+  return ['bot-recommendation-engine', 'bot-clone-fork', 'bot-dependency-graph', 'changelog-generator', 'dependency-impact-bot', 'incident-response-playbooks', 'cross-team-bot-sharing', 'inline-prompt-editor', 'prompt-ab-testing', 'visual-cron-wizard', 'guided-onboarding-wizard', 'structured-output', 'bot-runbooks', 'repo-scope-filters', 'bot-performance-benchmarks', 'smart-schedule-optimizer', 'execution-tagging'].includes(currentRouteName.value);
 }
 
 function isPlatformSectionActive(): boolean {
@@ -412,6 +412,12 @@ function handleSidebarKeydown(e: KeyboardEvent) {
           :aria-current="sidebarActive('team-impact-report') ? 'page' : undefined"
           @click="navTo('team-impact-report')">
           Impact Report
+        </button>
+        <button type="button" class="submenu-item"
+          :class="{ active: sidebarActive('cross-team-insights') }"
+          :aria-current="sidebarActive('cross-team-insights') ? 'page' : undefined"
+          @click="navTo('cross-team-insights')">
+          Cross-Team Insights
         </button>
         <button type="button" class="submenu-item"
           :class="{ active: sidebarActive('execution-queue-dashboard') }"
@@ -856,6 +862,9 @@ function handleSidebarKeydown(e: KeyboardEvent) {
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('pr-review-learning-loop') }" :aria-current="sidebarActive('pr-review-learning-loop') ? 'page' : undefined" @click="navTo('pr-review-learning-loop')">
           PR Review Learning
         </button>
+        <button type="button" class="submenu-item" :class="{ active: sidebarActive('notification-channels') }" :aria-current="sidebarActive('notification-channels') ? 'page' : undefined" @click="navTo('notification-channels')">
+          Notification Channels
+        </button>
       </div>
 
       <!-- Automation Tools (expandable) -->
@@ -916,6 +925,15 @@ function handleSidebarKeydown(e: KeyboardEvent) {
         </button>
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('repo-scope-filters') }" :aria-current="sidebarActive('repo-scope-filters') ? 'page' : undefined" @click="navTo('repo-scope-filters')">
           Repo Scope Filters
+        </button>
+        <button type="button" class="submenu-item" :class="{ active: sidebarActive('bot-performance-benchmarks') }" :aria-current="sidebarActive('bot-performance-benchmarks') ? 'page' : undefined" @click="navTo('bot-performance-benchmarks')">
+          Bot Benchmarks
+        </button>
+        <button type="button" class="submenu-item" :class="{ active: sidebarActive('smart-schedule-optimizer') }" :aria-current="sidebarActive('smart-schedule-optimizer') ? 'page' : undefined" @click="navTo('smart-schedule-optimizer')">
+          Schedule Optimizer
+        </button>
+        <button type="button" class="submenu-item" :class="{ active: sidebarActive('execution-tagging') }" :aria-current="sidebarActive('execution-tagging') ? 'page' : undefined" @click="navTo('execution-tagging')">
+          Execution Tagging
         </button>
       </div>
 

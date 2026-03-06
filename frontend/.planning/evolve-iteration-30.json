@@ -1,0 +1,32 @@
+{
+  "decisions": [
+    "Bot Performance Benchmarks page was chosen as a new view because ProviderBenchmarkDashboard covers provider-level metrics but no dedicated per-bot latency + LLM-as-judge quality score tracking existed — added BotPerformanceBenchmarksPage.vue",
+    "Smart Schedule Optimizer was implemented as a separate page from VisualCronWizard because the optimizer is AI-driven (rate limit heatmap + conflict detection) while the wizard is manual cron editing — distinct enough to warrant its own view",
+    "Cross-Team Insights Dashboard supplements TeamImpactReport by focusing on org-wide risk aggregation, common findings across teams, and repo risk ranking — addressing the engineering leadership use case explicitly",
+    "TeamsNotificationChannelsPage consolidates Slack, Microsoft Teams, and email into a single channel management UI rather than extending SlackNotificationsPage, enabling per-event and per-bot scope configuration in one place",
+    "ExecutionTaggingPage was built with in-browser full-text search over log snippets and inline tag management, keeping the UX lightweight without requiring a backend search index for the prototype"
+  ],
+  "patterns": [
+    "The existing views follow a consistent pattern: types defined at top, mock data as ref(), computed properties for derived values, useToast for feedback, AppBreadcrumb + PageHeader layout — all 5 new views follow this pattern exactly",
+    "Sidebar auto-expand arrays and isXxxSectionActive() computed functions duplicate the same route name lists — this creates a maintenance burden where adding a new route requires updating 2 places in AppSidebar.vue",
+    "Python scripting for precise string-based sidebar edits proved more reliable than heredoc approaches since the sidebar file is large (~1400+ lines) and cannot be fully rewritten safely in a single shell operation",
+    "All new views use CSS custom properties (var(--accent-blue), var(--bg-secondary), etc.) consistently with the existing design system — no hardcoded hex colors in any new component",
+    "Mock data density is high: each new view has 3-6 realistic sample entries with plausible timestamps, IDs, and metrics — this makes the UI feel functional during demo/prototype phases"
+  ],
+  "takeaways": [
+    "The frontend has now reached 159+ view files — discoverability of existing features is becoming a challenge; a search-based navigation or feature catalog would help engineers find existing views before creating duplicates",
+    "Several features from the 38-item list were already partially covered by existing views (e.g., PromptABTesting for A/B testing, BotVersionHistory for rollback) — the evolve loop should track which feature IDs have been addressed to avoid redundant implementations",
+    "The misc.ts routes file has grown very large (700+ lines) — splitting routes by domain area (bots/, integrations/, dashboards/, executions/) would improve maintainability as the route count continues to grow",
+    "ExecutionTaggingPage demonstrates that v-html with sanitized highlight injection is a viable pattern for search result highlighting in Vue 3 without needing a third-party highlight library — works because log content is internal/trusted",
+    "CrossTeamInsightsDashboard aggregates data across teams/repos in a way that would require multi-table JOINs on the backend — the mock data structure reveals the API shape that would need to be designed (team_stats, org_findings, repo_risk endpoints)"
+  ],
+  "files_changed": [
+    "frontend/src/views/BotPerformanceBenchmarksPage.vue",
+    "frontend/src/views/SmartScheduleOptimizerPage.vue",
+    "frontend/src/views/CrossTeamInsightsDashboard.vue",
+    "frontend/src/views/TeamsNotificationChannelsPage.vue",
+    "frontend/src/views/ExecutionTaggingPage.vue",
+    "frontend/src/router/routes/misc.ts",
+    "frontend/src/components/layout/AppSidebar.vue"
+  ]
+}
