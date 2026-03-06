@@ -484,4 +484,60 @@ export const miscRoutes: RouteRecordRaw[] = [
     component: () => import('../../views/ApiKeysPage.vue'),
     meta: { title: 'API Keys' },
   },
+  // Agent Capability Matrix (Feature 17)
+  {
+    path: '/agents/capability-matrix',
+    name: 'agent-capability-matrix',
+    component: () => import('../../views/AgentCapabilityMatrix.vue'),
+    meta: { title: 'Agent Capability Matrix' },
+  },
+  // Execution Quota & Rate Controls (Feature 19)
+  {
+    path: '/admin/execution-quotas',
+    name: 'execution-quota-controls',
+    component: () => import('../../views/ExecutionQuotaControls.vue'),
+    meta: { title: 'Execution Quotas & Rate Controls' },
+  },
+  // Findings Trend Analysis (Feature 24)
+  {
+    path: '/dashboards/findings-trend',
+    name: 'findings-trend-analysis',
+    component: () => import('../../views/FindingsTrendAnalysis.vue'),
+    meta: { title: 'Findings Trend Analysis' },
+  },
+  // Bot Test Sandbox Environments (Feature 29)
+  {
+    path: '/bots/sandbox',
+    name: 'bot-sandbox',
+    component: () => import('../../views/BotSandboxPage.vue'),
+    meta: { title: 'Bot Test Sandboxes' },
+  },
+  // Mobile Execution Monitor (Feature 30)
+  {
+    path: '/executions/monitor',
+    name: 'mobile-execution-monitor',
+    component: () => import('../../views/MobileExecutionMonitor.vue'),
+    meta: { title: 'Execution Monitor' },
+  },
+  // Team Automation Leaderboard (Feature 32)
+  {
+    path: '/dashboards/leaderboard',
+    name: 'team-leaderboard',
+    component: () => import('../../views/TeamLeaderboard.vue'),
+    meta: { title: 'Team Automation Leaderboard' },
+  },
+  // Bot-Linked Runbooks (Feature 33)
+  {
+    path: '/bots/runbooks',
+    name: 'bot-runbooks',
+    component: () => import('../../views/BotRunbooksPage.vue'),
+    meta: { title: 'Bot Runbooks' },
+  },
+  // Execution Anomaly Detection (Feature 34)
+  {
+    path: '/executions/anomalies',
+    name: 'execution-anomaly-detection',
+    component: () => import('../../views/ExecutionAnomalyDetection.vue'),
+    meta: { title: 'Execution Anomaly Detection' },
+  },
 ];
