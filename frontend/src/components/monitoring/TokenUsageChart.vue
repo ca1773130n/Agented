@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch } from 'vue';
-import { Chart, registerables } from 'chart.js';
+import { Chart, registerables, type ChartDataset, type TooltipItem } from 'chart.js';
 import type { UsageSummaryEntry } from '../../services/api';
 
 Chart.register(...registerables);
@@ -46,8 +46,7 @@ function renderChart() {
     textMuted: 'rgba(255, 255, 255, 0.35)',
   };
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Chart.js dataset config type is overly complex
-  const costDataset: any = {
+  const costDataset: ChartDataset<'bar' | 'line', number[]> & Record<string, unknown> = {
     label: 'Cost (USD)',
     data: sorted.map(d => d.total_cost_usd),
     backgroundColor: colors.costBg,
@@ -64,8 +63,7 @@ function renderChart() {
     costDataset.pointHoverRadius = 6;
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Chart.js dataset config type is overly complex
-  const executionDataset: any = {
+  const executionDataset: ChartDataset<'line', number[]> & Record<string, unknown> = {
     label: 'Executions',
     data: sorted.map(d => d.execution_count),
     borderColor: colors.executions,
@@ -126,7 +124,7 @@ function renderChart() {
             size: 12,
           },
           callbacks: {
-            label: (context: any) => { // eslint-disable-line @typescript-eslint/no-explicit-any -- Chart.js tooltip callback
+            label: (context: TooltipItem<'bar' | 'line'>) => {
               const dataIndex = context.dataIndex;
               const entry = sorted[dataIndex];
               if (context.dataset.label === 'Cost (USD)') {
@@ -134,7 +132,7 @@ function renderChart() {
               }
               return `Executions: ${entry.execution_count}`;
             },
-            afterBody: (contexts: any[]) => { // eslint-disable-line @typescript-eslint/no-explicit-any -- Chart.js tooltip callback
+            afterBody: (contexts: TooltipItem<'bar' | 'line'>[]) => {
               const dataIndex = contexts[0]?.dataIndex;
               if (dataIndex == null) return '';
               const entry = sorted[dataIndex];

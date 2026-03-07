@@ -6,6 +6,7 @@ from flask import Response, request
 from flask_openapi3 import APIBlueprint, Tag
 from pydantic import BaseModel, Field
 
+from app.models.command import CreateCommandRequest, GenerateCommandRequest, UpdateCommandRequest
 from app.models.common import error_response
 
 from ..database import (
@@ -43,24 +44,16 @@ def list_commands(query: PaginationQuery):
 
 
 @commands_bp.post("/")
-def create_command():
+def create_command(body: CreateCommandRequest):
     """Create a new command."""
-    data = request.get_json()
-    if not data:
-        return error_response("BAD_REQUEST", "JSON body required", HTTPStatus.BAD_REQUEST)
-
-    name = data.get("name")
-    if not name:
-        return error_response("BAD_REQUEST", "name is required", HTTPStatus.BAD_REQUEST)
-
     command_id = db_create_command(
-        name=name,
-        description=data.get("description"),
-        content=data.get("content"),
-        arguments=data.get("arguments"),
-        enabled=data.get("enabled", True),
-        project_id=data.get("project_id"),
-        source_path=data.get("source_path"),
+        name=body.name,
+        description=body.description,
+        content=body.content,
+        arguments=body.arguments,
+        enabled=body.enabled,
+        project_id=body.project_id,
+        source_path=body.source_path,
     )
 
     if not command_id:
@@ -82,19 +75,15 @@ def get_command_endpoint(path: CommandPath):
 
 
 @commands_bp.put("/<int:command_id>")
-def update_command_endpoint(path: CommandPath):
+def update_command_endpoint(path: CommandPath, body: UpdateCommandRequest):
     """Update a command."""
-    data = request.get_json()
-    if not data:
-        return error_response("BAD_REQUEST", "JSON body required", HTTPStatus.BAD_REQUEST)
-
     if not update_command(
         path.command_id,
-        name=data.get("name"),
-        description=data.get("description"),
-        content=data.get("content"),
-        arguments=data.get("arguments"),
-        enabled=data.get("enabled"),
+        name=body.name,
+        description=body.description,
+        content=body.content,
+        arguments=body.arguments,
+        enabled=body.enabled,
     ):
         return error_response(
             "NOT_FOUND", "Command not found or no changes made", HTTPStatus.NOT_FOUND
@@ -120,22 +109,12 @@ def list_project_commands(path: ProjectCommandsPath):
 
 
 @commands_bp.post("/generate/stream")
-def generate_command_stream():
+def generate_command_stream(body: GenerateCommandRequest):
     """Generate a command configuration from a description using AI (streaming)."""
     from ..services.command_generation_service import CommandGenerationService
 
-    data = request.get_json()
-    if not data:
-        return error_response("BAD_REQUEST", "JSON body required", HTTPStatus.BAD_REQUEST)
-
-    description = (data.get("description") or "").strip()
-    if len(description) < 10:
-        return error_response(
-            "BAD_REQUEST", "Description must be at least 10 characters", HTTPStatus.BAD_REQUEST
-        )
-
     return Response(
-        CommandGenerationService.generate_streaming(description),
+        CommandGenerationService.generate_streaming(body.description),
         mimetype="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )

@@ -1,4 +1,5 @@
-import { ref } from 'vue';
+import { ref, onUnmounted } from 'vue';
+import { isAbortError } from '../services/api';
 
 export interface StreamLogEntry {
   type: string;
@@ -10,6 +11,9 @@ export function useStreamingGeneration() {
   const phase = ref('');
   const isStreaming = ref(false);
 
+  // AbortController for cancelling in-flight streams on unmount
+  let abortController = new AbortController();
+
   function reset() {
     log.value = [];
     phase.value = '';
@@ -20,6 +24,11 @@ export function useStreamingGeneration() {
     url: string,
     body: Record<string, unknown>,
   ): Promise<T | null> {
+    // Cancel any previous stream before starting a new one
+    abortController.abort();
+    abortController = new AbortController();
+    const { signal } = abortController;
+
     reset();
     isStreaming.value = true;
     phase.value = 'Starting...';
@@ -29,6 +38,7 @@ export function useStreamingGeneration() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
+        signal,
       });
 
       if (!response.ok) {
@@ -91,12 +101,19 @@ export function useStreamingGeneration() {
 
       return resultData;
     } catch (e) {
+      if (isAbortError(e) || signal.aborted) return null;
       log.value.push({ type: 'error', text: 'Connection failed' });
       return null;
     } finally {
-      isStreaming.value = false;
+      if (!abortController.signal.aborted) {
+        isStreaming.value = false;
+      }
     }
   }
+
+  onUnmounted(() => {
+    abortController.abort();
+  });
 
   return { log, phase, isStreaming, startStream, reset };
 }

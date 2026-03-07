@@ -24,6 +24,12 @@ from ..database import (
     create_plugin as db_create_plugin,
 )
 from ..models.common import PaginationQuery
+from ..models.plugin import (
+    CreatePluginComponentRequest,
+    CreatePluginRequest,
+    UpdatePluginComponentRequest,
+    UpdatePluginRequest,
+)
 
 tag = Tag(name="plugins", description="Plugin management operations")
 plugins_bp = APIBlueprint("plugins", __name__, url_prefix="/admin/plugins", abp_tags=[tag])
@@ -47,22 +53,14 @@ def list_plugins(query: PaginationQuery):
 
 
 @plugins_bp.post("/")
-def create_plugin():
+def create_plugin(body: CreatePluginRequest):
     """Create a new plugin."""
-    data = request.get_json()
-    if not data:
-        return error_response("BAD_REQUEST", "JSON body required", HTTPStatus.BAD_REQUEST)
-
-    name = data.get("name")
-    if not name:
-        return error_response("BAD_REQUEST", "name is required", HTTPStatus.BAD_REQUEST)
-
     plugin_id = db_create_plugin(
-        name=name,
-        description=data.get("description"),
-        version=data.get("version", "1.0.0"),
-        status=data.get("status", "draft"),
-        author=data.get("author"),
+        name=body.name,
+        description=body.description,
+        version=body.version or "1.0.0",
+        status=body.status or "draft",
+        author=body.author,
     )
     if not plugin_id:
         return error_response(
@@ -83,19 +81,15 @@ def get_plugin_detail_endpoint(path: PluginPath):
 
 
 @plugins_bp.put("/<plugin_id>")
-def update_plugin_endpoint(path: PluginPath):
+def update_plugin_endpoint(path: PluginPath, body: UpdatePluginRequest):
     """Update a plugin."""
-    data = request.get_json()
-    if not data:
-        return error_response("BAD_REQUEST", "JSON body required", HTTPStatus.BAD_REQUEST)
-
     if not update_plugin(
         path.plugin_id,
-        name=data.get("name"),
-        description=data.get("description"),
-        version=data.get("version"),
-        status=data.get("status"),
-        author=data.get("author"),
+        name=body.name,
+        description=body.description,
+        version=body.version,
+        status=body.status,
+        author=body.author,
     ):
         return error_response(
             "NOT_FOUND", "Plugin not found or no changes made", HTTPStatus.NOT_FOUND
@@ -122,22 +116,13 @@ def list_components(path: PluginPath):
 
 
 @plugins_bp.post("/<plugin_id>/components")
-def add_component(path: PluginPath):
+def add_component(path: PluginPath, body: CreatePluginComponentRequest):
     """Add a component to the plugin."""
-    data = request.get_json()
-    if not data:
-        return error_response("BAD_REQUEST", "JSON body required", HTTPStatus.BAD_REQUEST)
-
-    name = data.get("name")
-    component_type = data.get("type")
-    if not name or not component_type:
-        return error_response("BAD_REQUEST", "name and type are required", HTTPStatus.BAD_REQUEST)
-
     component_id = add_plugin_component(
         plugin_id=path.plugin_id,
-        name=name,
-        component_type=component_type,
-        content=data.get("content"),
+        name=body.name,
+        component_type=body.type,
+        content=body.content,
     )
     if not component_id:
         return error_response(
@@ -150,17 +135,13 @@ def add_component(path: PluginPath):
 
 
 @plugins_bp.put("/<plugin_id>/components/<int:component_id>")
-def update_component(path: ComponentPath):
+def update_component(path: ComponentPath, body: UpdatePluginComponentRequest):
     """Update a plugin component."""
-    data = request.get_json()
-    if not data:
-        return error_response("BAD_REQUEST", "JSON body required", HTTPStatus.BAD_REQUEST)
-
     if not update_plugin_component(
         path.component_id,
-        name=data.get("name"),
-        component_type=data.get("type"),
-        content=data.get("content"),
+        name=body.name,
+        component_type=body.type,
+        content=body.content,
     ):
         return error_response(
             "NOT_FOUND", "Component not found or no changes made", HTTPStatus.NOT_FOUND

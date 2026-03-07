@@ -72,7 +72,6 @@ class UpdateUserSkillRequest(BaseModel):
 class ToggleHarnessRequest(BaseModel):
     """Request to toggle a skill's harness selection."""
 
-    skill_id: int
     selected: bool
 
 

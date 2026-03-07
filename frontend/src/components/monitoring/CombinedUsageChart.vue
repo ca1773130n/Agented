@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch, nextTick } from 'vue';
-import { Chart, registerables } from 'chart.js';
+import { Chart, registerables, type ChartDataset } from 'chart.js';
 import 'chartjs-adapter-date-fns';
 import type { SnapshotHistoryEntry } from '../../services/api';
 
@@ -77,8 +77,7 @@ function renderChart() {
   Object.keys(assignedColors).forEach(k => delete assignedColors[k]);
 
   // Build datasets using {x, y} point format for time scale
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Chart.js dataset config type is overly complex
-  const datasets: any[] = [];
+  const datasets: ChartDataset<'line', { x: number; y: number }[]>[] = [];
 
   for (const wh of props.windowHistories) {
     const color = getColor(wh.windowType, wh.color);

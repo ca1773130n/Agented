@@ -1,6 +1,6 @@
-import { ref, computed } from 'vue';
+import { ref, computed, onUnmounted } from 'vue';
 import type { HealthStatus } from '../services/api';
-import { healthApi } from '../services/api';
+import { healthApi, isAbortError } from '../services/api';
 
 export function useHealthPolling() {
   const isConnected = ref(true);
@@ -8,14 +8,19 @@ export function useHealthPolling() {
   const activeExecutionCount = ref(0);
   let healthInterval: ReturnType<typeof setInterval> | null = null;
 
+  // AbortController for cancelling in-flight health polls on unmount
+  let abortController = new AbortController();
+
   async function pollHealth() {
     try {
       const health = await healthApi.readiness();
+      if (abortController.signal.aborted) return;
       systemHealth.value = health;
       activeExecutionCount.value =
         health.components?.process_manager?.active_executions ?? 0;
       isConnected.value = true;
-    } catch {
+    } catch (err) {
+      if (isAbortError(err) || abortController.signal.aborted) return;
       systemHealth.value = {
         status: 'error',
         components: {
@@ -58,6 +63,11 @@ export function useHealthPolling() {
   function stopPolling() {
     if (healthInterval) clearInterval(healthInterval);
   }
+
+  onUnmounted(() => {
+    stopPolling();
+    abortController.abort();
+  });
 
   return {
     isConnected,

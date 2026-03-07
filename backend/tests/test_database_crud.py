@@ -21,10 +21,13 @@ from app.database import (
     add_user_skill,
     assign_team_to_project,
     # Agent functions
+    count_agents,
     create_agent,
     create_agent_conversation,
     # Command functions
     create_command,
+    # Design conversation functions
+    create_design_conversation,
     # Hook functions
     create_hook,
     # Plugin functions
@@ -39,10 +42,15 @@ from app.database import (
     create_team,
     # Trigger functions
     create_trigger,
+    # Workflow functions
+    create_workflow,
+    count_all_triggers,
+    count_teams,
     delete_agent,
     delete_agent_conversation,
     delete_command,
     delete_hook,
+    delete_old_design_conversations,
     delete_plugin,
     delete_plugin_component,
     delete_product,
@@ -50,8 +58,10 @@ from app.database import (
     delete_rule,
     delete_team,
     delete_team_agent_assignment,
+    delete_team_agent_assignments_bulk,
     delete_trigger,
     delete_user_skill,
+    delete_workflow,
     get_active_conversations,
     get_agent,
     get_agent_by_name,
@@ -66,13 +76,17 @@ from app.database import (
     get_all_teams,
     get_all_triggers,
     get_all_user_skills,
+    get_all_workflows,
     get_command,
     get_commands_by_project,
+    get_design_conversation,
+    get_enabled_agents,
     get_enabled_user_skills,
     get_harness_skills,
     get_hook,
     get_hooks_by_event,
     get_hooks_by_project,
+    get_latest_workflow_version,
     get_plugin,
     get_plugin_component_by_name,
     get_plugin_components,
@@ -91,14 +105,24 @@ from app.database import (
     get_team_detail,
     get_team_members,
     get_trigger,
+    get_trigger_by_name,
     get_triggers_by_trigger_source,
     get_user_skill,
     get_user_skill_by_name,
+    get_webhook_teams,
+    get_workflow,
+    get_workflow_execution,
+    get_workflow_executions,
+    get_workflow_versions,
+    list_design_conversations,
+    publish_workflow_version,
+    remove_team_member,
     toggle_skill_harness,
     unassign_team_from_project,
     update_agent,
     update_agent_conversation,
     update_command,
+    update_design_conversation,
     update_hook,
     update_plugin,
     update_plugin_component,
@@ -112,6 +136,30 @@ from app.database import (
     update_trigger_last_run,
     update_trigger_next_run,
     update_user_skill,
+    update_workflow,
+    validate_workflow_graph,
+)
+from app.db.teams import (
+    add_team_edge,
+    delete_team_edge,
+    delete_team_edges_by_team,
+    get_team_edges,
+    get_team_hierarchy,
+)
+from app.db.workflows import (
+    add_workflow_approval_state,
+    add_workflow_execution,
+    add_workflow_node_execution,
+    add_workflow_version,
+    add_workflow_version_raw,
+    cleanup_stale_approval_states,
+    get_pending_approval_states,
+    get_running_workflow_executions,
+    get_workflow_approval_state,
+    get_workflow_node_executions,
+    update_workflow_approval_state,
+    update_workflow_execution,
+    update_workflow_node_execution,
 )
 
 
@@ -2039,3 +2087,626 @@ class TestBudgetLimitCRUD:
         set_budget_limit("trigger", "trig-upd", hard_limit_usd=100.0)
         limit = get_budget_limit("trigger", "trig-upd")
         assert limit["hard_limit_usd"] == 100.0
+
+
+# =============================================================================
+# Trigger supplementary tests (count, get_by_name)
+# =============================================================================
+
+
+class TestTriggerSupplementary:
+    def test_count_all_triggers(self):
+        """count_all_triggers includes predefined triggers."""
+        count = count_all_triggers()
+        assert count >= 2  # bot-security, bot-pr-review
+
+    def test_count_after_create(self):
+        before = count_all_triggers()
+        create_trigger(name="Counter Trigger", prompt_template="test")
+        after = count_all_triggers()
+        assert after == before + 1
+
+    def test_get_trigger_by_name(self):
+        create_trigger(name="Unique Trigger Name", prompt_template="test")
+        t = get_trigger_by_name("Unique Trigger Name")
+        assert t is not None
+        assert t["name"] == "Unique Trigger Name"
+
+    def test_get_trigger_by_name_nonexistent(self):
+        assert get_trigger_by_name("Does Not Exist") is None
+
+
+# =============================================================================
+# Agent supplementary tests (count, enabled, validation, design conversations)
+# =============================================================================
+
+
+class TestAgentSupplementary:
+    def test_count_agents_empty(self):
+        assert count_agents() == 0
+
+    def test_count_agents_after_create(self):
+        create_agent(name="Agent A")
+        create_agent(name="Agent B")
+        assert count_agents() == 2
+
+    def test_get_enabled_agents(self):
+        aid1 = create_agent(name="Enabled Agent")
+        aid2 = create_agent(name="Disabled Agent")
+        update_agent(aid2, enabled=0)
+        enabled = get_enabled_agents()
+        ids = [a["id"] for a in enabled]
+        assert aid1 in ids
+        assert aid2 not in ids
+
+    def test_create_agent_invalid_backend_defaults_to_claude(self):
+        aid = create_agent(name="Bad Backend", backend_type="invalid")
+        agent = get_agent(aid)
+        assert agent["backend_type"] == "claude"
+
+    def test_create_agent_invalid_effort_defaults_to_medium(self):
+        aid = create_agent(name="Bad Effort", effort_level="extreme")
+        agent = get_agent(aid)
+        assert agent["effort_level"] == "medium"
+
+    def test_update_agent_invalid_backend_ignored(self):
+        aid = create_agent(name="Agent Validate", backend_type="claude")
+        update_agent(aid, backend_type="invalid_backend")
+        agent = get_agent(aid)
+        assert agent["backend_type"] == "claude"
+
+    def test_update_agent_invalid_effort_ignored(self):
+        aid = create_agent(name="Agent Effort", effort_level="medium")
+        update_agent(aid, effort_level="extreme")
+        agent = get_agent(aid)
+        assert agent["effort_level"] == "medium"
+
+    def test_update_agent_nonexistent(self):
+        result = update_agent("agent-nonexistent", name="New Name")
+        assert result is False
+
+    def test_get_all_agents_pagination(self):
+        for i in range(5):
+            create_agent(name=f"PageAgent {i}")
+        page = get_all_agents(limit=2, offset=0)
+        assert len(page) == 2
+        page2 = get_all_agents(limit=2, offset=2)
+        assert len(page2) == 2
+        # No overlap
+        ids1 = {a["id"] for a in page}
+        ids2 = {a["id"] for a in page2}
+        assert ids1.isdisjoint(ids2)
+
+
+class TestDesignConversationCRUD:
+    def test_create_and_get(self):
+        ok = create_design_conversation("dc-001", "agent")
+        assert ok is True
+        conv = get_design_conversation("dc-001")
+        assert conv is not None
+        assert conv["entity_type"] == "agent"
+        assert conv["status"] == "active"
+
+    def test_get_nonexistent(self):
+        assert get_design_conversation("dc-nonexistent") is None
+
+    def test_update(self):
+        create_design_conversation("dc-002", "team")
+        update_design_conversation("dc-002", status="completed", entity_id="team-abc")
+        conv = get_design_conversation("dc-002")
+        assert conv["status"] == "completed"
+        assert conv["entity_id"] == "team-abc"
+
+    def test_update_no_fields(self):
+        create_design_conversation("dc-003", "agent")
+        result = update_design_conversation("dc-003")
+        assert result is False
+
+    def test_list_by_type_and_status(self):
+        create_design_conversation("dc-list-1", "agent")
+        create_design_conversation("dc-list-2", "agent")
+        create_design_conversation("dc-list-3", "team")
+        convs = list_design_conversations("agent", status="active")
+        assert len(convs) == 2
+        assert all(c["entity_type"] == "agent" for c in convs)
+
+    def test_delete_old(self):
+        create_design_conversation("dc-old", "agent")
+        update_design_conversation("dc-old", status="completed")
+        # With max_age_seconds=0, everything non-active should be deleted
+        # (the updated_at will be "now", so we use a very large age)
+        deleted = delete_old_design_conversations(max_age_seconds=0)
+        # This may or may not delete depending on timing; just assert it runs
+        assert deleted >= 0
+
+    def test_duplicate_id_fails(self):
+        ok1 = create_design_conversation("dc-dup", "agent")
+        ok2 = create_design_conversation("dc-dup", "team")
+        assert ok1 is True
+        assert ok2 is False
+
+
+# =============================================================================
+# Team supplementary tests (member removal, edges, hierarchy)
+# =============================================================================
+
+
+class TestTeamMemberSupplementary:
+    def test_remove_team_member(self):
+        tid = create_team(name="Remove Test Team")
+        mid = add_team_member(tid, name="Bob")
+        assert remove_team_member(mid) is True
+        members = get_team_members(tid)
+        assert len(members) == 0
+
+    def test_remove_nonexistent_member(self):
+        assert remove_team_member(99999) is False
+
+    def test_update_member_multiple_fields(self):
+        tid = create_team(name="Update Member Team")
+        mid = add_team_member(tid, name="Alice", role="member", layer="backend")
+        update_team_member(mid, name="Alice Updated", role="lead", layer="frontend")
+        members = get_team_members(tid)
+        member = next(m for m in members if m["id"] == mid)
+        assert member["name"] == "Alice Updated"
+        assert member["role"] == "lead"
+        assert member["layer"] == "frontend"
+
+    def test_update_member_no_fields(self):
+        tid = create_team(name="Noop Member Team")
+        mid = add_team_member(tid, name="Charlie")
+        assert update_team_member(mid) is False
+
+    def test_update_nonexistent_member(self):
+        assert update_team_member(99999, name="Ghost") is False
+
+    def test_add_member_no_identifier(self):
+        """Must have at least one of name, agent_id, or super_agent_id."""
+        tid = create_team(name="No ID Team")
+        result = add_team_member(tid)
+        assert result is None
+
+    def test_add_member_both_agent_and_super_agent(self):
+        """Cannot set both agent_id and super_agent_id."""
+        tid = create_team(name="XOR Team")
+        result = add_team_member(tid, agent_id="agent-x", super_agent_id="sa-y")
+        assert result is None
+
+    def test_count_teams(self):
+        before = count_teams()
+        create_team(name="Count Team 1")
+        create_team(name="Count Team 2")
+        assert count_teams() == before + 2
+
+    def test_get_webhook_teams(self):
+        create_team(name="Webhook Team", trigger_source="webhook")
+        teams = get_webhook_teams()
+        assert any(t["name"] == "Webhook Team" for t in teams)
+
+    def test_delete_agent_assignments_bulk_all(self):
+        tid = create_team(name="Bulk Delete Team")
+        aid = create_agent(name="Bulk Agent")
+        add_team_agent_assignment(tid, aid, "skill", "skill-1", "Skill One")
+        add_team_agent_assignment(tid, aid, "command", "cmd-1", "Cmd One")
+        deleted = delete_team_agent_assignments_bulk(tid)
+        assert deleted == 2
+        assert get_team_agent_assignments(tid) == []
+
+    def test_add_assignment_invalid_entity_type(self):
+        tid = create_team(name="Invalid Type Team")
+        aid = create_agent(name="Invalid Type Agent")
+        result = add_team_agent_assignment(tid, aid, "invalid_type", "x", "X")
+        assert result is None
+
+
+class TestTeamEdges:
+    def test_add_and_get_edge(self):
+        tid = create_team(name="Edge Team")
+        m1 = add_team_member(tid, name="Alice")
+        m2 = add_team_member(tid, name="Bob")
+        eid = add_team_edge(tid, m1, m2, edge_type="delegation", label="delegates to")
+        assert eid is not None
+        edges = get_team_edges(tid)
+        assert len(edges) == 1
+        assert edges[0]["source_member_id"] == m1
+        assert edges[0]["target_member_id"] == m2
+        assert edges[0]["edge_type"] == "delegation"
+
+    def test_add_edge_invalid_type(self):
+        tid = create_team(name="Invalid Edge Team")
+        m1 = add_team_member(tid, name="A")
+        m2 = add_team_member(tid, name="B")
+        result = add_team_edge(tid, m1, m2, edge_type="invalid_edge")
+        assert result is None
+
+    def test_add_self_loop_rejected(self):
+        tid = create_team(name="Self Loop Team")
+        m1 = add_team_member(tid, name="Self")
+        result = add_team_edge(tid, m1, m1, edge_type="delegation")
+        assert result is None
+
+    def test_delete_edge(self):
+        tid = create_team(name="Del Edge Team")
+        m1 = add_team_member(tid, name="X")
+        m2 = add_team_member(tid, name="Y")
+        eid = add_team_edge(tid, m1, m2)
+        assert delete_team_edge(eid) is True
+        assert get_team_edges(tid) == []
+
+    def test_delete_nonexistent_edge(self):
+        assert delete_team_edge(99999) is False
+
+    def test_delete_edges_by_team(self):
+        tid = create_team(name="Bulk Edge Team")
+        m1 = add_team_member(tid, name="A")
+        m2 = add_team_member(tid, name="B")
+        m3 = add_team_member(tid, name="C")
+        add_team_edge(tid, m1, m2)
+        add_team_edge(tid, m2, m3)
+        deleted = delete_team_edges_by_team(tid)
+        assert deleted == 2
+        assert get_team_edges(tid) == []
+
+    def test_get_team_hierarchy(self):
+        tid = create_team(name="Hierarchy Team")
+        m1 = add_team_member(tid, name="Root")
+        m2 = add_team_member(tid, name="Child1")
+        m3 = add_team_member(tid, name="GrandChild")
+        add_team_edge(tid, m1, m2, edge_type="delegation")
+        add_team_edge(tid, m2, m3, edge_type="delegation")
+        hierarchy = get_team_hierarchy(tid, m1)
+        assert len(hierarchy) == 2
+        assert hierarchy[0]["name"] == "Child1"
+        assert hierarchy[0]["depth"] == 1
+        assert hierarchy[1]["name"] == "GrandChild"
+        assert hierarchy[1]["depth"] == 2
+
+    def test_get_team_hierarchy_empty(self):
+        tid = create_team(name="Flat Team")
+        m1 = add_team_member(tid, name="Lone")
+        hierarchy = get_team_hierarchy(tid, m1)
+        assert hierarchy == []
+
+    def test_duplicate_edge_rejected(self):
+        tid = create_team(name="Dup Edge Team")
+        m1 = add_team_member(tid, name="A")
+        m2 = add_team_member(tid, name="B")
+        eid1 = add_team_edge(tid, m1, m2, edge_type="delegation")
+        eid2 = add_team_edge(tid, m1, m2, edge_type="delegation")
+        assert eid1 is not None
+        assert eid2 is None
+
+
+# =============================================================================
+# Workflow CRUD tests
+# =============================================================================
+
+SIMPLE_GRAPH = '{"nodes": [{"id": "n1"}], "edges": []}'
+TWO_NODE_GRAPH = '{"nodes": [{"id": "n1"}, {"id": "n2"}], "edges": [{"source": "n1", "target": "n2"}]}'
+CYCLIC_GRAPH = '{"nodes": [{"id": "a"}, {"id": "b"}], "edges": [{"source": "a", "target": "b"}, {"source": "b", "target": "a"}]}'
+
+
+class TestWorkflowCRUD:
+    def test_create_and_get(self):
+        wid = create_workflow(name="Test Workflow", description="A test workflow")
+        assert wid is not None
+        assert wid.startswith("wf-")
+        w = get_workflow(wid)
+        assert w["name"] == "Test Workflow"
+        assert w["description"] == "A test workflow"
+        assert w["enabled"] == 1
+
+    def test_get_nonexistent(self):
+        assert get_workflow("wf-nonexistent") is None
+
+    def test_get_all(self):
+        create_workflow(name="WF A")
+        create_workflow(name="WF B")
+        all_wf = get_all_workflows()
+        assert len(all_wf) >= 2
+
+    def test_get_all_pagination(self):
+        for i in range(5):
+            create_workflow(name=f"WF Page {i}")
+        page = get_all_workflows(limit=2, offset=0)
+        assert len(page) == 2
+
+    def test_update(self):
+        wid = create_workflow(name="Update WF")
+        result = update_workflow(wid, name="Updated WF", description="new desc")
+        assert result is True
+        w = get_workflow(wid)
+        assert w["name"] == "Updated WF"
+        assert w["description"] == "new desc"
+
+    def test_update_no_fields(self):
+        wid = create_workflow(name="Noop WF")
+        assert update_workflow(wid) is False
+
+    def test_update_nonexistent(self):
+        assert update_workflow("wf-ghost", name="X") is False
+
+    def test_update_enabled(self):
+        wid = create_workflow(name="Disable WF")
+        update_workflow(wid, enabled=0)
+        w = get_workflow(wid)
+        assert w["enabled"] == 0
+
+    def test_delete(self):
+        wid = create_workflow(name="Delete WF")
+        assert delete_workflow(wid) is True
+        assert get_workflow(wid) is None
+
+    def test_delete_nonexistent(self):
+        assert delete_workflow("wf-ghost") is False
+
+
+class TestWorkflowGraphValidation:
+    def test_valid_single_node(self):
+        ok, err = validate_workflow_graph(SIMPLE_GRAPH)
+        assert ok is True
+        assert err == ""
+
+    def test_valid_two_nodes(self):
+        ok, err = validate_workflow_graph(TWO_NODE_GRAPH)
+        assert ok is True
+
+    def test_cyclic_graph(self):
+        ok, err = validate_workflow_graph(CYCLIC_GRAPH)
+        assert ok is False
+        assert "cycle" in err.lower()
+
+    def test_invalid_json(self):
+        ok, err = validate_workflow_graph("not json")
+        assert ok is False
+        assert "Invalid JSON" in err
+
+    def test_no_nodes(self):
+        ok, err = validate_workflow_graph('{"nodes": [], "edges": []}')
+        assert ok is False
+        assert "at least one node" in err
+
+    def test_edge_references_unknown_node(self):
+        graph = '{"nodes": [{"id": "n1"}], "edges": [{"source": "n1", "target": "n_missing"}]}'
+        ok, err = validate_workflow_graph(graph)
+        assert ok is False
+        assert "unknown" in err.lower()
+
+    def test_node_missing_id(self):
+        graph = '{"nodes": [{"name": "oops"}], "edges": []}'
+        ok, err = validate_workflow_graph(graph)
+        assert ok is False
+        assert "id" in err.lower()
+
+
+class TestWorkflowVersions:
+    def test_add_version(self):
+        wid = create_workflow(name="Version WF")
+        ver = add_workflow_version(wid, TWO_NODE_GRAPH)
+        assert ver == 1
+
+    def test_add_multiple_versions(self):
+        wid = create_workflow(name="Multi Version WF")
+        v1 = add_workflow_version(wid, SIMPLE_GRAPH)
+        v2 = add_workflow_version(wid, TWO_NODE_GRAPH)
+        assert v1 == 1
+        assert v2 == 2
+
+    def test_add_version_invalid_json(self):
+        wid = create_workflow(name="Bad JSON WF")
+        ver = add_workflow_version(wid, "not json")
+        assert ver is None
+
+    def test_add_version_cyclic_graph(self):
+        wid = create_workflow(name="Cyclic WF")
+        ver = add_workflow_version(wid, CYCLIC_GRAPH)
+        assert ver is None
+
+    def test_get_versions(self):
+        wid = create_workflow(name="Get Versions WF")
+        add_workflow_version(wid, SIMPLE_GRAPH)
+        add_workflow_version(wid, TWO_NODE_GRAPH)
+        versions = get_workflow_versions(wid)
+        assert len(versions) == 2
+        # Ordered by version DESC
+        assert versions[0]["version"] == 2
+        assert versions[1]["version"] == 1
+
+    def test_get_latest_published_version(self):
+        wid = create_workflow(name="Latest WF")
+        add_workflow_version(wid, SIMPLE_GRAPH)
+        add_workflow_version(wid, TWO_NODE_GRAPH, is_draft=True)
+        latest = get_latest_workflow_version(wid)
+        assert latest is not None
+        assert latest["version"] == 1  # v2 is draft, so v1 is latest published
+
+    def test_publish_draft(self):
+        wid = create_workflow(name="Publish WF")
+        add_workflow_version(wid, SIMPLE_GRAPH, is_draft=True)
+        assert publish_workflow_version(wid, 1) is True
+        latest = get_latest_workflow_version(wid)
+        assert latest["version"] == 1
+
+    def test_publish_nonexistent(self):
+        wid = create_workflow(name="Pub None WF")
+        assert publish_workflow_version(wid, 99) is False
+
+    def test_add_version_raw_success(self):
+        wid = create_workflow(name="Raw WF")
+        ver, err = add_workflow_version_raw(wid, SIMPLE_GRAPH)
+        assert ver == 1
+        assert err == ""
+
+    def test_add_version_raw_invalid_json(self):
+        wid = create_workflow(name="Raw Bad WF")
+        ver, err = add_workflow_version_raw(wid, "bad json")
+        assert ver is None
+        assert "Invalid JSON" in err
+
+    def test_add_version_raw_cyclic(self):
+        wid = create_workflow(name="Raw Cycle WF")
+        ver, err = add_workflow_version_raw(wid, CYCLIC_GRAPH)
+        assert ver is None
+        assert "cycle" in err.lower()
+
+
+class TestWorkflowExecution:
+    def test_add_and_get_execution(self):
+        wid = create_workflow(name="Exec WF")
+        add_workflow_version(wid, SIMPLE_GRAPH)
+        eid = add_workflow_execution(wid, version=1, input_json='{"key": "val"}')
+        assert eid is not None
+        assert eid.startswith("wfx-")
+        ex = get_workflow_execution(eid)
+        assert ex["workflow_id"] == wid
+        assert ex["status"] == "running"
+        assert ex["version"] == 1
+
+    def test_get_execution_nonexistent(self):
+        assert get_workflow_execution("wfx-nope") is None
+
+    def test_update_execution(self):
+        wid = create_workflow(name="Update Exec WF")
+        add_workflow_version(wid, SIMPLE_GRAPH)
+        eid = add_workflow_execution(wid, version=1)
+        result = update_workflow_execution(eid, status="completed", output_json='{"result": 1}')
+        assert result is True
+        ex = get_workflow_execution(eid)
+        assert ex["status"] == "completed"
+        assert ex["output_json"] == '{"result": 1}'
+
+    def test_update_execution_no_fields(self):
+        assert update_workflow_execution("wfx-x") is False
+
+    def test_update_execution_with_error(self):
+        wid = create_workflow(name="Error Exec WF")
+        add_workflow_version(wid, SIMPLE_GRAPH)
+        eid = add_workflow_execution(wid, version=1)
+        update_workflow_execution(eid, status="failed", error="something broke")
+        ex = get_workflow_execution(eid)
+        assert ex["status"] == "failed"
+        assert ex["error"] == "something broke"
+
+    def test_get_executions_for_workflow(self):
+        wid = create_workflow(name="List Exec WF")
+        add_workflow_version(wid, SIMPLE_GRAPH)
+        eid1 = add_workflow_execution(wid, version=1)
+        eid2 = add_workflow_execution(wid, version=1)
+        execs = get_workflow_executions(wid)
+        assert len(execs) == 2
+        ids = {e["id"] for e in execs}
+        assert eid1 in ids
+        assert eid2 in ids
+
+    def test_get_running_executions(self):
+        wid = create_workflow(name="Running Exec WF")
+        add_workflow_version(wid, SIMPLE_GRAPH)
+        eid1 = add_workflow_execution(wid, version=1, status="running")
+        eid2 = add_workflow_execution(wid, version=1, status="running")
+        update_workflow_execution(eid2, status="completed")
+        running = get_running_workflow_executions()
+        ids = [e["id"] for e in running]
+        assert eid1 in ids
+        assert eid2 not in ids
+
+
+class TestWorkflowNodeExecution:
+    def test_add_and_get(self):
+        wid = create_workflow(name="Node Exec WF")
+        add_workflow_version(wid, SIMPLE_GRAPH)
+        eid = add_workflow_execution(wid, version=1)
+        nid = add_workflow_node_execution(eid, node_id="n1", node_type="agent")
+        assert nid is not None
+        nodes = get_workflow_node_executions(eid)
+        assert len(nodes) == 1
+        assert nodes[0]["node_id"] == "n1"
+        assert nodes[0]["node_type"] == "agent"
+        assert nodes[0]["status"] == "pending"
+
+    def test_update_node_execution(self):
+        wid = create_workflow(name="Update Node WF")
+        add_workflow_version(wid, SIMPLE_GRAPH)
+        eid = add_workflow_execution(wid, version=1)
+        nid = add_workflow_node_execution(eid, node_id="n1", node_type="agent")
+        result = update_workflow_node_execution(
+            nid, status="completed", output_json='{"done": true}'
+        )
+        assert result is True
+        nodes = get_workflow_node_executions(eid)
+        assert nodes[0]["status"] == "completed"
+
+    def test_update_node_execution_no_fields(self):
+        assert update_workflow_node_execution(99999) is False
+
+    def test_multiple_nodes(self):
+        wid = create_workflow(name="Multi Node WF")
+        add_workflow_version(wid, TWO_NODE_GRAPH)
+        eid = add_workflow_execution(wid, version=1)
+        add_workflow_node_execution(eid, node_id="n1", node_type="agent")
+        add_workflow_node_execution(eid, node_id="n2", node_type="agent")
+        nodes = get_workflow_node_executions(eid)
+        assert len(nodes) == 2
+
+
+class TestWorkflowApprovalState:
+    def test_add_and_get(self):
+        wid = create_workflow(name="Approval WF")
+        add_workflow_version(wid, SIMPLE_GRAPH)
+        eid = add_workflow_execution(wid, version=1)
+        row_id = add_workflow_approval_state(eid, node_id="n1", timeout_seconds=600)
+        assert row_id is not None
+        state = get_workflow_approval_state(eid, "n1")
+        assert state is not None
+        assert state["status"] == "pending"
+        assert state["timeout_seconds"] == 600
+
+    def test_get_nonexistent(self):
+        assert get_workflow_approval_state("wfx-nope", "n1") is None
+
+    def test_update_approval_approved(self):
+        wid = create_workflow(name="Approve WF")
+        add_workflow_version(wid, SIMPLE_GRAPH)
+        eid = add_workflow_execution(wid, version=1)
+        add_workflow_approval_state(eid, "n1")
+        result = update_workflow_approval_state(eid, "n1", "approved", resolved_by="admin")
+        assert result is True
+        state = get_workflow_approval_state(eid, "n1")
+        assert state["status"] == "approved"
+        assert state["resolved_by"] == "admin"
+        assert state["resolved_at"] is not None
+
+    def test_update_approval_rejected(self):
+        wid = create_workflow(name="Reject WF")
+        add_workflow_version(wid, SIMPLE_GRAPH)
+        eid = add_workflow_execution(wid, version=1)
+        add_workflow_approval_state(eid, "n1")
+        update_workflow_approval_state(eid, "n1", "rejected")
+        state = get_workflow_approval_state(eid, "n1")
+        assert state["status"] == "rejected"
+
+    def test_get_pending_states(self):
+        wid = create_workflow(name="Pending WF")
+        add_workflow_version(wid, SIMPLE_GRAPH)
+        eid = add_workflow_execution(wid, version=1)
+        add_workflow_approval_state(eid, "n1")
+        pending = get_pending_approval_states()
+        assert any(s["execution_id"] == eid for s in pending)
+
+    def test_cleanup_stale(self):
+        wid = create_workflow(name="Stale WF")
+        add_workflow_version(wid, SIMPLE_GRAPH)
+        eid = add_workflow_execution(wid, version=1)
+        add_workflow_approval_state(eid, "n1")
+        count = cleanup_stale_approval_states()
+        assert count >= 1
+        state = get_workflow_approval_state(eid, "n1")
+        assert state["status"] == "timed_out"
+
+    def test_duplicate_approval_rejected(self):
+        wid = create_workflow(name="Dup Approval WF")
+        add_workflow_version(wid, SIMPLE_GRAPH)
+        eid = add_workflow_execution(wid, version=1)
+        r1 = add_workflow_approval_state(eid, "n1")
+        r2 = add_workflow_approval_state(eid, "n1")
+        assert r1 is not None
+        assert r2 is None

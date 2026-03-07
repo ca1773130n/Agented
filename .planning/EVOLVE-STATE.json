@@ -183,7 +183,7 @@
           "description": "frontend/src/webmcp/__tests__/search-sort-cycle.test.ts:81,88,93,100,111,121,131,135 uses multiple `as any` casts. frontend/src/webmcp/useWebMcpPageTools.ts:27,37,43,67,127 uses `Record<string, unknown>` loosely. Tests won't catch type-related regressions.",
           "effort": "small",
           "source": "discovery",
-          "status": "pending",
+          "status": "done",
           "iteration_added": 1
         },
         {
@@ -216,7 +216,7 @@
           "description": "backend/app/services/agent_scheduler_service.py's init function is ~330 lines. Scheduler initialization phases (DB connection, job registration, trigger loading, cron parsing) are all intermixed. This is a coverage and maintainability concern.",
           "effort": "medium",
           "source": "discovery",
-          "status": "pending",
+          "status": "done",
           "iteration_added": 1
         },
         {
@@ -304,7 +304,7 @@
           "description": "In frontend/src/services/api.ts, fetch calls do not use AbortController. When a user navigates away mid-request, the request continues and may update stale component state or cause 'component unmounted' Vue warnings.",
           "effort": "medium",
           "source": "discovery",
-          "status": "pending",
+          "status": "done",
           "iteration_added": 1
         },
         {
@@ -337,7 +337,7 @@
           "description": "frontend/src/composables/useTeamCanvas.ts (576 lines), useAiChat.ts (427 lines), and useConversation.ts (352 lines) have no test files. These are core UI logic units; add Vitest tests covering state transitions and SSE handling.",
           "effort": "medium",
           "source": "discovery",
-          "status": "pending",
+          "status": "done",
           "iteration_added": 1
         },
         {
@@ -392,7 +392,7 @@
           "description": "frontend/src/composables/useAiChat.ts \u2014 Core chat composable handling SSE streaming, session management, and conversation state has no test coverage. Behavior regressions go undetected.",
           "effort": "medium",
           "source": "discovery",
-          "status": "pending",
+          "status": "done",
           "iteration_added": 1
         },
         {
@@ -491,7 +491,7 @@
           "description": "frontend/src/composables/useAiChat.ts: chat streaming composable \u2014 the most user-visible real-time feature \u2014 has no Vitest tests covering SSE parsing, reconnection, error states, or message accumulation.",
           "effort": "medium",
           "source": "discovery",
-          "status": "pending",
+          "status": "done",
           "iteration_added": 1
         },
         {
@@ -623,7 +623,7 @@
           "description": "Route handlers in backend/app/routes/ accept request.get_json() but validate fields minimally before passing to DB. No schema validation for nested objects, array bounds, or type coercion. Should use Pydantic models for all request bodies.",
           "effort": "medium",
           "source": "discovery",
-          "status": "pending",
+          "status": "done",
           "iteration_added": 1
         },
         {
@@ -678,7 +678,7 @@
           "description": "frontend/src/services/api/client.ts createBackoffEventSource() implements exponential backoff with jitter but has no tests for: backpressure queue overflow, event loss during reconnection, or jitter calculation correctness.",
           "effort": "medium",
           "source": "discovery",
-          "status": "pending",
+          "status": "done",
           "iteration_added": 1
         },
         {
@@ -799,7 +799,7 @@
           "description": "frontend/src/components/canvas/TeamCanvas.vue, OrgCanvas.vue, CanvasSidebar.vue, AgentDetailPanel.vue, and ProjectTeamCanvas.vue all declare props as `members: any[]`, `availableAgents: any[]`, `availableSuperAgents: any[]`. This disables type checking for the entire member/agent rendering pipeline.",
           "effort": "medium",
           "source": "discovery",
-          "status": "pending",
+          "status": "done",
           "iteration_added": 1
         },
         {
@@ -810,7 +810,7 @@
           "description": "frontend/src/components/monitoring/CombinedUsageChart.vue, TokenUsageChart.vue, RotationTimelineChart.vue, and RemainingTimeChart.vue all use `const datasets: any[]` or `Record<number, any[]>` for chart data. Chart.js has full TypeScript types available that would catch data shape mismatches at compile time.",
           "effort": "medium",
           "source": "discovery",
-          "status": "pending",
+          "status": "done",
           "iteration_added": 1
         },
         {
@@ -865,7 +865,7 @@
           "description": "backend/app/db/migrations.py: No tests verify that migrations run cleanly, produce the expected schema, or that rollback strategy works. A regression in migration logic could corrupt production data.",
           "effort": "medium",
           "source": "discovery",
-          "status": "pending",
+          "status": "done",
           "iteration_added": 1
         },
         {
@@ -876,7 +876,7 @@
           "description": "frontend/src/services/api/client.ts: The sophisticated retry logic (exponential backoff, jitter, 429 handling, SSE backpressure) has no unit tests. Coverage gaps in the network layer mean regressions will only be caught in production.",
           "effort": "medium",
           "source": "discovery",
-          "status": "pending",
+          "status": "done",
           "iteration_added": 1
         },
         {
@@ -909,7 +909,7 @@
           "description": "backend/app/routes/: Endpoints like list_agents, list_bots, list_teams return all results without pagination. Organizations with hundreds of entities will experience degraded performance and large memory spikes.",
           "effort": "medium",
           "source": "discovery",
-          "status": "pending",
+          "status": "done",
           "iteration_added": 1
         }
       ],
@@ -1100,7 +1100,7 @@
           "description": "frontend/src/webmcp/__tests__/search-sort-cycle.test.ts:81,88,93,100,111,121,131,135 uses multiple `as any` casts. frontend/src/webmcp/useWebMcpPageTools.ts:27,37,43,67,127 uses `Record<string, unknown>` loosely. Tests won't catch type-related regressions.",
           "effort": "small",
           "source": "discovery",
-          "status": "pending",
+          "status": "done",
           "iteration_added": 1
         },
         {
@@ -1133,7 +1133,7 @@
           "description": "backend/app/services/agent_scheduler_service.py's init function is ~330 lines. Scheduler initialization phases (DB connection, job registration, trigger loading, cron parsing) are all intermixed. This is a coverage and maintainability concern.",
           "effort": "medium",
           "source": "discovery",
-          "status": "pending",
+          "status": "done",
           "iteration_added": 1
         },
         {
@@ -1221,7 +1221,7 @@
           "description": "In frontend/src/services/api.ts, fetch calls do not use AbortController. When a user navigates away mid-request, the request continues and may update stale component state or cause 'component unmounted' Vue warnings.",
           "effort": "medium",
           "source": "discovery",
-          "status": "pending",
+          "status": "done",
           "iteration_added": 1
         },
         {
@@ -1254,7 +1254,7 @@
           "description": "frontend/src/composables/useTeamCanvas.ts (576 lines), useAiChat.ts (427 lines), and useConversation.ts (352 lines) have no test files. These are core UI logic units; add Vitest tests covering state transitions and SSE handling.",
           "effort": "medium",
           "source": "discovery",
-          "status": "pending",
+          "status": "done",
           "iteration_added": 1
         },
         {
@@ -1309,7 +1309,7 @@
           "description": "frontend/src/composables/useAiChat.ts \u2014 Core chat composable handling SSE streaming, session management, and conversation state has no test coverage. Behavior regressions go undetected.",
           "effort": "medium",
           "source": "discovery",
-          "status": "pending",
+          "status": "done",
           "iteration_added": 1
         },
         {
@@ -1408,7 +1408,7 @@
           "description": "frontend/src/composables/useAiChat.ts: chat streaming composable \u2014 the most user-visible real-time feature \u2014 has no Vitest tests covering SSE parsing, reconnection, error states, or message accumulation.",
           "effort": "medium",
           "source": "discovery",
-          "status": "pending",
+          "status": "done",
           "iteration_added": 1
         },
         {
@@ -1540,7 +1540,7 @@
           "description": "Route handlers in backend/app/routes/ accept request.get_json() but validate fields minimally before passing to DB. No schema validation for nested objects, array bounds, or type coercion. Should use Pydantic models for all request bodies.",
           "effort": "medium",
           "source": "discovery",
-          "status": "pending",
+          "status": "done",
           "iteration_added": 1
         },
         {
@@ -1595,7 +1595,7 @@
           "description": "frontend/src/services/api/client.ts createBackoffEventSource() implements exponential backoff with jitter but has no tests for: backpressure queue overflow, event loss during reconnection, or jitter calculation correctness.",
           "effort": "medium",
           "source": "discovery",
-          "status": "pending",
+          "status": "done",
           "iteration_added": 1
         },
         {
@@ -1716,7 +1716,7 @@
           "description": "frontend/src/components/canvas/TeamCanvas.vue, OrgCanvas.vue, CanvasSidebar.vue, AgentDetailPanel.vue, and ProjectTeamCanvas.vue all declare props as `members: any[]`, `availableAgents: any[]`, `availableSuperAgents: any[]`. This disables type checking for the entire member/agent rendering pipeline.",
           "effort": "medium",
           "source": "discovery",
-          "status": "pending",
+          "status": "done",
           "iteration_added": 1
         },
         {
@@ -1727,7 +1727,7 @@
           "description": "frontend/src/components/monitoring/CombinedUsageChart.vue, TokenUsageChart.vue, RotationTimelineChart.vue, and RemainingTimeChart.vue all use `const datasets: any[]` or `Record<number, any[]>` for chart data. Chart.js has full TypeScript types available that would catch data shape mismatches at compile time.",
           "effort": "medium",
           "source": "discovery",
-          "status": "pending",
+          "status": "done",
           "iteration_added": 1
         },
         {
@@ -1782,7 +1782,7 @@
           "description": "backend/app/db/migrations.py: No tests verify that migrations run cleanly, produce the expected schema, or that rollback strategy works. A regression in migration logic could corrupt production data.",
           "effort": "medium",
           "source": "discovery",
-          "status": "pending",
+          "status": "done",
           "iteration_added": 1
         },
         {
@@ -1793,7 +1793,7 @@
           "description": "frontend/src/services/api/client.ts: The sophisticated retry logic (exponential backoff, jitter, 429 handling, SSE backpressure) has no unit tests. Coverage gaps in the network layer mean regressions will only be caught in production.",
           "effort": "medium",
           "source": "discovery",
-          "status": "pending",
+          "status": "done",
           "iteration_added": 1
         },
         {
@@ -1826,7 +1826,7 @@
           "description": "backend/app/routes/: Endpoints like list_agents, list_bots, list_teams return all results without pagination. Organizations with hundreds of entities will experience degraded performance and large memory spikes.",
           "effort": "medium",
           "source": "discovery",
-          "status": "pending",
+          "status": "done",
           "iteration_added": 1
         }
       ],

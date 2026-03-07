@@ -1,7 +1,7 @@
 """Agent-related Pydantic models."""
 
 from enum import Enum
-from typing import List, Optional
+from typing import Any, List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -74,11 +74,11 @@ class CreateAgentRequest(BaseModel):
     name: str = Field(..., min_length=1)
     description: Optional[str] = None
     role: Optional[str] = None
-    goals: Optional[str] = None  # JSON array
+    goals: Optional[Any] = None  # JSON array string or list
     context: Optional[str] = None
     backend_type: str = Field(default="claude")
-    skills: Optional[str] = None  # JSON array
-    documents: Optional[str] = None  # JSON array
+    skills: Optional[Any] = None  # JSON array string or list
+    documents: Optional[Any] = None  # JSON array string or list
     system_prompt: Optional[str] = None
     preferred_model: Optional[str] = None
     effort_level: Optional[EffortLevel] = EffortLevel.MEDIUM
@@ -99,12 +99,12 @@ class UpdateAgentRequest(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
     role: Optional[str] = None
-    goals: Optional[str] = None
+    goals: Optional[Any] = None  # JSON array string or list
     context: Optional[str] = None
     backend_type: Optional[str] = None
     enabled: Optional[int] = Field(None, ge=0, le=1)
-    skills: Optional[str] = None
-    documents: Optional[str] = None
+    skills: Optional[Any] = None  # JSON array string or list
+    documents: Optional[Any] = None  # JSON array string or list
     system_prompt: Optional[str] = None
     preferred_model: Optional[str] = None
     effort_level: Optional[EffortLevel] = None

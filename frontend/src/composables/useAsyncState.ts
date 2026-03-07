@@ -1,4 +1,5 @@
-import { ref, type Ref } from 'vue';
+import { ref, onUnmounted, type Ref } from 'vue';
+import { isAbortError } from '../services/api';
 
 export interface UseAsyncStateReturn<T> {
   data: Ref<T>;
@@ -13,6 +14,9 @@ export interface UseAsyncStateReturn<T> {
  * Provides a standardized loading/error/data lifecycle for any async operation.
  * Consumers call `execute()` to trigger the async function and the composable
  * manages the `isLoading`, `error`, and `data` refs automatically.
+ *
+ * Pending requests are automatically cancelled on component unmount via
+ * AbortController. Aborted requests are silently ignored (no error state).
  *
  * @param asyncFn - Async function that returns the data
  * @param initialValue - Initial value for the data ref
@@ -35,17 +39,33 @@ export function useAsyncState<T>(
   const isLoading = ref(false);
   const error = ref<string | null>(null);
 
+  // AbortController for cancelling pending requests on unmount
+  let abortController = new AbortController();
+
   async function execute(): Promise<void> {
+    // Cancel any in-flight request before starting a new one
+    abortController.abort();
+    abortController = new AbortController();
+    const { signal } = abortController;
+
     isLoading.value = true;
     error.value = null;
     try {
       data.value = await asyncFn();
+      if (signal.aborted) return;
     } catch (err: unknown) {
+      if (isAbortError(err) || abortController.signal.aborted) return;
       error.value = err instanceof Error ? err.message : String(err);
     } finally {
-      isLoading.value = false;
+      if (!abortController.signal.aborted) {
+        isLoading.value = false;
+      }
     }
   }
+
+  onUnmounted(() => {
+    abortController.abort();
+  });
 
   return { data, isLoading, error, execute };
 }

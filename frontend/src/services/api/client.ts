@@ -52,6 +52,8 @@ export interface ApiFetchOptions extends RequestInit {
 /**
  * Single-attempt fetch with timeout support.
  * Handles response parsing, empty responses, and error extraction.
+ * Supports an external AbortSignal (via options.signal) combined with the
+ * internal timeout signal so callers can cancel requests on component unmount.
  */
 async function apiFetchSingle<T>(url: string, options?: ApiFetchOptions): Promise<T> {
   const timeoutMs = options?.timeout ?? DEFAULT_TIMEOUT_MS;
@@ -59,8 +61,22 @@ async function apiFetchSingle<T>(url: string, options?: ApiFetchOptions): Promis
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
   // Merge the abort signal into fetch options
-  // If caller provided a signal, we need to respect both
-  const { timeout: _timeout, retries: _retries, retryOn: _retryOn, ...fetchOptions } = options ?? {};
+  const { timeout: _timeout, retries: _retries, retryOn: _retryOn, signal: externalSignal, ...fetchOptions } = options ?? {};
+
+  // If the caller provided an external signal, forward its abort to our controller
+  // so a single signal drives both timeout and caller-initiated cancellation.
+  if (externalSignal) {
+    if (externalSignal.aborted) {
+      clearTimeout(timeoutId);
+      throw new DOMException('The operation was aborted.', 'AbortError');
+    }
+    const onExternalAbort = () => controller.abort();
+    externalSignal.addEventListener('abort', onExternalAbort, { once: true });
+    // Clean up the listener when our controller aborts (timeout or completion)
+    controller.signal.addEventListener('abort', () => {
+      externalSignal.removeEventListener('abort', onExternalAbort);
+    }, { once: true });
+  }
 
   try {
     const apiKey = getApiKey();
@@ -99,8 +115,12 @@ async function apiFetchSingle<T>(url: string, options?: ApiFetchOptions): Promis
   } catch (err) {
     clearTimeout(timeoutId);
 
-    // Convert AbortError to a more descriptive ApiError
+    // Convert AbortError to a more descriptive error
     if (err instanceof DOMException && err.name === 'AbortError') {
+      // Distinguish caller-initiated abort from timeout
+      if (externalSignal?.aborted) {
+        throw err; // Re-throw as AbortError so composables can ignore it
+      }
       throw new ApiError(0, 'Request timed out');
     }
 
@@ -422,6 +442,14 @@ export function createAuthenticatedEventSource(
 export const createBackoffEventSource = createAuthenticatedEventSource;
 
 /**
+ * Check if an error is an AbortError (from AbortController cancellation).
+ * Composables use this to silently ignore cancelled requests on unmount.
+ */
+export function isAbortError(err: unknown): boolean {
+  return err instanceof DOMException && err.name === 'AbortError';
+}
+
+/**
  * Fetch wrapper with retry logic for transient failures.
  * Retries on HTTP 429, 502, 503, 504 and network errors (TypeError).
  * Uses exponential backoff with jitter.
@@ -443,8 +471,9 @@ export async function apiFetch<T>(url: string, options?: ApiFetchOptions): Promi
       const isRetryable = isRetryableStatus || isNetworkError;
 
       // Never retry aborts/timeouts or non-retryable errors
+      const isAbort = isAbortError(err);
       const isTimeout = err instanceof ApiError && err.status === 0;
-      if (!isRetryable || isTimeout || attempt === maxRetries) throw err;
+      if (!isRetryable || isAbort || isTimeout || attempt === maxRetries) throw err;
 
       // Calculate backoff delay
       let delay = Math.min(1000 * Math.pow(2, attempt), MAX_BACKOFF_MS);

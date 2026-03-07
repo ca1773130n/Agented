@@ -2,8 +2,23 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { mount, flushPromises } from '@vue/test-utils';
 import type { RotationEvent } from '../../../services/api';
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Mock chart config uses nested dynamic shapes for test assertions
+type NestedRecord = Record<string, any>;
+
+interface MockChartConfig {
+  type: string;
+  data: { datasets: { label: string; data: unknown[] }[] };
+  options?: NestedRecord;
+}
+
+interface MockChartCall {
+  canvas: HTMLCanvasElement;
+  config: MockChartConfig;
+  instance: { type: string; data: MockChartConfig['data']; options: NestedRecord; destroy: () => void };
+}
+
 // Capture chart constructor calls
-let chartConstructorCalls: any[] = [];
+let chartConstructorCalls: MockChartCall[] = [];
 const mockDestroy = vi.fn();
 
 // Mock Chart.js with a proper class
@@ -11,14 +26,14 @@ vi.mock('chart.js', () => {
   class MockChart {
     static register = vi.fn();
     destroy: () => void;
-    options: any;
-    data: any;
+    options: Record<string, unknown>;
+    data: { datasets: { label: string; data: unknown[] }[] };
     type: string;
 
-    constructor(canvas: any, config: any) {
+    constructor(canvas: HTMLCanvasElement, config: MockChartConfig) {
       this.type = config.type;
       this.data = config.data;
-      this.options = config.options;
+      this.options = config.options || {};
       this.destroy = mockDestroy;
       chartConstructorCalls.push({ canvas, config, instance: this });
     }

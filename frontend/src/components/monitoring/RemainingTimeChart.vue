@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch, nextTick } from 'vue';
-import { Chart, registerables } from 'chart.js';
+import { Chart, registerables, type ChartDataset } from 'chart.js';
 import 'chartjs-adapter-date-fns';
 import type { SnapshotHistoryEntry } from '../../services/api';
 
@@ -57,8 +57,7 @@ function renderChart() {
     y: Math.max(0, 100 - h.percentage),
   }));
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Chart.js dataset type is complex with plugin-specific properties
-  const datasets: any[] = [
+  const datasets: ChartDataset<'line', { x: number; y: number }[]>[] = [
     {
       label: 'Remaining %',
       data,

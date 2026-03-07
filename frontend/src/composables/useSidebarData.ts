@@ -1,4 +1,4 @@
-import { ref, computed } from 'vue';
+import { ref, computed, onUnmounted } from 'vue';
 import type { Trigger, Project, Product, Team, Plugin, AIBackend } from '../services/api';
 import {
   triggerApi,
@@ -8,6 +8,7 @@ import {
   pluginApi,
   backendApi,
   versionApi,
+  isAbortError,
 } from '../services/api';
 import { handleApiError } from '../services/api/error-handler';
 
@@ -21,6 +22,9 @@ export function useSidebarData(showToast: ShowToastFn) {
   const plugins = ref<Plugin[]>([]);
   const sidebarBackends = ref<AIBackend[]>([]);
   const appVersion = ref('...');
+
+  // AbortController for cancelling pending requests on unmount
+  let abortController = new AbortController();
 
   const customTriggers = computed(() => triggers.value.filter(t => !t.is_predefined));
 
@@ -115,10 +119,20 @@ export function useSidebarData(showToast: ShowToastFn) {
   ];
 
   async function loadSidebarData() {
+    // Cancel any in-flight requests before starting fresh
+    abortController.abort();
+    abortController = new AbortController();
+    const { signal } = abortController;
+
     sidebarLoading.value = true;
     const results = await Promise.allSettled(sidebarLoaders.map(l => l.fn()));
+    if (signal.aborted) return; // Component unmounted during fetch
     results.forEach((result, index) => {
       const key = sidebarLoaders[index].key;
+      if (result.status === 'rejected' && isAbortError(result.reason)) {
+        // Silently ignore aborted requests
+        return;
+      }
       sidebarErrors.value[key] =
         result.status === 'rejected'
           ? result.reason instanceof Error
@@ -144,6 +158,10 @@ export function useSidebarData(showToast: ShowToastFn) {
   async function refreshTriggers() {
     await loadTriggers();
   }
+
+  onUnmounted(() => {
+    abortController.abort();
+  });
 
   return {
     triggers,

@@ -2,7 +2,6 @@
 
 from http import HTTPStatus
 
-from flask import request
 from flask_openapi3 import APIBlueprint, Tag
 from pydantic import BaseModel, Field
 
@@ -20,6 +19,7 @@ from ..database import (
     create_product as db_create_product,
 )
 from ..models.common import PaginationQuery
+from ..models.product import CreateProductRequest, UpdateProductRequest
 
 tag = Tag(name="products", description="Product management operations")
 products_bp = APIBlueprint("products", __name__, url_prefix="/admin/products", abp_tags=[tag])
@@ -38,21 +38,13 @@ def list_products(query: PaginationQuery):
 
 
 @products_bp.post("/")
-def create_product():
+def create_product(body: CreateProductRequest):
     """Create a new product."""
-    data = request.get_json()
-    if not data:
-        return error_response("BAD_REQUEST", "JSON body required", HTTPStatus.BAD_REQUEST)
-
-    name = data.get("name")
-    if not name:
-        return error_response("BAD_REQUEST", "name is required", HTTPStatus.BAD_REQUEST)
-
     product_id = db_create_product(
-        name=name,
-        description=data.get("description"),
-        status=data.get("status", "active"),
-        owner_team_id=data.get("owner_team_id"),
+        name=body.name,
+        description=body.description,
+        status=body.status or "active",
+        owner_team_id=body.owner_team_id,
     )
     if not product_id:
         return error_response(
@@ -73,18 +65,14 @@ def get_product_detail_endpoint(path: ProductPath):
 
 
 @products_bp.put("/<product_id>")
-def update_product_endpoint(path: ProductPath):
+def update_product_endpoint(path: ProductPath, body: UpdateProductRequest):
     """Update a product."""
-    data = request.get_json()
-    if not data:
-        return error_response("BAD_REQUEST", "JSON body required", HTTPStatus.BAD_REQUEST)
-
     if not update_product(
         path.product_id,
-        name=data.get("name"),
-        description=data.get("description"),
-        status=data.get("status"),
-        owner_team_id=data.get("owner_team_id"),
+        name=body.name,
+        description=body.description,
+        status=body.status,
+        owner_team_id=body.owner_team_id,
     ):
         return error_response(
             "NOT_FOUND", "Product not found or no changes made", HTTPStatus.NOT_FOUND

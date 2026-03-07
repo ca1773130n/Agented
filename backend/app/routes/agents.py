@@ -2,12 +2,12 @@
 
 from http import HTTPStatus
 
-from flask import request
 from flask_openapi3 import APIBlueprint, Tag
 from pydantic import BaseModel, Field
 
 from app.models.common import error_response
 
+from ..models.agent import CreateAgentRequest, RunAgentRequest, UpdateAgentRequest
 from ..models.common import PaginationQuery
 from ..services.agent_service import AgentService
 from ..services.skills_service import SkillsService
@@ -28,12 +28,9 @@ def list_agents(query: PaginationQuery):
 
 
 @agents_bp.post("/")
-def create_agent():
+def create_agent(body: CreateAgentRequest):
     """Create a new agent."""
-    data = request.get_json()
-    if not data:
-        return error_response("BAD_REQUEST", "JSON body required", HTTPStatus.BAD_REQUEST)
-    result, status = AgentService.create_agent(data)
+    result, status = AgentService.create_agent(body.model_dump(exclude_none=True))
     return result, status
 
 
@@ -45,12 +42,11 @@ def get_agent_detail(path: AgentPath):
 
 
 @agents_bp.put("/<agent_id>")
-def update_agent(path: AgentPath):
+def update_agent(path: AgentPath, body: UpdateAgentRequest):
     """Update an agent."""
-    data = request.get_json()
-    if not data:
-        return error_response("BAD_REQUEST", "JSON body required", HTTPStatus.BAD_REQUEST)
-    result, status = AgentService.update_agent_data(path.agent_id, data)
+    result, status = AgentService.update_agent_data(
+        path.agent_id, body.model_dump(exclude_none=True)
+    )
     return result, status
 
 
@@ -62,11 +58,9 @@ def delete_agent(path: AgentPath):
 
 
 @agents_bp.post("/<agent_id>/run")
-def run_agent(path: AgentPath):
+def run_agent(path: AgentPath, body: RunAgentRequest):
     """Execute an agent with an optional message."""
-    data = request.get_json() or {}
-    message = data.get("message", "")
-    result, status = AgentService.run_agent(path.agent_id, message)
+    result, status = AgentService.run_agent(path.agent_id, body.message)
     return result, status
 
 

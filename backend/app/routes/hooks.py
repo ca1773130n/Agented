@@ -7,6 +7,7 @@ from flask_openapi3 import APIBlueprint, Tag
 from pydantic import BaseModel, Field
 
 from app.models.common import error_response
+from app.models.hook import VALID_EVENTS, CreateHookRequest, GenerateHookRequest, UpdateHookRequest
 
 from ..database import (
     count_hooks,
@@ -34,20 +35,6 @@ class ProjectHooksPath(BaseModel):
     project_id: str = Field(..., description="Project ID")
 
 
-# Valid hook event types
-VALID_EVENTS = [
-    "PreToolUse",
-    "PostToolUse",
-    "Stop",
-    "SubagentStop",
-    "SessionStart",
-    "SessionEnd",
-    "UserPromptSubmit",
-    "PreCompact",
-    "Notification",
-]
-
-
 @hooks_bp.get("/")
 def list_hooks(query: PaginationQuery):
     """List all hooks (global + per-project) with optional pagination."""
@@ -58,34 +45,16 @@ def list_hooks(query: PaginationQuery):
 
 
 @hooks_bp.post("/")
-def create_hook():
+def create_hook(body: CreateHookRequest):
     """Create a new hook."""
-    data = request.get_json()
-    if not data:
-        return error_response("BAD_REQUEST", "JSON body required", HTTPStatus.BAD_REQUEST)
-
-    name = data.get("name")
-    event = data.get("event")
-
-    if not name:
-        return error_response("BAD_REQUEST", "name is required", HTTPStatus.BAD_REQUEST)
-    if not event:
-        return error_response("BAD_REQUEST", "event is required", HTTPStatus.BAD_REQUEST)
-    if event not in VALID_EVENTS:
-        return error_response(
-            "BAD_REQUEST",
-            f"Invalid event type. Must be one of: {', '.join(VALID_EVENTS)}",
-            HTTPStatus.BAD_REQUEST,
-        )
-
     hook_id = db_create_hook(
-        name=name,
-        event=event,
-        description=data.get("description"),
-        content=data.get("content"),
-        enabled=data.get("enabled", True),
-        project_id=data.get("project_id"),
-        source_path=data.get("source_path"),
+        name=body.name,
+        event=body.event,
+        description=body.description,
+        content=body.content,
+        enabled=body.enabled,
+        project_id=body.project_id,
+        source_path=body.source_path,
     )
 
     if not hook_id:
@@ -107,27 +76,15 @@ def get_hook_endpoint(path: HookPath):
 
 
 @hooks_bp.put("/<int:hook_id>")
-def update_hook_endpoint(path: HookPath):
+def update_hook_endpoint(path: HookPath, body: UpdateHookRequest):
     """Update a hook."""
-    data = request.get_json()
-    if not data:
-        return error_response("BAD_REQUEST", "JSON body required", HTTPStatus.BAD_REQUEST)
-
-    event = data.get("event")
-    if event and event not in VALID_EVENTS:
-        return error_response(
-            "BAD_REQUEST",
-            f"Invalid event type. Must be one of: {', '.join(VALID_EVENTS)}",
-            HTTPStatus.BAD_REQUEST,
-        )
-
     if not update_hook(
         path.hook_id,
-        name=data.get("name"),
-        event=event,
-        description=data.get("description"),
-        content=data.get("content"),
-        enabled=data.get("enabled"),
+        name=body.name,
+        event=body.event,
+        description=body.description,
+        content=body.content,
+        enabled=body.enabled,
     ):
         return error_response(
             "NOT_FOUND", "Hook not found or no changes made", HTTPStatus.NOT_FOUND
@@ -172,22 +129,12 @@ def list_hooks_by_event(event: str):
 
 
 @hooks_bp.post("/generate/stream")
-def generate_hook_stream():
+def generate_hook_stream(body: GenerateHookRequest):
     """Generate a hook configuration from a description using AI (streaming)."""
     from ..services.hook_generation_service import HookGenerationService
 
-    data = request.get_json()
-    if not data:
-        return error_response("BAD_REQUEST", "JSON body required", HTTPStatus.BAD_REQUEST)
-
-    description = (data.get("description") or "").strip()
-    if len(description) < 10:
-        return error_response(
-            "BAD_REQUEST", "Description must be at least 10 characters", HTTPStatus.BAD_REQUEST
-        )
-
     return Response(
-        HookGenerationService.generate_streaming(description),
+        HookGenerationService.generate_streaming(body.description),
         mimetype="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )

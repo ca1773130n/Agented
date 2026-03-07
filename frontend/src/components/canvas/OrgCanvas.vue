@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, nextTick, markRaw, toRef, onUnmounted } from 'vue'
 import { VueFlow, useVueFlow } from '@vue-flow/core'
-import type { NodeTypesObject, EdgeTypesObject } from '@vue-flow/core'
+import type { NodeTypesObject, EdgeTypesObject, GraphNode, GraphEdge } from '@vue-flow/core'
 import { Background } from '@vue-flow/background'
 import TeamOrgNode from '../projects/TeamOrgNode.vue'
 import MessageFlowEdge from './MessageFlowEdge.vue'
@@ -82,13 +82,11 @@ onConnect((params) => {
   }])
 })
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Vue Flow event type
-function onNodeClick(event: { node: any }) {
+function onNodeClick(event: { node: GraphNode }) {
   emit('drill-down', event.node.data.teamId)
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Vue Flow event type
-function onEdgeContextMenu(event: { event: MouseEvent | TouchEvent; edge: any }) {
+function onEdgeContextMenu(event: { event: MouseEvent | TouchEvent; edge: GraphEdge }) {
   if (event.event instanceof MouseEvent) {
     event.event.preventDefault()
     contextMenu.value = {

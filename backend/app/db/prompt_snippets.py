@@ -53,10 +53,15 @@ def get_snippet_by_name(name: str) -> Optional[dict]:
         return dict(row) if row else None
 
 
-def get_all_snippets() -> List[dict]:
+def get_all_snippets(limit: Optional[int] = None, offset: int = 0) -> List[dict]:
     """Get all prompt snippets."""
     with get_connection() as conn:
-        cursor = conn.execute("SELECT * FROM prompt_snippets ORDER BY created_at ASC")
+        query = "SELECT * FROM prompt_snippets ORDER BY created_at ASC"
+        params: list = []
+        if limit is not None:
+            query += " LIMIT ? OFFSET ?"
+            params = [limit, offset]
+        cursor = conn.execute(query, params)
         return [dict(row) for row in cursor.fetchall()]
 
 

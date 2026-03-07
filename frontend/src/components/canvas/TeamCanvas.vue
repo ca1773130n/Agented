@@ -2,7 +2,7 @@
 import { ref, computed, markRaw, onMounted, onUnmounted, nextTick, toRef, provide } from 'vue'
 import { toPng } from 'html-to-image'
 import { VueFlow, useVueFlow } from '@vue-flow/core'
-import type { NodeTypesObject, EdgeTypesObject } from '@vue-flow/core'
+import type { NodeTypesObject, EdgeTypesObject, GraphNode, GraphEdge, Connection } from '@vue-flow/core'
 import { Background } from '@vue-flow/background'
 import { Controls } from '@vue-flow/controls'
 import { MiniMap } from '@vue-flow/minimap'
@@ -91,8 +91,7 @@ const { isValidConnection: rawIsValidConnection, warnings, inferredTopology } = 
 // Bypass validation for programmatic edge additions (addEdges API calls).
 // isValidConnection is only intended for user-initiated drag connections.
 let bypassValidation = false
-// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Vue Flow connection event type
-const isValidConnection = (connection: any) => {
+const isValidConnection = (connection: Connection) => {
   if (bypassValidation) return true
   return rawIsValidConnection(connection)
 }
@@ -131,8 +130,7 @@ const edgeTypeOptions = [
   { type: 'messaging' as const, label: 'Messaging', color: 'rgba(168, 85, 247, 0.8)' },
 ]
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Vue Flow edge event type
-function onEdgeContextMenu(event: { event: MouseEvent | TouchEvent; edge: any }) {
+function onEdgeContextMenu(event: { event: MouseEvent | TouchEvent; edge: GraphEdge }) {
   event.event.preventDefault()
   const x = event.event instanceof MouseEvent ? event.event.clientX : event.event.touches?.[0]?.clientX ?? 0
   const y = event.event instanceof MouseEvent ? event.event.clientY : event.event.touches?.[0]?.clientY ?? 0
@@ -207,8 +205,7 @@ async function onDrop(event: DragEvent) {
 }
 
 // Handle node click to show detail panel
-// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Vue Flow node event type
-function onNodeClick(event: { node: any }) {
+function onNodeClick(event: { node: GraphNode }) {
   const node = event.node
   selectedAgentId.value = node.id
   // Find the member id for API calls (support both agent and super_agent members)

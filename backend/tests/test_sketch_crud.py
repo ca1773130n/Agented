@@ -188,12 +188,12 @@ class TestSketchRoutes:
         assert "message" in data
 
     def test_create_sketch_missing_title(self):
-        """POST /admin/sketches with {} returns 400."""
+        """POST /admin/sketches with {} returns 422 (Pydantic validation error)."""
         resp = self.client.post(
             "/admin/sketches",
             json={},
         )
-        assert resp.status_code == 400
+        assert resp.status_code == 422
 
     def test_get_sketch_endpoint(self):
         """GET /admin/sketches/<id> returns 200 with sketch data."""

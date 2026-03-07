@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch } from 'vue';
-import { Chart, registerables } from 'chart.js';
+import { Chart, registerables, type ChartDataset } from 'chart.js';
 import 'chartjs-adapter-date-fns';
 import type { RotationEvent } from '../../services/api';
 
@@ -13,8 +13,7 @@ interface Props {
 const props = defineProps<Props>();
 
 const chartCanvas = ref<HTMLCanvasElement | null>(null);
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-let chartInstance: Chart<any> | null = null;
+let chartInstance: Chart<'scatter'> | null = null;
 
 const statusColors: Record<string, string> = {
   completed: '#22c55e',
@@ -62,7 +61,7 @@ function buildChart() {
 
   const datasets = Object.entries(grouped).map(([status, points]) => ({
     label: status.charAt(0).toUpperCase() + status.slice(1),
-    data: points as any[], // eslint-disable-line @typescript-eslint/no-explicit-any -- Chart.js scatter data type mismatch with categorical Y-axis
+    data: points as unknown as ChartDataset<'scatter'>['data'], // Chart.js scatter type expects numeric Y but categorical Y-axis uses strings at runtime
     backgroundColor: statusColors[status] || '#6b7280',
     borderColor: statusColors[status] || '#6b7280',
     pointRadius: 6,
@@ -70,8 +69,7 @@ function buildChart() {
     showLine: false,
   }));
 
-  // Use 'as any' for Chart constructor because scatter with categorical Y-axis
-  // uses string y-values which Chart.js supports at runtime but not in its types
+  // Scatter with categorical Y-axis uses string y-values (supported at runtime but not in Chart.js types)
   chartInstance = new Chart(chartCanvas.value as HTMLCanvasElement, {
     type: 'scatter' as const,
     data: { datasets },

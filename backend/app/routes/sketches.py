@@ -20,6 +20,7 @@ from ..db.sketches import (
     create_sketch as db_create_sketch,
 )
 from ..models.common import PaginationQuery
+from ..models.sketch import CreateSketchRequest, UpdateSketchRequest
 
 tag = Tag(name="sketches", description="Sketch management operations")
 sketches_bp = APIBlueprint("sketches", __name__, url_prefix="/admin/sketches", abp_tags=[tag])
@@ -42,20 +43,12 @@ def list_sketches(query: PaginationQuery):
 
 
 @sketches_bp.post("/")
-def create_sketch():
+def create_sketch(body: CreateSketchRequest):
     """Create a new sketch."""
-    data = request.get_json()
-    if not data:
-        return error_response("BAD_REQUEST", "JSON body required", HTTPStatus.BAD_REQUEST)
-
-    title = data.get("title")
-    if not title:
-        return error_response("BAD_REQUEST", "title is required", HTTPStatus.BAD_REQUEST)
-
     sketch_id = db_create_sketch(
-        title=title,
-        content=data.get("content", ""),
-        project_id=data.get("project_id"),
+        title=body.title,
+        content=body.content or "",
+        project_id=body.project_id,
     )
     if not sketch_id:
         return error_response(
@@ -75,22 +68,9 @@ def get_sketch_endpoint(path: SketchPath):
 
 
 @sketches_bp.put("/<sketch_id>")
-def update_sketch_endpoint(path: SketchPath):
+def update_sketch_endpoint(path: SketchPath, body: UpdateSketchRequest):
     """Update a sketch."""
-    data = request.get_json()
-    if not data:
-        return error_response("BAD_REQUEST", "JSON body required", HTTPStatus.BAD_REQUEST)
-
-    allowed_fields = {
-        "title",
-        "content",
-        "project_id",
-        "status",
-        "classification_json",
-        "routing_json",
-        "parent_sketch_id",
-    }
-    kwargs = {k: v for k, v in data.items() if k in allowed_fields}
+    kwargs = body.model_dump(exclude_none=True)
 
     if not update_sketch(path.sketch_id, **kwargs):
         return error_response(

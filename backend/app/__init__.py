@@ -152,64 +152,61 @@ def _setup_scheduler(app) -> None:
 
     SchedulerService.init(app)
 
+    _init_monitoring_services()
+    _register_periodic_jobs(SchedulerService)
+    _init_auxiliary_schedulers()
+
+
+def _init_monitoring_services() -> None:
+    """Initialize monitoring and health check services."""
+    from .services.health_monitor_service import HealthMonitorService
     from .services.monitoring_service import MonitoringService
 
     MonitoringService.init()
-
-    from .services.health_monitor_service import HealthMonitorService
-
     HealthMonitorService.init()
 
-    from .services.session_collection_service import SessionCollectionService
 
-    if SchedulerService._scheduler:
-        SchedulerService._scheduler.add_job(
-            func=SessionCollectionService.collect_all,
-            trigger="interval",
-            minutes=10,
-            id="session_usage_collection",
-            replace_existing=True,
-        )
+def _register_periodic_jobs(scheduler_service) -> None:
+    """Register interval-based background jobs with the scheduler.
 
-    from .services.project_workspace_service import ProjectWorkspaceService
-
-    if SchedulerService._scheduler:
-        SchedulerService._scheduler.add_job(
-            func=ProjectWorkspaceService.sync_all_repos,
-            trigger="interval",
-            minutes=30,
-            id="project_repo_sync",
-            replace_existing=True,
-        )
-
-    from .services.agent_conversation_service import AgentConversationService
-
-    if SchedulerService._scheduler:
-        SchedulerService._scheduler.add_job(
-            func=AgentConversationService.cleanup_stale_conversations,
-            trigger="interval",
-            minutes=5,
-            id="stale_conversation_cleanup",
-            replace_existing=True,
-        )
+    Each entry is (callable, trigger_kwargs, job_id).  Jobs are only registered
+    when the underlying APScheduler instance is available.
+    """
+    if not scheduler_service._scheduler:
+        return
 
     from .db.webhook_dedup import cleanup_expired_keys
+    from .services.agent_conversation_service import AgentConversationService
+    from .services.project_workspace_service import ProjectWorkspaceService
+    from .services.session_collection_service import SessionCollectionService
 
-    if SchedulerService._scheduler:
-        SchedulerService._scheduler.add_job(
-            func=cleanup_expired_keys,
+    periodic_jobs = [
+        (SessionCollectionService.collect_all, {"minutes": 10}, "session_usage_collection"),
+        (ProjectWorkspaceService.sync_all_repos, {"minutes": 30}, "project_repo_sync"),
+        (
+            AgentConversationService.cleanup_stale_conversations,
+            {"minutes": 5},
+            "stale_conversation_cleanup",
+        ),
+        (cleanup_expired_keys, {"seconds": 60}, "webhook_dedup_cleanup"),
+    ]
+
+    for func, interval_kwargs, job_id in periodic_jobs:
+        scheduler_service._scheduler.add_job(
+            func=func,
             trigger="interval",
-            seconds=60,
-            id="webhook_dedup_cleanup",
+            id=job_id,
             replace_existing=True,
+            **interval_kwargs,
         )
 
+
+def _init_auxiliary_schedulers() -> None:
+    """Initialize agent scheduler and rotation evaluator services."""
     from .services.agent_scheduler_service import AgentSchedulerService
-
-    AgentSchedulerService.init()
-
     from .services.rotation_evaluator import RotationEvaluator
 
+    AgentSchedulerService.init()
     RotationEvaluator.init()
 
 

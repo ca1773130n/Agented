@@ -109,16 +109,21 @@ def get_workflow(workflow_id: str) -> Optional[dict]:
         return dict(row) if row else None
 
 
-def get_all_workflows() -> List[dict]:
+def get_all_workflows(limit: Optional[int] = None, offset: int = 0) -> List[dict]:
     """Get all workflows with latest version number."""
     with get_connection() as conn:
-        cursor = conn.execute("""
+        query = """
             SELECT w.*, COALESCE(MAX(wv.version), 0) as latest_version
             FROM workflows w
             LEFT JOIN workflow_versions wv ON w.id = wv.workflow_id
             GROUP BY w.id
             ORDER BY w.name ASC
-        """)
+        """
+        params: list = []
+        if limit is not None:
+            query += " LIMIT ? OFFSET ?"
+            params = [limit, offset]
+        cursor = conn.execute(query, params)
         return [dict(row) for row in cursor.fetchall()]
 
 

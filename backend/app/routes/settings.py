@@ -1,8 +1,8 @@
 """Settings API endpoints."""
 
 from http import HTTPStatus
+from typing import Optional
 
-from flask import request
 from flask_openapi3 import APIBlueprint, Tag
 from pydantic import BaseModel, Field
 
@@ -16,6 +16,20 @@ settings_bp = APIBlueprint("settings", __name__, url_prefix="/api/settings", abp
 
 class SettingPath(BaseModel):
     key: str = Field(..., description="Setting key")
+
+
+class SetSettingBody(BaseModel):
+    """Request body for setting a value."""
+
+    value: str = Field(..., description="Setting value")
+
+
+class SetHarnessPluginBody(BaseModel):
+    """Request body for setting the harness plugin."""
+
+    plugin_id: Optional[str] = None
+    marketplace_id: Optional[str] = None
+    plugin_name: Optional[str] = None
 
 
 @settings_bp.get("/")
@@ -33,18 +47,10 @@ def get_setting_endpoint(path: SettingPath):
 
 
 @settings_bp.put("/<key>")
-def set_setting_endpoint(path: SettingPath):
+def set_setting_endpoint(path: SettingPath, body: SetSettingBody):
     """Set a setting value."""
-    data = request.get_json()
-    if not data:
-        return error_response("BAD_REQUEST", "JSON body required", HTTPStatus.BAD_REQUEST)
-
-    value = data.get("value")
-    if value is None:
-        return error_response("BAD_REQUEST", "value is required", HTTPStatus.BAD_REQUEST)
-
-    set_setting(path.key, str(value))
-    return {"key": path.key, "value": value}, HTTPStatus.OK
+    set_setting(path.key, str(body.value))
+    return {"key": path.key, "value": body.value}, HTTPStatus.OK
 
 
 @settings_bp.delete("/<key>")
@@ -72,25 +78,17 @@ def get_harness_plugin():
 
 
 @settings_bp.put("/harness-plugin")
-def set_harness_plugin():
+def set_harness_plugin(body: SetHarnessPluginBody):
     """Set the harness plugin selection."""
-    data = request.get_json()
-    if not data:
-        return error_response("BAD_REQUEST", "JSON body required", HTTPStatus.BAD_REQUEST)
-
-    plugin_id = data.get("plugin_id")
-    marketplace_id = data.get("marketplace_id")
-    plugin_name = data.get("plugin_name")
-
-    if plugin_id:
-        set_setting("harness_plugin_id", str(plugin_id))
-    if marketplace_id:
-        set_setting("harness_marketplace_id", str(marketplace_id))
-    if plugin_name:
-        set_setting("harness_plugin_name", str(plugin_name))
+    if body.plugin_id:
+        set_setting("harness_plugin_id", str(body.plugin_id))
+    if body.marketplace_id:
+        set_setting("harness_marketplace_id", str(body.marketplace_id))
+    if body.plugin_name:
+        set_setting("harness_plugin_name", str(body.plugin_name))
 
     return {
-        "plugin_id": plugin_id,
-        "marketplace_id": marketplace_id,
-        "plugin_name": plugin_name,
+        "plugin_id": body.plugin_id,
+        "marketplace_id": body.marketplace_id,
+        "plugin_name": body.plugin_name,
     }, HTTPStatus.OK

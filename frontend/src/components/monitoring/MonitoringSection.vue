@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch, onMounted, onUnmounted } from 'vue';
-import type { MonitoringStatus, SnapshotHistory, ConsumptionRates, RotationSession, RotationEvaluatorStatus, EtaProjection } from '../../services/api';
+import type { MonitoringStatus, SnapshotHistory, ConsumptionRates, RotationSession, RotationEvaluatorStatus, EtaProjection, WindowSnapshot } from '../../services/api';
 import { useTokenFormatting } from '../../composables/useTokenFormatting';
 import RateLimitGauge from './RateLimitGauge.vue';
 import CombinedUsageChart from './CombinedUsageChart.vue';
@@ -333,8 +333,7 @@ const monitoringCardsByBackend = computed(() => {
   return groups;
 });
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Monitoring window objects have variable shape from backend API
-function toRatePctPerHour(w: any, accountId?: number): number | undefined {
+function toRatePctPerHour(w: WindowSnapshot, accountId?: number): number | undefined {
   const rates = w.consumption_rates;
   const rw = accountId != null ? getCardRateWindow(accountId) : '24h';
   const raw = rates?.[rw];
@@ -348,11 +347,10 @@ function toRatePctPerHour(w: any, accountId?: number): number | undefined {
 
 // Pre-compute chart data to avoid creating new objects on every template render
 const combinedHistoriesCache = computed(() => {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Monitoring history entries have dynamic shape from backend snapshots
   const result: Record<number, { windowType: string; label: string; history: SnapshotHistory['history']; color?: string; ratePerHour?: number; resetsAt?: string | null }[]> = {};
   for (const card of monitoringAccountCards.value) {
     result[card.account_id] = card.windows
-      .map((w: any, idx: number) => { // eslint-disable-line @typescript-eslint/no-explicit-any -- monitoring window object
+      .map((w: WindowSnapshot, idx: number) => {
         const key = getTrendKey(card.account_id, w.window_type);
         const history = props.trendHistories[key]?.history || [];
         return {
@@ -391,8 +389,7 @@ function getProjectionResetAt(accountId: number): string | null {
   const windowType = props.selectedProjectionWindow[accountId];
   if (!windowType) return null;
   const card = monitoringAccountCards.value.find(c => c.account_id === accountId);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- monitoring window object
-  const w = card?.windows.find((win: any) => win.window_type === windowType);
+  const w = card?.windows.find((win: WindowSnapshot) => win.window_type === windowType);
   return w?.resets_at || null;
 }
 
@@ -400,8 +397,7 @@ function getProjectionRatePerHour(accountId: number): number | undefined {
   const windowType = props.selectedProjectionWindow[accountId];
   if (!windowType) return undefined;
   const card = monitoringAccountCards.value.find(c => c.account_id === accountId);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- monitoring window object
-  const w = card?.windows.find((win: any) => win.window_type === windowType);
+  const w = card?.windows.find((win: WindowSnapshot) => win.window_type === windowType);
   if (!w) return undefined;
   return toRatePctPerHour(w, accountId);
 }

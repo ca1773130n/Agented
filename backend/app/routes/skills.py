@@ -9,6 +9,13 @@ from flask_openapi3 import APIBlueprint, Tag
 from pydantic import BaseModel, Field
 
 from app.models.common import error_response
+from app.models.skill import (
+    AddUserSkillRequest,
+    SkillsShInstallRequest,
+    TestSkillRequest,
+    ToggleHarnessRequest,
+    UpdateUserSkillRequest,
+)
 
 from ..services.skills_service import SkillsService, get_playground_working_dir
 
@@ -71,22 +78,16 @@ def get_single_user_skill(path: SkillIdPath):
 
 
 @skills_bp.post("/user")
-def add_user_skill():
+def add_user_skill(body: AddUserSkillRequest):
     """Add a skill to the user's collection."""
-    data = request.get_json()
-    if not data:
-        return error_response("BAD_REQUEST", "JSON body required", HTTPStatus.BAD_REQUEST)
-    result, status = SkillsService.add_skill(data)
+    result, status = SkillsService.add_skill(body.model_dump())
     return result, status
 
 
 @skills_bp.put("/user/<int:skill_id>")
-def update_user_skill(path: SkillIdPath):
+def update_user_skill(path: SkillIdPath, body: UpdateUserSkillRequest):
     """Update a user skill."""
-    data = request.get_json()
-    if not data:
-        return error_response("BAD_REQUEST", "JSON body required", HTTPStatus.BAD_REQUEST)
-    result, status = SkillsService.update_skill(path.skill_id, data)
+    result, status = SkillsService.update_skill(path.skill_id, body.model_dump(exclude_none=True))
     return result, status
 
 
@@ -110,13 +111,9 @@ def get_harness_skills():
 
 
 @skills_bp.put("/harness/<int:skill_id>")
-def toggle_harness_skill(path: SkillIdPath):
+def toggle_harness_skill(path: SkillIdPath, body: ToggleHarnessRequest):
     """Toggle a skill's harness selection."""
-    data = request.get_json()
-    if data is None:
-        return error_response("BAD_REQUEST", "JSON body required", HTTPStatus.BAD_REQUEST)
-    selected = bool(data.get("selected", False))
-    result, status = SkillsService.toggle_harness_selection(path.skill_id, selected)
+    result, status = SkillsService.toggle_harness_selection(path.skill_id, body.selected)
     return result, status
 
 
@@ -213,14 +210,9 @@ def list_playground_files():
 
 
 @skills_bp.post("/test")
-def test_skill():
+def test_skill(body: TestSkillRequest):
     """Start a skill test in the playground."""
-    data = request.get_json()
-    if not data or not data.get("skill_name"):
-        return error_response("BAD_REQUEST", "skill_name is required", HTTPStatus.BAD_REQUEST)
-    skill_name = data["skill_name"]
-    test_input = data.get("input", "")
-    result, status = SkillsService.test_skill(skill_name, test_input)
+    result, status = SkillsService.test_skill(body.skill_name, body.input)
     return result, status
 
 
@@ -275,13 +267,10 @@ def search_skills_sh():
 
 
 @skills_bp.post("/skills-sh/install")
-def install_skills_sh():
+def install_skills_sh(body: SkillsShInstallRequest):
     """Install a skill from skills.sh."""
-    data = request.get_json()
-    if not data or not data.get("source"):
-        return error_response("BAD_REQUEST", "source is required", HTTPStatus.BAD_REQUEST)
     from ..services.skills_sh_service import SkillsShService
 
     client_ip = request.remote_addr or "unknown"
-    result, status = SkillsShService.install_skill(data["source"], client_ip=client_ip)
+    result, status = SkillsShService.install_skill(body.source, client_ip=client_ip)
     return result, status

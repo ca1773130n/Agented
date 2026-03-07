@@ -1,7 +1,7 @@
-import { ref } from 'vue';
+import { ref, onUnmounted } from 'vue';
 import type { Ref } from 'vue';
 import type { Sketch, Project, ConversationMessage } from '../services/api/types';
-import { sketchApi, projectApi } from '../services/api';
+import { sketchApi, projectApi, isAbortError } from '../services/api';
 
 /**
  * Parse a JSON block from a string (e.g. a JSON field value).
@@ -24,11 +24,16 @@ export function useSketchChat() {
   const messages: Ref<ConversationMessage[]> = ref([]);
   const error: Ref<string | null> = ref(null);
 
+  // AbortController for cancelling pending requests on unmount
+  const abortController = new AbortController();
+
   async function loadProjects() {
     try {
       const result = await projectApi.list();
+      if (abortController.signal.aborted) return;
       projects.value = result.projects;
     } catch (e: unknown) {
+      if (isAbortError(e) || abortController.signal.aborted) return;
       error.value = e instanceof Error ? e.message : 'Failed to load projects';
     }
   }
@@ -40,8 +45,10 @@ export function useSketchChat() {
         params.project_id = selectedProjectId.value;
       }
       const result = await sketchApi.list(params);
+      if (abortController.signal.aborted) return;
       sketches.value = result.sketches;
     } catch (e: unknown) {
+      if (isAbortError(e) || abortController.signal.aborted) return;
       error.value = e instanceof Error ? e.message : 'Failed to load sketches';
     }
   }
@@ -66,8 +73,10 @@ export function useSketchChat() {
       const sketchId = createResult.sketch_id;
 
       await sketchApi.classify(sketchId);
+      if (abortController.signal.aborted) return;
 
       const fetched = await sketchApi.get(sketchId);
+      if (abortController.signal.aborted) return;
 
       let classificationSummary = 'Sketch created and classified.';
       if (fetched.classification_json) {
@@ -91,6 +100,7 @@ export function useSketchChat() {
       currentSketch.value = fetched;
       await loadSketches();
     } catch (e: unknown) {
+      if (isAbortError(e) || abortController.signal.aborted) return;
       const errMsg = e instanceof Error ? e.message : 'Failed to create or classify sketch';
       error.value = errMsg;
       messages.value.push({
@@ -99,7 +109,9 @@ export function useSketchChat() {
         timestamp: new Date().toISOString(),
       });
     } finally {
-      isProcessing.value = false;
+      if (!abortController.signal.aborted) {
+        isProcessing.value = false;
+      }
     }
   }
 
@@ -109,7 +121,9 @@ export function useSketchChat() {
 
     try {
       await sketchApi.route(sketchId);
+      if (abortController.signal.aborted) return;
       const fetched = await sketchApi.get(sketchId);
+      if (abortController.signal.aborted) return;
       currentSketch.value = fetched;
 
       let routingSummary = 'Sketch routed successfully.';
@@ -132,6 +146,7 @@ export function useSketchChat() {
 
       await loadSketches();
     } catch (e: unknown) {
+      if (isAbortError(e) || abortController.signal.aborted) return;
       const errMsg = e instanceof Error ? e.message : 'Failed to route sketch';
       error.value = errMsg;
       messages.value.push({
@@ -140,7 +155,9 @@ export function useSketchChat() {
         timestamp: new Date().toISOString(),
       });
     } finally {
-      isProcessing.value = false;
+      if (!abortController.signal.aborted) {
+        isProcessing.value = false;
+      }
     }
   }
 
@@ -196,6 +213,10 @@ export function useSketchChat() {
     messages.value = [];
     error.value = null;
   }
+
+  onUnmounted(() => {
+    abortController.abort();
+  });
 
   return {
     sketches,

@@ -383,3 +383,112 @@ class TestFreshDbMigrations:
 
         assert team is not None and team[0] == "Preserved Team"
         assert agent is not None and agent[0] == "Preserved Agent"
+
+
+class TestValidateSqlIdentifier:
+    """Tests for _validate_sql_identifier safety check."""
+
+    def test_valid_identifiers(self):
+        from app.db.migrations import _validate_sql_identifier
+
+        assert _validate_sql_identifier("triggers") == "triggers"
+        assert _validate_sql_identifier("my_table_2") == "my_table_2"
+        assert _validate_sql_identifier("_private") == "_private"
+
+    def test_rejects_sql_injection(self):
+        import pytest
+
+        from app.db.migrations import _validate_sql_identifier
+
+        with pytest.raises(ValueError, match="Invalid SQL"):
+            _validate_sql_identifier("table; DROP TABLE users")
+        with pytest.raises(ValueError, match="Invalid SQL"):
+            _validate_sql_identifier("name--comment")
+        with pytest.raises(ValueError, match="Invalid SQL"):
+            _validate_sql_identifier("")
+        with pytest.raises(ValueError, match="Invalid SQL"):
+            _validate_sql_identifier("123starts_with_digit")
+
+    def test_rejects_special_chars(self):
+        import pytest
+
+        from app.db.migrations import _validate_sql_identifier
+
+        for bad in ["has space", "has-dash", "has.dot", "has'quote", 'has"double']:
+            with pytest.raises(ValueError):
+                _validate_sql_identifier(bad)
+
+
+class TestMarkStaleExecutions:
+    """Tests for _mark_stale_executions helper."""
+
+    def test_marks_running_as_interrupted(self, isolated_db):
+        from app.db.connection import get_connection
+        from app.db.migrations import _mark_stale_executions
+
+        with get_connection() as conn:
+            conn.execute(
+                "INSERT INTO execution_logs (execution_id, trigger_id, trigger_type, backend_type, status, started_at)"
+                " VALUES ('exec-stale1', 'bot-security', 'webhook', 'claude', 'running', datetime('now', '-1 hour'))"
+            )
+            conn.execute(
+                "INSERT INTO execution_logs (execution_id, trigger_id, trigger_type, backend_type, status, started_at, finished_at)"
+                " VALUES ('exec-done1', 'bot-security', 'webhook', 'claude', 'success', datetime('now', '-2 hour'), datetime('now', '-1 hour'))"
+            )
+            conn.commit()
+
+            count = _mark_stale_executions(conn)
+            assert count == 1
+
+            row = conn.execute(
+                "SELECT status, finished_at FROM execution_logs WHERE execution_id='exec-stale1'"
+            ).fetchone()
+            assert row[0] == "interrupted"
+            assert row[1] is not None
+
+            # Completed execution unchanged
+            done = conn.execute(
+                "SELECT status FROM execution_logs WHERE execution_id='exec-done1'"
+            ).fetchone()
+            assert done[0] == "success"
+
+    def test_no_stale_returns_zero(self, isolated_db):
+        from app.db.connection import get_connection
+        from app.db.migrations import _mark_stale_executions
+
+        with get_connection() as conn:
+            count = _mark_stale_executions(conn)
+            assert count == 0
+
+
+class TestMigrationVersionGating:
+    """Tests for version-gated migration execution."""
+
+    def test_migrations_run_in_order(self, isolated_db):
+        """All versioned migrations are recorded in ascending order."""
+        from app.db.connection import get_connection
+        from app.db.migrations import VERSIONED_MIGRATIONS
+
+        with get_connection() as conn:
+            rows = conn.execute(
+                "SELECT version FROM schema_version ORDER BY version ASC"
+            ).fetchall()
+            versions = [r[0] for r in rows]
+            assert versions == sorted(versions)
+            assert len(versions) == len(VERSIONED_MIGRATIONS)
+
+    def test_no_duplicate_migration_versions(self):
+        """VERSIONED_MIGRATIONS list has no duplicate version numbers."""
+        from app.db.migrations import VERSIONED_MIGRATIONS
+
+        versions = [v for v, _, _ in VERSIONED_MIGRATIONS]
+        assert len(versions) == len(set(versions)), "Duplicate migration versions found"
+
+    def test_migration_versions_are_positive(self):
+        """All migration versions are positive integers."""
+        from app.db.migrations import VERSIONED_MIGRATIONS
+
+        for version, name, _ in VERSIONED_MIGRATIONS:
+            assert isinstance(version, int) and version > 0, (
+                f"Migration {name} has invalid version {version}"
+            )

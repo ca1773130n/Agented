@@ -6,11 +6,11 @@ in list or detail responses -- use the POST /reveal endpoint to decrypt.
 
 from http import HTTPStatus
 
-from flask import request
 from flask_openapi3 import APIBlueprint, Tag
 from pydantic import BaseModel, Field
 
 from app.models.common import error_response
+from app.models.secret import SecretCreate, SecretUpdate
 
 from ..services.secret_vault_service import SecretVaultService
 
@@ -52,32 +52,20 @@ def vault_status():
 
 
 @secrets_bp.post("/")
-def create_secret():
+def create_secret(body: SecretCreate):
     """Create a new encrypted secret."""
     err = _check_vault()
     if err:
         return err
 
-    data = request.get_json()
-    if not data:
-        return error_response("BAD_REQUEST", "JSON body required", HTTPStatus.BAD_REQUEST)
-
-    name = data.get("name")
-    value = data.get("value")
-    if not name or not value:
-        return error_response("BAD_REQUEST", "name and value are required", HTTPStatus.BAD_REQUEST)
-
-    description = data.get("description", "")
-    scope = data.get("scope", "global")
-
     try:
         secret_id = SecretVaultService.create_secret(
-            name=name, value=value, description=description, scope=scope
+            name=body.name, value=body.value, description=body.description, scope=body.scope
         )
     except Exception as e:
         if "UNIQUE constraint failed" in str(e):
             return error_response(
-                "CONFLICT", f"Secret with name '{name}' already exists", HTTPStatus.CONFLICT
+                "CONFLICT", f"Secret with name '{body.name}' already exists", HTTPStatus.CONFLICT
             )
         return error_response("INTERNAL_SERVER_ERROR", str(e), HTTPStatus.INTERNAL_SERVER_ERROR)
 
@@ -141,20 +129,13 @@ def reveal_secret(path: SecretPath):
 
 
 @secrets_bp.put("/<secret_id>")
-def update_secret(path: SecretPath):
+def update_secret(path: SecretPath, body: SecretUpdate):
     """Update a secret's value and/or description."""
     err = _check_vault()
     if err:
         return err
 
-    data = request.get_json()
-    if not data:
-        return error_response("BAD_REQUEST", "JSON body required", HTTPStatus.BAD_REQUEST)
-
-    value = data.get("value")
-    description = data.get("description")
-
-    if value is None and description is None:
+    if body.value is None and body.description is None:
         return error_response(
             "BAD_REQUEST",
             "At least one of value or description is required",
@@ -162,7 +143,7 @@ def update_secret(path: SecretPath):
         )
 
     updated = SecretVaultService.update_secret(
-        secret_id=path.secret_id, value=value, description=description
+        secret_id=path.secret_id, value=body.value, description=body.description
     )
     if not updated:
         return error_response("NOT_FOUND", "Secret not found", HTTPStatus.NOT_FOUND)
