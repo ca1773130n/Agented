@@ -353,3 +353,333 @@ class TestGetAllAccountStates:
         state = result[0]
         assert state["is_rate_limited"] is False
         assert state["cooldown_remaining_seconds"] is None
+
+
+# ---------------------------------------------------------------------------
+# Retry scheduling (ExecutionService.schedule_retry)
+# ---------------------------------------------------------------------------
+
+import json
+import threading
+
+from app.services.execution_service import ExecutionService
+
+
+def _reset_execution_service():
+    """Reset ExecutionService class-level retry state between tests."""
+    with ExecutionService._rate_limit_lock:
+        ExecutionService._pending_retries.clear()
+        for t in ExecutionService._retry_timers.values():
+            t.cancel()
+        ExecutionService._retry_timers.clear()
+        ExecutionService._retry_counts.clear()
+        ExecutionService._rate_limit_detected.clear()
+        ExecutionService._transient_failure_detected.clear()
+
+
+class TestScheduleRetry:
+    """Tests for ExecutionService.schedule_retry — retry scheduling on rate limit."""
+
+    def setup_method(self):
+        _reset_execution_service()
+
+    def teardown_method(self):
+        _reset_execution_service()
+
+    @patch("app.services.execution_service.delete_pending_retry")
+    @patch("app.services.execution_service.upsert_pending_retry")
+    @patch("app.services.execution_service.AuditLogService")
+    @patch("app.services.execution_service.ExecutionLogService")
+    def test_schedule_retry_adds_pending_entry(self, mock_log_svc, mock_audit, mock_upsert, mock_del):
+        """Scheduling a retry should add an entry to _pending_retries and persist to DB."""
+        trigger = {"id": "trg-abc", "backend_type": "claude"}
+        ExecutionService.schedule_retry(trigger, "hello", None, "webhook", 30)
+
+        with ExecutionService._rate_limit_lock:
+            assert "trg-abc" in ExecutionService._pending_retries
+            entry = ExecutionService._pending_retries["trg-abc"]
+            assert entry["cooldown_seconds"] == 30
+            assert entry["attempt"] == 1
+            assert "trg-abc" in ExecutionService._retry_timers
+
+        mock_upsert.assert_called_once()
+        args = mock_upsert.call_args
+        assert args[1]["trigger_id"] == "trg-abc"
+        assert args[1]["cooldown_seconds"] == 30
+
+    @patch("app.services.execution_service.delete_pending_retry")
+    @patch("app.services.execution_service.upsert_pending_retry")
+    @patch("app.services.execution_service.AuditLogService")
+    @patch("app.services.execution_service.ExecutionLogService")
+    def test_schedule_retry_increments_attempt_count(self, mock_log, mock_audit, mock_upsert, mock_del):
+        """Each call to schedule_retry for the same trigger increments the attempt counter."""
+        trigger = {"id": "trg-inc", "backend_type": "claude"}
+        ExecutionService.schedule_retry(trigger, "msg", None, "webhook", 10)
+        ExecutionService.schedule_retry(trigger, "msg", None, "webhook", 10)
+
+        with ExecutionService._rate_limit_lock:
+            assert ExecutionService._retry_counts["trg-inc"] == 2
+            entry = ExecutionService._pending_retries["trg-inc"]
+            assert entry["attempt"] == 2
+
+    @patch("app.services.execution_service.delete_pending_retry")
+    @patch("app.services.execution_service.upsert_pending_retry")
+    @patch("app.services.execution_service.AuditLogService")
+    @patch("app.services.execution_service.ExecutionLogService")
+    def test_schedule_retry_cancels_existing_timer(self, mock_log, mock_audit, mock_upsert, mock_del):
+        """Scheduling a new retry should cancel the previous timer for that trigger."""
+        trigger = {"id": "trg-cancel", "backend_type": "claude"}
+        ExecutionService.schedule_retry(trigger, "msg", None, "webhook", 600)
+
+        with ExecutionService._rate_limit_lock:
+            first_timer = ExecutionService._retry_timers["trg-cancel"]
+
+        ExecutionService.schedule_retry(trigger, "msg", None, "webhook", 600)
+
+        # First timer should have been cancelled
+        assert first_timer.finished.is_set() or not first_timer.is_alive()
+
+        with ExecutionService._rate_limit_lock:
+            second_timer = ExecutionService._retry_timers["trg-cancel"]
+        assert second_timer is not first_timer
+
+    @patch("app.services.execution_service.delete_pending_retry")
+    @patch("app.services.execution_service.upsert_pending_retry")
+    @patch("app.services.execution_service.AuditLogService")
+    @patch("app.services.execution_service.ExecutionLogService")
+    def test_schedule_retry_exceeds_max_attempts(self, mock_log_svc, mock_audit, mock_upsert, mock_del):
+        """When max retry attempts are exceeded, no new timer should be created."""
+        from app.config import MAX_RETRY_ATTEMPTS
+
+        trigger = {"id": "trg-max", "backend_type": "claude"}
+
+        # Manually set counter to MAX_RETRY_ATTEMPTS so next call exceeds it
+        with ExecutionService._rate_limit_lock:
+            ExecutionService._retry_counts["trg-max"] = MAX_RETRY_ATTEMPTS
+
+        ExecutionService.schedule_retry(trigger, "msg", None, "webhook", 10)
+
+        # Should NOT be in pending retries or timers — it gave up
+        with ExecutionService._rate_limit_lock:
+            assert "trg-max" not in ExecutionService._pending_retries
+            assert "trg-max" not in ExecutionService._retry_timers
+            assert "trg-max" not in ExecutionService._retry_counts
+
+        mock_del.assert_called_once_with("trg-max")
+        mock_log_svc.start_execution.assert_called_once()
+        mock_log_svc.finish_execution.assert_called_once()
+
+    @patch("app.services.execution_service.delete_pending_retry")
+    @patch("app.services.execution_service.upsert_pending_retry")
+    @patch("app.services.execution_service.AuditLogService")
+    @patch("app.services.execution_service.ExecutionLogService")
+    @patch("app.services.execution_service.random.uniform", return_value=0)
+    def test_schedule_retry_exponential_backoff(self, mock_rand, mock_log, mock_audit, mock_upsert, mock_del):
+        """Backoff delay should grow exponentially with attempt count."""
+        trigger = {"id": "trg-back", "backend_type": "claude"}
+
+        # First attempt: delay = min(30 * 2^0, 3600) + 0 = 30
+        ExecutionService.schedule_retry(trigger, "msg", None, "webhook", 30)
+        with ExecutionService._rate_limit_lock:
+            timer1 = ExecutionService._retry_timers["trg-back"]
+        assert timer1.interval == 30.0
+
+        # Second attempt: delay = min(30 * 2^1, 3600) + 0 = 60
+        ExecutionService.schedule_retry(trigger, "msg", None, "webhook", 30)
+        with ExecutionService._rate_limit_lock:
+            timer2 = ExecutionService._retry_timers["trg-back"]
+        assert timer2.interval == 60.0
+
+
+# ---------------------------------------------------------------------------
+# Retry queue management (get_pending_retries)
+# ---------------------------------------------------------------------------
+
+
+class TestGetPendingRetries:
+    """Tests for ExecutionService.get_pending_retries."""
+
+    def setup_method(self):
+        _reset_execution_service()
+
+    def teardown_method(self):
+        _reset_execution_service()
+
+    @patch("app.services.execution_service.get_all_pending_retries")
+    def test_returns_in_memory_retries(self, mock_db):
+        """get_pending_retries should include in-memory entries."""
+        mock_db.return_value = []
+        with ExecutionService._rate_limit_lock:
+            ExecutionService._pending_retries["trg-mem"] = {
+                "trigger_id": "trg-mem",
+                "cooldown_seconds": 60,
+                "retry_at": "2026-03-07T12:00:00",
+                "scheduled_at": "2026-03-07T11:59:00",
+            }
+
+        result = ExecutionService.get_pending_retries()
+        assert "trg-mem" in result
+        assert result["trg-mem"]["cooldown_seconds"] == 60
+
+    @patch("app.services.execution_service.get_all_pending_retries")
+    def test_supplements_with_db_rows(self, mock_db):
+        """DB rows not in memory should be included in the result."""
+        mock_db.return_value = [
+            {
+                "trigger_id": "trg-db",
+                "cooldown_seconds": 45,
+                "retry_at": "2026-03-07T12:00:00",
+                "created_at": "2026-03-07T11:59:00",
+            }
+        ]
+
+        result = ExecutionService.get_pending_retries()
+        assert "trg-db" in result
+        assert result["trg-db"]["cooldown_seconds"] == 45
+
+    @patch("app.services.execution_service.get_all_pending_retries")
+    def test_in_memory_takes_precedence_over_db(self, mock_db):
+        """If the same trigger_id exists in memory and DB, in-memory wins."""
+        mock_db.return_value = [
+            {
+                "trigger_id": "trg-dup",
+                "cooldown_seconds": 100,
+                "retry_at": "2026-03-07T12:00:00",
+                "created_at": "2026-03-07T11:59:00",
+            }
+        ]
+        with ExecutionService._rate_limit_lock:
+            ExecutionService._pending_retries["trg-dup"] = {
+                "trigger_id": "trg-dup",
+                "cooldown_seconds": 200,
+                "retry_at": "2026-03-07T12:05:00",
+                "scheduled_at": "2026-03-07T11:59:00",
+            }
+
+        result = ExecutionService.get_pending_retries()
+        assert result["trg-dup"]["cooldown_seconds"] == 200
+
+    @patch("app.services.execution_service.get_all_pending_retries")
+    def test_handles_db_error_gracefully(self, mock_db):
+        """If DB read fails, in-memory retries should still be returned."""
+        mock_db.side_effect = RuntimeError("DB unavailable")
+        with ExecutionService._rate_limit_lock:
+            ExecutionService._pending_retries["trg-ok"] = {
+                "trigger_id": "trg-ok",
+                "cooldown_seconds": 10,
+                "retry_at": "2026-03-07T12:00:00",
+                "scheduled_at": "2026-03-07T11:59:00",
+            }
+
+        result = ExecutionService.get_pending_retries()
+        assert "trg-ok" in result
+
+
+# ---------------------------------------------------------------------------
+# Retry restoration on restart (restore_pending_retries)
+# ---------------------------------------------------------------------------
+
+
+class TestRestorePendingRetries:
+    """Tests for ExecutionService.restore_pending_retries."""
+
+    def setup_method(self):
+        _reset_execution_service()
+
+    def teardown_method(self):
+        _reset_execution_service()
+
+    @patch("app.services.execution_service.delete_pending_retry")
+    @patch("app.services.execution_service.get_all_pending_retries")
+    def test_restores_future_retry_from_db(self, mock_get, mock_del):
+        """A pending retry with a future retry_at should be restored with a timer."""
+        future = (datetime.now() + timedelta(seconds=300)).isoformat()
+        mock_get.return_value = [
+            {
+                "trigger_id": "trg-fut",
+                "trigger_json": json.dumps({"id": "trg-fut", "backend_type": "claude"}),
+                "message_text": "test msg",
+                "event_json": "{}",
+                "trigger_type": "webhook",
+                "cooldown_seconds": 60,
+                "retry_at": future,
+                "created_at": datetime.now().isoformat(),
+            }
+        ]
+
+        count = ExecutionService.restore_pending_retries()
+        assert count == 1
+
+        with ExecutionService._rate_limit_lock:
+            assert "trg-fut" in ExecutionService._pending_retries
+            assert "trg-fut" in ExecutionService._retry_timers
+            timer = ExecutionService._retry_timers["trg-fut"]
+        assert timer.is_alive()
+
+    @patch("app.services.execution_service.delete_pending_retry")
+    @patch("app.services.execution_service.get_all_pending_retries")
+    def test_restores_past_due_retry_with_zero_delay(self, mock_get, mock_del):
+        """A retry whose retry_at is in the past should be restored with remaining=0 (fires ASAP).
+
+        The timer fires almost immediately so the in-memory entry may already be cleaned up
+        by the callback. We verify restore counted it and a timer was created.
+        """
+        past = (datetime.now() - timedelta(seconds=10)).isoformat()
+        # Use a large future retry_at but patch datetime so remaining computes as 0
+        mock_get.return_value = [
+            {
+                "trigger_id": "trg-past",
+                "trigger_json": json.dumps({"id": "trg-past", "backend_type": "claude"}),
+                "message_text": "msg",
+                "event_json": "{}",
+                "trigger_type": "webhook",
+                "cooldown_seconds": 5,
+                "retry_at": past,
+                "created_at": datetime.now().isoformat(),
+            }
+        ]
+
+        count = ExecutionService.restore_pending_retries()
+        # The row was successfully processed and counted, even if timer already fired
+        assert count == 1
+
+    @patch("app.services.execution_service.get_all_pending_retries")
+    def test_restore_returns_zero_on_db_error(self, mock_get):
+        """If DB query fails, restore should return 0."""
+        mock_get.side_effect = RuntimeError("DB gone")
+        count = ExecutionService.restore_pending_retries()
+        assert count == 0
+
+    @patch("app.services.execution_service.delete_pending_retry")
+    @patch("app.services.execution_service.get_all_pending_retries")
+    def test_restore_skips_bad_rows_and_continues(self, mock_get, mock_del):
+        """Malformed rows should be skipped; valid ones should still be restored."""
+        future = (datetime.now() + timedelta(seconds=300)).isoformat()
+        mock_get.return_value = [
+            {
+                "trigger_id": "trg-bad",
+                "trigger_json": "NOT VALID JSON {{{",
+                "message_text": "",
+                "event_json": "{}",
+                "trigger_type": "webhook",
+                "cooldown_seconds": 10,
+                "retry_at": future,
+                "created_at": datetime.now().isoformat(),
+            },
+            {
+                "trigger_id": "trg-good",
+                "trigger_json": json.dumps({"id": "trg-good", "backend_type": "claude"}),
+                "message_text": "ok",
+                "event_json": "{}",
+                "trigger_type": "webhook",
+                "cooldown_seconds": 60,
+                "retry_at": future,
+                "created_at": datetime.now().isoformat(),
+            },
+        ]
+
+        count = ExecutionService.restore_pending_retries()
+        assert count == 1
+        with ExecutionService._rate_limit_lock:
+            assert "trg-good" in ExecutionService._pending_retries
+            assert "trg-bad" not in ExecutionService._pending_retries

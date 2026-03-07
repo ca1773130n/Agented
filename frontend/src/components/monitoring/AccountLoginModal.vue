@@ -2,7 +2,10 @@
 /**
  * AccountLoginModal -- Stub component for backend account login.
  *
- * TODO: Implement full login flow (created as stub to unblock build).
+ * TODO: Implement full OAuth/API-key login flow for CLI proxy backends.
+ *   Currently a non-functional placeholder created to satisfy the import in
+ *   BackendDetailPage.vue. The real flow should use the playwright-based
+ *   OAuth helper in CLIProxyManager._run_playwright_oauth().
  */
 
 defineProps<{

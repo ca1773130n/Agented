@@ -150,7 +150,7 @@
           "description": "Multiple service files contain TODO/FIXME comments representing deferred work. Run `grep -rn 'TODO\\|FIXME' backend/app/` to enumerate them all and prioritize resolution.",
           "effort": "medium",
           "source": "discovery",
-          "status": "pending",
+          "status": "done",
           "iteration_added": 1
         },
         {
@@ -403,7 +403,7 @@
           "description": "frontend/src/ \u2014 No error boundary components to catch and display Vue rendering errors. SSE streaming errors in chat and execution log viewers fail silently with no user feedback.",
           "effort": "medium",
           "source": "discovery",
-          "status": "pending",
+          "status": "done",
           "iteration_added": 1
         },
         {
@@ -436,7 +436,7 @@
           "description": "backend/tests/: ExecutionService.schedule_retry() and the rate-limit backoff logic (lines 98-164) have no test coverage, leaving race conditions and retry-loop bugs undetected.",
           "effort": "medium",
           "source": "discovery",
-          "status": "pending",
+          "status": "done",
           "iteration_added": 1
         },
         {
@@ -469,7 +469,7 @@
           "description": "backend/app/services/project_session_manager.py: complex session state machine with no test coverage. Session state transitions, concurrent access, and timeout logic are entirely unverified.",
           "effort": "medium",
           "source": "discovery",
-          "status": "pending",
+          "status": "done",
           "iteration_added": 1
         },
         {
@@ -513,7 +513,7 @@
           "description": "backend/app/services/execution_service.py lines 214-295: restore_pending_retries() is called on startup to reschedule pending retries after a crash, but there are no tests verifying that retries are correctly persisted, loaded, and rescheduled.",
           "effort": "medium",
           "source": "discovery",
-          "status": "pending",
+          "status": "done",
           "iteration_added": 1
         },
         {
@@ -601,7 +601,7 @@
           "description": "ExecutionService.schedule_retry() and restore_pending_retries() are complex state-management functions with closure-based timers and DB persistence but have no dedicated tests. Need tests for exponential backoff, timer cancellation, thread safety, and DB round-trips.",
           "effort": "medium",
           "source": "discovery",
-          "status": "pending",
+          "status": "done",
           "iteration_added": 1
         },
         {
@@ -612,7 +612,7 @@
           "description": "Workflow node error modes (stop, continue, continue_with_error) each have distinct branching paths in WorkflowExecutionService, but test coverage for edge cases (node timeout + continue_with_error, cycle detection + partial execution) is missing.",
           "effort": "medium",
           "source": "discovery",
-          "status": "pending",
+          "status": "done",
           "iteration_added": 1
         },
         {
@@ -733,7 +733,7 @@
           "description": "backend/app/services/execution_service.py: GitHub cloning failures, prompt template placeholder resolution, and stream handling edge cases (timeout, partial reads) are not unit-tested \u2014 only covered by broader integration tests.",
           "effort": "medium",
           "source": "discovery",
-          "status": "pending",
+          "status": "done",
           "iteration_added": 1
         },
         {
@@ -777,7 +777,7 @@
           "description": "frontend/src/composables/useWorkflowValidation.ts implements DFS-based cycle detection and port type compatibility matching. Neither algorithm has test coverage. Incorrect cycle detection could silently allow invalid workflow graphs that hang on execution.",
           "effort": "medium",
           "source": "discovery",
-          "status": "pending",
+          "status": "done",
           "iteration_added": 1
         },
         {

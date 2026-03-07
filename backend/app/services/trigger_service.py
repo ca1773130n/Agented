@@ -78,8 +78,9 @@ class TriggerService:
         text_field_path = data.get("text_field_path", "text")
         detection_keyword = data.get("detection_keyword", "")
 
-        # Deprecated field for backward compatibility.
-        # TODO(v0.5.0): Remove group_id — use match_field_path/match_field_value instead.
+        # Deprecated field kept for backward compatibility with legacy webhook matchers.
+        # TODO(v0.5.0): Remove group_id from schema and all trigger CRUD once all
+        #   consumers have migrated to match_field_path / match_field_value filtering.
         group_id = data.get("group_id", 0)
 
         if not name or not prompt_template:
