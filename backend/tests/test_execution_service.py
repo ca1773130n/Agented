@@ -277,15 +277,15 @@ class TestRateLimitTracking:
 
 
 class TestDispatchWebhookEvent:
-    @patch("app.services.execution_service.get_webhook_triggers", return_value=[])
+    @patch("app.services.trigger_dispatcher.get_webhook_triggers", return_value=[])
     def test_no_matching_triggers_returns_false(self, mock_triggers, isolated_db):
         with patch("app.database.get_webhook_teams", return_value=[]):
             result = ExecutionService.dispatch_webhook_event({"text": "hello"})
         assert result is False
 
     @patch("app.services.execution_service.ExecutionService.save_trigger_event")
-    @patch("app.services.execution_service.check_and_insert_dedup_key", return_value=True)
-    @patch("app.services.execution_service.get_webhook_triggers")
+    @patch("app.services.trigger_dispatcher.check_and_insert_dedup_key", return_value=True)
+    @patch("app.services.trigger_dispatcher.get_webhook_triggers")
     def test_matching_trigger_dispatches(
         self, mock_get_triggers, mock_dedup, mock_save, isolated_db
     ):
@@ -304,8 +304,8 @@ class TestDispatchWebhookEvent:
         mock_enqueue.assert_called_once()
 
     @patch("app.services.execution_service.ExecutionService.save_trigger_event")
-    @patch("app.services.execution_service.check_and_insert_dedup_key", return_value=False)
-    @patch("app.services.execution_service.get_webhook_triggers")
+    @patch("app.services.trigger_dispatcher.check_and_insert_dedup_key", return_value=False)
+    @patch("app.services.trigger_dispatcher.get_webhook_triggers")
     def test_dedup_skips_duplicate(self, mock_get_triggers, mock_dedup, mock_save, isolated_db):
         trigger = _make_trigger(text_field_path="body")
         mock_get_triggers.return_value = [trigger]
@@ -319,8 +319,8 @@ class TestDispatchWebhookEvent:
         mock_enqueue.assert_not_called()
 
     @patch("app.services.execution_service.ExecutionService.save_trigger_event")
-    @patch("app.services.execution_service.check_and_insert_dedup_key", return_value=True)
-    @patch("app.services.execution_service.get_webhook_triggers")
+    @patch("app.services.trigger_dispatcher.check_and_insert_dedup_key", return_value=True)
+    @patch("app.services.trigger_dispatcher.get_webhook_triggers")
     def test_hmac_validation_failure_skips_trigger(
         self, mock_get_triggers, mock_dedup, mock_save, isolated_db
     ):
@@ -346,7 +346,7 @@ class TestDispatchWebhookEvent:
 
 
 class TestDispatchGithubEvent:
-    @patch("app.services.execution_service.get_triggers_by_trigger_source", return_value=[])
+    @patch("app.services.trigger_dispatcher.get_triggers_by_trigger_source", return_value=[])
     def test_no_github_triggers(self, mock_get, isolated_db):
         with patch("app.database.get_teams_by_trigger_source", return_value=[]):
             result = ExecutionService.dispatch_github_event(
@@ -363,7 +363,7 @@ class TestDispatchGithubEvent:
         assert result is False
 
     @patch("app.services.execution_service.ExecutionService.save_trigger_event")
-    @patch("app.services.execution_service.get_triggers_by_trigger_source")
+    @patch("app.services.trigger_dispatcher.get_triggers_by_trigger_source")
     def test_github_trigger_dispatches(self, mock_get_triggers, mock_save, isolated_db):
         trigger = _make_trigger(trigger_source="github")
         mock_get_triggers.return_value = [trigger]

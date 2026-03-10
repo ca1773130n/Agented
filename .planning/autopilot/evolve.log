@@ -264,3 +264,20 @@
 [2026-03-06T13:40:15.939Z] No groups to process. Done.
 [2026-03-06T13:40:15.940Z] Done: 13 iteration(s) completed
 [2026-03-06T23:56:51.000Z] Ralph loop iteration: 36 items done (from 82). 264 new tests added (1918 total). Frontend build clean. Items completed: error handling in routes, print→logging conversion, SQL injection prevention, webhook HMAC edge tests, prompt renderer tests, GRD sync tests, plus 8 agent-written test suites (plugin_sync, worktree, model_discovery, backend_service, workflow_trigger, provider_usage, mcp_sync, cliproxy_manager).
+[2026-03-07T02:37:02.822Z] Starting iteration 35
+[2026-03-07T02:40:02.860Z] Discovered 0 new + 0 carried-over = 0 total items, 0 groups, selected 0
+[2026-03-07T02:40:02.860Z] No groups to process. Done.
+[2026-03-07T02:40:02.860Z] Done: 0 iteration(s) completed
+[2026-03-09T01:15:26.372Z] Starting iteration 35
+[2026-03-09T01:17:33.589Z] Discovered 35 new + 0 carried-over = 35 total items, 1 groups, selected 1
+[2026-03-09T01:17:33.589Z] Capped batch from 35 to 30 items (max 30)
+[2026-03-09T01:17:33.589Z] Batch-executing 1 groups (30 items) in one subprocess
+[2026-03-10T10:48:02.703Z] Batch execute FAILED (exit 1)
+[2026-03-10T10:48:02.706Z] Starting iteration 36
+[2026-03-10T10:49:42.576Z] Starting iteration 36
+[2026-03-10T10:51:02.761Z] Discovered 0 new + 0 carried-over = 0 total items, 0 groups, selected 0
+[2026-03-10T10:51:02.761Z] No groups to process. Done.
+[2026-03-10T10:51:02.761Z] Done: 1 iteration(s) completed
+[2026-03-10T10:52:42.614Z] Discovered 0 new + 0 carried-over = 0 total items, 0 groups, selected 0
+[2026-03-10T10:52:42.615Z] No groups to process. Done.
+[2026-03-10T10:52:42.615Z] Done: 0 iteration(s) completed

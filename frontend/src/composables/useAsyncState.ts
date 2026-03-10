@@ -51,8 +51,9 @@ export function useAsyncState<T>(
     isLoading.value = true;
     error.value = null;
     try {
-      data.value = await asyncFn();
+      const result = await asyncFn();
       if (signal.aborted) return;
+      data.value = result;
     } catch (err: unknown) {
       if (isAbortError(err) || abortController.signal.aborted) return;
       error.value = err instanceof Error ? err.message : String(err);

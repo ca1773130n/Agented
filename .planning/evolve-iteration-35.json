@@ -1,0 +1,51 @@
+{
+  "decisions": [
+    "Item 8 (PR Comment Command Triggers): Extended GitHub webhook to handle issue_comment events with slash command parsing using a compiled regex. Dispatching routes through ExecutionQueueService via the existing trigger_dispatcher pattern to keep execution infrastructure consistent.",
+    "Item 23 (Full-Text Log Search): Added status, started_after, started_before, and bot_name filters to ExecutionSearchService.search(). Bot_name uses LIKE fuzzy matching against trigger name rather than exact ID to match UX intent.",
+    "Item 11 (Conditional Trigger Rules): Built a full DB-backed CRUD layer (trigger_conditions table + db module + REST blueprint) rather than trying to shoehorn rules into the triggers table. Rules store conditions as a JSON column to avoid a 3-table join for a variable-length list.",
+    "Added ?trigger_id= URL query parameter to ConditionalTriggerRulesPage so rules can be scoped without a full routing change — keeps the page usable both standalone and in context.",
+    "Used autouse=True fixture pattern for webhook secret setup in tests, matching the existing TestGitHubWebhookPREvents pattern for consistency."
+  ],
+  "patterns": [
+    "The codebase consistently splits: DB functions in app/db/, business logic in app/services/, HTTP layer in app/routes/ — the trigger_conditions feature follows this exactly.",
+    "GitHub webhook tests use class-level SECRET + autouse fixture to avoid monkeypatching in every test method — a clean pattern worth following for all webhook tests.",
+    "FTS5 MATCH queries gracefully return empty list on OperationalError rather than propagating — important because malformed FTS5 syntax throws at the DB level, not parse time.",
+    "Many frontend pages (like ConditionalTriggerRulesPage) were using hardcoded mock data arrays with fake setTimeout delays, making them look functional but non-persistent. Real API wiring requires companion route registration in __init__.py."
+  ],
+  "takeaways": [
+    "The GitHub webhook only handled pull_request events before this change — a real gap since many engineering teams rely on PR comment commands (/review, /fix) as their primary automation trigger.",
+    "ConditionalTriggerRulesPage was a fully-featured UI with zero backend persistence. The frontend quality was high (proper Vue 3 reactivity, good UX) but the data never survived a page refresh.",
+    "The execution search already had a well-structured FTS5 query builder but lacked status/date/name filters that would make it actually useful for debugging — the gap between what was described and what was implemented was purely missing query params.",
+    "The schema migration approach (adding tables to the end of initialize_db() with IF NOT EXISTS) is safe and consistent — no migration framework, just idempotent DDL. New tables can always be added this way.",
+    "Items 1-7 and 9-30 (except 8, 11, 23) were already implemented as UI components or backend endpoints. The evolve iteration should focus on functionality that is UI-complete but backend-stub, not purely missing features."
+  ],
+  "files_changed": [
+    "backend/app/routes/github_webhook.py",
+    "backend/app/services/execution_service.py",
+    "backend/app/services/trigger_dispatcher.py",
+    "backend/app/models/execution_search.py",
+    "backend/app/services/execution_search_service.py",
+    "backend/app/routes/execution_search.py",
+    "backend/app/db/schema.py",
+    "backend/app/db/trigger_conditions.py",
+    "backend/app/routes/trigger_conditions.py",
+    "backend/app/routes/__init__.py",
+    "backend/tests/test_github_webhook.py",
+    "backend/tests/test_trigger_conditions.py",
+    "backend/tests/test_execution_search_filters.py",
+    "frontend/src/views/ConditionalTriggerRulesPage.vue",
+    "frontend/src/services/api/trigger-conditions.ts"
+  ],
+  "items_skipped": [
+    "Item 1 (Execution Replay & Time Travel): Already implemented in replay.py + ExecutionTimeTravelDebugger.vue.",
+    "Item 2 (Bot Template Marketplace): Already implemented in marketplace.py + BotTemplateMarketplace.vue.",
+    "Item 3 (Visual DAG Workflow Composer): Already implemented in WorkflowBuilderPage.vue.",
+    "Item 4 (AI-Assisted Prompt Editor): Already implemented in InlinePromptEditor.vue + prompt_optimizer service.",
+    "Item 5 (AI Execution Cost Tracker): Already implemented in AiCostDashboard.vue + budget_service.py.",
+    "Item 6 (Multi-Provider Fallback Chains): Already implemented in MultiProviderFallback.vue + fallback_chains table.",
+    "Item 7 (Slack/Teams Notification Hub): Already implemented in NotificationHubPage.vue.",
+    "Item 9 (Execution Diff Viewer): Already implemented in ExecutionFileDiffViewer.vue + diff_context_service.py.",
+    "Item 10 (Team Activity Feed): Already implemented in TeamActivityFeedPage.vue.",
+    "Items 12-30 (excluding 23): All had existing UI and/or backend implementations."
+  ]
+}

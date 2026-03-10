@@ -1732,4 +1732,22 @@ def create_fresh_schema(conn):
         )
     """)
 
+    # --- v0.4.0: Conditional trigger rules (filter conditions per trigger) ---
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS trigger_conditions (
+            id TEXT PRIMARY KEY,
+            trigger_id TEXT NOT NULL REFERENCES triggers(id) ON DELETE CASCADE,
+            name TEXT NOT NULL DEFAULT '',
+            description TEXT NOT NULL DEFAULT '',
+            enabled INTEGER DEFAULT 1,
+            logic TEXT NOT NULL DEFAULT 'AND',
+            conditions_json TEXT NOT NULL DEFAULT '[]',
+            created_at TEXT DEFAULT (datetime('now')),
+            updated_at TEXT DEFAULT (datetime('now'))
+        )
+    """)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_tc_trigger ON trigger_conditions(trigger_id)"
+    )
+
     conn.commit()

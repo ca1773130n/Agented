@@ -13,11 +13,19 @@ execution_search_bp = APIBlueprint(
 
 @execution_search_bp.get("/execution-search")
 def search_execution_logs(query: SearchQuery):
-    """Search execution logs using natural language queries with BM25 ranking."""
+    """Search execution logs using natural language queries with BM25 ranking.
+
+    Supports optional filters: status, date range (started_after/started_before),
+    trigger_id, and bot_name substring match.
+    """
     results = ExecutionSearchService.search(
         query=query.q,
         limit=query.limit,
         trigger_id=query.trigger_id,
+        status=query.status,
+        started_after=query.started_after,
+        started_before=query.started_before,
+        bot_name=query.bot_name,
     )
     return SearchResponse(
         results=[SearchResult(**r) for r in results],

@@ -386,10 +386,10 @@ class TestScheduleRetry:
     def teardown_method(self):
         _reset_execution_service()
 
-    @patch("app.services.execution_service.delete_pending_retry")
-    @patch("app.services.execution_service.upsert_pending_retry")
-    @patch("app.services.execution_service.AuditLogService")
-    @patch("app.services.execution_service.ExecutionLogService")
+    @patch("app.services.execution_retry.delete_pending_retry")
+    @patch("app.services.execution_retry.upsert_pending_retry")
+    @patch("app.services.audit_log_service.AuditLogService")
+    @patch("app.services.execution_log_service.ExecutionLogService")
     def test_schedule_retry_adds_pending_entry(self, mock_log_svc, mock_audit, mock_upsert, mock_del):
         """Scheduling a retry should add an entry to _pending_retries and persist to DB."""
         trigger = {"id": "trg-abc", "backend_type": "claude"}
@@ -407,10 +407,10 @@ class TestScheduleRetry:
         assert args[1]["trigger_id"] == "trg-abc"
         assert args[1]["cooldown_seconds"] == 30
 
-    @patch("app.services.execution_service.delete_pending_retry")
-    @patch("app.services.execution_service.upsert_pending_retry")
-    @patch("app.services.execution_service.AuditLogService")
-    @patch("app.services.execution_service.ExecutionLogService")
+    @patch("app.services.execution_retry.delete_pending_retry")
+    @patch("app.services.execution_retry.upsert_pending_retry")
+    @patch("app.services.audit_log_service.AuditLogService")
+    @patch("app.services.execution_log_service.ExecutionLogService")
     def test_schedule_retry_increments_attempt_count(self, mock_log, mock_audit, mock_upsert, mock_del):
         """Each call to schedule_retry for the same trigger increments the attempt counter."""
         trigger = {"id": "trg-inc", "backend_type": "claude"}
@@ -422,10 +422,10 @@ class TestScheduleRetry:
             entry = ExecutionService._pending_retries["trg-inc"]
             assert entry["attempt"] == 2
 
-    @patch("app.services.execution_service.delete_pending_retry")
-    @patch("app.services.execution_service.upsert_pending_retry")
-    @patch("app.services.execution_service.AuditLogService")
-    @patch("app.services.execution_service.ExecutionLogService")
+    @patch("app.services.execution_retry.delete_pending_retry")
+    @patch("app.services.execution_retry.upsert_pending_retry")
+    @patch("app.services.audit_log_service.AuditLogService")
+    @patch("app.services.execution_log_service.ExecutionLogService")
     def test_schedule_retry_cancels_existing_timer(self, mock_log, mock_audit, mock_upsert, mock_del):
         """Scheduling a new retry should cancel the previous timer for that trigger."""
         trigger = {"id": "trg-cancel", "backend_type": "claude"}
@@ -443,10 +443,10 @@ class TestScheduleRetry:
             second_timer = ExecutionService._retry_timers["trg-cancel"]
         assert second_timer is not first_timer
 
-    @patch("app.services.execution_service.delete_pending_retry")
-    @patch("app.services.execution_service.upsert_pending_retry")
-    @patch("app.services.execution_service.AuditLogService")
-    @patch("app.services.execution_service.ExecutionLogService")
+    @patch("app.services.execution_retry.delete_pending_retry")
+    @patch("app.services.execution_retry.upsert_pending_retry")
+    @patch("app.services.audit_log_service.AuditLogService")
+    @patch("app.services.execution_log_service.ExecutionLogService")
     def test_schedule_retry_exceeds_max_attempts(self, mock_log_svc, mock_audit, mock_upsert, mock_del):
         """When max retry attempts are exceeded, no new timer should be created."""
         from app.config import MAX_RETRY_ATTEMPTS
@@ -469,11 +469,11 @@ class TestScheduleRetry:
         mock_log_svc.start_execution.assert_called_once()
         mock_log_svc.finish_execution.assert_called_once()
 
-    @patch("app.services.execution_service.delete_pending_retry")
-    @patch("app.services.execution_service.upsert_pending_retry")
-    @patch("app.services.execution_service.AuditLogService")
-    @patch("app.services.execution_service.ExecutionLogService")
-    @patch("app.services.execution_service.random.uniform", return_value=0)
+    @patch("app.services.execution_retry.delete_pending_retry")
+    @patch("app.services.execution_retry.upsert_pending_retry")
+    @patch("app.services.audit_log_service.AuditLogService")
+    @patch("app.services.execution_log_service.ExecutionLogService")
+    @patch("app.services.execution_retry.random.uniform", return_value=0)
     def test_schedule_retry_exponential_backoff(self, mock_rand, mock_log, mock_audit, mock_upsert, mock_del):
         """Backoff delay should grow exponentially with attempt count."""
         trigger = {"id": "trg-back", "backend_type": "claude"}
@@ -505,7 +505,7 @@ class TestGetPendingRetries:
     def teardown_method(self):
         _reset_execution_service()
 
-    @patch("app.services.execution_service.get_all_pending_retries")
+    @patch("app.services.execution_retry.get_all_pending_retries")
     def test_returns_in_memory_retries(self, mock_db):
         """get_pending_retries should include in-memory entries."""
         mock_db.return_value = []
@@ -521,7 +521,7 @@ class TestGetPendingRetries:
         assert "trg-mem" in result
         assert result["trg-mem"]["cooldown_seconds"] == 60
 
-    @patch("app.services.execution_service.get_all_pending_retries")
+    @patch("app.services.execution_retry.get_all_pending_retries")
     def test_supplements_with_db_rows(self, mock_db):
         """DB rows not in memory should be included in the result."""
         mock_db.return_value = [
@@ -537,7 +537,7 @@ class TestGetPendingRetries:
         assert "trg-db" in result
         assert result["trg-db"]["cooldown_seconds"] == 45
 
-    @patch("app.services.execution_service.get_all_pending_retries")
+    @patch("app.services.execution_retry.get_all_pending_retries")
     def test_in_memory_takes_precedence_over_db(self, mock_db):
         """If the same trigger_id exists in memory and DB, in-memory wins."""
         mock_db.return_value = [
@@ -559,7 +559,7 @@ class TestGetPendingRetries:
         result = ExecutionService.get_pending_retries()
         assert result["trg-dup"]["cooldown_seconds"] == 200
 
-    @patch("app.services.execution_service.get_all_pending_retries")
+    @patch("app.services.execution_retry.get_all_pending_retries")
     def test_handles_db_error_gracefully(self, mock_db):
         """If DB read fails, in-memory retries should still be returned."""
         mock_db.side_effect = RuntimeError("DB unavailable")
@@ -589,8 +589,8 @@ class TestRestorePendingRetries:
     def teardown_method(self):
         _reset_execution_service()
 
-    @patch("app.services.execution_service.delete_pending_retry")
-    @patch("app.services.execution_service.get_all_pending_retries")
+    @patch("app.services.execution_retry.delete_pending_retry")
+    @patch("app.services.execution_retry.get_all_pending_retries")
     def test_restores_future_retry_from_db(self, mock_get, mock_del):
         """A pending retry with a future retry_at should be restored with a timer."""
         future = (datetime.now() + timedelta(seconds=300)).isoformat()
@@ -616,8 +616,8 @@ class TestRestorePendingRetries:
             timer = ExecutionService._retry_timers["trg-fut"]
         assert timer.is_alive()
 
-    @patch("app.services.execution_service.delete_pending_retry")
-    @patch("app.services.execution_service.get_all_pending_retries")
+    @patch("app.services.execution_retry.delete_pending_retry")
+    @patch("app.services.execution_retry.get_all_pending_retries")
     def test_restores_past_due_retry_with_zero_delay(self, mock_get, mock_del):
         """A retry whose retry_at is in the past should be restored with remaining=0 (fires ASAP).
 
@@ -643,15 +643,15 @@ class TestRestorePendingRetries:
         # The row was successfully processed and counted, even if timer already fired
         assert count == 1
 
-    @patch("app.services.execution_service.get_all_pending_retries")
+    @patch("app.services.execution_retry.get_all_pending_retries")
     def test_restore_returns_zero_on_db_error(self, mock_get):
         """If DB query fails, restore should return 0."""
         mock_get.side_effect = RuntimeError("DB gone")
         count = ExecutionService.restore_pending_retries()
         assert count == 0
 
-    @patch("app.services.execution_service.delete_pending_retry")
-    @patch("app.services.execution_service.get_all_pending_retries")
+    @patch("app.services.execution_retry.delete_pending_retry")
+    @patch("app.services.execution_retry.get_all_pending_retries")
     def test_restore_skips_bad_rows_and_continues(self, mock_get, mock_del):
         """Malformed rows should be skipped; valid ones should still be restored."""
         future = (datetime.now() + timedelta(seconds=300)).isoformat()

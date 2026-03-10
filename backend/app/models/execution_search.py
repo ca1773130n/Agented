@@ -11,6 +11,18 @@ class SearchQuery(BaseModel):
     q: str = Field(..., description="Search query string")
     limit: int = Field(default=50, le=200, description="Maximum results to return")
     trigger_id: Optional[str] = Field(default=None, description="Filter by trigger ID")
+    status: Optional[str] = Field(
+        default=None, description="Filter by execution status (running, completed, failed)"
+    )
+    started_after: Optional[str] = Field(
+        default=None, description="Filter executions started after this ISO 8601 timestamp"
+    )
+    started_before: Optional[str] = Field(
+        default=None, description="Filter executions started before this ISO 8601 timestamp"
+    )
+    bot_name: Optional[str] = Field(
+        default=None, description="Filter by bot/trigger name (substring match)"
+    )
 
 
 class SearchResult(BaseModel):

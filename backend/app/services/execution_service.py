@@ -1,11 +1,15 @@
-"""Trigger execution service with database-only status tracking and real-time logging."""
+"""Trigger execution service with database-only status tracking and real-time logging.
+
+This module is the public facade. Implementation is split across:
+- execution_retry.py   — retry/rate-limit state (ExecutionRetryManager)
+- execution_runner.py  — subprocess helpers (stream_pipe, budget_monitor, clone_repos, etc.)
+- trigger_dispatcher.py — webhook/GitHub event dispatching
+"""
 
 import datetime
-import hashlib
 import json
 import logging
 import os
-import random
 import shutil
 import signal
 import subprocess
@@ -16,36 +20,39 @@ from app.config import (
     EXECUTION_TIMEOUT_DEFAULT,
     EXECUTION_TIMEOUT_MAX,
     EXECUTION_TIMEOUT_MIN,
-    MAX_RETRY_ATTEMPTS,
-    MAX_RETRY_DELAY,
     PROJECT_ROOT,
     SIGTERM_GRACE_SECONDS,
     THREAD_JOIN_TIMEOUT,
-    WEBHOOK_DEDUP_WINDOW,
 )
 
 from ..database import (
     PREDEFINED_TRIGGER_ID,
-    delete_pending_retry,
-    get_all_pending_retries,
     get_latest_execution_for_trigger,
     get_paths_for_trigger_detailed,
-    get_triggers_by_trigger_source,
-    get_webhook_triggers,
-    upsert_pending_retry,
 )
-from ..db.health_alerts import create_health_alert
-from ..db.webhook_dedup import check_and_insert_dedup_key
-from ..utils.json_path import get_nested_value
 from .audit_log_service import AuditLogService
 from .budget_service import BudgetService
 from .command_builder import CommandBuilder
 from .diff_context_service import DiffContextService
 from .execution_log_service import ExecutionLogService
+from .execution_retry import ExecutionRetryManager
+from .execution_runner import (
+    auto_resolve_and_pr,
+    build_subprocess_env,
+    budget_monitor,
+    clone_repos,
+    fetch_pr_diff,
+    stream_pipe,
+)
 from .github_service import GitHubService
 from .process_manager import ProcessManager
 from .prompt_renderer import PromptRenderer
-from .rate_limit_service import RateLimitService
+from .trigger_dispatcher import (
+    dispatch_github_event as _dispatch_github_event,
+    dispatch_pr_comment_commands as _dispatch_pr_comment_commands,
+    dispatch_webhook_event as _dispatch_webhook_event,
+    match_payload as _match_payload,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -107,46 +114,32 @@ class ExecutionState:
 
 
 class ExecutionService:
-    """Service for trigger execution and status tracking via database."""
+    """Service for trigger execution and status tracking via database.
 
-    # Thread-safe dict tracking rate limit detections: {execution_id: cooldown_seconds}
-    _rate_limit_detected: Dict[str, int] = {}
-    # Thread-safe dict tracking transient failure detections: {execution_id: error_description}
-    _transient_failure_detected: Dict[str, str] = {}
-    # _rate_limit_lock guards _rate_limit_detected, _transient_failure_detected,
-    # _pending_retries, _retry_timers, and _retry_counts.
-    # Acquire before any read or write to those dicts.
-    _rate_limit_lock = threading.Lock()
+    This class is the public API facade. Retry state is managed by
+    ``ExecutionRetryManager``, subprocess helpers live in ``execution_runner``,
+    and dispatching lives in ``trigger_dispatcher``. All public method signatures
+    are preserved so that existing callers (32+ files) need zero import changes.
+    """
 
-    # Pending rate-limit retries: {trigger_id: {"retry_at": str, "cooldown_seconds": int, ...}}
-    _pending_retries: Dict[str, dict] = {}
-    # Active retry timers: {trigger_id: threading.Timer}
-    _retry_timers: Dict[str, threading.Timer] = {}
-    # Per-trigger consecutive retry attempt counter: {trigger_id: int}
-    _retry_counts: Dict[str, int] = {}
+    # ── Retry state (delegated to ExecutionRetryManager) ──────────────────────
+    # Expose the underlying dicts for any code that accesses them directly
+    _rate_limit_detected = ExecutionRetryManager._rate_limit_detected
+    _transient_failure_detected = ExecutionRetryManager._transient_failure_detected
+    _rate_limit_lock = ExecutionRetryManager._rate_limit_lock
+    _pending_retries = ExecutionRetryManager._pending_retries
+    _retry_timers = ExecutionRetryManager._retry_timers
+    _retry_counts = ExecutionRetryManager._retry_counts
 
     @classmethod
     def was_rate_limited(cls, execution_id: str) -> Optional[int]:
-        """Check if an execution was rate-limited. Returns cooldown seconds or None.
-
-        Pops the entry from the tracking dict (one-time check).
-        """
-        if not execution_id:
-            return None
-        with cls._rate_limit_lock:
-            return cls._rate_limit_detected.pop(execution_id, None)
+        """Check if an execution was rate-limited. Returns cooldown seconds or None."""
+        return ExecutionRetryManager.was_rate_limited(execution_id)
 
     @classmethod
     def was_transient_failure(cls, execution_id: str) -> Optional[str]:
-        """Check if an execution had a transient failure. Returns error description or None.
-
-        Pops the entry from the tracking dict (one-time check).
-        Uses CircuitBreakerService.is_transient_error for classification.
-        """
-        if not execution_id:
-            return None
-        with cls._rate_limit_lock:
-            return cls._transient_failure_detected.pop(execution_id, None)
+        """Check if an execution had a transient failure. Returns error description or None."""
+        return ExecutionRetryManager.was_transient_failure(execution_id)
 
     @classmethod
     def schedule_retry(
@@ -157,239 +150,22 @@ class ExecutionService:
         trigger_type: str,
         cooldown_seconds: int,
     ) -> None:
-        """Schedule a retry execution after rate-limit cooldown expires.
-
-        Replaces any existing pending retry for the same trigger.
-        Called by OrchestrationService when all fallback accounts are exhausted
-        and at least one was rate-limited.
-        """
-        trigger_id = trigger["id"]
-
-        # Cancel existing timer for this trigger
-        with cls._rate_limit_lock:
-            existing = cls._retry_timers.pop(trigger_id, None)
-            attempt_count = cls._retry_counts.get(trigger_id, 0) + 1
-            cls._retry_counts[trigger_id] = attempt_count
-        if existing:
-            existing.cancel()
-
-        if attempt_count > MAX_RETRY_ATTEMPTS:
-            logger.error(
-                "Rate-limit retry for trigger %s has exceeded max attempts (%d/%d) — "
-                "giving up to prevent infinite retry loop",
-                trigger_id,
-                attempt_count,
-                MAX_RETRY_ATTEMPTS,
-            )
-            AuditLogService.log(
-                action="retry.exhausted",
-                entity_type="trigger",
-                entity_id=trigger_id,
-                outcome="terminal_failure",
-                details={
-                    "attempt_count": attempt_count,
-                    "max_attempts": MAX_RETRY_ATTEMPTS,
-                    "trigger_type": trigger_type,
-                },
-            )
-            # Create a failed execution record so the terminal state is observable in the UI
-            terminal_exec_id = ExecutionLogService.start_execution(
-                trigger_id=trigger_id,
-                trigger_type=trigger_type,
-                prompt="[rate-limit retry exhausted]",
-                backend_type=trigger.get("backend_type", "claude"),
-            )
-            if terminal_exec_id:
-                ExecutionLogService.append_log(
-                    terminal_exec_id,
-                    "stderr",
-                    f"[TERMINAL] Rate-limit retry exhausted after {attempt_count} attempts "
-                    f"(max={MAX_RETRY_ATTEMPTS}). No further retries will be scheduled.",
-                )
-                ExecutionLogService.finish_execution(
-                    execution_id=terminal_exec_id,
-                    status=ExecutionState.FAILED,
-                    exit_code=-1,
-                    error_message=(
-                        f"Rate-limit retry exhausted: {attempt_count}/{MAX_RETRY_ATTEMPTS} attempts"
-                    ),
-                )
-            with cls._rate_limit_lock:
-                cls._retry_counts.pop(trigger_id, None)
-            delete_pending_retry(trigger_id)
-            return
-
-        retry_at = (
-            datetime.datetime.now() + datetime.timedelta(seconds=cooldown_seconds)
-        ).isoformat()
-
-        with cls._rate_limit_lock:
-            cls._pending_retries[trigger_id] = {
-                "trigger_id": trigger_id,
-                "cooldown_seconds": cooldown_seconds,
-                "retry_at": retry_at,
-                "scheduled_at": datetime.datetime.now().isoformat(),
-                "attempt": attempt_count,
-            }
-
-        # Persist to DB so the retry survives a server restart
-        upsert_pending_retry(
-            trigger_id=trigger_id,
-            trigger_json=json.dumps(trigger, default=str),
-            message_text=message_text,
-            event_json=json.dumps(event, default=str) if event else "{}",
-            trigger_type=trigger_type,
-            cooldown_seconds=cooldown_seconds,
-            retry_at=retry_at,
-        )
-
-        def _retry() -> None:
-            with cls._rate_limit_lock:
-                cls._retry_timers.pop(trigger_id, None)
-                cls._pending_retries.pop(trigger_id, None)
-                cls._retry_counts.pop(trigger_id, None)
-            delete_pending_retry(trigger_id)
-            logger.info(
-                "Executing rate-limit retry for trigger %s (attempt %d)", trigger_id, attempt_count
-            )
-            from .orchestration_service import OrchestrationService
-
-            OrchestrationService.execute_with_fallback(trigger, message_text, event, trigger_type)
-
-        # Exponential backoff: base * 2^(attempt-1), capped at MAX_RETRY_DELAY, plus random jitter
-        # to reduce thundering herd when multiple executions hit rate limits simultaneously.
-        jitter = random.uniform(0, min(10, cooldown_seconds))
-        backoff_delay = min(cooldown_seconds * (2 ** (attempt_count - 1)), MAX_RETRY_DELAY) + jitter
-
-        timer = threading.Timer(backoff_delay, _retry)
-        timer.daemon = True
-        timer.start()
-        with cls._rate_limit_lock:
-            cls._retry_timers[trigger_id] = timer
-
-        logger.info(
-            "Rate-limit retry scheduled: trigger=%s, attempt=%d/%d, base_cooldown=%ds, "
-            "backoff_delay=%.1fs, retry_at=%s",
-            trigger_id,
-            attempt_count,
-            MAX_RETRY_ATTEMPTS,
-            cooldown_seconds,
-            backoff_delay,
-            retry_at,
+        """Schedule a retry execution after rate-limit cooldown expires."""
+        return ExecutionRetryManager.schedule_retry(
+            trigger, message_text, event, trigger_type, cooldown_seconds
         )
 
     @classmethod
     def get_pending_retries(cls) -> dict:
-        """Return a snapshot of all pending rate-limit retries keyed by trigger_id.
-
-        Merges in-memory state with the DB so callers see all pending retries regardless
-        of whether the in-memory timer was restored after a restart.
-        """
-        with cls._rate_limit_lock:
-            result = dict(cls._pending_retries)
-        # Supplement with DB rows not currently tracked in memory
-        try:
-            for row in get_all_pending_retries():
-                tid = row["trigger_id"]
-                if tid not in result:
-                    result[tid] = {
-                        "trigger_id": tid,
-                        "cooldown_seconds": row.get("cooldown_seconds", 0),
-                        "retry_at": row.get("retry_at", ""),
-                        "scheduled_at": row.get("created_at", ""),
-                    }
-        except Exception as e:
-            logger.warning("Could not load pending retries from DB: %s", e, exc_info=True)
-        return result
+        """Return a snapshot of all pending rate-limit retries keyed by trigger_id."""
+        return ExecutionRetryManager.get_pending_retries()
 
     @classmethod
     def restore_pending_retries(cls) -> int:
-        """Re-schedule any pending retries persisted in the DB. Returns the count restored.
+        """Re-schedule any pending retries persisted in the DB. Returns the count restored."""
+        return ExecutionRetryManager.restore_pending_retries()
 
-        Called once at app startup to recover retries that were in-flight when the server
-        was last restarted.
-        """
-        restored = 0
-        try:
-            rows = get_all_pending_retries()
-        except Exception as e:
-            logger.error("Failed to load pending retries from DB for restore: %s", e, exc_info=True)
-            return 0
-
-        now = datetime.datetime.now()
-        for row in rows:
-            trigger_id = row["trigger_id"]
-            try:
-                trigger = json.loads(row["trigger_json"])
-                message_text = row.get("message_text", "")
-                event_raw = row.get("event_json") or "{}"
-                event = json.loads(event_raw) if event_raw != "{}" else None
-                trigger_type = row.get("trigger_type", "webhook")
-                retry_at_str = row["retry_at"]
-                retry_at = datetime.datetime.fromisoformat(retry_at_str)
-
-                # Compute remaining delay; fire immediately if already past due
-                remaining = max(0.0, (retry_at - now).total_seconds())
-
-                # Remove stale in-memory entry so schedule_retry can re-add it cleanly.
-                # Cancel is called inside the lock to close the window between the pop
-                # and the cancel where a timer could fire and cause double-execution.
-                with cls._rate_limit_lock:
-                    cls._pending_retries.pop(trigger_id, None)
-                    old_timer = cls._retry_timers.pop(trigger_id, None)
-                    if old_timer:
-                        old_timer.cancel()
-
-                def _retry(
-                    _trigger=trigger,
-                    _message=message_text,
-                    _event=event,
-                    _type=trigger_type,
-                    _tid=trigger_id,
-                ) -> None:
-                    with cls._rate_limit_lock:
-                        cls._retry_timers.pop(_tid, None)
-                        cls._pending_retries.pop(_tid, None)
-                    delete_pending_retry(_tid)
-                    logger.info("Executing restored rate-limit retry for trigger %s", _tid)
-                    from .orchestration_service import OrchestrationService
-
-                    OrchestrationService.execute_with_fallback(_trigger, _message, _event, _type)
-
-                with cls._rate_limit_lock:
-                    cls._pending_retries[trigger_id] = {
-                        "trigger_id": trigger_id,
-                        "cooldown_seconds": row.get("cooldown_seconds", 0),
-                        "retry_at": retry_at_str,
-                        "scheduled_at": row.get("created_at", ""),
-                    }
-
-                timer = threading.Timer(remaining, _retry)
-                timer.daemon = True
-                timer.start()
-
-                with cls._rate_limit_lock:
-                    cls._retry_timers[trigger_id] = timer
-
-                logger.info(
-                    "Restored pending retry for trigger %s (fires in %.1fs)",
-                    trigger_id,
-                    remaining,
-                )
-                restored += 1
-            except Exception as e:
-                logger.error(
-                    "Failed to restore pending retry for trigger %s: %s",
-                    trigger_id,
-                    e,
-                    exc_info=True,
-                )
-
-        if restored:
-            logger.warning(
-                "Restored %d rate-limit retry/retries from DB after server restart", restored
-            )
-        return restored
+    # ── Status / event persistence ────────────────────────────────────────────
 
     @classmethod
     def get_status(cls, trigger_id: str) -> dict:
@@ -443,30 +219,12 @@ class ExecutionService:
         logger.info("Saved threat report: %s", filepath)
         return filepath
 
+    # ── Execution runner helpers (delegated to execution_runner) ──────────────
+
     @staticmethod
     def _fetch_pr_diff(event: dict) -> Optional[str]:
-        """Fetch PR diff text from GitHub.
-
-        Constructs the diff URL from the PR URL ({pr_url}.diff) and fetches it.
-        Returns the diff text or None if unavailable.
-        """
-        pr_url = event.get("pr_url", "")
-        if not pr_url:
-            return None
-
-        diff_url = f"{pr_url}.diff"
-        try:
-            import urllib.request
-
-            req = urllib.request.Request(
-                diff_url,
-                headers={"Accept": "text/plain", "User-Agent": "Agented/1.0"},
-            )
-            with urllib.request.urlopen(req, timeout=15) as response:
-                return response.read().decode("utf-8", errors="replace")
-        except Exception as e:
-            logger.debug("Could not fetch PR diff from %s: %s", diff_url, e)
-            return None
+        """Fetch PR diff text from GitHub."""
+        return fetch_pr_diff(event)
 
     # Execution timeout bounds imported from app.config
     TIMEOUT_MIN = EXECUTION_TIMEOUT_MIN
@@ -502,239 +260,34 @@ class ExecutionService:
         interval_seconds: int = 30,
     ) -> None:
         """Periodically check budget during execution and kill process if hard limit exceeded."""
-        import time as _time
-
-        start_time = _time.time()
-
-        while process.poll() is None:
-            _time.sleep(interval_seconds)
-            if process.poll() is not None:
-                break
-            try:
-                # Check cost budget
-                budget_check = BudgetService.check_budget(entity_type, entity_id)
-                if not budget_check["allowed"]:
-                    reason = budget_check.get("reason", "hard limit reached")
-                    logger.warning(
-                        "Budget hard limit exceeded during execution %s (%s/%s) — terminating process. %s",
-                        execution_id,
-                        entity_type,
-                        entity_id,
-                        reason,
-                    )
-                    try:
-                        import os as _os
-
-                        _os.killpg(_os.getpgid(process.pid), signal.SIGKILL)
-                    except ProcessLookupError:
-                        pass  # Intentionally silenced: process already terminated
-                    except Exception as kill_err:
-                        logger.error(
-                            "Failed to kill over-budget process for execution %s: %s",
-                            execution_id,
-                            kill_err,
-                            exc_info=True,
-                        )
-                    ExecutionLogService.append_log(
-                        execution_id,
-                        "stderr",
-                        f"[BUDGET] Execution terminated: {reason}",
-                    )
-                    AuditLogService.log(
-                        action="execution.budget_exceeded",
-                        entity_type=entity_type,
-                        entity_id=entity_id,
-                        outcome="killed",
-                        details={"execution_id": execution_id, "reason": reason},
-                    )
-                    break
-
-                # Check execution time limit
-                elapsed = _time.time() - start_time
-                if BudgetService.check_execution_time_limit(entity_type, entity_id, elapsed):
-                    from ..db.budgets import get_budget_limit
-
-                    limits = get_budget_limit(entity_type, entity_id)
-                    limit_seconds = limits.get("max_execution_time_seconds") if limits else None
-                    logger.warning(
-                        "Execution time limit exceeded (%ds > %ds) for execution %s — "
-                        "terminating via cancel_graceful",
-                        int(elapsed),
-                        limit_seconds,
-                        execution_id,
-                    )
-                    ProcessManager.cancel_graceful(execution_id)
-                    ExecutionLogService.append_log(
-                        execution_id,
-                        "stderr",
-                        f"[BUDGET] Execution cancelled: time limit exceeded "
-                        f"({int(elapsed)}s > {limit_seconds}s)",
-                    )
-                    AuditLogService.log(
-                        action="execution.budget_exceeded",
-                        entity_type=entity_type,
-                        entity_id=entity_id,
-                        outcome="killed",
-                        details={
-                            "execution_id": execution_id,
-                            "reason": "execution_time_limit_exceeded",
-                            "elapsed_seconds": int(elapsed),
-                            "limit_seconds": limit_seconds,
-                        },
-                    )
-                    create_health_alert(
-                        alert_type="budget_exceeded",
-                        trigger_id=trigger_id,
-                        message=(
-                            f"Execution cancelled: time limit exceeded "
-                            f"({int(elapsed)}s > {limit_seconds}s)"
-                        ),
-                        details={
-                            "execution_id": execution_id,
-                            "elapsed_seconds": int(elapsed),
-                            "limit_seconds": limit_seconds,
-                        },
-                        severity="critical",
-                    )
-                    break
-            except Exception as monitor_err:
-                logger.debug("Budget monitor check failed for %s: %s", execution_id, monitor_err)
+        return budget_monitor(
+            execution_id, trigger_id, entity_type, entity_id, process, interval_seconds
+        )
 
     @classmethod
     def _stream_pipe(
         cls, execution_id: str, stream_name: str, pipe, backend_type: str = None
     ) -> None:
-        """Read from a pipe line by line and stream to log service.
-
-        When stream_name is 'stderr' and backend_type is provided, checks each line
-        for rate limit patterns and flags the execution if detected.
-        """
-        try:
-            for line in iter(pipe.readline, ""):
-                if line:
-                    content = line.rstrip("\n\r")
-                    ExecutionLogService.append_log(execution_id, stream_name, content)
-                    logger.debug("[%s] %s", stream_name, content)
-
-                    # Check for rate limit patterns in stderr
-                    if stream_name == "stderr" and backend_type:
-                        cooldown = RateLimitService.check_stderr_line(content, backend_type)
-                        if cooldown is not None:
-                            with cls._rate_limit_lock:
-                                cls._rate_limit_detected[execution_id] = cooldown
-                            logger.warning(
-                                "Rate limit detected for execution %s, cooldown=%ds",
-                                execution_id,
-                                cooldown,
-                            )
-                            AuditLogService.log(
-                                action="rate_limit.detected",
-                                entity_type="execution",
-                                entity_id=execution_id,
-                                outcome="rate_limited",
-                                details={
-                                    "backend_type": backend_type,
-                                    "cooldown_seconds": cooldown,
-                                },
-                            )
-                        else:
-                            # Check for transient failure patterns (502/503/timeout/connection)
-                            from .circuit_breaker_service import CircuitBreakerService
-
-                            if CircuitBreakerService.is_transient_error(error=content):
-                                with cls._rate_limit_lock:
-                                    # Only record first transient error per execution
-                                    if execution_id not in cls._transient_failure_detected:
-                                        cls._transient_failure_detected[execution_id] = content
-                                        logger.warning(
-                                            "Transient failure detected for execution %s: %s",
-                                            execution_id,
-                                            content[:200],
-                                        )
-        except (OSError, ValueError) as e:
-            logger.error(
-                "Error reading %s stream for execution %s: %s",
-                stream_name,
-                execution_id,
-                e,
-                exc_info=True,
-            )
-        except Exception:
-            logger.exception(
-                "Unexpected error reading %s stream for execution %s", stream_name, execution_id
-            )
-        finally:
-            pipe.close()
+        """Read from a pipe line by line and stream to log service."""
+        return stream_pipe(
+            execution_id,
+            stream_name,
+            pipe,
+            backend_type,
+            rate_limit_detected=ExecutionRetryManager._rate_limit_detected,
+            transient_failure_detected=ExecutionRetryManager._transient_failure_detected,
+            lock=ExecutionRetryManager._rate_limit_lock,
+        )
 
     @classmethod
     def _clone_repos(cls, path_entries: list, cloned_dirs: list, github_repo_map: dict) -> list:
-        """Resolve path entries into effective local paths, cloning GitHub repos as needed.
-
-        Mutates cloned_dirs (appends temp dirs) and github_repo_map (clone_dir -> repo_url).
-        Returns effective_paths list.
-        """
-        effective_paths = []
-        for entry in path_entries:
-            if entry["path_type"] == "github":
-                repo_url = entry["github_repo_url"]
-                logger.info("Cloning GitHub repo: %s", repo_url)
-                clone_dir = GitHubService.clone_repo(repo_url)
-                cloned_dirs.append(clone_dir)
-                effective_paths.append(clone_dir)
-                github_repo_map[clone_dir] = repo_url
-            else:
-                effective_paths.append(entry["local_project_path"])
-        return effective_paths
+        """Resolve path entries into effective local paths, cloning GitHub repos as needed."""
+        return clone_repos(path_entries, cloned_dirs, github_repo_map)
 
     @staticmethod
     def _build_subprocess_env(env_overrides: dict) -> Optional[dict]:
-        """Build subprocess environment, injecting vault secrets and account overrides.
-
-        Returns a merged env dict (os.environ + overrides + vault secrets), or None if no
-        overrides or secrets are present.
-        """
-        # Inject secrets from vault into subprocess environment
-        try:
-            from app.services.secret_vault_service import SecretVaultService
-
-            if SecretVaultService.is_configured():
-                vault_secrets = SecretVaultService.get_secrets_for_execution(scope="global")
-                if vault_secrets:
-                    if env_overrides is None:
-                        env_overrides = {}
-                    env_overrides.update(vault_secrets)
-        except Exception as e:
-            logger.warning("Failed to inject vault secrets into execution env: %s", e)
-
-        return {**os.environ, **env_overrides} if env_overrides else None
-
-    @classmethod
-    def _match_payload(cls, config: dict, payload: dict) -> Optional[str]:
-        """Check whether a webhook payload matches a trigger/team config's field criteria.
-
-        Returns the extracted text string if the payload matches, or None if it does not match.
-        Text is extracted using text_field_path and normalized to str.
-        """
-        match_field_path = config.get("match_field_path")
-        match_field_value = config.get("match_field_value")
-        text_field_path = config.get("text_field_path", "text")
-        detection_keyword = config.get("detection_keyword", "")
-
-        if match_field_path and match_field_value:
-            actual_value = get_nested_value(payload, match_field_path)
-            if str(actual_value) != str(match_field_value):
-                return None
-
-        text = get_nested_value(payload, text_field_path)
-        if text is None:
-            text = ""
-        elif not isinstance(text, str):
-            text = str(text)
-
-        if detection_keyword and detection_keyword not in text:
-            return None
-
-        return text
+        """Build subprocess environment, injecting vault secrets and account overrides."""
+        return build_subprocess_env(env_overrides)
 
     @classmethod
     def run_trigger(
@@ -825,7 +378,7 @@ class ExecutionService:
                 account_id=account_id,
             )
             # Trace logger — prefixes all subsequent log lines with the execution ID
-            # so that trigger receipt → subprocess output → completion can be correlated.
+            # so that trigger receipt -> subprocess output -> completion can be correlated.
             tlog = _trace_logger(execution_id)
             tlog.info(
                 "Execution started: trigger='%s' backend=%s cwd=%s cmd=%s...",
@@ -850,6 +403,8 @@ class ExecutionService:
 
             # Pre-execution budget check (wrapped in try/except -- never crash execution flow)
             try:
+                from ..db.health_alerts import create_health_alert
+
                 budget_check = BudgetService.check_budget("trigger", trigger_id)
                 if not budget_check["allowed"]:
                     limit_info = budget_check.get("limit") or {}
@@ -1051,7 +606,7 @@ class ExecutionService:
                 ):
                     # Get scan output from execution logs
                     scan_output = ExecutionLogService.get_stdout_log(execution_id)
-                    cls._auto_resolve_and_pr(trigger, github_repo_map, scan_output)
+                    auto_resolve_and_pr(trigger, github_repo_map, scan_output)
                 ExecutionLogService.finish_execution(
                     execution_id=execution_id, status=ExecutionState.SUCCESS, exit_code=exit_code
                 )
@@ -1137,96 +692,9 @@ class ExecutionService:
         cls, trigger: dict, github_repo_map: dict, scan_output: str
     ) -> List[str]:
         """Resolve issues in GitHub repos and create PRs. Returns list of PR URLs."""
-        pr_urls = []
+        return auto_resolve_and_pr(trigger, github_repo_map, scan_output)
 
-        for clone_dir, repo_url in github_repo_map.items():
-            try:
-                branch_name = GitHubService.generate_branch_name()
-
-                # Create a new branch
-                if not GitHubService.create_branch(clone_dir, branch_name):
-                    logger.warning("Skipping PR for %s: branch creation failed", repo_url)
-                    continue
-
-                # Run resolve command with Edit/Write permissions
-                resolve_prompt = (
-                    "IMPORTANT: You must ONLY fix the specific security vulnerabilities "
-                    "listed in the audit results below. Do NOT make any other changes "
-                    "or general security improvements.\n\n"
-                    "## Audit Results\n\n"
-                    f"{scan_output}\n\n"
-                    "## Instructions\n"
-                    "1. Read the audit findings above carefully\n"
-                    "2. For each vulnerability found, apply the specific fix\n"
-                    "3. If a fix command is provided (like 'pip install package>=version'), execute it\n"
-                    "4. Do NOT modify any code that isn't directly related to the vulnerabilities listed\n"
-                    "5. If no vulnerabilities were found in the audit, make NO changes\n"
-                )
-                cmd = [
-                    "claude",
-                    "-p",
-                    resolve_prompt,
-                    "--verbose",
-                    "--allowedTools",
-                    "Read,Glob,Grep,Bash,Edit,Write",
-                    "--add-dir",
-                    clone_dir,
-                ]
-                logger.info("Running resolve on %s...", repo_url)
-                resolve_result = subprocess.run(
-                    cmd,
-                    cwd=clone_dir,
-                    capture_output=True,
-                    text=True,
-                    timeout=900,  # 15 minute timeout
-                    start_new_session=True,  # Process group for clean cleanup
-                )
-                if resolve_result.returncode != 0:
-                    logger.warning(
-                        "Auto-resolve command failed for %s (exit=%d): %s",
-                        repo_url,
-                        resolve_result.returncode,
-                        resolve_result.stderr[:500] if resolve_result.stderr else "(no stderr)",
-                    )
-                    continue
-
-                # Commit changes
-                committed = GitHubService.commit_changes(
-                    clone_dir,
-                    "fix(security): resolve vulnerabilities\n\nAutomatic security fix by Agented",
-                )
-
-                if committed:
-                    pushed = GitHubService.push_branch(clone_dir, branch_name)
-                    if pushed:
-                        pr_url = GitHubService.create_pull_request(
-                            repo_path=clone_dir,
-                            branch_name=branch_name,
-                            title="fix(security): resolve vulnerabilities",
-                            body=(
-                                "## Security Fix\n\n"
-                                "This PR was automatically generated by Agented "
-                                "to resolve detected security vulnerabilities.\n\n"
-                                "Please review the changes carefully before merging."
-                            ),
-                        )
-                        if pr_url:
-                            pr_urls.append(pr_url)
-                        else:
-                            # PR creation failed after branch was pushed — roll back the remote branch
-                            logger.warning(
-                                "PR creation failed for %s; rolling back remote branch '%s'",
-                                repo_url,
-                                branch_name,
-                            )
-                            GitHubService.delete_remote_branch(clone_dir, branch_name)
-                else:
-                    logger.info("No changes to resolve for %s", repo_url)
-
-            except Exception:
-                logger.exception("Auto-resolve failed for %s", repo_url)
-
-        return pr_urls
+    # ── Dispatchers (delegated to trigger_dispatcher) ─────────────────────────
 
     @classmethod
     def dispatch_webhook_event(
@@ -1235,117 +703,18 @@ class ExecutionService:
         raw_payload: bytes = None,
         signature_header: str = None,
     ) -> bool:
-        """Dispatch a webhook event to matching triggers and teams based on configurable field matching.
+        """Dispatch a webhook event to matching triggers and teams based on configurable field matching."""
+        return _dispatch_webhook_event(
+            payload,
+            raw_payload,
+            signature_header,
+            save_trigger_event_fn=cls.save_trigger_event,
+        )
 
-        Args:
-            payload: The JSON webhook payload (parsed dict)
-            raw_payload: Raw request body bytes, used for HMAC validation
-            signature_header: Value of the X-Webhook-Signature-256 header
-
-        Returns:
-            True if at least one trigger or team was triggered
-        """
-        triggered = False
-
-        # --- Trigger dispatch ---
-        triggers = get_webhook_triggers()
-        for trigger in triggers:
-            # HMAC validation: if this trigger has a webhook_secret configured,
-            # require a valid signature. Skip trigger if signature is missing or invalid.
-            webhook_secret = trigger.get("webhook_secret")
-            if webhook_secret:
-                from .webhook_validation_service import WebhookValidationService
-
-                if raw_payload is None or not WebhookValidationService.validate_signature(
-                    raw_payload, signature_header or "", webhook_secret
-                ):
-                    logger.warning(
-                        "Webhook HMAC validation failed for trigger '%s' (%s); skipping dispatch",
-                        trigger["name"],
-                        trigger["id"],
-                    )
-                    continue
-
-            # Check if payload matches the trigger's field criteria and extract text
-            text = cls._match_payload(trigger, payload)
-            if text is None:
-                continue
-
-            # DB-backed deduplication: skip if identical payload was dispatched within TTL
-            payload_hash = hashlib.sha256(
-                json.dumps(payload, sort_keys=True, default=str).encode()
-            ).hexdigest()[:16]
-            is_new = check_and_insert_dedup_key(
-                trigger_id=trigger["id"],
-                payload_hash=payload_hash,
-                ttl_seconds=WEBHOOK_DEDUP_WINDOW,
-            )
-            if not is_new:
-                logger.info(
-                    "Webhook dedup: skipping duplicate dispatch for trigger '%s' (DB-backed)",
-                    trigger["name"],
-                )
-                continue
-
-            logger.info("Trigger '%s' triggered by webhook", trigger["name"])
-            cls.save_trigger_event(trigger, payload)
-
-            # Enqueue for dispatch via ExecutionQueueService (replaces direct thread spawn)
-            from .execution_queue_service import ExecutionQueueService, QueueFullError
-
-            try:
-                ExecutionQueueService.enqueue(
-                    trigger_id=trigger["id"],
-                    trigger_type="webhook",
-                    message_text=text,
-                    event_data=payload,
-                )
-                triggered = True
-            except QueueFullError:
-                logger.warning(
-                    "Queue depth limit exceeded for trigger '%s' (%s); rejecting webhook dispatch",
-                    trigger["name"],
-                    trigger["id"],
-                )
-                continue
-
-        # --- Team dispatch ---
-        from ..database import get_webhook_teams
-
-        teams = get_webhook_teams()
-        for team in teams:
-            # Parse trigger_config for field-matching rules (same schema as triggers)
-            trigger_config = team.get("trigger_config")
-            if trigger_config and isinstance(trigger_config, str):
-                try:
-                    trigger_config = json.loads(trigger_config)
-                except (json.JSONDecodeError, TypeError) as e:
-                    logger.warning(
-                        "Failed to parse trigger_config JSON for team '%s' (%s): %s — using empty config",
-                        team.get("name", ""),
-                        team.get("id", ""),
-                        e,
-                    )
-                    trigger_config = {}
-            if not trigger_config:
-                trigger_config = {}
-
-            # Check if payload matches the team's field criteria and extract text
-            text = cls._match_payload(trigger_config, payload)
-            if text is None:
-                continue
-
-            logger.info("Team '%s' triggered by webhook", team["name"])
-
-            from .team_execution_service import TeamExecutionService
-
-            TeamExecutionService.execute_team(team["id"], text, payload, "webhook")
-            triggered = True
-
-        if not triggered:
-            logger.debug("No webhook-triggered triggers or teams matched")
-
-        return triggered
+    @classmethod
+    def _match_payload(cls, config: dict, payload: dict) -> Optional[str]:
+        """Check whether a webhook payload matches a trigger/team config's field criteria."""
+        return _match_payload(config, payload)
 
     @staticmethod
     def build_resolve_command(audit_summary: str, project_paths: list) -> list:
@@ -1392,85 +761,21 @@ class ExecutionService:
 
     @classmethod
     def dispatch_github_event(cls, repo_url: str, pr_data: dict) -> bool:
-        """Dispatch a GitHub PR event to matching triggers and teams.
+        """Dispatch a GitHub PR event to matching triggers and teams."""
+        return _dispatch_github_event(
+            repo_url,
+            pr_data,
+            save_trigger_event_fn=cls.save_trigger_event,
+        )
 
-        Args:
-            repo_url: The GitHub repository URL
-            pr_data: Dictionary containing PR information:
-                - pr_number: PR number
-                - pr_title: PR title
-                - pr_url: PR URL
-                - pr_author: PR author username
-                - repo_full_name: Repository full name (owner/repo)
-                - action: PR action (opened, synchronize, reopened)
-
-        Returns:
-            True if at least one trigger or team was triggered
-        """
-        triggered = False
-
-        # --- Trigger dispatch ---
-        triggers = get_triggers_by_trigger_source("github")
-        for trigger in triggers:
-            logger.info("Triggering '%s' for GitHub PR event", trigger["name"])
-
-            # Build message text from PR data
-            message_text = (
-                f"PR #{pr_data['pr_number']}: {pr_data['pr_title']}\n"
-                f"URL: {pr_data['pr_url']}\n"
-                f"Author: {pr_data['pr_author']}\n"
-                f"Repository: {pr_data['repo_full_name']}\n"
-                f"Action: {pr_data['action']}"
-            )
-
-            # Build event context for logging
-            event = {"type": "github_pr", "repo_url": repo_url, **pr_data}
-
-            # Save trigger event
-            cls.save_trigger_event(trigger, event)
-
-            # Enqueue for dispatch via ExecutionQueueService (replaces direct thread spawn)
-            from .execution_queue_service import ExecutionQueueService, QueueFullError
-
-            try:
-                ExecutionQueueService.enqueue(
-                    trigger_id=trigger["id"],
-                    trigger_type="github",
-                    message_text=message_text,
-                    event_data=event,
-                )
-                triggered = True
-            except QueueFullError:
-                logger.warning(
-                    "Queue depth limit exceeded for trigger '%s' (%s); rejecting GitHub dispatch",
-                    trigger["name"],
-                    trigger["id"],
-                )
-                continue
-
-        # --- Team dispatch ---
-        from ..database import get_teams_by_trigger_source
-
-        teams = get_teams_by_trigger_source("github")
-        for team in teams:
-            logger.info("Triggering team '%s' for GitHub PR event", team["name"])
-
-            message_text = (
-                f"PR #{pr_data.get('pr_number', '')}: {pr_data.get('pr_title', '')}\n"
-                f"URL: {pr_data.get('pr_url', '')}\n"
-                f"Author: {pr_data.get('pr_author', '')}\n"
-                f"Repository: {pr_data.get('repo_full_name', '')}\n"
-                f"Action: {pr_data.get('action', '')}"
-            )
-
-            event = {"type": "github_pr", "repo_url": repo_url, **pr_data}
-
-            from .team_execution_service import TeamExecutionService
-
-            TeamExecutionService.execute_team(team["id"], message_text, event, "github")
-            triggered = True
-
-        if not triggered:
-            logger.debug("No GitHub-triggered triggers or teams found")
-
-        return triggered
+    @classmethod
+    def dispatch_pr_comment_commands(
+        cls, repo_url: str, commands: list, pr_data: dict
+    ) -> bool:
+        """Dispatch slash commands from a PR comment to matching triggers."""
+        return _dispatch_pr_comment_commands(
+            repo_url=repo_url,
+            commands=commands,
+            pr_data=pr_data,
+            save_trigger_event_fn=cls.save_trigger_event,
+        )

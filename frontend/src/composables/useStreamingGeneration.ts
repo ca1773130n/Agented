@@ -1,5 +1,6 @@
 import { ref, onUnmounted } from 'vue';
 import { isAbortError } from '../services/api';
+import { getApiKey } from '../services/api/client';
 
 export interface StreamLogEntry {
   type: string;
@@ -34,9 +35,13 @@ export function useStreamingGeneration() {
     phase.value = 'Starting...';
 
     try {
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      const apiKey = getApiKey();
+      if (apiKey) headers['X-API-Key'] = apiKey;
+
       const response = await fetch(url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify(body),
         signal,
       });

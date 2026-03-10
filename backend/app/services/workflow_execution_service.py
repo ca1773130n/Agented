@@ -1,15 +1,9 @@
 """Workflow execution service — DAG execution engine with topological sort, node dispatch,
 error handling, retry, and timeout."""
 
-import ast
 import graphlib
 import json
 import logging
-import operator
-import os
-import shlex
-import subprocess
-import tempfile
 import threading
 import time
 from datetime import datetime, timedelta, timezone
@@ -17,154 +11,12 @@ from typing import Dict, List, Optional
 
 from ..models.workflow import NodeErrorMode, WorkflowMessage
 
+# Re-export evaluate_condition so existing imports continue to work:
+#   from app.services.workflow_execution_service import evaluate_condition
+from .workflow_expression_evaluator import evaluate_condition  # noqa: F401
+from .workflow_node_executor import NodeExecutor
+
 logger = logging.getLogger(__name__)
-
-
-# =============================================================================
-# Safe Expression Evaluator (AST-based, no eval/exec)
-# =============================================================================
-
-SAFE_COMPARE_OPS = {
-    ast.Eq: operator.eq,
-    ast.NotEq: operator.ne,
-    ast.Gt: operator.gt,
-    ast.Lt: operator.lt,
-    ast.GtE: operator.ge,
-    ast.LtE: operator.le,
-    ast.In: lambda a, b: a in b,
-    ast.NotIn: lambda a, b: a not in b,
-}
-
-SAFE_BOOL_OPS = {
-    ast.And: all,
-    ast.Or: any,
-}
-
-
-def _resolve_name(name: str, context: dict) -> None:
-    """Resolve a top-level name from the context dict."""
-    if name in context:
-        return context[name]
-    raise ValueError(f"Undefined variable: '{name}'")
-
-
-def _resolve_attribute(node: ast.Attribute, context: dict) -> None:
-    """Resolve dot-notation attribute access on the context dict.
-
-    E.g., pr.lines_changed -> context["pr"]["lines_changed"]
-    """
-    # Build the chain of attributes
-    parts = []
-    current = node
-    while isinstance(current, ast.Attribute):
-        parts.append(current.attr)
-        current = current.value
-    if isinstance(current, ast.Name):
-        parts.append(current.id)
-    else:
-        raise ValueError(f"Unsupported attribute base: {ast.dump(current)}")
-
-    # Reverse to get root-first order
-    parts.reverse()
-
-    # Walk into the context dict
-    value = context
-    for part in parts:
-        if isinstance(value, dict):
-            if part not in value:
-                raise ValueError(f"Key not found: '{part}' in context path")
-            value = value[part]
-        else:
-            raise ValueError(f"Cannot access attribute '{part}' on non-dict value")
-
-    return value
-
-
-def _eval_node(node, context: dict) -> None:
-    """Recursively evaluate an AST node against a context dict.
-
-    Only allows safe operations: comparisons, boolean ops, unary not,
-    attribute access, name lookups, constants, and subscripts.
-    """
-    if isinstance(node, ast.Constant):
-        return node.value
-
-    elif isinstance(node, ast.Name):
-        return _resolve_name(node.id, context)
-
-    elif isinstance(node, ast.Attribute):
-        return _resolve_attribute(node, context)
-
-    elif isinstance(node, ast.Subscript):
-        value = _eval_node(node.value, context)
-        if isinstance(node.slice, ast.Constant):
-            key = node.slice.value
-        elif isinstance(node.slice, ast.Name):
-            key = _resolve_name(node.slice.id, context)
-        else:
-            raise ValueError(f"Unsupported subscript slice: {ast.dump(node.slice)}")
-        if isinstance(value, dict):
-            return value[key]
-        elif isinstance(value, (list, tuple)):
-            return value[key]
-        raise ValueError(f"Cannot subscript type: {type(value).__name__}")
-
-    elif isinstance(node, ast.Compare):
-        left = _eval_node(node.left, context)
-        for op, comparator in zip(node.ops, node.comparators):
-            op_func = SAFE_COMPARE_OPS.get(type(op))
-            if op_func is None:
-                raise ValueError(f"Unsupported comparison operator: {ast.dump(op)}")
-            right = _eval_node(comparator, context)
-            if not op_func(left, right):
-                return False
-            left = right
-        return True
-
-    elif isinstance(node, ast.BoolOp):
-        op_func = SAFE_BOOL_OPS.get(type(node.op))
-        if op_func is None:
-            raise ValueError(f"Unsupported boolean operator: {ast.dump(node.op)}")
-        return op_func(_eval_node(v, context) for v in node.values)
-
-    elif isinstance(node, ast.UnaryOp):
-        if isinstance(node.op, ast.Not):
-            return not _eval_node(node.operand, context)
-        raise ValueError(f"Unsupported unary operator: {ast.dump(node.op)}")
-
-    elif isinstance(node, ast.List):
-        return [_eval_node(elt, context) for elt in node.elts]
-
-    elif isinstance(node, ast.Tuple):
-        return tuple(_eval_node(elt, context) for elt in node.elts)
-
-    else:
-        raise ValueError(f"Unsupported expression node: {ast.dump(node)}")
-
-
-def evaluate_condition(expression: str, context: dict) -> bool:
-    """Evaluate a condition expression against a sandboxed context dict.
-
-    Uses Python's ast module to parse the expression and walk the AST,
-    only allowing safe operations. Does NOT use eval(), exec(), or compile()
-    with exec mode.
-
-    Args:
-        expression: A Python-like condition expression string.
-        context: A dict of variables available for evaluation.
-
-    Returns:
-        Boolean result of the expression evaluation.
-
-    Raises:
-        ValueError: If the expression contains unsupported AST nodes.
-    """
-    try:
-        tree = ast.parse(expression, mode="eval")
-    except SyntaxError as e:
-        raise ValueError(f"Invalid expression syntax: {e}") from e
-
-    return bool(_eval_node(tree.body, context))
 
 
 class WorkflowExecutionService:
@@ -192,7 +44,8 @@ class WorkflowExecutionService:
 
     DEFAULT_TIMEOUT_SECONDS = 1800  # 30 minutes
 
-    # Node type dispatcher map
+    # Node type dispatcher map (kept for backward compatibility with tests that
+    # reference NODE_DISPATCHERS or patch individual _execute_* methods)
     NODE_DISPATCHERS = {
         "trigger": "_execute_trigger_node",
         "skill": "_execute_skill_node",
@@ -813,7 +666,9 @@ class WorkflowExecutionService:
                 "workflow", workflow_id, final_status, output=output_data
             )
         except Exception as e:
-            logger.error(f"Error firing completion triggers for {execution_id}: {e}", exc_info=True)
+            logger.error(
+                f"Error firing completion triggers for {execution_id}: {e}", exc_info=True
+            )
 
         cls._schedule_cleanup(execution_id)
 
@@ -893,7 +748,13 @@ class WorkflowExecutionService:
         )
 
     # =========================================================================
-    # Node Dispatchers
+    # Node Dispatchers — delegate to NodeExecutor
+    #
+    # These methods are kept on WorkflowExecutionService so that existing
+    # test patches (e.g. monkeypatch.setattr(WorkflowExecutionService,
+    # "_execute_command_node", ...)) continue to work. The _dispatch_node
+    # method uses getattr(cls, handler_name) which resolves these methods,
+    # allowing tests to override them on this class.
     # =========================================================================
 
     @classmethod
@@ -950,461 +811,57 @@ class WorkflowExecutionService:
     def _execute_trigger_node(
         cls, node_id: str, node_config: dict, input_msg: WorkflowMessage
     ) -> WorkflowMessage:
-        """Execute a trigger node (entry point).
-
-        Pass-through: returns input as-is, or creates a message from config data.
-        """
-        if "data" in node_config:
-            return WorkflowMessage(
-                content_type="trigger",
-                data=node_config["data"],
-                metadata={"source_node_id": node_id},
-            )
-        # Pass through input
-        return WorkflowMessage(
-            content_type="trigger",
-            text=input_msg.text,
-            data=input_msg.data,
-            metadata={**input_msg.metadata, "source_node_id": node_id},
-        )
+        """Execute a trigger node — delegates to NodeExecutor."""
+        return NodeExecutor._execute_trigger_node(node_id, node_config, input_msg)
 
     @classmethod
     def _execute_skill_node(
         cls, node_id: str, node_config: dict, input_msg: WorkflowMessage
     ) -> WorkflowMessage:
-        """Execute a skill node (stub).
-
-        Real skill invocation deferred to when skills integration is built.
-        """
-        skill_name = node_config.get("skill_name", "unknown")
-        return WorkflowMessage(
-            content_type="text",
-            text=f"[skill:{skill_name}] executed",
-            metadata={"source_node_id": node_id},
-        )
+        """Execute a skill node — delegates to NodeExecutor."""
+        return NodeExecutor._execute_skill_node(node_id, node_config, input_msg)
 
     @classmethod
     def _execute_command_node(
         cls, node_id: str, node_config: dict, input_msg: WorkflowMessage
     ) -> WorkflowMessage:
-        """Execute a shell command node.
-
-        Runs the command via subprocess.run() with a timeout. Returns stdout, stderr,
-        and exit code in a WorkflowMessage.
-        """
-        command = node_config.get("command")
-        if not command:
-            raise ValueError(f"Command node {node_id} has no 'command' in config")
-
-        timeout = node_config.get("timeout", 60)
-        cwd = node_config.get("cwd")
-
-        try:
-            result = subprocess.run(
-                shlex.split(command),
-                shell=False,
-                capture_output=True,
-                text=True,
-                timeout=timeout,
-                cwd=cwd,
-            )
-            stdout = result.stdout[:10000] if result.stdout else ""
-            stderr = result.stderr[:10000] if result.stderr else ""
-
-            if result.returncode != 0:
-                raise RuntimeError(
-                    f"Command exited with code {result.returncode}: "
-                    f"{stderr[:200] if stderr else 'no stderr'}"
-                )
-
-            return WorkflowMessage(
-                content_type="command_output",
-                text=stdout.strip(),
-                stdout=stdout,
-                stderr=stderr,
-                exit_code=result.returncode,
-                metadata={"source_node_id": node_id, "command": command},
-            )
-        except subprocess.TimeoutExpired:
-            raise RuntimeError(f"Command timed out after {timeout}s: {command[:100]}")
+        """Execute a command node — delegates to NodeExecutor."""
+        return NodeExecutor._execute_command_node(node_id, node_config, input_msg)
 
     @classmethod
     def _execute_agent_node(
         cls, node_id: str, node_config: dict, input_msg: WorkflowMessage
     ) -> WorkflowMessage:
-        """Execute an agent node via OrchestrationService with fallback chain.
-
-        Reads fallback_chain and routing_rules from node_config to determine which
-        model/account to use. Delegates execution to OrchestrationService.execute_with_fallback()
-        which handles rate limits, budget checks, and account rotation.
-
-        If routing_rules are configured and diff size is available, the fallback chain
-        is filtered to the appropriate tier (cheap vs expensive) before execution.
-        """
-        from .orchestration_service import ExecutionStatus, OrchestrationService
-
-        agent_id = node_config.get("agent_id", "unknown")
-        trigger_id = node_config.get("trigger_id")
-
-        # Read fallback chain and routing rules from config
-        fallback_chain = node_config.get("fallback_chain", [])
-        routing_rules = node_config.get("routing_rules")
-
-        # Determine diff size from input message data
-        input_data = input_msg.data or {}
-        diff_size = input_data.get("diff_size", 0)
-        pr_data = input_data.get("pr", {})
-        if isinstance(pr_data, dict):
-            diff_size = diff_size or pr_data.get("lines_changed", 0)
-
-        # Apply routing rules to filter fallback chain by tier
-        effective_chain = list(fallback_chain)
-        if routing_rules and diff_size and effective_chain:
-            threshold = routing_rules.get("diff_size_threshold", 500)
-            if diff_size < threshold:
-                target_tier = routing_rules.get("small_diff_tier", "cheap")
-            else:
-                target_tier = routing_rules.get("large_diff_tier", "expensive")
-
-            filtered = [e for e in effective_chain if e.get("tier") == target_tier]
-            if filtered:
-                effective_chain = filtered
-            # If filter produces empty list, use full chain (graceful fallback)
-
-        # Build message text from input
-        message_text = input_msg.text or ""
-        if not message_text and input_data:
-            message_text = json.dumps(input_data, default=str)[:5000]
-
-        # Build synthetic trigger dict for OrchestrationService
-        trigger_dict = {
-            "id": trigger_id or f"wf-agent-{node_id}",
-            "name": f"workflow-agent-{agent_id}",
-            "backend_type": "claude",  # default, overridden by chain entries
-            "agent_id": agent_id,
-        }
-
-        # Build event data from input message
-        event_data = {
-            "node_id": node_id,
-            "agent_id": agent_id,
-            **(input_data or {}),
-        }
-
-        # If we have an explicit fallback chain, override the default chain lookup
-        # by setting the chain entries on the trigger dict
-        if effective_chain:
-            trigger_dict["_fallback_chain_override"] = effective_chain
-
-        result = OrchestrationService.execute_with_fallback(
-            trigger_dict, message_text, event_data, "workflow"
-        )
-
-        if result.status == ExecutionStatus.CHAIN_EXHAUSTED:
-            raise RuntimeError(
-                f"Agent node {node_id}: all fallback chain providers exhausted "
-                f"({result.detail or 'no detail'})"
-            )
-
-        if result.status == ExecutionStatus.BUDGET_BLOCKED:
-            raise RuntimeError(
-                f"Agent node {node_id}: budget blocked ({result.detail or 'no detail'})"
-            )
-
-        if result.status == ExecutionStatus.LAUNCH_FAILED:
-            raise RuntimeError(f"Agent node {node_id}: execution launch failed")
-
-        # DISPATCHED: execution started successfully
-        return WorkflowMessage(
-            content_type="agent_output",
-            text=f"Agent {agent_id} execution dispatched: {result.execution_id}",
-            data={
-                "execution_id": result.execution_id,
-                "agent_id": agent_id,
-                "status": result.status.value,
-            },
-            metadata={
-                "source_node_id": node_id,
-                "execution_id": result.execution_id or "",
-                "agent_id": agent_id,
-            },
-        )
+        """Execute an agent node — delegates to NodeExecutor."""
+        return NodeExecutor._execute_agent_node(node_id, node_config, input_msg)
 
     @classmethod
     def _execute_script_node(
         cls, node_id: str, node_config: dict, input_msg: WorkflowMessage
     ) -> WorkflowMessage:
-        """Execute a script node.
-
-        Writes script content to a temp file, runs it via subprocess,
-        and returns the output.
-        """
-        script = node_config.get("script")
-        if not script:
-            raise ValueError(f"Script node {node_id} has no 'script' in config")
-
-        timeout = node_config.get("timeout", 60)
-        interpreter = node_config.get("interpreter", "python3")
-
-        tmp_file = None
-        try:
-            # Write script to temp file
-            suffix = ".py" if "python" in interpreter else ".sh"
-            tmp_file = tempfile.NamedTemporaryFile(mode="w", suffix=suffix, delete=False)
-            tmp_file.write(script)
-            tmp_file.flush()
-            tmp_file.close()
-
-            result = subprocess.run(
-                [interpreter, tmp_file.name],
-                capture_output=True,
-                text=True,
-                timeout=timeout,
-            )
-            stdout = result.stdout[:10000] if result.stdout else ""
-            stderr = result.stderr[:10000] if result.stderr else ""
-
-            if result.returncode != 0:
-                raise RuntimeError(
-                    f"Script exited with code {result.returncode}: "
-                    f"{stderr[:200] if stderr else 'no stderr'}"
-                )
-
-            return WorkflowMessage(
-                content_type="script_output",
-                text=stdout.strip(),
-                stdout=stdout,
-                stderr=stderr,
-                exit_code=result.returncode,
-                metadata={"source_node_id": node_id},
-            )
-        except subprocess.TimeoutExpired:
-            raise RuntimeError(f"Script timed out after {timeout}s")
-        finally:
-            # Clean up temp file
-            if tmp_file and os.path.exists(tmp_file.name):
-                try:
-                    os.unlink(tmp_file.name)
-                except OSError as e:
-                    logger.warning("Failed to delete temp script file %s: %s", tmp_file.name, e)
+        """Execute a script node — delegates to NodeExecutor."""
+        return NodeExecutor._execute_script_node(node_id, node_config, input_msg)
 
     @classmethod
     def _execute_conditional_node(
         cls, node_id: str, node_config: dict, input_msg: WorkflowMessage
     ) -> WorkflowMessage:
-        """Execute a conditional node.
-
-        Evaluates a condition against the input message and returns a boolean result.
-        Supported conditions: has_text, exit_code_zero, contains, expression.
-
-        The 'expression' condition type uses the safe AST-based evaluator to evaluate
-        rich expressions against the input data (e.g., pr.lines_changed > 500).
-        """
-        condition = node_config.get("condition", "has_text")
-        result = False
-
-        if condition == "has_text":
-            result = bool(input_msg.text)
-        elif condition == "exit_code_zero":
-            result = input_msg.exit_code == 0
-        elif condition == "contains":
-            value = node_config.get("value", "")
-            result = value in (input_msg.text or "")
-        elif condition == "expression":
-            expression = node_config.get("expression", "")
-            if not expression:
-                logger.warning(f"Expression condition on node {node_id} has empty expression")
-                result = False
-            else:
-                # Build context from input_msg.data (upstream node's output data)
-                context = input_msg.data or {}
-                try:
-                    result = evaluate_condition(expression, context)
-                except ValueError as e:
-                    logger.error(
-                        f"Expression evaluation error on node {node_id}: {e}", exc_info=True
-                    )
-                    result = False
-        else:
-            logger.warning(f"Unknown condition type: {condition}")
-
-        branch = "true" if result else "false"
-        return WorkflowMessage(
-            content_type="conditional",
-            data={"result": result, "branch": branch},
-            text=input_msg.text,
-            metadata={"source_node_id": node_id, "condition": condition, "branch": branch},
-        )
+        """Execute a conditional node — delegates to NodeExecutor."""
+        return NodeExecutor._execute_conditional_node(node_id, node_config, input_msg)
 
     @classmethod
     def _execute_transform_node(
         cls, node_id: str, node_config: dict, input_msg: WorkflowMessage
     ) -> WorkflowMessage:
-        """Execute a transform node.
-
-        Applies a transformation to the input message.
-        Supported types: extract_field, template, json_parse, uppercase, lowercase.
-        """
-        transform_type = node_config.get("transform_type", "passthrough")
-
-        if transform_type == "extract_field":
-            field = node_config.get("field", "")
-            data = input_msg.data or {}
-            value = data.get(field)
-            return WorkflowMessage(
-                content_type="text",
-                text=str(value) if value is not None else None,
-                data={"field": field, "value": value},
-                metadata={"source_node_id": node_id, "transform": "extract_field"},
-            )
-
-        elif transform_type == "template":
-            template = node_config.get("template", "")
-            # Format with input message fields
-            try:
-                formatted = template.format(
-                    text=input_msg.text or "",
-                    data=input_msg.data or {},
-                    stdout=input_msg.stdout or "",
-                    stderr=input_msg.stderr or "",
-                    exit_code=input_msg.exit_code,
-                )
-            except (KeyError, IndexError, ValueError):
-                formatted = template
-            return WorkflowMessage(
-                content_type="text",
-                text=formatted,
-                metadata={"source_node_id": node_id, "transform": "template"},
-            )
-
-        elif transform_type == "json_parse":
-            try:
-                parsed = json.loads(input_msg.text or "{}")
-                return WorkflowMessage(
-                    content_type="json",
-                    data=parsed if isinstance(parsed, dict) else {"value": parsed},
-                    metadata={"source_node_id": node_id, "transform": "json_parse"},
-                )
-            except (json.JSONDecodeError, TypeError):
-                raise ValueError(f"Cannot parse input text as JSON in node {node_id}")
-
-        elif transform_type == "uppercase":
-            return WorkflowMessage(
-                content_type="text",
-                text=(input_msg.text or "").upper(),
-                metadata={"source_node_id": node_id, "transform": "uppercase"},
-            )
-
-        elif transform_type == "lowercase":
-            return WorkflowMessage(
-                content_type="text",
-                text=(input_msg.text or "").lower(),
-                metadata={"source_node_id": node_id, "transform": "lowercase"},
-            )
-
-        else:
-            # Passthrough
-            return WorkflowMessage(
-                content_type=input_msg.content_type,
-                text=input_msg.text,
-                data=input_msg.data,
-                metadata={**input_msg.metadata, "source_node_id": node_id},
-                exit_code=input_msg.exit_code,
-                stdout=input_msg.stdout,
-                stderr=input_msg.stderr,
-            )
-
-    # =========================================================================
-    # Approval Gate Node
-    # =========================================================================
+        """Execute a transform node — delegates to NodeExecutor."""
+        return NodeExecutor._execute_transform_node(node_id, node_config, input_msg)
 
     @classmethod
     def _execute_approval_gate_node(
         cls, node_id: str, node_config: dict, input_msg: WorkflowMessage
     ) -> WorkflowMessage:
-        """Execute an approval gate node.
-
-        Pauses workflow execution via threading.Event.wait() until an approve or
-        reject API call is made, or the timeout expires. Follows the proven
-        TeamExecutionService._execute_human_in_loop pattern.
-
-        The execution_id is obtained from input_msg.metadata["_execution_id"],
-        which is injected by _run_workflow before dispatch.
-        """
-        from ..db.workflows import add_workflow_approval_state, update_workflow_approval_state
-
-        timeout = node_config.get("timeout", 1800)
-
-        # Get execution_id from metadata (injected by _run_workflow Part B)
-        execution_id = (input_msg.metadata or {}).get("_execution_id")
-        if not execution_id:
-            raise RuntimeError(
-                "execution_id not available in input_msg.metadata -- _run_workflow must inject it"
-            )
-
-        # Create approval event
-        approval_event = threading.Event()
-        approval_key = (execution_id, node_id)
-
-        # Register in class-level approval events dict
-        with cls._approval_lock:
-            cls._approval_events[approval_key] = approval_event
-
-        # Persist to DB
-        add_workflow_approval_state(execution_id, node_id, timeout)
-
-        # Update node state to pending_approval (triggers SSE via existing mechanism)
-        cls._update_node_state(execution_id, node_id, "pending_approval")
-
-        # Also update overall execution status to pending_approval
-        cls._update_status(execution_id, "pending_approval")
-
-        logger.info(
-            f"Approval gate: waiting for approval on execution={execution_id}, "
-            f"node={node_id}, timeout={timeout}s"
-        )
-
-        # Wait for approval or timeout
-        approved = approval_event.wait(timeout=timeout)
-
-        # Clean up event from registry
-        with cls._approval_lock:
-            cls._approval_events.pop(approval_key, None)
-
-        if not approved:
-            # Timeout
-            update_workflow_approval_state(execution_id, node_id, "timed_out")
-            cls._update_status(execution_id, "running")
-            raise RuntimeError(
-                f"Approval gate timed out after {timeout}s "
-                f"(execution={execution_id}, node={node_id})"
-            )
-
-        # Check if rejected
-        with cls._approval_lock:
-            was_rejected = cls._rejection_flags.pop(approval_key, False)
-
-        if was_rejected:
-            cls._update_status(execution_id, "running")
-            raise RuntimeError(f"Approval gate rejected (execution={execution_id}, node={node_id})")
-
-        # Approved -- restore running status and pass through
-        cls._update_status(execution_id, "running")
-        logger.info(f"Approval gate: approved for execution={execution_id}, node={node_id}")
-
-        return WorkflowMessage(
-            content_type=input_msg.content_type or "approval_gate",
-            text=input_msg.text,
-            data=input_msg.data,
-            metadata={
-                **(input_msg.metadata or {}),
-                "source_node_id": node_id,
-                "approval_status": "approved",
-            },
-            exit_code=input_msg.exit_code,
-            stdout=input_msg.stdout,
-            stderr=input_msg.stderr,
-        )
+        """Execute an approval gate node — delegates to NodeExecutor."""
+        return NodeExecutor._execute_approval_gate_node(node_id, node_config, input_msg)
 
     # =========================================================================
     # Approve / Reject API

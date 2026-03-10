@@ -24,8 +24,8 @@ export function useSketchChat() {
   const messages: Ref<ConversationMessage[]> = ref([]);
   const error: Ref<string | null> = ref(null);
 
-  // AbortController for cancelling pending requests on unmount
-  const abortController = new AbortController();
+  // AbortController for cancelling pending requests on unmount or re-execute
+  let abortController = new AbortController();
 
   async function loadProjects() {
     try {

@@ -22,6 +22,7 @@ def register_blueprints(app):
     from .execution_search import execution_search_bp
     from .executions import executions_bp
     from .github_webhook import github_webhook_bp
+    from .trigger_conditions import trigger_conditions_bp
     from .gitops import gitops_bp
     from .grd import grd_bp
     from .health import health_bp
@@ -56,8 +57,17 @@ def register_blueprints(app):
     from .skills import skills_bp
     from .spa import spa_bp
     from .specialized_bots import specialized_bots_bp
+    from .super_agent_chat import super_agent_chat_bp
+    from .super_agent_documents import super_agent_documents_bp
     from .super_agent_exports import super_agent_exports_bp
+    from .super_agent_messages import super_agent_messages_bp
+    from .super_agent_sessions import super_agent_sessions_bp
     from .super_agents import super_agents_bp
+    from .team_assignments import team_assignments_bp
+    from .team_connections import team_connections_bp
+    from .team_edges import team_edges_bp
+    from .team_generation import team_generation_bp
+    from .team_members import team_members_bp
     from .teams import teams_bp
     from .triggers import triggers_bp
     from .utility import utility_bp
@@ -93,6 +103,11 @@ def register_blueprints(app):
             agent_conversations_bp,
             skills_bp,
             teams_bp,
+            team_members_bp,
+            team_connections_bp,
+            team_assignments_bp,
+            team_edges_bp,
+            team_generation_bp,
             products_bp,
             projects_bp,
             plugins_bp,
@@ -115,6 +130,10 @@ def register_blueprints(app):
             scheduler_bp,
             setup_bp,
             super_agents_bp,
+            super_agent_chat_bp,
+            super_agent_documents_bp,
+            super_agent_messages_bp,
+            super_agent_sessions_bp,
             super_agent_exports_bp,
             workflows_bp,
             sketches_bp,
@@ -158,10 +177,16 @@ def register_blueprints(app):
     app.register_api(execution_search_bp)
     app.register_api(executions_bp)
     app.register_api(pr_reviews_bp)
+    app.register_api(trigger_conditions_bp)
     app.register_api(agents_bp)
     app.register_api(agent_conversations_bp)
     app.register_api(skills_bp)
     app.register_api(teams_bp)
+    app.register_api(team_members_bp)
+    app.register_api(team_connections_bp)
+    app.register_api(team_assignments_bp)
+    app.register_api(team_edges_bp)
+    app.register_api(team_generation_bp)
     app.register_api(products_bp)
     app.register_api(projects_bp)
     app.register_api(plugins_bp)
@@ -184,6 +209,10 @@ def register_blueprints(app):
     app.register_api(scheduler_bp)
     app.register_api(setup_bp)
     app.register_api(super_agents_bp)
+    app.register_api(super_agent_chat_bp)
+    app.register_api(super_agent_documents_bp)
+    app.register_api(super_agent_messages_bp)
+    app.register_api(super_agent_sessions_bp)
     app.register_api(super_agent_exports_bp)
     app.register_api(workflows_bp)
     app.register_api(sketches_bp)

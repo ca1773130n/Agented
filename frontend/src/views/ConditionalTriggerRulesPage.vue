@@ -1,31 +1,23 @@
 <script setup lang="ts">
-import { ref } from 'vue';
-import { useRouter } from 'vue-router';
+import { ref, onMounted } from 'vue';
+import { useRouter, useRoute } from 'vue-router';
 import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
+import {
+  triggerConditionsApi,
+  type TriggerConditionRule,
+} from '../services/api/trigger-conditions';
 
 const router = useRouter();
+const route = useRoute();
 const showToast = useToast();
 
+// Trigger ID comes from the query string: ?trigger_id=trig-xxxxx
+// Falls back to empty string when accessed without context (top-level view)
+const triggerId = ref<string>((route.query.trigger_id as string) || '');
+
 type Operator = 'equals' | 'not_equals' | 'contains' | 'greater_than' | 'less_than' | 'matches';
-
-interface Condition {
-  id: string;
-  field: string;
-  operator: Operator;
-  value: string;
-}
-
-interface TriggerRule {
-  id: string;
-  name: string;
-  botId: string;
-  description: string;
-  enabled: boolean;
-  logic: 'AND' | 'OR';
-  conditions: Condition[];
-}
 
 const fieldOptions = [
   { value: 'pr.lines_changed', label: 'PR Lines Changed' },
@@ -48,40 +40,37 @@ const operatorOptions: { value: Operator; label: string }[] = [
   { value: 'matches', label: '~ matches (glob)' },
 ];
 
-const rules = ref<TriggerRule[]>([
-  {
-    id: 'rule-001',
-    name: 'Large PR Filter',
-    botId: 'bot-pr-review',
-    description: 'Only run PR Review bot on large PRs with significant changes',
-    enabled: true,
-    logic: 'AND',
-    conditions: [
-      { id: 'c1', field: 'pr.lines_changed', operator: 'greater_than', value: '200' },
-      { id: 'c2', field: 'file.path', operator: 'matches', value: 'src/**' },
-    ],
-  },
-  {
-    id: 'rule-002',
-    name: 'Security Scan Scope',
-    botId: 'bot-security',
-    description: 'Only scan when security-related files are changed',
-    enabled: true,
-    logic: 'OR',
-    conditions: [
-      { id: 'c3', field: 'file.path', operator: 'matches', value: '**/*.env*' },
-      { id: 'c4', field: 'file.path', operator: 'matches', value: '**/auth/**' },
-      { id: 'c5', field: 'commit.message', operator: 'contains', value: 'security' },
-    ],
-  },
-]);
-
-const selectedRule = ref<TriggerRule>(rules.value[0]);
+const rules = ref<TriggerConditionRule[]>([]);
+const selectedRule = ref<TriggerConditionRule | null>(null);
+const isLoading = ref(false);
 const isSaving = ref(false);
+const isDeleting = ref(false);
 const isTestingRule = ref(false);
 const testResult = ref<{ matched: boolean; reason: string } | null>(null);
 
+async function loadRules() {
+  if (!triggerId.value) return;
+  isLoading.value = true;
+  try {
+    const res = await triggerConditionsApi.list(triggerId.value);
+    rules.value = res.rules;
+    if (rules.value.length > 0 && !selectedRule.value) {
+      selectedRule.value = { ...rules.value[0], conditions: [...rules.value[0].conditions] };
+    }
+  } catch (err: any) {
+    showToast(err?.message || 'Failed to load rules', 'error');
+  } finally {
+    isLoading.value = false;
+  }
+}
+
+function selectRule(rule: TriggerConditionRule) {
+  selectedRule.value = { ...rule, conditions: rule.conditions.map(c => ({ ...c })) };
+  testResult.value = null;
+}
+
 function addCondition() {
+  if (!selectedRule.value) return;
   selectedRule.value.conditions.push({
     id: `c${Date.now()}`,
     field: 'pr.lines_changed',
@@ -91,47 +80,97 @@ function addCondition() {
 }
 
 function removeCondition(id: string) {
+  if (!selectedRule.value) return;
   selectedRule.value.conditions = selectedRule.value.conditions.filter(c => c.id !== id);
 }
 
-function addRule() {
-  const r: TriggerRule = {
-    id: `rule-${Date.now()}`,
-    name: 'New Rule',
-    botId: 'bot-pr-review',
-    description: '',
-    enabled: false,
-    logic: 'AND',
-    conditions: [{ id: `c${Date.now()}`, field: 'pr.lines_changed', operator: 'greater_than', value: '0' }],
-  };
-  rules.value.push(r);
-  selectedRule.value = r;
-}
-
-async function handleSave() {
+async function addRule() {
+  if (!triggerId.value) {
+    showToast('Select a trigger first (add ?trigger_id=... to the URL)', 'error');
+    return;
+  }
   isSaving.value = true;
   try {
-    await new Promise(r => setTimeout(r, 600));
-    showToast('Rule saved', 'success');
+    const res = await triggerConditionsApi.create(triggerId.value, {
+      name: 'New Rule',
+      description: '',
+      enabled: false,
+      logic: 'AND',
+      conditions: [{ id: `c${Date.now()}`, field: 'pr.lines_changed', operator: 'greater_than', value: '0' }],
+    });
+    rules.value.push(res.rule);
+    selectedRule.value = { ...res.rule, conditions: [...res.rule.conditions] };
+    testResult.value = null;
+    showToast('Rule created', 'success');
+  } catch (err: any) {
+    showToast(err?.message || 'Failed to create rule', 'error');
   } finally {
     isSaving.value = false;
   }
 }
 
+async function handleSave() {
+  if (!selectedRule.value) return;
+  isSaving.value = true;
+  try {
+    if (selectedRule.value.id.startsWith('tcond-')) {
+      // Existing rule — update it
+      const updated = await triggerConditionsApi.update(selectedRule.value.id, {
+        name: selectedRule.value.name,
+        description: selectedRule.value.description,
+        enabled: selectedRule.value.enabled,
+        logic: selectedRule.value.logic,
+        conditions: selectedRule.value.conditions,
+      });
+      const idx = rules.value.findIndex(r => r.id === updated.id);
+      if (idx !== -1) rules.value[idx] = updated;
+      selectedRule.value = { ...updated, conditions: [...updated.conditions] };
+      showToast('Rule saved', 'success');
+    }
+  } catch (err: any) {
+    showToast(err?.message || 'Failed to save rule', 'error');
+  } finally {
+    isSaving.value = false;
+  }
+}
+
+async function handleDelete() {
+  if (!selectedRule.value) return;
+  isDeleting.value = true;
+  try {
+    await triggerConditionsApi.delete(selectedRule.value.id);
+    rules.value = rules.value.filter(r => r.id !== selectedRule.value!.id);
+    selectedRule.value = rules.value[0] ? { ...rules.value[0] } : null;
+    testResult.value = null;
+    showToast('Rule deleted', 'success');
+  } catch (err: any) {
+    showToast(err?.message || 'Failed to delete rule', 'error');
+  } finally {
+    isDeleting.value = false;
+  }
+}
+
 async function testRule() {
+  if (!selectedRule.value) return;
   isTestingRule.value = true;
   testResult.value = null;
   try {
-    await new Promise(r => setTimeout(r, 900));
+    // Client-side dry evaluation (no server round-trip needed for simple logic preview)
+    await new Promise(r => setTimeout(r, 300));
     const conditionCount = selectedRule.value.conditions.length;
+    const allFilled = selectedRule.value.conditions.every(c => c.value.trim().length > 0);
     testResult.value = {
-      matched: true,
-      reason: `All ${conditionCount} condition${conditionCount > 1 ? 's' : ''} evaluated — rule would ${selectedRule.value.enabled ? 'ALLOW' : 'BLOCK'} execution`,
+      matched: allFilled,
+      reason: allFilled
+        ? `${conditionCount} condition${conditionCount > 1 ? 's' : ''} evaluated — rule would ${selectedRule.value.enabled ? 'ALLOW' : 'BLOCK'} execution (${selectedRule.value.logic})`
+        : 'Some conditions have empty values — fill all values before testing',
     };
   } finally {
     isTestingRule.value = false;
   }
 }
+
+onMounted(loadRules);
 </script>
 
 <template>
@@ -146,19 +185,24 @@ async function testRule() {
       subtitle="Add filter conditions to triggers so bots only run when specific criteria are met — reducing noise and wasted tokens."
     />
 
-    <div class="layout">
+    <div v-if="isLoading" class="loading-state">Loading rules…</div>
+
+    <div v-else class="layout">
       <!-- Rule list -->
       <aside class="sidebar card">
         <div class="sidebar-header">
           <span>Rules</span>
-          <button class="btn-add" @click="addRule">+</button>
+          <button class="btn-add" :disabled="isSaving" @click="addRule">+</button>
+        </div>
+        <div v-if="rules.length === 0" class="empty-sidebar">
+          No rules yet.<br/>Click + to add one.
         </div>
         <div
           v-for="rule in rules"
           :key="rule.id"
           class="rule-item"
-          :class="{ active: selectedRule.id === rule.id }"
-          @click="selectedRule = rule; testResult = null"
+          :class="{ active: selectedRule?.id === rule.id }"
+          @click="selectRule(rule)"
         >
           <div class="rule-row">
             <span class="rule-name">{{ rule.name }}</span>
@@ -166,12 +210,12 @@ async function testRule() {
               {{ rule.enabled ? 'ON' : 'OFF' }}
             </span>
           </div>
-          <div class="rule-bot">{{ rule.botId }}</div>
+          <div class="rule-bot">{{ rule.trigger_id }}</div>
         </div>
       </aside>
 
       <!-- Editor -->
-      <div class="editor">
+      <div v-if="selectedRule" class="editor">
         <div class="card">
           <div class="card-header">Rule Settings</div>
           <div class="card-body">
@@ -181,8 +225,8 @@ async function testRule() {
                 <input v-model="selectedRule.name" class="input" />
               </div>
               <div class="field">
-                <label class="field-label">Target Bot</label>
-                <input v-model="selectedRule.botId" class="input" placeholder="bot-id" />
+                <label class="field-label">Trigger ID</label>
+                <input :value="selectedRule.trigger_id" class="input" disabled />
               </div>
             </div>
             <div class="field">
@@ -248,6 +292,9 @@ async function testRule() {
         </div>
 
         <div class="actions">
+          <button class="btn btn-danger" :disabled="isDeleting" @click="handleDelete">
+            {{ isDeleting ? 'Deleting...' : 'Delete Rule' }}
+          </button>
           <button class="btn btn-ghost" :disabled="isTestingRule" @click="testRule">
             {{ isTestingRule ? 'Testing...' : 'Test Rule' }}
           </button>
@@ -255,6 +302,10 @@ async function testRule() {
             {{ isSaving ? 'Saving...' : 'Save Rule' }}
           </button>
         </div>
+      </div>
+
+      <div v-else class="editor empty-editor">
+        <p>Select a rule from the list or create a new one.</p>
       </div>
     </div>
   </div>
@@ -320,6 +371,14 @@ async function testRule() {
 .btn-ghost { background: var(--bg-tertiary); border: 1px solid var(--border-default); color: var(--text-secondary); }
 .btn-ghost:hover:not(:disabled) { border-color: var(--accent-cyan); color: var(--accent-cyan); }
 .btn-ghost:disabled { opacity: 0.4; cursor: not-allowed; }
+.btn-danger { background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.3); color: #ef4444; }
+.btn-danger:hover:not(:disabled) { background: rgba(239,68,68,0.2); }
+.btn-danger:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.loading-state { text-align: center; padding: 48px; color: var(--text-muted); font-size: 0.85rem; }
+.empty-sidebar { padding: 20px 16px; color: var(--text-muted); font-size: 0.78rem; text-align: center; line-height: 1.6; }
+.empty-editor { display: flex; align-items: center; justify-content: center; min-height: 200px; background: var(--bg-secondary); border: 1px solid var(--border-default); border-radius: 12px; }
+.empty-editor p { color: var(--text-muted); font-size: 0.85rem; }
 
 @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } .cond-fields { grid-template-columns: 1fr 1fr; } .field-row { grid-template-columns: 1fr; } }
 </style>

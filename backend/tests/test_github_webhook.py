@@ -204,11 +204,68 @@ class TestGitHubWebhookPREvents:
         assert "ignored" in data["message"]
 
     def test_non_pr_event_ignored(self, client):
-        """Non-PR events should be ignored."""
+        """Unknown event types (not pull_request or issue_comment) should be ignored."""
         payload = json.dumps({"action": "created"}).encode()
         signature = compute_signature(payload, self.SECRET)
 
         response = client.post(
+            "/api/webhooks/github/",
+            data=payload,
+            content_type="application/json",
+            headers={
+                "X-GitHub-Event": "push",
+                "X-Hub-Signature-256": signature,
+            },
+        )
+
+        assert response.status_code == 200
+        data = response.get_json()
+        assert "ignored" in data["message"]
+
+
+class TestPRCommentSlashCommands:
+    """Tests for PR comment slash command dispatch."""
+
+    SECRET = "test-secret"
+
+    @pytest.fixture(autouse=True)
+    def setup_webhook_secret(self, monkeypatch):
+        """Set up webhook secret for all tests in this class."""
+        from app.routes import github_webhook
+
+        monkeypatch.setattr(github_webhook, "GITHUB_WEBHOOK_SECRET", self.SECRET)
+
+    def _make_issue_comment_payload(
+        self,
+        comment_body: str,
+        is_pr: bool = True,
+        action: str = "created",
+    ) -> bytes:
+        payload = {
+            "action": action,
+            "issue": {
+                "number": 42,
+                "title": "Test PR",
+                "html_url": "https://github.com/owner/repo/pull/42",
+                "user": {"login": "testuser"},
+                "pull_request": {"html_url": "https://github.com/owner/repo/pull/42"} if is_pr else None,
+            },
+            "comment": {
+                "body": comment_body,
+                "user": {"login": "reviewer"},
+            },
+            "repository": {
+                "full_name": "owner/repo",
+                "html_url": "https://github.com/owner/repo",
+            },
+        }
+        if not is_pr:
+            del payload["issue"]["pull_request"]
+        return json.dumps(payload).encode()
+
+    def _post_comment(self, client, payload: bytes, *, secret: str = SECRET):
+        signature = compute_signature(payload, secret)
+        return client.post(
             "/api/webhooks/github/",
             data=payload,
             content_type="application/json",
@@ -218,9 +275,76 @@ class TestGitHubWebhookPREvents:
             },
         )
 
+    def test_issue_comment_on_plain_issue_ignored(self, client):
+        """Comments on plain issues (not PRs) should be ignored."""
+        payload = self._make_issue_comment_payload("/review", is_pr=False)
+        response = self._post_comment(client, payload)
+        assert response.status_code == 200
+        data = response.get_json()
+        assert "not PR" in data["message"] or "ignored" in data["message"]
+
+    def test_issue_comment_deleted_action_ignored(self, client):
+        """Deleted comment actions should be ignored."""
+        payload = self._make_issue_comment_payload("/review", action="deleted")
+        response = self._post_comment(client, payload)
         assert response.status_code == 200
         data = response.get_json()
         assert "ignored" in data["message"]
+
+    def test_comment_without_slash_command_ignored(self, client):
+        """Comments without a slash command should produce 'no slash command' response."""
+        payload = self._make_issue_comment_payload("Looks good to me!")
+        response = self._post_comment(client, payload)
+        assert response.status_code == 200
+        data = response.get_json()
+        assert "no slash command" in data["message"]
+
+    def test_slash_command_detected_and_processed(self, client, monkeypatch):
+        """A PR comment with a slash command should be processed."""
+        from app.services import execution_service
+
+        dispatched = []
+
+        def fake_dispatch(repo_url, commands, pr_data):
+            dispatched.extend(commands)
+            return True
+
+        monkeypatch.setattr(
+            execution_service.ExecutionService,
+            "dispatch_pr_comment_commands",
+            staticmethod(fake_dispatch),
+        )
+
+        payload = self._make_issue_comment_payload("/review")
+        response = self._post_comment(client, payload)
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data["commands"] == ["/review"]
+        assert "/review" in dispatched
+
+    def test_multiple_slash_commands_in_one_comment(self, client, monkeypatch):
+        """Multiple slash commands in a single comment body are all detected."""
+        from app.services import execution_service
+
+        dispatched = []
+
+        def fake_dispatch(repo_url, commands, pr_data):
+            dispatched.extend(commands)
+            return True
+
+        monkeypatch.setattr(
+            execution_service.ExecutionService,
+            "dispatch_pr_comment_commands",
+            staticmethod(fake_dispatch),
+        )
+
+        body = "Please run:\n/review\n/security-scan"
+        payload = self._make_issue_comment_payload(body)
+        response = self._post_comment(client, payload)
+        assert response.status_code == 200
+        data = response.get_json()
+        assert "/review" in data["commands"]
+        assert "/security-scan" in data["commands"]
 
 
 class TestTriggerSourceFiltering:
