@@ -612,7 +612,7 @@ class TestSaveHelpers:
 
     def test_save_threat_report(self, tmp_path, monkeypatch):
         monkeypatch.setattr(
-            "app.services.execution_service.TRIGGER_LOG_DIR", str(tmp_path)
+            "app.services.execution_service.SECURITY_AUDIT_REPORT_DIR", str(tmp_path)
         )
         path = ExecutionService.save_threat_report("trg-test01", "vulnerability details")
         assert "threat_report_" in path

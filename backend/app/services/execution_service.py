@@ -76,23 +76,18 @@ def _trace_logger(execution_id: str) -> logging.LoggerAdapter:
     return logging.LoggerAdapter(logger, {"trace_id": execution_id})
 
 
-TRIGGER_LOG_DIR = os.path.join(PROJECT_ROOT, ".claude/skills/weekly-security-audit/reports")
+TRIGGER_LOG_DIR = os.path.join(PROJECT_ROOT, "data/trigger_events")
+SECURITY_AUDIT_REPORT_DIR = os.path.join(
+    PROJECT_ROOT, ".claude/skills/weekly-security-audit/reports"
+)
 
-# Validate write access to TRIGGER_LOG_DIR at import time so misconfiguration is
-# surfaced immediately rather than silently swallowed at first trigger save.
-try:
-    os.makedirs(TRIGGER_LOG_DIR, exist_ok=True)
-    if not os.access(TRIGGER_LOG_DIR, os.W_OK):
-        logger.warning(
-            "TRIGGER_LOG_DIR is not writable: %s — trigger reports will fail to save",
-            TRIGGER_LOG_DIR,
-        )
-except Exception as _dir_err:
-    logger.warning(
-        "Could not create TRIGGER_LOG_DIR %s: %s — trigger reports will fail to save",
-        TRIGGER_LOG_DIR,
-        _dir_err,
-    )
+for _dir in (TRIGGER_LOG_DIR, SECURITY_AUDIT_REPORT_DIR):
+    try:
+        os.makedirs(_dir, exist_ok=True)
+        if not os.access(_dir, os.W_OK):
+            logger.warning("Directory is not writable: %s", _dir)
+    except Exception as _dir_err:
+        logger.warning("Could not create directory %s: %s", _dir, _dir_err)
 
 
 class ExecutionState:
@@ -208,10 +203,10 @@ class ExecutionService:
     @staticmethod
     def save_threat_report(trigger_id: str, message_text: str) -> str:
         """Save webhook message as threat report file. Returns file path."""
-        os.makedirs(TRIGGER_LOG_DIR, exist_ok=True)
+        os.makedirs(SECURITY_AUDIT_REPORT_DIR, exist_ok=True)
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
         filename = f"threat_report_{trigger_id}_{timestamp}.txt"
-        filepath = os.path.join(TRIGGER_LOG_DIR, filename)
+        filepath = os.path.join(SECURITY_AUDIT_REPORT_DIR, filename)
 
         with open(filepath, "w", encoding="utf-8") as f:
             f.write(message_text)

@@ -20,6 +20,8 @@ test-dashboard.mjs
 # Runtime
 *.db
 project_links/
+data/trigger_events/
+.claude/skills/weekly-security-audit/reports/
 
 # Environment / secrets
 .env
