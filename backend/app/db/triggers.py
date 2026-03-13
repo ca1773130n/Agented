@@ -193,6 +193,8 @@ def create_trigger(
     webhook_secret: str = None,
     allowed_tools: str = None,
     sigterm_grace_seconds: int = None,
+    dispatch_type: str = "bot",
+    super_agent_id: str = None,
 ) -> Optional[str]:
     """Add a new trigger. Returns trigger_id (string) on success, None on failure."""
     if backend_type not in VALID_BACKENDS:
@@ -236,8 +238,8 @@ def create_trigger(
                                       match_field_path, match_field_value, text_field_path,
                                       schedule_type, schedule_time, schedule_day, schedule_timezone, skill_command, model,
                                       execution_mode, team_id, timeout_seconds, webhook_secret, allowed_tools,
-                                      sigterm_grace_seconds)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                      sigterm_grace_seconds, dispatch_type, super_agent_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
                 (
                     trigger_id,
@@ -262,6 +264,8 @@ def create_trigger(
                     webhook_secret,
                     allowed_tools,
                     sigterm_grace_seconds,
+                    dispatch_type,
+                    super_agent_id,
                 ),
             )
             conn.commit()
@@ -294,6 +298,8 @@ def update_trigger(
     webhook_secret: str = None,
     allowed_tools: str = None,
     sigterm_grace_seconds: int = None,
+    dispatch_type: str = None,
+    super_agent_id: str = None,
 ) -> bool:
     """Update trigger fields. Returns True on success."""
     updates = []
@@ -404,6 +410,15 @@ def update_trigger(
         else:
             updates.append("sigterm_grace_seconds = ?")
             values.append(sigterm_grace_seconds)
+    if dispatch_type is not None:
+        updates.append("dispatch_type = ?")
+        values.append(dispatch_type)
+    if super_agent_id is not None:
+        if super_agent_id == "":
+            updates.append("super_agent_id = NULL")
+        else:
+            updates.append("super_agent_id = ?")
+            values.append(super_agent_id)
 
     if not updates:
         return False
