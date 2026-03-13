@@ -44,10 +44,26 @@ export { specializedBotApi } from './specialized-bots';
 export { secretsApi } from './secrets';
 export { rbacApi } from './rbac';
 export { gitopsApi } from './gitops';
-export { integrationApi } from './integrations';
-export type { Integration } from './integrations';
+export { integrationApi, slackApi } from './integrations';
+export type { Integration, SlackStatus, SlackCommandLog } from './integrations';
 export { configExportApi } from './config-export';
 export type { ConfigExport } from './config-export';
+export { modelPricingApi } from './model-pricing';
+export type { ModelPricingInfo, ModelPricingResponse } from './model-pricing';
+export { activityFeedApi } from './activity-feed';
+export type { Activity, ActivityType, ActivityFeedResponse, ActivityFeedParams } from './activity-feed';
+export { projectHealthApi } from './project-health';
+export type { ProjectHealthScorecard, HealthCategory, HealthSignal, HealthRecommendation } from './project-health';
+export { repoBotDefaultsApi } from './repo-bot-defaults';
+export type {
+  RepoBotBinding,
+  AvailableBot as RepoBotAvailableBot,
+  RepoBotDefaultsListResponse,
+  CreateRepoBotDefaultRequest,
+  CreateRepoBotDefaultResponse,
+  ToggleRepoBotDefaultResponse,
+  DeleteRepoBotDefaultResponse,
+} from './repo-bot-defaults';
 
 // Constant exports from types
 export { CLAUDE_MODELS, OPENCODE_MODELS } from './types';

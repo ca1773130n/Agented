@@ -3,9 +3,11 @@
 
 def register_blueprints(app):
     """Register all route blueprints with the Flask app."""
+    from .activity_feed import activity_feed_bp
     from .agent_conversations import agent_conversations_bp
     from .agents import agents_bp
     from .analytics import analytics_bp
+    from .cross_team_insights import cross_team_insights_bp
     from .audit import audit_bp
     from .backends import backends_bp
     from .bookmarks import bookmarks_bp
@@ -32,6 +34,7 @@ def register_blueprints(app):
     from .integrations import integrations_bp, slack_command_bp
     from .marketplace import marketplace_bp
     from .mcp_servers import mcp_servers_bp, project_mcp_bp
+    from .model_pricing import model_pricing_bp
     from .monitoring import monitoring_bp
     from .orchestration import orchestration_bp
     from .plugin_conversations import plugin_conversations_bp
@@ -44,6 +47,7 @@ def register_blueprints(app):
     from .prompt_snippets import prompt_snippets_bp
     from .rbac import rbac_bp
     from .replay import replay_bp
+    from .repo_bot_defaults import repo_bot_defaults_bp
     from .rotation import rotation_bp
     from .rule_conversations import rule_conversations_bp
     from .rules import rules_bp
@@ -125,6 +129,7 @@ def register_blueprints(app):
             orchestration_bp,
             budgets_bp,
             analytics_bp,
+            cross_team_insights_bp,
             plugin_exports_bp,
             monitoring_bp,
             scheduler_bp,
@@ -159,6 +164,9 @@ def register_blueprints(app):
             prompt_snippets_bp,
             specialized_bots_bp,
             bulk_bp,
+            model_pricing_bp,
+            activity_feed_bp,
+            repo_bot_defaults_bp,
         ]
         for bp in admin_blueprints:
             limiter.limit("120/minute")(bp)
@@ -204,6 +212,7 @@ def register_blueprints(app):
     app.register_api(orchestration_bp)
     app.register_api(budgets_bp)
     app.register_api(analytics_bp)
+    app.register_api(cross_team_insights_bp)
     app.register_api(plugin_exports_bp)
     app.register_api(monitoring_bp)
     app.register_api(scheduler_bp)
@@ -239,6 +248,9 @@ def register_blueprints(app):
     app.register_api(prompt_snippets_bp)
     app.register_api(specialized_bots_bp)
     app.register_api(bulk_bp)
+    app.register_api(model_pricing_bp)
+    app.register_api(activity_feed_bp)
+    app.register_api(repo_bot_defaults_bp)
 
     # SPA catch-all: MUST be registered LAST so API routes take priority
     app.register_blueprint(spa_bp)

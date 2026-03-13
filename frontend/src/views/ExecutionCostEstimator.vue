@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
+import { modelPricingApi } from '../services/api/model-pricing';
 
 const router = useRouter();
 
@@ -19,11 +20,24 @@ interface ModelInfo {
   speed: 'fast' | 'medium' | 'slow';
 }
 
-const MODELS: ModelInfo[] = [
+const _FALLBACK_MODELS: ModelInfo[] = [
   { id: 'claude-haiku-3-5', name: 'Claude Haiku 3.5', inputPricePer1M: 0.80, outputPricePer1M: 4.00, contextWindow: 200000, speed: 'fast' },
   { id: 'claude-sonnet-4-5', name: 'Claude Sonnet 4.5', inputPricePer1M: 3.00, outputPricePer1M: 15.00, contextWindow: 200000, speed: 'medium' },
   { id: 'claude-opus-4-5', name: 'Claude Opus 4.5', inputPricePer1M: 15.00, outputPricePer1M: 75.00, contextWindow: 200000, speed: 'slow' },
 ];
+
+const models = ref<ModelInfo[]>([..._FALLBACK_MODELS]);
+
+onMounted(async () => {
+  try {
+    const response = await modelPricingApi.getModels();
+    if (response.models && response.models.length > 0) {
+      models.value = response.models;
+    }
+  } catch {
+    // silently keep fallback
+  }
+});
 
 const CODEBASE_TOKENS: Record<string, number> = {
   small: 10000,
@@ -49,7 +63,7 @@ const contextTokens = computed(() => CODEBASE_TOKENS[codebaseSize.value]);
 const totalInputTokens = computed(() => promptTokens.value + contextTokens.value);
 const estimatedOutputTokens = computed(() => Math.min(totalInputTokens.value * 0.3, 4000));
 
-const selectedModelInfo = computed(() => MODELS.find(m => m.id === selectedModel.value) ?? MODELS[1]);
+const selectedModelInfo = computed(() => models.value.find(m => m.id === selectedModel.value) ?? models.value[1] ?? models.value[0]);
 
 const estimatedCostLow = computed(() => {
   const m = selectedModelInfo.value;
@@ -136,7 +150,7 @@ function speedColor(speed: string): string {
           <div class="field-group">
             <label class="field-label">Model</label>
             <select v-model="selectedModel" class="select-input">
-              <option v-for="m in MODELS" :key="m.id" :value="m.id">{{ m.name }}</option>
+              <option v-for="m in models" :key="m.id" :value="m.id">{{ m.name }}</option>
             </select>
           </div>
         </div>
@@ -230,7 +244,7 @@ function speedColor(speed: string): string {
           </thead>
           <tbody>
             <tr
-              v-for="m in MODELS"
+              v-for="m in models"
               :key="m.id"
               :class="{ 'row-selected': m.id === selectedModel }"
               @click="selectedModel = m.id"
