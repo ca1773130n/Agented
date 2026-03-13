@@ -1,110 +1,71 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
+import { qualityApi } from '../services/api/quality-ratings';
+import type { QualityEntry, BotQualityStats } from '../services/api/quality-ratings';
 
 const router = useRouter();
 const showToast = useToast();
 
-interface QualityEntry {
-  executionId: string;
-  botId: string;
-  timestamp: string;
-  rating: 1 | 2 | 3 | 4 | 5 | null;
-  feedback: string;
-  output_preview: string;
-}
-
-interface BotQualityStats {
-  botId: string;
-  name: string;
-  avgScore: number;
-  totalRated: number;
-  thumbsUp: number;
-  thumbsDown: number;
-  trend: 'up' | 'down' | 'stable';
-  recentScores: number[];
-}
-
-const bots = ref<BotQualityStats[]>([
-  {
-    botId: 'bot-security',
-    name: 'Security Audit Bot',
-    avgScore: 4.2,
-    totalRated: 47,
-    thumbsUp: 41,
-    thumbsDown: 6,
-    trend: 'up',
-    recentScores: [3, 4, 4, 5, 4, 5, 4, 4, 5, 5],
-  },
-  {
-    botId: 'bot-pr-review',
-    name: 'PR Review Bot',
-    avgScore: 3.6,
-    totalRated: 93,
-    thumbsUp: 68,
-    thumbsDown: 25,
-    trend: 'down',
-    recentScores: [4, 4, 3, 3, 2, 4, 3, 4, 3, 3],
-  },
-]);
-
-const entries = ref<QualityEntry[]>([
-  {
-    executionId: 'exec-aa1',
-    botId: 'bot-security',
-    timestamp: '2026-03-06T08:00:00Z',
-    rating: 5,
-    feedback: 'Found the exact vulnerability we were worried about.',
-    output_preview: 'CRITICAL: SQL injection in /api/users endpoint...',
-  },
-  {
-    executionId: 'exec-bb2',
-    botId: 'bot-pr-review',
-    timestamp: '2026-03-06T09:15:00Z',
-    rating: 2,
-    feedback: 'Comments were too generic, missed the race condition.',
-    output_preview: 'LGTM on overall structure. Minor style issues found...',
-  },
-  {
-    executionId: 'exec-cc3',
-    botId: 'bot-security',
-    timestamp: '2026-03-05T14:20:00Z',
-    rating: 4,
-    feedback: 'Good catch on the hardcoded credentials.',
-    output_preview: 'WARNING: Hardcoded API key found in config.js line 42...',
-  },
-  {
-    executionId: 'exec-dd4',
-    botId: 'bot-pr-review',
-    timestamp: '2026-03-05T10:00:00Z',
-    rating: null,
-    feedback: '',
-    output_preview: 'Review complete. 3 suggestions, 0 blocking issues...',
-  },
-]);
+const bots = ref<BotQualityStats[]>([]);
+const entries = ref<QualityEntry[]>([]);
+const loading = ref(false);
 
 const selectedBotFilter = ref('all');
 const pendingRatings = ref<Record<string, number>>({});
+const pendingFeedback = ref<Record<string, string>>({});
 
 const filteredEntries = computed(() =>
   selectedBotFilter.value === 'all'
     ? entries.value
-    : entries.value.filter(e => e.botId === selectedBotFilter.value)
+    : entries.value.filter(e => e.trigger_id === selectedBotFilter.value)
 );
+
+onMounted(async () => {
+  loading.value = true;
+  try {
+    const [statsRes, entriesRes] = await Promise.all([
+      qualityApi.getStats(),
+      qualityApi.listEntries({ limit: 50 }),
+    ]);
+    bots.value = statsRes.bots;
+    entries.value = entriesRes.entries;
+  } catch (err) {
+    showToast('Failed to load quality data', 'error');
+  } finally {
+    loading.value = false;
+  }
+});
 
 function setRating(execId: string, rating: number) {
   pendingRatings.value[execId] = rating;
 }
 
 async function submitRating(entry: QualityEntry) {
-  const rating = pendingRatings.value[entry.executionId];
+  const rating = pendingRatings.value[entry.execution_id];
   if (!rating) return;
-  entry.rating = rating as QualityEntry['rating'];
-  delete pendingRatings.value[entry.executionId];
-  showToast('Rating submitted', 'success');
+  const feedback = pendingFeedback.value[entry.execution_id] ?? entry.feedback ?? '';
+  try {
+    const result = await qualityApi.submitRating(entry.execution_id, {
+      rating,
+      feedback,
+      trigger_id: entry.trigger_id,
+    });
+    // Update local state
+    const idx = entries.value.findIndex(e => e.execution_id === entry.execution_id);
+    if (idx !== -1) entries.value[idx] = { ...entries.value[idx], ...result };
+    delete pendingRatings.value[entry.execution_id];
+    delete pendingFeedback.value[entry.execution_id];
+    showToast('Rating submitted', 'success');
+    // Refresh stats
+    const statsRes = await qualityApi.getStats();
+    bots.value = statsRes.bots;
+  } catch {
+    showToast('Failed to submit rating', 'error');
+  }
 }
 
 function trendIcon(trend: BotQualityStats['trend']): string {
@@ -121,7 +82,8 @@ function scoreColor(score: number): string {
   return '#ef4444';
 }
 
-function formatDate(ts: string): string {
+function formatDate(ts: string | null): string {
+  if (!ts) return '—';
   return new Date(ts).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
@@ -143,27 +105,29 @@ function starClass(star: number, rating: number | null, pending: number | undefi
       subtitle="Collect feedback on bot outputs and surface per-agent quality scores with trend analysis."
     />
 
+    <div v-if="loading" class="loading-msg">Loading quality data…</div>
+
     <!-- Summary cards -->
-    <div class="bot-grid">
-      <div v-for="bot in bots" :key="bot.botId" class="bot-card card" @click="selectedBotFilter = bot.botId">
+    <div v-else-if="bots.length > 0" class="bot-grid">
+      <div v-for="bot in bots" :key="bot.trigger_id ?? 'unknown'" class="bot-card card" @click="selectedBotFilter = bot.trigger_id ?? 'all'">
         <div class="bot-card-header">
-          <div class="bot-name">{{ bot.name }}</div>
+          <div class="bot-name">{{ bot.trigger_name ?? bot.trigger_id ?? 'Unknown Bot' }}</div>
           <span class="trend-badge" :style="{ color: trendColor(bot.trend) }">
             {{ trendIcon(bot.trend) }} {{ bot.trend }}
           </span>
         </div>
-        <div class="bot-score" :style="{ color: scoreColor(bot.avgScore) }">
-          {{ bot.avgScore.toFixed(1) }}
+        <div class="bot-score" :style="{ color: scoreColor(bot.avg_score) }">
+          {{ bot.avg_score.toFixed(1) }}
           <span class="score-max">/5</span>
         </div>
         <div class="bot-stats">
-          <span class="stat-item">{{ bot.totalRated }} rated</span>
-          <span class="stat-item stat-up">{{ bot.thumbsUp }} good</span>
-          <span class="stat-item stat-down">{{ bot.thumbsDown }} poor</span>
+          <span class="stat-item">{{ bot.total_rated }} rated</span>
+          <span class="stat-item stat-up">{{ bot.thumbs_up }} good</span>
+          <span class="stat-item stat-down">{{ bot.thumbs_down }} poor</span>
         </div>
         <div class="mini-chart">
           <div
-            v-for="(s, i) in bot.recentScores"
+            v-for="(s, i) in bot.recent_scores"
             :key="i"
             class="mini-bar"
             :style="{ height: `${(s / 5) * 100}%`, background: scoreColor(s) }"
@@ -171,12 +135,15 @@ function starClass(star: number, rating: number | null, pending: number | undefi
         </div>
       </div>
     </div>
+    <div v-else-if="!loading" class="empty-bots">No quality ratings yet. Submit ratings below to see per-bot statistics.</div>
 
     <!-- Filter -->
     <div class="filter-row">
       <select v-model="selectedBotFilter" class="select">
         <option value="all">All Bots</option>
-        <option v-for="bot in bots" :key="bot.botId" :value="bot.botId">{{ bot.name }}</option>
+        <option v-for="bot in bots" :key="bot.trigger_id ?? 'unknown'" :value="bot.trigger_id">
+          {{ bot.trigger_name ?? bot.trigger_id ?? 'Unknown' }}
+        </option>
       </select>
       <span class="filter-count">{{ filteredEntries.length }} executions</span>
     </div>
@@ -184,13 +151,14 @@ function starClass(star: number, rating: number | null, pending: number | undefi
     <!-- Entry list -->
     <div class="card">
       <div class="card-header">Execution Feedback</div>
+      <div v-if="entries.length === 0 && !loading" class="empty-entries">No execution entries to rate yet.</div>
       <div class="entry-list">
-        <div v-for="entry in filteredEntries" :key="entry.executionId" class="entry-row">
+        <div v-for="entry in filteredEntries" :key="entry.execution_id" class="entry-row">
           <div class="entry-left">
-            <div class="entry-id">{{ entry.executionId }}</div>
-            <div class="entry-preview">{{ entry.output_preview }}</div>
+            <div class="entry-id">{{ entry.execution_id }}</div>
+            <div class="entry-preview">{{ entry.output_preview || '(no output)' }}</div>
             <div class="entry-meta">
-              <span class="entry-bot">{{ entry.botId }}</span>
+              <span class="entry-bot">{{ entry.trigger_name ?? entry.trigger_id ?? '—' }}</span>
               <span class="sep">·</span>
               <span class="entry-date">{{ formatDate(entry.timestamp) }}</span>
             </div>
@@ -201,12 +169,12 @@ function starClass(star: number, rating: number | null, pending: number | undefi
               <button
                 v-for="star in 5"
                 :key="star"
-                :class="['star', starClass(star, entry.rating, pendingRatings[entry.executionId])]"
-                @click="setRating(entry.executionId, star)"
+                :class="['star', starClass(star, entry.rating, pendingRatings[entry.execution_id])]"
+                @click="setRating(entry.execution_id, star)"
               >★</button>
             </div>
             <button
-              v-if="pendingRatings[entry.executionId]"
+              v-if="pendingRatings[entry.execution_id]"
               class="btn-submit"
               @click="submitRating(entry)"
             >Submit</button>
@@ -222,6 +190,10 @@ function starClass(star: number, rating: number | null, pending: number | undefi
 <style scoped>
 .quality-scoring { display: flex; flex-direction: column; gap: 24px; animation: fadeIn 0.4s ease; }
 @keyframes fadeIn { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+
+.loading-msg { color: var(--text-muted); font-size: 0.85rem; padding: 20px 0; }
+.empty-bots { color: var(--text-muted); font-size: 0.85rem; padding: 12px 0; }
+.empty-entries { color: var(--text-muted); font-size: 0.85rem; padding: 20px; text-align: center; }
 
 .bot-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px; }
 
