@@ -1,55 +1,43 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
+import { pipeApi } from '../services/api/bot-pipes';
+import type { BotPipe, BotPipeExecution } from '../services/api/bot-pipes';
 
 const router = useRouter();
 
-interface Pipe {
-  id: string;
-  name: string;
-  sourceBot: string;
-  destBot: string;
-  transform: 'passthrough' | 'trim' | 'json-extract';
-  enabled: boolean;
-}
-
-interface PipeExecution {
-  id: string;
-  pipeName: string;
-  triggeredAt: string;
-  sourcePreview: string;
-  destinationStatus: 'success' | 'running' | 'failed' | 'pending';
-}
-
-const pipes = ref<Pipe[]>([
-  { id: 'pipe-1', name: 'Security Scan → Slack Notify', sourceBot: 'bot-security', destBot: 'bot-slack-notify', transform: 'trim', enabled: true },
-  { id: 'pipe-2', name: 'PR Review → Jira Ticket', sourceBot: 'bot-pr-review', destBot: 'bot-jira', transform: 'json-extract', enabled: true },
-  { id: 'pipe-3', name: 'Dep Audit → Summary Bot', sourceBot: 'bot-dep-audit', destBot: 'bot-summary', transform: 'passthrough', enabled: false },
-]);
-
-const executions = ref<PipeExecution[]>([
-  { id: 'exec-1', pipeName: 'Security Scan → Slack Notify', triggeredAt: '3 minutes ago', sourcePreview: 'Found 2 critical CVEs in lodash@4.17.20 and follow-redirects@1.14.8...', destinationStatus: 'success' },
-  { id: 'exec-2', pipeName: 'PR Review → Jira Ticket', triggeredAt: '18 minutes ago', sourcePreview: 'PR #412: Missing null check in auth middleware. Severity: medium...', destinationStatus: 'running' },
-  { id: 'exec-3', pipeName: 'Security Scan → Slack Notify', triggeredAt: '1 hour ago', sourcePreview: 'No critical findings. 3 low-severity advisories noted.', destinationStatus: 'success' },
-  { id: 'exec-4', pipeName: 'Dep Audit → Summary Bot', triggeredAt: '2 hours ago', sourcePreview: 'Dependency tree audit complete. 47 packages scanned, 0 critical...', destinationStatus: 'failed' },
-]);
-
-const selectedPipeId = ref<string>('pipe-1');
+const pipes = ref<BotPipe[]>([]);
+const executions = ref<BotPipeExecution[]>([]);
+const selectedPipeId = ref<string>('');
 
 const selectedPipe = computed(() => pipes.value.find(p => p.id === selectedPipeId.value) ?? pipes.value[0]);
 
-function transformLabel(t: Pipe['transform']): string {
+function transformLabel(t: string): string {
   if (t === 'passthrough') return 'Passthrough';
   if (t === 'trim') return 'Trim Whitespace';
   if (t === 'json-extract') return 'JSON Extract';
   return t;
 }
 
-function togglePipe(pipe: Pipe) {
-  pipe.enabled = !pipe.enabled;
+async function togglePipe(pipe: BotPipe) {
+  const newEnabled = !pipe.enabled;
+  await pipeApi.update(pipe.id, { enabled: !!newEnabled });
+  pipe.enabled = newEnabled;
 }
+
+onMounted(async () => {
+  const [pipesRes, execsRes] = await Promise.all([
+    pipeApi.list(),
+    pipeApi.listExecutions(),
+  ]);
+  pipes.value = pipesRes.pipes;
+  executions.value = execsRes.executions;
+  if (pipes.value.length > 0) {
+    selectedPipeId.value = pipes.value[0].id;
+  }
+});
 </script>
 
 <template>
@@ -91,11 +79,11 @@ function togglePipe(pipe: Pipe) {
           <div class="pipe-info">
             <span class="pipe-name">{{ pipe.name }}</span>
             <div class="pipe-meta">
-              <span class="pipe-bot source">{{ pipe.sourceBot }}</span>
+              <span class="pipe-bot source">{{ pipe.source_bot_id }}</span>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12" style="color: var(--text-muted)">
                 <line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/>
               </svg>
-              <span class="pipe-bot dest">{{ pipe.destBot }}</span>
+              <span class="pipe-bot dest">{{ pipe.dest_bot_id }}</span>
             </div>
           </div>
           <div class="pipe-transform">
@@ -135,7 +123,7 @@ function togglePipe(pipe: Pipe) {
             </svg>
           </div>
           <div class="node-label">Source Bot</div>
-          <div class="node-value">{{ selectedPipe?.sourceBot }}</div>
+          <div class="node-value">{{ selectedPipe?.source_bot_id }}</div>
           <div class="node-sublabel">stdout captured</div>
         </div>
 
@@ -173,7 +161,7 @@ function togglePipe(pipe: Pipe) {
             </svg>
           </div>
           <div class="node-label">Destination Bot</div>
-          <div class="node-value">{{ selectedPipe?.destBot }}</div>
+          <div class="node-value">{{ selectedPipe?.dest_bot_id }}</div>
           <div class="node-sublabel">stdin injected</div>
         </div>
       </div>
@@ -197,12 +185,12 @@ function togglePipe(pipe: Pipe) {
           <span>Destination Status</span>
         </div>
         <div v-for="exec in executions" :key="exec.id" class="exec-row">
-          <span class="exec-pipe">{{ exec.pipeName }}</span>
-          <span class="exec-time">{{ exec.triggeredAt }}</span>
-          <span class="exec-preview">{{ exec.sourcePreview }}</span>
+          <span class="exec-pipe">{{ exec.pipe_name }}</span>
+          <span class="exec-time">{{ exec.triggered_at }}</span>
+          <span class="exec-preview">{{ exec.source_preview }}</span>
           <span class="exec-status">
-            <span :class="['status-dot', exec.destinationStatus]" />
-            <span :class="['status-text', exec.destinationStatus]">{{ exec.destinationStatus }}</span>
+            <span :class="['status-dot', exec.destination_status]" />
+            <span :class="['status-text', exec.destination_status]">{{ exec.destination_status }}</span>
           </span>
         </div>
       </div>
