@@ -1368,3 +1368,50 @@ def get_pr_review_history(trigger_id: str = "bot-pr-review", days: int = 30) -> 
             (trigger_id, -days),
         )
         return [dict(row) for row in cursor.fetchall()]
+
+
+def get_pr_review_learning_loop(trigger_id: str = "bot-pr-review") -> List[dict]:
+    """Get per-project acceptance signal breakdown for the learning loop.
+
+    Groups PR reviews by project_name and computes acceptance, dismiss, comment,
+    and resolve counts along with the last_seen timestamp.  Also computes a
+    simple trend by comparing the accept-rate in the most-recent 7 days against
+    the preceding 7-day window.
+    """
+    with get_connection() as conn:
+        cursor = conn.execute(
+            """
+            SELECT
+                project_name AS pattern,
+                COUNT(*) AS total,
+                COALESCE(SUM(CASE WHEN review_status IN ('approved', 'fixed')
+                             THEN 1 ELSE 0 END), 0) AS accepted_count,
+                COALESCE(SUM(CASE WHEN review_status = 'changes_requested'
+                             THEN 1 ELSE 0 END), 0) AS dismissed_count,
+                COALESCE(SUM(CASE WHEN review_comment IS NOT NULL
+                             THEN 1 ELSE 0 END), 0) AS commented_count,
+                COALESCE(SUM(CASE WHEN fixes_applied > 0
+                             THEN 1 ELSE 0 END), 0) AS resolved_count,
+                MAX(updated_at) AS last_seen,
+                -- recent 7-day window accept count
+                COALESCE(SUM(CASE WHEN review_status IN ('approved', 'fixed')
+                              AND updated_at >= date('now', '-7 days')
+                             THEN 1 ELSE 0 END), 0) AS recent_accepted,
+                COALESCE(SUM(CASE WHEN updated_at >= date('now', '-7 days')
+                             THEN 1 ELSE 0 END), 0) AS recent_total,
+                -- preceding 7-day window accept count
+                COALESCE(SUM(CASE WHEN review_status IN ('approved', 'fixed')
+                              AND updated_at >= date('now', '-14 days')
+                              AND updated_at < date('now', '-7 days')
+                             THEN 1 ELSE 0 END), 0) AS prev_accepted,
+                COALESCE(SUM(CASE WHEN updated_at >= date('now', '-14 days')
+                              AND updated_at < date('now', '-7 days')
+                             THEN 1 ELSE 0 END), 0) AS prev_total
+            FROM pr_reviews
+            WHERE trigger_id = ?
+            GROUP BY project_name
+            ORDER BY total DESC
+            """,
+            (trigger_id,),
+        )
+        return [dict(row) for row in cursor.fetchall()]

@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
+import { prReviewApi } from '../services/api/triggers';
 
 const showToast = useToast();
 
@@ -31,118 +32,18 @@ interface RefinementSuggestion {
   appliedAt?: string;
 }
 
-const signals = ref<FindingSignal[]>([
-  {
-    id: 'sig-001',
-    category: 'security',
-    pattern: 'Missing input validation',
-    acceptedCount: 87,
-    dismissedCount: 12,
-    commentedCount: 23,
-    resolvedCount: 76,
-    acceptRate: 0.84,
-    trend: 'up',
-    lastSeen: '2026-03-06T10:12:00Z',
-    examplePromptFragment: 'Check for missing input validation on user-controlled parameters',
-  },
-  {
-    id: 'sig-002',
-    category: 'style',
-    pattern: 'Unused variable',
-    acceptedCount: 14,
-    dismissedCount: 62,
-    commentedCount: 8,
-    resolvedCount: 10,
-    acceptRate: 0.16,
-    trend: 'down',
-    lastSeen: '2026-03-05T18:44:00Z',
-    examplePromptFragment: 'Flag unused variables that are never referenced after assignment',
-  },
-  {
-    id: 'sig-003',
-    category: 'performance',
-    pattern: 'N+1 query in loop',
-    acceptedCount: 44,
-    dismissedCount: 5,
-    commentedCount: 18,
-    resolvedCount: 38,
-    acceptRate: 0.89,
-    trend: 'stable',
-    lastSeen: '2026-03-06T08:30:00Z',
-    examplePromptFragment: 'Identify database calls inside iteration loops that cause N+1 query patterns',
-  },
-  {
-    id: 'sig-004',
-    category: 'correctness',
-    pattern: 'Off-by-one in pagination',
-    acceptedCount: 31,
-    dismissedCount: 9,
-    commentedCount: 14,
-    resolvedCount: 28,
-    acceptRate: 0.75,
-    trend: 'stable',
-    lastSeen: '2026-03-04T15:20:00Z',
-    examplePromptFragment: 'Verify page offset calculations in list endpoint responses',
-  },
-  {
-    id: 'sig-005',
-    category: 'docs',
-    pattern: 'Missing docstring on public function',
-    acceptedCount: 8,
-    dismissedCount: 55,
-    commentedCount: 3,
-    resolvedCount: 5,
-    acceptRate: 0.11,
-    trend: 'down',
-    lastSeen: '2026-03-03T11:00:00Z',
-    examplePromptFragment: 'Flag public functions without docstrings explaining parameters and return values',
-  },
-  {
-    id: 'sig-006',
-    category: 'security',
-    pattern: 'Hardcoded secret or credential',
-    acceptedCount: 22,
-    dismissedCount: 2,
-    commentedCount: 6,
-    resolvedCount: 22,
-    acceptRate: 0.92,
-    trend: 'up',
-    lastSeen: '2026-03-06T09:50:00Z',
-    examplePromptFragment: 'Detect hardcoded API keys, tokens, or passwords in source files',
-  },
-]);
+const signals = ref<FindingSignal[]>([]);
+const suggestions = ref<RefinementSuggestion[]>([]);
 
-const suggestions = ref<RefinementSuggestion[]>([
-  {
-    id: 'ref-001',
-    type: 'suppress',
-    category: 'style',
-    description: 'Stop flagging "Unused variable" — 79% dismiss rate signals this finding adds noise without value for this team.',
-    impact: 'high',
-  },
-  {
-    id: 'ref-002',
-    type: 'suppress',
-    category: 'docs',
-    description: 'Suppress "Missing docstring on public function" — 87% dismiss rate. Team convention prefers inline comments over docstrings.',
-    impact: 'medium',
-  },
-  {
-    id: 'ref-003',
-    type: 'promote',
-    category: 'security',
-    description: 'Increase priority of "Hardcoded secret" checks — 92% acceptance rate and high severity means more coverage is welcome.',
-    impact: 'high',
-  },
-  {
-    id: 'ref-004',
-    type: 'reword',
-    category: 'performance',
-    description: 'Reword N+1 findings to include the specific table and endpoint — devs comment asking for context 40% of the time.',
-    impact: 'medium',
-    appliedAt: '2026-03-01T00:00:00Z',
-  },
-]);
+onMounted(async () => {
+  try {
+    const data = await prReviewApi.getLearningLoop();
+    signals.value = data.signals;
+    suggestions.value = data.suggestions;
+  } catch {
+    showToast('Failed to load learning loop data', 'error');
+  }
+});
 
 const filterCategory = ref<FindingCategory | 'all'>('all');
 const sortBy = ref<'acceptRate' | 'volume' | 'lastSeen'>('acceptRate');

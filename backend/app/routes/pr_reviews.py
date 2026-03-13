@@ -41,6 +41,13 @@ def get_pr_review_stats():
     return result, status
 
 
+@pr_reviews_bp.get("/learning-loop")
+def get_pr_review_learning_loop():
+    """Get learning-loop signals and refinement suggestions derived from PR review data."""
+    result, status = PrReviewService.get_learning_loop()
+    return result, status
+
+
 @pr_reviews_bp.get("/history")
 def get_pr_review_history():
     """Get PR activity grouped by date for time-series charts."""

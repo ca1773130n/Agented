@@ -733,6 +733,7 @@ from .triggers import (  # noqa: F401
     get_paths_for_trigger_detailed,
     get_pr_review,
     get_pr_review_history,
+    get_pr_review_learning_loop,
     get_pr_review_stats,
     get_pr_reviews_count,
     get_pr_reviews_for_trigger,

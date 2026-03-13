@@ -11,6 +11,7 @@ from ..database import (
     delete_pr_review,
     get_pr_review,
     get_pr_review_history,
+    get_pr_review_learning_loop,
     get_pr_review_stats,
     get_pr_reviews_count,
     get_pr_reviews_for_trigger,
@@ -137,3 +138,82 @@ class PrReviewService:
         """Get PR activity grouped by date for time-series visualization."""
         history = get_pr_review_history(trigger_id, days)
         return {"history": history}, HTTPStatus.OK
+
+    @staticmethod
+    def get_learning_loop(trigger_id: str = "bot-pr-review") -> Tuple[dict, HTTPStatus]:
+        """Derive learning-loop signals and refinement suggestions from PR review data."""
+        rows = get_pr_review_learning_loop(trigger_id)
+
+        signals = []
+        suggestions = []
+
+        for i, row in enumerate(rows):
+            total = row["total"]
+            accepted = row["accepted_count"]
+            accept_rate = accepted / total if total > 0 else 0.0
+
+            # Compute trend from two 7-day windows
+            recent_total = row["recent_total"]
+            recent_accepted = row["recent_accepted"]
+            prev_total = row["prev_total"]
+            prev_accepted = row["prev_accepted"]
+
+            recent_rate = recent_accepted / recent_total if recent_total > 0 else None
+            prev_rate = prev_accepted / prev_total if prev_total > 0 else None
+
+            if recent_rate is None or prev_rate is None:
+                trend = "stable"
+            elif recent_rate > prev_rate + 0.05:
+                trend = "up"
+            elif recent_rate < prev_rate - 0.05:
+                trend = "down"
+            else:
+                trend = "stable"
+
+            signals.append(
+                {
+                    "id": f"sig-{i + 1:03d}",
+                    "category": "correctness",
+                    "pattern": row["pattern"] or "Unknown project",
+                    "acceptedCount": accepted,
+                    "dismissedCount": row["dismissed_count"],
+                    "commentedCount": row["commented_count"],
+                    "resolvedCount": row["resolved_count"],
+                    "acceptRate": round(accept_rate, 4),
+                    "trend": trend,
+                    "lastSeen": row["last_seen"] or "",
+                    "examplePromptFragment": "",
+                }
+            )
+
+            # Generate suggestions for extreme accept rates
+            if accept_rate < 0.25 and total >= 3:
+                suggestions.append(
+                    {
+                        "id": f"ref-sup-{i + 1:03d}",
+                        "type": "suppress",
+                        "category": "correctness",
+                        "description": (
+                            f'Consider suppressing findings for "{row["pattern"]}" '
+                            f"— {round((1 - accept_rate) * 100)}% dismiss rate "
+                            "suggests low value for this project."
+                        ),
+                        "impact": "high" if accept_rate < 0.10 else "medium",
+                    }
+                )
+            elif accept_rate > 0.85 and total >= 3:
+                suggestions.append(
+                    {
+                        "id": f"ref-pro-{i + 1:03d}",
+                        "type": "promote",
+                        "category": "correctness",
+                        "description": (
+                            f'Increase coverage for "{row["pattern"]}" '
+                            f"— {round(accept_rate * 100)}% acceptance rate "
+                            "signals high value for this project."
+                        ),
+                        "impact": "high",
+                    }
+                )
+
+        return {"signals": signals, "suggestions": suggestions}, HTTPStatus.OK
