@@ -1,11 +1,29 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import { useToast } from '../composables/useToast';
+import { triggerApi } from '../services/api';
 
 const showToast = useToast();
 
-const botId = ref('bot-security');
+const triggers = ref<Array<{ id: string; name: string }>>([]);
+const loading = ref(false);
+const botId = ref('');
+
+onMounted(async () => {
+  loading.value = true;
+  try {
+    const data = await triggerApi.list();
+    triggers.value = data.triggers.map((t) => ({ id: t.id, name: t.name }));
+    if (triggers.value.length > 0) {
+      botId.value = triggers.value[0].id;
+    }
+  } catch {
+    // ignore — botId stays empty
+  } finally {
+    loading.value = false;
+  }
+});
 
 const baseUrl = computed(() => {
   return typeof window !== 'undefined' ? window.location.origin : 'https://your-agented-host';
@@ -78,14 +96,13 @@ function copyWebhookUrl() {
         </div>
 
         <div class="field-group">
-          <label class="field-label">Bot ID</label>
-          <input
-            v-model="botId"
-            class="field-input"
-            type="text"
-            placeholder="bot-security"
-          />
-          <p class="field-hint">Which bot to trigger on each PR or push event</p>
+          <label class="field-label">Trigger</label>
+          <select v-model="botId" class="field-input" :disabled="loading">
+            <option v-if="loading" value="">Loading…</option>
+            <option v-else-if="triggers.length === 0" value="">No triggers found</option>
+            <option v-for="t in triggers" :key="t.id" :value="t.id">{{ t.name }}</option>
+          </select>
+          <p class="field-hint">Which trigger to fire on each PR or push event</p>
         </div>
 
         <div class="field-group">
