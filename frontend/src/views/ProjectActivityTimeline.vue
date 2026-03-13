@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
+import { activityFeedApi } from '../services/api/activity-feed';
 const router = useRouter();
 
 type ActivityType = 'bot_run' | 'trigger_fired' | 'config_changed' | 'team_action' | 'execution_failed' | 'approval';
@@ -18,16 +19,16 @@ interface Activity {
   metadata?: Record<string, string | number>;
 }
 
-const activities = ref<Activity[]>([
-  { id: 'act-001', type: 'bot_run', title: 'Bot Execution Complete', description: 'bot-pr-review ran on PR #142 — 3 findings', actor: 'bot-pr-review', timestamp: '2026-03-06T14:22:00Z', projectId: 'proj-api', metadata: { duration: '888ms', findings: 3 } },
-  { id: 'act-002', type: 'trigger_fired', title: 'GitHub Trigger Fired', description: 'PR #142 opened by developer in org/api', actor: 'github', timestamp: '2026-03-06T14:21:58Z', projectId: 'proj-api', metadata: { pr: 142 } },
-  { id: 'act-003', type: 'config_changed', title: 'Bot Config Updated', description: 'Prompt template modified for bot-pr-review', actor: 'jane.smith', timestamp: '2026-03-06T13:45:00Z', projectId: 'proj-api', metadata: { field: 'prompt_template' } },
-  { id: 'act-004', type: 'execution_failed', title: 'Execution Failed', description: 'bot-security timed out after 300s on weekly scan', actor: 'bot-security', timestamp: '2026-03-06T09:00:12Z', projectId: 'proj-api', metadata: { error: 'timeout' } },
-  { id: 'act-005', type: 'approval', title: 'Approval Gate Triggered', description: 'Human approval required before merging PR #140', actor: 'bot-pr-review', timestamp: '2026-03-05T16:30:00Z', projectId: 'proj-frontend', metadata: { pr: 140 } },
-  { id: 'act-006', type: 'team_action', title: 'Team Member Added', description: 'alex.johnson joined the Backend Team', actor: 'admin', timestamp: '2026-03-05T11:00:00Z', projectId: 'proj-api', metadata: {} },
-  { id: 'act-007', type: 'bot_run', title: 'Bot Execution Complete', description: 'bot-security ran weekly audit — 12 findings', actor: 'bot-security', timestamp: '2026-03-04T09:00:45Z', projectId: 'proj-api', metadata: { duration: '245s', findings: 12 } },
-  { id: 'act-008', type: 'trigger_fired', title: 'Schedule Trigger Fired', description: 'Weekly security scan triggered by cron 0 9 * * 1', actor: 'scheduler', timestamp: '2026-03-04T09:00:00Z', projectId: 'proj-api', metadata: {} },
-]);
+const activities = ref<Activity[]>([]);
+
+onMounted(async () => {
+  try {
+    const response = await activityFeedApi.list({ limit: 200 });
+    activities.value = response.activities as Activity[];
+  } catch {
+    // Leave activities empty on error; the empty-state UI will display
+  }
+});
 
 const filterType = ref<ActivityType | ''>('');
 const filterProject = ref('');
