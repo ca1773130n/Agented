@@ -1,8 +1,10 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, watch, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
+import { executionApi } from '../services/api';
+import type { Execution } from '../services/api';
 const router = useRouter();
 
 interface ExecutionFrame {
@@ -15,31 +17,126 @@ interface ExecutionFrame {
   tokenCount?: number;
 }
 
-const frames: ExecutionFrame[] = [
-  { index: 0, timestamp: '14:22:00.000', type: 'trigger', label: 'Trigger Received', content: '{"action":"opened","pull_request":{"number":42,"title":"Add OAuth flow"},"repository":{"full_name":"org/api"}}', durationMs: 0 },
-  { index: 1, timestamp: '14:22:00.012', type: 'context', label: 'Context Injected', content: 'Fetched 3 changed files (214 lines total):\n- src/auth/oauth.ts (+180, -0)\n- src/middleware/session.ts (+22, -8)\n- src/routes/callback.ts (+12, -4)\n\nRecent git history: 5 commits from last 7 days.', durationMs: 12 },
-  { index: 2, timestamp: '14:22:00.024', type: 'prompt', label: 'Final Prompt Built', content: 'You are a senior software engineer conducting a code review.\n\nReview PR #42 "Add OAuth flow" in org/api.\n\nChanged files:\n[...214 lines of diff]\n\nAnalyze for security vulnerabilities, logic errors, performance issues.', durationMs: 12, tokenCount: 4240 },
-  { index: 3, timestamp: '14:22:00.042', type: 'api_call', label: 'API Call Sent', content: 'POST claude-opus-4-6 with 4,240 tokens\nMax output: 2048 tokens\nTemperature: 0.1', durationMs: 18 },
-  { index: 4, timestamp: '14:22:00.862', type: 'response', label: 'Model Response Received', content: '## Security Analysis\n\nFound 1 high-severity issue:\n**CSRF Vulnerability**: OAuth callback at `/auth/callback` does not validate the `state` parameter...\n\n## Code Quality\n\nThe `handleCallback` function at 87 lines violates single-responsibility...', durationMs: 820, tokenCount: 680 },
-  { index: 5, timestamp: '14:22:00.880', type: 'output', label: 'Output Formatted', content: 'Structured output: 3 findings (1 critical, 1 warning, 1 info)\nFormatted for GitHub PR comment', durationMs: 18 },
-  { index: 6, timestamp: '14:22:00.900', type: 'complete', label: 'Execution Complete', content: 'Total duration: 888ms\nInput tokens: 4,240 | Output tokens: 680\nEstimated cost: $0.078\nStatus: SUCCESS', durationMs: 20 },
-];
+function buildFrames(exec: Execution): ExecutionFrame[] {
+  const stdoutLines = (exec.stdout_log || '').split('\n');
+  const firstNLines = stdoutLines.slice(0, 10).join('\n');
+  const truncatedStdout = stdoutLines.slice(0, 30).join('\n');
+  const lineCount = stdoutLines.filter((l) => l.trim().length > 0).length;
+  const promptText = exec.prompt || '(no prompt recorded)';
+  const estimatedTokens = Math.round(promptText.length / 4);
 
-const executions = ref([
-  { id: 'exec-001', botName: 'bot-pr-review', runAt: '14:22:00', status: 'success' },
-  { id: 'exec-002', botName: 'bot-security', runAt: '13:10:00', status: 'failed' },
-]);
+  return [
+    {
+      index: 0,
+      timestamp: exec.started_at,
+      type: 'trigger',
+      label: 'Trigger Received',
+      content: `trigger_type: ${exec.trigger_type}\ntrigger_name: ${exec.trigger_name}\nstarted_at: ${exec.started_at}`,
+      durationMs: 0,
+    },
+    {
+      index: 1,
+      timestamp: exec.started_at,
+      type: 'context',
+      label: 'Context Injected',
+      content: firstNLines || '(no stdout recorded)',
+      durationMs: undefined,
+    },
+    {
+      index: 2,
+      timestamp: exec.started_at,
+      type: 'prompt',
+      label: 'Final Prompt Built',
+      content: promptText,
+      durationMs: undefined,
+      tokenCount: estimatedTokens,
+    },
+    {
+      index: 3,
+      timestamp: exec.started_at,
+      type: 'api_call',
+      label: 'API Call Sent',
+      content: `backend_type: ${exec.backend_type}\ncommand: ${exec.command || '(none)'}`,
+      durationMs: undefined,
+    },
+    {
+      index: 4,
+      timestamp: exec.started_at,
+      type: 'response',
+      label: 'Model Response Received',
+      content: truncatedStdout || '(no output recorded)',
+      durationMs: exec.duration_ms,
+    },
+    {
+      index: 5,
+      timestamp: exec.started_at,
+      type: 'output',
+      label: 'Output Formatted',
+      content: `stdout line count: ${lineCount}`,
+      durationMs: undefined,
+    },
+    {
+      index: 6,
+      timestamp: exec.finished_at || exec.started_at,
+      type: 'complete',
+      label: 'Execution Complete',
+      content: `status: ${exec.status}\nduration_ms: ${exec.duration_ms ?? 'N/A'}\nfinished_at: ${exec.finished_at || 'N/A'}`,
+      durationMs: exec.duration_ms,
+    },
+  ];
+}
 
-const selectedExecId = ref('exec-001');
+const executions = ref<Execution[]>([]);
+const frames = ref<ExecutionFrame[]>([]);
+const selectedExecId = ref('');
 const currentFrame = ref(0);
 const isPlaying = ref(false);
 const playInterval = ref<ReturnType<typeof setInterval> | null>(null);
 
-const currentFrameData = computed(() => frames[currentFrame.value]);
-const progress = computed(() => ((currentFrame.value) / (frames.length - 1)) * 100);
+const currentFrameData = computed(() => {
+  if (frames.value.length === 0) return null;
+  return frames.value[currentFrame.value];
+});
+
+const progress = computed(() => {
+  if (frames.value.length <= 1) return 0;
+  return (currentFrame.value / (frames.value.length - 1)) * 100;
+});
+
+async function loadFrames(id: string) {
+  if (!id) return;
+  try {
+    const exec = await executionApi.get(id);
+    frames.value = buildFrames(exec);
+    currentFrame.value = 0;
+  } catch {
+    frames.value = [];
+  }
+}
+
+watch(selectedExecId, (id) => {
+  isPlaying.value = false;
+  if (playInterval.value) {
+    clearInterval(playInterval.value);
+    playInterval.value = null;
+  }
+  loadFrames(id);
+});
+
+onMounted(async () => {
+  try {
+    const result = await executionApi.listAll({ limit: 20 });
+    executions.value = result.executions;
+    if (result.executions.length > 0) {
+      selectedExecId.value = result.executions[0].execution_id;
+    }
+  } catch {
+    executions.value = [];
+  }
+});
 
 function goTo(idx: number) {
-  currentFrame.value = Math.max(0, Math.min(frames.length - 1, idx));
+  currentFrame.value = Math.max(0, Math.min(frames.value.length - 1, idx));
 }
 
 function togglePlay() {
@@ -47,10 +144,10 @@ function togglePlay() {
     if (playInterval.value) clearInterval(playInterval.value);
     isPlaying.value = false;
   } else {
-    if (currentFrame.value === frames.length - 1) currentFrame.value = 0;
+    if (currentFrame.value === frames.value.length - 1) currentFrame.value = 0;
     isPlaying.value = true;
     playInterval.value = setInterval(() => {
-      if (currentFrame.value >= frames.length - 1) {
+      if (currentFrame.value >= frames.value.length - 1) {
         if (playInterval.value) clearInterval(playInterval.value);
         isPlaying.value = false;
       } else {
@@ -92,13 +189,13 @@ function frameTypeColor(type: ExecutionFrame['type']) {
         <div class="sidebar-header">Executions</div>
         <div
           v-for="e in executions"
-          :key="e.id"
+          :key="e.execution_id"
           class="exec-item"
-          :class="{ active: selectedExecId === e.id }"
-          @click="selectedExecId = e.id; currentFrame = 0; isPlaying = false;"
+          :class="{ active: selectedExecId === e.execution_id }"
+          @click="selectedExecId = e.execution_id; currentFrame = 0; isPlaying = false;"
         >
-          <div class="exec-bot">{{ e.botName }}</div>
-          <div class="exec-meta">{{ e.runAt }} · <span :class="['exec-status', `es-${e.status}`]">{{ e.status }}</span></div>
+          <div class="exec-bot">{{ e.trigger_name }}</div>
+          <div class="exec-meta">{{ e.started_at }} · <span :class="['exec-status', `es-${e.status}`]">{{ e.status }}</span></div>
         </div>
 
         <div class="frames-nav">
@@ -121,11 +218,11 @@ function frameTypeColor(type: ExecutionFrame['type']) {
         <!-- Progress bar -->
         <div class="card progress-card">
           <div class="progress-controls">
-            <button class="ctrl-btn" :disabled="currentFrame === 0" @click="goTo(0)">⏮</button>
-            <button class="ctrl-btn" :disabled="currentFrame === 0" @click="goTo(currentFrame - 1)">◀</button>
-            <button class="ctrl-btn play-btn" @click="togglePlay">{{ isPlaying ? '⏸' : '▶' }}</button>
-            <button class="ctrl-btn" :disabled="currentFrame === frames.length - 1" @click="goTo(currentFrame + 1)">▶</button>
-            <button class="ctrl-btn" :disabled="currentFrame === frames.length - 1" @click="goTo(frames.length - 1)">⏭</button>
+            <button class="ctrl-btn" :disabled="currentFrame === 0 || frames.length === 0" @click="goTo(0)">⏮</button>
+            <button class="ctrl-btn" :disabled="currentFrame === 0 || frames.length === 0" @click="goTo(currentFrame - 1)">◀</button>
+            <button class="ctrl-btn play-btn" :disabled="frames.length === 0" @click="togglePlay">{{ isPlaying ? '⏸' : '▶' }}</button>
+            <button class="ctrl-btn" :disabled="currentFrame === frames.length - 1 || frames.length === 0" @click="goTo(currentFrame + 1)">▶</button>
+            <button class="ctrl-btn" :disabled="currentFrame === frames.length - 1 || frames.length === 0" @click="goTo(frames.length - 1)">⏭</button>
           </div>
           <div class="progress-track">
             <div class="progress-fill" :style="{ width: `${progress}%` }"></div>
@@ -133,17 +230,22 @@ function frameTypeColor(type: ExecutionFrame['type']) {
               v-for="f in frames"
               :key="f.index"
               class="progress-marker"
-              :style="{ left: `${(f.index / (frames.length - 1)) * 100}%`, background: frameTypeColor(f.type) }"
+              :style="{ left: `${frames.length > 1 ? (f.index / (frames.length - 1)) * 100 : 0}%`, background: frameTypeColor(f.type) }"
               @click="goTo(f.index)"
             ></div>
           </div>
           <div class="progress-meta">
-            Frame {{ currentFrame + 1 }} / {{ frames.length }} · {{ currentFrameData.timestamp }}
+            <template v-if="frames.length > 0">
+              Frame {{ currentFrame + 1 }} / {{ frames.length }} · {{ currentFrameData?.timestamp }}
+            </template>
+            <template v-else>
+              No execution selected
+            </template>
           </div>
         </div>
 
         <!-- Current frame content -->
-        <div class="card frame-card">
+        <div v-if="currentFrameData" class="card frame-card">
           <div class="frame-header">
             <span class="frame-type-pill" :style="{ background: `${frameTypeColor(currentFrameData.type)}18`, color: frameTypeColor(currentFrameData.type) }">{{ currentFrameData.type.replace('_', ' ') }}</span>
             <span class="frame-label-big">{{ currentFrameData.label }}</span>
@@ -153,6 +255,9 @@ function frameTypeColor(type: ExecutionFrame['type']) {
             </div>
           </div>
           <pre class="frame-content">{{ currentFrameData.content }}</pre>
+        </div>
+        <div v-else class="card frame-card empty-state">
+          <p>Select an execution to begin debugging.</p>
         </div>
       </div>
     </div>
@@ -209,6 +314,8 @@ function frameTypeColor(type: ExecutionFrame['type']) {
 .frame-metric { font-size: 0.72rem; color: var(--text-muted); background: var(--bg-tertiary); padding: 2px 8px; border-radius: 3px; }
 
 .frame-content { padding: 18px; font-family: 'Geist Mono', monospace; font-size: 0.78rem; color: var(--text-secondary); white-space: pre-wrap; line-height: 1.6; margin: 0; overflow: auto; max-height: 400px; }
+
+.empty-state { display: flex; align-items: center; justify-content: center; min-height: 120px; color: var(--text-muted); font-size: 0.85rem; }
 
 @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
 </style>
