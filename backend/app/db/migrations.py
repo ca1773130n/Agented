@@ -3396,6 +3396,26 @@ def _migrate_v75_trigger_cron_expression(conn):
         logger.debug("triggers.cron_expression column already exists: %s", e)
 
 
+def _migrate_76_super_agent_dispatch(conn):
+    """Add dispatch_type and super_agent_id to triggers; session_id and source_type to execution_logs."""
+    try:
+        conn.execute("ALTER TABLE triggers ADD COLUMN dispatch_type TEXT DEFAULT 'bot'")
+    except Exception as e:
+        logger.debug("triggers.dispatch_type column already exists: %s", e)
+    try:
+        conn.execute("ALTER TABLE triggers ADD COLUMN super_agent_id TEXT")
+    except Exception as e:
+        logger.debug("triggers.super_agent_id column already exists: %s", e)
+    try:
+        conn.execute("ALTER TABLE execution_logs ADD COLUMN session_id TEXT")
+    except Exception as e:
+        logger.debug("execution_logs.session_id column already exists: %s", e)
+    try:
+        conn.execute("ALTER TABLE execution_logs ADD COLUMN source_type TEXT DEFAULT 'bot'")
+    except Exception as e:
+        logger.debug("execution_logs.source_type column already exists: %s", e)
+
+
 VERSIONED_MIGRATIONS = [
     (1, "add_github_columns", _migrate_add_github_columns),
     (2, "add_pr_reviews_table", _migrate_add_pr_reviews_table),
@@ -3478,4 +3498,6 @@ VERSIONED_MIGRATIONS = [
     (74, "add_execution_queue_table", _migrate_v74_add_execution_queue_table),
     # v0.2.0 API hardening
     (75, "trigger_cron_expression", _migrate_v75_trigger_cron_expression),
+    # v0.4.0 core loop wiring
+    (76, "super_agent_dispatch", _migrate_76_super_agent_dispatch),
 ]
