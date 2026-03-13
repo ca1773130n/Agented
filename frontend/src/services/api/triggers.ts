@@ -52,6 +52,8 @@ export const triggerApi = {
     schedule_timezone?: string;
     timeout_seconds?: number | null;
     webhook_secret?: string | null;
+    dispatch_type?: 'bot' | 'super_agent';
+    super_agent_id?: string | null;
   }) => apiFetch<{ message: string; trigger_id: string; name: string }>('/admin/triggers', {
     method: 'POST',
     body: JSON.stringify(data),
@@ -74,6 +76,8 @@ export const triggerApi = {
     team_id: string | null;
     timeout_seconds: number | null;
     webhook_secret: string | null;
+    dispatch_type: 'bot' | 'super_agent';
+    super_agent_id: string | null;
   }>) => apiFetch<{ message: string }>(`/admin/triggers/${triggerId}`, {
     method: 'PUT',
     body: JSON.stringify(data),

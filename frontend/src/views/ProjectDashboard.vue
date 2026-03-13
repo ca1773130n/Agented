@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { ref, computed, watch, onUnmounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import type { Project, HarnessStatusResult, ProjectSkill, Hook, Command, Rule, Agent, TeamMember, ProjectInstallation } from '../services/api';
-import { projectApi, grdApi, hookApi, commandApi, ruleApi, agentApi, teamApi, ApiError } from '../services/api';
+import type { Project, HarnessStatusResult, ProjectSkill, Hook, Command, Rule, Agent, TeamMember, ProjectInstallation, SuperAgent, SuperAgentSession } from '../services/api';
+import { projectApi, grdApi, hookApi, commandApi, ruleApi, agentApi, teamApi, superAgentApi, superAgentSessionApi, ApiError } from '../services/api';
 import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import EntityLayout from '../layouts/EntityLayout.vue';
 import InteractiveSetup from '../components/projects/InteractiveSetup.vue';
@@ -52,6 +52,17 @@ const isLoadingLibrary = ref(false);
 // Installation state
 const installations = ref<ProjectInstallation[]>([]);
 const isInstallingComponent = ref<Record<string, boolean>>({});
+
+// Active sessions state
+interface SessionInfo {
+  session: SuperAgentSession;
+  superAgent: SuperAgent;
+}
+const activeSessions = ref<SessionInfo[]>([]);
+const isLoadingSessions = ref(false);
+const showChatSlideOver = ref(false);
+const chatSuperAgentId = ref('');
+const chatSessionId = ref('');
 
 // GRD init status
 const grdInitStatus = ref<string>('none');
@@ -158,7 +169,47 @@ async function loadData() {
   // Fire and forget library items load (non-critical)
   loadLibraryItems();
   loadGrdStatus();
+  loadActiveSessions();
   return project.value;
+}
+
+async function loadActiveSessions() {
+  isLoadingSessions.value = true;
+  try {
+    // Collect all super agents from team members
+    const teamIds: string[] = [];
+    if (project.value?.owner_team_id) teamIds.push(project.value.owner_team_id);
+    if (project.value?.teams) {
+      for (const t of project.value.teams) {
+        if (!teamIds.includes(t.id)) teamIds.push(t.id);
+      }
+    }
+    // Fetch super agents that belong to these teams
+    const saData = await superAgentApi.list();
+    const teamSuperAgents = (saData.super_agents || []).filter(
+      sa => sa.team_id && teamIds.includes(sa.team_id)
+    );
+    // Fetch sessions for each super agent
+    const sessionInfos: SessionInfo[] = [];
+    for (const sa of teamSuperAgents) {
+      try {
+        const sessData = await superAgentSessionApi.list(sa.id);
+        for (const sess of (sessData.sessions || [])) {
+          if (sess.status === 'active') {
+            sessionInfos.push({ session: sess, superAgent: sa });
+          }
+        }
+      } catch { /* skip */ }
+    }
+    activeSessions.value = sessionInfos;
+  } catch { activeSessions.value = []; }
+  finally { isLoadingSessions.value = false; }
+}
+
+function openChat(superAgentId: string, sessionId: string) {
+  chatSuperAgentId.value = superAgentId;
+  chatSessionId.value = sessionId;
+  showChatSlideOver.value = true;
 }
 
 async function loadGrdStatus() {
@@ -426,6 +477,51 @@ function onSetupCompleted() {
         @refresh="loadData"
       />
 
+      <!-- Active Sessions -->
+      <div v-if="activeSessions.length > 0 || isLoadingSessions" class="card sessions-card">
+        <div class="card-header-sessions">
+          <h3>Active Sessions</h3>
+          <span class="card-count">{{ activeSessions.length }} active</span>
+        </div>
+        <div v-if="isLoadingSessions" class="sessions-loading">Loading sessions...</div>
+        <div v-else-if="activeSessions.length === 0" class="sessions-empty">No active sessions</div>
+        <div v-else class="session-cards">
+          <div v-for="info in activeSessions" :key="info.session.id" class="session-card">
+            <div class="session-card-header">
+              <span class="session-agent-name">{{ info.superAgent.name }}</span>
+              <span class="session-status-badge active">active</span>
+            </div>
+            <div class="session-card-meta">
+              <span class="session-id-label">{{ info.session.id }}</span>
+              <span v-if="info.session.started_at" class="session-time">Started {{ new Date(info.session.started_at).toLocaleString() }}</span>
+            </div>
+            <button class="action-btn session-chat-btn" @click="openChat(info.superAgent.id, info.session.id)">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+              Chat
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Chat SlideOver -->
+      <Teleport to="body">
+        <div v-if="showChatSlideOver" class="slide-over-overlay" @click.self="showChatSlideOver = false">
+          <div class="slide-over-panel">
+            <div class="slide-over-header">
+              <h3>Chat Session</h3>
+              <button class="modal-close" @click="showChatSlideOver = false">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
+            </div>
+            <div class="slide-over-body">
+              <p class="slide-over-info">Super Agent: <code>{{ chatSuperAgentId }}</code></p>
+              <p class="slide-over-info">Session: <code>{{ chatSessionId }}</code></p>
+              <p class="slide-over-hint">Open the <router-link :to="{ name: 'super-agent-playground', params: { superAgentId: chatSuperAgentId } }">Super Agent Playground</router-link> for the full chat experience.</p>
+            </div>
+          </div>
+        </div>
+      </Teleport>
+
       <ProjectTeamCanvas
         v-if="allTeams.length >= 1"
         :projectId="projectId"
@@ -525,4 +621,33 @@ function onSetupCompleted() {
 .btn-primary { padding: 8px 16px; background: var(--accent-violet); border: none; border-radius: 6px; color: #fff; font-size: 0.9rem; font-weight: 500; cursor: pointer; transition: all 0.15s; }
 .btn-primary:hover:not(:disabled) { background: #9966ff; }
 .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+/* Sessions Section */
+.sessions-card { padding: 0; }
+.card-header-sessions { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; border-bottom: 1px solid var(--border-subtle); }
+.card-header-sessions h3 { font-size: 0.95rem; font-weight: 600; color: var(--text-primary); margin: 0; }
+.card-count { font-size: 0.75rem; color: var(--text-tertiary); background: var(--bg-tertiary); padding: 4px 8px; border-radius: 4px; }
+.sessions-loading, .sessions-empty { padding: 24px; text-align: center; color: var(--text-muted); font-size: 0.85rem; }
+.session-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; padding: 16px 20px; }
+.session-card { background: var(--bg-tertiary); border: 1px solid var(--border-subtle); border-radius: 8px; padding: 14px 16px; display: flex; flex-direction: column; gap: 8px; }
+.session-card-header { display: flex; align-items: center; justify-content: space-between; }
+.session-agent-name { font-weight: 600; font-size: 0.9rem; color: var(--text-primary); }
+.session-status-badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 0.65rem; font-weight: 700; text-transform: uppercase; }
+.session-status-badge.active { background: var(--accent-emerald-dim); color: var(--accent-emerald); }
+.session-card-meta { display: flex; flex-direction: column; gap: 2px; }
+.session-id-label { font-family: var(--font-mono); font-size: 0.7rem; color: var(--text-muted); }
+.session-time { font-size: 0.75rem; color: var(--text-tertiary); }
+.session-chat-btn { background: var(--accent-violet-dim); color: var(--accent-violet); border: 1px solid transparent; padding: 8px 14px; font-size: 0.85rem; }
+.session-chat-btn:hover { border-color: var(--accent-violet); }
+/* SlideOver */
+.slide-over-overlay { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.5); z-index: 100; display: flex; justify-content: flex-end; }
+.slide-over-panel { width: 400px; max-width: 90vw; background: var(--bg-secondary); border-left: 1px solid var(--border-subtle); display: flex; flex-direction: column; animation: slideIn 0.2s ease; }
+@keyframes slideIn { from { transform: translateX(100%); } to { transform: translateX(0); } }
+.slide-over-header { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; border-bottom: 1px solid var(--border-subtle); }
+.slide-over-header h3 { margin: 0; font-size: 1rem; color: var(--text-primary); }
+.slide-over-body { padding: 20px; flex: 1; overflow-y: auto; }
+.slide-over-info { font-size: 0.85rem; color: var(--text-secondary); margin: 0 0 8px; }
+.slide-over-info code { font-family: var(--font-mono); font-size: 0.8rem; background: var(--bg-tertiary); padding: 2px 6px; border-radius: 4px; }
+.slide-over-hint { font-size: 0.85rem; color: var(--text-tertiary); margin-top: 16px; }
+.slide-over-hint a { color: var(--accent-cyan); text-decoration: none; }
+.slide-over-hint a:hover { text-decoration: underline; }
 </style>

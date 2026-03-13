@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import type { Team, TopologyType } from '../services/api';
-import { teamApi, ApiError } from '../services/api';
+import type { Team, TopologyType, SuperAgent, SuperAgentSession } from '../services/api';
+import { teamApi, superAgentApi, superAgentSessionApi, ApiError } from '../services/api';
+import MessageInbox from '../components/super-agents/MessageInbox.vue';
 import AgentAssignmentEditor from '../components/teams/AgentAssignmentEditor.vue';
 import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import TeamTopologyCard from '../components/teams/TeamTopologyCard.vue';
@@ -33,6 +34,11 @@ const runMessage = ref('');
 const agentMembers = computed(() =>
   (team.value?.members || []).filter(m => m.agent_id)
 );
+
+// Super agent session tracking
+const teamSuperAgents = ref<SuperAgent[]>([]);
+const superAgentSessions = ref<Record<string, SuperAgentSession[]>>({});
+const selectedMailboxAgentId = ref<string | null>(null);
 
 // Expanded assignment cards
 const expandedAgents = ref<Set<string>>(new Set());
@@ -96,11 +102,38 @@ async function loadData() {
   try {
     const data = await teamApi.get(teamId.value);
     team.value = data;
+    loadTeamSuperAgents();
     return data;
   } catch (err) {
     handleApiError(err, showToast, 'Failed to load team dashboard');
     throw err;
   }
+}
+
+async function loadTeamSuperAgents() {
+  try {
+    const saData = await superAgentApi.list();
+    teamSuperAgents.value = (saData.super_agents || []).filter(
+      sa => sa.team_id === teamId.value
+    );
+    // Load sessions for each super agent
+    const sessMap: Record<string, SuperAgentSession[]> = {};
+    for (const sa of teamSuperAgents.value) {
+      try {
+        const sessData = await superAgentSessionApi.list(sa.id);
+        sessMap[sa.id] = sessData.sessions || [];
+      } catch { sessMap[sa.id] = []; }
+    }
+    superAgentSessions.value = sessMap;
+  } catch { teamSuperAgents.value = []; }
+}
+
+function getActiveSessionCount(saId: string): number {
+  return (superAgentSessions.value[saId] || []).filter(s => s.status === 'active').length;
+}
+
+function openMailbox(saId: string) {
+  selectedMailboxAgentId.value = selectedMailboxAgentId.value === saId ? null : saId;
 }
 
 // Manual run
@@ -292,6 +325,60 @@ async function runTeam() {
         @navigate-to-agent-design="(agentId: string) => router.push({ name: 'agent-design', params: { agentId } })"
       />
 
+      <!-- Super Agent Sessions -->
+      <div v-if="teamSuperAgents.length > 0" class="card">
+        <div class="card-header">
+          <div class="header-left">
+            <h3>Super Agents</h3>
+            <span class="card-count">{{ teamSuperAgents.length }}</span>
+          </div>
+        </div>
+        <div class="super-agent-list">
+          <div v-for="sa in teamSuperAgents" :key="sa.id" class="super-agent-row">
+            <div class="sa-info">
+              <span class="sa-name">{{ sa.name }}</span>
+              <span class="sa-id">{{ sa.id }}</span>
+            </div>
+            <div class="sa-status">
+              <span v-if="getActiveSessionCount(sa.id) > 0" class="sa-session-badge active">
+                {{ getActiveSessionCount(sa.id) }} active
+              </span>
+              <span v-else class="sa-session-badge idle">idle</span>
+            </div>
+            <div class="sa-actions">
+              <button
+                class="action-btn secondary compact"
+                @click="router.push({ name: 'super-agent-playground', params: { superAgentId: sa.id } })"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+                Chat
+              </button>
+              <button
+                class="action-btn secondary compact"
+                :class="{ active: selectedMailboxAgentId === sa.id }"
+                @click="openMailbox(sa.id)"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+                Mailbox
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Mailbox -->
+      <div v-if="selectedMailboxAgentId" class="card mailbox-card">
+        <div class="card-header">
+          <h3>Messages</h3>
+          <button class="close-mailbox-btn" @click="selectedMailboxAgentId = null">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+          </button>
+        </div>
+        <div class="mailbox-body">
+          <MessageInbox :superAgentId="selectedMailboxAgentId" />
+        </div>
+      </div>
+
       <!-- Team Info -->
       <div class="card">
         <div class="card-header">
@@ -420,4 +507,23 @@ async function runTeam() {
 .visual-builder-btn svg { width: 18px; height: 18px; }
 .visual-builder-btn:hover:not(:disabled) { background: linear-gradient(135deg, rgba(0, 212, 255, 0.25), rgba(168, 85, 247, 0.25)); border-color: var(--accent-cyan); transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0, 212, 255, 0.2); }
 .visual-builder-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+/* Super Agent List */
+.super-agent-list { display: flex; flex-direction: column; }
+.super-agent-row { display: flex; align-items: center; gap: 16px; padding: 14px 20px; border-bottom: 1px solid var(--border-subtle); }
+.super-agent-row:last-child { border-bottom: none; }
+.sa-info { flex: 1; display: flex; flex-direction: column; gap: 2px; }
+.sa-name { font-weight: 500; color: var(--text-primary); font-size: 0.9rem; }
+.sa-id { font-size: 0.7rem; font-family: var(--font-mono); color: var(--text-tertiary); }
+.sa-status { flex-shrink: 0; }
+.sa-session-badge { display: inline-block; padding: 3px 8px; border-radius: 4px; font-size: 0.65rem; font-weight: 700; text-transform: uppercase; }
+.sa-session-badge.active { background: var(--accent-emerald-dim); color: var(--accent-emerald); }
+.sa-session-badge.idle { background: var(--bg-tertiary); color: var(--text-tertiary); }
+.sa-actions { display: flex; gap: 8px; }
+.action-btn.active { border-color: var(--accent-cyan); color: var(--accent-cyan); }
+/* Mailbox */
+.mailbox-card { overflow: hidden; }
+.mailbox-body { padding: 0 20px 20px; max-height: 500px; overflow-y: auto; }
+.close-mailbox-btn { width: 28px; height: 28px; background: transparent; border: none; border-radius: 6px; display: flex; align-items: center; justify-content: center; cursor: pointer; color: var(--text-tertiary); transition: all 0.15s; }
+.close-mailbox-btn:hover { background: var(--bg-tertiary); color: var(--text-primary); }
+.close-mailbox-btn svg { width: 16px; height: 16px; }
 </style>

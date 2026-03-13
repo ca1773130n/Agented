@@ -131,6 +131,11 @@ function formatDuration(ms?: number): string {
   return `${seconds}s`;
 }
 
+function formatSourceType(type: string | undefined): string {
+  const labels: Record<string, string> = { bot: 'Bot', super_agent: 'Super Agent', user_chat: 'Chat' };
+  return labels[type || 'bot'] || type || 'Bot';
+}
+
 function closeLogs() {
   selectedExecution.value = null;
 }
@@ -302,9 +307,9 @@ onMounted(loadData);
                 </span>
                 <span v-else>{{ formatDuration(execution.duration_ms) }}</span>
               </td>
-              <td class="cell-trigger">
-                <span class="trigger-badge" :class="execution.trigger_type">
-                  {{ execution.trigger_type }}
+              <td class="cell-source">
+                <span class="source-badge" :class="execution.source_type || 'bot'">
+                  {{ formatSourceType(execution.source_type) }}
                 </span>
               </td>
               <td class="cell-backend">
@@ -664,6 +669,34 @@ onMounted(loadData);
 .trigger-badge.webhook {
   background: var(--accent-cyan-dim);
   color: var(--accent-cyan);
+}
+
+.cell-source {
+  max-width: 140px;
+}
+
+.source-badge {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.source-badge.bot {
+  background: var(--accent-cyan-dim);
+  color: var(--accent-cyan);
+}
+
+.source-badge.super_agent {
+  background: var(--accent-violet-dim);
+  color: var(--accent-violet);
+}
+
+.source-badge.user_chat {
+  background: var(--accent-emerald-dim);
+  color: var(--accent-emerald);
 }
 
 .backend-badge {

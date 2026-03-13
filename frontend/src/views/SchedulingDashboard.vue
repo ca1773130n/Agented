@@ -126,6 +126,53 @@
       </div>
     </section>
 
+    <!-- Scheduled Triggers -->
+    <section class="dashboard-section">
+      <h2 class="section-header">Scheduled Triggers</h2>
+      <div v-if="scheduledTriggers.length === 0" class="empty-state">
+        <p>No scheduled triggers configured</p>
+      </div>
+      <div v-else class="table-wrapper">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Dispatch Type</th>
+              <th>Schedule</th>
+              <th>Next Run</th>
+              <th>Last Run</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="trigger in scheduledTriggers" :key="trigger.id">
+              <td>
+                <span class="trigger-name-link" @click="router.push({ name: 'trigger-dashboard', params: { triggerId: trigger.id } })">
+                  {{ trigger.name }}
+                </span>
+              </td>
+              <td>
+                <span class="dispatch-badge" :class="trigger.dispatch_type || 'bot'">
+                  {{ formatDispatchType(trigger.dispatch_type) }}
+                </span>
+              </td>
+              <td class="mono">
+                {{ trigger.schedule_type || '---' }}
+                <span v-if="trigger.schedule_time"> at {{ trigger.schedule_time }}</span>
+              </td>
+              <td class="mono">{{ formatTime(trigger.next_run_at) }}</td>
+              <td class="mono">{{ formatTime(trigger.last_run_at) }}</td>
+              <td>
+                <span class="state-badge" :class="trigger.enabled === 1 ? 'running' : 'stopped'">
+                  {{ trigger.enabled === 1 ? 'enabled' : 'disabled' }}
+                </span>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
     <!-- Rotation Event Timeline -->
     <section class="dashboard-section">
       <h2 class="section-header">Rotation Event Timeline</h2>
@@ -140,9 +187,11 @@ import { useRouter } from 'vue-router';
 import {
   schedulerApi,
   rotationApi,
+  triggerApi,
   type SchedulerStatus,
   type RotationDashboardStatus,
   type RotationEvent,
+  type Trigger,
 } from '../services/api';
 import { useWebMcpTool } from '../composables/useWebMcpTool';
 import RotationTimelineChart from '../components/monitoring/RotationTimelineChart.vue';
@@ -156,6 +205,7 @@ const router = useRouter();
 const schedulerStatus = ref<SchedulerStatus | null>(null);
 const rotationStatus = ref<RotationDashboardStatus | null>(null);
 const rotationHistory = ref<RotationEvent[]>([]);
+const scheduledTriggers = ref<Trigger[]>([]);
 const isLoading = ref(true);
 const error = ref<string | null>(null);
 const autoRefresh = ref(true);
@@ -251,9 +301,25 @@ async function refreshHistory() {
   }
 }
 
+async function refreshScheduledTriggers() {
+  try {
+    const data = await triggerApi.list();
+    scheduledTriggers.value = (data.triggers || []).filter(
+      t => t.trigger_source === 'scheduled'
+    );
+  } catch {
+    // Non-critical
+  }
+}
+
+function formatDispatchType(type: string | undefined): string {
+  if (type === 'super_agent') return 'Super Agent';
+  return 'Bot';
+}
+
 async function refreshAll() {
   isLoading.value = true;
-  await Promise.all([refreshStatus(), refreshHistory()]);
+  await Promise.all([refreshStatus(), refreshHistory(), refreshScheduledTriggers()]);
   isLoading.value = false;
 }
 
@@ -544,5 +610,38 @@ onUnmounted(() => {
 
 .eval-state-row:last-child {
   border-bottom: none;
+}
+
+/* Scheduled Triggers */
+.trigger-name-link {
+  color: var(--accent-cyan);
+  cursor: pointer;
+  font-weight: 500;
+  transition: color 0.15s;
+}
+
+.trigger-name-link:hover {
+  color: var(--text-primary);
+  text-decoration: underline;
+}
+
+.dispatch-badge {
+  display: inline-block;
+  padding: 0.15rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.dispatch-badge.bot {
+  background: rgba(0, 212, 255, 0.15);
+  color: var(--accent-cyan);
+}
+
+.dispatch-badge.super_agent {
+  background: rgba(139, 92, 246, 0.15);
+  color: var(--accent-violet);
 }
 </style>

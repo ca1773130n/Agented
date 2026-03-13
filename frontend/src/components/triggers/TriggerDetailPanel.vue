@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue';
 import { useRouter } from 'vue-router';
-import type { Trigger, ProjectPath, PathType, SkillInfo, Project, Team, BudgetLimit } from '../../services/api';
-import { triggerApi, utilityApi, budgetApi, ApiError } from '../../services/api';
+import type { Trigger, ProjectPath, PathType, SkillInfo, Project, Team, BudgetLimit, SuperAgent } from '../../services/api';
+import { triggerApi, utilityApi, budgetApi, superAgentApi, ApiError } from '../../services/api';
 import FallbackChainEditor from './FallbackChainEditor.vue';
 import SchedulingSuggestions from '../analytics/SchedulingSuggestions.vue';
 
@@ -37,6 +37,9 @@ const showEditSkillDropdown = ref(false);
 const isLoadingEditSkills = ref(false);
 const editExecutionMode = ref<'direct' | 'team'>('direct');
 const editTeamId = ref<string | null>(null);
+const editDispatchType = ref<'bot' | 'super_agent'>('bot');
+const editSuperAgentId = ref<string | null>(null);
+const availableSuperAgents = ref<SuperAgent[]>([]);
 
 // Path input state
 const newPathInput = ref('');
@@ -73,7 +76,10 @@ function initFromTrigger(trig: Trigger) {
   editSkillSearchQuery.value = trig.skill_command || '';
   editExecutionMode.value = trig.execution_mode || 'direct';
   editTeamId.value = trig.team_id || null;
+  editDispatchType.value = trig.dispatch_type || 'bot';
+  editSuperAgentId.value = trig.super_agent_id || null;
   loadTriggerBudget(trig.id);
+  if (!availableSuperAgents.value.length) loadSuperAgents();
   if (trig.backend_type === 'claude') loadEditSkills(trig.id);
 }
 
@@ -94,6 +100,13 @@ async function loadEditSkills(triggerId?: string) {
     editAvailableSkills.value = data.skills || [];
   } catch { editAvailableSkills.value = []; }
   finally { isLoadingEditSkills.value = false; }
+}
+
+async function loadSuperAgents() {
+  try {
+    const data = await superAgentApi.list();
+    availableSuperAgents.value = data.super_agents || [];
+  } catch { availableSuperAgents.value = []; }
 }
 
 function selectEditSkill(skill: SkillInfo) {
@@ -134,6 +147,8 @@ async function saveTrigger() {
       skill_command: editSkillCommand.value || '',
       execution_mode: editExecutionMode.value,
       team_id: editExecutionMode.value === 'team' ? editTeamId.value : null,
+      dispatch_type: editDispatchType.value,
+      super_agent_id: editDispatchType.value === 'super_agent' ? editSuperAgentId.value : null,
     });
     emit('saved');
     showToast('Trigger updated', 'success');
@@ -384,6 +399,23 @@ async function deleteTriggerBudget() {
         </select>
       </div>
 
+      <!-- Dispatch Type -->
+      <div class="form-group dispatch-type-group">
+        <label><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg> Dispatch Type</label>
+        <div class="dispatch-type-toggle">
+          <button type="button" class="toggle-btn" :class="{ active: editDispatchType === 'bot' }" @click="editDispatchType = 'bot'">Bot</button>
+          <button type="button" class="toggle-btn" :class="{ active: editDispatchType === 'super_agent' }" @click="editDispatchType = 'super_agent'">Super Agent</button>
+        </div>
+        <div class="form-hint">Bot dispatches run a CLI process. Super Agent dispatches route to a persistent AI session.</div>
+      </div>
+      <div v-if="editDispatchType === 'super_agent'" class="form-group">
+        <label><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="8" r="4"/><path d="M20 21a8 8 0 1 0-16 0"/></svg> Target Super Agent</label>
+        <select v-model="editSuperAgentId">
+          <option :value="null">Select a super agent...</option>
+          <option v-for="sa in availableSuperAgents" :key="sa.id" :value="sa.id">{{ sa.name }} ({{ sa.id }})</option>
+        </select>
+      </div>
+
       <button type="submit" class="btn btn-primary">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17,21 17,13 7,13 7,21"/><polyline points="7,3 7,8 15,8"/></svg>
         Save Changes
@@ -510,6 +542,8 @@ async function deleteTriggerBudget() {
 .skill-name { font-family: var(--font-mono); font-size: 0.85rem; font-weight: 600; color: var(--accent-cyan); }
 .skill-desc { font-size: 0.75rem; color: var(--text-tertiary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .skill-dropdown-loading, .skill-dropdown-empty { padding: 12px 16px; font-size: 0.8rem; color: var(--text-muted); text-align: center; }
+.dispatch-type-group { border-top: 1px solid var(--border-subtle); padding-top: 16px; }
+.dispatch-type-toggle { display: flex; border: 1px solid var(--border-default); border-radius: 8px; overflow: hidden; }
 .execution-mode-group { border-top: 1px solid var(--border-subtle); padding-top: 16px; }
 .auto-resolve-group { border-top: 1px solid var(--border-subtle); padding-top: 16px; }
 .auto-resolve-toggle { display: flex; align-items: center; gap: 10px; cursor: pointer; padding: 10px 14px; border-radius: 8px; background: var(--bg-secondary); border: 1px solid var(--border-default); transition: all var(--transition-fast); }

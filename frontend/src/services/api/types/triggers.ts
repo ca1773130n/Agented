@@ -55,6 +55,8 @@ export interface Trigger {
   model?: string;
   execution_mode?: 'direct' | 'team';
   team_id?: string | null;
+  dispatch_type?: 'bot' | 'super_agent';
+  super_agent_id?: string | null;
   timeout_seconds?: number | null;
   webhook_secret?: string | null;
   sigterm_grace_seconds?: number | null;
@@ -145,6 +147,8 @@ export interface Execution {
   backend_type: 'claude' | 'opencode';
   command?: string;
   status: 'running' | 'success' | 'failed' | 'timeout' | 'cancelled' | 'interrupted';
+  session_id?: string | null;
+  source_type?: 'bot' | 'super_agent' | 'user_chat';
   exit_code?: number;
   error_message?: string;
   stdout_log?: string;
