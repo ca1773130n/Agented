@@ -73,7 +73,7 @@ def create_fresh_schema(conn):
         CREATE TABLE IF NOT EXISTS execution_logs (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             execution_id TEXT NOT NULL UNIQUE,
-            trigger_id TEXT NOT NULL,
+            trigger_id TEXT,
             trigger_type TEXT NOT NULL,
             started_at TIMESTAMP NOT NULL,
             finished_at TIMESTAMP,
@@ -91,6 +91,8 @@ def create_fresh_schema(conn):
             input_tokens INTEGER,
             output_tokens INTEGER,
             total_cost_usd REAL,
+            source_type TEXT DEFAULT 'bot',
+            session_id TEXT,
             FOREIGN KEY (trigger_id) REFERENCES triggers(id) ON DELETE CASCADE
         )
     """)

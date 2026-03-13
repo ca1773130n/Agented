@@ -849,14 +849,16 @@ def create_execution_log(
     command: str,
     trigger_config_snapshot: str = None,
     account_id: int = None,
+    source_type: str = "bot",
+    session_id: str = None,
 ) -> bool:
     """Create a new execution log entry. Returns True on success."""
     with get_connection() as conn:
         try:
             conn.execute(
                 """
-                INSERT INTO execution_logs (execution_id, trigger_id, trigger_type, started_at, prompt, backend_type, command, status, trigger_config_snapshot, account_id)
-                VALUES (?, ?, ?, ?, ?, ?, ?, 'running', ?, ?)
+                INSERT INTO execution_logs (execution_id, trigger_id, trigger_type, started_at, prompt, backend_type, command, status, trigger_config_snapshot, account_id, source_type, session_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, 'running', ?, ?, ?, ?)
             """,
                 (
                     execution_id,
@@ -868,6 +870,8 @@ def create_execution_log(
                     command,
                     trigger_config_snapshot,
                     account_id,
+                    source_type,
+                    session_id,
                 ),
             )
             conn.commit()

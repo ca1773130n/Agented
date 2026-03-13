@@ -3397,7 +3397,11 @@ def _migrate_v75_trigger_cron_expression(conn):
 
 
 def _migrate_76_super_agent_dispatch(conn):
-    """Add dispatch_type and super_agent_id to triggers; session_id and source_type to execution_logs."""
+    """Add dispatch_type and super_agent_id to triggers; session_id and source_type to execution_logs.
+
+    Also drops NOT NULL constraint on execution_logs.trigger_id to support user_chat executions
+    that have no associated trigger.
+    """
     try:
         conn.execute("ALTER TABLE triggers ADD COLUMN dispatch_type TEXT DEFAULT 'bot'")
     except Exception as e:
@@ -3414,6 +3418,87 @@ def _migrate_76_super_agent_dispatch(conn):
         conn.execute("ALTER TABLE execution_logs ADD COLUMN source_type TEXT DEFAULT 'bot'")
     except Exception as e:
         logger.debug("execution_logs.source_type column already exists: %s", e)
+
+    # Drop NOT NULL constraint on execution_logs.trigger_id so that user_chat executions
+    # (which have no associated trigger) can be recorded. SQLite requires a full table
+    # rebuild to change column constraints.
+    cursor = conn.execute("PRAGMA table_info(execution_logs)")
+    col_info = {row[1]: row for row in cursor.fetchall()}
+    trigger_id_col = col_info.get("trigger_id")
+    # row[3] is the notnull flag (1 = NOT NULL, 0 = nullable)
+    if trigger_id_col and trigger_id_col[3] == 1:
+        logger.info("Rebuilding execution_logs to drop NOT NULL on trigger_id")
+        # Collect current column names preserving order
+        cursor = conn.execute("PRAGMA table_info(execution_logs)")
+        cols = [row[1] for row in cursor.fetchall()]
+        cols_csv = ", ".join(cols)
+        conn.execute("""
+            CREATE TABLE execution_logs_new (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                execution_id TEXT NOT NULL UNIQUE,
+                trigger_id TEXT,
+                trigger_type TEXT NOT NULL,
+                started_at TIMESTAMP NOT NULL,
+                finished_at TIMESTAMP,
+                duration_ms INTEGER,
+                prompt TEXT,
+                backend_type TEXT NOT NULL,
+                command TEXT,
+                status TEXT NOT NULL DEFAULT 'running',
+                exit_code INTEGER,
+                error_message TEXT,
+                stdout_log TEXT,
+                stderr_log TEXT,
+                trigger_config_snapshot TEXT,
+                account_id INTEGER,
+                input_tokens INTEGER,
+                output_tokens INTEGER,
+                total_cost_usd REAL,
+                session_id TEXT,
+                source_type TEXT DEFAULT 'bot',
+                FOREIGN KEY (trigger_id) REFERENCES triggers(id) ON DELETE CASCADE
+            )
+        """)
+        conn.execute(f"INSERT INTO execution_logs_new ({cols_csv}) SELECT {cols_csv} FROM execution_logs")
+        conn.execute("DROP TABLE execution_logs")
+        conn.execute("ALTER TABLE execution_logs_new RENAME TO execution_logs")
+        # Recreate indexes
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_execution_logs_trigger_id ON execution_logs(trigger_id)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_execution_logs_started_at ON execution_logs(started_at DESC)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_execution_logs_status ON execution_logs(status)"
+        )
+        # Recreate FTS5 sync triggers (dropped with old table)
+        conn.execute("""
+            CREATE TRIGGER IF NOT EXISTS execution_logs_fts_insert
+            AFTER INSERT ON execution_logs
+            BEGIN
+                INSERT INTO execution_logs_fts(rowid, stdout_log, stderr_log, prompt)
+                VALUES (new.id, COALESCE(new.stdout_log, ''), COALESCE(new.stderr_log, ''), COALESCE(new.prompt, ''));
+            END
+        """)
+        conn.execute("""
+            CREATE TRIGGER IF NOT EXISTS execution_logs_fts_update
+            AFTER UPDATE OF stdout_log, stderr_log ON execution_logs
+            BEGIN
+                INSERT INTO execution_logs_fts(execution_logs_fts, rowid, stdout_log, stderr_log, prompt)
+                VALUES ('delete', old.id, COALESCE(old.stdout_log, ''), COALESCE(old.stderr_log, ''), COALESCE(old.prompt, ''));
+                INSERT INTO execution_logs_fts(rowid, stdout_log, stderr_log, prompt)
+                VALUES (new.id, COALESCE(new.stdout_log, ''), COALESCE(new.stderr_log, ''), COALESCE(new.prompt, ''));
+            END
+        """)
+        conn.execute("""
+            CREATE TRIGGER IF NOT EXISTS execution_logs_fts_delete
+            AFTER DELETE ON execution_logs
+            BEGIN
+                INSERT INTO execution_logs_fts(execution_logs_fts, rowid, stdout_log, stderr_log, prompt)
+                VALUES ('delete', old.id, COALESCE(old.stdout_log, ''), COALESCE(old.stderr_log, ''), COALESCE(old.prompt, ''));
+            END
+        """)
 
 
 VERSIONED_MIGRATIONS = [
