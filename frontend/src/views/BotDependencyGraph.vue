@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
+import { triggerApi, agentApi, teamApi } from '../services/api/index';
 
 const router = useRouter();
 
@@ -23,31 +24,143 @@ interface Edge {
   isCircular: boolean;
 }
 
-const nodes = ref<Node[]>([
-  { id: 'bot-security', label: 'bot-security', type: 'bot', x: 300, y: 120, color: '#ef4444' },
-  { id: 'bot-pr-review', label: 'bot-pr-review', type: 'bot', x: 600, y: 120, color: '#3b82f6' },
-  { id: 'bot-deploy', label: 'bot-deploy', type: 'bot', x: 450, y: 280, color: '#8b5cf6' },
-  { id: 'trig-github', label: 'GitHub Webhook', type: 'trigger', x: 150, y: 50, color: '#f59e0b' },
-  { id: 'trig-schedule', label: 'Schedule (daily)', type: 'trigger', x: 450, y: 40, color: '#f59e0b' },
-  { id: 'team-security', label: 'Security Team', type: 'team', x: 100, y: 220, color: '#06b6d4' },
-  { id: 'team-platform', label: 'Platform Team', type: 'team', x: 700, y: 220, color: '#06b6d4' },
-  { id: 'agent-main', label: 'Main Agent', type: 'agent', x: 450, y: 420, color: '#34d399' },
-]);
-
-const edges = ref<Edge[]>([
-  { id: 'e1', from: 'trig-github', to: 'bot-security', label: 'fires', isCircular: false },
-  { id: 'e2', from: 'trig-github', to: 'bot-pr-review', label: 'fires', isCircular: false },
-  { id: 'e3', from: 'trig-schedule', to: 'bot-security', label: 'fires', isCircular: false },
-  { id: 'e4', from: 'bot-security', to: 'bot-deploy', label: 'triggers', isCircular: false },
-  { id: 'e5', from: 'team-security', to: 'bot-security', label: 'owns', isCircular: false },
-  { id: 'e6', from: 'team-platform', to: 'bot-pr-review', label: 'owns', isCircular: false },
-  { id: 'e7', from: 'bot-deploy', to: 'agent-main', label: 'uses', isCircular: false },
-]);
-
+const nodes = ref<Node[]>([]);
+const edges = ref<Edge[]>([]);
 const selectedNode = ref<Node | null>(null);
 const hasCircularDeps = ref(false);
 const showLegend = ref(true);
 
+function positionX(index: number, count: number): number {
+  return (index + 1) * (800 / (count + 1));
+}
+
+function detectCycles(edgeList: Edge[]): boolean {
+  // Build adjacency list
+  const adj = new Map<string, string[]>();
+  for (const e of edgeList) {
+    if (!adj.has(e.from)) adj.set(e.from, []);
+    adj.get(e.from)!.push(e.to);
+  }
+
+  const visited = new Set<string>();
+  const inStack = new Set<string>();
+
+  function dfs(node: string): boolean {
+    visited.add(node);
+    inStack.add(node);
+    for (const neighbor of (adj.get(node) ?? [])) {
+      if (!visited.has(neighbor)) {
+        if (dfs(neighbor)) return true;
+      } else if (inStack.has(neighbor)) {
+        return true;
+      }
+    }
+    inStack.delete(node);
+    return false;
+  }
+
+  for (const node of adj.keys()) {
+    if (!visited.has(node)) {
+      if (dfs(node)) return true;
+    }
+  }
+  return false;
+}
+
+onMounted(async () => {
+  const [triggersRes, agentsRes, teamsRes] = await Promise.all([
+    triggerApi.list(),
+    agentApi.list(),
+    teamApi.list(),
+  ]);
+
+  const triggers = triggersRes.triggers;
+  const agents = agentsRes.agents;
+  const teams = teamsRes.teams;
+
+  const newNodes: Node[] = [];
+  const newEdges: Edge[] = [];
+  let edgeCounter = 0;
+
+  // Collect unique trigger_source values
+  const uniqueSources = [...new Set(triggers.map(t => t.trigger_source))];
+
+  // Trigger-source nodes (y=60)
+  uniqueSources.forEach((source, i) => {
+    newNodes.push({
+      id: `src-${source}`,
+      label: source,
+      type: 'trigger',
+      x: positionX(i, uniqueSources.length),
+      y: 60,
+      color: '#f59e0b',
+    });
+  });
+
+  // Trigger (bot) nodes (y=200)
+  triggers.forEach((trigger, i) => {
+    newNodes.push({
+      id: trigger.id,
+      label: trigger.name,
+      type: 'bot',
+      x: positionX(i, triggers.length),
+      y: 200,
+      color: '#3b82f6',
+    });
+
+    // fires edge: trigger-source-node -> trigger-node
+    edgeCounter++;
+    newEdges.push({
+      id: `e${edgeCounter}`,
+      from: `src-${trigger.trigger_source}`,
+      to: trigger.id,
+      label: 'fires',
+      isCircular: false,
+    });
+  });
+
+  // Team nodes (y=340)
+  teams.forEach((team, i) => {
+    newNodes.push({
+      id: team.id,
+      label: team.name,
+      type: 'team',
+      x: positionX(i, teams.length),
+      y: 340,
+      color: '#06b6d4',
+    });
+
+    // owns edges: team-node -> trigger-node where team_id matches
+    for (const trigger of triggers) {
+      if (trigger.team_id === team.id) {
+        edgeCounter++;
+        newEdges.push({
+          id: `e${edgeCounter}`,
+          from: team.id,
+          to: trigger.id,
+          label: 'owns',
+          isCircular: false,
+        });
+      }
+    }
+  });
+
+  // Agent nodes (y=460)
+  agents.forEach((agent, i) => {
+    newNodes.push({
+      id: agent.id,
+      label: agent.name,
+      type: 'agent',
+      x: positionX(i, agents.length),
+      y: 460,
+      color: '#34d399',
+    });
+  });
+
+  nodes.value = newNodes;
+  edges.value = newEdges;
+  hasCircularDeps.value = detectCycles(newEdges);
+});
 
 function getNodeById(id: string): Node | undefined {
   return nodes.value.find(n => n.id === id);
