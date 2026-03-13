@@ -31,7 +31,7 @@ async function fetchExecutions() {
   const ws = now.value - windowMs.value;
   executions.value = result.executions.map(e => {
     let status: ExecutionBar['status'];
-    if (e.status === 'completed' || e.status === 'success') {
+    if (e.status === 'success') {
       status = 'success';
     } else if (e.status === 'failed' || e.status === 'timeout' || e.status === 'cancelled' || e.status === 'interrupted') {
       status = 'failed';

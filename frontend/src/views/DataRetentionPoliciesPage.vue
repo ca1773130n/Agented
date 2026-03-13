@@ -1,24 +1,14 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
+import { retentionApi } from '../services/api/retention';
+import type { RetentionPolicy } from '../services/api/retention';
 
 const showToast = useToast();
 
 type DataCategory = 'execution_logs' | 'execution_outputs' | 'bot_memory' | 'audit_logs' | 'token_metrics';
-
-interface RetentionPolicy {
-  id: string;
-  category: DataCategory;
-  scope: 'global' | 'team' | 'bot';
-  scopeName: string;
-  retentionDays: number;
-  deleteOnExpiry: boolean;
-  archiveOnExpiry: boolean;
-  estimatedSizeGB: number;
-  enabled: boolean;
-}
 
 const categoryMeta: Record<DataCategory, { label: string; icon: string; color: string }> = {
   execution_logs: { label: 'Execution Logs', icon: '📋', color: '#06b6d4' },
@@ -28,13 +18,8 @@ const categoryMeta: Record<DataCategory, { label: string; icon: string; color: s
   token_metrics: { label: 'Token Metrics', icon: '📊', color: '#60a5fa' },
 };
 
-const policies = ref<RetentionPolicy[]>([
-  { id: 'pol-1', category: 'execution_logs', scope: 'global', scopeName: 'All Teams', retentionDays: 90, deleteOnExpiry: true, archiveOnExpiry: false, estimatedSizeGB: 12.4, enabled: true },
-  { id: 'pol-2', category: 'execution_outputs', scope: 'global', scopeName: 'All Teams', retentionDays: 30, deleteOnExpiry: false, archiveOnExpiry: true, estimatedSizeGB: 8.1, enabled: true },
-  { id: 'pol-3', category: 'audit_logs', scope: 'global', scopeName: 'All Teams', retentionDays: 365, deleteOnExpiry: false, archiveOnExpiry: true, estimatedSizeGB: 2.3, enabled: true },
-  { id: 'pol-4', category: 'execution_logs', scope: 'team', scopeName: 'Security Team', retentionDays: 180, deleteOnExpiry: false, archiveOnExpiry: true, estimatedSizeGB: 3.7, enabled: true },
-  { id: 'pol-5', category: 'bot_memory', scope: 'bot', scopeName: 'bot-security', retentionDays: 14, deleteOnExpiry: true, archiveOnExpiry: false, estimatedSizeGB: 0.01, enabled: false },
-]);
+const policies = ref<RetentionPolicy[]>([]);
+const loading = ref(false);
 
 const showAddModal = ref(false);
 const newCategory = ref<DataCategory>('execution_logs');
@@ -44,7 +29,9 @@ const newDays = ref(90);
 const newDeleteOnExpiry = ref(true);
 const newArchiveOnExpiry = ref(false);
 
-const totalEstimatedGB = computed(() => policies.value.reduce((s, p) => s + p.estimatedSizeGB, 0));
+const totalEstimatedGB = computed(() =>
+  policies.value.reduce((s, p) => s + (p.estimated_size_gb ?? 0), 0)
+);
 const policiesWithExpiry = computed(() => policies.value.filter(p => p.enabled));
 
 const scopeOptions: Record<string, string[]> = {
@@ -53,44 +40,80 @@ const scopeOptions: Record<string, string[]> = {
   bot: ['bot-security', 'bot-pr-review', 'bot-test-cov'],
 };
 
+function getCategoryMeta(category: string) {
+  return categoryMeta[category as DataCategory] ?? { label: category, icon: '📁', color: '#9ca3af' };
+}
+
+async function loadPolicies() {
+  loading.value = true;
+  try {
+    const data = await retentionApi.list();
+    policies.value = data.policies;
+  } catch {
+    showToast('Failed to load retention policies', 'error');
+  } finally {
+    loading.value = false;
+  }
+}
+
 function onScopeChange() {
   newScopeName.value = scopeOptions[newScope.value][0] ?? '';
 }
 
-function toggleEnabled(policy: RetentionPolicy) {
-  policy.enabled = !policy.enabled;
-  showToast(`Policy ${policy.enabled ? 'enabled' : 'disabled'}`, 'success');
+async function toggleEnabled(policy: RetentionPolicy) {
+  const newEnabled = !policy.enabled;
+  try {
+    await retentionApi.toggle(policy.id, Boolean(newEnabled));
+    policy.enabled = newEnabled ? 1 : 0;
+    showToast(`Policy ${newEnabled ? 'enabled' : 'disabled'}`, 'success');
+  } catch {
+    showToast('Failed to update policy', 'error');
+  }
 }
 
-function deletePolicy(id: string) {
-  const idx = policies.value.findIndex(p => p.id === id);
-  if (idx !== -1) policies.value.splice(idx, 1);
-  showToast('Retention policy removed', 'success');
+async function deletePolicy(id: string) {
+  try {
+    await retentionApi.delete(id);
+    policies.value = policies.value.filter(p => p.id !== id);
+    showToast('Retention policy removed', 'success');
+  } catch {
+    showToast('Failed to delete policy', 'error');
+  }
 }
 
-function runCleanup() {
-  showToast('Cleanup job queued — expired data will be removed within 5 minutes', 'success');
+async function runCleanup() {
+  try {
+    await retentionApi.runCleanup();
+    showToast('Cleanup job queued — expired data will be removed within 5 minutes', 'success');
+  } catch {
+    showToast('Failed to queue cleanup job', 'error');
+  }
 }
 
-function savePolicy() {
+async function savePolicy() {
   if (newDays.value < 1) {
     showToast('Retention period must be at least 1 day', 'error');
     return;
   }
-  policies.value.push({
-    id: `pol-${Date.now()}`,
-    category: newCategory.value,
-    scope: newScope.value,
-    scopeName: newScopeName.value,
-    retentionDays: newDays.value,
-    deleteOnExpiry: newDeleteOnExpiry.value,
-    archiveOnExpiry: newArchiveOnExpiry.value,
-    estimatedSizeGB: 0,
-    enabled: true,
-  });
-  showAddModal.value = false;
-  showToast('Retention policy added', 'success');
+  try {
+    const created = await retentionApi.create({
+      category: newCategory.value,
+      scope: newScope.value,
+      scope_name: newScopeName.value,
+      retention_days: newDays.value,
+      delete_on_expiry: newDeleteOnExpiry.value,
+      archive_on_expiry: newArchiveOnExpiry.value,
+      estimated_size_gb: 0,
+    });
+    policies.value.unshift(created);
+    showAddModal.value = false;
+    showToast('Retention policy added', 'success');
+  } catch {
+    showToast('Failed to add retention policy', 'error');
+  }
 }
+
+onMounted(loadPolicies);
 </script>
 
 <template>
@@ -141,7 +164,8 @@ function savePolicy() {
           Retention Policies
         </h3>
       </div>
-      <div class="policies-table">
+      <div v-if="loading" class="empty-row">Loading...</div>
+      <div v-else class="policies-table">
         <div class="table-header">
           <span>Data Category</span>
           <span>Scope</span>
@@ -153,23 +177,23 @@ function savePolicy() {
         </div>
         <div v-for="policy in policies" :key="policy.id" class="table-row" :class="{ disabled: !policy.enabled }">
           <div class="category-cell">
-            <span class="cat-icon">{{ categoryMeta[policy.category].icon }}</span>
-            <span class="cat-label" :style="{ color: categoryMeta[policy.category].color }">
-              {{ categoryMeta[policy.category].label }}
+            <span class="cat-icon">{{ getCategoryMeta(policy.category).icon }}</span>
+            <span class="cat-label" :style="{ color: getCategoryMeta(policy.category).color }">
+              {{ getCategoryMeta(policy.category).label }}
             </span>
           </div>
           <div class="scope-cell">
             <span class="scope-badge" :class="policy.scope">{{ policy.scope }}</span>
-            <span class="scope-name">{{ policy.scopeName }}</span>
+            <span class="scope-name">{{ policy.scope_name }}</span>
           </div>
           <div class="retention-cell">
-            <span class="days-value">{{ policy.retentionDays }}d</span>
+            <span class="days-value">{{ policy.retention_days }}d</span>
           </div>
           <div class="expiry-cell">
-            <span v-if="policy.archiveOnExpiry" class="expiry-tag archive">Archive</span>
-            <span v-if="policy.deleteOnExpiry" class="expiry-tag delete">Delete</span>
+            <span v-if="policy.archive_on_expiry" class="expiry-tag archive">Archive</span>
+            <span v-if="policy.delete_on_expiry" class="expiry-tag delete">Delete</span>
           </div>
-          <div class="size-cell">{{ policy.estimatedSizeGB.toFixed(2) }} GB</div>
+          <div class="size-cell">{{ (policy.estimated_size_gb ?? 0).toFixed(2) }} GB</div>
           <div class="status-cell">
             <button class="toggle-btn" :class="{ active: policy.enabled }" @click="toggleEnabled(policy)">
               {{ policy.enabled ? 'Active' : 'Off' }}
