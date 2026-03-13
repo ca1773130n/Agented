@@ -139,6 +139,8 @@ class Trigger(BaseModel):
     webhook_secret: Optional[str] = Field(
         None, description="HMAC-SHA256 shared secret for validating incoming webhook payloads."
     )
+    dispatch_type: str = "bot"
+    super_agent_id: Optional[str] = None
     created_at: Optional[str] = None
     path_count: Optional[int] = None
     execution_status: Optional[ExecutionStatus] = None
@@ -188,6 +190,8 @@ class CreateTriggerRequest(BaseModel):
     timeout_seconds: Optional[int] = Field(None, ge=1, le=3600)
     allowed_tools: Optional[str] = None
     webhook_secret: Optional[str] = None
+    dispatch_type: str = "bot"
+    super_agent_id: Optional[str] = None
 
 
 class CreateTriggerResponse(BaseModel):
@@ -229,6 +233,8 @@ class UpdateTriggerRequest(BaseModel):
     timeout_seconds: Optional[int] = Field(None, ge=1, le=3600)
     allowed_tools: Optional[str] = None
     webhook_secret: Optional[str] = None
+    dispatch_type: Optional[str] = None
+    super_agent_id: Optional[str] = None
 
 
 class PathListResponse(BaseModel):
