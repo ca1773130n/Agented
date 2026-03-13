@@ -58,9 +58,7 @@ class TestDevOpsTeamSetupScenario:
     def test_step_02_create_project(self, client):
         """Create project 'payments-api' under the product."""
         # Create product first
-        prod_resp = client.post(
-            "/admin/products/", json={"name": "Payments Platform"}
-        )
+        prod_resp = client.post("/admin/products/", json={"name": "Payments Platform"})
         product_id = prod_resp.get_json()["product"]["id"]
 
         resp = client.post(
@@ -162,9 +160,7 @@ class TestDevOpsTeamSetupScenario:
     def test_step_05_create_skills_hooks_commands_rules(self, client):
         """Create skills, hooks, commands, and rules for the project."""
         # Create project
-        proj_resp = client.post(
-            "/admin/projects/", json={"name": "payments-api"}
-        )
+        proj_resp = client.post("/admin/projects/", json={"name": "payments-api"})
         project_id = proj_resp.get_json()["project"]["id"]
 
         # Create hooks
@@ -380,9 +376,7 @@ class TestDevOpsTeamSetupScenario:
         # Resolve snippets in a template
         resolve_resp = client.post(
             "/admin/prompt-snippets/resolve",
-            json={
-                "text": "{{security_preamble}}\n\nScan the code.\n\n{{output_format}}"
-            },
+            json={"text": "{{security_preamble}}\n\nScan the code.\n\n{{output_format}}"},
         )
         assert resolve_resp.status_code == 200
         resolved = resolve_resp.get_json()["resolved"]
@@ -610,8 +604,8 @@ class TestDevOpsTeamSetupScenario:
             rid = add_pr_review(
                 project_name=f"project-{i}",
                 pr_number=i + 1,
-                pr_url=f"https://github.com/org/repo/pull/{i+1}",
-                pr_title=f"PR {i+1}",
+                pr_url=f"https://github.com/org/repo/pull/{i + 1}",
+                pr_title=f"PR {i + 1}",
                 trigger_id="bot-pr-review",
             )
             if rid:
@@ -879,12 +873,8 @@ class TestDevOpsTeamSetupScenario:
     def test_step_19_bulk_operations(self, client):
         """Test bulk create, update, and delete across entity types."""
         # Bulk create agents
-        agents = [
-            {"name": f"Bulk Agent {i}", "description": f"Agent {i}"} for i in range(5)
-        ]
-        resp = client.post(
-            "/admin/bulk/agents", json={"action": "create", "items": agents}
-        )
+        agents = [{"name": f"Bulk Agent {i}", "description": f"Agent {i}"} for i in range(5)]
+        resp = client.post("/admin/bulk/agents", json={"action": "create", "items": agents})
         assert resp.status_code == 200
         data = resp.get_json()
         assert data["total"] == 5
@@ -894,49 +884,35 @@ class TestDevOpsTeamSetupScenario:
 
         # Bulk update agents
         updates = [
-            {"id": aid, "name": f"Updated Bulk Agent {i}"}
-            for i, aid in enumerate(created_ids)
+            {"id": aid, "name": f"Updated Bulk Agent {i}"} for i, aid in enumerate(created_ids)
         ]
-        resp = client.post(
-            "/admin/bulk/agents", json={"action": "update", "items": updates}
-        )
+        resp = client.post("/admin/bulk/agents", json={"action": "update", "items": updates})
         assert resp.status_code == 200
         assert resp.get_json()["succeeded"] == 5
 
         # Bulk delete agents
         deletes = [{"id": aid} for aid in created_ids]
-        resp = client.post(
-            "/admin/bulk/agents", json={"action": "delete", "items": deletes}
-        )
+        resp = client.post("/admin/bulk/agents", json={"action": "delete", "items": deletes})
         assert resp.status_code == 200
         assert resp.get_json()["succeeded"] == 5
 
         # Bulk create triggers
         triggers = [
-            {"name": f"Bulk Trigger {i}", "prompt_template": f"Prompt {i}"}
-            for i in range(3)
+            {"name": f"Bulk Trigger {i}", "prompt_template": f"Prompt {i}"} for i in range(3)
         ]
-        resp = client.post(
-            "/admin/bulk/triggers", json={"action": "create", "items": triggers}
-        )
+        resp = client.post("/admin/bulk/triggers", json={"action": "create", "items": triggers})
         assert resp.status_code == 200
         assert resp.get_json()["succeeded"] == 3
 
         # Bulk create plugins
         plugins = [{"name": f"Bulk Plugin {i}"} for i in range(3)]
-        resp = client.post(
-            "/admin/bulk/plugins", json={"action": "create", "items": plugins}
-        )
+        resp = client.post("/admin/bulk/plugins", json={"action": "create", "items": plugins})
         assert resp.status_code == 200
         assert resp.get_json()["succeeded"] == 3
 
         # Bulk create hooks
-        hooks = [
-            {"name": f"Bulk Hook {i}", "event": "PreToolUse"} for i in range(3)
-        ]
-        resp = client.post(
-            "/admin/bulk/hooks", json={"action": "create", "items": hooks}
-        )
+        hooks = [{"name": f"Bulk Hook {i}", "event": "PreToolUse"} for i in range(3)]
+        resp = client.post("/admin/bulk/hooks", json={"action": "create", "items": hooks})
         assert resp.status_code == 200
         assert resp.get_json()["succeeded"] == 3
 
@@ -946,9 +922,7 @@ class TestDevOpsTeamSetupScenario:
             {"description": "Missing name"},  # Should fail
             {"name": "Another Good Agent"},
         ]
-        resp = client.post(
-            "/admin/bulk/agents", json={"action": "create", "items": mixed_items}
-        )
+        resp = client.post("/admin/bulk/agents", json={"action": "create", "items": mixed_items})
         assert resp.status_code == 200
         data = resp.get_json()
         assert data["succeeded"] == 2
@@ -961,9 +935,7 @@ class TestDevOpsTeamSetupScenario:
     def test_step_20_full_crud_lifecycle(self, client):
         """Verify create, list, get, update, delete for all major entities."""
         # --- Product ---
-        prod_resp = client.post(
-            "/admin/products/", json={"name": "CRUD Product"}
-        )
+        prod_resp = client.post("/admin/products/", json={"name": "CRUD Product"})
         assert prod_resp.status_code == 201
         prod_id = prod_resp.get_json()["product"]["id"]
 
@@ -978,9 +950,7 @@ class TestDevOpsTeamSetupScenario:
         assert client.get(f"/admin/products/{prod_id}").status_code == 404
 
         # --- Project ---
-        proj_resp = client.post(
-            "/admin/projects/", json={"name": "CRUD Project"}
-        )
+        proj_resp = client.post("/admin/projects/", json={"name": "CRUD Project"})
         assert proj_resp.status_code == 201
         proj_id = proj_resp.get_json()["project"]["id"]
 
@@ -1024,9 +994,7 @@ class TestDevOpsTeamSetupScenario:
         assert client.get(f"/admin/triggers/{trig_id}").status_code == 404
 
         # --- Hook ---
-        hook_resp = client.post(
-            "/admin/hooks/", json={"name": "CRUD Hook", "event": "PreToolUse"}
-        )
+        hook_resp = client.post("/admin/hooks/", json={"name": "CRUD Hook", "event": "PreToolUse"})
         assert hook_resp.status_code == 201
         hook_id = hook_resp.get_json()["hook"]["id"]
 
@@ -1093,9 +1061,9 @@ class TestIntegratedEntityLinking:
     def test_product_project_team_chain(self, client):
         """Product -> Project -> Team linkage works end to end."""
         # Product
-        prod = client.post(
-            "/admin/products/", json={"name": "Linked Product"}
-        ).get_json()["product"]
+        prod = client.post("/admin/products/", json={"name": "Linked Product"}).get_json()[
+            "product"
+        ]
 
         # Project under product
         proj = client.post(
@@ -1104,12 +1072,8 @@ class TestIntegratedEntityLinking:
         ).get_json()["project"]
 
         # Agents
-        agent1 = client.post(
-            "/admin/agents/", json={"name": "Agent Alpha"}
-        ).get_json()
-        agent2 = client.post(
-            "/admin/agents/", json={"name": "Agent Beta"}
-        ).get_json()
+        agent1 = client.post("/admin/agents/", json={"name": "Agent Alpha"}).get_json()
+        agent2 = client.post("/admin/agents/", json={"name": "Agent Beta"}).get_json()
 
         # Team
         team = client.post(
@@ -1145,9 +1109,7 @@ class TestIntegratedEntityLinking:
     def test_project_mcp_command_rule_linkage(self, client):
         """Project -> MCP, Commands, Rules linkage works."""
         # Create project
-        proj = client.post(
-            "/admin/projects/", json={"name": "Full Project"}
-        ).get_json()["project"]
+        proj = client.post("/admin/projects/", json={"name": "Full Project"}).get_json()["project"]
         proj_id = proj["id"]
 
         # Create MCP server and assign to project
@@ -1705,9 +1667,7 @@ class TestMarketplaceScenario:
         assert len(resp.get_json()["plugins"]) == 1
 
         # Uninstall plugin
-        resp = client.delete(
-            f"/admin/marketplaces/{marketplace_id}/plugins/{installed_id}"
-        )
+        resp = client.delete(f"/admin/marketplaces/{marketplace_id}/plugins/{installed_id}")
         assert resp.status_code == 200
         assert resp.get_json()["message"] == "Plugin uninstalled"
 
@@ -1961,9 +1921,7 @@ class TestTriggerConditionsScenario:
         resp = client.get("/admin/trigger-conditions/cond-nonexist")
         assert resp.status_code == 404
 
-        resp = client.put(
-            "/admin/trigger-conditions/cond-nonexist", json={"name": "x"}
-        )
+        resp = client.put("/admin/trigger-conditions/cond-nonexist", json={"name": "x"})
         assert resp.status_code == 404
 
         resp = client.delete("/admin/trigger-conditions/cond-nonexist")
@@ -2083,19 +2041,21 @@ class TestConfigExportScenario:
 
     def test_import_trigger_json(self, client):
         """Import a trigger from JSON config."""
-        config = json.dumps({
-            "version": "1.0",
-            "kind": "trigger",
-            "metadata": {
-                "name": "Imported Test Trigger",
-                "backend_type": "claude",
-                "trigger_source": "webhook",
-            },
-            "spec": {
-                "prompt_template": "Review {message}",
-                "paths": [],
-            },
-        })
+        config = json.dumps(
+            {
+                "version": "1.0",
+                "kind": "trigger",
+                "metadata": {
+                    "name": "Imported Test Trigger",
+                    "backend_type": "claude",
+                    "trigger_source": "webhook",
+                },
+                "spec": {
+                    "prompt_template": "Review {message}",
+                    "paths": [],
+                },
+            }
+        )
         resp = client.post(
             "/admin/triggers/import",
             json={"config": config, "format": "json"},
@@ -2107,19 +2067,21 @@ class TestConfigExportScenario:
 
     def test_import_trigger_upsert(self, client):
         """Import with upsert updates an existing trigger."""
-        config = json.dumps({
-            "version": "1.0",
-            "kind": "trigger",
-            "metadata": {
-                "name": "Upsert Trigger",
-                "backend_type": "claude",
-                "trigger_source": "webhook",
-            },
-            "spec": {
-                "prompt_template": "First version {message}",
-                "paths": [],
-            },
-        })
+        config = json.dumps(
+            {
+                "version": "1.0",
+                "kind": "trigger",
+                "metadata": {
+                    "name": "Upsert Trigger",
+                    "backend_type": "claude",
+                    "trigger_source": "webhook",
+                },
+                "spec": {
+                    "prompt_template": "First version {message}",
+                    "paths": [],
+                },
+            }
+        )
         # First create
         resp = client.post(
             "/admin/triggers/import",
@@ -2128,19 +2090,21 @@ class TestConfigExportScenario:
         assert resp.status_code == 201
 
         # Upsert (update)
-        config2 = json.dumps({
-            "version": "1.0",
-            "kind": "trigger",
-            "metadata": {
-                "name": "Upsert Trigger",
-                "backend_type": "claude",
-                "trigger_source": "webhook",
-            },
-            "spec": {
-                "prompt_template": "Updated version {message}",
-                "paths": [],
-            },
-        })
+        config2 = json.dumps(
+            {
+                "version": "1.0",
+                "kind": "trigger",
+                "metadata": {
+                    "name": "Upsert Trigger",
+                    "backend_type": "claude",
+                    "trigger_source": "webhook",
+                },
+                "spec": {
+                    "prompt_template": "Updated version {message}",
+                    "paths": [],
+                },
+            }
+        )
         resp = client.post(
             "/admin/triggers/import",
             json={"config": config2, "format": "json", "upsert": True},
@@ -2150,18 +2114,20 @@ class TestConfigExportScenario:
 
     def test_validate_config_valid(self, client):
         """Validate a valid config returns valid=True."""
-        config = json.dumps({
-            "version": "1.0",
-            "kind": "trigger",
-            "metadata": {
-                "name": "Valid Trigger",
-                "backend_type": "claude",
-                "trigger_source": "webhook",
-            },
-            "spec": {
-                "prompt_template": "Do something",
-            },
-        })
+        config = json.dumps(
+            {
+                "version": "1.0",
+                "kind": "trigger",
+                "metadata": {
+                    "name": "Valid Trigger",
+                    "backend_type": "claude",
+                    "trigger_source": "webhook",
+                },
+                "spec": {
+                    "prompt_template": "Do something",
+                },
+            }
+        )
         resp = client.post(
             "/admin/triggers/validate-config",
             json={"config": config, "format": "json"},

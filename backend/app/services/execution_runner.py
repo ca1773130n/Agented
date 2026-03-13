@@ -283,9 +283,7 @@ def fetch_pr_diff(event: dict) -> Optional[str]:
         return None
 
 
-def auto_resolve_and_pr(
-    trigger: dict, github_repo_map: dict, scan_output: str
-) -> List[str]:
+def auto_resolve_and_pr(trigger: dict, github_repo_map: dict, scan_output: str) -> List[str]:
     """Resolve issues in GitHub repos and create PRs. Returns list of PR URLs."""
     pr_urls = []
 

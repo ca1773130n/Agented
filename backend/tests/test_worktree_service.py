@@ -76,12 +76,7 @@ class TestListWorktrees:
 
     @patch("app.services.worktree_service.subprocess.run")
     def test_filters_out_main_worktree(self, mock_run):
-        porcelain = (
-            "worktree /repo\n"
-            "HEAD abc123\n"
-            "branch refs/heads/main\n"
-            "\n"
-        )
+        porcelain = "worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\n"
         mock_run.return_value = _make_run_result(stdout=porcelain)
         result = WorktreeService.list_worktrees("/repo")
         assert result == []
@@ -136,7 +131,9 @@ class TestCreateWorktree:
     @patch("app.services.worktree_service.subprocess.run")
     @patch("app.services.worktree_service.WorktreeService._ensure_gitignore")
     @patch("app.services.worktree_service.WorktreeService.list_worktrees")
-    def test_creates_new_worktree_successfully(self, mock_list, mock_gitignore, mock_run, mock_isdir):
+    def test_creates_new_worktree_successfully(
+        self, mock_list, mock_gitignore, mock_run, mock_isdir
+    ):
         mock_list.return_value = []
         # First call: git fetch, second call: git worktree add
         mock_run.side_effect = [_make_run_result(), _make_run_result()]
@@ -150,7 +147,9 @@ class TestCreateWorktree:
     @patch("app.services.worktree_service.subprocess.run")
     @patch("app.services.worktree_service.WorktreeService._ensure_gitignore")
     @patch("app.services.worktree_service.WorktreeService.list_worktrees")
-    def test_retries_without_b_when_branch_exists(self, mock_list, mock_gitignore, mock_run, mock_isdir):
+    def test_retries_without_b_when_branch_exists(
+        self, mock_list, mock_gitignore, mock_run, mock_isdir
+    ):
         mock_list.return_value = []
         fetch_ok = _make_run_result()
         branch_exists_err = _make_run_result(returncode=1, stderr="branch 'b1' already exists")
@@ -166,7 +165,9 @@ class TestCreateWorktree:
     @patch("app.services.worktree_service.subprocess.run")
     @patch("app.services.worktree_service.WorktreeService._ensure_gitignore")
     @patch("app.services.worktree_service.WorktreeService.list_worktrees")
-    def test_raises_on_git_worktree_add_failure(self, mock_list, mock_gitignore, mock_run, mock_isdir):
+    def test_raises_on_git_worktree_add_failure(
+        self, mock_list, mock_gitignore, mock_run, mock_isdir
+    ):
         mock_list.return_value = []
         mock_run.side_effect = [
             _make_run_result(),  # fetch

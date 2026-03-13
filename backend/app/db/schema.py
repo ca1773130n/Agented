@@ -1748,8 +1748,6 @@ def create_fresh_schema(conn):
             updated_at TEXT DEFAULT (datetime('now'))
         )
     """)
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_tc_trigger ON trigger_conditions(trigger_id)"
-    )
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_tc_trigger ON trigger_conditions(trigger_id)")
 
     conn.commit()

@@ -294,9 +294,7 @@ class BaseConversationService(abc.ABC):
 
         full_response_parts = []
         accumulator = WordBoundaryAccumulator(
-            flush_callback=lambda text: cls._broadcast(
-                conv_id, "response_chunk", {"content": text}
-            )
+            flush_callback=lambda text: cls._broadcast(conv_id, "response_chunk", {"content": text})
         )
 
         for chunk in stream_llm_response(

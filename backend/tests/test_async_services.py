@@ -921,14 +921,10 @@ class TestRotationEvaluatorHysteresis:
             mock_thread = MagicMock()
             mock_thread_cls.return_value = mock_thread
 
-            RotationEvaluator._evaluate_single_execution(
-                "exec-001", mock_exec_log, mock_rotation
-            )
+            RotationEvaluator._evaluate_single_execution("exec-001", mock_exec_log, mock_rotation)
 
             mock_thread.start.assert_called_once()
-            assert (
-                RotationEvaluator._evaluation_state["exec-001"]["consecutive_rotate_polls"] == 0
-            )
+            assert RotationEvaluator._evaluation_state["exec-001"]["consecutive_rotate_polls"] == 0
 
     def test_below_threshold_does_not_dispatch(self, isolated_db):
         """Counter below threshold does not trigger rotation."""
@@ -950,9 +946,7 @@ class TestRotationEvaluatorHysteresis:
             patch("threading.Thread") as mock_thread_cls,
         ):
             # First poll: counter goes to 1 (threshold=3)
-            RotationEvaluator._evaluate_single_execution(
-                "exec-001", mock_exec_log, mock_rotation
-            )
+            RotationEvaluator._evaluate_single_execution("exec-001", mock_exec_log, mock_rotation)
             mock_thread_cls.assert_not_called()
             assert RotationEvaluator._evaluation_state["exec-001"]["consecutive_rotate_polls"] == 1
 
@@ -1137,9 +1131,7 @@ class TestEvaluateRunningSessions:
                 "app.services.process_manager.ProcessManager.get_active_executions",
                 return_value=["exec-001", "exec-002"],
             ),
-            patch.object(
-                RotationEvaluator, "_evaluate_single_execution", side_effect=mock_eval_fn
-            ),
+            patch.object(RotationEvaluator, "_evaluate_single_execution", side_effect=mock_eval_fn),
         ):
             RotationEvaluator._evaluate_running_sessions()
 

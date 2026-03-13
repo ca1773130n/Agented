@@ -113,8 +113,10 @@ class TestCronTriggers:
 
     def test_register_cron_trigger_no_scheduler_raises(self):
         """Raises ValueError if scheduler is not initialized."""
-        with patch("app.services.scheduler_service.SCHEDULER_AVAILABLE", True), \
-             patch("app.services.scheduler_service.SchedulerService._scheduler", None):
+        with (
+            patch("app.services.scheduler_service.SCHEDULER_AVAILABLE", True),
+            patch("app.services.scheduler_service.SchedulerService._scheduler", None),
+        ):
             with pytest.raises(ValueError, match="Scheduler not initialized"):
                 WorkflowTriggerService.register_cron_trigger("wf-001", "*/5 * * * *")
 

@@ -479,10 +479,13 @@ class DeployService:
             raise
 
         # Store in cache
-        _marketplace_cache.set(marketplace_id, {
-            "data": result,
-            "fetched_at": time.time(),
-        })
+        _marketplace_cache.set(
+            marketplace_id,
+            {
+                "data": result,
+                "fetched_at": time.time(),
+            },
+        )
         return result
 
     @classmethod

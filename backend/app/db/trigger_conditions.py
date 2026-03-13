@@ -122,8 +122,6 @@ def update_trigger_condition(
 def delete_trigger_condition(condition_id: str) -> bool:
     """Delete a trigger condition rule. Returns True if deleted."""
     with get_connection() as conn:
-        cursor = conn.execute(
-            "DELETE FROM trigger_conditions WHERE id = ?", (condition_id,)
-        )
+        cursor = conn.execute("DELETE FROM trigger_conditions WHERE id = ?", (condition_id,))
         conn.commit()
         return cursor.rowcount > 0

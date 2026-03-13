@@ -16,7 +16,9 @@ class TestTriggerConditionsDB:
             description="Only run on main",
             enabled=True,
             logic="AND",
-            conditions=[{"id": "c1", "field": "pr.base_branch", "operator": "equals", "value": "main"}],
+            conditions=[
+                {"id": "c1", "field": "pr.base_branch", "operator": "equals", "value": "main"}
+            ],
         )
         assert cid is not None
         assert cid.startswith("tcond-")
@@ -42,7 +44,14 @@ class TestTriggerConditionsDB:
         cid = create_trigger_condition(
             trigger_id="bot-pr-review",
             name="Large PRs",
-            conditions=[{"id": "c1", "field": "pr.lines_changed", "operator": "greater_than", "value": "200"}],
+            conditions=[
+                {
+                    "id": "c1",
+                    "field": "pr.lines_changed",
+                    "operator": "greater_than",
+                    "value": "200",
+                }
+            ],
         )
         rule = get_trigger_condition(cid)
         assert rule is not None

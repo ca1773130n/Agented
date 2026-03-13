@@ -55,15 +55,15 @@ class PromptRenderer:
     #      so the AI trigger generator knows about it.
     # ─────────────────────────────────────────────────────────────────────
     _KNOWN_PLACEHOLDERS = {
-        "trigger_id",   # Universal – the trigger's unique ID
-        "bot_id",       # Universal – legacy alias for trigger_id
-        "paths",        # Universal – newline-separated project paths
-        "message",      # Universal – incoming message / webhook body
-        "pr_url",       # GitHub PR – full pull-request URL
-        "pr_number",    # GitHub PR – pull-request number (string)
-        "pr_title",     # GitHub PR – pull-request title
-        "pr_author",    # GitHub PR – PR author's GitHub username
-        "repo_url",     # GitHub PR – repository clone URL
+        "trigger_id",  # Universal – the trigger's unique ID
+        "bot_id",  # Universal – legacy alias for trigger_id
+        "paths",  # Universal – newline-separated project paths
+        "message",  # Universal – incoming message / webhook body
+        "pr_url",  # GitHub PR – full pull-request URL
+        "pr_number",  # GitHub PR – pull-request number (string)
+        "pr_title",  # GitHub PR – pull-request title
+        "pr_author",  # GitHub PR – PR author's GitHub username
+        "repo_url",  # GitHub PR – repository clone URL
         "repo_full_name",  # GitHub PR – "owner/repo" identifier
     }
 

@@ -128,9 +128,7 @@ class TestDiscoverAllSkills:
     def test_discovers_skills_from_explicit_paths(self, tmp_path, monkeypatch):
         # Prevent scanning PROJECT_ROOT and global/plugin dirs
         monkeypatch.setattr("app.services.skill_discovery_service.PROJECT_ROOT", str(tmp_path))
-        monkeypatch.setattr(
-            "pathlib.Path.home", lambda: tmp_path / "fakehome"
-        )
+        monkeypatch.setattr("pathlib.Path.home", lambda: tmp_path / "fakehome")
 
         project = tmp_path / "myproject"
         project.mkdir()
@@ -148,9 +146,7 @@ class TestDiscoverAllSkills:
 
         project = tmp_path / "proj"
         project.mkdir()
-        self._create_skill(
-            project, "deploy", '---\nname: deploy\ndescription: "Deploy app"\n---\n'
-        )
+        self._create_skill(project, "deploy", '---\nname: deploy\ndescription: "Deploy app"\n---\n')
 
         monkeypatch.setattr(
             "app.services.skill_discovery_service.get_paths_for_trigger",
@@ -202,9 +198,7 @@ class TestDiscoverAllSkills:
         monkeypatch.setattr("app.services.skill_discovery_service.PROJECT_ROOT", str(tmp_path))
         monkeypatch.setattr("pathlib.Path.home", lambda: tmp_path / "fakehome")
 
-        skills = SkillDiscoveryService.discover_all_skills(
-            paths=["/nonexistent/path/abc123"]
-        )
+        skills = SkillDiscoveryService.discover_all_skills(paths=["/nonexistent/path/abc123"])
         # Should return empty (or only PROJECT_ROOT skills, which has none)
         assert isinstance(skills, list)
 
@@ -284,7 +278,7 @@ class TestParseFrontmatterFromFile:
 
     def test_only_name_and_description_extracted(self, tmp_path):
         md = tmp_path / "test.md"
-        md.write_text('---\nname: x\ndescription: y\nrole: z\n---\n')
+        md.write_text("---\nname: x\ndescription: y\nrole: z\n---\n")
         result = SkillDiscoveryService._parse_frontmatter_from_file(str(md))
         assert "name" in result
         assert "description" in result

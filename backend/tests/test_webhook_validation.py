@@ -135,7 +135,10 @@ class TestValidateSignature:
         secret = "test-secret"
         sig = self._sign(payload, secret, "sha1")
         # Default is sha256, but header says sha1= — should auto-detect sha1
-        assert WebhookValidationService.validate_signature(payload, sig, secret, algorithm="sha256") is True
+        assert (
+            WebhookValidationService.validate_signature(payload, sig, secret, algorithm="sha256")
+            is True
+        )
 
     def test_signature_with_extra_whitespace_rejected(self):
         from app.services.webhook_validation_service import WebhookValidationService
@@ -226,7 +229,9 @@ class TestValidateTimestamp:
 
         # 299 seconds ago — comfortably within 300s tolerance
         boundary_ts = str(int(time.time()) - 299)
-        assert WebhookValidationService.validate_timestamp(boundary_ts, tolerance_seconds=300) is True
+        assert (
+            WebhookValidationService.validate_timestamp(boundary_ts, tolerance_seconds=300) is True
+        )
 
     def test_zero_tolerance(self):
         """With 0 tolerance, only the exact current second should pass."""

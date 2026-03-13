@@ -135,9 +135,7 @@ class TestUtilityRoutes:
     def test_validate_github_url_well_formed(self, client):
         """GET /api/validate-github-url parses owner/repo from valid URL."""
         url = "https://github.com/octocat/hello-world"
-        with patch(
-            "app.routes.utility.GitHubService.validate_repo_url", return_value=True
-        ):
+        with patch("app.routes.utility.GitHubService.validate_repo_url", return_value=True):
             resp = client.get(f"/api/validate-github-url?url={url}")
             assert resp.status_code == 200
             body = resp.get_json()
@@ -642,9 +640,7 @@ class TestSketchRoutes:
 
     def test_get_sketch(self, client):
         """GET /admin/sketches/<id> returns sketch details."""
-        create_resp = client.post(
-            "/admin/sketches/", json={"title": "Test sketch"}
-        )
+        create_resp = client.post("/admin/sketches/", json={"title": "Test sketch"})
         sketch_id = create_resp.get_json()["sketch_id"]
 
         resp = client.get(f"/admin/sketches/{sketch_id}")
@@ -660,9 +656,7 @@ class TestSketchRoutes:
 
     def test_update_sketch(self, client):
         """PUT /admin/sketches/<id> updates sketch fields."""
-        create_resp = client.post(
-            "/admin/sketches/", json={"title": "Original title"}
-        )
+        create_resp = client.post("/admin/sketches/", json={"title": "Original title"})
         sketch_id = create_resp.get_json()["sketch_id"]
 
         resp = client.put(
@@ -678,16 +672,12 @@ class TestSketchRoutes:
 
     def test_update_sketch_not_found(self, client):
         """PUT /admin/sketches/<id> returns 404 for unknown sketch."""
-        resp = client.put(
-            "/admin/sketches/sketch-nonexistent", json={"title": "whatever"}
-        )
+        resp = client.put("/admin/sketches/sketch-nonexistent", json={"title": "whatever"})
         assert resp.status_code == 404
 
     def test_delete_sketch(self, client):
         """DELETE /admin/sketches/<id> removes a sketch."""
-        create_resp = client.post(
-            "/admin/sketches/", json={"title": "To be deleted"}
-        )
+        create_resp = client.post("/admin/sketches/", json={"title": "To be deleted"})
         sketch_id = create_resp.get_json()["sketch_id"]
 
         resp = client.delete(f"/admin/sketches/{sketch_id}")
@@ -740,9 +730,7 @@ class TestSketchRoutes:
 
     def test_route_sketch_requires_classification(self, client):
         """POST /admin/sketches/<id>/route returns 400 if not classified."""
-        create_resp = client.post(
-            "/admin/sketches/", json={"title": "Unclassified sketch"}
-        )
+        create_resp = client.post("/admin/sketches/", json={"title": "Unclassified sketch"})
         sketch_id = create_resp.get_json()["sketch_id"]
 
         resp = client.post(f"/admin/sketches/{sketch_id}/route")
@@ -786,9 +774,7 @@ class TestSketchRoutes:
         assert route_resp.status_code == 200
 
         # Update status to in_progress
-        update_resp = client.put(
-            f"/admin/sketches/{sketch_id}", json={"status": "in_progress"}
-        )
+        update_resp = client.put(f"/admin/sketches/{sketch_id}", json={"status": "in_progress"})
         assert update_resp.status_code == 200
 
         # Verify final state
@@ -814,9 +800,7 @@ class TestPluginExportRoutes:
 
     def test_export_missing_body(self, client):
         """POST /admin/plugin-exports/export without JSON returns 400."""
-        resp = client.post(
-            "/admin/plugin-exports/export", content_type="application/json"
-        )
+        resp = client.post("/admin/plugin-exports/export", content_type="application/json")
         assert resp.status_code == 400
 
     def test_export_missing_team_id(self, client):
@@ -879,9 +863,7 @@ class TestPluginExportRoutes:
 
     def test_import_missing_body(self, client):
         """POST /admin/plugin-exports/import without JSON returns 400."""
-        resp = client.post(
-            "/admin/plugin-exports/import", content_type="application/json"
-        )
+        resp = client.post("/admin/plugin-exports/import", content_type="application/json")
         assert resp.status_code == 400
 
     def test_import_missing_source_path(self, client):
@@ -903,9 +885,7 @@ class TestPluginExportRoutes:
         resp = client.post("/admin/plugin-exports/deploy", json={})
         assert resp.status_code == 400
 
-        resp = client.post(
-            "/admin/plugin-exports/deploy", json={"plugin_id": "plug-abc"}
-        )
+        resp = client.post("/admin/plugin-exports/deploy", json={"plugin_id": "plug-abc"})
         assert resp.status_code == 400
         assert "marketplace_id" in resp.get_json()["message"]
 
@@ -927,9 +907,7 @@ class TestPluginExportRoutes:
         resp = client.post("/admin/plugin-exports/sync", json={})
         assert resp.status_code == 400
 
-        resp = client.post(
-            "/admin/plugin-exports/sync", json={"plugin_id": "plug-abc"}
-        )
+        resp = client.post("/admin/plugin-exports/sync", json={"plugin_id": "plug-abc"})
         assert resp.status_code == 400
 
     def test_sync_entity_missing_fields(self, client):

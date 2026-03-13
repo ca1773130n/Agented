@@ -16,6 +16,7 @@ from app.services.plugin_file_watcher import PluginFileWatcher
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _sha256(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
@@ -141,9 +142,7 @@ class TestSyncEntityToDisk:
         "app.services.sync_persistence_service.get_agent",
         return_value=FAKE_AGENT,
     )
-    def test_writes_file_when_no_prior_state(
-        self, _get, _gen, _state, _update, tmp_path
-    ):
+    def test_writes_file_when_no_prior_state(self, _get, _gen, _state, _update, tmp_path):
         plugin_dir = str(tmp_path / "plugin")
         result = SyncService.sync_entity_to_disk("agent", "agent-abc", "plug-1", plugin_dir)
         assert result is True
@@ -170,9 +169,7 @@ class TestSyncEntityToDisk:
 
     @patch("app.services.sync_persistence_service.get_agent", return_value=None)
     def test_returns_false_when_entity_not_found(self, _get, tmp_path):
-        result = SyncService.sync_entity_to_disk(
-            "agent", "agent-missing", "plug-1", str(tmp_path)
-        )
+        result = SyncService.sync_entity_to_disk("agent", "agent-missing", "plug-1", str(tmp_path))
         assert result is False
 
 
@@ -286,9 +283,7 @@ class TestGetSyncStatus:
         assert len(status["entities"]) == 2
 
     @patch.object(SyncService, "is_watching", return_value=True)
-    @patch(
-        "app.services.sync_persistence_service.get_sync_states_for_plugin", return_value=[]
-    )
+    @patch("app.services.sync_persistence_service.get_sync_states_for_plugin", return_value=[])
     def test_empty_plugin_status(self, _states, _watch):
         status = SyncService.get_sync_status("plug-empty")
         assert status["entity_count"] == 0

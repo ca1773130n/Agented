@@ -334,9 +334,7 @@ class TestPtyRunnerRunCommand:
     @patch("app.services.pty_service.os.close")
     @patch("app.services.pty_service.os.fork")
     @patch("app.services.pty_service.pty.openpty")
-    def test_strips_whitespace(
-        self, mock_openpty, mock_fork, mock_close, mock_read, mock_cleanup
-    ):
+    def test_strips_whitespace(self, mock_openpty, mock_fork, mock_close, mock_read, mock_cleanup):
         mock_openpty.return_value = (10, 11)
         mock_fork.return_value = 42
         mock_read.return_value = "  output with spaces  "

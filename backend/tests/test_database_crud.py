@@ -2382,7 +2382,9 @@ class TestTeamEdges:
 # =============================================================================
 
 SIMPLE_GRAPH = '{"nodes": [{"id": "n1"}], "edges": []}'
-TWO_NODE_GRAPH = '{"nodes": [{"id": "n1"}, {"id": "n2"}], "edges": [{"source": "n1", "target": "n2"}]}'
+TWO_NODE_GRAPH = (
+    '{"nodes": [{"id": "n1"}, {"id": "n2"}], "edges": [{"source": "n1", "target": "n2"}]}'
+)
 CYCLIC_GRAPH = '{"nodes": [{"id": "a"}, {"id": "b"}], "edges": [{"source": "a", "target": "b"}, {"source": "b", "target": "a"}]}'
 
 

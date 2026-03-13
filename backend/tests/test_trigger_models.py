@@ -18,9 +18,7 @@ class TestTriggerModelDispatchFields:
         assert req.super_agent_id == "sa-abc123"
 
     def test_update_request_accepts_dispatch_fields(self):
-        req = UpdateTriggerRequest(
-            dispatch_type="super_agent", super_agent_id="sa-abc123"
-        )
+        req = UpdateTriggerRequest(dispatch_type="super_agent", super_agent_id="sa-abc123")
         assert req.dispatch_type == "super_agent"
         assert req.super_agent_id == "sa-abc123"
 

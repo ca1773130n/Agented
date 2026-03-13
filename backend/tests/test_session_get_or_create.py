@@ -58,11 +58,12 @@ def test_resumes_paused_session():
         "token_count": 0,
     }
 
-    with patch.object(
-        SuperAgentSessionService, "resume_session", return_value=(True, None)
-    ) as mock_resume, patch.object(
-        SuperAgentSessionService, "create_session"
-    ) as mock_create:
+    with (
+        patch.object(
+            SuperAgentSessionService, "resume_session", return_value=(True, None)
+        ) as mock_resume,
+        patch.object(SuperAgentSessionService, "create_session") as mock_create,
+    ):
         result = SuperAgentSessionService.get_or_create_session("agent-1")
 
     assert result == "session-paused"

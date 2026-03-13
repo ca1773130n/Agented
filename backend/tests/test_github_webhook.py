@@ -248,7 +248,9 @@ class TestPRCommentSlashCommands:
                 "title": "Test PR",
                 "html_url": "https://github.com/owner/repo/pull/42",
                 "user": {"login": "testuser"},
-                "pull_request": {"html_url": "https://github.com/owner/repo/pull/42"} if is_pr else None,
+                "pull_request": {"html_url": "https://github.com/owner/repo/pull/42"}
+                if is_pr
+                else None,
             },
             "comment": {
                 "body": comment_body,

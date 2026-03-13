@@ -221,23 +221,42 @@ class TeamExecutionService:
     # ------------------------------------------------------------------
 
     @classmethod
-    def _execute_sequential(cls, team, config, message, event, trigger_type, working_directory=None):
+    def _execute_sequential(
+        cls, team, config, message, event, trigger_type, working_directory=None
+    ):
         return execute_sequential(
-            team, config, message, event, trigger_type, working_directory,
+            team,
+            config,
+            message,
+            event,
+            trigger_type,
+            working_directory,
             run_agent=cls._run_agent_and_get_output,
         )
 
     @classmethod
     def _execute_parallel(cls, team, config, message, event, trigger_type, working_directory=None):
         return execute_parallel(
-            team, config, message, event, trigger_type, working_directory,
+            team,
+            config,
+            message,
+            event,
+            trigger_type,
+            working_directory,
             run_agent=cls._run_agent_and_get_output,
         )
 
     @classmethod
-    def _execute_coordinator(cls, team, config, message, event, trigger_type, working_directory=None):
+    def _execute_coordinator(
+        cls, team, config, message, event, trigger_type, working_directory=None
+    ):
         return execute_coordinator(
-            team, config, message, event, trigger_type, working_directory,
+            team,
+            config,
+            message,
+            event,
+            trigger_type,
+            working_directory,
             run_agent=cls._run_agent_and_get_output,
         )
 
@@ -246,7 +265,12 @@ class TeamExecutionService:
         cls, team, config, message, event, trigger_type, working_directory=None
     ):
         return execute_generator_critic(
-            team, config, message, event, trigger_type, working_directory,
+            team,
+            config,
+            message,
+            event,
+            trigger_type,
+            working_directory,
             run_agent=cls._run_agent_and_get_output,
         )
 
@@ -255,7 +279,12 @@ class TeamExecutionService:
         cls, team, config, message, event, trigger_type, working_directory=None
     ):
         return execute_hierarchical(
-            team, config, message, event, trigger_type, working_directory,
+            team,
+            config,
+            message,
+            event,
+            trigger_type,
+            working_directory,
             run_agent=cls._run_agent_and_get_output,
         )
 
@@ -264,7 +293,12 @@ class TeamExecutionService:
         cls, team, config, message, event, trigger_type, working_directory=None
     ):
         return execute_human_in_loop(
-            team, config, message, event, trigger_type, working_directory,
+            team,
+            config,
+            message,
+            event,
+            trigger_type,
+            working_directory,
             tracker=TeamExecutionTracker,
             run_agent=cls._run_agent_and_get_output,
         )
@@ -272,7 +306,12 @@ class TeamExecutionService:
     @classmethod
     def _execute_composite(cls, team, config, message, event, trigger_type, working_directory=None):
         return execute_composite(
-            team, config, message, event, trigger_type, working_directory,
+            team,
+            config,
+            message,
+            event,
+            trigger_type,
+            working_directory,
             tracker=TeamExecutionTracker,
             run_agent=cls._run_agent_and_get_output,
         )

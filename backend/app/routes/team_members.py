@@ -17,9 +17,7 @@ from ..services.rbac_service import require_role
 from .teams import TeamPath
 
 tag = Tag(name="team-members", description="Team member management")
-team_members_bp = APIBlueprint(
-    "team_members", __name__, url_prefix="/admin/teams", abp_tags=[tag]
-)
+team_members_bp = APIBlueprint("team_members", __name__, url_prefix="/admin/teams", abp_tags=[tag])
 
 
 class MemberPath(BaseModel):

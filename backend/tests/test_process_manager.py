@@ -37,9 +37,7 @@ def _make_process(pid=1234, poll_return=None):
 class TestProcessInfo:
     def test_defaults(self):
         proc = _make_process()
-        info = ProcessInfo(
-            process=proc, pgid=100, execution_id="exec-1", trigger_id="trig-1"
-        )
+        info = ProcessInfo(process=proc, pgid=100, execution_id="exec-1", trigger_id="trig-1")
         assert info.paused_at is None
         assert info.pause_timer is None
         assert info.execution_id == "exec-1"
@@ -243,12 +241,12 @@ class TestPauseResume:
         mock_broadcast = MagicMock()
         timer_instance = MagicMock()
 
-        with patch(
-            "app.db.triggers.update_execution_status_cas", mock_cas
-        ), patch(
-            "app.services.execution_log_service.ExecutionLogService._broadcast", mock_broadcast
-        ), patch(
-            "threading.Timer", return_value=timer_instance
+        with (
+            patch("app.db.triggers.update_execution_status_cas", mock_cas),
+            patch(
+                "app.services.execution_log_service.ExecutionLogService._broadcast", mock_broadcast
+            ),
+            patch("threading.Timer", return_value=timer_instance),
         ):
             result = ProcessManager.pause("exec-1")
 
@@ -303,8 +301,11 @@ class TestPauseResume:
 
         mock_cas = MagicMock(return_value=True)
         mock_broadcast = MagicMock()
-        with patch("app.db.triggers.update_execution_status_cas", mock_cas), patch(
-            "app.services.execution_log_service.ExecutionLogService._broadcast", mock_broadcast
+        with (
+            patch("app.db.triggers.update_execution_status_cas", mock_cas),
+            patch(
+                "app.services.execution_log_service.ExecutionLogService._broadcast", mock_broadcast
+            ),
         ):
             result = ProcessManager.resume("exec-1")
 
@@ -360,8 +361,9 @@ class TestAutoCancelPaused:
 
         mock_cas = MagicMock(return_value=True)
         timer_mock = MagicMock()
-        with patch("app.db.triggers.update_execution_status_cas", mock_cas), patch(
-            "threading.Timer", return_value=timer_mock
+        with (
+            patch("app.db.triggers.update_execution_status_cas", mock_cas),
+            patch("threading.Timer", return_value=timer_mock),
         ):
             ProcessManager._auto_cancel_paused("exec-1")
 

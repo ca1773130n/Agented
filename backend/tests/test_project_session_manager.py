@@ -343,9 +343,7 @@ class TestCleanupDeadSessions:
         return_value=[{"id": "psess-alive", "pid": 12345}],
     )
     def test_leaves_alive_processes(self, mock_get, mock_kill):
-        with patch(
-            "app.services.project_session_manager.update_project_session"
-        ) as mock_update:
+        with patch("app.services.project_session_manager.update_project_session") as mock_update:
             ProjectSessionManager.cleanup_dead_sessions()
             mock_update.assert_not_called()
 
@@ -363,9 +361,7 @@ class TestCleanupDeadSessions:
         return_value=[{"id": "psess-perm", "pid": 1}],
     )
     def test_permission_error_leaves_session(self, mock_get, mock_kill):
-        with patch(
-            "app.services.project_session_manager.update_project_session"
-        ) as mock_update:
+        with patch("app.services.project_session_manager.update_project_session") as mock_update:
             ProjectSessionManager.cleanup_dead_sessions()
             mock_update.assert_not_called()
 
@@ -374,9 +370,7 @@ class TestCleanupDeadSessions:
         return_value=[{"id": "psess-nopid", "pid": None}],
     )
     def test_skips_sessions_without_pid(self, mock_get):
-        with patch(
-            "app.services.project_session_manager.update_project_session"
-        ) as mock_update:
+        with patch("app.services.project_session_manager.update_project_session") as mock_update:
             ProjectSessionManager.cleanup_dead_sessions()
             mock_update.assert_not_called()
 
@@ -440,9 +434,7 @@ class TestCheckResourceLimits:
 
 class TestSubscribe:
     def test_subscribe_completed_session(self):
-        si = _make_session_info(
-            session_id="psess-comp", status="completed", buffer_lines=["line1"]
-        )
+        si = _make_session_info(session_id="psess-comp", status="completed", buffer_lines=["line1"])
         ProjectSessionManager._sessions["psess-comp"] = si
 
         events = list(ProjectSessionManager.subscribe("psess-comp"))

@@ -378,9 +378,7 @@ class TestSchedulingSuggestions:
 
     def test_get_suggestions_with_trigger_filter(self, client):
         """Accepts trigger_id filter and returns structured response."""
-        resp = client.get(
-            "/admin/analytics/scheduling-suggestions?trigger_id=trg-nonexist"
-        )
+        resp = client.get("/admin/analytics/scheduling-suggestions?trigger_id=trg-nonexist")
         assert resp.status_code == 200
         body = resp.get_json()
         assert body["suggestions"] == []
@@ -411,9 +409,7 @@ class TestExecutionSearch:
 
     def test_search_with_filters(self, client):
         """Search accepts optional filter params."""
-        resp = client.get(
-            "/admin/execution-search?q=test&status=completed&trigger_id=trg-1"
-        )
+        resp = client.get("/admin/execution-search?q=test&status=completed&trigger_id=trg-1")
         assert resp.status_code == 200
         body = resp.get_json()
         assert "results" in body
@@ -502,13 +498,7 @@ class TestReplay:
     def test_diff_context_preview(self, client):
         """POST /admin/diff-context/preview extracts context from diff text."""
         diff_text = (
-            "--- a/file.py\n"
-            "+++ b/file.py\n"
-            "@@ -1,3 +1,3 @@\n"
-            " line1\n"
-            "-old line\n"
-            "+new line\n"
-            " line3\n"
+            "--- a/file.py\n+++ b/file.py\n@@ -1,3 +1,3 @@\n line1\n-old line\n+new line\n line3\n"
         )
         resp = client.post(
             "/admin/diff-context/preview",
@@ -543,9 +533,7 @@ class TestOrchestration:
     def test_get_fallback_chain_empty(self, client):
         """GET fallback chain for a trigger with none returns empty chain."""
         trigger_id = _create_trigger(client, name="orch-trigger")
-        resp = client.get(
-            f"/admin/orchestration/triggers/{trigger_id}/fallback-chain"
-        )
+        resp = client.get(f"/admin/orchestration/triggers/{trigger_id}/fallback-chain")
         assert resp.status_code == 200
         body = resp.get_json()
         assert body["chain"] == []
@@ -570,9 +558,7 @@ class TestOrchestration:
         assert chain[0]["account_id"] == account_id
 
         # Verify with GET
-        resp2 = client.get(
-            f"/admin/orchestration/triggers/{trigger_id}/fallback-chain"
-        )
+        resp2 = client.get(f"/admin/orchestration/triggers/{trigger_id}/fallback-chain")
         assert resp2.status_code == 200
         assert len(resp2.get_json()["chain"]) == 1
 
@@ -597,15 +583,11 @@ class TestOrchestration:
         )
 
         # Delete
-        resp = client.delete(
-            f"/admin/orchestration/triggers/{trigger_id}/fallback-chain"
-        )
+        resp = client.delete(f"/admin/orchestration/triggers/{trigger_id}/fallback-chain")
         assert resp.status_code == 204
 
         # Verify empty
-        resp2 = client.get(
-            f"/admin/orchestration/triggers/{trigger_id}/fallback-chain"
-        )
+        resp2 = client.get(f"/admin/orchestration/triggers/{trigger_id}/fallback-chain")
         assert resp2.get_json()["chain"] == []
 
     def test_get_account_health(self, client):
@@ -634,8 +616,6 @@ class TestOrchestration:
     def test_clear_rate_limit_success(self, client):
         """POST clear-rate-limit for existing account returns success."""
         _backend_id, account_id = _seed_backend_and_account()
-        resp = client.post(
-            f"/admin/orchestration/accounts/{account_id}/clear-rate-limit"
-        )
+        resp = client.post(f"/admin/orchestration/accounts/{account_id}/clear-rate-limit")
         assert resp.status_code == 200
         assert resp.get_json()["message"] == "Rate limit cleared"

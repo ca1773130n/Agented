@@ -70,11 +70,12 @@ class TestSyncProject:
         roadmap = planning_dir / "ROADMAP.md"
         roadmap.write_text("# Roadmap — v1.0.0\n\n## Phase 1: Init\nSetup stuff\n")
 
-        with patch(
-            "app.services.grd_sync_service.get_project_sync_state", return_value=None
-        ), patch(
-            "app.services.grd_sync_service.GrdSyncService._sync_roadmap",
-            side_effect=ValueError("test error"),
+        with (
+            patch("app.services.grd_sync_service.get_project_sync_state", return_value=None),
+            patch(
+                "app.services.grd_sync_service.GrdSyncService._sync_roadmap",
+                side_effect=ValueError("test error"),
+            ),
         ):
             result = GrdSyncService.sync_project("proj-test", str(planning_dir))
             assert len(result["errors"]) == 1
@@ -89,10 +90,9 @@ class TestSyncProject:
         roadmap.write_text(content)
 
         cached = {"content_hash": _sha256(content), "entity_id": "ms-123"}
-        with patch(
-            "app.services.grd_sync_service.get_project_sync_state", return_value=cached
-        ), patch(
-            "app.services.grd_sync_service.get_milestones_by_project", return_value=[]
+        with (
+            patch("app.services.grd_sync_service.get_project_sync_state", return_value=cached),
+            patch("app.services.grd_sync_service.get_milestones_by_project", return_value=[]),
         ):
             result = GrdSyncService.sync_project("proj-test2", str(planning_dir))
             assert result["skipped"] >= 1

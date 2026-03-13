@@ -285,9 +285,7 @@ class TestWorkflowExecutionPipeline:
         node_executions = result.get("node_executions", [])
         executed_node_ids = {ne["node_id"] for ne in node_executions}
         for node_id in ("A", "B", "C"):
-            assert node_id in executed_node_ids, (
-                f"Node {node_id} should appear in node_executions"
-            )
+            assert node_id in executed_node_ids, f"Node {node_id} should appear in node_executions"
 
     def test_workflow_error_mode_skip_continues_on_failure(self, client, isolated_db):
         """Node with error_mode='skip' should not halt the workflow when it fails."""

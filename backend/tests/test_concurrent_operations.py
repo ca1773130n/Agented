@@ -273,7 +273,9 @@ class TestTeamParallelExecution:
             time.sleep(0.01)
             return f"exec-{agent_id}", f"output-{agent_id}"
 
-        with patch.object(TeamExecutionService, "_run_agent_and_get_output", side_effect=mock_run_agent):
+        with patch.object(
+            TeamExecutionService, "_run_agent_and_get_output", side_effect=mock_run_agent
+        ):
             result = TeamExecutionService._execute_parallel(
                 team, config, "test message", None, "manual"
             )
@@ -291,10 +293,10 @@ class TestTeamParallelExecution:
             time.sleep(0.005)  # Simulate concurrent work
             return f"exec-{agent_id}", ""
 
-        with patch.object(TeamExecutionService, "_run_agent_and_get_output", side_effect=mock_run_agent):
-            result = TeamExecutionService._execute_parallel(
-                team, config, "test", None, "manual"
-            )
+        with patch.object(
+            TeamExecutionService, "_run_agent_and_get_output", side_effect=mock_run_agent
+        ):
+            result = TeamExecutionService._execute_parallel(team, config, "test", None, "manual")
 
         assert len(result) == num_agents
         assert len(set(result)) == num_agents  # No duplicates
@@ -309,10 +311,10 @@ class TestTeamParallelExecution:
                 return None, ""  # Simulate failure
             return f"exec-{agent_id}", "output"
 
-        with patch.object(TeamExecutionService, "_run_agent_and_get_output", side_effect=mock_run_agent):
-            result = TeamExecutionService._execute_parallel(
-                team, config, "test", None, "manual"
-            )
+        with patch.object(
+            TeamExecutionService, "_run_agent_and_get_output", side_effect=mock_run_agent
+        ):
+            result = TeamExecutionService._execute_parallel(team, config, "test", None, "manual")
 
         assert len(result) == 2
         assert "exec-agent-ok" in result
@@ -343,7 +345,9 @@ class TestTeamCoordinatorParallel:
                 time.sleep(0.01)
                 return f"exec-{agent_id}", f"output-{agent_id}"
 
-        with patch.object(TeamExecutionService, "_run_agent_and_get_output", side_effect=mock_run_agent):
+        with patch.object(
+            TeamExecutionService, "_run_agent_and_get_output", side_effect=mock_run_agent
+        ):
             result = TeamExecutionService._execute_coordinator(
                 team, config, "initial", None, "manual"
             )
@@ -392,6 +396,7 @@ class TestTeamConcurrentExecutions:
         p_detail_db.start()
 
         try:
+
             def run_team(i):
                 barrier.wait(timeout=5)
                 exec_id = TeamExecutionService.execute_team(f"team-{i}", f"msg-{i}")
@@ -514,6 +519,7 @@ class TestStreamPipeRealThreads:
         collect_lock = threading.Lock()
 
         with patch("app.services.execution_runner.ExecutionLogService") as mock_log:
+
             def capture_log(exec_id, stream, content):
                 with collect_lock:
                     collected.setdefault(exec_id, []).append(content)

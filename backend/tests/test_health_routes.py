@@ -22,9 +22,7 @@ class TestReadiness:
     def test_readiness_authenticated(self, client, monkeypatch):
         """GET /health/readiness with valid API key returns full details."""
         monkeypatch.setenv("AGENTED_API_KEY", "test-secret-key")
-        resp = client.get(
-            "/health/readiness", headers={"X-API-Key": "test-secret-key"}
-        )
+        resp = client.get("/health/readiness", headers={"X-API-Key": "test-secret-key"})
         assert resp.status_code in (200, 503)  # 503 if degraded
         body = resp.get_json()
         assert "status" in body
@@ -34,9 +32,7 @@ class TestReadiness:
     def test_readiness_wrong_api_key(self, client, monkeypatch):
         """GET /health/readiness with wrong API key returns minimal response."""
         monkeypatch.setenv("AGENTED_API_KEY", "correct-key")
-        resp = client.get(
-            "/health/readiness", headers={"X-API-Key": "wrong-key"}
-        )
+        resp = client.get("/health/readiness", headers={"X-API-Key": "wrong-key"})
         assert resp.status_code == 200
         body = resp.get_json()
         # Wrong key should get minimal response (no components)

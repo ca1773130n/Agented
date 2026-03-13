@@ -76,7 +76,11 @@ class TeamExecutionTracker:
 
     @classmethod
     def set_pending_approval(
-        cls, team_exec_id: str, agent_id: str, approval_timeout: int, approval_event: threading.Event
+        cls,
+        team_exec_id: str,
+        agent_id: str,
+        approval_timeout: int,
+        approval_event: threading.Event,
     ) -> None:
         """Set execution to pending_approval state with an approval event."""
         with cls._lock:

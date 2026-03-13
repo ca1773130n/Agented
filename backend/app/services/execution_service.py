@@ -764,9 +764,7 @@ class ExecutionService:
         )
 
     @classmethod
-    def dispatch_pr_comment_commands(
-        cls, repo_url: str, commands: list, pr_data: dict
-    ) -> bool:
+    def dispatch_pr_comment_commands(cls, repo_url: str, commands: list, pr_data: dict) -> bool:
         """Dispatch slash commands from a PR comment to matching triggers."""
         return _dispatch_pr_comment_commands(
             repo_url=repo_url,

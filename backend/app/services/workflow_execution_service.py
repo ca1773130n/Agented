@@ -666,9 +666,7 @@ class WorkflowExecutionService:
                 "workflow", workflow_id, final_status, output=output_data
             )
         except Exception as e:
-            logger.error(
-                f"Error firing completion triggers for {execution_id}: {e}", exc_info=True
-            )
+            logger.error(f"Error firing completion triggers for {execution_id}: {e}", exc_info=True)
 
         cls._schedule_cleanup(execution_id)
 

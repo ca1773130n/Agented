@@ -18,9 +18,7 @@ class TestSchedulerSuperAgentDispatch:
         )
 
         with (
-            patch(
-                "app.services.super_agent_session_service.SuperAgentSessionService"
-            ) as mock_svc,
+            patch("app.services.super_agent_session_service.SuperAgentSessionService") as mock_svc,
             patch("app.db.triggers.create_execution_log", return_value=True),
         ):
             mock_svc.get_or_create_session.return_value = "sess-cron"

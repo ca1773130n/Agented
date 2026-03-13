@@ -679,12 +679,18 @@ class TestConversationBranches:
         # via the DB to have content to branch from.
         from app.database import update_agent_conversation
 
-        messages = json.dumps([
-            {"role": "system", "content": "You are helpful.", "timestamp": "2025-01-01T00:00:00"},
-            {"role": "user", "content": "Hello", "timestamp": "2025-01-01T00:01:00"},
-            {"role": "assistant", "content": "Hi there!", "timestamp": "2025-01-01T00:02:00"},
-            {"role": "user", "content": "Help me", "timestamp": "2025-01-01T00:03:00"},
-        ])
+        messages = json.dumps(
+            [
+                {
+                    "role": "system",
+                    "content": "You are helpful.",
+                    "timestamp": "2025-01-01T00:00:00",
+                },
+                {"role": "user", "content": "Hello", "timestamp": "2025-01-01T00:01:00"},
+                {"role": "assistant", "content": "Hi there!", "timestamp": "2025-01-01T00:02:00"},
+                {"role": "user", "content": "Help me", "timestamp": "2025-01-01T00:03:00"},
+            ]
+        )
         update_agent_conversation(conv_id, messages=messages)
         return conv_id
 
@@ -908,9 +914,7 @@ class TestSuperAgentChat:
     def test_stream_chat_sse(self, client):
         """GET /<sa_id>/sessions/<sess_id>/chat/stream returns SSE stream."""
         sa_id, session_id = self._create_session(client)
-        resp = client.get(
-            f"/admin/super-agents/{sa_id}/sessions/{session_id}/chat/stream"
-        )
+        resp = client.get(f"/admin/super-agents/{sa_id}/sessions/{session_id}/chat/stream")
         assert resp.status_code == 200
         assert resp.content_type.startswith("text/event-stream")
 
@@ -1012,18 +1016,14 @@ class TestSuperAgentMessages:
             json={"content": "Read me", "to_agent_id": sa_to},
         )
         msg_id = send_resp.get_json()["message_id"]
-        resp = client.post(
-            f"/admin/super-agents/{sa_to}/messages/{msg_id}/read"
-        )
+        resp = client.post(f"/admin/super-agents/{sa_to}/messages/{msg_id}/read")
         assert resp.status_code == 200
         assert resp.get_json()["message"] == "Message marked as read"
 
     def test_mark_message_read_not_found(self, client):
         """POST mark read for non-existent message returns 404."""
         sa_id = _create_super_agent(client)
-        resp = client.post(
-            f"/admin/super-agents/{sa_id}/messages/msg-nonexistent/read"
-        )
+        resp = client.post(f"/admin/super-agents/{sa_id}/messages/msg-nonexistent/read")
         assert resp.status_code == 404
 
     def test_stream_messages(self, client):
@@ -1161,9 +1161,7 @@ class TestSuperAgentSessions:
         sa_id = _create_super_agent(client)
         create_resp = client.post(f"/admin/super-agents/{sa_id}/sessions")
         session_id = create_resp.get_json()["session_id"]
-        resp = client.get(
-            f"/admin/super-agents/{sa_id}/sessions/{session_id}/stream"
-        )
+        resp = client.get(f"/admin/super-agents/{sa_id}/sessions/{session_id}/stream")
         assert resp.status_code == 200
         assert resp.content_type.startswith("text/event-stream")
 
@@ -1184,9 +1182,7 @@ class TestSuperAgentSessions:
         assert msg_resp.status_code == 200
 
         # End session
-        end_resp = client.post(
-            f"/admin/super-agents/{sa_id}/sessions/{session_id}/end"
-        )
+        end_resp = client.post(f"/admin/super-agents/{sa_id}/sessions/{session_id}/end")
         assert end_resp.status_code == 200
 
         # Sending message to ended session should fail

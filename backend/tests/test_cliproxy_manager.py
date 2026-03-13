@@ -111,9 +111,7 @@ class TestStart:
         assert CLIProxyManager._port == 9000
         mock_popen.assert_called_once()
 
-    @patch.object(
-        CLIProxyManager, "_read_config", return_value=None
-    )
+    @patch.object(CLIProxyManager, "_read_config", return_value=None)
     @patch.object(CLIProxyManager, "_write_default_config")
     def test_start_creates_default_config_if_missing(self, mock_write, mock_read):
         # Both reads return None -> should fail
@@ -154,9 +152,7 @@ class TestStart:
         assert result is False
         mock_proc.terminate.assert_called_once()
 
-    @patch.object(
-        CLIProxyManager, "_read_config", return_value={"port": 8317}
-    )
+    @patch.object(CLIProxyManager, "_read_config", return_value={"port": 8317})
     @patch.object(CLIProxyManager, "_check_port_healthy", return_value=False)
     @patch("app.services.cliproxy_manager.subprocess.Popen")
     def test_start_uses_not_needed_when_no_keys(self, mock_popen, mock_healthy, mock_config):
@@ -523,9 +519,7 @@ class TestRefreshExpiredTokens:
     @patch.object(
         CLIProxyManager,
         "list_accounts",
-        return_value=[
-            {"email": "noexp@test.com", "disabled": False, "expired": ""}
-        ],
+        return_value=[{"email": "noexp@test.com", "disabled": False, "expired": ""}],
     )
     def test_skips_account_with_no_expiry(self, mock_list):
         result = CLIProxyManager.refresh_expired_tokens()
@@ -534,9 +528,7 @@ class TestRefreshExpiredTokens:
     @patch.object(
         CLIProxyManager,
         "list_accounts",
-        return_value=[
-            {"email": "bad@test.com", "disabled": False, "expired": "not-a-date"}
-        ],
+        return_value=[{"email": "bad@test.com", "disabled": False, "expired": "not-a-date"}],
     )
     def test_skips_account_with_bad_expiry(self, mock_list):
         result = CLIProxyManager.refresh_expired_tokens()

@@ -149,7 +149,9 @@ class TestStateHelpers:
 
     def test_update_task_replaces_existing(self):
         self._seed_state()
-        TeamMonitorService._update_task("sess-1", {"id": "t1", "status": "running", "file": "t1.json"})
+        TeamMonitorService._update_task(
+            "sess-1", {"id": "t1", "status": "running", "file": "t1.json"}
+        )
         TeamMonitorService._update_task("sess-1", {"id": "t1", "status": "done", "file": "t1.json"})
 
         tasks = TeamMonitorService._monitors["sess-1"]["tasks"]
@@ -234,9 +236,7 @@ class TestTeamFileHandler:
     def test_process_config_event(self, mock_parse, mock_update, tmp_path):
         handler = TeamFileHandler("sess-1", "myteam")
 
-        with patch(
-            "app.services.project_session_manager.ProjectSessionManager"
-        ) as MockPSM:
+        with patch("app.services.project_session_manager.ProjectSessionManager") as MockPSM:
             src = str(tmp_path / "myteam" / "config.json")
             handler._process_event(src)
 
@@ -256,9 +256,7 @@ class TestTeamFileHandler:
     def test_process_task_event(self, mock_parse, mock_update, tmp_path):
         handler = TeamFileHandler("sess-1", "myteam")
 
-        with patch(
-            "app.services.project_session_manager.ProjectSessionManager"
-        ) as MockPSM:
+        with patch("app.services.project_session_manager.ProjectSessionManager") as MockPSM:
             src = str(tmp_path / "tasks" / "myteam" / "task-1.json")
             handler._process_event(src)
 

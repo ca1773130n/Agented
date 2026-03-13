@@ -70,7 +70,12 @@ class TestSelectAccount:
 
         with (
             patch("app.services.orchestration_service.RateLimitService") as mock_rls,
-            patch("app.services.orchestration_service.OrchestrationService._select_account.__wrapped__", side_effect=None) if False else patch(
+            patch(
+                "app.services.orchestration_service.OrchestrationService._select_account.__wrapped__",
+                side_effect=None,
+            )
+            if False
+            else patch(
                 "app.services.agent_scheduler_service.AgentSchedulerService.check_eligibility",
                 return_value={"eligible": True},
             ),

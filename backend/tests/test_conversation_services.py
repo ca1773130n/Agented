@@ -323,12 +323,15 @@ class TestExtractConfig:
             content=f"Here is your config:\n---COMMAND_CONFIG---\n{config_json}\n---END_CONFIG---",
             timestamp=datetime.datetime.now().isoformat(),
         )
-        conv_id = _seed_conversation(CommandConversationService, messages=[
-            ConversationMessage(
-                role="system", content="sys", timestamp=datetime.datetime.now().isoformat()
-            ),
-            msg,
-        ])
+        conv_id = _seed_conversation(
+            CommandConversationService,
+            messages=[
+                ConversationMessage(
+                    role="system", content="sys", timestamp=datetime.datetime.now().isoformat()
+                ),
+                msg,
+            ],
+        )
         config = CommandConversationService._extract_config_from_conversation(conv_id)
         assert config is not None
         assert config["name"] == "my-cmd"
@@ -496,13 +499,15 @@ class TestHookConversationService:
     @patch.object(HookConversationService, "_process_with_claude")
     def test_finalize_hook_entity(self, mock_process):
         """Test _finalize_entity creates a hook in the DB."""
-        config_json = json.dumps({
-            "name": "test-hook",
-            "event": "Stop",
-            "description": "A test hook",
-            "content": "echo done",
-            "enabled": True,
-        })
+        config_json = json.dumps(
+            {
+                "name": "test-hook",
+                "event": "Stop",
+                "description": "A test hook",
+                "content": "echo done",
+                "enabled": True,
+            }
+        )
         msg = ConversationMessage(
             role="assistant",
             content=f"---HOOK_CONFIG---\n{config_json}\n---END_CONFIG---",
@@ -562,14 +567,16 @@ class TestRuleConversationService:
 
     @patch.object(RuleConversationService, "_process_with_claude")
     def test_finalize_rule_entity(self, mock_process):
-        config_json = json.dumps({
-            "name": "no-console",
-            "rule_type": "validation",
-            "description": "No console.log",
-            "condition": "when files contain console.log",
-            "action": "warn",
-            "enabled": True,
-        })
+        config_json = json.dumps(
+            {
+                "name": "no-console",
+                "rule_type": "validation",
+                "description": "No console.log",
+                "condition": "when files contain console.log",
+                "action": "warn",
+                "enabled": True,
+            }
+        )
         msg = ConversationMessage(
             role="assistant",
             content=f"---RULE_CONFIG---\n{config_json}\n---END_CONFIG---",
@@ -596,13 +603,15 @@ class TestRuleConversationService:
 class TestCommandFinalize:
     @patch.object(CommandConversationService, "_process_with_claude")
     def test_finalize_command_entity(self, mock_process):
-        config_json = json.dumps({
-            "name": "deploy",
-            "description": "Deploy to production",
-            "content": "Run deploy script",
-            "arguments": [{"name": "env", "type": "string", "description": "Target env"}],
-            "enabled": True,
-        })
+        config_json = json.dumps(
+            {
+                "name": "deploy",
+                "description": "Deploy to production",
+                "content": "Run deploy script",
+                "arguments": [{"name": "env", "type": "string", "description": "Target env"}],
+                "enabled": True,
+            }
+        )
         msg = ConversationMessage(
             role="assistant",
             content=f"---COMMAND_CONFIG---\n{config_json}\n---END_CONFIG---",

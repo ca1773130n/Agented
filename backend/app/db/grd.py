@@ -104,7 +104,9 @@ def update_milestone(milestone_id: str, **kwargs) -> bool:
     values.append(milestone_id)
 
     with get_connection() as conn:
-        cursor = conn.execute(f"UPDATE milestones SET {safe_set_clause(updates)} WHERE id = ?", values)
+        cursor = conn.execute(
+            f"UPDATE milestones SET {safe_set_clause(updates)} WHERE id = ?", values
+        )
         conn.commit()
         return cursor.rowcount > 0
 
@@ -295,7 +297,9 @@ def update_project_plan(plan_id: str, **kwargs) -> bool:
     values.append(plan_id)
 
     with get_connection() as conn:
-        cursor = conn.execute(f"UPDATE project_plans SET {safe_set_clause(updates)} WHERE id = ?", values)
+        cursor = conn.execute(
+            f"UPDATE project_plans SET {safe_set_clause(updates)} WHERE id = ?", values
+        )
         conn.commit()
         return cursor.rowcount > 0
 

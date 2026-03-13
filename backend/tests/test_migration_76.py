@@ -7,7 +7,9 @@ def test_migration_adds_dispatch_columns(tmp_path):
     db_path = tmp_path / "migration_76_test.db"
     conn = sqlite3.connect(str(db_path))
     conn.execute("CREATE TABLE triggers (id TEXT PRIMARY KEY, name TEXT)")
-    conn.execute("CREATE TABLE execution_logs (id INTEGER PRIMARY KEY, execution_id TEXT, trigger_id TEXT)")
+    conn.execute(
+        "CREATE TABLE execution_logs (id INTEGER PRIMARY KEY, execution_id TEXT, trigger_id TEXT)"
+    )
     conn.commit()
 
     _migrate_76_super_agent_dispatch(conn)

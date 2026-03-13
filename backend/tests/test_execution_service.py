@@ -295,9 +295,12 @@ class TestDispatchWebhookEvent:
         )
         mock_get_triggers.return_value = [trigger]
 
-        with patch(
-            "app.services.execution_queue_service.ExecutionQueueService.enqueue"
-        ) as mock_enqueue, patch("app.database.get_webhook_teams", return_value=[]):
+        with (
+            patch(
+                "app.services.execution_queue_service.ExecutionQueueService.enqueue"
+            ) as mock_enqueue,
+            patch("app.database.get_webhook_teams", return_value=[]),
+        ):
             result = ExecutionService.dispatch_webhook_event({"body": "test message"})
 
         assert result is True
@@ -310,9 +313,12 @@ class TestDispatchWebhookEvent:
         trigger = _make_trigger(text_field_path="body")
         mock_get_triggers.return_value = [trigger]
 
-        with patch(
-            "app.services.execution_queue_service.ExecutionQueueService.enqueue"
-        ) as mock_enqueue, patch("app.database.get_webhook_teams", return_value=[]):
+        with (
+            patch(
+                "app.services.execution_queue_service.ExecutionQueueService.enqueue"
+            ) as mock_enqueue,
+            patch("app.database.get_webhook_teams", return_value=[]),
+        ):
             result = ExecutionService.dispatch_webhook_event({"body": "test"})
 
         assert result is False
@@ -327,10 +333,13 @@ class TestDispatchWebhookEvent:
         trigger = _make_trigger(webhook_secret="my-secret")
         mock_get_triggers.return_value = [trigger]
 
-        with patch(
-            "app.services.webhook_validation_service.WebhookValidationService.validate_signature",
-            return_value=False,
-        ), patch("app.database.get_webhook_teams", return_value=[]):
+        with (
+            patch(
+                "app.services.webhook_validation_service.WebhookValidationService.validate_signature",
+                return_value=False,
+            ),
+            patch("app.database.get_webhook_teams", return_value=[]),
+        ):
             result = ExecutionService.dispatch_webhook_event(
                 {"text": "test"},
                 raw_payload=b'{"text":"test"}',
@@ -377,10 +386,11 @@ class TestDispatchGithubEvent:
             "action": "opened",
         }
 
-        with patch(
-            "app.services.execution_queue_service.ExecutionQueueService.enqueue"
-        ) as mock_enqueue, patch(
-            "app.database.get_teams_by_trigger_source", return_value=[]
+        with (
+            patch(
+                "app.services.execution_queue_service.ExecutionQueueService.enqueue"
+            ) as mock_enqueue,
+            patch("app.database.get_teams_by_trigger_source", return_value=[]),
         ):
             result = ExecutionService.dispatch_github_event("https://github.com/o/r", pr_data)
 
@@ -524,9 +534,10 @@ class TestRunTriggerSuccess:
         mock_proc.stderr.readline = MagicMock(return_value="")
         mock_proc.poll.return_value = 0
 
-        with patch("subprocess.Popen", return_value=mock_proc), patch(
-            "threading.Thread"
-        ) as mock_thread_cls:
+        with (
+            patch("subprocess.Popen", return_value=mock_proc),
+            patch("threading.Thread") as mock_thread_cls,
+        ):
             mock_thread = MagicMock()
             mock_thread.is_alive.return_value = False
             mock_thread_cls.return_value = mock_thread
@@ -571,9 +582,10 @@ class TestRunTriggerSuccess:
         mock_proc.stderr.readline = MagicMock(return_value="")
         mock_proc.poll.return_value = 1
 
-        with patch("subprocess.Popen", return_value=mock_proc), patch(
-            "threading.Thread"
-        ) as mock_thread_cls:
+        with (
+            patch("subprocess.Popen", return_value=mock_proc),
+            patch("threading.Thread") as mock_thread_cls,
+        ):
             mock_thread = MagicMock()
             mock_thread.is_alive.return_value = False
             mock_thread_cls.return_value = mock_thread
@@ -594,9 +606,7 @@ class TestRunTriggerSuccess:
 
 class TestSaveHelpers:
     def test_save_trigger_event(self, tmp_path, monkeypatch):
-        monkeypatch.setattr(
-            "app.services.execution_service.TRIGGER_LOG_DIR", str(tmp_path)
-        )
+        monkeypatch.setattr("app.services.execution_service.TRIGGER_LOG_DIR", str(tmp_path))
         trigger = _make_trigger()
         event = {"action": "opened"}
         event_id = ExecutionService.save_trigger_event(trigger, event)
@@ -673,14 +683,10 @@ class TestFetchPrDiff:
         mock_response.read.return_value = b"diff --git a/file.py b/file.py\n"
         mock_urlopen.return_value = mock_response
 
-        result = ExecutionService._fetch_pr_diff(
-            {"pr_url": "https://github.com/o/r/pull/1"}
-        )
+        result = ExecutionService._fetch_pr_diff({"pr_url": "https://github.com/o/r/pull/1"})
         assert result == "diff --git a/file.py b/file.py\n"
 
     @patch("urllib.request.urlopen", side_effect=Exception("network error"))
     def test_returns_none_on_network_error(self, mock_urlopen):
-        result = ExecutionService._fetch_pr_diff(
-            {"pr_url": "https://github.com/o/r/pull/1"}
-        )
+        result = ExecutionService._fetch_pr_diff({"pr_url": "https://github.com/o/r/pull/1"})
         assert result is None

@@ -18,9 +18,7 @@ from ..services.rbac_service import require_role
 from .teams import TeamPath
 
 tag = Tag(name="team-edges", description="Team directed graph edge management")
-team_edges_bp = APIBlueprint(
-    "team_edges", __name__, url_prefix="/admin/teams", abp_tags=[tag]
-)
+team_edges_bp = APIBlueprint("team_edges", __name__, url_prefix="/admin/teams", abp_tags=[tag])
 
 
 class EdgePath(BaseModel):

@@ -164,8 +164,7 @@ class TestExtractModelsFromClaudeHistory:
     def test_extracts_model_ids(self, tmp_path):
         history = tmp_path / "history.jsonl"
         history.write_text(
-            '{"model":"claude-opus-4-6-20250514"}\n'
-            '{"model":"claude-sonnet-4-5-20250514"}\n'
+            '{"model":"claude-opus-4-6-20250514"}\n{"model":"claude-sonnet-4-5-20250514"}\n'
         )
         result = ModelDiscoveryService._extract_models_from_claude_history(history)
         assert "claude-opus-4-6-20250514" in result
@@ -271,7 +270,9 @@ class TestDiscoverRaw:
     @patch.object(ModelDiscoveryService, "_discover_claude_models_local", return_value=None)
     @patch.object(ModelDiscoveryService, "_discover_claude_models_pty", return_value=None)
     @patch.object(ModelDiscoveryService, "_discover_models_via_cliproxy", return_value=None)
-    @patch.object(ModelDiscoveryService, "_discover_anthropic_models_via_opencode", return_value=None)
+    @patch.object(
+        ModelDiscoveryService, "_discover_anthropic_models_via_opencode", return_value=None
+    )
     def test_claude_returns_empty_when_all_fail(self, *mocks):
         result = ModelDiscoveryService._discover_raw("claude")
         assert result == []
@@ -282,7 +283,9 @@ class TestDiscoverRaw:
         return_value=["claude-opus-4-6-20250514"],
     )
     @patch.object(ModelDiscoveryService, "_discover_models_via_cliproxy", return_value=None)
-    @patch.object(ModelDiscoveryService, "_discover_anthropic_models_via_opencode", return_value=None)
+    @patch.object(
+        ModelDiscoveryService, "_discover_anthropic_models_via_opencode", return_value=None
+    )
     def test_claude_uses_local_first(self, *mocks):
         result = ModelDiscoveryService._discover_raw("claude")
         assert "claude-opus-4-6-20250514" in result
@@ -297,7 +300,9 @@ class TestDiscoverRaw:
         "_discover_models_via_cliproxy",
         return_value=["claude-sonnet-4-5-20250514"],
     )
-    @patch.object(ModelDiscoveryService, "_discover_anthropic_models_via_opencode", return_value=None)
+    @patch.object(
+        ModelDiscoveryService, "_discover_anthropic_models_via_opencode", return_value=None
+    )
     def test_claude_merges_extra_sources(self, *mocks):
         result = ModelDiscoveryService._discover_raw("claude")
         assert "claude-opus-4-6-20250514" in result
@@ -372,7 +377,10 @@ class TestDiscoverCodexModelsLocal:
         cache = tmp_path / "models_cache.json"
         cache.write_text(
             json.dumps(
-                [{"slug": "gpt-5.3-codex", "visibility": "list"}, {"slug": "internal", "visibility": "hidden"}]
+                [
+                    {"slug": "gpt-5.3-codex", "visibility": "list"},
+                    {"slug": "internal", "visibility": "hidden"},
+                ]
             )
         )
         mock_dirs.return_value = [tmp_path]

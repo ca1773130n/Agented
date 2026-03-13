@@ -170,9 +170,7 @@ def execute_coordinator(
     coordinator_id = config.get("coordinator")
     workers = config.get("workers", [])
     if not coordinator_id or not workers:
-        logger.warning(
-            f"Coordinator topology missing coordinator/workers for team {team['id']}"
-        )
+        logger.warning(f"Coordinator topology missing coordinator/workers for team {team['id']}")
         return []
 
     execution_ids = []
@@ -228,9 +226,7 @@ def execute_generator_critic(
     critic_id = config.get("critic")
     max_iterations = config.get("max_iterations", 3)
     if not generator_id or not critic_id:
-        logger.warning(
-            f"Generator-critic topology missing generator/critic for team {team['id']}"
-        )
+        logger.warning(f"Generator-critic topology missing generator/critic for team {team['id']}")
         return []
 
     execution_ids = []
@@ -448,8 +444,7 @@ def execute_human_in_loop(
                 tracker.clear_approval(team_exec_id)
 
         logger.info(
-            f"Human-in-loop: executing agent {agent_id} "
-            f"with message length={len(current_message)}"
+            f"Human-in-loop: executing agent {agent_id} with message length={len(current_message)}"
         )
         execution_id, output = run_agent(
             team, agent_id, current_message, event, trigger_type, working_directory
@@ -502,9 +497,7 @@ def execute_composite(
         sub_config = sub_group.get("config", {})
 
         if sub_topology == "composite":
-            logger.error(
-                f"Composite nesting not allowed in sub_group {i} for team {team['id']}"
-            )
+            logger.error(f"Composite nesting not allowed in sub_group {i} for team {team['id']}")
             continue
 
         strategy = sub_strategy_map.get(sub_topology)
@@ -523,7 +516,12 @@ def execute_composite(
             kwargs["tracker"] = tracker
 
         sub_exec_ids = strategy(
-            team, sub_config, current_message, event, trigger_type, working_directory,
+            team,
+            sub_config,
+            current_message,
+            event,
+            trigger_type,
+            working_directory,
             **kwargs,
         )
         execution_ids.extend(sub_exec_ids or [])

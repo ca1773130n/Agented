@@ -719,9 +719,7 @@ class WorkflowTriggerService:
                         )
                         count += 1
                     except ValueError as e:
-                        logger.warning(
-                            f"Skipping file watch trigger for workflow {wf['id']}: {e}"
-                        )
+                        logger.warning(f"Skipping file watch trigger for workflow {wf['id']}: {e}")
             logger.info(f"Loaded {count} file watch triggers from DB")
         except Exception as e:
             logger.error(f"Error loading file watch triggers: {e}", exc_info=True)

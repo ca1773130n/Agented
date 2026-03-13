@@ -623,7 +623,7 @@ def _migrate_add_schedule_columns(conn):
 
     if added_columns:
         conn.commit()
-        logger.info("Added schedule columns to bots: %s", ', '.join(added_columns))
+        logger.info("Added schedule columns to bots: %s", ", ".join(added_columns))
 
 
 def _migrate_add_skill_command(conn):
@@ -935,7 +935,7 @@ def _migrate_add_teams_products_projects_plugins(conn):
 
     if tables_created:
         conn.commit()
-        logger.info("Created tables: %s", ', '.join(tables_created))
+        logger.info("Created tables: %s", ", ".join(tables_created))
 
 
 def _migrate_webhook_fields(conn):
@@ -960,7 +960,7 @@ def _migrate_webhook_fields(conn):
 
     if added_columns:
         conn.commit()
-        logger.info("Added webhook columns: %s", ', '.join(added_columns))
+        logger.info("Added webhook columns: %s", ", ".join(added_columns))
 
     # Migrate legacy bots to use new fields
     cursor = conn.execute(
@@ -1076,9 +1076,9 @@ def _migrate_add_marketplaces_and_team_agents(conn):
     if tables_created or columns_added:
         conn.commit()
         if tables_created:
-            logger.info("Created tables: %s", ', '.join(tables_created))
+            logger.info("Created tables: %s", ", ".join(tables_created))
         if columns_added:
-            logger.info("Added columns: %s", ', '.join(columns_added))
+            logger.info("Added columns: %s", ", ".join(columns_added))
 
 
 def _migrate_add_hooks_commands_project_skills(conn):
@@ -1169,9 +1169,9 @@ def _migrate_add_hooks_commands_project_skills(conn):
     if tables_created or columns_added:
         conn.commit()
         if tables_created:
-            logger.info("Created tables: %s", ', '.join(tables_created))
+            logger.info("Created tables: %s", ", ".join(tables_created))
         if columns_added:
-            logger.info("Added columns: %s", ', '.join(columns_added))
+            logger.info("Added columns: %s", ", ".join(columns_added))
 
 
 def _migrate_add_agent_effort_and_ai_backends(conn):
@@ -1306,11 +1306,11 @@ def _migrate_add_agent_effort_and_ai_backends(conn):
     if tables_created or columns_added or data_migrated:
         conn.commit()
         if tables_created:
-            logger.info("Created tables: %s", ', '.join(tables_created))
+            logger.info("Created tables: %s", ", ".join(tables_created))
         if columns_added:
-            logger.info("Added columns: %s", ', '.join(columns_added))
+            logger.info("Added columns: %s", ", ".join(columns_added))
         if data_migrated:
-            logger.info("Migrated data: %s", '; '.join(data_migrated))
+            logger.info("Migrated data: %s", "; ".join(data_migrated))
 
 
 def _migrate_update_backend_model_names(conn):
@@ -1433,9 +1433,9 @@ def _migrate_add_orchestration_tables(conn):
     if tables_created or columns_added:
         conn.commit()
         if tables_created:
-            logger.info("Created tables: %s", ', '.join(tables_created))
+            logger.info("Created tables: %s", ", ".join(tables_created))
         if columns_added:
-            logger.info("Added columns: %s", ', '.join(columns_added))
+            logger.info("Added columns: %s", ", ".join(columns_added))
 
 
 def _migrate_add_budget_tables(conn):
@@ -1517,9 +1517,9 @@ def _migrate_add_budget_tables(conn):
     if tables_created or columns_added:
         conn.commit()
         if tables_created:
-            logger.info("Created budget tables: %s", ', '.join(tables_created))
+            logger.info("Created budget tables: %s", ", ".join(tables_created))
         if columns_added:
-            logger.info("Added budget columns: %s", ', '.join(columns_added))
+            logger.info("Added budget columns: %s", ", ".join(columns_added))
 
 
 def _migrate_add_team_design_tables(conn):
@@ -1579,9 +1579,9 @@ def _migrate_add_team_design_tables(conn):
     if tables_created or columns_added:
         conn.commit()
         if tables_created:
-            logger.info("Created team design tables: %s", ', '.join(tables_created))
+            logger.info("Created team design tables: %s", ", ".join(tables_created))
         if columns_added:
-            logger.info("Added team design columns: %s", ', '.join(columns_added))
+            logger.info("Added team design columns: %s", ", ".join(columns_added))
 
 
 def _migrate_add_design_conversations_table(conn):
@@ -1662,7 +1662,7 @@ def _migrate_add_sync_and_export_tables(conn):
 
     if tables_created:
         conn.commit()
-        logger.info("Created plugin sync/export tables: %s", ', '.join(tables_created))
+        logger.info("Created plugin sync/export tables: %s", ", ".join(tables_created))
 
 
 def _migrate_add_project_local_path(conn):
@@ -3459,7 +3459,9 @@ def _migrate_76_super_agent_dispatch(conn):
                 FOREIGN KEY (trigger_id) REFERENCES triggers(id) ON DELETE CASCADE
             )
         """)
-        conn.execute(f"INSERT INTO execution_logs_new ({cols_csv}) SELECT {cols_csv} FROM execution_logs")
+        conn.execute(
+            f"INSERT INTO execution_logs_new ({cols_csv}) SELECT {cols_csv} FROM execution_logs"
+        )
         conn.execute("DROP TABLE execution_logs")
         conn.execute("ALTER TABLE execution_logs_new RENAME TO execution_logs")
         # Recreate indexes

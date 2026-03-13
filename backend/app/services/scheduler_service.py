@@ -235,9 +235,7 @@ class SchedulerService:
                 session_id = SuperAgentSessionService.get_or_create_session(
                     trigger_data["super_agent_id"]
                 )
-                SuperAgentSessionService.send_message(
-                    session_id, trigger_data["prompt_template"]
-                )
+                SuperAgentSessionService.send_message(session_id, trigger_data["prompt_template"])
                 exec_id = f"exec-{trigger_id}-{int(time.time())}"
                 create_execution_log(
                     execution_id=exec_id,

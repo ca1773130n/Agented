@@ -229,9 +229,7 @@ def _handle_issue_comment(data):
         return {"message": "issue_comment: no slash command"}, HTTPStatus.OK
 
     commands = [f"/{m.lower()}" for m in matches]
-    logger.info(
-        "PR comment slash commands from %s on %s: %s", commenter, repo_full_name, commands
-    )
+    logger.info("PR comment slash commands from %s on %s: %s", commenter, repo_full_name, commands)
 
     pr_url = issue.get("pull_request", {}).get("html_url", issue.get("html_url", ""))
     pr_number = issue.get("number")

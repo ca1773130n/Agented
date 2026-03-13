@@ -466,9 +466,7 @@ class TestTeamGenerationScenario:
         assert resp.status_code in (400, 415)
 
     def test_generate_no_body(self, client):
-        resp = client.post(
-            "/admin/teams/generate", data="bad", content_type="text/plain"
-        )
+        resp = client.post("/admin/teams/generate", data="bad", content_type="text/plain")
         assert resp.status_code in (400, 415)
 
     def test_poll_nonexistent_job(self, client):
@@ -497,9 +495,7 @@ class TestTeamGenerationScenario:
         assert resp.status_code in (400, 415)
 
     def test_stream_no_body(self, client):
-        resp = client.post(
-            "/admin/teams/generate/stream", data="nope", content_type="text/plain"
-        )
+        resp = client.post("/admin/teams/generate/stream", data="nope", content_type="text/plain")
         assert resp.status_code in (400, 415)
 
 
@@ -780,9 +776,7 @@ class TestProductOwnerScenario:
         assert resp.status_code == 201
 
         # List
-        resp = client.get(
-            f"/admin/products/{product_id}/milestones/{milestone_id}/projects"
-        )
+        resp = client.get(f"/admin/products/{product_id}/milestones/{milestone_id}/projects")
         assert resp.status_code == 200
         assert resp.get_json()["total_count"] >= 1
 
@@ -838,9 +832,7 @@ class TestProductOwnerScenario:
         assert resp.status_code in (400, 415)
 
     def test_assign_owner_nonexistent_product(self, client):
-        resp = client.put(
-            "/admin/products/prod-nope/owner", json={"owner_agent_id": "sa-1"}
-        )
+        resp = client.put("/admin/products/prod-nope/owner", json={"owner_agent_id": "sa-1"})
         assert resp.status_code == 404
 
     # -- Meetings --
@@ -925,15 +917,11 @@ class TestSuperAgentsScenario:
         assert resp.status_code in (400, 415)
 
     def test_create_no_body(self, client):
-        resp = client.post(
-            "/admin/super-agents/", data="bad", content_type="text/plain"
-        )
+        resp = client.post("/admin/super-agents/", data="bad", content_type="text/plain")
         assert resp.status_code in (400, 415)
 
     def test_update_nonexistent(self, client):
-        resp = client.put(
-            "/admin/super-agents/sa-nope", json={"description": "ghost"}
-        )
+        resp = client.put("/admin/super-agents/sa-nope", json={"description": "ghost"})
         assert resp.status_code == 404
 
     def test_update_no_body(self, client):

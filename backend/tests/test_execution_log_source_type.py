@@ -5,9 +5,7 @@ from app.db import triggers as trigger_db
 
 class TestExecutionLogSourceType:
     def _create_trigger(self):
-        return trigger_db.create_trigger(
-            name="test-trigger", prompt_template="test"
-        )
+        return trigger_db.create_trigger(name="test-trigger", prompt_template="test")
 
     def test_create_log_with_source_type(self, isolated_db):
         tid = self._create_trigger()

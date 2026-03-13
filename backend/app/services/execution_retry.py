@@ -232,9 +232,7 @@ class ExecutionRetryManager:
         try:
             rows = get_all_pending_retries()
         except Exception as e:
-            logger.error(
-                "Failed to load pending retries from DB for restore: %s", e, exc_info=True
-            )
+            logger.error("Failed to load pending retries from DB for restore: %s", e, exc_info=True)
             return 0
 
         now = datetime.datetime.now()

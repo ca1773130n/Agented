@@ -390,7 +390,9 @@ class TestScheduleRetry:
     @patch("app.services.execution_retry.upsert_pending_retry")
     @patch("app.services.audit_log_service.AuditLogService")
     @patch("app.services.execution_log_service.ExecutionLogService")
-    def test_schedule_retry_adds_pending_entry(self, mock_log_svc, mock_audit, mock_upsert, mock_del):
+    def test_schedule_retry_adds_pending_entry(
+        self, mock_log_svc, mock_audit, mock_upsert, mock_del
+    ):
         """Scheduling a retry should add an entry to _pending_retries and persist to DB."""
         trigger = {"id": "trg-abc", "backend_type": "claude"}
         ExecutionService.schedule_retry(trigger, "hello", None, "webhook", 30)
@@ -411,7 +413,9 @@ class TestScheduleRetry:
     @patch("app.services.execution_retry.upsert_pending_retry")
     @patch("app.services.audit_log_service.AuditLogService")
     @patch("app.services.execution_log_service.ExecutionLogService")
-    def test_schedule_retry_increments_attempt_count(self, mock_log, mock_audit, mock_upsert, mock_del):
+    def test_schedule_retry_increments_attempt_count(
+        self, mock_log, mock_audit, mock_upsert, mock_del
+    ):
         """Each call to schedule_retry for the same trigger increments the attempt counter."""
         trigger = {"id": "trg-inc", "backend_type": "claude"}
         ExecutionService.schedule_retry(trigger, "msg", None, "webhook", 10)
@@ -426,7 +430,9 @@ class TestScheduleRetry:
     @patch("app.services.execution_retry.upsert_pending_retry")
     @patch("app.services.audit_log_service.AuditLogService")
     @patch("app.services.execution_log_service.ExecutionLogService")
-    def test_schedule_retry_cancels_existing_timer(self, mock_log, mock_audit, mock_upsert, mock_del):
+    def test_schedule_retry_cancels_existing_timer(
+        self, mock_log, mock_audit, mock_upsert, mock_del
+    ):
         """Scheduling a new retry should cancel the previous timer for that trigger."""
         trigger = {"id": "trg-cancel", "backend_type": "claude"}
         ExecutionService.schedule_retry(trigger, "msg", None, "webhook", 600)
@@ -447,7 +453,9 @@ class TestScheduleRetry:
     @patch("app.services.execution_retry.upsert_pending_retry")
     @patch("app.services.audit_log_service.AuditLogService")
     @patch("app.services.execution_log_service.ExecutionLogService")
-    def test_schedule_retry_exceeds_max_attempts(self, mock_log_svc, mock_audit, mock_upsert, mock_del):
+    def test_schedule_retry_exceeds_max_attempts(
+        self, mock_log_svc, mock_audit, mock_upsert, mock_del
+    ):
         """When max retry attempts are exceeded, no new timer should be created."""
         from app.config import MAX_RETRY_ATTEMPTS
 
@@ -474,7 +482,9 @@ class TestScheduleRetry:
     @patch("app.services.audit_log_service.AuditLogService")
     @patch("app.services.execution_log_service.ExecutionLogService")
     @patch("app.services.execution_retry.random.uniform", return_value=0)
-    def test_schedule_retry_exponential_backoff(self, mock_rand, mock_log, mock_audit, mock_upsert, mock_del):
+    def test_schedule_retry_exponential_backoff(
+        self, mock_rand, mock_log, mock_audit, mock_upsert, mock_del
+    ):
         """Backoff delay should grow exponentially with attempt count."""
         trigger = {"id": "trg-back", "backend_type": "claude"}
 

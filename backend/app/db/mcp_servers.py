@@ -143,7 +143,9 @@ def update_mcp_server(server_id: str, **kwargs) -> bool:
     values.append(server_id)
 
     with get_connection() as conn:
-        cursor = conn.execute(f"UPDATE mcp_servers SET {safe_set_clause(updates)} WHERE id = ?", values)
+        cursor = conn.execute(
+            f"UPDATE mcp_servers SET {safe_set_clause(updates)} WHERE id = ?", values
+        )
         conn.commit()
         return cursor.rowcount > 0
 

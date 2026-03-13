@@ -534,9 +534,7 @@ class NodeExecutor:
 
         if was_rejected:
             WorkflowExecutionService._update_status(execution_id, "running")
-            raise RuntimeError(
-                f"Approval gate rejected (execution={execution_id}, node={node_id})"
-            )
+            raise RuntimeError(f"Approval gate rejected (execution={execution_id}, node={node_id})")
 
         # Approved -- restore running status and pass through
         WorkflowExecutionService._update_status(execution_id, "running")

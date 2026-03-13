@@ -25,9 +25,7 @@ class TestTriggerServiceAuditLogging:
     @patch("app.services.trigger_service.AuditLogService")
     @patch("app.services.trigger_service.get_trigger_by_name", return_value=None)
     @patch("app.services.trigger_service.db_create_trigger", return_value="trg-abc123")
-    def test_create_trigger_logs_audit_event(
-        self, mock_create, mock_get_by_name, mock_audit
-    ):
+    def test_create_trigger_logs_audit_event(self, mock_create, mock_get_by_name, mock_audit):
         from app.services.trigger_service import TriggerService
 
         data = {
@@ -55,9 +53,7 @@ class TestTriggerServiceAuditLogging:
     @patch("app.services.trigger_service.AuditLogService")
     @patch("app.services.trigger_service.get_trigger_by_name", return_value=None)
     @patch("app.services.trigger_service.db_create_trigger", return_value=None)
-    def test_create_trigger_no_audit_on_failure(
-        self, mock_create, mock_get_by_name, mock_audit
-    ):
+    def test_create_trigger_no_audit_on_failure(self, mock_create, mock_get_by_name, mock_audit):
         """When trigger creation fails in DB, no audit event should be logged."""
         from app.services.trigger_service import TriggerService
 
@@ -279,9 +275,7 @@ class TestBackendServiceAuditLogging:
         "app.services.backend_service.get_backend_by_id",
         return_value={"id": "backend-claude"},
     )
-    def test_delete_account_logs_audit_event(
-        self, mock_get_backend, mock_delete, mock_audit
-    ):
+    def test_delete_account_logs_audit_event(self, mock_get_backend, mock_delete, mock_audit):
         from app.services.backend_service import BackendService
 
         result, status = BackendService.delete_account("backend-claude", 42)
@@ -431,9 +425,7 @@ class TestSecretVaultServiceAuditLogging:
 
         mock_db.get_secret.return_value = None
 
-        updated = SecretVaultService.update_secret(
-            secret_id="sec-missing", value="val"
-        )
+        updated = SecretVaultService.update_secret(secret_id="sec-missing", value="val")
 
         assert updated is False
         mock_audit.log.assert_not_called()

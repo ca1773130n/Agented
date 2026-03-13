@@ -74,7 +74,9 @@ def update_command(
             return False
         updates.append("updated_at = CURRENT_TIMESTAMP")
         values.append(command_id)
-        cursor = conn.execute(f"UPDATE commands SET {safe_set_clause(updates)} WHERE id = ?", values)
+        cursor = conn.execute(
+            f"UPDATE commands SET {safe_set_clause(updates)} WHERE id = ?", values
+        )
         conn.commit()
         return cursor.rowcount > 0
 

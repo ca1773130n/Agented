@@ -124,8 +124,12 @@ class TestExtractTokenUsage:
 
     def test_codex_uses_last_turn_completed(self):
         lines = [
-            json.dumps({"type": "turn.completed", "usage": {"input_tokens": 100, "output_tokens": 50}}),
-            json.dumps({"type": "turn.completed", "usage": {"input_tokens": 200, "output_tokens": 100}}),
+            json.dumps(
+                {"type": "turn.completed", "usage": {"input_tokens": 100, "output_tokens": 50}}
+            ),
+            json.dumps(
+                {"type": "turn.completed", "usage": {"input_tokens": 200, "output_tokens": 100}}
+            ),
         ]
         result = BudgetService.extract_token_usage("\n".join(lines), "codex")
         assert result["input_tokens"] == 200

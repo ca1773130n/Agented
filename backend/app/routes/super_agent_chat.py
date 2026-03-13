@@ -54,9 +54,15 @@ def _resolve_session(data: dict, super_agent_id: str, session_id: str) -> dict:
     """
     session = get_super_agent_session(session_id)
     if not session:
-        return {"error_response": error_response("NOT_FOUND", "Session not found", HTTPStatus.NOT_FOUND)}
+        return {
+            "error_response": error_response("NOT_FOUND", "Session not found", HTTPStatus.NOT_FOUND)
+        }
     if session.get("status") != "active":
-        return {"error_response": error_response("BAD_REQUEST", "Session is not active", HTTPStatus.BAD_REQUEST)}
+        return {
+            "error_response": error_response(
+                "BAD_REQUEST", "Session is not active", HTTPStatus.BAD_REQUEST
+            )
+        }
 
     backend = data.get("backend", "auto")
     effective_backend = backend if backend != "auto" else None
@@ -133,7 +139,12 @@ def _dispatch_by_mode(
             account_email=account_id,
             timeout=30,
         )
-        return {"status": "streaming", "mode": "all", "message_id": message_id, "backends": execution_map}
+        return {
+            "status": "streaming",
+            "mode": "all",
+            "message_id": message_id,
+            "backends": execution_map,
+        }
     else:  # compound
         from ..services.all_mode_service import CompoundModeService
 
@@ -147,7 +158,12 @@ def _dispatch_by_mode(
             account_email=account_id,
             timeout=30,
         )
-        return {"status": "streaming", "mode": "compound", "message_id": message_id, "backends": execution_map}
+        return {
+            "status": "streaming",
+            "mode": "compound",
+            "message_id": message_id,
+            "backends": execution_map,
+        }
 
 
 def _launch_background_thread(
@@ -306,8 +322,13 @@ def send_chat_message(path: SessionPath):
 
     if mode in ("all", "compound"):
         result = _dispatch_by_mode(
-            mode, path.session_id, path.super_agent_id,
-            effective_backend, account_id, model, message_id,
+            mode,
+            path.session_id,
+            path.super_agent_id,
+            effective_backend,
+            account_id,
+            model,
+            message_id,
         )
         return result, HTTPStatus.OK
 
