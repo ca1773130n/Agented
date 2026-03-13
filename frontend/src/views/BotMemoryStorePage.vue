@@ -1,16 +1,18 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
+import { botMemoryApi } from '../services/api/bot-memory';
+import type { BotMemorySummary } from '../services/api/bot-memory';
 
 const showToast = useToast();
 
 interface MemoryEntry {
   key: string;
   value: string;
-  updatedAt: string;
-  expiresAt: string | null;
+  updated_at: string;
+  expires_at: string | null;
   source: 'bot' | 'manual';
 }
 
@@ -22,31 +24,8 @@ interface BotMemory {
   maxBytes: number;
 }
 
-const bots = ref<BotMemory[]>([
-  {
-    botId: 'bot-security',
-    botName: 'Security Audit Bot',
-    usedBytes: 2340,
-    maxBytes: 65536,
-    entries: [
-      { key: 'last_5_audited_prs', value: '["#142","#139","#136","#133","#130"]', updatedAt: '10 min ago', expiresAt: null, source: 'bot' },
-      { key: 'known_false_positives', value: '["src/utils/crypto.ts:22","lib/auth.ts:48"]', updatedAt: '2 days ago', expiresAt: null, source: 'bot' },
-      { key: 'audit_run_count', value: '47', updatedAt: '10 min ago', expiresAt: null, source: 'bot' },
-    ],
-  },
-  {
-    botId: 'bot-pr-review',
-    botName: 'PR Review Bot',
-    usedBytes: 980,
-    maxBytes: 65536,
-    entries: [
-      { key: 'reviewer_preferences', value: '{"strictness":"medium","focus":["logic","tests"]}', updatedAt: '1 day ago', expiresAt: null, source: 'manual' },
-      { key: 'last_reviewed_pr', value: '"#145"', updatedAt: '5 min ago', expiresAt: '2026-03-13', source: 'bot' },
-    ],
-  },
-]);
-
-const selectedBotId = ref(bots.value[0]?.botId ?? null);
+const bots = ref<BotMemory[]>([]);
+const selectedBotId = ref<string | null>(null);
 const showAddModal = ref(false);
 const newKey = ref('');
 const newValue = ref('');
@@ -75,6 +54,50 @@ function formatBytes(b: number) {
   return `${(b / 1024).toFixed(1)} KB`;
 }
 
+async function loadBotList() {
+  try {
+    const res = await botMemoryApi.listAll();
+    bots.value = res.bots.map((b: BotMemorySummary) => ({
+      botId: b.bot_id,
+      botName: b.bot_name,
+      entries: [],
+      usedBytes: b.used_bytes,
+      maxBytes: 65536,
+    }));
+    if (bots.value.length > 0 && !selectedBotId.value) {
+      selectedBotId.value = bots.value[0].botId;
+      await loadBotMemory(bots.value[0].botId);
+    }
+  } catch {
+    // No memory entries yet — leave list empty
+  }
+}
+
+async function loadBotMemory(botId: string) {
+  try {
+    const res = await botMemoryApi.getBotMemory(botId);
+    const bot = bots.value.find(b => b.botId === botId);
+    if (bot) {
+      bot.entries = res.entries.map(e => ({
+        key: e.key,
+        value: e.value,
+        updated_at: e.updated_at,
+        expires_at: e.expires_at,
+        source: e.source as 'bot' | 'manual',
+      }));
+      bot.usedBytes = res.used_bytes;
+      bot.maxBytes = res.max_bytes;
+    }
+  } catch {
+    // ignore
+  }
+}
+
+async function selectBot(botId: string) {
+  selectedBotId.value = botId;
+  await loadBotMemory(botId);
+}
+
 function openAddModal() {
   newKey.value = '';
   newValue.value = '';
@@ -87,48 +110,59 @@ function openEditModal(entry: MemoryEntry) {
   editingEntry.value = entry;
   newKey.value = entry.key;
   newValue.value = entry.value;
-  newExpiry.value = entry.expiresAt ?? '';
+  newExpiry.value = entry.expires_at ?? '';
   showAddModal.value = true;
 }
 
-function saveEntry() {
+async function saveEntry() {
   if (!newKey.value.trim() || !newValue.value.trim()) {
     showToast('Key and value are required', 'error');
     return;
   }
   if (!selectedBot.value) return;
 
-  if (editingEntry.value) {
-    editingEntry.value.value = newValue.value.trim();
-    editingEntry.value.expiresAt = newExpiry.value || null;
-    editingEntry.value.updatedAt = 'just now';
-    editingEntry.value.source = 'manual';
-    showToast(`Memory key "${newKey.value}" updated`, 'success');
-  } else {
-    selectedBot.value.entries.push({
-      key: newKey.value.trim(),
+  try {
+    await botMemoryApi.upsertEntry(selectedBot.value.botId, newKey.value.trim(), {
       value: newValue.value.trim(),
-      updatedAt: 'just now',
       expiresAt: newExpiry.value || null,
-      source: 'manual',
     });
-    showToast(`Memory key "${newKey.value}" added`, 'success');
+    showToast(
+      editingEntry.value
+        ? `Memory key "${newKey.value}" updated`
+        : `Memory key "${newKey.value}" added`,
+      'success',
+    );
+    showAddModal.value = false;
+    await loadBotMemory(selectedBot.value.botId);
+  } catch {
+    showToast('Failed to save memory entry', 'error');
   }
-  showAddModal.value = false;
 }
 
-function deleteEntry(key: string) {
+async function deleteEntry(key: string) {
   if (!selectedBot.value) return;
-  const idx = selectedBot.value.entries.findIndex(e => e.key === key);
-  if (idx !== -1) selectedBot.value.entries.splice(idx, 1);
-  showToast(`Memory key "${key}" deleted`, 'success');
+  try {
+    await botMemoryApi.deleteEntry(selectedBot.value.botId, key);
+    showToast(`Memory key "${key}" deleted`, 'success');
+    await loadBotMemory(selectedBot.value.botId);
+  } catch {
+    showToast('Failed to delete memory entry', 'error');
+  }
 }
 
-function clearAllMemory() {
+async function clearAllMemory() {
   if (!selectedBot.value) return;
-  selectedBot.value.entries = [];
-  showToast(`All memory cleared for ${selectedBot.value.botName}`, 'success');
+  try {
+    await botMemoryApi.clearAll(selectedBot.value.botId);
+    showToast(`All memory cleared for ${selectedBot.value.botName}`, 'success');
+    selectedBot.value.entries = [];
+    selectedBot.value.usedBytes = 0;
+  } catch {
+    showToast('Failed to clear memory', 'error');
+  }
 }
+
+onMounted(loadBotList);
 </script>
 
 <template>
@@ -149,7 +183,7 @@ function clearAllMemory() {
           :key="bot.botId"
           class="bot-list-item"
           :class="{ selected: selectedBotId === bot.botId }"
-          @click="selectedBotId = bot.botId"
+          @click="selectBot(bot.botId)"
         >
           <div class="bot-list-name">{{ bot.botName }}</div>
           <div class="bot-list-meta">
@@ -192,8 +226,8 @@ function clearAllMemory() {
                 <code>{{ entry.value.length > 60 ? entry.value.slice(0, 60) + '…' : entry.value }}</code>
               </div>
               <span class="source-badge" :class="entry.source">{{ entry.source }}</span>
-              <span class="entry-meta">{{ entry.updatedAt }}</span>
-              <span class="entry-meta">{{ entry.expiresAt ?? '—' }}</span>
+              <span class="entry-meta">{{ entry.updated_at }}</span>
+              <span class="entry-meta">{{ entry.expires_at ?? '—' }}</span>
               <div class="entry-actions">
                 <button class="icon-btn" @click="openEditModal(entry)" title="Edit">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
