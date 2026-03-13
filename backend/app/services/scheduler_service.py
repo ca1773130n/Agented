@@ -235,14 +235,19 @@ class SchedulerService:
                 session_id = SuperAgentSessionService.get_or_create_session(
                     trigger_data["super_agent_id"]
                 )
-                SuperAgentSessionService.send_message(session_id, trigger_data["prompt_template"])
+                # Render prompt template — replace placeholders with scheduled context
+                prompt_template = trigger_data.get("prompt_template") or ""
+                rendered_prompt = prompt_template.replace(
+                    "{message}", f"Scheduled execution of trigger {trigger_id}"
+                )
+                SuperAgentSessionService.send_message(session_id, rendered_prompt)
                 exec_id = f"exec-{trigger_id}-{int(time.time())}"
                 create_execution_log(
                     execution_id=exec_id,
                     trigger_id=trigger_id,
                     trigger_type="scheduled",
                     started_at=datetime.now(timezone.utc).isoformat(),
-                    prompt=trigger_data["prompt_template"],
+                    prompt=rendered_prompt,
                     backend_type=trigger_data.get("backend_type", "claude"),
                     command="",
                     source_type="super_agent",

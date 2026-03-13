@@ -48,6 +48,8 @@ def create_fresh_schema(conn):
             allowed_tools TEXT,
             sigterm_grace_seconds INTEGER,
             cron_expression TEXT,
+            dispatch_type TEXT DEFAULT 'bot',
+            super_agent_id TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """)

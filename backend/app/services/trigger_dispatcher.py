@@ -281,6 +281,52 @@ def dispatch_github_event(repo_url: str, pr_data: dict, save_trigger_event_fn=No
         # Save trigger event
         save_trigger_event_fn(trigger, event)
 
+        # Route to super agent session if dispatch_type is configured
+        if trigger.get("dispatch_type") == "super_agent" and trigger.get("super_agent_id"):
+            from .super_agent_session_service import (
+                SuperAgentSessionService,
+                SessionLimitError,
+            )
+            from ..db.triggers import create_execution_log
+            from ..db.ids import generate_execution_id
+
+            prompt_template = trigger.get("prompt_template") or "{message}"
+            rendered_prompt = prompt_template.replace("{message}", message_text)
+            execution_id = generate_execution_id(trigger["id"])
+            started_at = datetime.datetime.now().isoformat()
+
+            try:
+                session_id = SuperAgentSessionService.get_or_create_session(
+                    trigger["super_agent_id"]
+                )
+                SuperAgentSessionService.send_message(session_id, rendered_prompt)
+                create_execution_log(
+                    execution_id=execution_id,
+                    trigger_id=trigger["id"],
+                    trigger_type="github",
+                    started_at=started_at,
+                    prompt=rendered_prompt,
+                    backend_type="super_agent",
+                    command="",
+                    source_type="super_agent",
+                    session_id=session_id,
+                )
+                triggered = True
+            except SessionLimitError as exc:
+                create_execution_log(
+                    execution_id=execution_id,
+                    trigger_id=trigger["id"],
+                    trigger_type="github",
+                    started_at=started_at,
+                    prompt=rendered_prompt,
+                    backend_type="super_agent",
+                    command="",
+                    source_type="super_agent",
+                    status="failed",
+                    stderr_log=str(exc),
+                )
+            continue
+
         # Enqueue for dispatch via ExecutionQueueService (replaces direct thread spawn)
         from .execution_queue_service import ExecutionQueueService, QueueFullError
 
@@ -384,6 +430,52 @@ def dispatch_pr_comment_commands(
         }
 
         save_trigger_event_fn(trigger, event)
+
+        # Route to super agent session if dispatch_type is configured
+        if trigger.get("dispatch_type") == "super_agent" and trigger.get("super_agent_id"):
+            from .super_agent_session_service import (
+                SuperAgentSessionService,
+                SessionLimitError,
+            )
+            from ..db.triggers import create_execution_log
+            from ..db.ids import generate_execution_id
+
+            prompt_template = trigger.get("prompt_template") or "{message}"
+            rendered_prompt = prompt_template.replace("{message}", message_text)
+            execution_id = generate_execution_id(trigger["id"])
+            started_at = datetime.datetime.now().isoformat()
+
+            try:
+                session_id = SuperAgentSessionService.get_or_create_session(
+                    trigger["super_agent_id"]
+                )
+                SuperAgentSessionService.send_message(session_id, rendered_prompt)
+                create_execution_log(
+                    execution_id=execution_id,
+                    trigger_id=trigger["id"],
+                    trigger_type="github_pr_comment",
+                    started_at=started_at,
+                    prompt=rendered_prompt,
+                    backend_type="super_agent",
+                    command="",
+                    source_type="super_agent",
+                    session_id=session_id,
+                )
+                triggered = True
+            except SessionLimitError as exc:
+                create_execution_log(
+                    execution_id=execution_id,
+                    trigger_id=trigger["id"],
+                    trigger_type="github_pr_comment",
+                    started_at=started_at,
+                    prompt=rendered_prompt,
+                    backend_type="super_agent",
+                    command="",
+                    source_type="super_agent",
+                    status="failed",
+                    stderr_log=str(exc),
+                )
+            continue
 
         from .execution_queue_service import ExecutionQueueService, QueueFullError
 

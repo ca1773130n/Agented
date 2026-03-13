@@ -40,7 +40,7 @@ class SuperAgentSessionService:
     CHARS_PER_TOKEN = 4  # Approximate: 4 chars ~ 1 token
 
     _active_sessions: Dict[str, dict] = {}
-    _lock = threading.Lock()
+    _lock = threading.RLock()
 
     @classmethod
     def create_session(cls, super_agent_id: str) -> Tuple[Optional[str], Optional[str]]:
@@ -98,14 +98,14 @@ class SuperAgentSessionService:
             else:
                 paused_session_id = None
 
-        if paused_session_id is not None:
-            cls.resume_session(paused_session_id)
-            return paused_session_id
+            if paused_session_id is not None:
+                cls.resume_session(paused_session_id)
+                return paused_session_id
 
-        session_id, error = cls.create_session(super_agent_id)
-        if session_id is None:
-            raise SessionLimitError(error or "Failed to create session")
-        return session_id
+            session_id, error = cls.create_session(super_agent_id)
+            if session_id is None:
+                raise SessionLimitError(error or "Failed to create session")
+            return session_id
 
     @classmethod
     def send_message(
