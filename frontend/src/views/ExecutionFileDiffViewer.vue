@@ -1,8 +1,10 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
+import { executionApi } from '../services/api/triggers';
+import type { Execution } from '../services/api/types';
 const router = useRouter();
 
 interface FileDiff {
@@ -23,79 +25,32 @@ interface DiffLine {
   content: string;
   oldLineNo: number | null;
   newLineNo: number | null;
-  comment?: string;
 }
 
-interface Execution {
-  id: string;
-  botName: string;
-  runAt: string;
-  status: 'success' | 'failed';
-  filesChanged: number;
-}
+const executions = ref<Execution[]>([]);
+const diffs = ref<FileDiff[]>([]);
+const selectedExec = ref<Execution | null>(null);
+const selectedFile = ref<FileDiff | null>(null);
+const loadingExecs = ref(false);
+const loadingDiffs = ref(false);
 
-const executions = ref<Execution[]>([
-  { id: 'exec-001', botName: 'bot-pr-review', runAt: '2026-03-06T14:22:00Z', status: 'success', filesChanged: 4 },
-  { id: 'exec-002', botName: 'bot-security', runAt: '2026-03-06T12:00:00Z', status: 'success', filesChanged: 2 },
-  { id: 'exec-003', botName: 'bot-pr-review', runAt: '2026-03-05T18:30:00Z', status: 'success', filesChanged: 7 },
-]);
-
-const diffs = ref<FileDiff[]>([
-  {
-    path: 'src/auth/middleware.ts',
-    status: 'modified',
-    additions: 12,
-    deletions: 3,
-    chunks: [
-      {
-        header: '@@ -8,7 +8,16 @@',
-        lines: [
-          { type: 'context', content: ' import { Request, Response, NextFunction } from "express";', oldLineNo: 8, newLineNo: 8 },
-          { type: 'removed', content: '-export function authMiddleware(req: Request, res: Response, next: NextFunction) {', oldLineNo: 9, newLineNo: null },
-          { type: 'added', content: '+export function authMiddleware(req: Request, res: Response, next: NextFunction): void {', oldLineNo: null, newLineNo: 9, comment: 'Added explicit return type for type safety' },
-          { type: 'added', content: '+  if (!req.headers.authorization) {', oldLineNo: null, newLineNo: 10 },
-          { type: 'added', content: '+    res.status(401).json({ error: "Unauthorized" });', oldLineNo: null, newLineNo: 11 },
-          { type: 'added', content: '+    return;', oldLineNo: null, newLineNo: 12 },
-          { type: 'added', content: '+  }', oldLineNo: null, newLineNo: 13 },
-          { type: 'context', content: '   next();', oldLineNo: 10, newLineNo: 14 },
-          { type: 'context', content: ' }', oldLineNo: 11, newLineNo: 15 },
-        ],
-      },
-    ],
-  },
-  {
-    path: 'src/utils/validation.ts',
-    status: 'added',
-    additions: 28,
-    deletions: 0,
-    chunks: [
-      {
-        header: '@@ -0,0 +1,28 @@',
-        lines: [
-          { type: 'added', content: '+export function validateEmail(email: string): boolean {', oldLineNo: null, newLineNo: 1, comment: 'New validation utility extracted by bot' },
-          { type: 'added', content: '+  return /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email);', oldLineNo: null, newLineNo: 2 },
-          { type: 'added', content: '+}', oldLineNo: null, newLineNo: 3 },
-        ],
-      },
-    ],
-  },
-]);
-
-const selectedExec = ref<Execution>(executions.value[0]);
-const selectedFile = ref<FileDiff>(diffs.value[0]);
-const expandedComments = ref<Set<number>>(new Set());
-
-function selectExec(e: Execution) {
-  selectedExec.value = e;
-  selectedFile.value = diffs.value[0];
-}
-
-function toggleComment(idx: number) {
-  if (expandedComments.value.has(idx)) {
-    expandedComments.value.delete(idx);
-  } else {
-    expandedComments.value.add(idx);
+async function loadDiffs(executionId: string) {
+  loadingDiffs.value = true;
+  try {
+    const result = await executionApi.getDiff(executionId);
+    diffs.value = result.diffs as FileDiff[];
+    selectedFile.value = diffs.value.length > 0 ? diffs.value[0] : null;
+  } catch {
+    diffs.value = [];
+    selectedFile.value = null;
+  } finally {
+    loadingDiffs.value = false;
   }
+}
+
+async function selectExec(e: Execution) {
+  selectedExec.value = e;
+  await loadDiffs(e.execution_id);
 }
 
 function formatDate(ts: string) {
@@ -106,6 +61,22 @@ const totalChanges = computed(() => ({
   additions: diffs.value.reduce((s, f) => s + f.additions, 0),
   deletions: diffs.value.reduce((s, f) => s + f.deletions, 0),
 }));
+
+onMounted(async () => {
+  loadingExecs.value = true;
+  try {
+    const result = await executionApi.listAll({ limit: 20 });
+    executions.value = result.executions;
+    if (executions.value.length > 0) {
+      selectedExec.value = executions.value[0];
+      await loadDiffs(executions.value[0].execution_id);
+    }
+  } catch {
+    executions.value = [];
+  } finally {
+    loadingExecs.value = false;
+  }
+});
 </script>
 
 <template>
@@ -125,28 +96,32 @@ const totalChanges = computed(() => ({
       <aside class="sidebar">
         <div class="sidebar-section">
           <div class="sidebar-title">Recent Executions</div>
+          <div v-if="loadingExecs" class="sidebar-empty">Loading...</div>
+          <div v-else-if="executions.length === 0" class="sidebar-empty">No executions found</div>
           <div
             v-for="e in executions"
-            :key="e.id"
+            :key="e.execution_id"
             class="exec-item"
-            :class="{ active: selectedExec.id === e.id }"
+            :class="{ active: selectedExec?.execution_id === e.execution_id }"
             @click="selectExec(e)"
           >
-            <div class="exec-bot">{{ e.botName }}</div>
+            <div class="exec-bot">{{ e.trigger_name }}</div>
             <div class="exec-meta">
-              <span class="exec-date">{{ formatDate(e.runAt) }}</span>
-              <span class="exec-files">{{ e.filesChanged }} files</span>
+              <span class="exec-date">{{ formatDate(e.started_at) }}</span>
+              <span class="exec-files">{{ selectedExec?.execution_id === e.execution_id ? diffs.length : '–' }} files</span>
             </div>
           </div>
         </div>
 
         <div class="sidebar-section">
           <div class="sidebar-title">Changed Files</div>
+          <div v-if="loadingDiffs" class="sidebar-empty">Loading diffs...</div>
+          <div v-else-if="diffs.length === 0" class="sidebar-empty">No diffs found</div>
           <div
             v-for="f in diffs"
             :key="f.path"
             class="file-item"
-            :class="{ active: selectedFile.path === f.path }"
+            :class="{ active: selectedFile?.path === f.path }"
             @click="selectedFile = f"
           >
             <span :class="['file-status', `status-${f.status}`]">{{ f.status[0].toUpperCase() }}</span>
@@ -161,15 +136,15 @@ const totalChanges = computed(() => ({
 
       <!-- Diff panel -->
       <main class="diff-main">
-        <div class="diff-summary card">
-          <div class="summary-item"><span class="summary-label">Execution</span><span class="summary-val">{{ selectedExec.id }}</span></div>
-          <div class="summary-item"><span class="summary-label">Bot</span><span class="summary-val">{{ selectedExec.botName }}</span></div>
+        <div v-if="selectedExec" class="diff-summary card">
+          <div class="summary-item"><span class="summary-label">Execution</span><span class="summary-val">{{ selectedExec.execution_id }}</span></div>
+          <div class="summary-item"><span class="summary-label">Bot</span><span class="summary-val">{{ selectedExec.trigger_name }}</span></div>
           <div class="summary-item"><span class="summary-label">Files changed</span><span class="summary-val">{{ diffs.length }}</span></div>
           <div class="summary-item"><span class="summary-label">Additions</span><span class="additions">+{{ totalChanges.additions }}</span></div>
           <div class="summary-item"><span class="summary-label">Deletions</span><span class="deletions">-{{ totalChanges.deletions }}</span></div>
         </div>
 
-        <div class="diff-card card">
+        <div v-if="selectedFile" class="diff-card card">
           <div class="diff-file-header">
             <span :class="['file-badge', `status-${selectedFile.status}`]">{{ selectedFile.status }}</span>
             <span class="diff-filename">{{ selectedFile.path }}</span>
@@ -181,16 +156,12 @@ const totalChanges = computed(() => ({
               <span class="line-num">{{ line.oldLineNo ?? '' }}</span>
               <span class="line-num">{{ line.newLineNo ?? '' }}</span>
               <span class="line-content">{{ line.content }}</span>
-              <button
-                v-if="line.comment"
-                class="comment-toggle"
-                @click="toggleComment(li)"
-              >💬</button>
-              <div v-if="line.comment && expandedComments.has(li)" class="line-comment">
-                {{ line.comment }}
-              </div>
             </div>
           </div>
+        </div>
+
+        <div v-else-if="!loadingDiffs && selectedExec" class="empty-state card">
+          <p>No unified diff output found in this execution's logs.</p>
         </div>
       </main>
     </div>
@@ -213,6 +184,8 @@ const totalChanges = computed(() => ({
   padding: 12px 16px; font-size: 0.72rem; font-weight: 600; color: var(--text-tertiary);
   text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid var(--border-default);
 }
+
+.sidebar-empty { padding: 12px 16px; font-size: 0.75rem; color: var(--text-muted); }
 
 .exec-item {
   padding: 10px 16px; cursor: pointer; border-bottom: 1px solid var(--border-subtle);
@@ -272,13 +245,8 @@ const totalChanges = computed(() => ({
 .line-context { }
 .line-num { width: 36px; padding: 4px 8px; color: var(--text-muted); text-align: right; user-select: none; flex-shrink: 0; }
 .line-content { flex: 1; padding: 4px 8px; color: var(--text-secondary); white-space: pre-wrap; word-break: break-all; }
-.comment-toggle { background: none; border: none; cursor: pointer; padding: 4px; font-size: 0.82rem; opacity: 0.7; }
-.comment-toggle:hover { opacity: 1; }
-.line-comment {
-  width: 100%; padding: 8px 60px; background: rgba(251,191,36,0.06);
-  border-top: 1px solid rgba(251,191,36,0.15); font-size: 0.75rem; color: #fbbf24;
-  font-family: inherit;
-}
+
+.empty-state { padding: 32px 24px; text-align: center; color: var(--text-muted); font-size: 0.85rem; }
 
 @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
 </style>

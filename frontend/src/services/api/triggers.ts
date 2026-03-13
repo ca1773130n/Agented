@@ -313,6 +313,23 @@ export const executionApi = {
       method: 'DELETE',
     }),
 
+  // Get file diffs extracted from stdout_log of an execution
+  getDiff: (executionId: string) => apiFetch<{ diffs: Array<{
+    path: string;
+    status: 'added' | 'modified' | 'deleted';
+    additions: number;
+    deletions: number;
+    chunks: Array<{
+      header: string;
+      lines: Array<{
+        type: 'context' | 'added' | 'removed';
+        content: string;
+        oldLineNo: number | null;
+        newLineNo: number | null;
+      }>;
+    }>;
+  }> }>(`/admin/executions/${executionId}/diff`),
+
   // Create SSE connection for real-time log streaming with exponential backoff reconnection
   streamLogs: (executionId: string, options?: AuthenticatedEventSourceOptions): AuthenticatedEventSource => {
     return createAuthenticatedEventSource(`${API_BASE}/admin/executions/${executionId}/stream`, options);
@@ -366,4 +383,28 @@ export const prReviewApi = {
   delete: (id: number) => apiFetch<{ message: string }>(`/api/pr-reviews/${id}`, {
     method: 'DELETE',
   }),
+
+  getLearningLoop: () => apiFetch<{
+    signals: Array<{
+      id: string;
+      category: 'security' | 'style' | 'performance' | 'correctness' | 'docs';
+      pattern: string;
+      acceptedCount: number;
+      dismissedCount: number;
+      commentedCount: number;
+      resolvedCount: number;
+      acceptRate: number;
+      trend: 'up' | 'down' | 'stable';
+      lastSeen: string;
+      examplePromptFragment: string;
+    }>;
+    suggestions: Array<{
+      id: string;
+      type: 'suppress' | 'promote' | 'reword';
+      category: 'security' | 'style' | 'performance' | 'correctness' | 'docs';
+      description: string;
+      impact: 'high' | 'medium' | 'low';
+      appliedAt?: string;
+    }>;
+  }>('/api/pr-reviews/learning-loop'),
 };

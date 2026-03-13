@@ -124,6 +124,142 @@ def get_execution(path: ExecutionPath):
     return execution, HTTPStatus.OK
 
 
+@executions_bp.get("/executions/<execution_id>/diff")
+def get_execution_diff(path: ExecutionPath):
+    """Parse stdout_log for unified diff blocks and return structured file diffs."""
+    import re
+
+    execution = ExecutionLogService.get_execution(path.execution_id)
+    if not execution:
+        return error_response("NOT_FOUND", "Execution not found", HTTPStatus.NOT_FOUND)
+
+    stdout_log = execution.get("stdout_log") or ""
+
+    diffs = []
+    try:
+        import unidiff
+
+        patch_set = unidiff.PatchSet(stdout_log)
+        for patched_file in patch_set:
+            file_path = patched_file.path
+            additions = patched_file.added
+            deletions = patched_file.removed
+
+            if patched_file.is_added_file:
+                status = "added"
+            elif patched_file.is_removed_file:
+                status = "deleted"
+            else:
+                status = "modified"
+
+            chunks = []
+            for hunk in patched_file:
+                lines = []
+                old_no = hunk.source_start
+                new_no = hunk.target_start
+                for hunk_line in hunk:
+                    if hunk_line.is_context:
+                        lines.append(
+                            {
+                                "type": "context",
+                                "content": hunk_line.value.rstrip("\n"),
+                                "oldLineNo": old_no,
+                                "newLineNo": new_no,
+                            }
+                        )
+                        old_no += 1
+                        new_no += 1
+                    elif hunk_line.is_added:
+                        lines.append(
+                            {
+                                "type": "added",
+                                "content": hunk_line.value.rstrip("\n"),
+                                "oldLineNo": None,
+                                "newLineNo": new_no,
+                            }
+                        )
+                        new_no += 1
+                    elif hunk_line.is_removed:
+                        lines.append(
+                            {
+                                "type": "removed",
+                                "content": hunk_line.value.rstrip("\n"),
+                                "oldLineNo": old_no,
+                                "newLineNo": None,
+                            }
+                        )
+                        old_no += 1
+                chunks.append({"header": str(hunk.section_header).strip() or f"@@ -{hunk.source_start},{hunk.source_length} +{hunk.target_start},{hunk.target_length} @@", "lines": lines})
+
+            diffs.append(
+                {
+                    "path": file_path,
+                    "status": status,
+                    "additions": additions,
+                    "deletions": deletions,
+                    "chunks": chunks,
+                }
+            )
+    except Exception:
+        # Fallback: simple regex parsing
+        diff_header_re = re.compile(r"^diff --git a/(.+) b/(.+)$", re.MULTILINE)
+        hunk_header_re = re.compile(r"^(@@ -\d+(?:,\d+)? \+\d+(?:,\d+)? @@[^\n]*)$", re.MULTILINE)
+
+        raw_files = re.split(r"(?=^diff --git )", stdout_log, flags=re.MULTILINE)
+        for raw_file in raw_files:
+            if not raw_file.strip():
+                continue
+            m = diff_header_re.match(raw_file)
+            if not m:
+                continue
+            file_path = m.group(2)
+
+            is_new = bool(re.search(r"^new file mode", raw_file, re.MULTILINE))
+            is_del = bool(re.search(r"^deleted file mode", raw_file, re.MULTILINE))
+            status = "added" if is_new else "deleted" if is_del else "modified"
+
+            additions = len(re.findall(r"^\+(?!\+\+)", raw_file, re.MULTILINE))
+            deletions = len(re.findall(r"^-(?!--)", raw_file, re.MULTILINE))
+
+            chunks = []
+            hunk_parts = hunk_header_re.split(raw_file)
+            # hunk_parts[0] is before first hunk; then alternating header, body
+            i = 1
+            while i < len(hunk_parts) - 1:
+                header = hunk_parts[i]
+                body = hunk_parts[i + 1]
+                i += 2
+                lines = []
+                old_match = re.search(r"-(\d+)", header)
+                new_match = re.search(r"\+(\d+)", header)
+                old_no = int(old_match.group(1)) if old_match else 1
+                new_no = int(new_match.group(1)) if new_match else 1
+                for raw_line in body.splitlines():
+                    if raw_line.startswith("+"):
+                        lines.append({"type": "added", "content": raw_line, "oldLineNo": None, "newLineNo": new_no})
+                        new_no += 1
+                    elif raw_line.startswith("-"):
+                        lines.append({"type": "removed", "content": raw_line, "oldLineNo": old_no, "newLineNo": None})
+                        old_no += 1
+                    elif raw_line.startswith(" "):
+                        lines.append({"type": "context", "content": raw_line, "oldLineNo": old_no, "newLineNo": new_no})
+                        old_no += 1
+                        new_no += 1
+                chunks.append({"header": header, "lines": lines})
+
+            diffs.append(
+                {
+                    "path": file_path,
+                    "status": status,
+                    "additions": additions,
+                    "deletions": deletions,
+                    "chunks": chunks,
+                }
+            )
+
+    return {"diffs": diffs}, HTTPStatus.OK
+
+
 @executions_bp.get("/executions/<execution_id>/stream")
 def stream_execution(path: ExecutionPath):
     """SSE endpoint for real-time log streaming.
