@@ -1,136 +1,72 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, watch, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
+import { projectApi, projectHealthApi } from '../services/api';
+import type { Project, HealthCategory, HealthSignal, HealthRecommendation } from '../services/api';
 
 const router = useRouter();
 
-interface Project {
-  id: string;
-  name: string;
-}
-
-interface Category {
-  id: string;
-  name: string;
-  score: number;
-  trend: number;
-  icon: string;
-  bars: number[];
-}
-
-interface SignalRow {
-  id: string;
-  bot: string;
-  metric: string;
-  current: string;
-  previous: string;
-  impact: number;
-  status: 'good' | 'warn' | 'bad';
-}
-
-interface Recommendation {
-  id: string;
-  title: string;
-  description: string;
-  priority: 'high' | 'medium' | 'low';
-  category: string;
-}
-
-const projects = ref<Project[]>([
-  { id: 'proj-aaa', name: 'Agented Platform' },
-  { id: 'proj-bbb', name: 'API Gateway' },
-  { id: 'proj-ccc', name: 'Frontend Dashboard' },
-]);
-
-const selectedProjectId = ref('proj-aaa');
+const projects = ref<Project[]>([]);
+const selectedProjectId = ref('');
 
 const selectedProject = computed(() =>
   projects.value.find(p => p.id === selectedProjectId.value) ?? projects.value[0]
 );
 
-const overallScore = ref(78);
-const trendDelta = ref(3);
+const overallScore = ref(0);
+const trendDelta = ref(0);
+const weeklyHistory = ref<number[]>([]);
+const maxHistory = computed(() => Math.max(...weeklyHistory.value, 1));
+const categories = ref<HealthCategory[]>([]);
+const signals = ref<HealthSignal[]>([]);
+const recommendations = ref<HealthRecommendation[]>([]);
+const lastUpdated = ref('');
+const loading = ref(false);
 
-const weeklyHistory = ref([72, 74, 71, 75, 73, 76, 75, 78]);
-const maxHistory = computed(() => Math.max(...weeklyHistory.value));
+async function loadScorecard(projectId: string) {
+  if (!projectId) return;
+  loading.value = true;
+  try {
+    const data = await projectHealthApi.getScorecard(projectId);
+    overallScore.value = data.overall_score;
+    trendDelta.value = data.trend_delta;
+    weeklyHistory.value = data.weekly_history;
+    categories.value = data.categories;
+    signals.value = data.signals;
+    recommendations.value = data.recommendations;
+    lastUpdated.value = data.last_updated;
+  } catch (err) {
+    console.error('Failed to load health scorecard:', err);
+    overallScore.value = 0;
+    trendDelta.value = 0;
+    weeklyHistory.value = [];
+    categories.value = [];
+    signals.value = [];
+    recommendations.value = [];
+    lastUpdated.value = '';
+  } finally {
+    loading.value = false;
+  }
+}
 
-const categories = ref<Category[]>([
-  {
-    id: 'security',
-    name: 'Security',
-    score: 65,
-    trend: -2,
-    icon: 'shield',
-    bars: [68, 70, 67, 65, 66, 64, 65, 65],
-  },
-  {
-    id: 'test-coverage',
-    name: 'Test Coverage',
-    score: 82,
-    trend: 5,
-    icon: 'check-circle',
-    bars: [74, 76, 77, 78, 79, 80, 81, 82],
-  },
-  {
-    id: 'pr-velocity',
-    name: 'PR Velocity',
-    score: 88,
-    trend: 1,
-    icon: 'git-pull-request',
-    bars: [84, 85, 86, 85, 87, 86, 88, 88],
-  },
-  {
-    id: 'dependency-health',
-    name: 'Dependency Health',
-    score: 71,
-    trend: -3,
-    icon: 'package',
-    bars: [76, 75, 74, 73, 73, 72, 72, 71],
-  },
-]);
+watch(selectedProjectId, (newId) => {
+  loadScorecard(newId);
+});
 
-const signals = ref<SignalRow[]>([
-  { id: 's-1', bot: 'bot-security', metric: 'Critical CVEs', current: '3', previous: '1', impact: -8, status: 'bad' },
-  { id: 's-2', bot: 'bot-security', metric: 'High CVEs', current: '7', previous: '9', impact: 3, status: 'warn' },
-  { id: 's-3', bot: 'bot-pr-review', metric: 'Avg Review Time', current: '1.8h', previous: '2.1h', impact: 2, status: 'good' },
-  { id: 's-4', bot: 'bot-pr-review', metric: 'PR Merge Rate', current: '94%', previous: '91%', impact: 3, status: 'good' },
-  { id: 's-5', bot: 'bot-test-coverage', metric: 'Line Coverage', current: '82%', previous: '77%', impact: 5, status: 'good' },
-  { id: 's-6', bot: 'bot-deps', metric: 'Outdated Packages', current: '14', previous: '11', impact: -5, status: 'warn' },
-  { id: 's-7', bot: 'bot-deps', metric: 'License Issues', current: '2', previous: '0', impact: -3, status: 'bad' },
-]);
-
-const recommendations = ref<Recommendation[]>([
-  {
-    id: 'rec-1',
-    title: 'Patch 3 critical CVEs in dependencies',
-    description: 'bot-security flagged lodash, axios, and jsonwebtoken with critical severity vulnerabilities. Update to patched versions immediately.',
-    priority: 'high',
-    category: 'Security',
-  },
-  {
-    id: 'rec-2',
-    title: 'Resolve 2 license compliance violations',
-    description: 'Two packages use GPL-3.0 licenses incompatible with your project license. Replace or seek exemptions.',
-    priority: 'high',
-    category: 'Dependency Health',
-  },
-  {
-    id: 'rec-3',
-    title: 'Increase unit test coverage for services layer',
-    description: 'Coverage in src/services/ sits at 61%. Adding tests for execution and orchestration paths would push the overall score above 85.',
-    priority: 'medium',
-    category: 'Test Coverage',
-  },
-  {
-    id: 'rec-4',
-    title: 'Update 14 outdated packages to latest minor versions',
-    description: 'Running npm audit fix --force will resolve most outdated packages. Review any breaking changes before merging.',
-    priority: 'low',
-    category: 'Dependency Health',
-  },
-]);
+onMounted(async () => {
+  try {
+    const res = await projectApi.list();
+    projects.value = res.projects ?? [];
+    if (projects.value.length > 0) {
+      selectedProjectId.value = projects.value[0].id;
+      await loadScorecard(selectedProjectId.value);
+    }
+  } catch (err) {
+    console.error('Failed to load projects:', err);
+  }
+});
 
 function scoreColor(score: number): string {
   if (score >= 80) return '#34d399';
@@ -150,13 +86,15 @@ function scoreBorderColor(score: number): string {
   return '#ef4444';
 }
 
-function trendClass(trend: number): string {
+function trendClass(trend: number | null): string {
+  if (trend == null) return 'trend-flat';
   if (trend > 0) return 'trend-up';
   if (trend < 0) return 'trend-down';
   return 'trend-flat';
 }
 
-function trendLabel(trend: number): string {
+function trendLabel(trend: number | null): string {
+  if (trend == null) return '— N/A';
   if (trend > 0) return `↑ +${trend}`;
   if (trend < 0) return `↓ ${trend}`;
   return '→ 0';
@@ -173,13 +111,13 @@ function impactLabel(impact: number): string {
   return `${impact} pts`;
 }
 
-function statusClass(status: SignalRow['status']): string {
+function statusClass(status: HealthSignal['status']): string {
   if (status === 'good') return 'badge-good';
   if (status === 'warn') return 'badge-warn';
   return 'badge-bad';
 }
 
-function priorityClass(priority: Recommendation['priority']): string {
+function priorityClass(priority: HealthRecommendation['priority']): string {
   if (priority === 'high') return 'priority-high';
   if (priority === 'medium') return 'priority-medium';
   return 'priority-low';
@@ -192,8 +130,18 @@ function barHeightPct(val: number): number {
 }
 
 function historyBarHeightPct(val: number): number {
+  if (weeklyHistory.value.length === 0) return 0;
   const min = Math.min(...weeklyHistory.value) - 5;
   return Math.round(((val - min) / (maxHistory.value - min)) * 100);
+}
+
+function formatLastUpdated(iso: string): string {
+  if (!iso) return 'N/A';
+  try {
+    return new Date(iso).toLocaleString();
+  } catch {
+    return iso;
+  }
 }
 </script>
 
@@ -215,7 +163,9 @@ function historyBarHeightPct(val: number): number {
       <select v-model="selectedProjectId" class="project-select">
         <option v-for="p in projects" :key="p.id" :value="p.id">{{ p.name }}</option>
       </select>
-      <span class="selector-meta">Last updated: just now</span>
+      <span class="selector-meta">
+        Last updated: {{ lastUpdated ? formatLastUpdated(lastUpdated) : (loading ? 'Loading…' : 'N/A') }}
+      </span>
     </div>
 
     <!-- Hero Score -->
@@ -234,7 +184,7 @@ function historyBarHeightPct(val: number): number {
           <span class="score-denom">/100</span>
         </div>
         <div class="hero-meta">
-          <div class="hero-project">{{ selectedProject.name }}</div>
+          <div class="hero-project">{{ selectedProject?.name ?? '—' }}</div>
           <div class="hero-label">Overall Health Score</div>
           <div :class="['hero-trend', trendDelta > 0 ? 'trend-up' : 'trend-down']">
             {{ trendDelta > 0 ? '↑' : '↓' }} {{ trendDelta > 0 ? '+' : '' }}{{ trendDelta }} from last week
@@ -247,7 +197,7 @@ function historyBarHeightPct(val: number): number {
     </div>
 
     <!-- Category Cards 2x2 -->
-    <div class="categories-grid">
+    <div class="categories-grid" v-if="categories.length > 0">
       <div
         v-for="cat in categories"
         :key="cat.id"
@@ -257,34 +207,40 @@ function historyBarHeightPct(val: number): number {
           <span class="cat-name">{{ cat.name }}</span>
           <span :class="['cat-trend', trendClass(cat.trend)]">{{ trendLabel(cat.trend) }}</span>
         </div>
-        <div class="cat-score" :style="{ color: scoreColor(cat.score) }">{{ cat.score }}</div>
-        <div class="cat-score-label">/ 100</div>
-        <div class="cat-bar-track">
-          <div
-            class="cat-bar-fill"
-            :style="{
-              width: cat.score + '%',
-              background: scoreColor(cat.score),
-            }"
-          ></div>
-        </div>
-        <!-- Mini sparkline -->
-        <div class="sparkline">
-          <div
-            v-for="(val, i) in cat.bars"
-            :key="i"
-            class="spark-bar"
-            :style="{
-              height: barHeightPct(val) + '%',
-              background: i === cat.bars.length - 1 ? scoreColor(cat.score) : 'var(--border-default)',
-            }"
-          ></div>
-        </div>
+        <template v-if="cat.score !== null">
+          <div class="cat-score" :style="{ color: scoreColor(cat.score) }">{{ cat.score }}</div>
+          <div class="cat-score-label">/ 100</div>
+          <div class="cat-bar-track">
+            <div
+              class="cat-bar-fill"
+              :style="{
+                width: cat.score + '%',
+                background: scoreColor(cat.score),
+              }"
+            ></div>
+          </div>
+          <!-- Mini sparkline -->
+          <div class="sparkline">
+            <div
+              v-for="(val, i) in cat.bars"
+              :key="i"
+              class="spark-bar"
+              :style="{
+                height: barHeightPct(val) + '%',
+                background: i === cat.bars.length - 1 ? scoreColor(cat.score) : 'var(--border-default)',
+              }"
+            ></div>
+          </div>
+        </template>
+        <template v-else>
+          <div class="cat-score cat-score-na">N/A</div>
+          <div class="cat-score-label">No data</div>
+        </template>
       </div>
     </div>
 
     <!-- Signal Breakdown Table -->
-    <div class="card">
+    <div class="card" v-if="signals.length > 0">
       <div class="card-header">
         <h3>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="18" height="18">
@@ -329,7 +285,7 @@ function historyBarHeightPct(val: number): number {
     </div>
 
     <!-- Weekly Score History -->
-    <div class="card">
+    <div class="card" v-if="weeklyHistory.length > 0">
       <div class="card-header">
         <h3>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="18" height="18">
@@ -371,7 +327,7 @@ function historyBarHeightPct(val: number): number {
     </div>
 
     <!-- Recommendations -->
-    <div class="card">
+    <div class="card" v-if="recommendations.length > 0">
       <div class="card-header">
         <h3>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="18" height="18">
@@ -398,6 +354,15 @@ function historyBarHeightPct(val: number): number {
           </div>
         </div>
       </div>
+    </div>
+
+    <!-- Empty state -->
+    <div class="card empty-card" v-if="!loading && projects.length === 0">
+      <p class="empty-text">No projects found. Create a project to see health data.</p>
+    </div>
+
+    <div class="card empty-card" v-else-if="!loading && weeklyHistory.length === 0 && signals.length === 0 && selectedProjectId">
+      <p class="empty-text">No execution data available for this project yet.</p>
     </div>
   </div>
 </template>
@@ -592,6 +557,10 @@ function historyBarHeightPct(val: number): number {
   font-weight: 800;
   line-height: 1.1;
   letter-spacing: -0.02em;
+}
+
+.cat-score-na {
+  color: var(--text-tertiary);
 }
 
 .cat-score-label {
@@ -912,6 +881,18 @@ function historyBarHeightPct(val: number): number {
   color: var(--text-secondary);
   margin: 0;
   line-height: 1.55;
+}
+
+/* Empty state */
+.empty-card {
+  padding: 40px;
+  text-align: center;
+}
+
+.empty-text {
+  font-size: 0.9rem;
+  color: var(--text-tertiary);
+  margin: 0;
 }
 
 /* Buttons */

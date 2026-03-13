@@ -40,6 +40,7 @@ from ..services.harness_service import HarnessService
 from ..services.project_deploy_service import ProjectDeployService
 from ..services.project_install_service import ProjectInstallService
 from ..services.project_workspace_service import ProjectWorkspaceService
+from ..services.project_health_service import ProjectHealthService
 from ..services.team_execution_service import TeamExecutionService
 
 tag = Tag(name="projects", description="Project management operations")
@@ -554,6 +555,19 @@ def sync_project_repo(path: ProjectPath):
     result = ProjectWorkspaceService.sync_repo(path.project_id)
     status_code = HTTPStatus.OK if result["status"] == "ok" else HTTPStatus.BAD_REQUEST
     return result, status_code
+
+
+@projects_bp.get("/<project_id>/health-scorecard")
+def get_health_scorecard(path: ProjectPath):
+    """Get health scorecard for a project.
+
+    Returns overall_score, trend_delta, weekly_history, categories, signals,
+    recommendations, and last_updated derived from execution logs and audit data.
+    """
+    scorecard = ProjectHealthService.compute_scorecard(path.project_id)
+    if scorecard is None:
+        return error_response("NOT_FOUND", "Project not found", HTTPStatus.NOT_FOUND)
+    return scorecard, HTTPStatus.OK
 
 
 @projects_bp.get("/<project_id>/clone-status")
