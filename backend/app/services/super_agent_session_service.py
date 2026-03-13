@@ -25,6 +25,12 @@ from ..db.super_agents import (
 logger = logging.getLogger(__name__)
 
 
+class SessionLimitError(Exception):
+    """Raised when no session can be created due to the global concurrent session limit."""
+
+    pass
+
+
 class SuperAgentSessionService:
     """Service for SuperAgent session lifecycle, token tracking, and prompt assembly."""
 
@@ -70,6 +76,36 @@ class SuperAgentSessionService:
             }
 
             return session_id, None
+
+    @classmethod
+    def get_or_create_session(cls, super_agent_id: str) -> str:
+        """Return an existing session for the super agent, or create a new one.
+
+        - If an active session exists for the super_agent_id, return its session_id.
+        - If a paused session exists, resume it and return its session_id.
+        - Otherwise, create a new session and return its session_id.
+
+        Raises SessionLimitError if create_session fails (e.g., concurrency limit reached).
+        """
+        with cls._lock:
+            for session in cls._active_sessions.values():
+                if session["super_agent_id"] == super_agent_id:
+                    if session["status"] == "active":
+                        return session["session_id"]
+                    if session["status"] == "paused":
+                        paused_session_id = session["session_id"]
+                        break
+            else:
+                paused_session_id = None
+
+        if paused_session_id is not None:
+            cls.resume_session(paused_session_id)
+            return paused_session_id
+
+        session_id, error = cls.create_session(super_agent_id)
+        if session_id is None:
+            raise SessionLimitError(error or "Failed to create session")
+        return session_id
 
     @classmethod
     def send_message(
