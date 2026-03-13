@@ -1,8 +1,10 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
+import { triggerApi, backendApi } from '../services/api';
+import type { Trigger } from '../services/api';
 
 const router = useRouter();
 
@@ -26,17 +28,82 @@ Additional context from the repository: {context}
 const selectedModel = ref('claude-opus-4-5');
 const repoSize = ref<'small' | 'medium' | 'large' | 'xlarge'>('medium');
 
+const triggers = ref<Trigger[]>([]);
+const selectedTriggerId = ref('');
+
 interface ModelConfig {
   id: string;
   name: string;
   contextWindow: number;
 }
 
-const MODELS: ModelConfig[] = [
+const CONTEXT_WINDOW_BY_BACKEND: Record<string, number> = {
+  claude: 200000,
+  codex: 128000,
+  opencode: 200000,
+  gemini: 1000000,
+};
+
+const FALLBACK_MODELS: ModelConfig[] = [
   { id: 'claude-haiku-3-5', name: 'Haiku 3.5', contextWindow: 200000 },
   { id: 'claude-sonnet-4-5', name: 'Sonnet 4.5', contextWindow: 200000 },
   { id: 'claude-opus-4-5', name: 'Opus 4.5', contextWindow: 200000 },
 ];
+
+const models = ref<ModelConfig[]>([...FALLBACK_MODELS]);
+
+async function loadTriggers() {
+  try {
+    const res = await triggerApi.list();
+    triggers.value = res.triggers;
+  } catch {
+    // silently ignore — trigger selector remains empty
+  }
+}
+
+async function loadBackends() {
+  try {
+    const res = await backendApi.list();
+    if (res.backends && res.backends.length > 0) {
+      const derived: ModelConfig[] = [];
+      for (const backend of res.backends) {
+        const contextWindow = CONTEXT_WINDOW_BY_BACKEND[backend.type] ?? 200000;
+        if (backend.models && backend.models.length > 0) {
+          for (const modelId of backend.models) {
+            derived.push({ id: modelId, name: modelId, contextWindow });
+          }
+        } else {
+          derived.push({ id: backend.id, name: backend.name, contextWindow });
+        }
+      }
+      if (derived.length > 0) {
+        models.value = derived;
+      }
+    }
+  } catch {
+    // silently ignore — fall back to hardcoded models
+  }
+}
+
+async function onTriggerChange(triggerId: string) {
+  if (!triggerId) return;
+  try {
+    const trigger = await triggerApi.get(triggerId);
+    if (trigger.prompt_template) {
+      promptTemplate.value = trigger.prompt_template;
+    }
+    if (trigger.model) {
+      selectedModel.value = trigger.model;
+    }
+  } catch {
+    // silently ignore
+  }
+}
+
+onMounted(() => {
+  loadTriggers();
+  loadBackends();
+});
 
 const REPO_TOKENS: Record<string, number> = {
   small: 8000,
@@ -78,7 +145,7 @@ function countPlaceholderTokens(template: string): number {
   return total;
 }
 
-const model = computed(() => MODELS.find(m => m.id === selectedModel.value) ?? MODELS[1]);
+const model = computed(() => models.value.find(m => m.id === selectedModel.value) ?? models.value[1] ?? models.value[0]);
 const promptBaseTokens = computed(() => countBaseTokens(promptTemplate.value));
 const promptPhTokens = computed(() => countPlaceholderTokens(promptTemplate.value));
 const repoContextTokens = computed(() => REPO_TOKENS[repoSize.value]);
@@ -140,6 +207,18 @@ const detectedPlaceholders = computed(() => {
           </h3>
         </div>
         <div class="input-body">
+          <div class="field-group">
+            <label class="field-label">Load from Trigger</label>
+            <select
+              v-model="selectedTriggerId"
+              class="trigger-select"
+              @change="onTriggerChange(selectedTriggerId)"
+            >
+              <option value="">— select a trigger —</option>
+              <option v-for="t in triggers" :key="t.id" :value="t.id">{{ t.name }}</option>
+            </select>
+          </div>
+
           <textarea
             v-model="promptTemplate"
             class="text-area"
@@ -152,7 +231,7 @@ const detectedPlaceholders = computed(() => {
             <label class="field-label">Model</label>
             <div class="model-pills">
               <button
-                v-for="m in MODELS"
+                v-for="m in models"
                 :key="m.id"
                 class="model-pill"
                 :class="{ active: selectedModel === m.id }"
@@ -329,6 +408,22 @@ const detectedPlaceholders = computed(() => {
   display: flex;
   flex-direction: column;
   gap: 18px;
+}
+
+.trigger-select {
+  width: 100%;
+  padding: 8px 12px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  color: var(--text-primary);
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.trigger-select:focus {
+  outline: none;
+  border-color: var(--accent-cyan);
 }
 
 .text-area {
