@@ -17,6 +17,7 @@ methods grouped into four areas:
 import json
 import logging
 import os
+import time
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -219,6 +220,38 @@ class SchedulerService:
 
         if not trigger_data.get("enabled"):
             logger.info(f"Trigger {trigger_id} is disabled, skipping execution")
+            return
+
+        if trigger_data.get("dispatch_type") == "super_agent" and trigger_data.get(
+            "super_agent_id"
+        ):
+            try:
+                from .super_agent_session_service import (
+                    SessionLimitError,
+                    SuperAgentSessionService,
+                )
+                from ..db.triggers import create_execution_log
+
+                session_id = SuperAgentSessionService.get_or_create_session(
+                    trigger_data["super_agent_id"]
+                )
+                SuperAgentSessionService.send_message(
+                    session_id, trigger_data["prompt_template"]
+                )
+                exec_id = f"exec-{trigger_id}-{int(time.time())}"
+                create_execution_log(
+                    execution_id=exec_id,
+                    trigger_id=trigger_id,
+                    trigger_type="scheduled",
+                    started_at=datetime.now(timezone.utc).isoformat(),
+                    prompt=trigger_data["prompt_template"],
+                    backend_type=trigger_data.get("backend_type", "claude"),
+                    command="",
+                    source_type="super_agent",
+                    session_id=session_id,
+                )
+            except SessionLimitError as e:
+                logger.warning(f"Scheduled trigger {trigger_id} session limit: {e}")
             return
 
         try:
