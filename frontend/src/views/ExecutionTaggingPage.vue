@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
+import { executionTaggingApi } from '../services/api/execution-tagging';
 
 const showToast = useToast();
 
@@ -35,77 +36,62 @@ const newTagName = ref('');
 const newTagColor = ref<TagColor>('blue');
 const addTagTarget = ref<string | null>(null);
 
-const tags = ref<ExecutionTag[]>([
-  { id: 'tag-regression', name: 'regression', color: 'red', executionCount: 14, createdAt: '2026-01-20T00:00:00Z' },
-  { id: 'tag-flaky', name: 'flaky', color: 'amber', executionCount: 8, createdAt: '2026-02-01T00:00:00Z' },
-  { id: 'tag-perf', name: 'perf-issue', color: 'purple', executionCount: 5, createdAt: '2026-02-10T00:00:00Z' },
-  { id: 'tag-reviewed', name: 'reviewed', color: 'green', executionCount: 42, createdAt: '2026-01-15T00:00:00Z' },
-  { id: 'tag-incident', name: 'incident-2026-03', color: 'red', executionCount: 3, createdAt: '2026-03-01T00:00:00Z' },
-  { id: 'tag-baseline', name: 'baseline', color: 'blue', executionCount: 20, createdAt: '2026-01-10T00:00:00Z' },
-]);
+const tags = ref<ExecutionTag[]>([]);
+const executions = ref<TaggedExecution[]>([]);
 
-const executions = ref<TaggedExecution[]>([
-  {
-    id: 'exec-001',
-    botName: 'Security Audit Bot',
-    botId: 'bot-security',
-    triggeredAt: '2026-03-06T09:00:00Z',
-    durationMs: 32400,
-    status: 'success',
-    tags: ['tag-reviewed', 'tag-baseline'],
-    logSnippet: 'Found 2 high severity vulnerabilities in auth-service: SQL injection risk in /api/login handler and hardcoded JWT secret in config.js.',
-  },
-  {
-    id: 'exec-002',
-    botName: 'PR Review Bot',
-    botId: 'bot-pr-review',
-    triggeredAt: '2026-03-06T10:15:00Z',
-    durationMs: 18700,
-    status: 'success',
-    tags: ['tag-flaky'],
-    logSnippet: 'Review complete. 3 suggestions: missing null check on user.profile access, potential N+1 query in fetchOrders, unused import in checkout.ts.',
-  },
-  {
-    id: 'exec-003',
-    botName: 'Security Audit Bot',
-    botId: 'bot-security',
-    triggeredAt: '2026-03-05T09:00:00Z',
-    durationMs: 72100,
-    status: 'timeout',
-    tags: ['tag-flaky', 'tag-incident-2026-03'],
-    logSnippet: 'Execution timed out after 72s while scanning data-pipeline repo. Last output: Scanning /src/transforms/aggregation.py...',
-  },
-  {
-    id: 'exec-004',
-    botName: 'Dependency Audit Bot',
-    botId: 'bot-dep-audit',
-    triggeredAt: '2026-03-04T14:00:00Z',
-    durationMs: 11200,
-    status: 'success',
-    tags: ['tag-regression'],
-    logSnippet: 'lodash@4.17.19 has known prototype pollution CVE-2021-23337. express@4.17.1 outdated — 4.18.2 available with security fixes.',
-  },
-  {
-    id: 'exec-005',
-    botName: 'PR Review Bot',
-    botId: 'bot-pr-review',
-    triggeredAt: '2026-03-04T11:30:00Z',
-    durationMs: 21500,
-    status: 'failed',
-    tags: ['tag-regression', 'tag-incident-2026-03'],
-    logSnippet: 'Error: GitHub API rate limit exceeded. Retried 3 times. Last attempt failed with 429 Too Many Requests.',
-  },
-  {
-    id: 'exec-006',
-    botName: 'Security Audit Bot',
-    botId: 'bot-security',
-    triggeredAt: '2026-02-28T09:00:00Z',
-    durationMs: 28900,
-    status: 'success',
-    tags: ['tag-baseline', 'tag-reviewed'],
-    logSnippet: 'Clean scan. No critical issues found. 1 informational: TLS 1.0 still enabled on legacy endpoint.',
-  },
-]);
+function mapApiTag(raw: { id: string; name: string; color: string; execution_count: number; created_at: string }): ExecutionTag {
+  return {
+    id: raw.id,
+    name: raw.name,
+    color: raw.color as TagColor,
+    executionCount: raw.execution_count,
+    createdAt: raw.created_at,
+  };
+}
+
+function mapApiExecution(raw: {
+  id: string;
+  trigger_name: string | null;
+  bot_id: string | null;
+  started_at: string;
+  duration_ms: number | null;
+  status: string;
+  log_snippet: string;
+  tags: string[];
+}): TaggedExecution {
+  return {
+    id: raw.id,
+    botName: raw.trigger_name ?? 'Unknown Bot',
+    botId: raw.bot_id ?? '',
+    triggeredAt: raw.started_at,
+    durationMs: raw.duration_ms ?? 0,
+    status: raw.status as 'success' | 'failed' | 'timeout',
+    tags: raw.tags,
+    logSnippet: raw.log_snippet ?? '',
+  };
+}
+
+async function loadTags() {
+  try {
+    const res = await executionTaggingApi.listTags();
+    tags.value = res.tags.map(mapApiTag);
+  } catch {
+    showToast('Failed to load tags', 'error');
+  }
+}
+
+async function loadExecutions() {
+  try {
+    const res = await executionTaggingApi.listExecutions({ limit: 50 });
+    executions.value = res.executions.map(mapApiExecution);
+  } catch {
+    showToast('Failed to load executions', 'error');
+  }
+}
+
+onMounted(async () => {
+  await Promise.all([loadTags(), loadExecutions()]);
+});
 
 const filteredExecutions = computed(() => {
   let result = executions.value.map((e) => ({ ...e, hasMatch: false }));
@@ -172,52 +158,65 @@ function toggleTagFilter(tagId: string) {
   }
 }
 
-function addTagToExecution(execId: string, tagId: string) {
-  const exec = executions.value.find((e) => e.id === execId);
-  if (exec && !exec.tags.includes(tagId)) {
-    exec.tags = [...exec.tags, tagId];
+async function addTagToExecution(execId: string, tagId: string) {
+  addTagTarget.value = null;
+  try {
+    await executionTaggingApi.addTag(execId, tagId);
+    const exec = executions.value.find((e) => e.id === execId);
+    if (exec && !exec.tags.includes(tagId)) {
+      exec.tags = [...exec.tags, tagId];
+    }
     const tag = tags.value.find((t) => t.id === tagId);
     if (tag) tag.executionCount++;
     showToast(`Tag "${tag?.name}" added`, 'success');
+  } catch {
+    showToast('Failed to add tag', 'error');
   }
-  addTagTarget.value = null;
 }
 
-function removeTagFromExecution(execId: string, tagId: string) {
-  const exec = executions.value.find((e) => e.id === execId);
-  if (exec) {
-    exec.tags = exec.tags.filter((t) => t !== tagId);
+async function removeTagFromExecution(execId: string, tagId: string) {
+  try {
+    await executionTaggingApi.removeTag(execId, tagId);
+    const exec = executions.value.find((e) => e.id === execId);
+    if (exec) {
+      exec.tags = exec.tags.filter((t) => t !== tagId);
+    }
     const tag = tags.value.find((t) => t.id === tagId);
     if (tag && tag.executionCount > 0) tag.executionCount--;
     showToast('Tag removed', 'info');
+  } catch {
+    showToast('Failed to remove tag', 'error');
   }
 }
 
-function createTag() {
+async function createTag() {
   if (!newTagName.value.trim()) {
     showToast('Tag name cannot be empty', 'error');
     return;
   }
-  const id = `tag-${newTagName.value.toLowerCase().replace(/\s+/g, '-')}-${Date.now()}`;
-  tags.value.push({
-    id,
-    name: newTagName.value.trim(),
-    color: newTagColor.value,
-    executionCount: 0,
-    createdAt: new Date().toISOString(),
-  });
-  showCreateTag.value = false;
-  newTagName.value = '';
-  showToast('Tag created', 'success');
+  try {
+    const res = await executionTaggingApi.createTag(newTagName.value.trim(), newTagColor.value);
+    tags.value.push(mapApiTag(res.tag));
+    showCreateTag.value = false;
+    newTagName.value = '';
+    showToast('Tag created', 'success');
+  } catch {
+    showToast('Failed to create tag', 'error');
+  }
 }
 
-function deleteTag(tagId: string) {
-  tags.value = tags.value.filter((t) => t.id !== tagId);
-  executions.value.forEach((e) => {
-    e.tags = e.tags.filter((t) => t !== tagId);
-  });
-  selectedTagIds.value = selectedTagIds.value.filter((t) => t !== tagId);
-  showToast('Tag deleted', 'info');
+async function deleteTag(tagId: string) {
+  try {
+    await executionTaggingApi.deleteTag(tagId);
+    tags.value = tags.value.filter((t) => t.id !== tagId);
+    executions.value.forEach((e) => {
+      e.tags = e.tags.filter((t) => t !== tagId);
+    });
+    selectedTagIds.value = selectedTagIds.value.filter((t) => t !== tagId);
+    showToast('Tag deleted', 'info');
+  } catch {
+    showToast('Failed to delete tag', 'error');
+  }
 }
 
 function highlightMatch(text: string, query: string): string {

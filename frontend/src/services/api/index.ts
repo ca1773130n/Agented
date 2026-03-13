@@ -54,7 +54,29 @@ export { activityFeedApi } from './activity-feed';
 export type { Activity, ActivityType, ActivityFeedResponse, ActivityFeedParams } from './activity-feed';
 export { projectHealthApi } from './project-health';
 export type { ProjectHealthScorecard, HealthCategory, HealthSignal, HealthRecommendation } from './project-health';
+export { prAssignmentApi } from './pr-assignment';
+export type { OwnershipRule, AssignmentLog, PrAssignmentSettings, CreateRuleRequest } from './pr-assignment';
 export { repoBotDefaultsApi } from './repo-bot-defaults';
+export { qualityApi } from './quality-ratings';
+export type { QualityEntry, BotQualityStats, QualityEntriesResponse, QualityStatsResponse, SubmitRatingRequest } from './quality-ratings';
+export { scopeFiltersApi } from './scope-filters';
+export type { ScopeFilter, ScopeFilterPattern, ListScopeFiltersResponse, UpsertScopeFilterRequest, UpdateScopeFilterRequest, AddPatternRequest } from './scope-filters';
+export { retentionApi } from './retention';
+export type { RetentionPolicy, CreateRetentionPolicyRequest } from './retention';
+export { versionPinsApi } from './version-pins';
+export type { VersionPin, ComponentVersionHistory, PinStatus, ComponentType, VersionPinsListResponse, VersionHistoryResponse, UpgradeAllResponse } from './version-pins';
+export { findingsApi } from './findings';
+export type { TriageFinding, FindingsListResponse, CreateFindingRequest, UpdateFindingRequest } from './findings';
+export { pipeApi } from './bot-pipes';
+export type { BotPipe, BotPipeExecution } from './bot-pipes';
+export { botMemoryApi } from './bot-memory';
+export type {
+  MemoryEntry as BotMemoryEntry,
+  BotMemorySummary,
+  BotMemoryListAllResponse,
+  BotMemoryResponse,
+  UpsertMemoryEntryRequest,
+} from './bot-memory';
 export type {
   RepoBotBinding,
   AvailableBot as RepoBotAvailableBot,
@@ -64,6 +86,10 @@ export type {
   ToggleRepoBotDefaultResponse,
   DeleteRepoBotDefaultResponse,
 } from './repo-bot-defaults';
+export { skillSetsApi } from './skill-sets';
+export type { SkillSet } from './skill-sets';
+export { payloadTransformerApi } from './payload-transformers';
+export type { PayloadTransformer, TransformRuleItem, UpsertTransformerRequest, UpsertTransformerResponse } from './payload-transformers';
 
 // Constant exports from types
 export { CLAUDE_MODELS, OPENCODE_MODELS } from './types';
@@ -370,3 +396,19 @@ export type {
   GrdSyncResult,
   GrdSyncStatus,
 } from './grd';
+
+// Onboarding automation API
+export { onboardingApi } from './onboarding';
+export type {
+  OnboardingStep,
+  OnboardingTrigger,
+  OnboardingConfigResponse,
+  OnboardingStepInput,
+  SaveOnboardingConfigRequest,
+  SaveOnboardingConfigResponse,
+  OnboardingRun,
+  OnboardingRunsResponse,
+} from './onboarding';
+
+export { executionTaggingApi } from './execution-tagging';
+export type { ExecutionTag, TaggedExecution } from './execution-tagging';

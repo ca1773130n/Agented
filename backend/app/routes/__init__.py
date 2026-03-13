@@ -11,7 +11,10 @@ def register_blueprints(app):
     from .audit import audit_bp
     from .backends import backends_bp
     from .bookmarks import bookmarks_bp
+    from .bot_memory import bot_memory_bp
+    from .bot_pipes import bot_pipes_bp
     from .bot_templates import bot_templates_bp
+    from .payload_transformers import payload_transformers_bp
     from .budgets import budgets_bp
     from .bulk import bulk_bp
     from .campaigns import campaigns_bp
@@ -22,8 +25,11 @@ def register_blueprints(app):
     from .config_export import config_export_bp
     from .conversation_branches import conversation_branches_bp
     from .execution_search import execution_search_bp
+    from .execution_tagging import execution_tagging_bp
     from .executions import executions_bp
+    from .findings import findings_bp
     from .github_webhook import github_webhook_bp
+    from .onboarding import onboarding_bp
     from .trigger_conditions import trigger_conditions_bp
     from .gitops import gitops_bp
     from .grd import grd_bp
@@ -40,6 +46,7 @@ def register_blueprints(app):
     from .plugin_conversations import plugin_conversations_bp
     from .plugin_exports import plugin_exports_bp
     from .plugins import plugins_bp
+    from .pr_assignment import pr_assignment_bp
     from .pr_reviews import pr_reviews_bp
     from .product_owner import product_owner_bp
     from .products import products_bp
@@ -48,6 +55,10 @@ def register_blueprints(app):
     from .rbac import rbac_bp
     from .replay import replay_bp
     from .repo_bot_defaults import repo_bot_defaults_bp
+    from .quality_ratings import quality_ratings_bp
+    from .retention import retention_bp
+    from .scope_filters import scope_filters_bp
+    from .version_pins import version_pins_bp
     from .rotation import rotation_bp
     from .rule_conversations import rule_conversations_bp
     from .rules import rules_bp
@@ -58,6 +69,7 @@ def register_blueprints(app):
     from .setup import setup_bp
     from .sketches import sketches_bp
     from .skill_conversations import skill_conversations_bp
+    from .skill_sets import skill_sets_bp
     from .skills import skills_bp
     from .spa import spa_bp
     from .specialized_bots import specialized_bots_bp
@@ -101,7 +113,9 @@ def register_blueprints(app):
             audit_bp,
             utility_bp,
             execution_search_bp,
+            execution_tagging_bp,
             executions_bp,
+            pr_assignment_bp,
             pr_reviews_bp,
             agents_bp,
             agent_conversations_bp,
@@ -167,6 +181,15 @@ def register_blueprints(app):
             model_pricing_bp,
             activity_feed_bp,
             repo_bot_defaults_bp,
+            findings_bp,
+            bot_pipes_bp,
+            bot_memory_bp,
+            retention_bp,
+            skill_sets_bp,
+            onboarding_bp,
+            scope_filters_bp,
+            payload_transformers_bp,
+            quality_ratings_bp,
         ]
         for bp in admin_blueprints:
             limiter.limit("120/minute")(bp)
@@ -183,7 +206,9 @@ def register_blueprints(app):
     app.register_api(audit_bp)
     app.register_api(utility_bp)
     app.register_api(execution_search_bp)
+    app.register_api(execution_tagging_bp)
     app.register_api(executions_bp)
+    app.register_api(pr_assignment_bp)
     app.register_api(pr_reviews_bp)
     app.register_api(trigger_conditions_bp)
     app.register_api(agents_bp)
@@ -251,6 +276,16 @@ def register_blueprints(app):
     app.register_api(model_pricing_bp)
     app.register_api(activity_feed_bp)
     app.register_api(repo_bot_defaults_bp)
+    app.register_api(quality_ratings_bp)
+    app.register_api(scope_filters_bp)
+    app.register_api(version_pins_bp)
+    app.register_api(findings_bp)
+    app.register_api(bot_pipes_bp)
+    app.register_api(bot_memory_bp)
+    app.register_api(retention_bp)
+    app.register_api(skill_sets_bp)
+    app.register_api(onboarding_bp)
+    app.register_api(payload_transformers_bp)
 
     # SPA catch-all: MUST be registered LAST so API routes take priority
     app.register_blueprint(spa_bp)

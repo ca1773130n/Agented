@@ -3503,6 +3503,297 @@ def _migrate_76_super_agent_dispatch(conn):
         """)
 
 
+def _migrate_77_findings(conn):
+    """Create findings table for the triage board (v0.4.0)."""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS findings (
+            id TEXT PRIMARY KEY,
+            title TEXT NOT NULL,
+            description TEXT,
+            severity TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'open',
+            bot_id TEXT,
+            file_ref TEXT,
+            owner TEXT,
+            execution_id TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    try:
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_findings_status ON findings(status)")
+    except Exception as e:
+        logger.debug("idx_findings_status already exists: %s", e)
+    try:
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_findings_bot_id ON findings(bot_id)")
+    except Exception as e:
+        logger.debug("idx_findings_bot_id already exists: %s", e)
+
+
+def _migrate_78_bot_memory(conn):
+    """Create bot_memory table for per-bot persistent key-value store (v0.4.0)."""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS bot_memory (
+            bot_id TEXT NOT NULL,
+            key TEXT NOT NULL,
+            value TEXT NOT NULL,
+            source TEXT NOT NULL DEFAULT 'manual',
+            expires_at TEXT,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (bot_id, key)
+        )
+    """)
+    try:
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_bot_memory_bot ON bot_memory(bot_id)")
+    except Exception as e:
+        logger.debug("idx_bot_memory_bot already exists: %s", e)
+
+
+
+def _migrate_79_execution_tags(conn):
+    """Create execution_tags and execution_tag_assignments tables (v0.4.0)."""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS execution_tags (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL UNIQUE,
+            color TEXT NOT NULL DEFAULT 'blue',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS execution_tag_assignments (
+            tag_id TEXT NOT NULL REFERENCES execution_tags(id) ON DELETE CASCADE,
+            execution_id TEXT NOT NULL REFERENCES execution_logs(execution_id) ON DELETE CASCADE,
+            PRIMARY KEY (tag_id, execution_id)
+        )
+    """)
+    try:
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_eta_execution "
+            "ON execution_tag_assignments(execution_id)"
+        )
+    except Exception as e:
+        logger.debug("idx_eta_execution already exists: %s", e)
+
+def _migrate_80_bot_pipes(conn):
+    """Create bot_pipes and bot_pipe_executions tables for output piping (v0.4.0)."""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS bot_pipes (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            source_bot_id TEXT NOT NULL,
+            dest_bot_id TEXT NOT NULL,
+            transform TEXT NOT NULL DEFAULT 'passthrough',
+            enabled INTEGER NOT NULL DEFAULT 1,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS bot_pipe_executions (
+            id TEXT PRIMARY KEY,
+            pipe_id TEXT NOT NULL REFERENCES bot_pipes(id) ON DELETE CASCADE,
+            pipe_name TEXT NOT NULL,
+            triggered_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            source_preview TEXT,
+            destination_status TEXT NOT NULL DEFAULT 'pending'
+        )
+    """)
+    try:
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_bot_pipe_executions_pipe"
+            " ON bot_pipe_executions(pipe_id)"
+        )
+    except Exception as e:
+        logger.debug("idx_bot_pipe_executions_pipe already exists: %s", e)
+
+
+def _migrate_84_pr_ownership_rules(conn):
+    """Create pr_ownership_rules table for PR auto-assignment (v0.4.0)."""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS pr_ownership_rules (
+            id TEXT PRIMARY KEY,
+            pattern TEXT NOT NULL,
+            team TEXT NOT NULL,
+            reviewers TEXT NOT NULL,
+            priority INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT DEFAULT (datetime('now'))
+        )
+    """)
+
+
+def _migrate_81_add_retention_policies_table(conn):
+    """Create retention_policies table for DataRetentionPoliciesPage (v0.4.0)."""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS retention_policies (
+            id TEXT PRIMARY KEY,
+            category TEXT NOT NULL,
+            scope TEXT NOT NULL DEFAULT 'global',
+            scope_name TEXT NOT NULL DEFAULT 'All Teams',
+            retention_days INTEGER NOT NULL DEFAULT 90,
+            delete_on_expiry INTEGER NOT NULL DEFAULT 1,
+            archive_on_expiry INTEGER NOT NULL DEFAULT 0,
+            estimated_size_gb REAL NOT NULL DEFAULT 0.0,
+            enabled INTEGER NOT NULL DEFAULT 1,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
+
+def _migrate_83_onboarding_steps(conn):
+    """Add onboarding_steps table for OnboardingAutomationPage."""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS onboarding_steps (
+            id TEXT PRIMARY KEY,
+            trigger_id TEXT NOT NULL REFERENCES triggers(id) ON DELETE CASCADE,
+            step_order INTEGER NOT NULL,
+            name TEXT NOT NULL,
+            description TEXT NOT NULL DEFAULT '',
+            type TEXT NOT NULL DEFAULT 'custom',
+            enabled INTEGER NOT NULL DEFAULT 1,
+            delay_minutes INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+        )
+    """)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_onboarding_steps_trigger ON onboarding_steps(trigger_id)"
+    )
+
+
+
+def _migrate_85_version_pins(conn):
+    """Create version_pins and component_version_history tables."""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS version_pins (
+            id TEXT PRIMARY KEY,
+            component_type TEXT NOT NULL,
+            component_id TEXT NOT NULL,
+            component_name TEXT NOT NULL,
+            pinned_version TEXT,
+            latest_version TEXT,
+            bot_id TEXT,
+            bot_name TEXT,
+            status TEXT DEFAULT 'unpinned',
+            pinned_at TEXT,
+            changelog TEXT
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS component_version_history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            component_id TEXT NOT NULL,
+            version TEXT NOT NULL,
+            released_at TEXT,
+            breaking INTEGER DEFAULT 0,
+            summary TEXT
+        )
+    """)
+    try:
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_vp_component_id ON version_pins(component_id)"
+        )
+    except Exception as e:
+        logger.debug("idx_vp_component_id already exists: %s", e)
+    try:
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_cvh_component_id"
+            " ON component_version_history(component_id)"
+        )
+    except Exception as e:
+        logger.debug("idx_cvh_component_id already exists: %s", e)
+    conn.commit()
+
+
+
+def _migrate_82_add_execution_quality_ratings(conn):
+    """Add execution_quality_ratings table for AgentQualityScoringPage (v0.4.0)."""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS execution_quality_ratings (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            execution_id TEXT NOT NULL UNIQUE,
+            trigger_id TEXT,
+            rating INTEGER NOT NULL CHECK(rating BETWEEN 1 AND 5),
+            feedback TEXT DEFAULT '',
+            rated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (execution_id) REFERENCES execution_logs(execution_id) ON DELETE CASCADE,
+            FOREIGN KEY (trigger_id) REFERENCES triggers(id) ON DELETE SET NULL
+        )
+    """)
+    try:
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_eqr_trigger_id ON execution_quality_ratings(trigger_id)"
+        )
+    except Exception as e:
+        logger.debug("idx_eqr_trigger_id already exists: %s", e)
+    try:
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_eqr_rated_at ON execution_quality_ratings(rated_at DESC)"
+        )
+    except Exception as e:
+        logger.debug("idx_eqr_rated_at already exists: %s", e)
+
+
+def _migrate_87_skill_sets_table(conn):
+    """Add skill_sets table for VisualSkillComposerPage."""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS skill_sets (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            skill_ids TEXT NOT NULL DEFAULT '[]',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
+
+
+def _migrate_86_scope_filters(conn):
+    """Add scope_filters and scope_filter_patterns tables for RepoScopeFiltersPage."""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS scope_filters (
+            id TEXT PRIMARY KEY,
+            trigger_id TEXT NOT NULL UNIQUE REFERENCES triggers(id) ON DELETE CASCADE,
+            mode TEXT NOT NULL DEFAULT 'denylist',
+            enabled INTEGER NOT NULL DEFAULT 1,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS scope_filter_patterns (
+            id TEXT PRIMARY KEY,
+            filter_id TEXT NOT NULL REFERENCES scope_filters(id) ON DELETE CASCADE,
+            type TEXT NOT NULL,
+            pattern TEXT NOT NULL,
+            description TEXT NOT NULL DEFAULT '',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_sfp_filter ON scope_filter_patterns(filter_id)"
+    )
+
+
+def _migrate_88_payload_transformers(conn):
+    """Add payload_transformers table for WebhookPayloadTransformerPage (v0.4.0)."""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS payload_transformers (
+            id TEXT PRIMARY KEY,
+            trigger_id TEXT NOT NULL,
+            name TEXT NOT NULL DEFAULT 'default',
+            rules TEXT NOT NULL DEFAULT '[]',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    try:
+        conn.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_payload_transformers_trigger_id "
+            "ON payload_transformers(trigger_id)"
+        )
+    except Exception as e:
+        logger.debug("idx_payload_transformers_trigger_id already exists: %s", e)
+
+
 VERSIONED_MIGRATIONS = [
     (1, "add_github_columns", _migrate_add_github_columns),
     (2, "add_pr_reviews_table", _migrate_add_pr_reviews_table),
@@ -3587,4 +3878,24 @@ VERSIONED_MIGRATIONS = [
     (75, "trigger_cron_expression", _migrate_v75_trigger_cron_expression),
     # v0.4.0 core loop wiring
     (76, "super_agent_dispatch", _migrate_76_super_agent_dispatch),
+    # v0.4.0 findings triage board
+    (77, "findings", _migrate_77_findings),
+    (78, "bot_memory", _migrate_78_bot_memory),
+    (79, "execution_tags", _migrate_79_execution_tags),
+    # v0.4.0 bot output piping
+    (80, "bot_pipes", _migrate_80_bot_pipes),
+    # v0.4.0 data retention policies
+    (81, "add_retention_policies_table", _migrate_81_add_retention_policies_table),
+    # v0.4.0 PR auto-assignment
+    (84, "pr_ownership_rules", _migrate_84_pr_ownership_rules),
+    # v0.4.0 visual skill composer
+    (85, "version_pins", _migrate_85_version_pins),
+    (82, "add_execution_quality_ratings", _migrate_82_add_execution_quality_ratings),
+    (87, "skill_sets_table", _migrate_87_skill_sets_table),
+    # v0.4.0 scope filters
+    (86, "scope_filters", _migrate_86_scope_filters),
+    # v0.4.0 onboarding automation
+    (88, "onboarding_steps", _migrate_83_onboarding_steps),
+    # v0.4.0 webhook payload transformer
+    (89, "payload_transformers", _migrate_88_payload_transformers),
 ]

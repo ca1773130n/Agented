@@ -1752,4 +1752,235 @@ def create_fresh_schema(conn):
     """)
     conn.execute("CREATE INDEX IF NOT EXISTS idx_tc_trigger ON trigger_conditions(trigger_id)")
 
+    # --- v0.4.0: Findings triage board ---
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS findings (
+            id TEXT PRIMARY KEY,
+            title TEXT NOT NULL,
+            description TEXT,
+            severity TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'open',
+            bot_id TEXT,
+            file_ref TEXT,
+            owner TEXT,
+            execution_id TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_findings_status ON findings(status)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_findings_bot_id ON findings(bot_id)")
+
+    # --- Bot output piping tables ---
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS bot_pipes (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            source_bot_id TEXT NOT NULL,
+            dest_bot_id TEXT NOT NULL,
+            transform TEXT NOT NULL DEFAULT 'passthrough',
+            enabled INTEGER NOT NULL DEFAULT 1,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS bot_pipe_executions (
+            id TEXT PRIMARY KEY,
+            pipe_id TEXT NOT NULL REFERENCES bot_pipes(id) ON DELETE CASCADE,
+            pipe_name TEXT NOT NULL,
+            triggered_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            source_preview TEXT,
+            destination_status TEXT NOT NULL DEFAULT 'pending'
+        )
+    """)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_bot_pipe_executions_pipe ON bot_pipe_executions(pipe_id)"
+    )
+
+    # --- v0.4.0: Per-bot persistent memory store ---
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS bot_memory (
+            bot_id TEXT NOT NULL,
+            key TEXT NOT NULL,
+            value TEXT NOT NULL,
+            source TEXT NOT NULL DEFAULT 'manual',
+            expires_at TEXT,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (bot_id, key)
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_bot_memory_bot ON bot_memory(bot_id)")
+
+    # --- v0.4.0: Execution quality ratings ---
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS execution_quality_ratings (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            execution_id TEXT NOT NULL UNIQUE,
+            trigger_id TEXT,
+            rating INTEGER NOT NULL CHECK(rating BETWEEN 1 AND 5),
+            feedback TEXT DEFAULT '',
+            rated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (execution_id) REFERENCES execution_logs(execution_id) ON DELETE CASCADE,
+            FOREIGN KEY (trigger_id) REFERENCES triggers(id) ON DELETE SET NULL
+        )
+    """)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_eqr_trigger_id ON execution_quality_ratings(trigger_id)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_eqr_rated_at ON execution_quality_ratings(rated_at DESC)"
+    )
+
+    # --- Retention policies ---
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS retention_policies (
+            id TEXT PRIMARY KEY,
+            category TEXT NOT NULL,
+            scope TEXT NOT NULL DEFAULT 'global',
+            scope_name TEXT NOT NULL DEFAULT 'All Teams',
+            retention_days INTEGER NOT NULL DEFAULT 90,
+            delete_on_expiry INTEGER NOT NULL DEFAULT 1,
+            archive_on_expiry INTEGER NOT NULL DEFAULT 0,
+            estimated_size_gb REAL NOT NULL DEFAULT 0.0,
+            enabled INTEGER NOT NULL DEFAULT 1,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
+    # --- Onboarding automation steps ---
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS onboarding_steps (
+            id TEXT PRIMARY KEY,
+            trigger_id TEXT NOT NULL REFERENCES triggers(id) ON DELETE CASCADE,
+            step_order INTEGER NOT NULL,
+            name TEXT NOT NULL,
+            description TEXT NOT NULL DEFAULT '',
+            type TEXT NOT NULL DEFAULT 'custom',
+            enabled INTEGER NOT NULL DEFAULT 1,
+            delay_minutes INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+        )
+    """)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_onboarding_steps_trigger ON onboarding_steps(trigger_id)"
+    )
+
+    # --- Execution tags (tagging & full-text search feature) ---
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS execution_tags (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL UNIQUE,
+            color TEXT NOT NULL DEFAULT 'blue',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS execution_tag_assignments (
+            tag_id TEXT NOT NULL REFERENCES execution_tags(id) ON DELETE CASCADE,
+            execution_id TEXT NOT NULL REFERENCES execution_logs(execution_id) ON DELETE CASCADE,
+            PRIMARY KEY (tag_id, execution_id)
+        )
+    """)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_eta_execution ON execution_tag_assignments(execution_id)"
+    )
+
+    # --- Skill sets (VisualSkillComposerPage) ---
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS skill_sets (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            skill_ids TEXT NOT NULL DEFAULT '[]',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
+    # --- Scope filters tables ---
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS scope_filters (
+            id TEXT PRIMARY KEY,
+            trigger_id TEXT NOT NULL UNIQUE REFERENCES triggers(id) ON DELETE CASCADE,
+            mode TEXT NOT NULL DEFAULT 'denylist',
+            enabled INTEGER NOT NULL DEFAULT 1,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS scope_filter_patterns (
+            id TEXT PRIMARY KEY,
+            filter_id TEXT NOT NULL REFERENCES scope_filters(id) ON DELETE CASCADE,
+            type TEXT NOT NULL,
+            pattern TEXT NOT NULL,
+            description TEXT NOT NULL DEFAULT '',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_sfp_filter ON scope_filter_patterns(filter_id)"
+    )
+
+
+    # --- v0.4.0: Skill and plugin version pinning ---
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS version_pins (
+            id TEXT PRIMARY KEY,
+            component_type TEXT NOT NULL,
+            component_id TEXT NOT NULL,
+            component_name TEXT NOT NULL,
+            pinned_version TEXT,
+            latest_version TEXT,
+            bot_id TEXT,
+            bot_name TEXT,
+            status TEXT DEFAULT 'unpinned',
+            pinned_at TEXT,
+            changelog TEXT
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS component_version_history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            component_id TEXT NOT NULL,
+            version TEXT NOT NULL,
+            released_at TEXT,
+            breaking INTEGER DEFAULT 0,
+            summary TEXT
+        )
+    """)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_vp_component_id ON version_pins(component_id)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_cvh_component_id ON component_version_history(component_id)"
+    )
+
+    # --- v0.4.0: PR auto-assignment ownership rules ---
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS pr_ownership_rules (
+            id TEXT PRIMARY KEY,
+            pattern TEXT NOT NULL,
+            team TEXT NOT NULL,
+            reviewers TEXT NOT NULL,
+            priority INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT DEFAULT (datetime('now'))
+        )
+    """)
+
+    # --- v0.4.0: Webhook payload transformers ---
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS payload_transformers (
+            id TEXT PRIMARY KEY,
+            trigger_id TEXT NOT NULL,
+            name TEXT NOT NULL DEFAULT 'default',
+            rules TEXT NOT NULL DEFAULT '[]',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    conn.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_payload_transformers_trigger_id "
+        "ON payload_transformers(trigger_id)"
+    )
+
     conn.commit()
