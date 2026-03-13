@@ -177,6 +177,8 @@ class TriggerService:
         webhook_secret = data.get("webhook_secret")
         allowed_tools = data.get("allowed_tools")
         sigterm_grace_seconds = data.get("sigterm_grace_seconds")
+        dispatch_type = data.get("dispatch_type", "bot")
+        super_agent_id = data.get("super_agent_id")
 
         trigger_id = db_create_trigger(
             name=name,
@@ -200,6 +202,8 @@ class TriggerService:
             webhook_secret=webhook_secret,
             allowed_tools=allowed_tools,
             sigterm_grace_seconds=sigterm_grace_seconds,
+            dispatch_type=dispatch_type,
+            super_agent_id=super_agent_id,
         )
         if trigger_id:
             AuditLogService.log(
@@ -274,6 +278,8 @@ class TriggerService:
             webhook_secret=data.get("webhook_secret"),
             allowed_tools=data.get("allowed_tools"),
             sigterm_grace_seconds=data.get("sigterm_grace_seconds"),
+            dispatch_type=data.get("dispatch_type"),
+            super_agent_id=data.get("super_agent_id"),
         )
         if success:
             new_trigger = get_trigger(trigger_id) or {}
