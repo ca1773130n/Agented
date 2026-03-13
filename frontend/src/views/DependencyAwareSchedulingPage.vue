@@ -1,8 +1,10 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, onMounted } from 'vue';
 import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
+import { schedulerApi, triggerApi, ApiError } from '../services/api';
+import type { SchedulerStatus, Trigger } from '../services/api';
 
 const showToast = useToast();
 
@@ -19,58 +21,60 @@ interface ScheduledJob {
   enabled: boolean;
 }
 
-const jobs = ref<ScheduledJob[]>([
-  {
-    id: 'job-1',
-    name: 'Build & Test',
-    schedule: '0 9 * * 1-5',
-    dependsOn: [],
-    status: 'succeeded',
-    lastRun: '30 min ago',
-    nextRun: 'Tomorrow 9:00 AM',
-    enabled: true,
-  },
-  {
-    id: 'job-2',
-    name: 'Security Audit Bot',
-    schedule: 'After job-1',
-    dependsOn: ['job-1'],
-    status: 'running',
-    lastRun: '5 min ago',
-    nextRun: 'After Build & Test',
-    enabled: true,
-  },
-  {
-    id: 'job-3',
-    name: 'Dependency Scan',
-    schedule: 'After job-1',
-    dependsOn: ['job-1'],
-    status: 'pending',
-    lastRun: null,
-    nextRun: 'After Build & Test',
-    enabled: true,
-  },
-  {
-    id: 'job-4',
-    name: 'Release Notes Generator',
-    schedule: 'After job-2, job-3',
-    dependsOn: ['job-2', 'job-3'],
-    status: 'pending',
-    lastRun: null,
-    nextRun: 'After Security Audit + Dep Scan',
-    enabled: true,
-  },
-  {
-    id: 'job-5',
-    name: 'Weekly Digest Email',
-    schedule: '0 18 * * 5',
-    dependsOn: [],
-    status: 'skipped',
-    lastRun: '7 days ago',
-    nextRun: 'Friday 6:00 PM',
-    enabled: false,
-  },
-]);
+const loading = ref(true);
+const error = ref<string | null>(null);
+const jobs = ref<ScheduledJob[]>([]);
+const schedulerStatus = ref<SchedulerStatus | null>(null);
+const triggers = ref<Trigger[]>([]);
+
+async function loadData() {
+  loading.value = true;
+  error.value = null;
+  try {
+    const [status, sessionsResp, triggersResp] = await Promise.all([
+      schedulerApi.getStatus(),
+      schedulerApi.getSessions(),
+      triggerApi.list(),
+    ]);
+    schedulerStatus.value = status;
+    triggers.value = triggersResp.triggers ?? [];
+
+    // Map triggers to scheduled jobs
+    // Use running count from global summary to determine if anything is active
+    const runningSessions = (sessionsResp.sessions ?? status.sessions ?? []).filter(s => s.state === 'running');
+    jobs.value = triggers.value.map((t) => {
+      let schedule = 'Manual';
+      if (t.schedule_type) {
+        schedule = t.schedule_time ? `${t.schedule_type} ${t.schedule_time}` : t.schedule_type;
+      } else if (t.trigger_source === 'github') {
+        schedule = 'GitHub event';
+      } else if (t.trigger_source === 'webhook') {
+        schedule = 'Webhook';
+      }
+
+      return {
+        id: t.id,
+        name: t.name,
+        schedule,
+        dependsOn: [],
+        status: (runningSessions.length > 0 ? 'running' : t.enabled ? 'succeeded' : 'skipped') as DepStatus,
+        lastRun: t.last_run_at ?? null,
+        nextRun: schedule,
+        enabled: !!t.enabled,
+      };
+    });
+  } catch (err) {
+    if (err instanceof ApiError) {
+      error.value = `API Error (${err.status}): ${err.message}`;
+    } else {
+      error.value = err instanceof Error ? err.message : 'Unknown error';
+    }
+  } finally {
+    loading.value = false;
+  }
+}
+
+onMounted(loadData);
 
 const statusColor: Record<DepStatus, string> = {
   pending: '#94a3b8',
@@ -92,15 +96,27 @@ function jobName(id: string) {
   return jobs.value.find(j => j.id === id)?.name ?? id;
 }
 
-function toggleEnabled(job: ScheduledJob) {
+async function toggleEnabled(job: ScheduledJob) {
+  const prev = job.enabled;
   job.enabled = !job.enabled;
-  showToast(`${job.name} ${job.enabled ? 'enabled' : 'disabled'}`, 'success');
+  try {
+    await triggerApi.update(job.id, { enabled: job.enabled ? 1 : 0 });
+    showToast(`${job.name} ${job.enabled ? 'enabled' : 'disabled'}`, 'success');
+  } catch {
+    job.enabled = prev;
+    showToast('Failed to toggle trigger', 'error');
+  }
 }
 
-function triggerNow(job: ScheduledJob) {
-  job.status = 'running';
-  showToast(`${job.name} triggered manually`, 'success');
-  setTimeout(() => { job.status = 'succeeded'; }, 2000);
+async function triggerNow(job: ScheduledJob) {
+  try {
+    job.status = 'running';
+    await triggerApi.run(job.id);
+    showToast(`${job.name} triggered manually`, 'success');
+  } catch (err) {
+    job.status = 'failed';
+    showToast(err instanceof ApiError ? err.message : 'Trigger failed', 'error');
+  }
 }
 
 const showAddModal = ref(false);
@@ -153,79 +169,98 @@ function saveJob() {
       </template>
     </PageHeader>
 
-    <!-- DAG visual summary -->
-    <div class="card pipeline-card">
-      <div class="card-header">
-        <h3>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="18" height="18"><circle cx="12" cy="5" r="3"/><path d="M12 8v4"/><circle cx="6" cy="16" r="3"/><circle cx="18" cy="16" r="3"/><path d="M9.5 14l-3.5 0M14.5 14l3.5 0"/><path d="M10 10.5l-4 3M14 10.5l4 3"/></svg>
-          Execution Pipeline
-        </h3>
-      </div>
-      <div class="pipeline-viz">
-        <div v-for="job in jobs" :key="job.id" class="pipeline-node-row">
-          <div class="dep-indent" :style="{ width: `${job.dependsOn.length * 16}px` }"></div>
-          <div
-            class="pipeline-node"
-            :style="{ borderColor: statusColor[job.status] + '40', '--node-color': statusColor[job.status] }"
-          >
-            <span class="node-dot" :style="{ background: statusColor[job.status] }"></span>
-            <span class="node-name">{{ job.name }}</span>
-            <span class="node-status" :style="{ color: statusColor[job.status] }">
-              {{ statusLabel[job.status] }}
-            </span>
-          </div>
-          <div v-if="job.dependsOn.length > 0" class="dep-labels">
-            <span v-for="depId in job.dependsOn" :key="depId" class="dep-label">
-              after {{ jobName(depId) }}
-            </span>
-          </div>
-        </div>
-      </div>
+    <!-- Loading state -->
+    <div v-if="loading" class="card" style="text-align: center; padding: 60px 20px; color: var(--text-secondary);">
+      <p>Loading scheduler and trigger data...</p>
     </div>
 
-    <!-- Jobs table -->
-    <div class="card">
-      <div class="card-header">
-        <h3>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="18" height="18"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-          Scheduled Jobs
-        </h3>
-      </div>
-      <div class="jobs-table">
-        <div class="table-header">
-          <span>Job</span>
-          <span>Depends On</span>
-          <span>Status</span>
-          <span>Next Run</span>
-          <span>Actions</span>
-        </div>
-        <div v-for="job in jobs" :key="job.id" class="table-row" :class="{ disabled: !job.enabled }">
-          <div class="job-name-cell">
-            <span class="job-name">{{ job.name }}</span>
-            <span v-if="!job.enabled" class="disabled-badge">disabled</span>
-          </div>
-          <div class="deps-cell">
-            <template v-if="job.dependsOn.length > 0">
-              <span v-for="depId in job.dependsOn" :key="depId" class="dep-chip">
-                {{ jobName(depId) }}
-              </span>
-            </template>
-            <span v-else class="no-dep">— (time-based)</span>
-          </div>
-          <div class="status-cell">
-            <span class="status-dot" :style="{ background: statusColor[job.status] }"></span>
-            <span :style="{ color: statusColor[job.status] }">{{ statusLabel[job.status] }}</span>
-          </div>
-          <div class="next-run-cell">{{ job.nextRun }}</div>
-          <div class="actions-cell">
-            <button class="btn btn-sm btn-secondary" @click="triggerNow(job)">Run now</button>
-            <button class="toggle-btn" :class="{ active: job.enabled }" @click="toggleEnabled(job)">
-              {{ job.enabled ? 'On' : 'Off' }}
-            </button>
-          </div>
-        </div>
-      </div>
+    <!-- Error state -->
+    <div v-else-if="error" class="card" style="text-align: center; padding: 60px 20px; color: var(--text-secondary);">
+      <p>{{ error }}</p>
+      <button class="btn btn-primary" style="margin-top: 12px" @click="loadData">Retry</button>
     </div>
+
+    <template v-else>
+      <!-- DAG visual summary -->
+      <div class="card pipeline-card">
+        <div class="card-header">
+          <h3>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="18" height="18"><circle cx="12" cy="5" r="3"/><path d="M12 8v4"/><circle cx="6" cy="16" r="3"/><circle cx="18" cy="16" r="3"/><path d="M9.5 14l-3.5 0M14.5 14l3.5 0"/><path d="M10 10.5l-4 3M14 10.5l4 3"/></svg>
+            Execution Pipeline
+          </h3>
+        </div>
+        <div v-if="jobs.length === 0" style="padding: 30px; text-align: center; color: var(--text-tertiary);">
+          No triggers found. Create a trigger to see the execution pipeline.
+        </div>
+        <div v-else class="pipeline-viz">
+          <div v-for="job in jobs" :key="job.id" class="pipeline-node-row">
+            <div class="dep-indent" :style="{ width: `${job.dependsOn.length * 16}px` }"></div>
+            <div
+              class="pipeline-node"
+              :style="{ borderColor: statusColor[job.status] + '40', '--node-color': statusColor[job.status] }"
+            >
+              <span class="node-dot" :style="{ background: statusColor[job.status] }"></span>
+              <span class="node-name">{{ job.name }}</span>
+              <span class="node-status" :style="{ color: statusColor[job.status] }">
+                {{ statusLabel[job.status] }}
+              </span>
+            </div>
+            <div v-if="job.dependsOn.length > 0" class="dep-labels">
+              <span v-for="depId in job.dependsOn" :key="depId" class="dep-label">
+                after {{ jobName(depId) }}
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Jobs table -->
+      <div class="card">
+        <div class="card-header">
+          <h3>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="18" height="18"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+            Scheduled Jobs
+          </h3>
+        </div>
+        <div v-if="jobs.length === 0" style="padding: 30px; text-align: center; color: var(--text-tertiary);">
+          No jobs to display.
+        </div>
+        <div v-else class="jobs-table">
+          <div class="table-header">
+            <span>Job</span>
+            <span>Depends On</span>
+            <span>Status</span>
+            <span>Next Run</span>
+            <span>Actions</span>
+          </div>
+          <div v-for="job in jobs" :key="job.id" class="table-row" :class="{ disabled: !job.enabled }">
+            <div class="job-name-cell">
+              <span class="job-name">{{ job.name }}</span>
+              <span v-if="!job.enabled" class="disabled-badge">disabled</span>
+            </div>
+            <div class="deps-cell">
+              <template v-if="job.dependsOn.length > 0">
+                <span v-for="depId in job.dependsOn" :key="depId" class="dep-chip">
+                  {{ jobName(depId) }}
+                </span>
+              </template>
+              <span v-else class="no-dep">— (time-based)</span>
+            </div>
+            <div class="status-cell">
+              <span class="status-dot" :style="{ background: statusColor[job.status] }"></span>
+              <span :style="{ color: statusColor[job.status] }">{{ statusLabel[job.status] }}</span>
+            </div>
+            <div class="next-run-cell">{{ job.nextRun }}</div>
+            <div class="actions-cell">
+              <button class="btn btn-sm btn-secondary" @click="triggerNow(job)">Run now</button>
+              <button class="toggle-btn" :class="{ active: job.enabled }" @click="toggleEnabled(job)">
+                {{ job.enabled ? 'On' : 'Off' }}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </template>
 
     <!-- Add modal -->
     <div v-if="showAddModal" class="modal-overlay" @click.self="showAddModal = false">

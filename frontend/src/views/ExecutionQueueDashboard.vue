@@ -4,43 +4,65 @@ import { useRouter } from 'vue-router';
 import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
+import { executionApi, triggerApi, ApiError } from '../services/api';
+import type { Execution, Trigger } from '../services/api';
 
 const router = useRouter();
 const showToast = useToast();
 
-interface QueuedExecution {
-  id: string;
-  bot: string;
-  trigger: string;
-  priority: 'critical' | 'normal' | 'batch';
-  status: 'pending' | 'running';
-  queuedAt: string;
-  estimatedDuration: number;
-  position: number;
+interface QueueEntry {
+  trigger_id: string;
+  pending: number;
+  dispatching: number;
 }
 
-const queue = ref<QueuedExecution[]>([
-  { id: 'ex-001', bot: 'bot-security', trigger: 'webhook/github', priority: 'critical', status: 'running', queuedAt: '2 min ago', estimatedDuration: 240, position: 1 },
-  { id: 'ex-002', bot: 'bot-pr-review', trigger: 'webhook/github', priority: 'critical', status: 'running', queuedAt: '3 min ago', estimatedDuration: 120, position: 2 },
-  { id: 'ex-003', bot: 'bot-pr-review', trigger: 'webhook/github', priority: 'normal', status: 'pending', queuedAt: '4 min ago', estimatedDuration: 90, position: 3 },
-  { id: 'ex-004', bot: 'bot-security', trigger: 'schedule/daily', priority: 'normal', status: 'pending', queuedAt: '5 min ago', estimatedDuration: 300, position: 4 },
-  { id: 'ex-005', bot: 'bot-changelog', trigger: 'manual', priority: 'batch', status: 'pending', queuedAt: '6 min ago', estimatedDuration: 60, position: 5 },
-  { id: 'ex-006', bot: 'bot-dep-scan', trigger: 'schedule/weekly', priority: 'batch', status: 'pending', queuedAt: '7 min ago', estimatedDuration: 180, position: 6 },
-]);
+const queueSummary = ref<QueueEntry[]>([]);
+const totalPending = ref(0);
+const runningExecutions = ref<Execution[]>([]);
+const pendingExecutions = ref<Execution[]>([]);
+const triggers = ref<Map<string, Trigger>>(new Map());
+const isLoading = ref(true);
+const loadError = ref('');
+const cancellingIds = ref<Set<string>>(new Set());
 
-const isDragging = ref<string | null>(null);
-const dragOverId = ref<string | null>(null);
 let refreshInterval: ReturnType<typeof setInterval> | null = null;
 
-const criticalQueue = computed(() => queue.value.filter(e => e.priority === 'critical'));
-const normalQueue = computed(() => queue.value.filter(e => e.priority === 'normal'));
-const batchQueue = computed(() => queue.value.filter(e => e.priority === 'batch'));
+// Combine running and pending for display
+const allExecutions = computed(() => {
+  const items = [
+    ...runningExecutions.value.map((ex, i) => ({
+      id: ex.execution_id,
+      triggerName: triggers.value.get(ex.trigger_id)?.name ?? ex.trigger_id,
+      triggerType: ex.trigger_type ?? 'unknown',
+      status: ex.status as 'running' | 'pending' | 'paused',
+      startedAt: ex.started_at,
+      position: i + 1,
+    })),
+    ...pendingExecutions.value.map((ex, i) => ({
+      id: ex.execution_id,
+      triggerName: triggers.value.get(ex.trigger_id)?.name ?? ex.trigger_id,
+      triggerType: ex.trigger_type ?? 'unknown',
+      status: 'pending' as const,
+      startedAt: ex.started_at,
+      position: runningExecutions.value.length + i + 1,
+    })),
+  ];
+  return items;
+});
+
+const runningQueue = computed(() => allExecutions.value.filter(e => e.status === 'running' || e.status === 'paused'));
+const pendingQueue = computed(() => allExecutions.value.filter(e => e.status === 'pending'));
 
 const stats = computed(() => ({
-  running: queue.value.filter(e => e.status === 'running').length,
-  pending: queue.value.filter(e => e.status === 'pending').length,
-  total: queue.value.length,
+  running: runningExecutions.value.length,
+  pending: totalPending.value,
+  dispatching: queueSummary.value.reduce((sum, q) => sum + q.dispatching, 0),
+  total: runningExecutions.value.length + totalPending.value,
 }));
+
+// Drag-and-drop state (visual only since backend queue is FIFO)
+const isDragging = ref<string | null>(null);
+const dragOverId = ref<string | null>(null);
 
 function handleDragStart(id: string) {
   isDragging.value = id;
@@ -50,52 +72,91 @@ function handleDragOver(id: string) {
   dragOverId.value = id;
 }
 
-function handleDrop(targetId: string) {
-  if (!isDragging.value || isDragging.value === targetId) {
-    isDragging.value = null;
-    dragOverId.value = null;
-    return;
-  }
-  const fromIdx = queue.value.findIndex(e => e.id === isDragging.value);
-  const toIdx = queue.value.findIndex(e => e.id === targetId);
-  if (fromIdx === -1 || toIdx === -1) return;
-
-  const item = queue.value.splice(fromIdx, 1)[0];
-  queue.value.splice(toIdx, 0, item);
-  queue.value.forEach((e, i) => { e.position = i + 1; });
-  showToast('Queue order updated', 'info');
+function handleDrop(_targetId: string) {
   isDragging.value = null;
   dragOverId.value = null;
-}
-
-function priorityColor(p: string): string {
-  const map: Record<string, string> = { critical: '#ef4444', normal: '#3b82f6', batch: '#6b7280' };
-  return map[p] ?? '#6b7280';
+  showToast('Queue order is managed by the backend (FIFO with priority)', 'info');
 }
 
 function statusColor(s: string): string {
-  return s === 'running' ? '#34d399' : '#f59e0b';
+  const map: Record<string, string> = {
+    running: '#34d399',
+    pending: '#f59e0b',
+    paused: '#a78bfa',
+    dispatching: '#3b82f6',
+  };
+  return map[s] ?? '#6b7280';
 }
 
-function formatDuration(secs: number): string {
-  const m = Math.floor(secs / 60);
-  const s = secs % 60;
-  return m > 0 ? `${m}m ${s}s` : `${s}s`;
+function formatTimeAgo(dateStr: string): string {
+  if (!dateStr) return 'unknown';
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const secs = Math.floor(diff / 1000);
+  if (secs < 60) return `${secs}s ago`;
+  const mins = Math.floor(secs / 60);
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  return `${hours}h ago`;
 }
 
-function simulateProgress() {
-  // Occasionally advance queue
-  const running = queue.value.filter(e => e.status === 'running');
-  if (running.length > 0 && Math.random() > 0.7) {
-    const finished = running[Math.floor(Math.random() * running.length)];
-    queue.value = queue.value.filter(e => e.id !== finished.id);
-    const next = queue.value.find(e => e.status === 'pending');
-    if (next) { next.status = 'running'; }
+async function loadTriggers() {
+  const res = await triggerApi.list();
+  const map = new Map<string, Trigger>();
+  for (const t of res.triggers ?? []) {
+    map.set(t.id, t);
+  }
+  triggers.value = map;
+}
+
+async function loadQueueData() {
+  try {
+    const [queueRes, runningRes, pendingRes] = await Promise.all([
+      executionApi.getQueueStatus(),
+      executionApi.listAll({ limit: 50, status: 'running' }),
+      executionApi.listAll({ limit: 50, status: 'pending' }),
+    ]);
+
+    queueSummary.value = queueRes.queue;
+    totalPending.value = queueRes.total_pending;
+    runningExecutions.value = runningRes.executions ?? [];
+    pendingExecutions.value = pendingRes.executions ?? [];
+    loadError.value = '';
+  } catch (err) {
+    loadError.value = err instanceof ApiError ? err.message : 'Failed to load queue data';
+  } finally {
+    isLoading.value = false;
   }
 }
 
-onMounted(() => {
-  refreshInterval = setInterval(simulateProgress, 5000);
+async function cancelExecution(executionId: string) {
+  if (cancellingIds.value.has(executionId)) return;
+  cancellingIds.value.add(executionId);
+  try {
+    await executionApi.cancel(executionId);
+    showToast('Execution cancellation initiated', 'success');
+    await loadQueueData();
+  } catch (err) {
+    const message = err instanceof ApiError ? err.message : 'Failed to cancel execution';
+    showToast(message, 'error');
+  } finally {
+    cancellingIds.value.delete(executionId);
+  }
+}
+
+async function cancelQueueForTrigger(triggerId: string) {
+  try {
+    const res = await executionApi.cancelQueueForTrigger(triggerId);
+    showToast(`Cancelled ${res.cancelled} pending entries`, 'success');
+    await loadQueueData();
+  } catch (err) {
+    const message = err instanceof ApiError ? err.message : 'Failed to cancel queue entries';
+    showToast(message, 'error');
+  }
+}
+
+onMounted(async () => {
+  await Promise.all([loadTriggers().catch(() => {}), loadQueueData()]);
+  refreshInterval = setInterval(loadQueueData, 5000);
 });
 
 onUnmounted(() => {
@@ -112,95 +173,214 @@ onUnmounted(() => {
 
     <PageHeader
       title="Execution Queue Dashboard"
-      subtitle="Monitor and reprioritize the execution queue in real time."
+      subtitle="Monitor and manage the execution queue in real time."
     />
 
-    <div class="stats-bar">
-      <div class="stat-card">
-        <span class="stat-num" style="color: #34d399">{{ stats.running }}</span>
-        <span class="stat-lbl">Running</span>
-      </div>
-      <div class="stat-card">
-        <span class="stat-num" style="color: #f59e0b">{{ stats.pending }}</span>
-        <span class="stat-lbl">Pending</span>
-      </div>
-      <div class="stat-card">
-        <span class="stat-num">{{ stats.total }}</span>
-        <span class="stat-lbl">Total</span>
-      </div>
-      <div class="stat-card">
-        <span class="stat-num" style="color: var(--accent-cyan)">Live</span>
-        <span class="stat-lbl">Auto-refresh 5s</span>
-      </div>
+    <!-- Loading state -->
+    <div v-if="isLoading" class="loading-state">
+      <div class="loading-spinner"></div>
+      <span>Loading queue data...</span>
     </div>
 
-    <div class="lanes">
-      <div v-for="[laneKey, laneLabel, laneQueue] in [['critical', 'Critical', criticalQueue], ['normal', 'Normal', normalQueue], ['batch', 'Batch', batchQueue]]" :key="(laneKey as string)" class="lane">
-        <div class="lane-header" :style="{ borderBottomColor: priorityColor(laneKey as string) }">
-          <div class="lane-dot" :style="{ background: priorityColor(laneKey as string) }"></div>
-          <span class="lane-label">{{ laneLabel }}</span>
-          <span class="lane-count">{{ (laneQueue as QueuedExecution[]).length }}</span>
-        </div>
+    <!-- Error state -->
+    <div v-else-if="loadError" class="error-state">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
+        <circle cx="12" cy="12" r="10"/>
+        <line x1="12" y1="8" x2="12" y2="12"/>
+        <line x1="12" y1="16" x2="12.01" y2="16"/>
+      </svg>
+      <span>{{ loadError }}</span>
+      <button class="btn btn-secondary" @click="loadQueueData">Retry</button>
+    </div>
 
-        <div class="lane-items">
-          <div
-            v-for="ex in (laneQueue as QueuedExecution[])"
-            :key="ex.id"
-            class="queue-item"
-            :class="{
-              'is-running': ex.status === 'running',
-              'is-dragging': isDragging === ex.id,
-              'is-drag-over': dragOverId === ex.id,
-            }"
-            draggable="true"
-            @dragstart="handleDragStart(ex.id)"
-            @dragover.prevent="handleDragOver(ex.id)"
-            @drop.prevent="handleDrop(ex.id)"
-            @dragend="isDragging = null; dragOverId = null"
-          >
-            <div class="item-drag-handle">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12">
-                <line x1="8" y1="6" x2="21" y2="6"/>
-                <line x1="8" y1="12" x2="21" y2="12"/>
-                <line x1="8" y1="18" x2="21" y2="18"/>
-                <line x1="3" y1="6" x2="3.01" y2="6"/>
-                <line x1="3" y1="12" x2="3.01" y2="12"/>
-                <line x1="3" y1="18" x2="3.01" y2="18"/>
-              </svg>
-            </div>
-            <div class="item-pos">#{{ ex.position }}</div>
-            <div class="item-info">
-              <div class="item-bot">{{ ex.bot }}</div>
-              <div class="item-trigger">{{ ex.trigger }}</div>
-            </div>
-            <div class="item-right">
-              <span class="item-status" :style="{ color: statusColor(ex.status), background: statusColor(ex.status) + '20' }">
-                {{ ex.status }}
-              </span>
-              <span class="item-est">~{{ formatDuration(ex.estimatedDuration) }}</span>
-            </div>
-            <div v-if="ex.status === 'running'" class="item-progress">
-              <div class="progress-bar">
-                <div class="progress-fill running-anim"></div>
+    <template v-else>
+      <div class="stats-bar">
+        <div class="stat-card">
+          <span class="stat-num" style="color: #34d399">{{ stats.running }}</span>
+          <span class="stat-lbl">Running</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-num" style="color: #f59e0b">{{ stats.pending }}</span>
+          <span class="stat-lbl">Pending</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-num" style="color: #3b82f6">{{ stats.dispatching }}</span>
+          <span class="stat-lbl">Dispatching</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-num">{{ stats.total }}</span>
+          <span class="stat-lbl">Total</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-num" style="color: var(--accent-cyan)">Live</span>
+          <span class="stat-lbl">Auto-refresh 5s</span>
+        </div>
+      </div>
+
+      <div class="lanes">
+        <!-- Running Lane -->
+        <div class="lane">
+          <div class="lane-header" style="border-bottom-color: #34d399">
+            <div class="lane-dot" style="background: #34d399"></div>
+            <span class="lane-label">Running</span>
+            <span class="lane-count">{{ runningQueue.length }}</span>
+          </div>
+          <div class="lane-items">
+            <div
+              v-for="ex in runningQueue"
+              :key="ex.id"
+              class="queue-item is-running"
+              draggable="true"
+              @dragstart="handleDragStart(ex.id)"
+              @dragover.prevent="handleDragOver(ex.id)"
+              @drop.prevent="handleDrop(ex.id)"
+              @dragend="isDragging = null; dragOverId = null"
+              :class="{ 'is-dragging': isDragging === ex.id, 'is-drag-over': dragOverId === ex.id }"
+            >
+              <div class="item-drag-handle">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12">
+                  <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/>
+                  <line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>
+                </svg>
+              </div>
+              <div class="item-pos">#{{ ex.position }}</div>
+              <div class="item-info">
+                <div class="item-bot">{{ ex.triggerName }}</div>
+                <div class="item-trigger">{{ ex.triggerType }} | {{ ex.id }}</div>
+              </div>
+              <div class="item-right">
+                <span class="item-status" :style="{ color: statusColor(ex.status), background: statusColor(ex.status) + '20' }">
+                  {{ ex.status }}
+                </span>
+                <span class="item-est">{{ formatTimeAgo(ex.startedAt) }}</span>
+              </div>
+              <button
+                class="cancel-btn"
+                :disabled="cancellingIds.has(ex.id)"
+                @click.stop="cancelExecution(ex.id)"
+                title="Cancel execution"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+                  <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+              </button>
+              <div class="item-progress">
+                <div class="progress-bar">
+                  <div class="progress-fill running-anim"></div>
+                </div>
               </div>
             </div>
+            <div v-if="runningQueue.length === 0" class="lane-empty">
+              No running executions
+            </div>
           </div>
+        </div>
 
-          <div v-if="(laneQueue as QueuedExecution[]).length === 0" class="lane-empty">
-            No {{ laneKey }} executions
+        <!-- Pending Lane -->
+        <div class="lane">
+          <div class="lane-header" style="border-bottom-color: #f59e0b">
+            <div class="lane-dot" style="background: #f59e0b"></div>
+            <span class="lane-label">Pending</span>
+            <span class="lane-count">{{ pendingQueue.length }}</span>
+          </div>
+          <div class="lane-items">
+            <div
+              v-for="ex in pendingQueue"
+              :key="ex.id"
+              class="queue-item"
+              draggable="true"
+              @dragstart="handleDragStart(ex.id)"
+              @dragover.prevent="handleDragOver(ex.id)"
+              @drop.prevent="handleDrop(ex.id)"
+              @dragend="isDragging = null; dragOverId = null"
+              :class="{ 'is-dragging': isDragging === ex.id, 'is-drag-over': dragOverId === ex.id }"
+            >
+              <div class="item-drag-handle">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12">
+                  <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/>
+                  <line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>
+                </svg>
+              </div>
+              <div class="item-pos">#{{ ex.position }}</div>
+              <div class="item-info">
+                <div class="item-bot">{{ ex.triggerName }}</div>
+                <div class="item-trigger">{{ ex.triggerType }} | {{ ex.id }}</div>
+              </div>
+              <div class="item-right">
+                <span class="item-status" :style="{ color: statusColor(ex.status), background: statusColor(ex.status) + '20' }">
+                  {{ ex.status }}
+                </span>
+                <span class="item-est">{{ formatTimeAgo(ex.startedAt) }}</span>
+              </div>
+              <button
+                class="cancel-btn"
+                :disabled="cancellingIds.has(ex.id)"
+                @click.stop="cancelExecution(ex.id)"
+                title="Cancel execution"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+                  <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+              </button>
+            </div>
+            <div v-if="pendingQueue.length === 0" class="lane-empty">
+              No pending executions
+            </div>
+          </div>
+        </div>
+
+        <!-- Per-Trigger Queue Summary Lane -->
+        <div class="lane">
+          <div class="lane-header" style="border-bottom-color: #6b7280">
+            <div class="lane-dot" style="background: #6b7280"></div>
+            <span class="lane-label">Queue by Trigger</span>
+            <span class="lane-count">{{ queueSummary.length }}</span>
+          </div>
+          <div class="lane-items">
+            <div
+              v-for="entry in queueSummary"
+              :key="entry.trigger_id"
+              class="queue-item"
+            >
+              <div class="item-info">
+                <div class="item-bot">{{ triggers.get(entry.trigger_id)?.name ?? entry.trigger_id }}</div>
+                <div class="item-trigger">{{ entry.trigger_id }}</div>
+              </div>
+              <div class="item-right">
+                <span class="item-status" :style="{ color: '#f59e0b', background: '#f59e0b20' }">
+                  {{ entry.pending }} pending
+                </span>
+                <span v-if="entry.dispatching > 0" class="item-status" :style="{ color: '#3b82f6', background: '#3b82f620' }" style="margin-top: 3px">
+                  {{ entry.dispatching }} dispatching
+                </span>
+              </div>
+              <button
+                v-if="entry.pending > 0"
+                class="cancel-btn"
+                @click.stop="cancelQueueForTrigger(entry.trigger_id)"
+                title="Cancel all pending for this trigger"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+                  <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+              </button>
+            </div>
+            <div v-if="queueSummary.length === 0" class="lane-empty">
+              No queued triggers
+            </div>
           </div>
         </div>
       </div>
-    </div>
 
-    <div class="drag-hint">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="14" height="14">
-        <polyline points="5 9 2 12 5 15"/><polyline points="9 5 12 2 15 5"/>
-        <polyline points="15 19 12 22 9 19"/><polyline points="19 9 22 12 19 15"/>
-        <line x1="2" y1="12" x2="22" y2="12"/><line x1="12" y1="2" x2="12" y2="22"/>
-      </svg>
-      Drag executions to reprioritize within the queue
-    </div>
+      <div class="drag-hint">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="14" height="14">
+          <polyline points="5 9 2 12 5 15"/><polyline points="9 5 12 2 15 5"/>
+          <polyline points="15 19 12 22 9 19"/><polyline points="19 9 22 12 19 15"/>
+          <line x1="2" y1="12" x2="22" y2="12"/><line x1="12" y1="2" x2="12" y2="22"/>
+        </svg>
+        Drag executions to reprioritize within the queue
+      </div>
+    </template>
   </div>
 </template>
 
@@ -215,6 +395,55 @@ onUnmounted(() => {
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(12px); }
   to { opacity: 1; transform: translateY(0); }
+}
+
+.loading-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 60px 20px;
+  color: var(--text-tertiary);
+  font-size: 0.9rem;
+}
+
+.loading-spinner {
+  width: 20px;
+  height: 20px;
+  border: 2px solid var(--border-default);
+  border-top-color: var(--accent-cyan);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.error-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 40px 20px;
+  color: #ef4444;
+  font-size: 0.9rem;
+}
+
+.btn-secondary {
+  padding: 6px 14px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-default);
+  border-radius: 6px;
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.btn-secondary:hover {
+  border-color: var(--accent-cyan);
+  color: var(--text-primary);
 }
 
 .stats-bar {
@@ -307,6 +536,7 @@ onUnmounted(() => {
   cursor: grab;
   transition: all 0.15s;
   user-select: none;
+  position: relative;
 }
 
 .queue-item:hover { border-color: var(--border-default); background: var(--bg-elevated); }
@@ -371,6 +601,31 @@ onUnmounted(() => {
   font-size: 0.68rem;
   color: var(--text-muted);
   font-family: monospace;
+}
+
+.cancel-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.15s;
+  flex-shrink: 0;
+}
+
+.cancel-btn:hover {
+  color: #ef4444;
+  border-color: rgba(239, 68, 68, 0.3);
+  background: rgba(239, 68, 68, 0.1);
+}
+
+.cancel-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
 }
 
 .item-progress {

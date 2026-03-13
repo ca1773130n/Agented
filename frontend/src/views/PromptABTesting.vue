@@ -1,15 +1,19 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
+import { triggerApi, analyticsApi, ApiError } from '../services/api';
+import type { Trigger, ExecutionAnalyticsResponse } from '../services/api';
 
 const router = useRouter();
 const showToast = useToast();
 
 interface Variant {
   id: 'A' | 'B';
+  triggerId: string;
+  triggerName: string;
   prompt: string;
   runs: number;
   avgScore: number;
@@ -19,58 +23,180 @@ interface Variant {
 
 interface ABTest {
   id: string;
-  botName: string;
+  baseTriggerName: string;
   status: 'running' | 'paused' | 'completed';
   startedAt: string;
   totalRuns: number;
   variants: [Variant, Variant];
 }
 
-const tests = ref<ABTest[]>([
-  {
-    id: 'ab-001',
-    botName: 'bot-pr-review',
-    status: 'running',
-    startedAt: '2026-03-01T00:00:00Z',
-    totalRuns: 48,
-    variants: [
-      {
-        id: 'A',
-        prompt: 'You are a code reviewer. Review this pull request for bugs, security issues, and code quality. Be concise and actionable.',
-        runs: 24,
-        avgScore: 7.2,
-        avgTokens: 1840,
-        winRate: 54,
-      },
-      {
-        id: 'B',
-        prompt: 'You are a senior software engineer conducting a thorough code review. Examine the diff for: 1) Security vulnerabilities 2) Logic errors 3) Performance concerns 4) Code maintainability. Output structured findings.',
-        runs: 24,
-        avgScore: 8.1,
-        avgTokens: 2340,
-        winRate: 46,
-      },
-    ],
-  },
-]);
-
-const selected = ref<ABTest>(tests.value[0]);
+const triggers = ref<Trigger[]>([]);
+const tests = ref<ABTest[]>([]);
+const selected = ref<ABTest | null>(null);
+const isLoading = ref(false);
+const loadError = ref('');
 const isSaving = ref(false);
+const isCreating = ref(false);
+
+// Create new A/B test state
+const showCreateDialog = ref(false);
+const baseTriggerIdForCreate = ref('');
+const variantPrompt = ref('');
+
+onMounted(async () => {
+  await loadTriggers();
+});
+
+async function loadTriggers() {
+  isLoading.value = true;
+  loadError.value = '';
+  try {
+    const res = await triggerApi.list();
+    triggers.value = res.triggers;
+    await buildTestsFromTriggers();
+  } catch (e) {
+    loadError.value = e instanceof ApiError ? e.message : 'Failed to load triggers';
+  } finally {
+    isLoading.value = false;
+  }
+}
+
+async function buildTestsFromTriggers() {
+  // Group triggers that share a name prefix (e.g. "PR Review" and "PR Review [Variant B]")
+  const baseMap = new Map<string, Trigger[]>();
+  for (const t of triggers.value) {
+    const variantMatch = t.name.match(/^(.+?)\s*\[Variant [A-Z]\]$/);
+    const baseName = variantMatch ? variantMatch[1].trim() : t.name;
+    if (!baseMap.has(baseName)) baseMap.set(baseName, []);
+    baseMap.get(baseName)!.push(t);
+  }
+
+  const builtTests: ABTest[] = [];
+  for (const [baseName, group] of baseMap) {
+    if (group.length < 2) continue;
+    // Use first two as A and B
+    const [a, b] = group;
+    let analyticsA: ExecutionAnalyticsResponse | null = null;
+    let analyticsB: ExecutionAnalyticsResponse | null = null;
+    try {
+      [analyticsA, analyticsB] = await Promise.all([
+        analyticsApi.fetchExecutionAnalytics({ trigger_id: a.id }),
+        analyticsApi.fetchExecutionAnalytics({ trigger_id: b.id }),
+      ]);
+    } catch {
+      // Analytics may not be available
+    }
+
+    const runsA = analyticsA?.total_executions ?? 0;
+    const runsB = analyticsB?.total_executions ?? 0;
+    const totalRuns = runsA + runsB;
+    const successA = analyticsA?.data.reduce((sum, d) => sum + d.success_count, 0) ?? 0;
+    const successB = analyticsB?.data.reduce((sum, d) => sum + d.success_count, 0) ?? 0;
+    const avgDurA = analyticsA?.data.length
+      ? analyticsA.data.reduce((sum, d) => sum + (d.avg_duration_ms ?? 0), 0) / analyticsA.data.length
+      : 0;
+    const avgDurB = analyticsB?.data.length
+      ? analyticsB.data.reduce((sum, d) => sum + (d.avg_duration_ms ?? 0), 0) / analyticsB.data.length
+      : 0;
+
+    const scoreA = runsA > 0 ? Math.round((successA / runsA) * 100) / 10 : 0;
+    const scoreB = runsB > 0 ? Math.round((successB / runsB) * 100) / 10 : 0;
+
+    builtTests.push({
+      id: `ab-${a.id}-${b.id}`,
+      baseTriggerName: baseName,
+      status: a.enabled && b.enabled ? 'running' : 'paused',
+      startedAt: a.created_at || new Date().toISOString(),
+      totalRuns,
+      variants: [
+        {
+          id: 'A',
+          triggerId: a.id,
+          triggerName: a.name,
+          prompt: a.prompt_template,
+          runs: runsA,
+          avgScore: scoreA,
+          avgTokens: Math.round(avgDurA / 10),
+          winRate: totalRuns > 0 ? Math.round((runsA / totalRuns) * 100) : 50,
+        },
+        {
+          id: 'B',
+          triggerId: b.id,
+          triggerName: b.name,
+          prompt: b.prompt_template,
+          runs: runsB,
+          avgScore: scoreB,
+          avgTokens: Math.round(avgDurB / 10),
+          winRate: totalRuns > 0 ? Math.round((runsB / totalRuns) * 100) : 50,
+        },
+      ],
+    });
+  }
+  tests.value = builtTests;
+  if (builtTests.length > 0) selected.value = builtTests[0];
+}
 
 const winner = computed(() => {
+  if (!selected.value) return null;
   const [a, b] = selected.value.variants;
   if (a.avgScore === b.avgScore) return null;
   return a.avgScore > b.avgScore ? 'A' : 'B';
 });
 
 async function toggleTest() {
+  if (!selected.value) return;
   isSaving.value = true;
   try {
-    await new Promise(r => setTimeout(r, 600));
-    selected.value.status = selected.value.status === 'running' ? 'paused' : 'running';
+    const newEnabled = selected.value.status === 'running' ? 0 : 1;
+    await Promise.all([
+      triggerApi.update(selected.value.variants[0].triggerId, { enabled: newEnabled }),
+      triggerApi.update(selected.value.variants[1].triggerId, { enabled: newEnabled }),
+    ]);
+    selected.value.status = newEnabled ? 'running' : 'paused';
     showToast(`Test ${selected.value.status}`, 'success');
+  } catch (e) {
+    showToast(e instanceof ApiError ? e.message : 'Failed to toggle test', 'error');
   } finally {
     isSaving.value = false;
+  }
+}
+
+async function applyWinner() {
+  if (!selected.value || !winner.value) return;
+  const winnerVariant = selected.value.variants.find(v => v.id === winner.value);
+  const loserVariant = selected.value.variants.find(v => v.id !== winner.value);
+  if (!winnerVariant || !loserVariant) return;
+  try {
+    await triggerApi.update(loserVariant.triggerId, {
+      prompt_template: winnerVariant.prompt,
+      enabled: 0,
+    });
+    showToast('Winner applied — loser variant disabled', 'success');
+  } catch (e) {
+    showToast(e instanceof ApiError ? e.message : 'Failed to apply winner', 'error');
+  }
+}
+
+async function createVariant() {
+  if (!baseTriggerIdForCreate.value || !variantPrompt.value.trim()) return;
+  isCreating.value = true;
+  try {
+    const base = triggers.value.find(t => t.id === baseTriggerIdForCreate.value);
+    if (!base) return;
+    await triggerApi.create({
+      name: `${base.name} [Variant B]`,
+      prompt_template: variantPrompt.value,
+      backend_type: base.backend_type,
+      trigger_source: base.trigger_source,
+    });
+    showToast('Variant created. Reload to see the new A/B test.', 'success');
+    showCreateDialog.value = false;
+    variantPrompt.value = '';
+    await loadTriggers();
+  } catch (e) {
+    showToast(e instanceof ApiError ? e.message : 'Failed to create variant', 'error');
+  } finally {
+    isCreating.value = false;
   }
 }
 
@@ -93,9 +219,44 @@ function scoreBar(score: number) {
     <PageHeader
       title="Prompt A/B Testing"
       subtitle="Run two prompt variants on alternating executions and compare output quality side-by-side."
-    />
+    >
+      <template #actions>
+        <button class="btn btn-primary" @click="showCreateDialog = true">+ New A/B Test</button>
+      </template>
+    </PageHeader>
 
-    <div class="layout">
+    <div v-if="isLoading" class="loading-msg">Loading triggers and analytics...</div>
+    <div v-else-if="loadError" class="error-msg">{{ loadError }}</div>
+    <div v-else-if="tests.length === 0" class="empty-msg">
+      <p>No A/B tests found. Create variant triggers (name them with [Variant B] suffix) to start testing.</p>
+      <button class="btn btn-primary" @click="showCreateDialog = true">+ Create Variant</button>
+    </div>
+
+    <!-- Create dialog -->
+    <div v-if="showCreateDialog" class="card create-dialog">
+      <div class="create-header">Create A/B Test Variant</div>
+      <div class="create-body">
+        <div class="create-field">
+          <label class="create-label">Base Trigger</label>
+          <select v-model="baseTriggerIdForCreate" class="select">
+            <option value="">Select a trigger...</option>
+            <option v-for="t in triggers" :key="t.id" :value="t.id">{{ t.name }}</option>
+          </select>
+        </div>
+        <div class="create-field">
+          <label class="create-label">Variant B Prompt</label>
+          <textarea v-model="variantPrompt" class="variant-textarea" rows="6" placeholder="Enter the variant prompt..."></textarea>
+        </div>
+        <div class="create-actions">
+          <button class="btn btn-ghost" @click="showCreateDialog = false">Cancel</button>
+          <button class="btn btn-primary" :disabled="isCreating || !baseTriggerIdForCreate || !variantPrompt.trim()" @click="createVariant">
+            {{ isCreating ? 'Creating...' : 'Create Variant' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div v-if="tests.length > 0 && selected" class="layout">
       <!-- Test list -->
       <aside class="sidebar card">
         <div class="sidebar-header">Active Tests</div>
@@ -106,7 +267,7 @@ function scoreBar(score: number) {
           :class="{ active: selected.id === t.id }"
           @click="selected = t"
         >
-          <div class="test-name">{{ t.botName }}</div>
+          <div class="test-name">{{ t.baseTriggerName }}</div>
           <div class="test-meta">{{ t.totalRuns }} runs · <span :class="['test-status', `s-${t.status}`]">{{ t.status }}</span></div>
         </div>
       </aside>
@@ -116,7 +277,7 @@ function scoreBar(score: number) {
         <div class="card detail-header-card">
           <div class="detail-top">
             <div>
-              <div class="detail-bot">{{ selected.botName }}</div>
+              <div class="detail-bot">{{ selected.baseTriggerName }}</div>
               <div class="detail-meta">Started {{ formatDate(selected.startedAt) }} · {{ selected.totalRuns }} total runs</div>
             </div>
             <div class="header-actions">
@@ -124,7 +285,7 @@ function scoreBar(score: number) {
               <button class="btn btn-ghost" :disabled="isSaving" @click="toggleTest">
                 {{ selected.status === 'running' ? 'Pause' : 'Resume' }}
               </button>
-              <button class="btn btn-primary" @click="showToast('Winner applied to production', 'success')">
+              <button class="btn btn-primary" :disabled="!winner" @click="applyWinner">
                 Apply Winner
               </button>
             </div>
@@ -135,7 +296,7 @@ function scoreBar(score: number) {
           <div v-for="v in selected.variants" :key="v.id" class="variant-card card" :class="{ 'is-winner': winner === v.id }">
             <div class="variant-header">
               <div class="variant-badge">Variant {{ v.id }}</div>
-              <div v-if="winner === v.id" class="winner-badge">🏆 Leading</div>
+              <div v-if="winner === v.id" class="winner-badge">Leading</div>
             </div>
             <div class="variant-prompt">
               <div class="prompt-label">Prompt</div>
@@ -166,7 +327,6 @@ function scoreBar(score: number) {
         </div>
 
         <div v-if="winner" class="winner-summary card">
-          <span class="winner-icon">🏆</span>
           <div>
             <div class="winner-title">Variant {{ winner }} is leading</div>
             <div class="winner-sub">{{ Math.abs(selected.variants[0].avgScore - selected.variants[1].avgScore).toFixed(1) }} points higher average score with {{ selected.totalRuns }} total runs. Statistical significance improves with more data.</div>
@@ -180,6 +340,21 @@ function scoreBar(score: number) {
 <style scoped>
 .ab-testing { display: flex; flex-direction: column; gap: 24px; animation: fadeIn 0.4s ease; }
 @keyframes fadeIn { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+
+.loading-msg, .error-msg, .empty-msg { font-size: 0.875rem; padding: 24px; text-align: center; }
+.loading-msg { color: var(--text-tertiary); }
+.error-msg { color: #ef4444; }
+.empty-msg { color: var(--text-muted); display: flex; flex-direction: column; align-items: center; gap: 16px; }
+.empty-msg p { margin: 0; }
+
+.create-dialog { margin-bottom: 8px; }
+.create-header { padding: 14px 20px; border-bottom: 1px solid var(--border-default); font-size: 0.88rem; font-weight: 600; color: var(--text-primary); }
+.create-body { padding: 20px; display: flex; flex-direction: column; gap: 16px; }
+.create-field { display: flex; flex-direction: column; gap: 6px; }
+.create-label { font-size: 0.78rem; font-weight: 600; color: var(--text-secondary); }
+.select { padding: 8px 12px; background: var(--bg-tertiary); border: 1px solid var(--border-default); border-radius: 7px; color: var(--text-primary); font-size: 0.82rem; }
+.variant-textarea { padding: 10px 12px; background: var(--bg-tertiary); border: 1px solid var(--border-default); border-radius: 8px; color: var(--text-primary); font-family: monospace; font-size: 0.82rem; resize: vertical; }
+.create-actions { display: flex; gap: 10px; justify-content: flex-end; }
 
 .layout { display: grid; grid-template-columns: 220px 1fr; gap: 20px; align-items: start; }
 
@@ -228,13 +403,13 @@ function scoreBar(score: number) {
   display: flex; align-items: flex-start; gap: 16px; padding: 18px 20px;
   border-color: rgba(52,211,153,0.3); background: rgba(52,211,153,0.04);
 }
-.winner-icon { font-size: 1.4rem; }
 .winner-title { font-size: 0.88rem; font-weight: 600; color: #34d399; margin-bottom: 4px; }
 .winner-sub { font-size: 0.78rem; color: var(--text-secondary); line-height: 1.5; }
 
 .btn { display: flex; align-items: center; gap: 6px; padding: 7px 14px; border-radius: 7px; font-size: 0.82rem; font-weight: 500; cursor: pointer; border: none; transition: all 0.15s; }
 .btn-primary { background: var(--accent-cyan); color: #000; }
 .btn-primary:hover:not(:disabled) { opacity: 0.85; }
+.btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }
 .btn-ghost { background: var(--bg-tertiary); border: 1px solid var(--border-default); color: var(--text-secondary); }
 .btn-ghost:hover:not(:disabled) { border-color: var(--accent-cyan); color: var(--accent-cyan); }
 .btn-ghost:disabled { opacity: 0.4; cursor: not-allowed; }

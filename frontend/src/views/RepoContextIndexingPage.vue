@@ -1,9 +1,11 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
+import { triggerApi, ApiError } from '../services/api';
+import type { ProjectPath } from '../services/api';
 
 const router = useRouter();
 const showToast = useToast();
@@ -12,6 +14,7 @@ type IndexStatus = 'indexed' | 'indexing' | 'stale' | 'pending';
 
 interface RepoIndex {
   id: string;
+  triggerId: string;
   name: string;
   url: string;
   status: IndexStatus;
@@ -23,44 +26,66 @@ interface RepoIndex {
   embeddingModel: string;
 }
 
-const repos = ref<RepoIndex[]>([
-  {
-    id: 'idx-1',
-    name: 'agented/backend',
-    url: 'https://github.com/org/agented',
+const isLoading = ref(true);
+const loadError = ref<string | null>(null);
+
+const repos = ref<RepoIndex[]>([]);
+const cachedTriggers = ref<{ id: string }[]>([]);
+
+function pathToRepoIndex(path: ProjectPath, triggerId: string, idx: number): RepoIndex {
+  const isGithub = path.path_type === 'github';
+  const name = isGithub
+    ? (path.github_repo_url || '').replace('https://github.com/', '')
+    : (path.local_project_path || '').split('/').slice(-2).join('/');
+  return {
+    id: `idx-${triggerId}-${idx}`,
+    triggerId,
+    name: name || `path-${idx}`,
+    url: path.github_repo_url || path.local_project_path || '',
     status: 'indexed',
-    fileCount: 284,
-    indexedFiles: 284,
-    totalTokensSaved: 142000,
-    lastIndexedAt: '12 minutes ago',
-    branch: 'main',
-    embeddingModel: 'text-embedding-3-small',
-  },
-  {
-    id: 'idx-2',
-    name: 'org/platform-api',
-    url: 'https://github.com/org/platform-api',
-    status: 'stale',
-    fileCount: 512,
-    indexedFiles: 512,
-    totalTokensSaved: 280000,
-    lastIndexedAt: '3 days ago',
-    branch: 'main',
-    embeddingModel: 'text-embedding-3-small',
-  },
-  {
-    id: 'idx-3',
-    name: 'org/infra-terraform',
-    url: 'https://github.com/org/infra-terraform',
-    status: 'indexing',
-    fileCount: 120,
-    indexedFiles: 67,
+    fileCount: 0,
+    indexedFiles: 0,
     totalTokensSaved: 0,
     lastIndexedAt: null,
     branch: 'main',
-    embeddingModel: 'text-embedding-3-large',
-  },
-]);
+    embeddingModel: 'text-embedding-3-small',
+  };
+}
+
+async function loadPaths() {
+  isLoading.value = true;
+  loadError.value = null;
+  try {
+    const { triggers } = await triggerApi.list();
+    cachedTriggers.value = triggers;
+    const allRepos: RepoIndex[] = [];
+    const seen = new Set<string>();
+
+    const pathResults = await Promise.all(
+      triggers.map(t => triggerApi.listPaths(t.id).catch(() => ({ paths: [] as ProjectPath[] })))
+    );
+    for (let ti = 0; ti < triggers.length; ti++) {
+      const paths = pathResults[ti].paths;
+      for (let i = 0; i < paths.length; i++) {
+        const p = paths[i];
+        const key = p.github_repo_url || p.local_project_path || '';
+        if (key && !seen.has(key)) {
+          seen.add(key);
+          allRepos.push(pathToRepoIndex(p, triggers[ti].id, i));
+        }
+      }
+    }
+
+    repos.value = allRepos;
+  } catch (err) {
+    const msg = err instanceof ApiError ? err.message : 'Failed to load repository paths';
+    loadError.value = msg;
+  } finally {
+    isLoading.value = false;
+  }
+}
+
+onMounted(loadPaths);
 
 const addingRepo = ref(false);
 const newRepoUrl = ref('');
@@ -111,33 +136,69 @@ async function addRepo() {
     showToast('Repository URL is required', 'info');
     return;
   }
-  const name = newRepoUrl.value.replace('https://github.com/', '').split('/').slice(0, 2).join('/');
-  repos.value.push({
-    id: 'idx-' + Date.now(),
-    name: name || newRepoUrl.value,
-    url: newRepoUrl.value,
-    status: 'pending',
-    fileCount: 0,
-    indexedFiles: 0,
-    totalTokensSaved: 0,
-    lastIndexedAt: null,
-    branch: newRepoBranch.value,
-    embeddingModel: newRepoModel.value,
-  });
-  newRepoUrl.value = '';
-  addingRepo.value = false;
-  showToast('Repository added — indexing will begin shortly', 'success');
+  try {
+    // Get the first trigger to add the path to, or show info
+    const triggers = cachedTriggers.value.length > 0
+      ? cachedTriggers.value
+      : (await triggerApi.list()).triggers;
+    if (triggers.length === 0) {
+      showToast('No triggers found. Create a trigger first to add repository paths.', 'info');
+      return;
+    }
+    const triggerId = triggers[0].id;
+    const isGithub = newRepoUrl.value.includes('github.com');
+    if (isGithub) {
+      await triggerApi.addGitHubRepo(triggerId, newRepoUrl.value);
+    } else {
+      await triggerApi.addPath(triggerId, newRepoUrl.value);
+    }
+    const name = newRepoUrl.value.replace('https://github.com/', '').split('/').slice(0, 2).join('/');
+    repos.value.push({
+      id: 'idx-' + Date.now(),
+      triggerId,
+      name: name || newRepoUrl.value,
+      url: newRepoUrl.value,
+      status: 'pending',
+      fileCount: 0,
+      indexedFiles: 0,
+      totalTokensSaved: 0,
+      lastIndexedAt: null,
+      branch: newRepoBranch.value,
+      embeddingModel: newRepoModel.value,
+    });
+    newRepoUrl.value = '';
+    addingRepo.value = false;
+    showToast('Repository added — indexing will begin shortly', 'success');
+  } catch (err) {
+    const msg = err instanceof ApiError ? err.message : 'Failed to add repository';
+    showToast(msg, 'error');
+  }
 }
 
 async function searchContext() {
   if (!searchQuery.value.trim()) return;
   isSearching.value = true;
   try {
-    await new Promise(resolve => setTimeout(resolve, 800));
-    searchResult.value = `Found 3 relevant files for "${searchQuery.value}":\n\n1. backend/app/db/agents.py (score: 0.94)\n   def get_agent(agent_id: str) — retrieves agent by ID\n\n2. backend/app/routes/agents.py (score: 0.88)\n   AgentDetail route handler with full agent config\n\n3. backend/app/models/agent.py (score: 0.82)\n   AgentConfig pydantic model with all agent fields`;
-    showToast('Semantic search complete', 'success');
-  } catch {
-    showToast('Search failed', 'error');
+    // Search across all trigger paths to find matching repos
+    const results: string[] = [];
+    results.push(`Searching across ${repos.value.length} indexed repository path(s)...\n`);
+
+    for (const repo of repos.value) {
+      if (repo.name.toLowerCase().includes(searchQuery.value.toLowerCase()) ||
+          repo.url.toLowerCase().includes(searchQuery.value.toLowerCase())) {
+        results.push(`Match: ${repo.name} (${repo.url})`);
+      }
+    }
+
+    if (results.length === 1) {
+      results.push(`No direct path matches for "${searchQuery.value}". Try a different query.`);
+    }
+
+    searchResult.value = results.join('\n');
+    showToast('Search complete', 'success');
+  } catch (err) {
+    const msg = err instanceof ApiError ? err.message : 'Search failed';
+    showToast(msg, 'error');
   } finally {
     isSearching.value = false;
   }
@@ -155,6 +216,19 @@ async function searchContext() {
       title="Repository Context Indexing"
       subtitle="Semantically index connected repositories so bots retrieve only the most relevant files — not the whole codebase."
     />
+
+    <!-- Loading state -->
+    <div v-if="isLoading" class="card" style="padding: 32px; text-align: center; color: var(--text-tertiary);">
+      Loading repository paths...
+    </div>
+
+    <!-- Error state -->
+    <div v-else-if="loadError" class="card" style="padding: 32px; text-align: center; color: #ef4444;">
+      {{ loadError }}
+      <button class="btn btn-primary" style="margin-top: 12px;" @click="loadPaths">Retry</button>
+    </div>
+
+    <template v-else>
 
     <!-- Stats -->
     <div class="stat-row">
@@ -284,6 +358,8 @@ async function searchContext() {
         <div v-if="repos.length === 0" class="list-empty">No repositories indexed yet</div>
       </div>
     </div>
+
+    </template>
   </div>
 </template>
 

@@ -4,6 +4,8 @@ import { useRouter } from 'vue-router';
 import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
+import { triggerApi, ApiError } from '../services/api';
+import type { TriggerSource } from '../services/api';
 
 const router = useRouter();
 const showToast = useToast();
@@ -12,32 +14,51 @@ const description = ref('');
 const isGenerating = ref(false);
 const isSaving = ref(false);
 const generatedConfig = ref<string | null>(null);
+const saveError = ref('');
 
 const canGenerate = computed(() => description.value.trim().length > 20);
 
+interface GeneratedTriggerConfig {
+  name: string;
+  prompt_template: string;
+  trigger_source: TriggerSource;
+  backend_type: 'claude' | 'opencode';
+  model: string;
+  timeout_seconds: number;
+}
+
+function buildConfigFromDescription(desc: string): GeneratedTriggerConfig {
+  const words = desc.toLowerCase();
+  const isScheduled = words.includes('daily') || words.includes('weekly') || words.includes('schedule') || words.includes('monday') || words.includes('every');
+  const isGitHub = words.includes('pr') || words.includes('pull request') || words.includes('github') || words.includes('commit') || words.includes('merge');
+
+  let triggerSource: TriggerSource = 'webhook';
+  if (isGitHub) triggerSource = 'github';
+  else if (isScheduled) triggerSource = 'scheduled';
+
+  // Build a descriptive name from the first few words
+  const nameWords = desc.split(/\s+/).slice(0, 5);
+  const name = nameWords.map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
+
+  // Build prompt template with standard placeholders
+  const promptTemplate = `You are an AI assistant.\n\n## Task\n${desc}\n\n## Context\n- Repository paths: {paths}\n- Message/payload: {message}\n\nPlease analyze and respond accordingly.`;
+
+  return {
+    name,
+    prompt_template: promptTemplate,
+    trigger_source: triggerSource,
+    backend_type: 'claude',
+    model: 'claude-sonnet-4',
+    timeout_seconds: 300,
+  };
+}
 
 async function handleGenerate() {
   if (!canGenerate.value) return;
   isGenerating.value = true;
+  saveError.value = '';
   try {
-    // Simulate generation with a timeout
-    await new Promise(resolve => setTimeout(resolve, 1200));
-    const words = description.value.toLowerCase();
-    const isScheduled = words.includes('daily') || words.includes('weekly') || words.includes('schedule');
-    const isGitHub = words.includes('pr') || words.includes('pull request') || words.includes('github');
-
-    const config = {
-      name: description.value.split(' ').slice(0, 4).map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ') + ' Bot',
-      prompt_template: `You are an AI assistant. ${description.value}\n\nContext:\n- Repository paths: {paths}\n- Trigger payload: {payload}\n\nPlease analyze and respond accordingly.`,
-      trigger: {
-        type: isGitHub ? 'github' : isScheduled ? 'schedule' : 'webhook',
-        source: isGitHub ? 'pull_request' : 'push',
-      },
-      schedule: isScheduled ? '0 9 * * 1' : null,
-      model: 'claude-opus-4-5',
-      timeout: 300,
-      tags: words.includes('security') ? ['security'] : words.includes('review') ? ['review'] : ['automation'],
-    };
+    const config = buildConfigFromDescription(description.value);
     generatedConfig.value = JSON.stringify(config, null, 2);
     showToast('Bot configuration generated', 'success');
   } catch {
@@ -50,12 +71,39 @@ async function handleGenerate() {
 async function handleSaveDraft() {
   if (!generatedConfig.value) return;
   isSaving.value = true;
+  saveError.value = '';
+
   try {
-    await new Promise(resolve => setTimeout(resolve, 600));
-    showToast('Bot saved as draft', 'success');
+    const config = JSON.parse(generatedConfig.value) as GeneratedTriggerConfig;
+
+    // Validate required fields
+    if (!config.name || !config.prompt_template) {
+      saveError.value = 'Configuration must include name and prompt_template';
+      return;
+    }
+
+    const res = await triggerApi.create({
+      name: config.name,
+      prompt_template: config.prompt_template,
+      backend_type: config.backend_type || 'claude',
+      trigger_source: config.trigger_source || 'webhook',
+      model: config.model,
+      timeout_seconds: config.timeout_seconds || 300,
+    });
+
+    showToast(`Trigger "${res.name}" created successfully`, 'success');
     router.push({ name: 'bots' });
-  } catch {
-    showToast('Failed to save draft', 'error');
+  } catch (err) {
+    if (err instanceof ApiError) {
+      saveError.value = err.message;
+      showToast(err.message, 'error');
+    } else if (err instanceof SyntaxError) {
+      saveError.value = 'Invalid JSON in configuration';
+      showToast('Invalid JSON in configuration', 'error');
+    } else {
+      saveError.value = 'Failed to save trigger';
+      showToast('Failed to save trigger', 'error');
+    }
   } finally {
     isSaving.value = false;
   }
@@ -147,8 +195,9 @@ async function handleSaveDraft() {
             rows="18"
             spellcheck="false"
           />
+          <div v-if="saveError" class="save-error">{{ saveError }}</div>
           <div class="actions">
-            <button class="btn btn-secondary" @click="generatedConfig = null">
+            <button class="btn btn-secondary" @click="generatedConfig = null; saveError = ''">
               Clear
             </button>
             <button
@@ -159,7 +208,7 @@ async function handleSaveDraft() {
               <svg v-if="isSaving" class="spinner" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
                 <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
               </svg>
-              {{ isSaving ? 'Saving...' : 'Save as Draft' }}
+              {{ isSaving ? 'Creating trigger...' : 'Save as Draft' }}
             </button>
           </div>
         </div>
@@ -342,6 +391,15 @@ async function handleSaveDraft() {
   border-radius: 4px;
   text-transform: uppercase;
   letter-spacing: 0.05em;
+}
+
+.save-error {
+  font-size: 0.8rem;
+  color: #ef4444;
+  padding: 8px 12px;
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  border-radius: 6px;
 }
 
 .spinner {

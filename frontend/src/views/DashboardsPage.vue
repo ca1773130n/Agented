@@ -785,4 +785,15 @@ onMounted(() => {
   border-radius: 12px;
   flex-shrink: 0;
 }
+
+@media (max-width: 480px) {
+  .dashboard-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .page-intro {
+    flex-direction: column;
+    text-align: center;
+  }
+}
 </style>

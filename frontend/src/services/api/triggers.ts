@@ -21,6 +21,7 @@ import type {
   PrHistoryPoint,
   PromptHistoryEntry,
   PreviewPromptFullResponse,
+  DryRunResponse,
 } from './types';
 
 // Trigger API (renamed from Bot API)
@@ -173,6 +174,15 @@ export const triggerApi = {
         body: JSON.stringify(payload),
       }
     ),
+
+  dryRun: (triggerId: string, sampleData: Record<string, unknown>) =>
+    apiFetch<DryRunResponse>(
+      `/admin/triggers/${triggerId}/dry-run`,
+      {
+        method: 'POST',
+        body: JSON.stringify(sampleData),
+      }
+    ),
 };
 
 // Audit API
@@ -234,10 +244,11 @@ export const executionApi = {
   },
 
   // List all executions
-  listAll: (options?: { limit?: number; offset?: number }) => {
+  listAll: (options?: { limit?: number; offset?: number; status?: string }) => {
     const params = new URLSearchParams();
     if (options?.limit) params.set('limit', String(options.limit));
     if (options?.offset) params.set('offset', String(options.offset));
+    if (options?.status) params.set('status', options.status);
     const query = params.toString();
     return apiFetch<{ executions: Execution[]; total: number }>(
       `/admin/executions${query ? `?${query}` : ''}`
@@ -254,6 +265,45 @@ export const executionApi = {
   // Cancel a running execution
   cancel: (executionId: string) =>
     apiFetch<{ message: string }>(`/admin/executions/${executionId}`, {
+      method: 'DELETE',
+    }),
+
+  // Cancel a running execution via POST (graceful SIGTERM then SIGKILL)
+  cancelGraceful: (executionId: string) =>
+    apiFetch<{ message: string }>(`/admin/executions/${executionId}/cancel`, {
+      method: 'POST',
+    }),
+
+  // Pause a running execution
+  pause: (executionId: string) =>
+    apiFetch<{ status: string; execution_id: string }>(`/admin/executions/${executionId}/pause`, {
+      method: 'POST',
+    }),
+
+  // Resume a paused execution
+  resume: (executionId: string) =>
+    apiFetch<{ status: string; execution_id: string }>(`/admin/executions/${executionId}/resume`, {
+      method: 'POST',
+    }),
+
+  // Bulk cancel executions
+  bulkCancel: (data: { trigger_id?: string; status?: string; execution_ids?: string[] }) =>
+    apiFetch<{ cancelled: number; failed: number; details: Array<{ execution_id: string; success: boolean; reason?: string }> }>('/admin/executions/bulk-cancel', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  // Queue: get queue summary with per-trigger pending/dispatching counts
+  getQueueStatus: () =>
+    apiFetch<{ queue: Array<{ trigger_id: string; pending: number; dispatching: number }>; total_pending: number }>('/admin/executions/queue'),
+
+  // Queue: get queue depth for a specific trigger
+  getQueueForTrigger: (triggerId: string) =>
+    apiFetch<{ trigger_id: string; pending: number }>(`/admin/executions/queue/${triggerId}`),
+
+  // Queue: cancel all pending queue entries for a trigger
+  cancelQueueForTrigger: (triggerId: string) =>
+    apiFetch<{ cancelled: number }>(`/admin/executions/queue/${triggerId}`, {
       method: 'DELETE',
     }),
 

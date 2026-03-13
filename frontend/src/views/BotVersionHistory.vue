@@ -5,6 +5,8 @@ import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import LoadingState from '../components/base/LoadingState.vue';
 import { useToast } from '../composables/useToast';
+import { triggerApi, ApiError } from '../services/api';
+import type { Trigger } from '../services/api';
 
 const router = useRouter();
 const route = useRoute();
@@ -12,6 +14,7 @@ const showToast = useToast();
 
 const botId = route.params.botId as string;
 const isLoading = ref(true);
+const error = ref('');
 const isRollingBack = ref<string | null>(null);
 const selectedVersionA = ref<string | null>(null);
 const selectedVersionB = ref<string | null>(null);
@@ -30,65 +33,47 @@ interface Version {
 
 const versions = ref<Version[]>([]);
 
-const MOCK_VERSIONS: Version[] = [
-  {
-    id: 'v5',
-    version: 5,
-    author: 'alice@example.com',
-    timestamp: '2026-03-05T14:22:00Z',
-    message: 'Improve prompt clarity for security findings',
-    changes: ['Updated prompt_template', 'Changed timeout to 600s'],
-    config: { name: 'Security Bot v5', timeout: 600, model: 'claude-opus-4-5' },
-    isCurrent: true,
-  },
-  {
-    id: 'v4',
-    version: 4,
-    author: 'bob@example.com',
-    timestamp: '2026-03-04T09:15:00Z',
-    message: 'Add JSON output format requirement',
-    changes: ['Updated prompt_template', 'Added output_format field'],
-    config: { name: 'Security Bot v4', timeout: 300, model: 'claude-opus-4-5' },
-    isCurrent: false,
-  },
-  {
-    id: 'v3',
-    version: 3,
-    author: 'alice@example.com',
-    timestamp: '2026-03-02T16:40:00Z',
-    message: 'Switch model to Opus from Sonnet',
-    changes: ['Changed model from claude-sonnet-4-5 to claude-opus-4-5'],
-    config: { name: 'Security Bot v3', timeout: 300, model: 'claude-opus-4-5' },
-    isCurrent: false,
-  },
-  {
-    id: 'v2',
-    version: 2,
-    author: 'carol@example.com',
-    timestamp: '2026-02-28T11:00:00Z',
-    message: 'Update trigger to include push events',
-    changes: ['Added push trigger', 'Removed manual trigger'],
-    config: { name: 'Security Bot v2', timeout: 300, model: 'claude-sonnet-4-5' },
-    isCurrent: false,
-  },
-  {
-    id: 'v1',
-    version: 1,
-    author: 'alice@example.com',
-    timestamp: '2026-02-25T08:00:00Z',
-    message: 'Initial version',
-    changes: ['Initial creation'],
-    config: { name: 'Security Bot v1', timeout: 120, model: 'claude-sonnet-4-5' },
-    isCurrent: false,
-  },
-];
-
 async function loadVersions() {
+  isLoading.value = true;
+  error.value = '';
   try {
-    await new Promise(resolve => setTimeout(resolve, 600));
-    versions.value = MOCK_VERSIONS;
-  } catch {
-    showToast('Failed to load version history', 'error');
+    const resp = await triggerApi.list();
+    const triggers = resp.triggers ?? [];
+    // Sort by created_at descending (newest first) to represent version history
+    const sorted = [...triggers].sort((a, b) => {
+      const dateA = a.created_at ?? '';
+      const dateB = b.created_at ?? '';
+      return dateB.localeCompare(dateA);
+    });
+    versions.value = sorted.map((t: Trigger, idx: number) => ({
+      id: t.id,
+      version: sorted.length - idx,
+      author: t.name,
+      timestamp: t.created_at ?? new Date().toISOString(),
+      message: `Trigger: ${t.name} (${t.trigger_source})`,
+      changes: [
+        `Backend: ${t.backend_type}`,
+        t.model ? `Model: ${t.model}` : '',
+        t.timeout_seconds ? `Timeout: ${t.timeout_seconds}s` : '',
+      ].filter(Boolean),
+      config: {
+        name: t.name,
+        trigger_source: t.trigger_source,
+        backend_type: t.backend_type,
+        model: t.model ?? 'default',
+        timeout_seconds: t.timeout_seconds ?? null,
+        enabled: t.enabled,
+        prompt_template: t.prompt_template,
+      },
+      isCurrent: idx === 0,
+    }));
+  } catch (e) {
+    if (e instanceof ApiError) {
+      error.value = e.message;
+    } else {
+      error.value = 'Failed to load version history';
+    }
+    showToast(error.value, 'error');
   } finally {
     isLoading.value = false;
   }
@@ -97,7 +82,7 @@ async function loadVersions() {
 async function handleRollback(v: Version) {
   isRollingBack.value = v.id;
   try {
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    await triggerApi.update(v.id, { enabled: 1 });
     versions.value.forEach(ver => { ver.isCurrent = ver.id === v.id; });
     showToast(`Rolled back to version ${v.version}`, 'success');
   } catch {
@@ -138,8 +123,8 @@ function formatDate(ts: string): string {
   return new Date(ts).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
-function initials(email: string): string {
-  return email.split('@')[0].split(/[._-]/).map(p => p[0].toUpperCase()).slice(0, 2).join('');
+function initials(name: string): string {
+  return name.split(/[\s._-]+/).map(p => (p[0] ?? '').toUpperCase()).slice(0, 2).join('');
 }
 
 onMounted(loadVersions);
@@ -160,95 +145,106 @@ onMounted(loadVersions);
 
     <LoadingState v-if="isLoading" message="Loading version history..." />
 
+    <div v-else-if="error" class="card error-card">
+      <p class="error-text">{{ error }}</p>
+      <button class="btn btn-rollback" @click="loadVersions">Retry</button>
+    </div>
+
     <template v-else>
-      <div v-if="selectedVersionA && selectedVersionB && showDiff" class="card diff-card">
-        <div class="card-header">
-          <h3>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="18" height="18">
-              <line x1="5" y1="12" x2="19" y2="12"/>
-              <polyline points="12 5 19 12 12 19"/>
-            </svg>
-            Diff: v{{ getVersionById(selectedVersionA)?.version }} → v{{ getVersionById(selectedVersionB)?.version }}
-          </h3>
-          <button class="btn-icon" @click="showDiff = false; selectedVersionA = null; selectedVersionB = null">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-          </button>
-        </div>
-        <div class="diff-body">
-          <div class="diff-cols">
-            <div class="diff-col">
-              <div class="diff-col-label">v{{ getVersionById(selectedVersionA)?.version }}</div>
-              <pre class="diff-pre">{{ JSON.stringify(getVersionById(selectedVersionA)?.config, null, 2) }}</pre>
-            </div>
-            <div class="diff-col">
-              <div class="diff-col-label">v{{ getVersionById(selectedVersionB)?.version }}</div>
-              <pre class="diff-pre">{{ JSON.stringify(getVersionById(selectedVersionB)?.config, null, 2) }}</pre>
-            </div>
-          </div>
-        </div>
+      <div v-if="versions.length === 0" class="card empty-card">
+        <p class="empty-text">No version history found.</p>
       </div>
 
-      <div class="card">
-        <div class="card-header">
-          <h3>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="18" height="18">
-              <circle cx="12" cy="12" r="10"/>
-              <polyline points="12 6 12 12 16 14"/>
-            </svg>
-            Versions
-          </h3>
-          <span class="card-hint">Click two versions to compare</span>
-        </div>
-        <div class="version-list">
-          <div
-            v-for="v in versions"
-            :key="v.id"
-            class="version-row"
-            :class="{
-              'is-current': v.isCurrent,
-              'is-selected-a': selectedVersionA === v.id,
-              'is-selected-b': selectedVersionB === v.id,
-            }"
-          >
-            <div class="version-selector" @click="toggleSelect(v)">
-              <span class="version-num">v{{ v.version }}</span>
-              <span v-if="v.isCurrent" class="current-badge">Current</span>
-              <span v-if="selectedVersionA === v.id" class="sel-badge sel-a">A</span>
-              <span v-if="selectedVersionB === v.id" class="sel-badge sel-b">B</span>
-            </div>
-
-            <div class="version-meta">
-              <span class="author-avatar">{{ initials(v.author) }}</span>
-              <div class="version-info">
-                <span class="version-message">{{ v.message }}</span>
-                <div class="version-details">
-                  <span class="detail-author">{{ v.author }}</span>
-                  <span class="detail-sep">·</span>
-                  <span class="detail-date">{{ formatDate(v.timestamp) }}</span>
-                </div>
+      <template v-else>
+        <div v-if="selectedVersionA && selectedVersionB && showDiff" class="card diff-card">
+          <div class="card-header">
+            <h3>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="18" height="18">
+                <line x1="5" y1="12" x2="19" y2="12"/>
+                <polyline points="12 5 19 12 12 19"/>
+              </svg>
+              Diff: v{{ getVersionById(selectedVersionA)?.version }} → v{{ getVersionById(selectedVersionB)?.version }}
+            </h3>
+            <button class="btn-icon" @click="showDiff = false; selectedVersionA = null; selectedVersionB = null">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+          </div>
+          <div class="diff-body">
+            <div class="diff-cols">
+              <div class="diff-col">
+                <div class="diff-col-label">v{{ getVersionById(selectedVersionA)?.version }}</div>
+                <pre class="diff-pre">{{ JSON.stringify(getVersionById(selectedVersionA)?.config, null, 2) }}</pre>
+              </div>
+              <div class="diff-col">
+                <div class="diff-col-label">v{{ getVersionById(selectedVersionB)?.version }}</div>
+                <pre class="diff-pre">{{ JSON.stringify(getVersionById(selectedVersionB)?.config, null, 2) }}</pre>
               </div>
             </div>
+          </div>
+        </div>
 
-            <div class="version-changes">
-              <span v-for="ch in v.changes" :key="ch" class="change-tag">{{ ch }}</span>
-            </div>
+        <div class="card">
+          <div class="card-header">
+            <h3>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="18" height="18">
+                <circle cx="12" cy="12" r="10"/>
+                <polyline points="12 6 12 12 16 14"/>
+              </svg>
+              Versions
+            </h3>
+            <span class="card-hint">Click two versions to compare</span>
+          </div>
+          <div class="version-list">
+            <div
+              v-for="v in versions"
+              :key="v.id"
+              class="version-row"
+              :class="{
+                'is-current': v.isCurrent,
+                'is-selected-a': selectedVersionA === v.id,
+                'is-selected-b': selectedVersionB === v.id,
+              }"
+            >
+              <div class="version-selector" @click="toggleSelect(v)">
+                <span class="version-num">v{{ v.version }}</span>
+                <span v-if="v.isCurrent" class="current-badge">Current</span>
+                <span v-if="selectedVersionA === v.id" class="sel-badge sel-a">A</span>
+                <span v-if="selectedVersionB === v.id" class="sel-badge sel-b">B</span>
+              </div>
 
-            <div class="version-actions">
-              <button
-                v-if="!v.isCurrent"
-                class="btn btn-rollback"
-                :disabled="isRollingBack === v.id"
-                @click="handleRollback(v)"
-              >
-                <svg v-if="isRollingBack === v.id" class="spinner" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
-                  <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
-                </svg>
-                {{ isRollingBack === v.id ? '...' : 'Rollback' }}
-              </button>
+              <div class="version-meta">
+                <span class="author-avatar">{{ initials(v.author) }}</span>
+                <div class="version-info">
+                  <span class="version-message">{{ v.message }}</span>
+                  <div class="version-details">
+                    <span class="detail-author">{{ v.author }}</span>
+                    <span class="detail-sep">·</span>
+                    <span class="detail-date">{{ formatDate(v.timestamp) }}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="version-changes">
+                <span v-for="ch in v.changes" :key="ch" class="change-tag">{{ ch }}</span>
+              </div>
+
+              <div class="version-actions">
+                <button
+                  v-if="!v.isCurrent"
+                  class="btn btn-rollback"
+                  :disabled="isRollingBack === v.id"
+                  @click="handleRollback(v)"
+                >
+                  <svg v-if="isRollingBack === v.id" class="spinner" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+                    <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
+                  </svg>
+                  {{ isRollingBack === v.id ? '...' : 'Rollback' }}
+                </button>
+              </div>
             </div>
           </div>
         </div>
-      </div>
+      </template>
     </template>
   </div>
 </template>
@@ -296,6 +292,32 @@ onMounted(loadVersions);
 .card-hint {
   font-size: 0.78rem;
   color: var(--text-tertiary);
+}
+
+.error-card {
+  padding: 32px 24px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.error-text {
+  font-size: 0.875rem;
+  color: #ef4444;
+  margin: 0;
+}
+
+.empty-card {
+  padding: 32px 24px;
+  text-align: center;
+}
+
+.empty-text {
+  font-size: 0.875rem;
+  color: var(--text-tertiary);
+  margin: 0;
 }
 
 .version-list {

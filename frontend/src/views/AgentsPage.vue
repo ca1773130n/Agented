@@ -509,4 +509,14 @@ onMounted(() => {
 @keyframes btn-spin {
   to { transform: rotate(360deg); }
 }
+
+@media (max-width: 480px) {
+  .agents-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .agent-actions {
+    flex-wrap: wrap;
+  }
+}
 </style>

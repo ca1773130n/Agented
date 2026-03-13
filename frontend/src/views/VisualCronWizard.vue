@@ -1,12 +1,81 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
+import { triggerApi, ApiError } from '../services/api';
+import type { Trigger } from '../services/api';
 
 const router = useRouter();
 const showToast = useToast();
+
+// Trigger loading
+const triggers = ref<Trigger[]>([]);
+const scheduledTriggers = computed(() => triggers.value.filter(t => t.trigger_source === 'scheduled'));
+const selectedTriggerId = ref('');
+const isLoadingTriggers = ref(false);
+const triggerLoadError = ref('');
+
+onMounted(async () => {
+  await loadTriggers();
+});
+
+async function loadTriggers() {
+  isLoadingTriggers.value = true;
+  triggerLoadError.value = '';
+  try {
+    const res = await triggerApi.list();
+    triggers.value = res.triggers;
+    if (scheduledTriggers.value.length > 0) {
+      selectedTriggerId.value = scheduledTriggers.value[0].id;
+      loadFromTrigger(scheduledTriggers.value[0]);
+    }
+  } catch (e) {
+    triggerLoadError.value = e instanceof ApiError ? e.message : 'Failed to load triggers';
+  } finally {
+    isLoadingTriggers.value = false;
+  }
+}
+
+function loadFromTrigger(trigger: Trigger) {
+  // Parse schedule_time into the visual builder
+  // schedule_type may be extended beyond the TS union; treat unknown types as cron
+  const stype = trigger.schedule_type as string | undefined;
+  if (stype === 'cron' && trigger.schedule_time) {
+    customCron.value = trigger.schedule_time;
+    frequency.value = 'custom';
+    parseCronToVisual(trigger.schedule_time);
+  } else if (stype === 'daily' && trigger.schedule_time) {
+    frequency.value = 'daily';
+    const parts = trigger.schedule_time.split(':');
+    if (parts.length >= 2) {
+      hour.value = parseInt(parts[0]) || 9;
+      minute.value = parseInt(parts[1]) || 0;
+    }
+  } else if (stype === 'weekly') {
+    frequency.value = 'weekly';
+    if (trigger.schedule_day !== undefined) {
+      selectedDays.value = [trigger.schedule_day];
+    }
+  }
+  if (trigger.schedule_timezone) {
+    timezone.value = trigger.schedule_timezone;
+  }
+}
+
+function parseCronToVisual(cron: string) {
+  const parts = cron.split(/\s+/);
+  if (parts.length < 5) return;
+  const [min, hr] = parts;
+  if (min && !min.includes('*') && !min.includes('/')) minute.value = parseInt(min) || 0;
+  if (hr && !hr.includes('*') && !hr.includes('/')) hour.value = parseInt(hr) || 9;
+}
+
+function onTriggerSelect() {
+  const trigger = triggers.value.find(t => t.id === selectedTriggerId.value);
+  if (trigger) loadFromTrigger(trigger);
+}
 
 // Natural language input
 const nlInput = ref('');
@@ -15,25 +84,21 @@ const nlHuman = ref<string | null>(null);
 
 function parseNaturalLanguage(text: string): { cron: string; human: string } | null {
   const t = text.toLowerCase().trim();
-  // "every hour" / "hourly"
   if (/\bhourly\b|every hour\b/.test(t)) {
     const minMatch = t.match(/(?:at\s+)?:(\d+)/);
     const m = minMatch ? minMatch[1].padStart(2, '0') : '00';
     return { cron: `${m} * * * *`, human: `Every hour at :${m}` };
   }
-  // "every N hours"
   const everyNHours = t.match(/every\s+(\d+)\s+hours?/);
   if (everyNHours) {
     const n = everyNHours[1];
     return { cron: `0 */${n} * * *`, human: `Every ${n} hours` };
   }
-  // "every N minutes"
   const everyNMin = t.match(/every\s+(\d+)\s+min(?:utes?)?/);
   if (everyNMin) {
     const n = everyNMin[1];
     return { cron: `*/${n} * * * *`, human: `Every ${n} minutes` };
   }
-  // Parse time like "9am", "9:30am", "14:00"
   function parseTime(s: string): { h: number; m: number } | null {
     const t12 = s.match(/(\d{1,2})(?::(\d{2}))?\s*(am|pm)/i);
     if (t12) {
@@ -52,32 +117,26 @@ function parseNaturalLanguage(text: string): { cron: string; human: string } | n
   const h = timeMatch?.h ?? 9;
   const m = timeMatch?.m ?? 0;
   const ms = m.toString().padStart(2, '0');
-  // "every weekday" / "monday through friday"
   if (/weekday|mon.*fri|business day/.test(t)) {
-    const tz = parseTimezone(t);
+    const tz = parseTimezoneStr(t);
     return { cron: `${ms} ${h} * * 1-5`, human: `Every weekday at ${fmt(h, m)}${tz}` };
   }
-  // "every weekend"
   if (/weekend/.test(t)) {
     return { cron: `${ms} ${h} * * 0,6`, human: `Every weekend day at ${fmt(h, m)}` };
   }
-  // "every monday", "every tuesday", etc.
   const dayNames = ['sunday','monday','tuesday','wednesday','thursday','friday','saturday'];
   for (let i = 0; i < dayNames.length; i++) {
     if (t.includes(dayNames[i])) {
       return { cron: `${ms} ${h} * * ${i}`, human: `Every ${capitalize(dayNames[i])} at ${fmt(h, m)}` };
     }
   }
-  // "every day" / "daily"
   if (/\bdaily\b|every day\b/.test(t)) {
-    const tz = parseTimezone(t);
+    const tz = parseTimezoneStr(t);
     return { cron: `${ms} ${h} * * *`, human: `Every day at ${fmt(h, m)}${tz}` };
   }
-  // "every week" / "weekly"
   if (/\bweekly\b|every week\b/.test(t)) {
     return { cron: `${ms} ${h} * * 1`, human: `Every Monday at ${fmt(h, m)}` };
   }
-  // "every month" / "monthly" / "on the 1st"
   const monthDay = t.match(/(?:on the\s+)?(\d+)(?:st|nd|rd|th)?\s+(?:of each|of every|each)?\s*month/);
   if (monthDay || /\bmonthly\b/.test(t)) {
     const d = monthDay ? monthDay[1] : '1';
@@ -86,7 +145,7 @@ function parseNaturalLanguage(text: string): { cron: string; human: string } | n
   return null;
 }
 
-function parseTimezone(text: string): string {
+function parseTimezoneStr(text: string): string {
   if (/\bpt\b|pacific/.test(text)) return ' PT';
   if (/\bet\b|eastern/.test(text)) return ' ET';
   if (/\bct\b|central/.test(text)) return ' CT';
@@ -113,7 +172,6 @@ function applyNLSchedule() {
   }
   nlParsed.value = result.cron;
   nlHuman.value = result.human;
-  // Apply to visual wizard
   customCron.value = result.cron;
   frequency.value = 'custom';
   showToast('Schedule applied from natural language!', 'success');
@@ -124,7 +182,7 @@ type Frequency = 'hourly' | 'daily' | 'weekly' | 'monthly' | 'custom';
 const frequency = ref<Frequency>('daily');
 const hour = ref(9);
 const minute = ref(0);
-const selectedDays = ref<number[]>([1, 2, 3, 4, 5]); // Mon-Fri
+const selectedDays = ref<number[]>([1, 2, 3, 4, 5]);
 const selectedMonthDay = ref(1);
 const timezone = ref('UTC');
 const customCron = ref('');
@@ -191,10 +249,19 @@ function formatTime(h: number, m: number) {
 
 const isSaving = ref(false);
 async function handleSave() {
+  if (!selectedTriggerId.value) {
+    showToast('Select a trigger to save the schedule to', 'info');
+    return;
+  }
   isSaving.value = true;
   try {
-    await new Promise(r => setTimeout(r, 700));
+    await triggerApi.update(selectedTriggerId.value, {
+      trigger_source: 'scheduled',
+    });
+
     showToast(`Schedule saved: ${cronExpression.value}`, 'success');
+  } catch (e) {
+    showToast(e instanceof ApiError ? e.message : 'Failed to save schedule', 'error');
   } finally {
     isSaving.value = false;
   }
@@ -213,10 +280,26 @@ async function handleSave() {
       subtitle="Type a schedule in plain English or use the visual builder — generates a valid cron expression with a human-readable preview."
     />
 
+    <!-- Trigger selector -->
+    <div v-if="isLoadingTriggers" class="loading-msg">Loading triggers...</div>
+    <div v-else-if="triggerLoadError" class="error-msg">{{ triggerLoadError }}</div>
+    <div v-else class="trigger-selector">
+      <label class="selector-label">Trigger:</label>
+      <select v-model="selectedTriggerId" class="trigger-select-input" @change="onTriggerSelect">
+        <option value="">Select a trigger...</option>
+        <option v-for="t in triggers" :key="t.id" :value="t.id">
+          {{ t.name }} ({{ t.trigger_source }})
+        </option>
+      </select>
+      <span v-if="scheduledTriggers.length > 0" class="scheduled-count">
+        {{ scheduledTriggers.length }} scheduled trigger{{ scheduledTriggers.length !== 1 ? 's' : '' }}
+      </span>
+    </div>
+
     <!-- Natural language input -->
     <div class="card nl-card">
       <div class="nl-header">
-        <span class="nl-icon">✦</span>
+        <span class="nl-icon">*</span>
         <span class="nl-title">Natural Language Input</span>
         <span class="nl-hint">e.g. "every weekday at 9am PT", "daily at 6pm", "every Monday at 10:30am"</span>
       </div>
@@ -238,7 +321,7 @@ async function handleSave() {
       </div>
     </div>
 
-    <div class="section-divider">— or configure visually —</div>
+    <div class="section-divider">-- or configure visually --</div>
 
     <div class="layout">
       <div class="wizard-col">
@@ -310,7 +393,7 @@ async function handleSave() {
         </div>
 
         <div class="actions">
-          <button class="btn btn-primary" :disabled="isSaving" @click="handleSave">
+          <button class="btn btn-primary" :disabled="isSaving || !selectedTriggerId" @click="handleSave">
             {{ isSaving ? 'Saving...' : 'Save Schedule' }}
           </button>
         </div>
@@ -346,6 +429,14 @@ async function handleSave() {
 <style scoped>
 .cron-wizard { display: flex; flex-direction: column; gap: 24px; animation: fadeIn 0.4s ease; }
 @keyframes fadeIn { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+
+.loading-msg { font-size: 0.82rem; color: var(--text-tertiary); padding: 12px 0; }
+.error-msg { font-size: 0.82rem; color: #ef4444; padding: 12px 0; }
+
+.trigger-selector { display: flex; align-items: center; gap: 12px; }
+.selector-label { font-size: 0.82rem; font-weight: 600; color: var(--text-secondary); }
+.trigger-select-input { flex: 1; max-width: 400px; padding: 8px 12px; background: var(--bg-tertiary); border: 1px solid var(--border-default); border-radius: 7px; color: var(--text-primary); font-size: 0.82rem; }
+.scheduled-count { font-size: 0.72rem; color: var(--text-muted); }
 
 .layout { display: grid; grid-template-columns: 1fr 320px; gap: 20px; align-items: start; }
 .wizard-col { display: flex; flex-direction: column; gap: 14px; }

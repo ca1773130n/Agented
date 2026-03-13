@@ -1,9 +1,11 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
+import { prReviewApi, ApiError } from '../services/api';
+import type { PrReview } from '../services/api';
 
 const router = useRouter();
 const showToast = useToast();
@@ -16,37 +18,68 @@ interface PRAnnotation {
   comments: number;
   status: 'posted' | 'pending' | 'failed';
   severity: 'info' | 'warning' | 'error';
+  reviewComment: string;
 }
 
-const annotations = ref<PRAnnotation[]>([
-  { id: 'ann-001', pr: '#142 Add OAuth flow', repo: 'org/api', postedAt: '2026-03-06T14:30:00Z', comments: 5, status: 'posted', severity: 'warning' },
-  { id: 'ann-002', pr: '#138 Refactor DB layer', repo: 'org/backend', postedAt: '2026-03-05T10:00:00Z', comments: 2, status: 'posted', severity: 'info' },
-  { id: 'ann-003', pr: '#145 Update dependencies', repo: 'org/frontend', postedAt: '2026-03-06T08:15:00Z', comments: 8, status: 'pending', severity: 'error' },
-  { id: 'ann-004', pr: '#131 Fix SSE reconnect', repo: 'org/api', postedAt: '2026-03-04T17:00:00Z', comments: 3, status: 'failed', severity: 'info' },
-]);
-
+const loading = ref(true);
+const error = ref('');
+const annotations = ref<PRAnnotation[]>([]);
 const selected = ref<PRAnnotation | null>(null);
 const isPosting = ref(false);
 
-interface InlineComment {
-  file: string;
-  line: number;
-  body: string;
-  severity: 'info' | 'warning' | 'error';
+function reviewStatusToAnnotationStatus(review: PrReview): 'posted' | 'pending' | 'failed' {
+  if (review.review_status === 'approved' || review.review_status === 'fixed') return 'posted';
+  if (review.review_status === 'changes_requested') return 'pending';
+  if (review.review_status === 'pending') return 'pending';
+  return 'posted';
 }
 
-const mockComments: InlineComment[] = [
-  { file: 'src/auth/oauth.ts', line: 42, body: '**Potential CSRF vulnerability**: OAuth callback does not validate the `state` parameter. Add `state` verification before exchanging the authorization code.', severity: 'error' },
-  { file: 'src/auth/oauth.ts', line: 78, body: 'Access tokens stored in `localStorage` are accessible via XSS. Consider using `httpOnly` cookies instead.', severity: 'warning' },
-  { file: 'src/middleware/session.ts', line: 15, body: 'Session secret is hardcoded. Load from environment variable instead.', severity: 'error' },
-];
+function reviewToSeverity(review: PrReview): 'info' | 'warning' | 'error' {
+  if (review.review_status === 'changes_requested') return 'error';
+  if (review.review_status === 'pending') return 'warning';
+  return 'info';
+}
+
+function prReviewToAnnotation(review: PrReview): PRAnnotation {
+  return {
+    id: String(review.id),
+    pr: `#${review.pr_number} ${review.pr_title}`,
+    repo: review.github_repo_url || review.project_name,
+    postedAt: review.created_at || review.updated_at || new Date().toISOString(),
+    comments: review.fixes_applied || 0,
+    status: reviewStatusToAnnotationStatus(review),
+    severity: reviewToSeverity(review),
+    reviewComment: review.review_comment || '',
+  };
+}
+
+async function fetchReviews() {
+  loading.value = true;
+  error.value = '';
+  try {
+    const result = await prReviewApi.list({ limit: 20 });
+    annotations.value = (result?.reviews || []).map(prReviewToAnnotation);
+  } catch (err) {
+    if (err instanceof ApiError) {
+      error.value = `Failed to load PR reviews: ${err.message}`;
+    } else {
+      error.value = 'Failed to load PR reviews';
+    }
+  } finally {
+    loading.value = false;
+  }
+}
+
+onMounted(fetchReviews);
 
 async function handlePost(ann: PRAnnotation) {
   isPosting.value = true;
   try {
-    await new Promise(r => setTimeout(r, 1200));
+    await prReviewApi.update(Number(ann.id), { review_status: 'approved' });
     ann.status = 'posted';
-    showToast(`Posted ${mockComments.length} inline comments to ${ann.pr}`, 'success');
+    showToast(`Annotations posted to ${ann.pr}`, 'success');
+  } catch (err) {
+    showToast(err instanceof ApiError ? err.message : 'Failed to post annotations', 'error');
   } finally {
     isPosting.value = false;
   }
@@ -58,10 +91,6 @@ function formatDate(ts: string) {
 
 function statusClass(s: PRAnnotation['status']) {
   return { posted: 'status-ok', pending: 'status-warn', failed: 'status-err' }[s];
-}
-
-function severityClass(s: InlineComment['severity']) {
-  return { error: 'sev-error', warning: 'sev-warn', info: 'sev-info' }[s];
 }
 </script>
 
@@ -77,7 +106,23 @@ function severityClass(s: InlineComment['severity']) {
       subtitle="Post bot review findings as inline comments directly on GitHub pull request diffs."
     />
 
-    <div class="layout">
+    <!-- Loading state -->
+    <div v-if="loading" class="card" style="padding: 48px; text-align: center;">
+      <div style="color: var(--text-tertiary); font-size: 0.875rem;">Loading PR reviews...</div>
+    </div>
+
+    <!-- Error state -->
+    <div v-else-if="error" class="card" style="padding: 48px; text-align: center;">
+      <div style="color: #ef4444; font-size: 0.875rem; margin-bottom: 12px;">{{ error }}</div>
+      <button class="btn btn-primary" @click="fetchReviews">Retry</button>
+    </div>
+
+    <!-- Empty state -->
+    <div v-else-if="annotations.length === 0" class="card" style="padding: 48px; text-align: center;">
+      <div style="color: var(--text-tertiary); font-size: 0.875rem;">No PR reviews available for annotation.</div>
+    </div>
+
+    <div v-else class="layout">
       <div class="pr-list card">
         <div class="list-header">Recent PR Reviews</div>
         <div
@@ -97,14 +142,14 @@ function severityClass(s: InlineComment['severity']) {
           </div>
           <div class="pr-stats">
             <span :class="['sev-badge', `sev-${ann.severity}`]">{{ ann.severity }}</span>
-            <span class="comment-count">{{ ann.comments }} comments</span>
+            <span class="comment-count">{{ ann.comments }} fixes</span>
           </div>
         </div>
       </div>
 
       <div class="detail-panel">
         <div v-if="!selected" class="card empty-state">
-          <p>Select a PR to view its inline annotations</p>
+          <p>Select a PR to view its annotation details</p>
         </div>
 
         <div v-else class="card pr-detail">
@@ -123,12 +168,20 @@ function severityClass(s: InlineComment['severity']) {
           </div>
 
           <div class="comments-list">
-            <div v-for="(c, i) in mockComments" :key="i" :class="['comment-card', severityClass(c.severity)]">
+            <div v-if="selected.reviewComment" class="comment-card sev-info">
               <div class="comment-location">
-                <span class="comment-file">{{ c.file }}</span>
-                <span class="comment-line">Line {{ c.line }}</span>
+                <span class="comment-file">Review Comment</span>
               </div>
-              <div class="comment-body">{{ c.body }}</div>
+              <div class="comment-body">{{ selected.reviewComment }}</div>
+            </div>
+            <div v-if="!selected.reviewComment" class="comment-card sev-info">
+              <div class="comment-location">
+                <span class="comment-file">Status</span>
+              </div>
+              <div class="comment-body">
+                This PR review has {{ selected.comments }} fixes applied.
+                Status: {{ selected.status }}.
+              </div>
             </div>
           </div>
         </div>

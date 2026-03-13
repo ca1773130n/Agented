@@ -1,12 +1,18 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
+import LoadingState from '../components/base/LoadingState.vue';
 import { useToast } from '../composables/useToast';
+import { triggerApi, ApiError } from '../services/api';
+import type { Trigger } from '../services/api';
 
 const router = useRouter();
 const showToast = useToast();
+
+const isLoading = ref(true);
+const error = ref('');
 
 interface BotSummary {
   id: string;
@@ -14,110 +20,113 @@ interface BotSummary {
   trigger: string;
   lastRun: string;
   hasDoc: boolean;
+  raw: Trigger;
 }
 
-const bots = ref<BotSummary[]>([
-  { id: 'bot-security', name: 'Weekly Security Audit', trigger: 'schedule (Mon 9am)', lastRun: '3 hours ago', hasDoc: true },
-  { id: 'bot-pr-review', name: 'PR Review', trigger: 'github: pull_request', lastRun: '12 minutes ago', hasDoc: false },
-  { id: 'bot-dep-update', name: 'Dependency Updater', trigger: 'schedule (daily)', lastRun: '1 day ago', hasDoc: false },
-  { id: 'bot-changelog', name: 'Changelog Generator', trigger: 'github: push (main)', lastRun: '2 days ago', hasDoc: true },
-]);
+const bots = ref<BotSummary[]>([]);
 
 const selectedBotId = ref<string | null>(null);
 const isGenerating = ref(false);
 const generatedDoc = ref<string | null>(null);
 const isCopying = ref(false);
 
-const sampleDocs: Record<string, string> = {
-  'bot-security': `# Weekly Security Audit Bot
-
-## What It Does
-Runs a comprehensive security scan across connected repositories every Monday at 9am. Checks for dependency vulnerabilities, exposed secrets, SQL injection patterns, and OWASP Top 10 issues.
-
-## Trigger
-- **Type:** Scheduled
-- **Cron:** \`0 9 * * 1\` (Every Monday at 9:00 AM UTC)
-
-## Permissions Required
-- Read access to all connected repositories
-- GitHub API token for creating issues
-- Jira API key for ticket creation (optional)
-
-## Prompt Template Overview
-The bot receives the full diff of changes since the last scan and analyzes them for security issues using a structured checklist approach.
-
-## Example Output
-\`\`\`
-Found 2 issues in PR #142:
-  [HIGH] SQL injection risk in /api/users?search= (line 45)
-  [MEDIUM] Dependency lodash@4.17.19 has known CVE-2021-23337
-\`\`\`
-
-## Known Limitations
-- Does not perform dynamic/runtime analysis
-- False positive rate ~8% on minified/generated code
-- Requires repos to be connected before first run`,
-
-  'bot-changelog': `# Changelog Generator Bot
-
-## What It Does
-Automatically generates a human-readable CHANGELOG entry from git commit messages whenever code is pushed to the main branch. Groups commits by type (feat, fix, chore) and formats them as Markdown.
-
-## Trigger
-- **Type:** GitHub Event
-- **Event:** \`push\` to \`main\` branch
-
-## Permissions Required
-- Read access to commit history
-- Write access to update CHANGELOG.md via PR
-
-## Example Output
-\`\`\`
-## v2.4.1 (2026-03-06)
-### Features
-- Add semantic search for repository context
-### Bug Fixes
-- Fix token counting off-by-one in estimator
-### Chores
-- Update dependencies
-\`\`\``,
-};
+async function loadBots() {
+  isLoading.value = true;
+  error.value = '';
+  try {
+    const resp = await triggerApi.list();
+    const triggers = resp.triggers ?? [];
+    bots.value = triggers.map((t: Trigger) => ({
+      id: t.id,
+      name: t.name,
+      trigger: `${t.trigger_source}${t.schedule_type ? ` (${t.schedule_type})` : ''}`,
+      lastRun: t.last_run_at
+        ? new Date(t.last_run_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+        : 'Never',
+      hasDoc: false,
+      raw: t,
+    }));
+  } catch (e) {
+    if (e instanceof ApiError) {
+      error.value = e.message;
+    } else {
+      error.value = 'Failed to load bots';
+    }
+    showToast(error.value, 'error');
+  } finally {
+    isLoading.value = false;
+  }
+}
 
 function selectBot(id: string) {
   selectedBotId.value = id;
   generatedDoc.value = null;
 }
 
+function generateDocFromTrigger(t: Trigger): string {
+  const lines: string[] = [];
+  lines.push(`# ${t.name} Documentation`);
+  lines.push('');
+  lines.push('## What It Does');
+  lines.push(`This bot is triggered by **${t.trigger_source}** events and executes using the **${t.backend_type}** backend.`);
+  if (t.prompt_template) {
+    lines.push(`It runs the following prompt template to produce actionable output.`);
+  }
+  lines.push('');
+  lines.push('## Trigger Configuration');
+  lines.push(`- **Source:** ${t.trigger_source}`);
+  if (t.schedule_type) lines.push(`- **Schedule:** ${t.schedule_type}${t.schedule_time ? ` at ${t.schedule_time}` : ''}${t.schedule_timezone ? ` (${t.schedule_timezone})` : ''}`);
+  if (t.schedule_day) lines.push(`- **Day:** ${t.schedule_day}`);
+  if (t.match_field_path) lines.push(`- **Match Field:** \`${t.match_field_path}\` = \`${t.match_field_value ?? '*'}\``);
+  if (t.detection_keyword) lines.push(`- **Detection Keyword:** ${t.detection_keyword}`);
+  lines.push('');
+  lines.push('## Execution Details');
+  lines.push(`- **Backend:** ${t.backend_type}`);
+  lines.push(`- **Model:** ${t.model ?? 'default'}`);
+  if (t.timeout_seconds) lines.push(`- **Timeout:** ${t.timeout_seconds}s`);
+  if (t.execution_mode) lines.push(`- **Mode:** ${t.execution_mode}`);
+  if (t.team_id) lines.push(`- **Team:** ${t.team_id}`);
+  lines.push(`- **Enabled:** ${t.enabled ? 'Yes' : 'No'}`);
+  lines.push(`- **Auto-resolve:** ${t.auto_resolve ? 'Yes' : 'No'}`);
+  lines.push('');
+  if (t.prompt_template) {
+    lines.push('## Prompt Template');
+    lines.push('```');
+    lines.push(t.prompt_template);
+    lines.push('```');
+    lines.push('');
+  }
+  if (t.paths && t.paths.length > 0) {
+    lines.push('## Configured Paths');
+    for (const p of t.paths) {
+      lines.push(`- \`${p.local_project_path}\` (${p.path_type})${p.github_repo_url ? ` — ${p.github_repo_url}` : ''}`);
+    }
+    lines.push('');
+  }
+  lines.push('## Known Limitations');
+  lines.push('- Documentation is auto-generated from trigger configuration');
+  lines.push('- Manual review is recommended before sharing externally');
+  if (t.timeout_seconds) {
+    lines.push(`- Execution timeout is ${t.timeout_seconds}s — long-running tasks may be interrupted`);
+  }
+  return lines.join('\n');
+}
+
 async function generateDoc() {
   if (!selectedBotId.value) return;
   isGenerating.value = true;
   try {
-    await new Promise(resolve => setTimeout(resolve, 1400));
-    const bot = bots.value.find(b => b.id === selectedBotId.value);
-    generatedDoc.value = sampleDocs[selectedBotId.value] ?? `# ${bot?.name ?? 'Bot'} Documentation
-
-## What It Does
-This bot automates key development workflows triggered by ${bot?.trigger ?? 'configured events'}. It analyzes the incoming context and produces actionable output tailored to your team's conventions.
-
-## Trigger
-- **Type:** ${bot?.trigger ?? 'Configured trigger'}
-
-## Permissions Required
-- Read access to connected repositories
-- Write access for creating comments or PRs
-
-## Example Output
-The bot produces structured Markdown output summarizing findings and recommended actions.
-
-## Known Limitations
-- Best results when prompt templates are kept under 2,000 tokens
-- Requires at least 3 prior executions for optimal context calibration`;
-
+    const trigger = await triggerApi.get(selectedBotId.value);
+    generatedDoc.value = generateDocFromTrigger(trigger);
     const b = bots.value.find(b => b.id === selectedBotId.value);
     if (b) b.hasDoc = true;
     showToast('Documentation generated', 'success');
-  } catch {
-    showToast('Failed to generate documentation', 'error');
+  } catch (e) {
+    if (e instanceof ApiError) {
+      showToast(`Failed to generate documentation: ${e.message}`, 'error');
+    } else {
+      showToast('Failed to generate documentation', 'error');
+    }
   } finally {
     isGenerating.value = false;
   }
@@ -141,6 +150,8 @@ async function saveDoc() {
   await new Promise(resolve => setTimeout(resolve, 500));
   showToast('Documentation saved to bot config', 'success');
 }
+
+onMounted(loadBots);
 </script>
 
 <template>
@@ -155,89 +166,102 @@ async function saveDoc() {
       subtitle="Generate human-readable README documentation for any bot — trigger type, permissions, example output, and limitations."
     />
 
-    <div class="layout">
-      <!-- Bot picker -->
-      <div class="bot-picker card">
-        <div class="card-header">
-          <h3>Select a Bot</h3>
-        </div>
-        <div class="bot-list">
-          <button
-            v-for="b in bots"
-            :key="b.id"
-            class="bot-item"
-            :class="{ selected: selectedBotId === b.id }"
-            @click="selectBot(b.id)"
-          >
-            <div class="bot-item-info">
-              <span class="bot-item-name">{{ b.name }}</span>
-              <span class="bot-item-trigger">{{ b.trigger }}</span>
-              <span class="bot-item-meta">Last run {{ b.lastRun }}</span>
-            </div>
-            <span v-if="b.hasDoc" class="doc-badge">Documented</span>
-          </button>
-        </div>
+    <LoadingState v-if="isLoading" message="Loading bots..." />
+
+    <div v-else-if="error" class="card error-state">
+      <p class="error-text">{{ error }}</p>
+      <button class="btn btn-primary" @click="loadBots">Retry</button>
+    </div>
+
+    <template v-else>
+      <div v-if="bots.length === 0" class="card empty-card">
+        <p class="empty-text">No bots found. Create a trigger first to generate documentation.</p>
       </div>
 
-      <!-- Doc preview -->
-      <div class="doc-panel card">
-        <div class="card-header">
-          <h3>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="18" height="18">
+      <div v-else class="layout">
+        <!-- Bot picker -->
+        <div class="bot-picker card">
+          <div class="card-header">
+            <h3>Select a Bot</h3>
+          </div>
+          <div class="bot-list">
+            <button
+              v-for="b in bots"
+              :key="b.id"
+              class="bot-item"
+              :class="{ selected: selectedBotId === b.id }"
+              @click="selectBot(b.id)"
+            >
+              <div class="bot-item-info">
+                <span class="bot-item-name">{{ b.name }}</span>
+                <span class="bot-item-trigger">{{ b.trigger }}</span>
+                <span class="bot-item-meta">Last run {{ b.lastRun }}</span>
+              </div>
+              <span v-if="b.hasDoc" class="doc-badge">Documented</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Doc preview -->
+        <div class="doc-panel card">
+          <div class="card-header">
+            <h3>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="18" height="18">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                <polyline points="14 2 14 8 20 8"/>
+                <line x1="16" y1="13" x2="8" y2="13"/>
+                <line x1="16" y1="17" x2="8" y2="17"/>
+                <polyline points="10 9 9 9 8 9"/>
+              </svg>
+              Generated Documentation
+            </h3>
+            <div class="header-actions" v-if="generatedDoc">
+              <button class="btn btn-ghost" @click="copyDoc">
+                {{ isCopying ? 'Copied!' : 'Copy' }}
+              </button>
+              <button class="btn btn-primary" @click="saveDoc">Save to Bot</button>
+            </div>
+          </div>
+
+          <div v-if="!selectedBotId" class="doc-empty">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" width="48" height="48">
               <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
               <polyline points="14 2 14 8 20 8"/>
-              <line x1="16" y1="13" x2="8" y2="13"/>
-              <line x1="16" y1="17" x2="8" y2="17"/>
-              <polyline points="10 9 9 9 8 9"/>
             </svg>
-            Generated Documentation
-          </h3>
-          <div class="header-actions" v-if="generatedDoc">
-            <button class="btn btn-ghost" @click="copyDoc">
-              {{ isCopying ? 'Copied!' : 'Copy' }}
+            <p>Select a bot to generate its documentation</p>
+          </div>
+
+          <div v-else-if="!generatedDoc" class="generate-prompt">
+            <p class="generate-hint">
+              Click Generate to create a one-click README for
+              <strong>{{ bots.find(b => b.id === selectedBotId)?.name }}</strong>
+              — including trigger config, permissions, example outputs, and limitations.
+            </p>
+            <button class="btn btn-primary btn-lg" :disabled="isGenerating" @click="generateDoc">
+              <svg v-if="!isGenerating" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="16" height="16">
+                <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+              </svg>
+              {{ isGenerating ? 'Generating...' : 'Generate Documentation' }}
             </button>
-            <button class="btn btn-primary" @click="saveDoc">Save to Bot</button>
+            <div v-if="isGenerating" class="generating-indicator">
+              <div class="spinner" />
+              <span>Analyzing bot config and past executions...</span>
+            </div>
           </div>
-        </div>
 
-        <div v-if="!selectedBotId" class="doc-empty">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" width="48" height="48">
-            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-            <polyline points="14 2 14 8 20 8"/>
-          </svg>
-          <p>Select a bot to generate its documentation</p>
-        </div>
-
-        <div v-else-if="!generatedDoc" class="generate-prompt">
-          <p class="generate-hint">
-            Click Generate to create a one-click README for
-            <strong>{{ bots.find(b => b.id === selectedBotId)?.name }}</strong>
-            — including trigger config, permissions, example outputs, and limitations.
-          </p>
-          <button class="btn btn-primary btn-lg" :disabled="isGenerating" @click="generateDoc">
-            <svg v-if="!isGenerating" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="16" height="16">
-              <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
-            </svg>
-            {{ isGenerating ? 'Generating...' : 'Generate Documentation' }}
-          </button>
-          <div v-if="isGenerating" class="generating-indicator">
-            <div class="spinner" />
-            <span>Analyzing bot config and past executions...</span>
+          <div v-else class="doc-content">
+            <pre class="doc-text">{{ generatedDoc }}</pre>
+            <button class="btn btn-secondary regenerate-btn" :disabled="isGenerating" @click="generateDoc">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="14" height="14">
+                <polyline points="1 4 1 10 7 10"/>
+                <path d="M3.51 15a9 9 0 1 0 .49-3.75"/>
+              </svg>
+              Regenerate
+            </button>
           </div>
-        </div>
-
-        <div v-else class="doc-content">
-          <pre class="doc-text">{{ generatedDoc }}</pre>
-          <button class="btn btn-secondary regenerate-btn" :disabled="isGenerating" @click="generateDoc">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="14" height="14">
-              <polyline points="1 4 1 10 7 10"/>
-              <path d="M3.51 15a9 9 0 1 0 .49-3.75"/>
-            </svg>
-            Regenerate
-          </button>
         </div>
       </div>
-    </div>
+    </template>
   </div>
 </template>
 
@@ -252,6 +276,32 @@ async function saveDoc() {
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(10px); }
   to { opacity: 1; transform: translateY(0); }
+}
+
+.error-state {
+  padding: 32px 24px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.error-text {
+  font-size: 0.875rem;
+  color: #ef4444;
+  margin: 0;
+}
+
+.empty-card {
+  padding: 48px 24px;
+  text-align: center;
+}
+
+.empty-text {
+  font-size: 0.875rem;
+  color: var(--text-tertiary);
+  margin: 0;
 }
 
 .layout {

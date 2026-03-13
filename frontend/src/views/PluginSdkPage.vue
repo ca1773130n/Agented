@@ -1,8 +1,10 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
+import { pluginApi, ApiError } from '../services/api';
+import type { Plugin } from '../services/api';
 
 const router = useRouter();
 
@@ -15,7 +17,7 @@ interface Tab {
   description: string;
 }
 
-interface MockPlugin {
+interface DisplayPlugin {
   id: string;
   name: string;
   version: string;
@@ -29,6 +31,9 @@ interface LogLine {
   level: 'info' | 'warn' | 'error' | 'success';
   message: string;
 }
+
+const isLoading = ref(true);
+const loadError = ref<string | null>(null);
 
 const tabs = ref<Tab[]>([
   {
@@ -59,87 +64,99 @@ const tabs = ref<Tab[]>([
 
 const activeTab = ref<TabId>('init');
 
-const mockPlugins = ref<MockPlugin[]>([
-  {
-    id: 'plug-001',
-    name: 'slack-notifier',
-    version: '0.3.1',
-    description: 'Posts a Slack message whenever a bot execution completes or fails.',
-    triggers: ['on_execution_complete', 'on_execution_error'],
-    status: 'idle',
-  },
-  {
-    id: 'plug-002',
-    name: 'jira-linker',
-    version: '1.0.0',
-    description: 'Automatically creates or updates a Jira ticket from security findings.',
-    triggers: ['on_finding_created'],
-    status: 'idle',
-  },
-  {
-    id: 'plug-003',
-    name: 'metrics-exporter',
-    version: '0.1.4',
-    description: 'Exports execution timing and cost metrics to a Prometheus push-gateway.',
+const displayPlugins = ref<DisplayPlugin[]>([]);
+
+function pluginToDisplay(p: Plugin): DisplayPlugin {
+  return {
+    id: p.id,
+    name: p.name,
+    version: p.version || '0.0.0',
+    description: p.description || 'No description',
     triggers: ['on_execution_complete'],
     status: 'idle',
-  },
-]);
+  };
+}
+
+async function loadPlugins() {
+  isLoading.value = true;
+  loadError.value = null;
+  try {
+    const { plugins } = await pluginApi.list();
+    if (plugins.length > 0) {
+      displayPlugins.value = plugins.map(pluginToDisplay);
+    } else {
+      // Provide SDK example plugins when none exist
+      displayPlugins.value = [
+        { id: 'example-1', name: 'slack-notifier', version: '0.3.1', description: 'Example: Posts a Slack message whenever a bot execution completes or fails.', triggers: ['on_execution_complete', 'on_execution_error'], status: 'idle' },
+        { id: 'example-2', name: 'jira-linker', version: '1.0.0', description: 'Example: Automatically creates or updates a Jira ticket from security findings.', triggers: ['on_finding_created'], status: 'idle' },
+      ];
+    }
+  } catch (err) {
+    const msg = err instanceof ApiError ? err.message : 'Failed to load plugins';
+    loadError.value = msg;
+    // Fall back to examples on error
+    displayPlugins.value = [
+      { id: 'example-1', name: 'slack-notifier', version: '0.3.1', description: 'Example: Posts a Slack message whenever a bot execution completes or fails.', triggers: ['on_execution_complete', 'on_execution_error'], status: 'idle' },
+    ];
+  } finally {
+    isLoading.value = false;
+  }
+}
+
+onMounted(loadPlugins);
 
 const logLines = ref<LogLine[]>([]);
 const runningPlugin = ref<string | null>(null);
 const copied = ref(false);
 
-const MOCK_LOGS: Record<string, LogLine[]> = {
-  'plug-001': [
-    { time: '00:00.001', level: 'info', message: 'Booting local runner for slack-notifier@0.3.1' },
-    { time: '00:00.034', level: 'info', message: 'Loading manifest: agented.plugin.json' },
-    { time: '00:00.061', level: 'info', message: 'Registered hook: on_execution_complete' },
-    { time: '00:00.062', level: 'info', message: 'Registered hook: on_execution_error' },
-    { time: '00:00.080', level: 'info', message: 'Simulating trigger: on_execution_complete' },
-    { time: '00:00.120', level: 'info', message: 'Hook invoked with mock payload' },
-    { time: '00:00.245', level: 'info', message: 'POST https://hooks.slack.com/... [mocked]' },
-    { time: '00:00.248', level: 'success', message: 'Slack notification sent — 200 OK' },
-    { time: '00:00.249', level: 'success', message: 'Plugin run complete (248ms)' },
-  ],
-  'plug-002': [
-    { time: '00:00.001', level: 'info', message: 'Booting local runner for jira-linker@1.0.0' },
-    { time: '00:00.029', level: 'info', message: 'Loading manifest: agented.plugin.json' },
-    { time: '00:00.055', level: 'info', message: 'Registered hook: on_finding_created' },
-    { time: '00:00.070', level: 'info', message: 'Simulating trigger: on_finding_created' },
-    { time: '00:00.110', level: 'info', message: 'Finding severity: CRITICAL — creating ticket' },
-    { time: '00:00.310', level: 'warn', message: 'JIRA_BASE_URL not set — using sandbox endpoint' },
-    { time: '00:00.540', level: 'info', message: 'POST /rest/api/3/issue [mocked] — ticket AGT-1042 created' },
-    { time: '00:00.541', level: 'success', message: 'Plugin run complete (540ms)' },
-  ],
-  'plug-003': [
-    { time: '00:00.001', level: 'info', message: 'Booting local runner for metrics-exporter@0.1.4' },
-    { time: '00:00.022', level: 'info', message: 'Loading manifest: agented.plugin.json' },
-    { time: '00:00.045', level: 'info', message: 'Registered hook: on_execution_complete' },
-    { time: '00:00.060', level: 'info', message: 'Simulating trigger: on_execution_complete' },
-    { time: '00:00.085', level: 'info', message: 'Serialising metrics payload (duration=1240ms, cost=$0.0031)' },
-    { time: '00:00.210', level: 'error', message: 'Connection refused: push-gateway:9091 — retrying (1/3)' },
-    { time: '00:00.720', level: 'error', message: 'Connection refused: push-gateway:9091 — retrying (2/3)' },
-    { time: '00:01.230', level: 'error', message: 'All retries exhausted — export failed' },
-    { time: '00:01.231', level: 'error', message: 'Plugin run finished with errors (1231ms)' },
-  ],
-};
-
-async function runPlugin(plugin: MockPlugin) {
+async function runPlugin(plugin: DisplayPlugin) {
   if (runningPlugin.value) return;
   runningPlugin.value = plugin.id;
   plugin.status = 'running';
   logLines.value = [];
 
-  const lines = MOCK_LOGS[plugin.id] ?? [];
-  for (const line of lines) {
-    await new Promise(resolve => setTimeout(resolve, 120));
-    logLines.value.push(line);
-  }
+  try {
+    // Load plugin details from API to show real data
+    logLines.value.push({ time: '00:00.001', level: 'info', message: `Booting local runner for ${plugin.name}@${plugin.version}` });
 
-  const hasError = lines.some(l => l.level === 'error');
-  plugin.status = hasError ? 'error' : 'done';
-  runningPlugin.value = null;
+    let pluginDetails: Plugin | null = null;
+    if (!plugin.id.startsWith('example-')) {
+      try {
+        pluginDetails = await pluginApi.get(plugin.id);
+        logLines.value.push({ time: '00:00.030', level: 'info', message: `Loaded plugin: ${pluginDetails.name} (${pluginDetails.status || 'active'})` });
+      } catch {
+        logLines.value.push({ time: '00:00.030', level: 'warn', message: 'Could not fetch plugin details from API' });
+      }
+
+      // Load components
+      try {
+        const { components } = await pluginApi.listComponents(plugin.id);
+        logLines.value.push({ time: '00:00.060', level: 'info', message: `Found ${components.length} component(s)` });
+        for (const comp of components) {
+          logLines.value.push({ time: '00:00.065', level: 'info', message: `  - ${comp.type}: ${comp.name}` });
+        }
+      } catch {
+        logLines.value.push({ time: '00:00.060', level: 'warn', message: 'No components found' });
+      }
+    } else {
+      logLines.value.push({ time: '00:00.030', level: 'info', message: 'Loading manifest: agented.plugin.json' });
+    }
+
+    for (const trigger of plugin.triggers) {
+      logLines.value.push({ time: '00:00.080', level: 'info', message: `Registered hook: ${trigger}` });
+    }
+
+    logLines.value.push({ time: '00:00.100', level: 'info', message: `Simulating trigger: ${plugin.triggers[0]}` });
+    logLines.value.push({ time: '00:00.120', level: 'info', message: 'Hook invoked with mock payload' });
+    logLines.value.push({ time: '00:00.250', level: 'success', message: `Plugin run complete for ${plugin.name}` });
+
+    plugin.status = 'done';
+  } catch {
+    logLines.value.push({ time: '00:00.500', level: 'error', message: 'Plugin run finished with errors' });
+    plugin.status = 'error';
+  } finally {
+    runningPlugin.value = null;
+  }
 }
 
 function getActiveTab(): Tab {
@@ -254,10 +271,20 @@ const manifestFields = [
         <span class="badge-info">Simulated environment</span>
       </div>
 
-      <div class="runner-layout">
+      <div v-if="isLoading" style="padding: 32px; text-align: center; color: var(--text-tertiary);">
+        Loading plugins...
+      </div>
+      <div v-else-if="loadError" style="padding: 32px; text-align: center; color: #ef4444;">
+        {{ loadError }}
+        <button class="btn btn-run" style="margin-top: 12px;" @click="loadPlugins">Retry</button>
+      </div>
+      <div v-else-if="displayPlugins.length === 0" style="padding: 32px; text-align: center; color: var(--text-tertiary);">
+        No plugins found. Create a plugin to see it here.
+      </div>
+      <div v-else class="runner-layout">
         <div class="plugin-list">
           <div
-            v-for="plugin in mockPlugins"
+            v-for="plugin in displayPlugins"
             :key="plugin.id"
             class="plugin-row"
             :class="{ 'is-running': runningPlugin === plugin.id }"

@@ -1,9 +1,11 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, onMounted, watch } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
+import { triggerApi, ApiError } from '../services/api';
+import type { Trigger, PromptHistoryEntry } from '../services/api';
 
 const router = useRouter();
 const route = useRoute();
@@ -11,8 +13,14 @@ const showToast = useToast();
 
 const botId = computed(() => (route.params.botId as string) || '');
 
+// Trigger selection for when no botId is in the route
+const triggers = ref<Trigger[]>([]);
+const selectedTriggerId = ref('');
+const isLoadingTriggers = ref(false);
+const triggerLoadError = ref('');
+
 interface PromptVersion {
-  id: string;
+  id: number;
   version: number;
   author: string;
   timestamp: string;
@@ -22,92 +30,103 @@ interface PromptVersion {
   tag?: string;
 }
 
-const versions = ref<PromptVersion[]>([
-  {
-    id: 'pv-001',
-    version: 7,
-    author: 'alice@example.com',
-    timestamp: '2026-03-06T10:14:00Z',
-    message: 'Tighten severity classification criteria',
-    tag: 'current',
-    prompt: `You are a security audit expert. Analyze the provided code for vulnerabilities.
+const versions = ref<PromptVersion[]>([]);
+const isLoadingHistory = ref(false);
+const historyError = ref('');
 
-For each finding, assign a severity: critical, high, medium, or low.
-- critical: Remote code execution, auth bypass, SQL injection
-- high: XSS, SSRF, insecure deserialization
-- medium: CSRF, open redirect, missing rate limiting
-- low: Information disclosure, verbose error messages
-
-Output findings as structured JSON with keys: severity, title, file, line, description, remediation.
-Limit output to the top 10 most impactful findings.`,
-    tokensEstimate: 142,
-  },
-  {
-    id: 'pv-002',
-    version: 6,
-    author: 'bob@example.com',
-    timestamp: '2026-03-04T16:22:00Z',
-    message: 'Add remediation field to output schema',
-    prompt: `You are a security audit expert. Analyze the provided code for vulnerabilities.
-
-For each finding, assign a severity: critical, high, medium, or low.
-- critical: Remote code execution, auth bypass, SQL injection
-- high: XSS, SSRF, insecure deserialization
-- medium: CSRF, open redirect, missing rate limiting
-- low: Information disclosure, verbose error messages
-
-Output findings as structured JSON with keys: severity, title, file, line, description.
-Limit output to the top 10 most impactful findings.`,
-    tokensEstimate: 128,
-  },
-  {
-    id: 'pv-003',
-    version: 5,
-    author: 'alice@example.com',
-    timestamp: '2026-03-01T09:05:00Z',
-    message: 'Reduce output verbosity — cap at 10 findings',
-    prompt: `You are a security audit expert. Analyze the provided code for vulnerabilities.
-
-For each finding, assign a severity: critical, high, medium, or low.
-Use the OWASP Top 10 as a reference.
-
-Output findings as structured JSON with keys: severity, title, file, line, description.`,
-    tokensEstimate: 98,
-  },
-  {
-    id: 'pv-004',
-    version: 4,
-    author: 'carol@example.com',
-    timestamp: '2026-02-26T14:40:00Z',
-    message: 'Switch to OWASP-aligned severity scale',
-    prompt: `You are a security audit expert. Analyze the provided code for security issues.
-
-Classify each finding as: blocker, warning, or info.
-Reference OWASP Top 10 for guidance.
-
-Return JSON: [{severity, title, file, line, description}]`,
-    tokensEstimate: 82,
-  },
-  {
-    id: 'pv-005',
-    version: 3,
-    author: 'bob@example.com',
-    timestamp: '2026-02-20T11:30:00Z',
-    message: 'Initial structured JSON output format',
-    prompt: `You are a code security reviewer. Look for bugs and vulnerabilities in the code.
-
-Return a list of issues in JSON format with severity, title, file, and description.`,
-    tokensEstimate: 64,
-  },
-]);
-
-const selectedLeft = ref<string>(versions.value[1].id);
-const selectedRight = ref<string>(versions.value[0].id);
+const selectedLeft = ref<string>('');
+const selectedRight = ref<string>('');
 const activeTab = ref<'list' | 'diff'>('list');
 const isRollingBack = ref(false);
 
-const leftVersion = computed(() => versions.value.find(v => v.id === selectedLeft.value));
-const rightVersion = computed(() => versions.value.find(v => v.id === selectedRight.value));
+const leftVersion = computed(() => versions.value.find(v => String(v.id) === selectedLeft.value));
+const rightVersion = computed(() => versions.value.find(v => String(v.id) === selectedRight.value));
+
+const activeTrigId = computed(() => botId.value || selectedTriggerId.value);
+
+onMounted(async () => {
+  if (botId.value) {
+    await loadHistory(botId.value);
+  } else {
+    await loadTriggers();
+  }
+});
+
+async function loadTriggers() {
+  isLoadingTriggers.value = true;
+  triggerLoadError.value = '';
+  try {
+    const res = await triggerApi.list();
+    triggers.value = res.triggers;
+  } catch (e) {
+    triggerLoadError.value = e instanceof ApiError ? e.message : 'Failed to load triggers';
+  } finally {
+    isLoadingTriggers.value = false;
+  }
+}
+
+watch(selectedTriggerId, async (newId) => {
+  if (newId) await loadHistory(newId);
+});
+
+async function loadHistory(triggerId: string) {
+  isLoadingHistory.value = true;
+  historyError.value = '';
+  versions.value = [];
+  try {
+    const res = await triggerApi.getPromptHistory(triggerId);
+    const history = res.history || [];
+
+    // Also fetch the current trigger to show the current prompt
+    const currentTrigger = await triggerApi.get(triggerId);
+
+    // Build version list from history entries
+    const versionList: PromptVersion[] = [];
+
+    // Current version is always first
+    versionList.push({
+      id: 0, // special id for current
+      version: history.length + 1,
+      author: 'current',
+      timestamp: currentTrigger.created_at || new Date().toISOString(),
+      message: 'Current active version',
+      prompt: currentTrigger.prompt_template || '',
+      tokensEstimate: Math.round((currentTrigger.prompt_template || '').split(/\s+/).length * 1.3),
+      tag: 'current',
+    });
+
+    // History entries (most recent first)
+    history.forEach((entry: PromptHistoryEntry, idx: number) => {
+      versionList.push({
+        id: entry.id,
+        version: history.length - idx,
+        author: entry.author || 'unknown',
+        timestamp: entry.changed_at,
+        message: entry.diff_text ? `Changed: ${entry.diff_text.substring(0, 60)}...` : 'Prompt updated',
+        prompt: entry.old_template,
+        tokensEstimate: Math.round((entry.old_template || '').split(/\s+/).length * 1.3),
+      });
+    });
+
+    versions.value = versionList;
+
+    if (versionList.length >= 2) {
+      selectedRight.value = String(versionList[0].id);
+      selectedLeft.value = String(versionList[1].id);
+    } else if (versionList.length === 1) {
+      selectedRight.value = String(versionList[0].id);
+      selectedLeft.value = String(versionList[0].id);
+    }
+  } catch (e) {
+    if (e instanceof ApiError && e.status === 404) {
+      historyError.value = 'No prompt history found for this trigger.';
+    } else {
+      historyError.value = e instanceof ApiError ? e.message : 'Failed to load prompt history';
+    }
+  } finally {
+    isLoadingHistory.value = false;
+  }
+}
 
 interface DiffLine {
   type: 'added' | 'removed' | 'unchanged';
@@ -121,7 +140,6 @@ const diffLines = computed((): DiffLine[] => {
   const leftLines = leftVersion.value.prompt.split('\n');
   const rightLines = rightVersion.value.prompt.split('\n');
 
-  // Simple line-by-line diff (LCS-based would be ideal; this is a visual approximation)
   const result: DiffLine[] = [];
   let li = 0;
   let ri = 0;
@@ -161,32 +179,29 @@ function fmtDate(iso: string): string {
   });
 }
 
-function selectForDiff(versionId: string) {
-  if (versionId === selectedRight.value) return;
-  selectedLeft.value = versionId;
+function selectForDiff(versionId: number) {
+  if (String(versionId) === selectedRight.value) return;
+  selectedLeft.value = String(versionId);
   activeTab.value = 'diff';
 }
 
 async function rollbackTo(v: PromptVersion) {
+  if (!activeTrigId.value) return;
   isRollingBack.value = true;
   try {
-    await new Promise(r => setTimeout(r, 900));
-    const newVersion: PromptVersion = {
-      id: `pv-${Date.now()}`,
-      version: versions.value[0].version + 1,
-      author: 'you@example.com',
-      timestamp: new Date().toISOString(),
-      message: `Rollback to v${v.version}: ${v.message}`,
-      prompt: v.prompt,
-      tokensEstimate: v.tokensEstimate,
-      tag: 'current',
-    };
-    const prev = versions.value.find(x => x.tag === 'current');
-    if (prev) delete prev.tag;
-    versions.value.unshift(newVersion);
-    selectedRight.value = newVersion.id;
-    showToast(`Rolled back to v${v.version}. A new version v${newVersion.version} was created.`, 'success');
+    if (v.id > 0) {
+      await triggerApi.rollbackPrompt(activeTrigId.value, v.id);
+    } else {
+      // Rollback to current version doesn't make sense
+      showToast('Already on current version', 'info');
+      isRollingBack.value = false;
+      return;
+    }
+    showToast(`Rolled back to v${v.version}. Prompt has been restored.`, 'success');
     activeTab.value = 'list';
+    await loadHistory(activeTrigId.value);
+  } catch (e) {
+    showToast(e instanceof ApiError ? e.message : 'Rollback failed', 'error');
   } finally {
     isRollingBack.value = false;
   }
@@ -197,7 +212,7 @@ async function rollbackTo(v: PromptVersion) {
   <div class="prompt-version-history">
     <AppBreadcrumb :items="[
       { label: 'Bots', action: () => router.push({ name: 'triggers' }) },
-      { label: 'Bot', action: () => router.push({ name: 'trigger-dashboard', params: { triggerId: botId } }) },
+      ...(botId ? [{ label: 'Bot', action: () => router.push({ name: 'trigger-dashboard', params: { triggerId: botId } }) }] : []),
       { label: 'Prompt Version History' },
     ]" />
 
@@ -206,119 +221,147 @@ async function rollbackTo(v: PromptVersion) {
       subtitle="Every change to this bot's prompt template — with diffs, authors, and one-click rollback."
     />
 
-    <div class="tab-row">
-      <button class="tab-btn" :class="{ active: activeTab === 'list' }" @click="activeTab = 'list'">
-        Version List
-      </button>
-      <button class="tab-btn" :class="{ active: activeTab === 'diff' }" @click="activeTab = 'diff'">
-        Diff View
-        <span v-if="addedCount || removedCount" class="diff-badge">
-          <span class="added-badge">+{{ addedCount }}</span>
-          <span class="removed-badge">-{{ removedCount }}</span>
-        </span>
-      </button>
-    </div>
-
-    <!-- Version list -->
-    <div v-if="activeTab === 'list'" class="version-list card">
-      <div
-        v-for="v in versions"
-        :key="v.id"
-        class="version-row"
-        :class="{ current: v.tag === 'current' }"
-      >
-        <div class="version-meta">
-          <div class="version-number">v{{ v.version }}</div>
-          <div v-if="v.tag" class="tag-badge tag-current">{{ v.tag }}</div>
-        </div>
-        <div class="version-info">
-          <div class="version-message">{{ v.message }}</div>
-          <div class="version-details">
-            <span class="author">{{ v.author }}</span>
-            <span class="sep">·</span>
-            <span class="date">{{ fmtDate(v.timestamp) }}</span>
-            <span class="sep">·</span>
-            <span class="tokens">~{{ v.tokensEstimate }} tokens</span>
-          </div>
-        </div>
-        <div class="version-actions">
-          <button class="btn btn-xs btn-ghost" @click="selectForDiff(v.id)">
-            Diff vs current
-          </button>
-          <button
-            v-if="v.tag !== 'current'"
-            class="btn btn-xs btn-ghost"
-            :disabled="isRollingBack"
-            @click="rollbackTo(v)"
-          >
-            Rollback
-          </button>
-          <button class="btn btn-xs btn-ghost" @click="activeTab = 'diff'; selectedLeft = v.id">
-            View
-          </button>
-        </div>
+    <!-- Trigger selector (when no botId in route) -->
+    <div v-if="!botId">
+      <div v-if="isLoadingTriggers" class="loading-msg">Loading triggers...</div>
+      <div v-else-if="triggerLoadError" class="error-msg">{{ triggerLoadError }}</div>
+      <div v-else class="trigger-selector">
+        <label class="selector-label">Select Trigger:</label>
+        <select v-model="selectedTriggerId" class="trigger-select">
+          <option value="">Choose a trigger...</option>
+          <option v-for="t in triggers" :key="t.id" :value="t.id">{{ t.name }} ({{ t.id }})</option>
+        </select>
       </div>
     </div>
 
-    <!-- Diff view -->
-    <div v-else class="diff-view">
-      <div class="diff-controls card">
-        <div class="diff-select-row">
-          <div class="diff-select-group">
-            <label class="diff-label">Base (older)</label>
-            <select v-model="selectedLeft" class="select">
-              <option v-for="v in versions" :key="v.id" :value="v.id">
-                v{{ v.version }} — {{ v.message }}
-              </option>
-            </select>
+    <div v-if="isLoadingHistory" class="loading-msg">Loading prompt history...</div>
+    <div v-else-if="historyError" class="error-msg">{{ historyError }}</div>
+    <div v-else-if="versions.length === 0 && activeTrigId" class="empty-msg">No prompt history found for this trigger.</div>
+    <div v-else-if="versions.length === 0 && !activeTrigId" class="empty-msg">Select a trigger to view its prompt history.</div>
+
+    <template v-if="versions.length > 0">
+      <div class="tab-row">
+        <button class="tab-btn" :class="{ active: activeTab === 'list' }" @click="activeTab = 'list'">
+          Version List
+        </button>
+        <button class="tab-btn" :class="{ active: activeTab === 'diff' }" @click="activeTab = 'diff'">
+          Diff View
+          <span v-if="addedCount || removedCount" class="diff-badge">
+            <span class="added-badge">+{{ addedCount }}</span>
+            <span class="removed-badge">-{{ removedCount }}</span>
+          </span>
+        </button>
+      </div>
+
+      <!-- Version list -->
+      <div v-if="activeTab === 'list'" class="version-list card">
+        <div
+          v-for="v in versions"
+          :key="v.id"
+          class="version-row"
+          :class="{ current: v.tag === 'current' }"
+        >
+          <div class="version-meta">
+            <div class="version-number">v{{ v.version }}</div>
+            <div v-if="v.tag" class="tag-badge tag-current">{{ v.tag }}</div>
           </div>
-          <div class="diff-arrow">→</div>
-          <div class="diff-select-group">
-            <label class="diff-label">Compare (newer)</label>
-            <select v-model="selectedRight" class="select">
-              <option v-for="v in versions" :key="v.id" :value="v.id">
-                v{{ v.version }} — {{ v.message }}
-              </option>
-            </select>
+          <div class="version-info">
+            <div class="version-message">{{ v.message }}</div>
+            <div class="version-details">
+              <span class="author">{{ v.author }}</span>
+              <span class="sep">·</span>
+              <span class="date">{{ fmtDate(v.timestamp) }}</span>
+              <span class="sep">·</span>
+              <span class="tokens">~{{ v.tokensEstimate }} tokens</span>
+            </div>
           </div>
-        </div>
-        <div class="diff-summary">
-          <span class="added-badge">+{{ addedCount }} added</span>
-          <span class="removed-badge">-{{ removedCount }} removed</span>
+          <div class="version-actions">
+            <button class="btn btn-xs btn-ghost" @click="selectForDiff(v.id)">
+              Diff vs current
+            </button>
+            <button
+              v-if="v.tag !== 'current'"
+              class="btn btn-xs btn-ghost"
+              :disabled="isRollingBack"
+              @click="rollbackTo(v)"
+            >
+              Rollback
+            </button>
+            <button class="btn btn-xs btn-ghost" @click="activeTab = 'diff'; selectedLeft = String(v.id)">
+              View
+            </button>
+          </div>
         </div>
       </div>
 
-      <div class="diff-panel card">
-        <div class="diff-header">
-          <div class="diff-col-header">
-            <span class="diff-col-label">v{{ leftVersion?.version }} — {{ leftVersion?.message }}</span>
-            <span class="diff-col-meta">{{ leftVersion ? fmtDate(leftVersion.timestamp) : '' }}</span>
+      <!-- Diff view -->
+      <div v-else class="diff-view">
+        <div class="diff-controls card">
+          <div class="diff-select-row">
+            <div class="diff-select-group">
+              <label class="diff-label">Base (older)</label>
+              <select v-model="selectedLeft" class="select">
+                <option v-for="v in versions" :key="v.id" :value="String(v.id)">
+                  v{{ v.version }} — {{ v.message }}
+                </option>
+              </select>
+            </div>
+            <div class="diff-arrow">&rarr;</div>
+            <div class="diff-select-group">
+              <label class="diff-label">Compare (newer)</label>
+              <select v-model="selectedRight" class="select">
+                <option v-for="v in versions" :key="v.id" :value="String(v.id)">
+                  v{{ v.version }} — {{ v.message }}
+                </option>
+              </select>
+            </div>
           </div>
-          <div class="diff-col-header">
-            <span class="diff-col-label">v{{ rightVersion?.version }} — {{ rightVersion?.message }}</span>
-            <span class="diff-col-meta">{{ rightVersion ? fmtDate(rightVersion.timestamp) : '' }}</span>
+          <div class="diff-summary">
+            <span class="added-badge">+{{ addedCount }} added</span>
+            <span class="removed-badge">-{{ removedCount }} removed</span>
           </div>
         </div>
-        <div class="diff-lines">
-          <div
-            v-for="(line, i) in diffLines"
-            :key="i"
-            class="diff-line"
-            :class="line.type"
-          >
-            <span class="line-no">{{ line.type === 'removed' ? line.leftLineNo : line.type === 'added' ? line.rightLineNo : line.leftLineNo }}</span>
-            <span class="line-prefix">{{ line.type === 'added' ? '+' : line.type === 'removed' ? '-' : ' ' }}</span>
-            <span class="line-content">{{ line.content }}</span>
+
+        <div class="diff-panel card">
+          <div class="diff-header">
+            <div class="diff-col-header">
+              <span class="diff-col-label">v{{ leftVersion?.version }} — {{ leftVersion?.message }}</span>
+              <span class="diff-col-meta">{{ leftVersion ? fmtDate(leftVersion.timestamp) : '' }}</span>
+            </div>
+            <div class="diff-col-header">
+              <span class="diff-col-label">v{{ rightVersion?.version }} — {{ rightVersion?.message }}</span>
+              <span class="diff-col-meta">{{ rightVersion ? fmtDate(rightVersion.timestamp) : '' }}</span>
+            </div>
+          </div>
+          <div class="diff-lines">
+            <div
+              v-for="(line, i) in diffLines"
+              :key="i"
+              class="diff-line"
+              :class="line.type"
+            >
+              <span class="line-no">{{ line.type === 'removed' ? line.leftLineNo : line.type === 'added' ? line.rightLineNo : line.leftLineNo }}</span>
+              <span class="line-prefix">{{ line.type === 'added' ? '+' : line.type === 'removed' ? '-' : ' ' }}</span>
+              <span class="line-content">{{ line.content }}</span>
+            </div>
           </div>
         </div>
       </div>
-    </div>
+    </template>
   </div>
 </template>
 
 <style scoped>
 .prompt-version-history { display: flex; flex-direction: column; gap: 20px; animation: fadeIn 0.3s ease; }
 @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+
+.loading-msg { font-size: 0.82rem; color: var(--text-tertiary); padding: 12px 0; }
+.error-msg { font-size: 0.82rem; color: #ef4444; padding: 12px 0; }
+.empty-msg { font-size: 0.82rem; color: var(--text-muted); padding: 24px 0; text-align: center; }
+
+.trigger-selector { display: flex; align-items: center; gap: 12px; }
+.selector-label { font-size: 0.82rem; font-weight: 600; color: var(--text-secondary); }
+.trigger-select { flex: 1; max-width: 400px; padding: 8px 12px; background: var(--bg-tertiary); border: 1px solid var(--border-default); border-radius: 7px; color: var(--text-primary); font-size: 0.82rem; }
 
 .tab-row { display: flex; gap: 4px; border-bottom: 1px solid var(--border-default); padding-bottom: 0; }
 .tab-btn { padding: 8px 18px; font-size: 0.875rem; background: none; border: none; color: var(--text-secondary); cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; transition: color 0.15s; display: flex; align-items: center; gap: 8px; }

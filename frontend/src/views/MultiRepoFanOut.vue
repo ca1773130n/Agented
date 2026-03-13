@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { triggerApi } from '../services/api';
-import type { Trigger } from '../services/api';
+import type { Trigger, ProjectPath } from '../services/api';
 import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
@@ -10,95 +10,143 @@ import { useToast } from '../composables/useToast';
 const router = useRouter();
 const showToast = useToast();
 
-interface RepoMapping {
-  id: string;
-  repo: string;
-  bot: string;
-  events: string[];
-  enabled: boolean;
-}
+// Loading state
+const isLoadingTriggers = ref(true);
+const isLoadingPaths = ref(false);
+const loadError = ref<string | null>(null);
 
+// Data from API
 const triggers = ref<Trigger[]>([]);
 const selectedTriggerId = ref('');
-const newRepo = ref('');
-const newBot = ref('');
-const newEvents = ref<string[]>(['push', 'pull_request']);
+const paths = ref<ProjectPath[]>([]);
+
+// New repo form
+const newRepoUrl = ref('');
+const isAdding = ref(false);
+const isRemoving = ref<number | null>(null);
+
+// Test
 const isTesting = ref(false);
-const isSaving = ref(false);
-
-const mappings = ref<RepoMapping[]>([
-  { id: 'm1', repo: 'org/api', bot: 'bot-pr-review', events: ['pull_request'], enabled: true },
-  { id: 'm2', repo: 'org/frontend', bot: 'bot-pr-review', events: ['pull_request'], enabled: true },
-  { id: 'm3', repo: 'org/infra', bot: 'bot-security', events: ['push', 'pull_request'], enabled: true },
-  { id: 'm4', repo: 'org/shared-libs', bot: 'bot-security', events: ['push'], enabled: false },
-]);
-
-const EVENT_OPTIONS = ['push', 'pull_request', 'release', 'tag', 'workflow_run'];
+const testResult = ref<string | null>(null);
 
 async function loadTriggers() {
+  isLoadingTriggers.value = true;
+  loadError.value = null;
   try {
     const res = await triggerApi.list();
     triggers.value = res.triggers ?? [];
-    if (triggers.value.length > 0) selectedTriggerId.value = triggers.value[0].id;
-  } catch {
-    // Non-critical
+    if (triggers.value.length > 0) {
+      selectedTriggerId.value = triggers.value[0].id;
+    }
+  } catch (err: unknown) {
+    loadError.value = err instanceof Error ? err.message : 'Failed to load triggers';
+  } finally {
+    isLoadingTriggers.value = false;
   }
 }
 
-function addMapping() {
-  if (!newRepo.value.trim() || !newBot.value.trim()) {
-    showToast('Repo and bot are required', 'info');
+async function loadPaths() {
+  if (!selectedTriggerId.value) {
+    paths.value = [];
     return;
   }
-  mappings.value.push({
-    id: 'm' + Date.now(),
-    repo: newRepo.value.trim(),
-    bot: newBot.value.trim(),
-    events: [...newEvents.value],
-    enabled: true,
-  });
-  newRepo.value = '';
-  newBot.value = '';
-  newEvents.value = ['push', 'pull_request'];
-  showToast('Repo mapping added', 'success');
+  isLoadingPaths.value = true;
+  try {
+    const res = await triggerApi.listPaths(selectedTriggerId.value);
+    paths.value = res.paths ?? [];
+  } catch {
+    paths.value = [];
+  } finally {
+    isLoadingPaths.value = false;
+  }
 }
 
-function removeMapping(id: string) {
-  mappings.value = mappings.value.filter(m => m.id !== id);
+watch(selectedTriggerId, () => {
+  loadPaths();
+  testResult.value = null;
+});
+
+async function addRepo() {
+  const url = newRepoUrl.value.trim();
+  if (!url) {
+    showToast('Repository URL is required', 'info');
+    return;
+  }
+  if (!selectedTriggerId.value) {
+    showToast('Select a trigger first', 'info');
+    return;
+  }
+  isAdding.value = true;
+  try {
+    // Determine if it looks like a GitHub URL or a local path
+    if (url.includes('github.com') || url.match(/^[\w-]+\/[\w.-]+$/)) {
+      await triggerApi.addGitHubRepo(selectedTriggerId.value, url);
+    } else {
+      await triggerApi.addPath(selectedTriggerId.value, url);
+    }
+    showToast('Repository added', 'success');
+    newRepoUrl.value = '';
+    await loadPaths();
+  } catch (err: unknown) {
+    showToast(err instanceof Error ? err.message : 'Failed to add repository', 'error');
+  } finally {
+    isAdding.value = false;
+  }
 }
 
-function toggleMapping(m: RepoMapping) {
-  m.enabled = !m.enabled;
-}
-
-function toggleEvent(event: string) {
-  if (newEvents.value.includes(event)) {
-    newEvents.value = newEvents.value.filter(e => e !== event);
-  } else {
-    newEvents.value.push(event);
+async function removePath(path: ProjectPath) {
+  if (!selectedTriggerId.value) return;
+  isRemoving.value = path.id;
+  try {
+    if (path.github_repo_url) {
+      await triggerApi.removeGitHubRepo(selectedTriggerId.value, path.github_repo_url);
+    } else {
+      await triggerApi.removePath(selectedTriggerId.value, path.local_project_path);
+    }
+    showToast('Repository removed', 'success');
+    await loadPaths();
+  } catch (err: unknown) {
+    showToast(err instanceof Error ? err.message : 'Failed to remove', 'error');
+  } finally {
+    isRemoving.value = null;
   }
 }
 
 async function handleTest() {
+  if (!selectedTriggerId.value) {
+    showToast('Select a trigger first', 'info');
+    return;
+  }
   isTesting.value = true;
+  testResult.value = null;
   try {
-    await new Promise(resolve => setTimeout(resolve, 1200));
-    const enabled = mappings.value.filter(m => m.enabled);
-    showToast(`Fan-out test: ${enabled.length} mappings would be triggered`, 'success');
+    const res = await triggerApi.previewPromptFull(selectedTriggerId.value, {});
+    testResult.value = `Prompt preview rendered successfully. ${res.unresolved_placeholders?.length ? `Unresolved placeholders: ${res.unresolved_placeholders.join(', ')}` : 'All placeholders resolved.'}`;
+    showToast('Fan-out test complete', 'success');
+  } catch (err: unknown) {
+    testResult.value = err instanceof Error ? err.message : 'Test failed';
+    showToast('Test failed', 'error');
   } finally {
     isTesting.value = false;
   }
 }
 
-async function handleSave() {
-  isSaving.value = true;
-  try {
-    await new Promise(resolve => setTimeout(resolve, 700));
-    showToast('Fan-out configuration saved', 'success');
-  } finally {
-    isSaving.value = false;
-  }
+function displayPath(p: ProjectPath): string {
+  if (p.github_repo_url) return p.github_repo_url;
+  if (p.project_name) return `${p.project_name} (${p.local_project_path})`;
+  return p.local_project_path;
 }
+
+function pathTypeLabel(p: ProjectPath): string {
+  if (p.path_type === 'github') return 'GitHub';
+  if (p.path_type === 'project') return 'Project';
+  return 'Local';
+}
+
+const selectedTriggerName = () => {
+  const t = triggers.value.find(t => t.id === selectedTriggerId.value);
+  return t?.name ?? '';
+};
 
 onMounted(loadTriggers);
 </script>
@@ -112,150 +160,160 @@ onMounted(loadTriggers);
 
     <PageHeader title="Multi-Repo Fan-Out" subtitle="Configure a single trigger watching multiple repos with per-repo bot routing.">
       <template #actions>
-        <button class="btn btn-secondary" :disabled="isTesting" @click="handleTest">
+        <button class="btn btn-secondary" :disabled="isTesting || !selectedTriggerId" @click="handleTest">
           <svg v-if="isTesting" class="spinner" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
             <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
           </svg>
           {{ isTesting ? 'Testing...' : 'Test Fan-Out' }}
         </button>
-        <button class="btn btn-primary" :disabled="isSaving" @click="handleSave">
-          {{ isSaving ? 'Saving...' : 'Save Configuration' }}
-        </button>
       </template>
     </PageHeader>
 
-    <div class="card trigger-card">
-      <div class="card-header">
-        <h3>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="18" height="18">
-            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
-          </svg>
-          Base Trigger
-        </h3>
-      </div>
-      <div class="trigger-body">
-        <div class="field-group">
-          <label class="field-label">Select Trigger to Fan-Out</label>
-          <select v-model="selectedTriggerId" class="select-input">
-            <option value="">-- Select trigger --</option>
-            <option v-for="t in triggers" :key="t.id" :value="t.id">{{ t.name }}</option>
-          </select>
-        </div>
-        <div class="trigger-info">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="14" height="14" style="color: var(--accent-cyan)">
-            <circle cx="12" cy="12" r="10"/>
-            <path d="M12 8v4l3 3"/>
-          </svg>
-          When this trigger fires, the payload will be routed to each matching repo's bot based on the mappings below.
-        </div>
+    <!-- Loading state -->
+    <div v-if="isLoadingTriggers" class="card loading-card">
+      <div class="loading-content">Loading triggers...</div>
+    </div>
+
+    <!-- Error state -->
+    <div v-else-if="loadError" class="card error-card">
+      <div class="error-content">
+        <span>{{ loadError }}</span>
+        <button class="btn btn-secondary" @click="loadTriggers">Retry</button>
       </div>
     </div>
 
-    <div class="card">
-      <div class="card-header">
-        <h3>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="18" height="18">
-            <line x1="6" y1="3" x2="6" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/>
-            <path d="M18 9a9 9 0 0 1-9 9"/>
-          </svg>
-          Fan-Out Rules
-        </h3>
-        <span class="card-badge">{{ mappings.filter(m => m.enabled).length }} active</span>
-      </div>
-
-      <!-- Add new mapping -->
-      <div class="add-mapping">
-        <div class="add-row">
-          <input v-model="newRepo" type="text" class="text-input" placeholder="org/repo-name" />
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="16" height="16" style="color: var(--text-muted)">
-            <line x1="5" y1="12" x2="19" y2="12"/>
-            <polyline points="12 5 19 12 12 19"/>
-          </svg>
-          <input v-model="newBot" type="text" class="text-input" placeholder="bot-name" />
-          <button class="btn btn-primary" @click="addMapping">Add</button>
-        </div>
-        <div class="event-filters">
-          <span class="filter-label">Events:</span>
-          <button
-            v-for="ev in EVENT_OPTIONS"
-            :key="ev"
-            class="event-btn"
-            :class="{ active: newEvents.includes(ev) }"
-            @click="toggleEvent(ev)"
-          >
-            {{ ev }}
-          </button>
-        </div>
-      </div>
-
-      <div class="mappings-list">
-        <div v-for="m in mappings" :key="m.id" class="mapping-row" :class="{ 'is-disabled': !m.enabled }">
-          <div class="mapping-repo">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="14" height="14" style="color: var(--text-tertiary)">
-              <path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"/>
+    <template v-else>
+      <div class="card trigger-card">
+        <div class="card-header">
+          <h3>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="18" height="18">
+              <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
             </svg>
-            <span class="repo-name">{{ m.repo }}</span>
+            Base Trigger
+          </h3>
+        </div>
+        <div class="trigger-body">
+          <div class="field-group">
+            <label class="field-label">Select Trigger to Fan-Out</label>
+            <select v-model="selectedTriggerId" class="select-input">
+              <option value="">-- Select trigger --</option>
+              <option v-for="t in triggers" :key="t.id" :value="t.id">{{ t.name }}</option>
+            </select>
           </div>
-          <div class="mapping-arrow">→</div>
-          <div class="mapping-bot">
-            <span class="bot-name">{{ m.bot }}</span>
+          <div class="trigger-info">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="14" height="14" style="color: var(--accent-cyan)">
+              <circle cx="12" cy="12" r="10"/>
+              <path d="M12 8v4l3 3"/>
+            </svg>
+            When this trigger fires, the payload will be routed to each matching repo's bot based on the paths below.
           </div>
-          <div class="mapping-events">
-            <span v-for="ev in m.events" :key="ev" class="event-tag">{{ ev }}</span>
-          </div>
-          <div class="mapping-actions">
-            <label class="toggle-wrap">
-              <input type="checkbox" :checked="m.enabled" class="toggle-input" @change="toggleMapping(m)" />
-              <span class="toggle-track" :class="{ active: m.enabled }">
-                <span class="toggle-thumb" />
-              </span>
-            </label>
-            <button class="btn-icon-sm" @click="removeMapping(m.id)">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12">
-                <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-              </svg>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <h3>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="18" height="18">
+              <line x1="6" y1="3" x2="6" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/>
+              <path d="M18 9a9 9 0 0 1-9 9"/>
+            </svg>
+            Fan-Out Paths
+          </h3>
+          <span class="card-badge">{{ paths.length }} paths</span>
+        </div>
+
+        <!-- Add new path -->
+        <div class="add-mapping">
+          <div class="add-row">
+            <input
+              v-model="newRepoUrl"
+              type="text"
+              class="text-input"
+              placeholder="GitHub URL (https://github.com/org/repo) or local path"
+              :disabled="!selectedTriggerId"
+              @keyup.enter="addRepo"
+            />
+            <button class="btn btn-primary" :disabled="isAdding || !selectedTriggerId || !newRepoUrl.trim()" @click="addRepo">
+              {{ isAdding ? 'Adding...' : 'Add' }}
             </button>
           </div>
         </div>
-        <div v-if="mappings.length === 0" class="mappings-empty">
-          No fan-out rules configured. Add a repo mapping above.
-        </div>
-      </div>
-    </div>
 
-    <div class="card overview-card">
-      <div class="card-header">
-        <h3>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="18" height="18">
-            <circle cx="12" cy="12" r="10"/>
-            <path d="M12 8v4l3 3"/>
-          </svg>
-          Fan-Out Overview
-        </h3>
-      </div>
-      <div class="overview-body">
-        <div class="overview-stats">
-          <div class="ov-stat">
-            <span class="ov-num">{{ mappings.length }}</span>
-            <span class="ov-lbl">Total repos</span>
+        <!-- Loading paths indicator -->
+        <div v-if="isLoadingPaths" class="mappings-loading">Loading paths...</div>
+
+        <div v-else class="mappings-list">
+          <div v-for="p in paths" :key="p.id" class="mapping-row">
+            <div class="mapping-repo">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="14" height="14" style="color: var(--text-tertiary)">
+                <path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"/>
+              </svg>
+              <span class="repo-name">{{ displayPath(p) }}</span>
+            </div>
+            <div class="mapping-type">
+              <span class="type-tag">{{ pathTypeLabel(p) }}</span>
+            </div>
+            <div v-if="p.project_name" class="mapping-project">
+              <span class="project-name">{{ p.project_name }}</span>
+            </div>
+            <div class="mapping-actions">
+              <button
+                class="btn-icon-sm"
+                :disabled="isRemoving === p.id"
+                @click="removePath(p)"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12">
+                  <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+              </button>
+            </div>
           </div>
-          <div class="ov-stat">
-            <span class="ov-num" style="color: #34d399">{{ mappings.filter(m => m.enabled).length }}</span>
-            <span class="ov-lbl">Active</span>
-          </div>
-          <div class="ov-stat">
-            <span class="ov-num">{{ [...new Set(mappings.map(m => m.bot))].length }}</span>
-            <span class="ov-lbl">Unique bots</span>
+          <div v-if="paths.length === 0 && !isLoadingPaths" class="mappings-empty">
+            No paths configured for {{ selectedTriggerName() || 'this trigger' }}. Add a repository above.
           </div>
         </div>
-        <div class="bots-summary">
-          <div v-for="bot in [...new Set(mappings.map(m => m.bot))]" :key="bot" class="bot-summary-row">
-            <span class="bot-sum-name">{{ bot }}</span>
-            <span class="bot-sum-count">{{ mappings.filter(m => m.bot === bot && m.enabled).length }} repos</span>
+      </div>
+
+      <!-- Test result -->
+      <div v-if="testResult" class="card test-result-card">
+        <div class="card-header">
+          <h3>Test Result</h3>
+        </div>
+        <div class="test-result-body">{{ testResult }}</div>
+      </div>
+
+      <div class="card overview-card">
+        <div class="card-header">
+          <h3>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="18" height="18">
+              <circle cx="12" cy="12" r="10"/>
+              <path d="M12 8v4l3 3"/>
+            </svg>
+            Fan-Out Overview
+          </h3>
+        </div>
+        <div class="overview-body">
+          <div class="overview-stats">
+            <div class="ov-stat">
+              <span class="ov-num">{{ paths.length }}</span>
+              <span class="ov-lbl">Total paths</span>
+            </div>
+            <div class="ov-stat">
+              <span class="ov-num" style="color: #34d399">{{ paths.filter(p => p.path_type === 'github').length }}</span>
+              <span class="ov-lbl">GitHub repos</span>
+            </div>
+            <div class="ov-stat">
+              <span class="ov-num">{{ paths.filter(p => p.path_type === 'local').length }}</span>
+              <span class="ov-lbl">Local paths</span>
+            </div>
+            <div class="ov-stat">
+              <span class="ov-num">{{ paths.filter(p => p.path_type === 'project').length }}</span>
+              <span class="ov-lbl">Projects</span>
+            </div>
           </div>
         </div>
       </div>
-    </div>
+    </template>
   </div>
 </template>
 
@@ -278,6 +336,10 @@ onMounted(loadTriggers);
   border-radius: 12px;
   overflow: hidden;
 }
+
+.loading-card, .error-card { padding: 32px 24px; }
+.loading-content { text-align: center; color: var(--text-tertiary); font-size: 0.875rem; }
+.error-content { display: flex; align-items: center; justify-content: center; gap: 12px; color: #ef4444; font-size: 0.875rem; }
 
 .card-header {
   display: flex;
@@ -386,35 +448,15 @@ onMounted(loadTriggers);
   border-color: var(--accent-cyan);
 }
 
-.event-filters {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-wrap: wrap;
+.text-input:disabled {
+  opacity: 0.4;
 }
 
-.filter-label {
-  font-size: 0.78rem;
+.mappings-loading {
+  padding: 24px;
+  text-align: center;
   color: var(--text-tertiary);
-  font-weight: 500;
-}
-
-.event-btn {
-  padding: 3px 8px;
-  border-radius: 4px;
-  font-size: 0.72rem;
-  font-weight: 500;
-  cursor: pointer;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-default);
-  color: var(--text-secondary);
-  transition: all 0.12s;
-}
-
-.event-btn.active {
-  background: rgba(6, 182, 212, 0.1);
-  border-color: var(--accent-cyan);
-  color: var(--accent-cyan);
+  font-size: 0.82rem;
 }
 
 .mappings-list {
@@ -433,42 +475,27 @@ onMounted(loadTriggers);
 
 .mapping-row:hover { background: var(--bg-tertiary); }
 .mapping-row:last-child { border-bottom: none; }
-.mapping-row.is-disabled { opacity: 0.5; }
 
 .mapping-repo {
   display: flex;
   align-items: center;
   gap: 6px;
-  min-width: 160px;
+  flex: 1;
+  min-width: 0;
 }
 
 .repo-name {
   font-family: monospace;
   font-size: 0.85rem;
   color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.mapping-arrow {
-  color: var(--text-muted);
-  font-size: 1rem;
-}
+.mapping-type { flex-shrink: 0; }
 
-.mapping-bot .bot-name {
-  font-family: monospace;
-  font-size: 0.85rem;
-  color: var(--accent-cyan);
-  min-width: 140px;
-  display: block;
-}
-
-.mapping-events {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 5px;
-  flex: 1;
-}
-
-.event-tag {
+.type-tag {
   font-size: 0.7rem;
   padding: 2px 7px;
   background: var(--bg-tertiary);
@@ -477,10 +504,17 @@ onMounted(loadTriggers);
   color: var(--text-tertiary);
 }
 
+.mapping-project { flex-shrink: 0; }
+.project-name {
+  font-size: 0.78rem;
+  color: var(--accent-cyan);
+}
+
 .mapping-actions {
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-shrink: 0;
 }
 
 .mappings-empty {
@@ -488,6 +522,13 @@ onMounted(loadTriggers);
   text-align: center;
   font-size: 0.875rem;
   color: var(--text-tertiary);
+}
+
+.test-result-card .test-result-body {
+  padding: 16px 24px;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  white-space: pre-wrap;
 }
 
 .overview-body { padding: 20px 24px; display: flex; flex-direction: column; gap: 16px; }
@@ -514,56 +555,6 @@ onMounted(loadTriggers);
   color: var(--text-tertiary);
 }
 
-.bots-summary {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 14px;
-  background: var(--bg-tertiary);
-  border-radius: 8px;
-}
-
-.bot-summary-row {
-  display: flex;
-  justify-content: space-between;
-  font-size: 0.85rem;
-}
-
-.bot-sum-name { font-family: monospace; color: var(--text-primary); }
-.bot-sum-count { color: var(--text-tertiary); }
-
-.toggle-wrap {
-  display: flex;
-  align-items: center;
-  cursor: pointer;
-}
-
-.toggle-input { display: none; }
-
-.toggle-track {
-  width: 30px;
-  height: 16px;
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border-default);
-  border-radius: 8px;
-  display: flex;
-  align-items: center;
-  padding: 2px;
-  transition: all 0.2s;
-}
-
-.toggle-track.active { background: rgba(6, 182, 212, 0.2); border-color: var(--accent-cyan); }
-
-.toggle-thumb {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: var(--text-tertiary);
-  transition: all 0.2s;
-}
-
-.toggle-track.active .toggle-thumb { background: var(--accent-cyan); transform: translateX(14px); }
-
 .btn-icon-sm {
   display: flex;
   align-items: center;
@@ -579,6 +570,7 @@ onMounted(loadTriggers);
 }
 
 .btn-icon-sm:hover { border-color: #ef4444; color: #ef4444; }
+.btn-icon-sm:disabled { opacity: 0.4; cursor: not-allowed; }
 
 .btn {
   display: flex;

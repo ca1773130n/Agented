@@ -460,4 +460,10 @@ onMounted(() => {
 }
 
 .warning-text { color: #ff4d4d; font-size: 0.9rem; margin-top: 0.5rem; }
+
+@media (max-width: 480px) {
+  .products-grid {
+    grid-template-columns: 1fr;
+  }
+}
 </style>

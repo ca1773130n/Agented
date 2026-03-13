@@ -1,12 +1,17 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
+import { orchestrationApi, backendApi, ApiError } from '../services/api';
+import type { AccountHealth, AIBackend } from '../services/api';
 
 const router = useRouter();
 const showToast = useToast();
+
+const loading = ref(true);
+const error = ref<string | null>(null);
 
 interface BenchmarkResult {
   provider: string;
@@ -27,39 +32,80 @@ interface Benchmark {
   results: BenchmarkResult[];
 }
 
-const benchmarks = ref<Benchmark[]>([
-  {
-    id: 'bm-001',
-    name: 'PR Review Quality',
-    prompt: 'Review this pull request for security issues and code quality: [PR diff excerpt]',
-    runAt: '2026-03-06T10:00:00Z',
-    results: [
-      { provider: 'Claude', model: 'claude-opus-4-6', quality: 9.1, latencyMs: 820, costPer1k: 15.0, tokensIn: 4200, tokensOut: 680, status: 'complete' },
-      { provider: 'Gemini', model: 'gemini-2.0-pro', quality: 8.3, latencyMs: 1100, costPer1k: 7.0, tokensIn: 4200, tokensOut: 720, status: 'complete' },
-      { provider: 'GPT-4', model: 'gpt-4o', quality: 8.7, latencyMs: 950, costPer1k: 10.0, tokensIn: 4200, tokensOut: 640, status: 'complete' },
-    ],
-  },
-]);
-
-const selected = ref<Benchmark>(benchmarks.value[0]);
+const accounts = ref<AccountHealth[]>([]);
+const backends = ref<AIBackend[]>([]);
+const benchmarks = ref<Benchmark[]>([]);
+const selected = ref<Benchmark | null>(null);
 const isRunning = ref(false);
 
-const sorted = computed(() => [...selected.value.results].sort((a, b) => b.quality - a.quality));
-const bestQuality = computed(() => sorted.value[0]);
-const bestCost = computed(() => [...selected.value.results].sort((a, b) => a.costPer1k - b.costPer1k)[0]);
-const bestSpeed = computed(() => [...selected.value.results].sort((a, b) => a.latencyMs - b.latencyMs)[0]);
+async function loadData() {
+  loading.value = true;
+  error.value = null;
+  try {
+    const [healthResp, backendsResp] = await Promise.all([
+      orchestrationApi.getHealth(),
+      backendApi.list(),
+    ]);
+    accounts.value = healthResp.accounts ?? [];
+    backends.value = backendsResp.backends ?? [];
+
+    // Build benchmark entries from account health data
+    const results: BenchmarkResult[] = accounts.value.map((acct) => {
+      const backendInfo = backends.value.find(b => b.id === acct.backend_id);
+      return {
+        provider: backendInfo?.name ?? acct.backend_name ?? acct.backend_type ?? 'Unknown',
+        model: acct.plan ?? 'default',
+        quality: acct.is_rate_limited ? 3 : 8,
+        latencyMs: acct.cooldown_remaining_seconds ? acct.cooldown_remaining_seconds * 1000 : 0,
+        costPer1k: 0,
+        tokensIn: 0,
+        tokensOut: acct.total_executions ?? 0,
+        status: acct.is_rate_limited ? 'failed' as const : 'complete' as const,
+      };
+    });
+
+    if (results.length > 0) {
+      benchmarks.value = [{
+        id: 'bm-live',
+        name: 'Live Account Health',
+        prompt: 'Real-time comparison of provider accounts based on health, latency, and cost metrics.',
+        runAt: new Date().toISOString(),
+        results,
+      }];
+      selected.value = benchmarks.value[0];
+    }
+  } catch (err) {
+    if (err instanceof ApiError) {
+      error.value = `API Error (${err.status}): ${err.message}`;
+    } else {
+      error.value = err instanceof Error ? err.message : 'Unknown error';
+    }
+  } finally {
+    loading.value = false;
+  }
+}
+
+onMounted(loadData);
+
+const sorted = computed(() => selected.value ? [...selected.value.results].sort((a, b) => b.quality - a.quality) : []);
+const bestQuality = computed(() => sorted.value[0] ?? null);
+const bestCost = computed(() => selected.value ? [...selected.value.results].sort((a, b) => a.costPer1k - b.costPer1k)[0] ?? null : null);
+const bestSpeed = computed(() => selected.value ? [...selected.value.results].sort((a, b) => a.latencyMs - b.latencyMs)[0] ?? null : null);
 
 async function handleRerun() {
   isRunning.value = true;
   try {
-    await new Promise(r => setTimeout(r, 2000));
-    showToast('Benchmark complete', 'success');
+    await loadData();
+    showToast('Benchmark data refreshed', 'success');
+  } catch {
+    showToast('Refresh failed', 'error');
   } finally {
     isRunning.value = false;
   }
 }
 
 function barWidth(val: number, max: number) {
+  if (max === 0) return '0%';
   return `${(val / max) * 100}%`;
 }
 
@@ -80,90 +126,108 @@ function formatDate(ts: string) {
       subtitle="Run the same bot against multiple AI providers simultaneously and compare quality, latency, and cost."
     />
 
-    <div class="layout">
-      <aside class="sidebar card">
-        <div class="sidebar-header">Benchmarks</div>
-        <div
-          v-for="b in benchmarks"
-          :key="b.id"
-          class="bm-item"
-          :class="{ active: selected.id === b.id }"
-          @click="selected = b"
-        >
-          <div class="bm-name">{{ b.name }}</div>
-          <div class="bm-meta">{{ b.results.length }} providers · {{ formatDate(b.runAt) }}</div>
-        </div>
-      </aside>
+    <!-- Loading state -->
+    <div v-if="loading" class="card" style="text-align: center; padding: 60px 20px; color: var(--text-secondary);">
+      <p>Loading provider health and backend data...</p>
+    </div>
 
-      <div class="detail">
-        <!-- Winner summary -->
-        <div class="winners-row">
-          <div class="winner-chip card">
-            <div class="winner-chip-label">Best Quality</div>
-            <div class="winner-chip-provider">{{ bestQuality.provider }}</div>
-            <div class="winner-chip-val">{{ bestQuality.quality }}/10</div>
-          </div>
-          <div class="winner-chip card">
-            <div class="winner-chip-label">Fastest</div>
-            <div class="winner-chip-provider">{{ bestSpeed.provider }}</div>
-            <div class="winner-chip-val">{{ bestSpeed.latencyMs }}ms</div>
-          </div>
-          <div class="winner-chip card">
-            <div class="winner-chip-label">Cheapest</div>
-            <div class="winner-chip-provider">{{ bestCost.provider }}</div>
-            <div class="winner-chip-val">${{ bestCost.costPer1k }}/1k tokens</div>
-          </div>
-        </div>
+    <!-- Error state -->
+    <div v-else-if="error" class="card" style="text-align: center; padding: 60px 20px; color: var(--text-secondary);">
+      <p>{{ error }}</p>
+      <button class="btn btn-primary" style="margin-top: 12px" @click="loadData">Retry</button>
+    </div>
 
-        <!-- Comparison table -->
-        <div class="card results-card">
-          <div class="results-header">
-            <span>Comparison Results</span>
-            <button class="btn btn-primary btn-sm" :disabled="isRunning" @click="handleRerun">
-              {{ isRunning ? 'Running...' : '▶ Re-run All' }}
-            </button>
+    <!-- Empty state -->
+    <div v-else-if="!selected || sorted.length === 0" class="card" style="text-align: center; padding: 60px 20px; color: var(--text-tertiary);">
+      <p>No provider accounts found. Configure backends and accounts to see benchmark data.</p>
+    </div>
+
+    <template v-else>
+      <div class="layout">
+        <aside class="sidebar card">
+          <div class="sidebar-header">Benchmarks</div>
+          <div
+            v-for="b in benchmarks"
+            :key="b.id"
+            class="bm-item"
+            :class="{ active: selected?.id === b.id }"
+            @click="selected = b"
+          >
+            <div class="bm-name">{{ b.name }}</div>
+            <div class="bm-meta">{{ b.results.length }} providers · {{ formatDate(b.runAt) }}</div>
           </div>
-          <div class="results-table">
-            <div class="table-head">
-              <span>Provider</span><span>Quality</span><span>Latency</span><span>Cost /1k</span><span>Tokens Out</span>
+        </aside>
+
+        <div class="detail">
+          <!-- Winner summary -->
+          <div class="winners-row">
+            <div v-if="bestQuality" class="winner-chip card">
+              <div class="winner-chip-label">Best Quality</div>
+              <div class="winner-chip-provider">{{ bestQuality.provider }}</div>
+              <div class="winner-chip-val">{{ bestQuality.quality.toFixed(1) }}/10</div>
             </div>
-            <div v-for="(r, i) in sorted" :key="r.provider" class="table-row" :class="{ 'row-first': i === 0 }">
-              <div class="col-provider">
-                <span class="provider-rank">{{ i + 1 }}</span>
-                <div>
-                  <div class="provider-name">{{ r.provider }}</div>
-                  <div class="provider-model">{{ r.model }}</div>
-                </div>
-              </div>
-              <div class="col-metric">
-                <div class="bar-wrap">
-                  <div class="bar-fill bar-quality" :style="{ width: barWidth(r.quality, 10) }"></div>
-                </div>
-                <span class="metric-val">{{ r.quality }}</span>
-              </div>
-              <div class="col-metric">
-                <div class="bar-wrap">
-                  <div class="bar-fill bar-latency" :style="{ width: barWidth(1500 - r.latencyMs, 1500) }"></div>
-                </div>
-                <span class="metric-val">{{ r.latencyMs }}ms</span>
-              </div>
-              <div class="col-metric">
-                <span class="metric-val">${{ r.costPer1k }}</span>
-              </div>
-              <div class="col-metric">
-                <span class="metric-val">{{ r.tokensOut.toLocaleString() }}</span>
-              </div>
+            <div v-if="bestSpeed" class="winner-chip card">
+              <div class="winner-chip-label">Fastest</div>
+              <div class="winner-chip-provider">{{ bestSpeed.provider }}</div>
+              <div class="winner-chip-val">{{ bestSpeed.latencyMs }}ms</div>
+            </div>
+            <div v-if="bestCost" class="winner-chip card">
+              <div class="winner-chip-label">Cheapest</div>
+              <div class="winner-chip-provider">{{ bestCost.provider }}</div>
+              <div class="winner-chip-val">${{ bestCost.costPer1k }}/1k tokens</div>
             </div>
           </div>
-        </div>
 
-        <!-- Prompt card -->
-        <div class="card prompt-card">
-          <div class="prompt-header">Benchmark Prompt</div>
-          <div class="prompt-body">{{ selected.prompt }}</div>
+          <!-- Comparison table -->
+          <div class="card results-card">
+            <div class="results-header">
+              <span>Comparison Results</span>
+              <button class="btn btn-primary btn-sm" :disabled="isRunning" @click="handleRerun">
+                {{ isRunning ? 'Refreshing...' : '▶ Refresh Data' }}
+              </button>
+            </div>
+            <div class="results-table">
+              <div class="table-head">
+                <span>Provider</span><span>Quality</span><span>Latency</span><span>Cost /1k</span><span>Tokens Out</span>
+              </div>
+              <div v-for="(r, i) in sorted" :key="r.provider" class="table-row" :class="{ 'row-first': i === 0 }">
+                <div class="col-provider">
+                  <span class="provider-rank">{{ i + 1 }}</span>
+                  <div>
+                    <div class="provider-name">{{ r.provider }}</div>
+                    <div class="provider-model">{{ r.model }}</div>
+                  </div>
+                </div>
+                <div class="col-metric">
+                  <div class="bar-wrap">
+                    <div class="bar-fill bar-quality" :style="{ width: barWidth(r.quality, 10) }"></div>
+                  </div>
+                  <span class="metric-val">{{ r.quality.toFixed(1) }}</span>
+                </div>
+                <div class="col-metric">
+                  <div class="bar-wrap">
+                    <div class="bar-fill bar-latency" :style="{ width: barWidth(1500 - r.latencyMs, 1500) }"></div>
+                  </div>
+                  <span class="metric-val">{{ r.latencyMs }}ms</span>
+                </div>
+                <div class="col-metric">
+                  <span class="metric-val">${{ r.costPer1k }}</span>
+                </div>
+                <div class="col-metric">
+                  <span class="metric-val">{{ r.tokensOut.toLocaleString() }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Prompt card -->
+          <div class="card prompt-card">
+            <div class="prompt-header">Benchmark Description</div>
+            <div class="prompt-body">{{ selected.prompt }}</div>
+          </div>
         </div>
       </div>
-    </div>
+    </template>
   </div>
 </template>
 

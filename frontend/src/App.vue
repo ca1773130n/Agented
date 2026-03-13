@@ -1033,6 +1033,12 @@ body {
   gap: 20px;
 }
 
+@media (max-width: 480px) {
+  .entity-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 .entity-card {
   background: var(--bg-secondary);
   border: 1px solid var(--border-default);
@@ -1575,6 +1581,38 @@ body {
 
 :focus:not(:focus-visible) {
   outline: none;
+}
+
+/* --- Responsive Layout --- */
+@media (max-width: 768px) {
+  .design-content {
+    grid-template-columns: 1fr;
+  }
+
+  .filters-bar {
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .page-header {
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .page-header .header-actions {
+    flex-wrap: wrap;
+  }
+
+  .content-wrapper {
+    padding: 16px;
+  }
+}
+
+@media (max-width: 480px) {
+  .modal {
+    width: 95%;
+    max-width: none;
+  }
 }
 
 /* --- Prefers reduced motion --- */

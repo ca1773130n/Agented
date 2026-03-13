@@ -871,4 +871,10 @@ onMounted(() => {
 .toggle-switch.active .toggle-knob {
   transform: translateX(20px);
 }
+
+@media (max-width: 480px) {
+  .commands-grid {
+    grid-template-columns: 1fr;
+  }
+}
 </style>

@@ -1,6 +1,8 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
+import { triggerApi, teamApi } from '../services/api';
+import type { Trigger, Team } from '../services/api';
 import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
@@ -8,133 +10,129 @@ import { useToast } from '../composables/useToast';
 const router = useRouter();
 const showToast = useToast();
 
-interface Bot {
-  id: string;
-  name: string;
-  trigger: string;
-  team: string;
-  description: string;
-  promptPreview: string;
-  runCount: number;
-  successRate: number;
-  tags: string[];
-}
+// Loading state
+const isLoading = ref(true);
+const loadError = ref<string | null>(null);
 
-interface Team {
-  id: string;
-  name: string;
-}
-
-const bots = ref<Bot[]>([
-  {
-    id: 'bot-security',
-    name: 'Weekly Security Audit',
-    trigger: 'schedule (Mon 9am)',
-    team: 'Platform',
-    description: 'Scans repositories for security vulnerabilities, exposed secrets, and OWASP issues.',
-    promptPreview: 'You are a security expert. Analyze the following code changes for vulnerabilities...',
-    runCount: 148,
-    successRate: 97,
-    tags: ['security', 'scheduled'],
-  },
-  {
-    id: 'bot-pr-review',
-    name: 'PR Review',
-    trigger: 'github: pull_request',
-    team: 'Platform',
-    description: 'Reviews pull requests for code quality, test coverage, and adherence to conventions.',
-    promptPreview: 'You are a senior engineer. Review this PR for code quality issues...',
-    runCount: 342,
-    successRate: 99,
-    tags: ['review', 'github'],
-  },
-  {
-    id: 'bot-dep-update',
-    name: 'Dependency Updater',
-    trigger: 'schedule (daily)',
-    team: 'Security',
-    description: 'Monitors package manifests for vulnerable or outdated dependencies and creates update PRs.',
-    promptPreview: 'Analyze the following package manifest for outdated dependencies...',
-    runCount: 61,
-    successRate: 95,
-    tags: ['dependencies', 'scheduled'],
-  },
-  {
-    id: 'bot-changelog',
-    name: 'Changelog Generator',
-    trigger: 'github: push (main)',
-    team: 'Data',
-    description: 'Generates human-readable CHANGELOG entries from git commit history after every merge.',
-    promptPreview: 'Generate a CHANGELOG entry from the following commit messages...',
-    runCount: 89,
-    successRate: 100,
-    tags: ['docs', 'github'],
-  },
-]);
-
-const teams = ref<Team[]>([
-  { id: 'team-platform', name: 'Platform' },
-  { id: 'team-security', name: 'Security' },
-  { id: 'team-data', name: 'Data' },
-  { id: 'team-frontend', name: 'Frontend' },
-]);
+// Data from API
+const triggers = ref<Trigger[]>([]);
+const teams = ref<Team[]>([]);
 
 const searchQuery = ref('');
-const selectedBotId = ref<string | null>(null);
+const selectedTriggerId = ref<string | null>(null);
 const cloningId = ref<string | null>(null);
 
 const cloneConfig = ref({
   name: '',
-  team: '',
+  teamId: '' as string,
+  includePrompt: true,
   includeTrigger: true,
   includeSchedule: true,
-  includePrompt: true,
 });
 
-const filteredBots = computed(() => {
+const filteredTriggers = computed(() => {
   const q = searchQuery.value.toLowerCase();
-  if (!q) return bots.value;
-  return bots.value.filter(b =>
-    b.name.toLowerCase().includes(q) ||
-    b.description.toLowerCase().includes(q) ||
-    b.tags.some(t => t.includes(q))
+  if (!q) return triggers.value;
+  return triggers.value.filter(t =>
+    t.name.toLowerCase().includes(q) ||
+    (t.trigger_source ?? '').toLowerCase().includes(q) ||
+    (t.backend_type ?? '').toLowerCase().includes(q)
   );
 });
 
-const selectedBot = computed(() => bots.value.find(b => b.id === selectedBotId.value) ?? null);
+const selectedTrigger = computed(() =>
+  triggers.value.find(t => t.id === selectedTriggerId.value) ?? null
+);
 
-function selectBot(bot: Bot) {
-  selectedBotId.value = bot.id;
-  cloneConfig.value.name = `${bot.name} (Copy)`;
-  cloneConfig.value.team = bot.team;
+function triggerSourceLabel(t: Trigger): string {
+  if (t.trigger_source === 'scheduled') {
+    return `schedule${t.schedule_type ? ` (${t.schedule_type})` : ''}`;
+  }
+  return t.trigger_source ?? 'manual';
+}
+
+async function loadData() {
+  isLoading.value = true;
+  loadError.value = null;
+  try {
+    const [triggersRes, teamsRes] = await Promise.all([
+      triggerApi.list(),
+      teamApi.list(),
+    ]);
+    triggers.value = triggersRes.triggers ?? [];
+    teams.value = teamsRes.teams ?? [];
+  } catch (err: unknown) {
+    loadError.value = err instanceof Error ? err.message : 'Failed to load data';
+  } finally {
+    isLoading.value = false;
+  }
+}
+
+function selectTrigger(t: Trigger) {
+  selectedTriggerId.value = t.id;
+  cloneConfig.value.name = `${t.name} (Copy)`;
+  cloneConfig.value.teamId = t.team_id ?? '';
 }
 
 async function handleClone() {
-  if (!selectedBot.value || !cloneConfig.value.name.trim()) {
+  if (!selectedTrigger.value || !cloneConfig.value.name.trim()) {
     showToast('Bot name is required', 'info');
     return;
   }
-  cloningId.value = selectedBotId.value;
+  cloningId.value = selectedTriggerId.value;
+  const source = selectedTrigger.value;
+
   try {
-    await new Promise(resolve => setTimeout(resolve, 900));
-    const newId = 'bot-' + Math.random().toString(36).slice(2, 8);
-    bots.value.push({
-      ...selectedBot.value,
-      id: newId,
+    const createData: Parameters<typeof triggerApi.create>[0] = {
       name: cloneConfig.value.name,
-      team: cloneConfig.value.team,
-      runCount: 0,
-      successRate: 100,
-    });
+      prompt_template: cloneConfig.value.includePrompt ? source.prompt_template : '',
+      backend_type: source.backend_type,
+    };
+
+    if (cloneConfig.value.includeTrigger) {
+      createData.trigger_source = source.trigger_source;
+      createData.match_field_path = source.match_field_path;
+      createData.match_field_value = source.match_field_value;
+      createData.text_field_path = source.text_field_path;
+      createData.detection_keyword = source.detection_keyword;
+    }
+
+    if (cloneConfig.value.includeSchedule && source.schedule_type) {
+      createData.schedule_type = source.schedule_type;
+      createData.schedule_time = source.schedule_time;
+      createData.schedule_day = source.schedule_day;
+      createData.schedule_timezone = source.schedule_timezone;
+    }
+
+    if (source.skill_command) {
+      createData.skill_command = source.skill_command;
+    }
+    if (source.model) {
+      createData.model = source.model;
+    }
+    if (source.execution_mode) {
+      createData.execution_mode = source.execution_mode;
+    }
+    if (cloneConfig.value.teamId) {
+      createData.team_id = cloneConfig.value.teamId;
+    }
+    if (source.timeout_seconds != null) {
+      createData.timeout_seconds = source.timeout_seconds;
+    }
+
+    const res = await triggerApi.create(createData);
     showToast(`"${cloneConfig.value.name}" created successfully`, 'success');
-    selectedBotId.value = null;
-    cloneConfig.value = { name: '', team: '', includeTrigger: true, includeSchedule: true, includePrompt: true };
-  } catch {
-    showToast('Clone failed', 'error');
+
+    // Navigate to the new trigger
+    router.push({ name: 'trigger-detail', params: { id: res.trigger_id } });
+  } catch (err: unknown) {
+    showToast(err instanceof Error ? err.message : 'Clone failed', 'error');
   } finally {
     cloningId.value = null;
   }
 }
+
+onMounted(loadData);
 </script>
 
 <template>
@@ -149,7 +147,20 @@ async function handleClone() {
       subtitle="Duplicate any bot as a starting point for a new one — optionally into a different team's workspace."
     />
 
-    <div class="layout">
+    <!-- Loading state -->
+    <div v-if="isLoading" class="card loading-card">
+      <div class="loading-content">Loading triggers and teams...</div>
+    </div>
+
+    <!-- Error state -->
+    <div v-else-if="loadError" class="card error-card">
+      <div class="error-content">
+        <span>{{ loadError }}</span>
+        <button class="btn btn-primary" @click="loadData">Retry</button>
+      </div>
+    </div>
+
+    <div v-else class="layout">
       <!-- Source bot selector -->
       <div class="source-panel card">
         <div class="card-header">
@@ -164,23 +175,25 @@ async function handleClone() {
         </div>
         <div class="bots-list">
           <button
-            v-for="b in filteredBots"
-            :key="b.id"
+            v-for="t in filteredTriggers"
+            :key="t.id"
             class="bot-row"
-            :class="{ selected: selectedBotId === b.id }"
-            @click="selectBot(b)"
+            :class="{ selected: selectedTriggerId === t.id }"
+            @click="selectTrigger(t)"
           >
             <div class="bot-info">
-              <span class="bot-name">{{ b.name }}</span>
-              <span class="bot-team">{{ b.team }}</span>
+              <span class="bot-name">{{ t.name }}</span>
+              <span class="bot-team">{{ t.backend_type }}</span>
               <div class="bot-tags">
-                <span v-for="t in b.tags" :key="t" class="tag">{{ t }}</span>
+                <span class="tag">{{ t.trigger_source }}</span>
+                <span v-if="t.execution_mode === 'team'" class="tag">team</span>
+                <span v-if="t.is_predefined" class="tag">predefined</span>
               </div>
-              <span class="bot-stats">{{ b.runCount }} runs · {{ b.successRate }}% success</span>
+              <span class="bot-stats">{{ t.path_count ?? 0 }} paths</span>
             </div>
-            <div class="bot-trigger">{{ b.trigger }}</div>
+            <div class="bot-trigger">{{ triggerSourceLabel(t) }}</div>
           </button>
-          <div v-if="filteredBots.length === 0" class="list-empty">No bots match your search</div>
+          <div v-if="filteredTriggers.length === 0" class="list-empty">No bots match your search</div>
         </div>
       </div>
 
@@ -196,7 +209,7 @@ async function handleClone() {
           </h3>
         </div>
 
-        <div v-if="!selectedBot" class="clone-empty">
+        <div v-if="!selectedTrigger" class="clone-empty">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" width="48" height="48">
             <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
             <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
@@ -209,12 +222,12 @@ async function handleClone() {
           <div class="source-preview">
             <div class="preview-label">Cloning from</div>
             <div class="preview-bot">
-              <span class="preview-name">{{ selectedBot.name }}</span>
-              <span class="preview-team">{{ selectedBot.team }}</span>
+              <span class="preview-name">{{ selectedTrigger.name }}</span>
+              <span class="preview-team">{{ selectedTrigger.backend_type }}</span>
             </div>
-            <p class="preview-desc">{{ selectedBot.description }}</p>
+            <p class="preview-desc">{{ selectedTrigger.trigger_source }} trigger · {{ selectedTrigger.execution_mode ?? 'direct' }} mode</p>
             <div class="preview-prompt">
-              <code>{{ selectedBot.promptPreview }}</code>
+              <code>{{ selectedTrigger.prompt_template }}</code>
             </div>
           </div>
 
@@ -226,8 +239,9 @@ async function handleClone() {
             </div>
             <div class="form-field">
               <label>Target Team</label>
-              <select v-model="cloneConfig.team" class="select-input">
-                <option v-for="t in teams" :key="t.id" :value="t.name">{{ t.name }}</option>
+              <select v-model="cloneConfig.teamId" class="select-input">
+                <option value="">No team (direct)</option>
+                <option v-for="t in teams" :key="t.id" :value="t.id">{{ t.name }}</option>
               </select>
             </div>
 
@@ -253,7 +267,7 @@ async function handleClone() {
               </div>
               <div class="summary-row">
                 <span class="summary-key">Target team</span>
-                <span class="summary-val">{{ cloneConfig.team || '—' }}</span>
+                <span class="summary-val">{{ teams.find(t => t.id === cloneConfig.teamId)?.name ?? 'None (direct)' }}</span>
               </div>
               <div class="summary-row">
                 <span class="summary-key">Copying</span>
@@ -313,6 +327,10 @@ async function handleClone() {
   border-radius: 12px;
   overflow: hidden;
 }
+
+.loading-card, .error-card { padding: 32px 24px; }
+.loading-content { text-align: center; color: var(--text-tertiary); font-size: 0.875rem; }
+.error-content { display: flex; align-items: center; justify-content: center; gap: 12px; color: #ef4444; font-size: 0.875rem; }
 
 .card-header {
   display: flex;

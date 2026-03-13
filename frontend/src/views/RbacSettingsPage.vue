@@ -3,98 +3,123 @@ import { ref, onMounted } from 'vue';
 import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import LoadingState from '../components/base/LoadingState.vue';
 import { useToast } from '../composables/useToast';
+import { rbacApi, ApiError } from '../services/api';
+import type { UserRole, PermissionMatrix } from '../services/api';
 
 const showToast = useToast();
 const isLoading = ref(true);
-const isSaving = ref(false);
+const loadError = ref<string | null>(null);
 
-type PermKey = 'read' | 'execute' | 'manage' | 'admin';
+const roles = ref<UserRole[]>([]);
+const permissions = ref<PermissionMatrix>({});
 
-interface Role {
-  id: string;
-  name: string;
-  permissions: Record<PermKey, boolean>;
-  user_count: number;
-}
+const showCreateForm = ref(false);
+const newApiKey = ref('');
+const newLabel = ref('');
+const newRole = ref('viewer');
+const isCreating = ref(false);
+const deletingId = ref<string | null>(null);
+const editingId = ref<string | null>(null);
+const editRole = ref('');
+const editLabel = ref('');
+const isSavingEdit = ref(false);
 
-interface UserAssignment {
-  user_id: string;
-  email: string;
-  role_id: string;
-  team: string;
-}
-
-const PERM_LABELS: Record<PermKey, string> = {
-  read: 'Read',
-  execute: 'Execute',
-  manage: 'Manage',
-  admin: 'Admin',
-};
-
-const PERM_KEYS: PermKey[] = ['read', 'execute', 'manage', 'admin'];
-
-const roles = ref<Role[]>([]);
-const users = ref<UserAssignment[]>([]);
+const ROLE_OPTIONS = ['viewer', 'operator', 'editor', 'admin'];
 
 async function loadData() {
+  isLoading.value = true;
+  loadError.value = null;
   try {
-    const res = await fetch('/admin/rbac/roles');
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = await res.json();
-    roles.value = data.roles ?? [];
-    users.value = data.users ?? [];
-  } catch {
-    // Demo data
-    roles.value = [
-      { id: 'role-viewer', name: 'Viewer', permissions: { read: true, execute: false, manage: false, admin: false }, user_count: 3 },
-      { id: 'role-operator', name: 'Operator', permissions: { read: true, execute: true, manage: false, admin: false }, user_count: 5 },
-      { id: 'role-admin', name: 'Admin', permissions: { read: true, execute: true, manage: true, admin: false }, user_count: 2 },
-      { id: 'role-owner', name: 'Owner', permissions: { read: true, execute: true, manage: true, admin: true }, user_count: 1 },
-    ];
-    users.value = [
-      { user_id: 'u1', email: 'alice@example.com', role_id: 'role-owner', team: 'Platform' },
-      { user_id: 'u2', email: 'bob@example.com', role_id: 'role-admin', team: 'Security' },
-      { user_id: 'u3', email: 'carol@example.com', role_id: 'role-operator', team: 'Data' },
-      { user_id: 'u4', email: 'dave@example.com', role_id: 'role-viewer', team: 'Platform' },
-    ];
+    const [rolesData, permsData] = await Promise.all([
+      rbacApi.listRoles(),
+      rbacApi.getPermissions(),
+    ]);
+    roles.value = rolesData.roles ?? [];
+    permissions.value = permsData.permissions ?? {};
+  } catch (err) {
+    const message = err instanceof ApiError ? err.message : 'Failed to load RBAC data';
+    loadError.value = message;
   } finally {
     isLoading.value = false;
   }
 }
 
-
-async function saveRoles() {
-  isSaving.value = true;
+async function handleCreate() {
+  if (!newApiKey.value.trim() || !newLabel.value.trim()) {
+    showToast('API key and label are required', 'info');
+    return;
+  }
+  isCreating.value = true;
   try {
-    const res = await fetch('/admin/rbac/roles', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ roles: roles.value }),
+    const result = await rbacApi.createRole({
+      api_key: newApiKey.value.trim(),
+      label: newLabel.value.trim(),
+      role: newRole.value,
     });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    showToast('Roles saved', 'success');
-  } catch {
-    showToast('Saved (demo mode)', 'success');
+    if (result.role) {
+      roles.value.unshift(result.role);
+    }
+    newApiKey.value = '';
+    newLabel.value = '';
+    newRole.value = 'viewer';
+    showCreateForm.value = false;
+    showToast('Role created', 'success');
+  } catch (err) {
+    const message = err instanceof ApiError ? err.message : 'Failed to create role';
+    showToast(message, 'error');
   } finally {
-    isSaving.value = false;
+    isCreating.value = false;
   }
 }
 
-async function updateUserRole(userId: string, newRoleId: string) {
-  const user = users.value.find(u => u.user_id === userId);
-  if (!user) return;
-  user.role_id = newRoleId;
+function startEdit(role: UserRole) {
+  editingId.value = role.id;
+  editRole.value = role.role;
+  editLabel.value = role.label;
+}
+
+function cancelEdit() {
+  editingId.value = null;
+}
+
+async function saveEdit(roleId: string) {
+  isSavingEdit.value = true;
   try {
-    const res = await fetch(`/admin/rbac/users/${userId}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ role_id: newRoleId }),
+    const updated = await rbacApi.updateRole(roleId, {
+      label: editLabel.value,
+      role: editRole.value,
     });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    showToast('User role updated', 'success');
-  } catch {
-    showToast('Updated (demo mode)', 'success');
+    const idx = roles.value.findIndex(r => r.id === roleId);
+    if (idx !== -1 && updated) {
+      roles.value[idx] = updated;
+    }
+    editingId.value = null;
+    showToast('Role updated', 'success');
+  } catch (err) {
+    const message = err instanceof ApiError ? err.message : 'Failed to update role';
+    showToast(message, 'error');
+  } finally {
+    isSavingEdit.value = false;
   }
+}
+
+async function handleDelete(role: UserRole) {
+  deletingId.value = role.id;
+  try {
+    await rbacApi.deleteRole(role.id);
+    roles.value = roles.value.filter(r => r.id !== role.id);
+    showToast('Role deleted', 'success');
+  } catch (err) {
+    const message = err instanceof ApiError ? err.message : 'Failed to delete role';
+    showToast(message, 'error');
+  } finally {
+    deletingId.value = null;
+  }
+}
+
+function maskApiKey(key: string): string {
+  if (key.length <= 8) return key.slice(0, 4) + '...';
+  return key.slice(0, 8) + '...' + key.slice(-4);
 }
 
 onMounted(loadData);
@@ -107,74 +132,131 @@ onMounted(loadData);
     <div class="page-title-row">
       <div>
         <h2>Role-Based Access Control</h2>
-        <p class="subtitle">Define roles and assign permissions across teams and products</p>
+        <p class="subtitle">Manage API key roles and view the permission matrix</p>
       </div>
-      <button class="btn btn-primary" :disabled="isSaving" @click="saveRoles">
-        {{ isSaving ? 'Saving...' : 'Save Roles' }}
+      <button class="btn btn-primary" @click="showCreateForm = !showCreateForm">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+          <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+        </svg>
+        Add Role
       </button>
     </div>
 
     <LoadingState v-if="isLoading" message="Loading RBAC configuration..." />
 
+    <div v-else-if="loadError" class="card error-card">
+      <div class="error-inner">
+        <p>{{ loadError }}</p>
+        <button class="btn btn-ghost" @click="loadData">Retry</button>
+      </div>
+    </div>
+
     <template v-else>
-      <!-- Permission matrix -->
-      <div class="card">
+      <!-- Create Form -->
+      <div v-if="showCreateForm" class="card create-card">
         <div class="card-header">
-          <h3>Role Permission Matrix</h3>
+          <h3>Add New Role</h3>
+        </div>
+        <div class="form-body">
+          <div class="field-row-3">
+            <div class="field-group">
+              <label class="field-label">API Key</label>
+              <input v-model="newApiKey" type="text" class="text-input" placeholder="agnt_sk_..." />
+            </div>
+            <div class="field-group">
+              <label class="field-label">Label</label>
+              <input v-model="newLabel" type="text" class="text-input" placeholder="CI/CD Pipeline" />
+            </div>
+            <div class="field-group">
+              <label class="field-label">Role</label>
+              <select v-model="newRole" class="role-select">
+                <option v-for="r in ROLE_OPTIONS" :key="r" :value="r">{{ r }}</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-actions">
+            <button class="btn btn-ghost" @click="showCreateForm = false">Cancel</button>
+            <button class="btn btn-primary" :disabled="isCreating || !newApiKey.trim() || !newLabel.trim()" @click="handleCreate">
+              {{ isCreating ? 'Creating...' : 'Create Role' }}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Permission matrix -->
+      <div v-if="Object.keys(permissions).length > 0" class="card">
+        <div class="card-header">
+          <h3>Permission Matrix</h3>
         </div>
         <table class="matrix-table">
           <thead>
             <tr>
               <th>Role</th>
-              <th v-for="perm in PERM_KEYS" :key="perm">{{ PERM_LABELS[perm] }}</th>
-              <th>Users</th>
+              <th>Permissions</th>
             </tr>
           </thead>
           <tbody>
-            <tr v-for="role in roles" :key="role.id">
-              <td class="role-name">{{ role.name }}</td>
-              <td v-for="perm in PERM_KEYS" :key="perm" class="perm-cell">
-                <input
-                  v-model="role.permissions[perm]"
-                  type="checkbox"
-                  class="perm-check"
-                  :disabled="role.name === 'Owner'"
-                />
+            <tr v-for="(perms, roleName) in permissions" :key="roleName">
+              <td class="role-name">{{ roleName }}</td>
+              <td class="perm-list">
+                <span v-for="p in perms" :key="p" class="perm-tag">{{ p }}</span>
+                <span v-if="perms.length === 0" class="no-perms">No permissions</span>
               </td>
-              <td class="user-count">{{ role.user_count }}</td>
             </tr>
           </tbody>
         </table>
       </div>
 
-      <!-- User assignment -->
+      <!-- User Role Assignments -->
       <div class="card">
         <div class="card-header">
-          <h3>User Role Assignments</h3>
-          <span class="card-badge">{{ users.length }} users</span>
+          <h3>API Key Role Assignments</h3>
+          <span class="card-badge">{{ roles.length }} roles</span>
         </div>
-        <table class="users-table">
+        <div v-if="roles.length === 0" class="list-empty">
+          No roles configured. Add a role to map API keys to permissions.
+        </div>
+        <table v-else class="users-table">
           <thead>
             <tr>
-              <th>Email</th>
-              <th>Team</th>
+              <th>Label</th>
+              <th>API Key</th>
               <th>Role</th>
+              <th>Created</th>
+              <th></th>
             </tr>
           </thead>
           <tbody>
-            <tr v-for="user in users" :key="user.user_id">
-              <td class="email">{{ user.email }}</td>
-              <td class="team">{{ user.team }}</td>
+            <tr v-for="role in roles" :key="role.id">
+              <td class="label-cell">
+                <template v-if="editingId === role.id">
+                  <input v-model="editLabel" type="text" class="text-input text-input--inline" />
+                </template>
+                <template v-else>{{ role.label }}</template>
+              </td>
+              <td class="api-key-cell">
+                <code>{{ maskApiKey(role.api_key) }}</code>
+              </td>
               <td>
-                <select
-                  :value="user.role_id"
-                  class="role-select"
-                  @change="updateUserRole(user.user_id, ($event.target as HTMLSelectElement).value)"
-                >
-                  <option v-for="role in roles" :key="role.id" :value="role.id">
-                    {{ role.name }}
-                  </option>
-                </select>
+                <template v-if="editingId === role.id">
+                  <select v-model="editRole" class="role-select role-select--inline">
+                    <option v-for="r in ROLE_OPTIONS" :key="r" :value="r">{{ r }}</option>
+                  </select>
+                </template>
+                <span v-else class="role-badge" :class="`role-${role.role}`">{{ role.role }}</span>
+              </td>
+              <td class="date-cell">{{ role.created_at ? new Date(role.created_at).toLocaleDateString() : '-' }}</td>
+              <td class="actions-cell">
+                <template v-if="editingId === role.id">
+                  <button class="btn btn-sm btn-save" :disabled="isSavingEdit" @click="saveEdit(role.id)">Save</button>
+                  <button class="btn btn-sm btn-cancel" @click="cancelEdit">Cancel</button>
+                </template>
+                <template v-else>
+                  <button class="btn btn-sm btn-edit" @click="startEdit(role)">Edit</button>
+                  <button class="btn btn-sm btn-delete" :disabled="deletingId === role.id" @click="handleDelete(role)">
+                    {{ deletingId === role.id ? '...' : 'Delete' }}
+                  </button>
+                </template>
               </td>
             </tr>
           </tbody>
@@ -219,20 +301,25 @@ onMounted(loadData);
 }
 
 .card {
-  padding: 20px 24px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-default);
+  border-radius: 12px;
+  overflow: hidden;
 }
 
 .card-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 20px;
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--border-default);
 }
 
 .card-header h3 {
   font-size: 0.95rem;
   font-weight: 600;
   color: var(--text-primary);
+  margin: 0;
 }
 
 .card-badge {
@@ -244,6 +331,66 @@ onMounted(loadData);
   padding: 3px 8px;
   background: var(--bg-tertiary);
   border-radius: 4px;
+}
+
+.create-card {
+  border-color: var(--accent-cyan);
+}
+
+.form-body {
+  padding: 20px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.field-row-3 {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  gap: 16px;
+}
+
+.field-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.field-label {
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.form-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+.error-card {
+  padding: 48px;
+}
+
+.error-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  text-align: center;
+}
+
+.error-inner p {
+  font-size: 0.875rem;
+  color: var(--text-tertiary);
+  margin: 0;
+}
+
+.list-empty {
+  padding: 32px 24px;
+  text-align: center;
+  font-size: 0.875rem;
+  color: var(--text-tertiary);
 }
 
 .matrix-table,
@@ -280,45 +427,126 @@ onMounted(loadData);
 .role-name {
   font-weight: 600;
   color: var(--text-primary);
+  text-transform: capitalize;
 }
 
-.perm-cell {
-  text-align: center;
+.perm-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
 }
 
-.perm-check {
-  width: 16px;
-  height: 16px;
-  accent-color: var(--accent-cyan);
-  cursor: pointer;
-}
-
-.user-count {
+.perm-tag {
+  font-size: 0.7rem;
+  padding: 2px 8px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-subtle);
+  border-radius: 4px;
   color: var(--text-tertiary);
+}
+
+.no-perms {
   font-size: 0.78rem;
+  color: var(--text-muted);
+  font-style: italic;
 }
 
-.email {
+.label-cell {
+  font-weight: 500;
   color: var(--text-primary);
-  font-size: 0.85rem;
 }
 
-.team {
+.api-key-cell code {
+  font-family: 'Geist Mono', monospace;
+  font-size: 0.78rem;
+  color: var(--accent-cyan);
+  background: rgba(6, 182, 212, 0.08);
+  padding: 3px 8px;
+  border-radius: 4px;
+}
+
+.date-cell {
+  font-size: 0.8rem;
   color: var(--text-tertiary);
+  white-space: nowrap;
 }
 
-.role-select {
-  padding: 4px 8px;
+.role-badge {
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 4px;
+  text-transform: capitalize;
+}
+
+.role-admin { background: rgba(239, 68, 68, 0.12); color: #ef4444; }
+.role-editor { background: rgba(245, 158, 11, 0.12); color: #f59e0b; }
+.role-operator { background: rgba(52, 211, 153, 0.12); color: #34d399; }
+.role-viewer { background: var(--bg-tertiary); color: var(--text-tertiary); }
+
+.actions-cell {
+  display: flex;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.text-input {
+  padding: 8px 12px;
   background: var(--bg-tertiary);
   border: 1px solid var(--border-default);
-  border-radius: 6px;
+  border-radius: 8px;
+  color: var(--text-primary);
+  font-size: 0.875rem;
+}
+
+.text-input:focus { outline: none; border-color: var(--accent-cyan); }
+.text-input--inline { padding: 4px 8px; font-size: 0.82rem; }
+
+.role-select {
+  padding: 8px 12px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
   color: var(--text-primary);
   font-size: 0.82rem;
   cursor: pointer;
+  text-transform: capitalize;
 }
 
-.role-select:focus {
-  outline: none;
-  border-color: var(--accent-cyan);
+.role-select:focus { outline: none; border-color: var(--accent-cyan); }
+.role-select--inline { padding: 4px 8px; font-size: 0.78rem; }
+
+.btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  border-radius: 6px;
+  font-weight: 500;
+  cursor: pointer;
+  border: none;
+  transition: all 0.15s;
 }
+
+.btn-primary { padding: 8px 16px; font-size: 0.875rem; background: var(--accent-cyan); color: #000; }
+.btn-primary:hover:not(:disabled) { opacity: 0.85; }
+.btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.btn-ghost { padding: 8px 14px; font-size: 0.875rem; background: transparent; border: 1px solid var(--border-default); color: var(--text-secondary); cursor: pointer; border-radius: 8px; }
+.btn-ghost:hover { border-color: var(--accent-cyan); color: var(--text-primary); }
+
+.btn-sm { padding: 4px 10px; font-size: 0.78rem; }
+
+.btn-edit { background: var(--bg-tertiary); border: 1px solid var(--border-default); color: var(--text-secondary); }
+.btn-edit:hover { border-color: var(--accent-cyan); color: var(--accent-cyan); }
+
+.btn-save { background: rgba(52, 211, 153, 0.15); color: #34d399; border: 1px solid rgba(52, 211, 153, 0.3); }
+.btn-save:hover:not(:disabled) { background: rgba(52, 211, 153, 0.25); }
+.btn-save:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.btn-cancel { background: var(--bg-tertiary); border: 1px solid var(--border-default); color: var(--text-tertiary); }
+.btn-cancel:hover { color: var(--text-primary); }
+
+.btn-delete { background: var(--bg-tertiary); border: 1px solid var(--border-default); color: var(--text-tertiary); }
+.btn-delete:hover:not(:disabled) { border-color: #ef4444; color: #ef4444; }
+.btn-delete:disabled { opacity: 0.4; cursor: not-allowed; }
 </style>

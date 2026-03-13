@@ -1,12 +1,18 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
+import LoadingState from '../components/base/LoadingState.vue';
 import { useToast } from '../composables/useToast';
+import { triggerApi, analyticsApi, ApiError } from '../services/api';
+import type { Trigger } from '../services/api';
 
 const router = useRouter();
 const showToast = useToast();
+
+const isLoading = ref(true);
+const error = ref('');
 
 interface BotRecommendation {
   id: string;
@@ -20,52 +26,7 @@ interface BotRecommendation {
   installed: boolean;
 }
 
-const recommendations = ref<BotRecommendation[]>([
-  {
-    id: 'rec-001',
-    templateId: 'tmpl-dep-updater',
-    name: 'Dependency Auto-Updater',
-    description: 'Automatically opens PRs to update outdated npm/pip/cargo packages with changelogs.',
-    reason: 'Your repo has 12 packages with available updates, including 3 with known CVEs.',
-    relevanceScore: 97,
-    category: 'security',
-    estimatedTimeSaved: '2 hrs/week',
-    installed: false,
-  },
-  {
-    id: 'rec-002',
-    templateId: 'tmpl-test-gen',
-    name: 'Test Coverage Generator',
-    description: 'Generates unit tests for new functions added in pull requests.',
-    reason: 'Your last 15 PRs averaged 32% test coverage. Industry standard is 80%+.',
-    relevanceScore: 91,
-    category: 'quality',
-    estimatedTimeSaved: '3 hrs/week',
-    installed: false,
-  },
-  {
-    id: 'rec-003',
-    templateId: 'tmpl-docs-writer',
-    name: 'Documentation Writer',
-    description: 'Auto-generates JSDoc/docstrings for undocumented functions.',
-    reason: '68% of your exported functions lack documentation based on recent analysis.',
-    relevanceScore: 84,
-    category: 'productivity',
-    estimatedTimeSaved: '1.5 hrs/week',
-    installed: true,
-  },
-  {
-    id: 'rec-004',
-    templateId: 'tmpl-incident-triage',
-    name: 'Incident Triage Bot',
-    description: 'When errors spike in production, automatically correlates with recent commits and suggests root cause.',
-    reason: 'You had 4 production incidents last month with no automated triage.',
-    relevanceScore: 79,
-    category: 'monitoring',
-    estimatedTimeSaved: '4 hrs/incident',
-    installed: false,
-  },
-]);
+const recommendations = ref<BotRecommendation[]>([]);
 
 const isInstalling = ref<string | null>(null);
 const filterCategory = ref<string>('');
@@ -77,12 +38,71 @@ const filtered = computed(() => {
 
 const categories = ['security', 'quality', 'productivity', 'monitoring'];
 
+function categorizeSource(source: string): BotRecommendation['category'] {
+  if (source === 'github') return 'quality';
+  if (source === 'schedule') return 'monitoring';
+  if (source === 'webhook') return 'security';
+  return 'productivity';
+}
+
+async function loadRecommendations() {
+  isLoading.value = true;
+  error.value = '';
+  try {
+    const [triggersResp, effectResp] = await Promise.all([
+      triggerApi.list(),
+      analyticsApi.fetchEffectiveness().catch(() => null),
+    ]);
+
+    const triggers = triggersResp.triggers ?? [];
+    const acceptanceRate = effectResp?.acceptance_rate ?? 0;
+
+    recommendations.value = triggers.map((t: Trigger, idx: number) => {
+      const category = categorizeSource(t.trigger_source);
+      const score = Math.max(50, 100 - idx * 8 - (t.enabled ? 0 : 15));
+      const timeSaved = t.timeout_seconds
+        ? `${Math.round((t.timeout_seconds / 3600) * 10) / 10} hrs/week`
+        : '1 hr/week';
+
+      return {
+        id: t.id,
+        templateId: t.id,
+        name: t.name,
+        description: t.prompt_template
+          ? t.prompt_template.substring(0, 120) + (t.prompt_template.length > 120 ? '...' : '')
+          : `${t.trigger_source} trigger using ${t.backend_type}`,
+        reason: acceptanceRate > 0
+          ? `Current effectiveness rate: ${(acceptanceRate * 100).toFixed(0)}%. This trigger (${t.trigger_source}) can improve automation coverage.`
+          : `This ${t.trigger_source} trigger uses ${t.backend_type} and ${t.model ?? 'default model'}.`,
+        relevanceScore: Math.min(99, score),
+        category,
+        estimatedTimeSaved: timeSaved,
+        installed: !!t.enabled,
+      };
+    });
+
+    // Sort by relevance score descending
+    recommendations.value.sort((a, b) => b.relevanceScore - a.relevanceScore);
+  } catch (e) {
+    if (e instanceof ApiError) {
+      error.value = e.message;
+    } else {
+      error.value = 'Failed to load recommendations';
+    }
+    showToast(error.value, 'error');
+  } finally {
+    isLoading.value = false;
+  }
+}
+
 async function installBot(rec: BotRecommendation) {
   isInstalling.value = rec.id;
   try {
-    await new Promise(r => setTimeout(r, 1200));
+    await triggerApi.update(rec.id, { enabled: 1 });
     rec.installed = true;
-    showToast(`${rec.name} installed successfully`, 'success');
+    showToast(`${rec.name} enabled successfully`, 'success');
+  } catch {
+    showToast(`Failed to enable ${rec.name}`, 'error');
   } finally {
     isInstalling.value = null;
   }
@@ -97,6 +117,8 @@ function scoreColor(score: number) {
   if (score >= 75) return '#fbbf24';
   return 'var(--text-muted)';
 }
+
+onMounted(loadRecommendations);
 </script>
 
 <template>
@@ -111,62 +133,74 @@ function scoreColor(score: number) {
       subtitle="Personalized bot suggestions based on your team's repos, PRs, and incident history."
     />
 
-    <div class="filters-row">
-      <button
-        :class="['filter-pill', { active: filterCategory === '' }]"
-        @click="filterCategory = ''"
-      >All</button>
-      <button
-        v-for="cat in categories"
-        :key="cat"
-        :class="['filter-pill', { active: filterCategory === cat }]"
-        @click="filterCategory = cat"
-      >{{ cat }}</button>
+    <LoadingState v-if="isLoading" message="Loading recommendations..." />
+
+    <div v-else-if="error" class="card error-state">
+      <p class="error-text">{{ error }}</p>
+      <button class="btn btn-primary" @click="loadRecommendations">Retry</button>
     </div>
 
-    <div class="recs-list">
-      <div v-for="rec in filtered" :key="rec.id" class="rec-card card">
-        <div class="rec-left">
-          <div class="relevance-circle" :style="{ borderColor: scoreColor(rec.relevanceScore) }">
-            <span class="relevance-val" :style="{ color: scoreColor(rec.relevanceScore) }">{{ rec.relevanceScore }}</span>
-            <span class="relevance-label">match</span>
-          </div>
-        </div>
-        <div class="rec-content">
-          <div class="rec-top">
-            <div>
-              <div class="rec-name">{{ rec.name }}</div>
-              <span class="rec-category" :style="{ background: `${categoryColor(rec.category)}18`, color: categoryColor(rec.category) }">{{ rec.category }}</span>
-            </div>
-            <div class="rec-actions">
-              <span class="time-saved">⏱ {{ rec.estimatedTimeSaved }} saved</span>
-              <button
-                v-if="!rec.installed"
-                class="btn btn-primary"
-                :disabled="isInstalling === rec.id"
-                @click="installBot(rec)"
-              >{{ isInstalling === rec.id ? 'Installing...' : 'Install' }}</button>
-              <span v-else class="installed-badge">✓ Installed</span>
-            </div>
-          </div>
-          <div class="rec-description">{{ rec.description }}</div>
-          <div class="rec-reason">
-            <span class="reason-icon">💡</span>
-            {{ rec.reason }}
-          </div>
-        </div>
+    <template v-else>
+      <div class="filters-row">
+        <button
+          :class="['filter-pill', { active: filterCategory === '' }]"
+          @click="filterCategory = ''"
+        >All</button>
+        <button
+          v-for="cat in categories"
+          :key="cat"
+          :class="['filter-pill', { active: filterCategory === cat }]"
+          @click="filterCategory = cat"
+        >{{ cat }}</button>
       </div>
 
-      <div v-if="filtered.length === 0" class="empty-state card">
-        <p>No recommendations for this category yet.</p>
+      <div class="recs-list">
+        <div v-for="rec in filtered" :key="rec.id" class="rec-card card">
+          <div class="rec-left">
+            <div class="relevance-circle" :style="{ borderColor: scoreColor(rec.relevanceScore) }">
+              <span class="relevance-val" :style="{ color: scoreColor(rec.relevanceScore) }">{{ rec.relevanceScore }}</span>
+              <span class="relevance-label">match</span>
+            </div>
+          </div>
+          <div class="rec-content">
+            <div class="rec-top">
+              <div>
+                <div class="rec-name">{{ rec.name }}</div>
+                <span class="rec-category" :style="{ background: `${categoryColor(rec.category)}18`, color: categoryColor(rec.category) }">{{ rec.category }}</span>
+              </div>
+              <div class="rec-actions">
+                <span class="time-saved">{{ rec.estimatedTimeSaved }} saved</span>
+                <button
+                  v-if="!rec.installed"
+                  class="btn btn-primary"
+                  :disabled="isInstalling === rec.id"
+                  @click="installBot(rec)"
+                >{{ isInstalling === rec.id ? 'Installing...' : 'Install' }}</button>
+                <span v-else class="installed-badge">Installed</span>
+              </div>
+            </div>
+            <div class="rec-description">{{ rec.description }}</div>
+            <div class="rec-reason">
+              <span class="reason-icon">*</span>
+              {{ rec.reason }}
+            </div>
+          </div>
+        </div>
+
+        <div v-if="filtered.length === 0" class="empty-state card">
+          <p>No recommendations for this category yet.</p>
+        </div>
       </div>
-    </div>
+    </template>
   </div>
 </template>
 
 <style scoped>
 .rec-engine { display: flex; flex-direction: column; gap: 24px; animation: fadeIn 0.4s ease; }
 @keyframes fadeIn { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+
+.error-state { padding: 32px 24px; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 12px; }
+.error-text { font-size: 0.875rem; color: #ef4444; margin: 0; }
 
 .filters-row { display: flex; gap: 8px; flex-wrap: wrap; }
 .filter-pill { padding: 6px 16px; border-radius: 20px; font-size: 0.8rem; font-weight: 500; border: 1px solid var(--border-default); background: var(--bg-secondary); color: var(--text-secondary); cursor: pointer; text-transform: capitalize; transition: all 0.15s; }

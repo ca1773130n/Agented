@@ -1,14 +1,16 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
+import { integrationApi, ApiError } from '../services/api';
+import type { Integration } from '../services/api';
 
 const router = useRouter();
 const showToast = useToast();
 
-interface Integration {
+interface TicketingIntegration {
   id: string;
   name: string;
   type: 'jira' | 'linear';
@@ -19,68 +21,92 @@ interface Integration {
   severityThreshold: 'critical' | 'high' | 'medium' | 'low';
 }
 
-interface Ticket {
-  id: string;
-  title: string;
-  integration: string;
-  severity: string;
-  bot: string;
-  createdAt: string;
-  url: string;
-}
-
-const integrations = ref<Integration[]>([
-  {
-    id: 'int-jira',
-    name: 'Jira',
-    type: 'jira',
-    enabled: true,
-    host: 'https://myorg.atlassian.net',
-    apiKey: '••••••••••••',
-    project: 'SEC',
-    severityThreshold: 'high',
-  },
-  {
-    id: 'int-linear',
-    name: 'Linear',
-    type: 'linear',
-    enabled: false,
-    host: 'https://api.linear.app',
-    apiKey: '',
-    project: 'ENG',
-    severityThreshold: 'critical',
-  },
-]);
-
-const recentTickets = ref<Ticket[]>([
-  { id: 'SEC-101', title: 'SQL injection vulnerability in user search', integration: 'Jira', severity: 'critical', bot: 'bot-security', createdAt: '2 hours ago', url: '#' },
-  { id: 'SEC-100', title: 'Missing CORS headers on /api/export', integration: 'Jira', severity: 'high', bot: 'bot-security', createdAt: '1 day ago', url: '#' },
-  { id: 'SEC-099', title: 'Outdated dependency: lodash 4.17.11', integration: 'Jira', severity: 'medium', bot: 'bot-security', createdAt: '3 days ago', url: '#' },
-]);
-
+const loading = ref(true);
+const error = ref('');
+const integrations = ref<TicketingIntegration[]>([]);
 const editingId = ref<string | null>(null);
 const isSaving = ref(false);
+
+function rawToTicketing(int: Integration): TicketingIntegration {
+  const config = int.config || {};
+  const intType = (int.type || '').toLowerCase();
+  return {
+    id: int.id,
+    name: int.name,
+    type: intType.includes('linear') ? 'linear' : 'jira',
+    enabled: int.enabled,
+    host: (config.host as string) || '',
+    apiKey: (config.api_key as string) || '',
+    project: (config.project as string) || '',
+    severityThreshold: (config.severity_threshold as TicketingIntegration['severityThreshold']) || 'high',
+  };
+}
+
+function ticketingToRaw(t: TicketingIntegration): Partial<Integration> {
+  return {
+    name: t.name,
+    type: t.type,
+    enabled: t.enabled,
+    config: {
+      host: t.host,
+      api_key: t.apiKey,
+      project: t.project,
+      severity_threshold: t.severityThreshold,
+    },
+  };
+}
+
+async function fetchIntegrations() {
+  loading.value = true;
+  error.value = '';
+  try {
+    const all = await integrationApi.list();
+    integrations.value = (all || [])
+      .filter((i) => {
+        const t = (i.type || '').toLowerCase();
+        return t.includes('ticket') || t.includes('jira') || t.includes('linear');
+      })
+      .map(rawToTicketing);
+  } catch (err) {
+    if (err instanceof ApiError) {
+      error.value = `Failed to load ticketing integrations: ${err.message}`;
+    } else {
+      error.value = 'Failed to load ticketing integrations';
+    }
+  } finally {
+    loading.value = false;
+  }
+}
+
+onMounted(fetchIntegrations);
 
 function editIntegration(id: string) {
   editingId.value = editingId.value === id ? null : id;
 }
 
-async function saveIntegration(int: Integration) {
+async function saveIntegration(int: TicketingIntegration) {
   isSaving.value = true;
   try {
-    await new Promise(resolve => setTimeout(resolve, 800));
+    await integrationApi.update(int.id, ticketingToRaw(int));
     editingId.value = null;
     showToast(`${int.name} integration saved`, 'success');
-  } catch {
-    showToast('Failed to save integration', 'error');
+  } catch (err) {
+    showToast(err instanceof ApiError ? err.message : 'Failed to save integration', 'error');
   } finally {
     isSaving.value = false;
   }
 }
 
-function toggleIntegration(int: Integration) {
+async function toggleIntegration(int: TicketingIntegration) {
+  const prev = int.enabled;
   int.enabled = !int.enabled;
-  showToast(`${int.name} ${int.enabled ? 'enabled' : 'disabled'}`, 'success');
+  try {
+    await integrationApi.update(int.id, { enabled: int.enabled });
+    showToast(`${int.name} ${int.enabled ? 'enabled' : 'disabled'}`, 'success');
+  } catch (err) {
+    int.enabled = prev;
+    showToast(err instanceof ApiError ? err.message : 'Failed to toggle integration', 'error');
+  }
 }
 
 function severityColor(s: string): string {
@@ -101,115 +127,100 @@ function severityColor(s: string): string {
       subtitle="Configure Jira and Linear to auto-create tickets from bot findings."
     />
 
-    <div class="integrations-list">
-      <div v-for="int in integrations" :key="int.id" class="card integration-card">
-        <div class="int-header">
-          <div class="int-logo" :class="int.type">
-            <span>{{ int.type === 'jira' ? 'J' : 'L' }}</span>
+    <!-- Loading state -->
+    <div v-if="loading" class="card" style="padding: 48px; text-align: center;">
+      <div style="color: var(--text-tertiary); font-size: 0.875rem;">Loading ticketing integrations...</div>
+    </div>
+
+    <!-- Error state -->
+    <div v-else-if="error" class="card" style="padding: 48px; text-align: center;">
+      <div style="color: #ef4444; font-size: 0.875rem; margin-bottom: 12px;">{{ error }}</div>
+      <button class="btn btn-secondary" @click="fetchIntegrations">Retry</button>
+    </div>
+
+    <!-- Empty state -->
+    <div v-else-if="integrations.length === 0" class="card" style="padding: 48px; text-align: center;">
+      <div style="color: var(--text-tertiary); font-size: 0.875rem;">No ticketing integrations configured yet.</div>
+    </div>
+
+    <template v-else>
+      <div class="integrations-list">
+        <div v-for="int in integrations" :key="int.id" class="card integration-card">
+          <div class="int-header">
+            <div class="int-logo" :class="int.type">
+              <span>{{ int.type === 'jira' ? 'J' : 'L' }}</span>
+            </div>
+            <div class="int-title-area">
+              <h3 class="int-name">{{ int.name }}</h3>
+              <span class="int-host">{{ int.host || 'Not configured' }}</span>
+            </div>
+            <div class="int-controls">
+              <label class="toggle-wrap">
+                <input type="checkbox" :checked="int.enabled" class="toggle-input" @change="toggleIntegration(int)" />
+                <span class="toggle-track" :class="{ active: int.enabled }">
+                  <span class="toggle-thumb" />
+                </span>
+              </label>
+              <button class="btn btn-sm btn-secondary" @click="editIntegration(int.id)">
+                {{ editingId === int.id ? 'Cancel' : 'Configure' }}
+              </button>
+            </div>
           </div>
-          <div class="int-title-area">
-            <h3 class="int-name">{{ int.name }}</h3>
-            <span class="int-host">{{ int.host || 'Not configured' }}</span>
+
+          <div v-if="editingId === int.id" class="int-form">
+            <div class="form-row">
+              <div class="field-group">
+                <label class="field-label">Host URL</label>
+                <input v-model="int.host" type="text" class="text-input" placeholder="https://myorg.atlassian.net" />
+              </div>
+              <div class="field-group">
+                <label class="field-label">API Key</label>
+                <input v-model="int.apiKey" type="password" class="text-input" placeholder="Enter API key..." />
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="field-group">
+                <label class="field-label">Project Key</label>
+                <input v-model="int.project" type="text" class="text-input" placeholder="e.g. SEC" />
+              </div>
+              <div class="field-group">
+                <label class="field-label">Auto-create threshold</label>
+                <select v-model="int.severityThreshold" class="select-input">
+                  <option value="critical">Critical only</option>
+                  <option value="high">High and above</option>
+                  <option value="medium">Medium and above</option>
+                  <option value="low">All findings</option>
+                </select>
+              </div>
+            </div>
+            <div class="form-actions">
+              <button class="btn btn-primary" :disabled="isSaving" @click="saveIntegration(int)">
+                {{ isSaving ? 'Saving...' : 'Save Integration' }}
+              </button>
+            </div>
           </div>
-          <div class="int-controls">
-            <label class="toggle-wrap">
-              <input type="checkbox" :checked="int.enabled" class="toggle-input" @change="toggleIntegration(int)" />
-              <span class="toggle-track" :class="{ active: int.enabled }">
-                <span class="toggle-thumb" />
+
+          <div v-else class="int-summary">
+            <div class="summary-item">
+              <span class="summary-label">Project</span>
+              <span class="summary-val">{{ int.project || 'Not set' }}</span>
+            </div>
+            <div class="summary-item">
+              <span class="summary-label">Auto-create</span>
+              <span class="summary-val severity-val" :style="{ color: severityColor(int.severityThreshold) }">
+                {{ int.severityThreshold }} and above
               </span>
-            </label>
-            <button class="btn btn-sm btn-secondary" @click="editIntegration(int.id)">
-              {{ editingId === int.id ? 'Cancel' : 'Configure' }}
-            </button>
-          </div>
-        </div>
-
-        <div v-if="editingId === int.id" class="int-form">
-          <div class="form-row">
-            <div class="field-group">
-              <label class="field-label">Host URL</label>
-              <input v-model="int.host" type="text" class="text-input" placeholder="https://myorg.atlassian.net" />
             </div>
-            <div class="field-group">
-              <label class="field-label">API Key</label>
-              <input v-model="int.apiKey" type="password" class="text-input" placeholder="Enter API key..." />
+            <div class="summary-item">
+              <span class="summary-label">Status</span>
+              <span :class="['summary-val', int.enabled ? 'text-green' : 'text-muted']">
+                {{ int.enabled ? 'Active' : 'Disabled' }}
+              </span>
             </div>
-          </div>
-          <div class="form-row">
-            <div class="field-group">
-              <label class="field-label">Project Key</label>
-              <input v-model="int.project" type="text" class="text-input" placeholder="e.g. SEC" />
-            </div>
-            <div class="field-group">
-              <label class="field-label">Auto-create threshold</label>
-              <select v-model="int.severityThreshold" class="select-input">
-                <option value="critical">Critical only</option>
-                <option value="high">High and above</option>
-                <option value="medium">Medium and above</option>
-                <option value="low">All findings</option>
-              </select>
-            </div>
-          </div>
-          <div class="form-actions">
-            <button class="btn btn-primary" :disabled="isSaving" @click="saveIntegration(int)">
-              {{ isSaving ? 'Saving...' : 'Save Integration' }}
-            </button>
-          </div>
-        </div>
-
-        <div v-else class="int-summary">
-          <div class="summary-item">
-            <span class="summary-label">Project</span>
-            <span class="summary-val">{{ int.project }}</span>
-          </div>
-          <div class="summary-item">
-            <span class="summary-label">Auto-create</span>
-            <span class="summary-val severity-val" :style="{ color: severityColor(int.severityThreshold) }">
-              {{ int.severityThreshold }} and above
-            </span>
-          </div>
-          <div class="summary-item">
-            <span class="summary-label">Status</span>
-            <span :class="['summary-val', int.enabled ? 'text-green' : 'text-muted']">
-              {{ int.enabled ? 'Active' : 'Disabled' }}
-            </span>
           </div>
         </div>
       </div>
-    </div>
-
-    <div class="card">
-      <div class="card-header">
-        <h3>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="18" height="18">
-            <path d="M14.5 10c-.83 0-1.5-.67-1.5-1.5v-5c0-.83.67-1.5 1.5-1.5s1.5.67 1.5 1.5v5c0 .83-.67 1.5-1.5 1.5z"/>
-            <path d="M20.5 10H19V8.5c0-.83.67-1.5 1.5-1.5s1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/>
-            <path d="M9.5 14c.83 0 1.5.67 1.5 1.5v5c0 .83-.67 1.5-1.5 1.5S8 21.33 8 20.5v-5c0-.83.67-1.5 1.5-1.5z"/>
-            <path d="M3.5 14H5v1.5c0 .83-.67 1.5-1.5 1.5S2 16.33 2 15.5 2.67 14 3.5 14z"/>
-            <path d="M14 14.5c0-.83.67-1.5 1.5-1.5h5c.83 0 1.5.67 1.5 1.5s-.67 1.5-1.5 1.5h-5c-.83 0-1.5-.67-1.5-1.5z"/>
-            <path d="M15.5 19H14v1.5c0 .83.67 1.5 1.5 1.5s1.5-.67 1.5-1.5-.67-1.5-1.5-1.5z"/>
-            <path d="M10 9.5C10 8.67 9.33 8 8.5 8h-5C2.67 8 2 8.67 2 9.5S2.67 11 3.5 11h5c.83 0 1.5-.67 1.5-1.5z"/>
-            <path d="M8.5 5H10V3.5C10 2.67 9.33 2 8.5 2S7 2.67 7 3.5 7.67 5 8.5 5z"/>
-          </svg>
-          Recent Auto-Created Tickets
-        </h3>
-        <span class="card-badge">{{ recentTickets.length }} tickets</span>
-      </div>
-      <div class="tickets-list">
-        <div v-for="t in recentTickets" :key="t.id" class="ticket-row">
-          <div class="ticket-id">{{ t.id }}</div>
-          <div class="ticket-title">{{ t.title }}</div>
-          <div class="ticket-meta">
-            <span class="ticket-sev" :style="{ color: severityColor(t.severity), background: severityColor(t.severity) + '20' }">
-              {{ t.severity }}
-            </span>
-            <span class="ticket-bot">{{ t.bot }}</span>
-            <span class="ticket-int">{{ t.integration }}</span>
-            <span class="ticket-date">{{ t.createdAt }}</span>
-          </div>
-        </div>
-      </div>
-    </div>
+    </template>
   </div>
 </template>
 

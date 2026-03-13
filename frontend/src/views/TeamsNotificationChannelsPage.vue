@@ -1,8 +1,11 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
+import { integrationApi, teamApi, ApiError } from '../services/api';
+import type { Integration } from '../services/api';
+import type { Team } from '../services/api';
 
 const showToast = useToast();
 
@@ -29,9 +32,12 @@ interface TestResult {
   testedAt: string;
 }
 
+const loading = ref(true);
+const error = ref('');
 const showAddModal = ref(false);
 const testingChannelId = ref<string | null>(null);
 const testResults = ref<TestResult[]>([]);
+const teams = ref<Team[]>([]);
 
 const newChannel = ref<Partial<NotificationChannel> & { type: ChannelType }>({
   type: 'slack',
@@ -42,56 +48,70 @@ const newChannel = ref<Partial<NotificationChannel> & { type: ChannelType }>({
   enabled: true,
 });
 
-const channels = ref<NotificationChannel[]>([
-  {
-    id: 'ch-001',
-    name: '#platform-alerts',
-    type: 'slack',
-    destination: 'https://hooks.slack.com/services/T000/B000/xxx',
-    enabled: true,
-    events: ['execution_failed', 'critical_finding', 'bot_disabled'],
-    botIds: ['bot-security', 'bot-pr-review'],
-    lastDeliveredAt: '2026-03-06T11:42:00Z',
-    deliveryCount: 187,
-    failureCount: 2,
-  },
-  {
-    id: 'ch-002',
-    name: 'Engineering Team Channel',
-    type: 'teams',
-    destination: 'https://outlook.office.com/webhook/abc123/IncomingWebhook/xxx',
-    enabled: true,
-    events: ['execution_complete', 'critical_finding'],
-    botIds: ['bot-pr-review'],
-    lastDeliveredAt: '2026-03-06T09:15:00Z',
-    deliveryCount: 94,
-    failureCount: 0,
-  },
-  {
-    id: 'ch-003',
-    name: 'Security Team Email',
-    type: 'email',
-    destination: 'security-team@company.com',
-    enabled: true,
-    events: ['critical_finding', 'execution_failed'],
-    botIds: ['bot-security'],
-    lastDeliveredAt: '2026-03-05T08:00:00Z',
-    deliveryCount: 31,
-    failureCount: 1,
-  },
-  {
-    id: 'ch-004',
-    name: '#dev-digest',
-    type: 'slack',
-    destination: 'https://hooks.slack.com/services/T000/B001/yyy',
-    enabled: false,
-    events: ['execution_complete'],
-    botIds: [],
-    lastDeliveredAt: null,
-    deliveryCount: 0,
-    failureCount: 0,
-  },
-]);
+const channels = ref<NotificationChannel[]>([]);
+
+function integrationToChannel(int: Integration): NotificationChannel {
+  const config = int.config || {};
+  const channelType = (int.type || 'slack').toLowerCase();
+  let mappedType: ChannelType = 'slack';
+  if (channelType.includes('teams') || channelType.includes('microsoft')) mappedType = 'teams';
+  else if (channelType.includes('email')) mappedType = 'email';
+
+  return {
+    id: int.id,
+    name: int.name,
+    type: mappedType,
+    destination: (config.destination as string) || (config.webhook_url as string) || '',
+    enabled: int.enabled,
+    events: (config.events as EventType[]) || [],
+    botIds: (config.bot_ids as string[]) || [],
+    lastDeliveredAt: (config.last_delivered_at as string) || null,
+    deliveryCount: (config.delivery_count as number) || 0,
+    failureCount: (config.failure_count as number) || 0,
+  };
+}
+
+function channelToIntegrationData(ch: Partial<NotificationChannel> & { type: ChannelType }): Partial<Integration> {
+  return {
+    name: ch.name || '',
+    type: ch.type,
+    enabled: ch.enabled ?? true,
+    config: {
+      destination: ch.destination || '',
+      events: ch.events || [],
+      bot_ids: ch.botIds || [],
+    },
+  };
+}
+
+async function fetchData() {
+  loading.value = true;
+  error.value = '';
+  try {
+    const [integrationsResult, teamsResult] = await Promise.all([
+      integrationApi.list(),
+      teamApi.list(),
+    ]);
+    const allIntegrations = integrationsResult || [];
+    channels.value = allIntegrations
+      .filter((i) => {
+        const t = (i.type || '').toLowerCase();
+        return t.includes('slack') || t.includes('teams') || t.includes('email') || t.includes('notification');
+      })
+      .map(integrationToChannel);
+    teams.value = teamsResult?.teams || [];
+  } catch (err) {
+    if (err instanceof ApiError) {
+      error.value = `Failed to load notification channels: ${err.message}`;
+    } else {
+      error.value = 'Failed to load notification channels';
+    }
+  } finally {
+    loading.value = false;
+  }
+}
+
+onMounted(fetchData);
 
 const allEvents: { key: EventType; label: string }[] = [
   { key: 'execution_complete', label: 'Execution Complete' },
@@ -99,12 +119,6 @@ const allEvents: { key: EventType; label: string }[] = [
   { key: 'critical_finding', label: 'Critical Finding' },
   { key: 'bot_disabled', label: 'Bot Auto-Disabled' },
   { key: 'quota_exceeded', label: 'Quota Exceeded' },
-];
-
-const allBots = [
-  { id: 'bot-security', name: 'Security Audit Bot' },
-  { id: 'bot-pr-review', name: 'PR Review Bot' },
-  { id: 'bot-dep-audit', name: 'Dependency Audit Bot' },
 ];
 
 function channelIcon(type: ChannelType): string {
@@ -120,9 +134,16 @@ function formatDate(iso: string | null): string {
   return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
-function toggleChannel(ch: NotificationChannel) {
+async function toggleChannel(ch: NotificationChannel) {
+  const prev = ch.enabled;
   ch.enabled = !ch.enabled;
-  showToast(`Channel ${ch.enabled ? 'enabled' : 'disabled'}`, 'info');
+  try {
+    await integrationApi.update(ch.id, { enabled: ch.enabled });
+    showToast(`Channel ${ch.enabled ? 'enabled' : 'disabled'}`, 'info');
+  } catch (err) {
+    ch.enabled = prev;
+    showToast(err instanceof ApiError ? err.message : 'Failed to toggle channel', 'error');
+  }
 }
 
 function toggleEvent(ch: NotificationChannel, event: EventType) {
@@ -142,45 +163,55 @@ function toggleNewEvent(event: EventType) {
   }
 }
 
-function deleteChannel(id: string) {
-  channels.value = channels.value.filter((ch) => ch.id !== id);
-  showToast('Channel removed', 'info');
+async function deleteChannel(id: string) {
+  try {
+    await integrationApi.delete(id);
+    channels.value = channels.value.filter((ch) => ch.id !== id);
+    showToast('Channel removed', 'info');
+  } catch (err) {
+    showToast(err instanceof ApiError ? err.message : 'Failed to delete channel', 'error');
+  }
 }
 
 async function testChannel(ch: NotificationChannel) {
   testingChannelId.value = ch.id;
-  await new Promise((r) => setTimeout(r, 1000));
-  testingChannelId.value = null;
-  const success = Math.random() > 0.2;
-  testResults.value.unshift({
-    channelId: ch.id,
-    success,
-    message: success ? 'Test message delivered successfully' : 'Delivery failed: webhook returned 404',
-    testedAt: new Date().toISOString(),
-  });
-  showToast(success ? 'Test notification delivered!' : 'Delivery failed — check webhook URL', success ? 'success' : 'error');
+  try {
+    const result = await integrationApi.test(ch.id);
+    testResults.value.unshift({
+      channelId: ch.id,
+      success: result.success,
+      message: result.message,
+      testedAt: new Date().toISOString(),
+    });
+    showToast(result.success ? 'Test notification delivered!' : `Delivery failed: ${result.message}`, result.success ? 'success' : 'error');
+  } catch (err) {
+    testResults.value.unshift({
+      channelId: ch.id,
+      success: false,
+      message: err instanceof ApiError ? err.message : 'Test failed',
+      testedAt: new Date().toISOString(),
+    });
+    showToast(err instanceof ApiError ? err.message : 'Test failed', 'error');
+  } finally {
+    testingChannelId.value = null;
+  }
 }
 
-function saveNewChannel() {
+async function saveNewChannel() {
   if (!newChannel.value.name?.trim() || !newChannel.value.destination?.trim()) {
     showToast('Name and destination are required', 'error');
     return;
   }
-  channels.value.push({
-    id: `ch-${Date.now()}`,
-    name: newChannel.value.name,
-    type: newChannel.value.type,
-    destination: newChannel.value.destination,
-    enabled: true,
-    events: newChannel.value.events ?? [],
-    botIds: newChannel.value.botIds ?? [],
-    lastDeliveredAt: null,
-    deliveryCount: 0,
-    failureCount: 0,
-  });
-  showAddModal.value = false;
-  newChannel.value = { type: 'slack', name: '', destination: '', events: ['execution_failed', 'critical_finding'], botIds: [], enabled: true };
-  showToast('Notification channel added', 'success');
+  try {
+    const data = channelToIntegrationData(newChannel.value);
+    const created = await integrationApi.create(data);
+    channels.value.push(integrationToChannel(created));
+    showAddModal.value = false;
+    newChannel.value = { type: 'slack', name: '', destination: '', events: ['execution_failed', 'critical_finding'], botIds: [], enabled: true };
+    showToast('Notification channel added', 'success');
+  } catch (err) {
+    showToast(err instanceof ApiError ? err.message : 'Failed to create channel', 'error');
+  }
 }
 
 const totalDeliveries = computed(() => channels.value.reduce((s, c) => s + c.deliveryCount, 0));
@@ -196,98 +227,125 @@ const lastTestForChannel = (id: string) => testResults.value.find((r) => r.chann
       subtitle="Configure Slack, Microsoft Teams, and email channels to receive bot execution results and critical alerts"
     />
 
-    <div class="stats-row">
-      <div class="stat-card">
-        <div class="stat-label">Channels Configured</div>
-        <div class="stat-value">{{ channels.length }}</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-label">Active Channels</div>
-        <div class="stat-value" :style="{ color: 'var(--accent-green)' }">{{ enabledCount }}</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-label">Total Deliveries</div>
-        <div class="stat-value">{{ totalDeliveries }}</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-label">Total Failures</div>
-        <div class="stat-value" :style="{ color: channels.reduce((s,c)=>s+c.failureCount,0) > 0 ? 'var(--accent-amber)' : 'var(--text-primary)' }">
-          {{ channels.reduce((s, c) => s + c.failureCount, 0) }}
-        </div>
-      </div>
+    <!-- Loading state -->
+    <div v-if="loading" class="section-card" style="padding: 48px; text-align: center;">
+      <div style="color: var(--text-tertiary); font-size: 0.875rem;">Loading notification channels...</div>
     </div>
 
-    <div class="section-card">
-      <div class="section-header">
-        <h3 class="section-title">Configured Channels</h3>
-        <button class="btn-primary" @click="showAddModal = true">+ Add Channel</button>
-      </div>
+    <!-- Error state -->
+    <div v-else-if="error" class="section-card" style="padding: 48px; text-align: center;">
+      <div style="color: #ef4444; font-size: 0.875rem; margin-bottom: 12px;">{{ error }}</div>
+      <button class="btn-primary" @click="fetchData">Retry</button>
+    </div>
 
-      <div class="channels-list">
-        <div v-for="ch in channels" :key="ch.id" class="channel-card" :class="{ disabled: !ch.enabled }">
-          <div class="channel-main">
-            <div class="channel-icon" :style="{ color: channelColor(ch.type) }">{{ channelIcon(ch.type) }}</div>
-            <div class="channel-info">
-              <div class="channel-name">{{ ch.name }}</div>
-              <div class="channel-dest">{{ ch.destination }}</div>
-              <div class="channel-meta">
-                {{ ch.deliveryCount }} delivered · {{ ch.failureCount }} failed ·
-                Last: {{ formatDate(ch.lastDeliveredAt) }}
-              </div>
-              <!-- Test result -->
-              <div v-if="lastTestForChannel(ch.id)" class="test-result" :class="lastTestForChannel(ch.id)!.success ? 'ok' : 'err'">
-                {{ lastTestForChannel(ch.id)!.success ? '✓' : '✗' }} {{ lastTestForChannel(ch.id)!.message }}
-              </div>
-            </div>
-            <div class="channel-actions">
-              <button
-                class="btn-test"
-                :disabled="testingChannelId === ch.id"
-                @click="testChannel(ch)"
-              >
-                {{ testingChannelId === ch.id ? 'Sending…' : 'Test' }}
-              </button>
-              <label class="toggle">
-                <input type="checkbox" :checked="ch.enabled" @change="toggleChannel(ch)" />
-                <span class="toggle-track"></span>
-              </label>
-              <button class="btn-delete" @click="deleteChannel(ch.id)">✕</button>
-            </div>
-          </div>
-
-          <!-- Events -->
-          <div class="channel-events">
-            <span class="events-label">Notify on:</span>
-            <div class="event-tags">
-              <span
-                v-for="ev in allEvents"
-                :key="ev.key"
-                class="event-tag"
-                :class="{ active: ch.events.includes(ev.key) }"
-                @click="toggleEvent(ch, ev.key)"
-              >
-                {{ ev.label }}
-              </span>
-            </div>
-          </div>
-
-          <!-- Bot scope -->
-          <div v-if="ch.botIds.length > 0" class="channel-bots">
-            <span class="events-label">Bots:</span>
-            <div class="event-tags">
-              <span v-for="id in ch.botIds" :key="id" class="bot-tag">
-                {{ allBots.find((b) => b.id === id)?.name ?? id }}
-              </span>
-            </div>
-            <span class="bot-scope-note">All other bots excluded</span>
-          </div>
-          <div v-else class="channel-bots">
-            <span class="events-label">Scope:</span>
-            <span class="all-bots-note">All bots</span>
+    <template v-else>
+      <div class="stats-row">
+        <div class="stat-card">
+          <div class="stat-label">Channels Configured</div>
+          <div class="stat-value">{{ channels.length }}</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Active Channels</div>
+          <div class="stat-value" :style="{ color: 'var(--accent-green)' }">{{ enabledCount }}</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Total Deliveries</div>
+          <div class="stat-value">{{ totalDeliveries }}</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Total Failures</div>
+          <div class="stat-value" :style="{ color: channels.reduce((s,c)=>s+c.failureCount,0) > 0 ? 'var(--accent-amber)' : 'var(--text-primary)' }">
+            {{ channels.reduce((s, c) => s + c.failureCount, 0) }}
           </div>
         </div>
       </div>
-    </div>
+
+      <div v-if="teams.length > 0" class="section-card" style="margin-bottom: 20px;">
+        <div class="section-header">
+          <h3 class="section-title">Teams</h3>
+        </div>
+        <div style="padding: 12px 20px; font-size: 0.82rem; color: var(--text-secondary);">
+          {{ teams.length }} team{{ teams.length !== 1 ? 's' : '' }} available:
+          <span v-for="(t, i) in teams" :key="t.id">{{ t.name }}<span v-if="i < teams.length - 1">, </span></span>
+        </div>
+      </div>
+
+      <div class="section-card">
+        <div class="section-header">
+          <h3 class="section-title">Configured Channels</h3>
+          <button class="btn-primary" @click="showAddModal = true">+ Add Channel</button>
+        </div>
+
+        <div v-if="channels.length === 0" style="padding: 32px 20px; text-align: center; color: var(--text-tertiary); font-size: 0.82rem;">
+          No notification channels configured yet. Click "Add Channel" to get started.
+        </div>
+
+        <div v-else class="channels-list">
+          <div v-for="ch in channels" :key="ch.id" class="channel-card" :class="{ disabled: !ch.enabled }">
+            <div class="channel-main">
+              <div class="channel-icon" :style="{ color: channelColor(ch.type) }">{{ channelIcon(ch.type) }}</div>
+              <div class="channel-info">
+                <div class="channel-name">{{ ch.name }}</div>
+                <div class="channel-dest">{{ ch.destination }}</div>
+                <div class="channel-meta">
+                  {{ ch.deliveryCount }} delivered · {{ ch.failureCount }} failed ·
+                  Last: {{ formatDate(ch.lastDeliveredAt) }}
+                </div>
+                <!-- Test result -->
+                <div v-if="lastTestForChannel(ch.id)" class="test-result" :class="lastTestForChannel(ch.id)!.success ? 'ok' : 'err'">
+                  {{ lastTestForChannel(ch.id)!.success ? '✓' : '✗' }} {{ lastTestForChannel(ch.id)!.message }}
+                </div>
+              </div>
+              <div class="channel-actions">
+                <button
+                  class="btn-test"
+                  :disabled="testingChannelId === ch.id"
+                  @click="testChannel(ch)"
+                >
+                  {{ testingChannelId === ch.id ? 'Sending…' : 'Test' }}
+                </button>
+                <label class="toggle">
+                  <input type="checkbox" :checked="ch.enabled" @change="toggleChannel(ch)" />
+                  <span class="toggle-track"></span>
+                </label>
+                <button class="btn-delete" @click="deleteChannel(ch.id)">✕</button>
+              </div>
+            </div>
+
+            <!-- Events -->
+            <div class="channel-events">
+              <span class="events-label">Notify on:</span>
+              <div class="event-tags">
+                <span
+                  v-for="ev in allEvents"
+                  :key="ev.key"
+                  class="event-tag"
+                  :class="{ active: ch.events.includes(ev.key) }"
+                  @click="toggleEvent(ch, ev.key)"
+                >
+                  {{ ev.label }}
+                </span>
+              </div>
+            </div>
+
+            <!-- Bot scope -->
+            <div v-if="ch.botIds.length > 0" class="channel-bots">
+              <span class="events-label">Bots:</span>
+              <div class="event-tags">
+                <span v-for="id in ch.botIds" :key="id" class="bot-tag">
+                  {{ id }}
+                </span>
+              </div>
+              <span class="bot-scope-note">All other bots excluded</span>
+            </div>
+            <div v-else class="channel-bots">
+              <span class="events-label">Scope:</span>
+              <span class="all-bots-note">All bots</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </template>
 
     <!-- Add channel modal -->
     <div v-if="showAddModal" class="modal-overlay" @click.self="showAddModal = false">

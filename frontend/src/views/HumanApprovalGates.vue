@@ -1,96 +1,99 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
+import LoadingState from '../components/base/LoadingState.vue';
 import { useToast } from '../composables/useToast';
+import { workflowExecutionApi, ApiError } from '../services/api';
 
 const router = useRouter();
 const showToast = useToast();
 
-interface ApprovalGate {
-  id: string;
-  name: string;
-  bot: string;
-  condition: string;
-  approvers: string[];
-  enabled: boolean;
-}
-
 interface PendingApproval {
-  id: string;
-  gateId: string;
-  gateName: string;
-  bot: string;
-  action: string;
-  requestedBy: string;
-  requestedAt: string;
-  context: string;
-  status: 'pending' | 'approved' | 'rejected';
+  execution_id: string;
+  node_id: string;
+  status: string;
+  requested_at: string;
+  timeout_seconds: number;
 }
 
-interface AuditEntry {
-  id: string;
-  action: 'approved' | 'rejected';
-  gate: string;
-  approver: string;
-  timestamp: string;
-  reason: string;
-}
-
-const gates = ref<ApprovalGate[]>([
-  { id: 'gate-1', name: 'Production Deploy Approval', bot: 'bot-deploy', condition: 'trigger.type === "deploy" && env === "production"', approvers: ['alice@example.com', 'bob@example.com'], enabled: true },
-  { id: 'gate-2', name: 'Security Critical Finding', bot: 'bot-security', condition: 'finding.severity === "critical"', approvers: ['security@example.com'], enabled: true },
-]);
-
-const pending = ref<PendingApproval[]>([
-  { id: 'pa-1', gateId: 'gate-2', gateName: 'Security Critical Finding', bot: 'bot-security', action: 'Create Jira ticket for SQL injection', requestedBy: 'bot-security', requestedAt: '5 minutes ago', context: 'Found SQL injection vulnerability in /api/users endpoint. Severity: CRITICAL.', status: 'pending' },
-  { id: 'pa-2', gateId: 'gate-1', gateName: 'Production Deploy Approval', bot: 'bot-deploy', action: 'Deploy v2.5.0 to production', requestedBy: 'bot-deploy', requestedAt: '12 minutes ago', context: 'Deployment pipeline triggered. 4 services affected. 0 failing tests.', status: 'pending' },
-]);
-
-const audit = ref<AuditEntry[]>([
-  { id: 'a-1', action: 'approved', gate: 'Production Deploy Approval', approver: 'alice@example.com', timestamp: '2 hours ago', reason: 'Verified tests pass' },
-  { id: 'a-2', action: 'rejected', gate: 'Security Critical Finding', approver: 'security@example.com', timestamp: '1 day ago', reason: 'False positive — already patched' },
-]);
-
-const processingId = ref<string | null>(null);
+const pending = ref<PendingApproval[]>([]);
+const isLoading = ref(true);
+const loadError = ref<string | null>(null);
+const processingKey = ref<string | null>(null);
+const rejectingKey = ref<string | null>(null);
 const rejectReason = ref('');
-const rejectingId = ref<string | null>(null);
+
+function approvalKey(pa: PendingApproval): string {
+  return `${pa.execution_id}:${pa.node_id}`;
+}
+
+async function loadPendingApprovals() {
+  isLoading.value = true;
+  loadError.value = null;
+  try {
+    const data = await workflowExecutionApi.listPendingApprovals();
+    pending.value = data.pending_approvals ?? [];
+  } catch (err) {
+    const message = err instanceof ApiError ? err.message : 'Failed to load pending approvals';
+    loadError.value = message;
+  } finally {
+    isLoading.value = false;
+  }
+}
 
 async function handleApprove(pa: PendingApproval) {
-  processingId.value = pa.id;
+  const key = approvalKey(pa);
+  processingKey.value = key;
   try {
-    await new Promise(resolve => setTimeout(resolve, 800));
-    pa.status = 'approved';
-    audit.value.unshift({ id: 'a-' + Date.now(), action: 'approved', gate: pa.gateName, approver: 'you@example.com', timestamp: 'just now', reason: 'Approved' });
+    await workflowExecutionApi.approveNode(pa.execution_id, pa.node_id);
+    pending.value = pending.value.filter(p => approvalKey(p) !== key);
     showToast('Approval granted', 'success');
-    setTimeout(() => {
-      pending.value = pending.value.filter(p => p.id !== pa.id);
-    }, 800);
-  } catch {
-    showToast('Failed to approve', 'error');
+  } catch (err) {
+    const message = err instanceof ApiError ? err.message : 'Failed to approve';
+    showToast(message, 'error');
   } finally {
-    processingId.value = null;
+    processingKey.value = null;
   }
 }
 
 async function handleReject(pa: PendingApproval) {
-  processingId.value = pa.id;
+  const key = approvalKey(pa);
+  processingKey.value = key;
   try {
-    await new Promise(resolve => setTimeout(resolve, 800));
-    pa.status = 'rejected';
-    audit.value.unshift({ id: 'a-' + Date.now(), action: 'rejected', gate: pa.gateName, approver: 'you@example.com', timestamp: 'just now', reason: rejectReason.value || 'No reason given' });
+    await workflowExecutionApi.rejectNode(pa.execution_id, pa.node_id, rejectReason.value || undefined);
+    pending.value = pending.value.filter(p => approvalKey(p) !== key);
+    rejectingKey.value = null;
+    rejectReason.value = '';
     showToast('Approval rejected', 'info');
-    setTimeout(() => {
-      pending.value = pending.value.filter(p => p.id !== pa.id);
-      rejectingId.value = null;
-    }, 800);
-  } catch {
-    showToast('Failed to reject', 'error');
+  } catch (err) {
+    const message = err instanceof ApiError ? err.message : 'Failed to reject';
+    showToast(message, 'error');
   } finally {
-    processingId.value = null;
+    processingKey.value = null;
   }
 }
+
+function formatDate(dateStr: string): string {
+  return new Date(dateStr).toLocaleString();
+}
+
+function timeRemaining(pa: PendingApproval): string {
+  if (!pa.timeout_seconds) return '';
+  const requestedAt = new Date(pa.requested_at).getTime();
+  const expiresAt = requestedAt + pa.timeout_seconds * 1000;
+  const remaining = expiresAt - Date.now();
+  if (remaining <= 0) return 'Expired';
+  const minutes = Math.floor(remaining / 60000);
+  const hours = Math.floor(minutes / 60);
+  if (hours > 0) return `${hours}h ${minutes % 60}m remaining`;
+  return `${minutes}m remaining`;
+}
+
+const pendingCount = computed(() => pending.value.length);
+
+onMounted(loadPendingApprovals);
 </script>
 
 <template>
@@ -102,133 +105,106 @@ async function handleReject(pa: PendingApproval) {
 
     <PageHeader
       title="Human Approval Gates"
-      subtitle="Configure approval requirements and process pending approvals."
-    />
-
-    <!-- Pending Approvals -->
-    <div class="card">
-      <div class="card-header">
-        <h3>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="18" height="18">
-            <circle cx="12" cy="12" r="10"/>
-            <polyline points="12 6 12 12 16 14"/>
+      subtitle="Review and process pending workflow approval requests."
+    >
+      <template #actions>
+        <button class="btn btn-ghost" @click="loadPendingApprovals">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+            <polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
           </svg>
-          Pending Approvals
-        </h3>
-        <span class="badge-warn">{{ pending.filter(p => p.status === 'pending').length }} pending</span>
+          Refresh
+        </button>
+      </template>
+    </PageHeader>
+
+    <LoadingState v-if="isLoading" message="Loading pending approvals..." />
+
+    <div v-else-if="loadError" class="card error-card">
+      <div class="error-inner">
+        <p>{{ loadError }}</p>
+        <button class="btn btn-ghost" @click="loadPendingApprovals">Retry</button>
       </div>
-      <div class="pending-list">
-        <div
-          v-for="pa in pending"
-          :key="pa.id"
-          class="pending-row"
-          :class="{ 'is-approved': pa.status === 'approved', 'is-rejected': pa.status === 'rejected' }"
-        >
-          <div class="pending-info">
-            <div class="pending-gate">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="14" height="14" style="color: var(--accent-cyan)">
-                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
-              </svg>
-              {{ pa.gateName }}
+    </div>
+
+    <template v-else>
+      <!-- Pending Approvals -->
+      <div class="card">
+        <div class="card-header">
+          <h3>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="18" height="18">
+              <circle cx="12" cy="12" r="10"/>
+              <polyline points="12 6 12 12 16 14"/>
+            </svg>
+            Pending Approvals
+          </h3>
+          <span v-if="pendingCount > 0" class="badge-warn">{{ pendingCount }} pending</span>
+        </div>
+        <div class="pending-list">
+          <div
+            v-for="pa in pending"
+            :key="approvalKey(pa)"
+            class="pending-row"
+          >
+            <div class="pending-info">
+              <div class="pending-ids">
+                <span class="id-label">Execution</span>
+                <code class="id-value">{{ pa.execution_id }}</code>
+                <span class="id-label">Node</span>
+                <code class="id-value">{{ pa.node_id }}</code>
+              </div>
+              <div class="pending-meta">
+                <span class="meta-item">Requested: {{ formatDate(pa.requested_at) }}</span>
+                <template v-if="pa.timeout_seconds">
+                  <span class="meta-sep">&middot;</span>
+                  <span class="meta-item" :class="{ 'text-warn': timeRemaining(pa) === 'Expired' }">
+                    {{ timeRemaining(pa) }}
+                  </span>
+                </template>
+                <span class="meta-sep">&middot;</span>
+                <span class="meta-item">Status: {{ pa.status }}</span>
+              </div>
             </div>
-            <div class="pending-action">{{ pa.action }}</div>
-            <div class="pending-context">{{ pa.context }}</div>
-            <div class="pending-meta">
-              <span class="meta-item">Requested by {{ pa.requestedBy }}</span>
-              <span class="meta-sep">·</span>
-              <span class="meta-item">{{ pa.requestedAt }}</span>
-            </div>
-          </div>
-          <div class="pending-actions">
-            <template v-if="pa.status === 'pending'">
+            <div class="pending-actions">
               <button
                 class="btn btn-approve"
-                :disabled="processingId === pa.id"
+                :disabled="processingKey === approvalKey(pa)"
                 @click="handleApprove(pa)"
               >
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
                   <polyline points="20 6 9 17 4 12"/>
                 </svg>
-                Approve
+                {{ processingKey === approvalKey(pa) ? '...' : 'Approve' }}
               </button>
               <button
                 class="btn btn-reject"
-                :disabled="processingId === pa.id"
-                @click="rejectingId = rejectingId === pa.id ? null : pa.id"
+                :disabled="processingKey === approvalKey(pa)"
+                @click="rejectingKey = rejectingKey === approvalKey(pa) ? null : approvalKey(pa)"
               >
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
                   <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
                 </svg>
                 Reject
               </button>
-            </template>
-            <span v-else-if="pa.status === 'approved'" class="status-badge approved">Approved</span>
-            <span v-else class="status-badge rejected">Rejected</span>
-          </div>
-          <div v-if="rejectingId === pa.id" class="reject-form">
-            <input v-model="rejectReason" type="text" class="text-input" placeholder="Reason for rejection (optional)..." />
-            <div class="reject-actions">
-              <button class="btn btn-ghost-sm" @click="rejectingId = null">Cancel</button>
-              <button class="btn btn-reject-confirm" @click="handleReject(pa)">Confirm Reject</button>
+            </div>
+            <div v-if="rejectingKey === approvalKey(pa)" class="reject-form">
+              <input v-model="rejectReason" type="text" class="text-input" placeholder="Reason for rejection (optional)..." />
+              <div class="reject-actions">
+                <button class="btn btn-ghost-sm" @click="rejectingKey = null">Cancel</button>
+                <button class="btn btn-reject-confirm" :disabled="processingKey === approvalKey(pa)" @click="handleReject(pa)">
+                  Confirm Reject
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-        <div v-if="pending.length === 0" class="list-empty">
-          No pending approvals
-        </div>
-      </div>
-    </div>
-
-    <!-- Gate configs -->
-    <div class="card">
-      <div class="card-header">
-        <h3>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="18" height="18">
-            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
-          </svg>
-          Approval Gate Configurations
-        </h3>
-        <button class="btn btn-primary">+ New Gate</button>
-      </div>
-      <div class="gates-list">
-        <div v-for="g in gates" :key="g.id" class="gate-row">
-          <div class="gate-info">
-            <span class="gate-name">{{ g.name }}</span>
-            <span class="gate-bot">{{ g.bot }}</span>
-          </div>
-          <div class="gate-condition">
-            <code>{{ g.condition }}</code>
-          </div>
-          <div class="gate-approvers">
-            <span v-for="a in g.approvers" :key="a" class="approver-tag">{{ a }}</span>
-          </div>
-          <div class="gate-status" :class="g.enabled ? 'text-green' : 'text-muted'">
-            {{ g.enabled ? 'Active' : 'Disabled' }}
+          <div v-if="pending.length === 0" class="list-empty">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="40" height="40" style="opacity: 0.3; color: var(--text-tertiary)">
+              <polyline points="20 6 9 17 4 12"/>
+            </svg>
+            <p>No pending approvals</p>
           </div>
         </div>
       </div>
-    </div>
-
-    <!-- Audit trail -->
-    <div class="card">
-      <div class="card-header">
-        <h3>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="18" height="18">
-            <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
-          </svg>
-          Audit Trail
-        </h3>
-      </div>
-      <div class="audit-list">
-        <div v-for="a in audit" :key="a.id" class="audit-row">
-          <span :class="['audit-action', a.action]">{{ a.action }}</span>
-          <span class="audit-gate">{{ a.gate }}</span>
-          <span class="audit-by">by {{ a.approver }}</span>
-          <span class="audit-reason">{{ a.reason }}</span>
-          <span class="audit-time">{{ a.timestamp }}</span>
-        </div>
-      </div>
-    </div>
+    </template>
   </div>
 </template>
 
@@ -281,6 +257,18 @@ async function handleReject(pa: PendingApproval) {
   border-radius: 4px;
 }
 
+.error-card { padding: 48px; }
+
+.error-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  text-align: center;
+}
+
+.error-inner p { font-size: 0.875rem; color: var(--text-tertiary); margin: 0; }
+
 .pending-list {
   display: flex;
   flex-direction: column;
@@ -297,19 +285,21 @@ async function handleReject(pa: PendingApproval) {
 
 .pending-row:hover { background: var(--bg-tertiary); }
 .pending-row:last-child { border-bottom: none; }
-.pending-row.is-approved { opacity: 0.6; }
-.pending-row.is-rejected { opacity: 0.5; }
 
 .pending-info {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 8px;
 }
 
-.pending-gate {
+.pending-ids {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.id-label {
   font-size: 0.72rem;
   font-weight: 600;
   color: var(--text-tertiary);
@@ -317,15 +307,13 @@ async function handleReject(pa: PendingApproval) {
   letter-spacing: 0.05em;
 }
 
-.pending-action {
-  font-size: 0.95rem;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.pending-context {
-  font-size: 0.85rem;
-  color: var(--text-secondary);
+.id-value {
+  font-family: 'Geist Mono', monospace;
+  font-size: 0.82rem;
+  color: var(--accent-cyan);
+  background: rgba(6, 182, 212, 0.08);
+  padding: 2px 8px;
+  border-radius: 4px;
 }
 
 .pending-meta {
@@ -337,22 +325,12 @@ async function handleReject(pa: PendingApproval) {
 }
 
 .meta-sep { opacity: 0.5; }
+.text-warn { color: #ef4444; }
 
 .pending-actions {
   display: flex;
   gap: 10px;
 }
-
-.status-badge {
-  font-size: 0.72rem;
-  font-weight: 700;
-  padding: 3px 10px;
-  border-radius: 4px;
-  text-transform: uppercase;
-}
-
-.status-badge.approved { background: rgba(52, 211, 153, 0.15); color: #34d399; }
-.status-badge.rejected { background: rgba(239, 68, 68, 0.15); color: #ef4444; }
 
 .reject-form {
   display: flex;
@@ -384,111 +362,19 @@ async function handleReject(pa: PendingApproval) {
 }
 
 .list-empty {
-  padding: 32px 24px;
-  text-align: center;
-  font-size: 0.875rem;
-  color: var(--text-tertiary);
-}
-
-.gates-list {
+  padding: 48px 24px;
   display: flex;
   flex-direction: column;
-}
-
-.gate-row {
-  display: grid;
-  grid-template-columns: 220px 1fr auto auto;
-  gap: 16px;
-  align-items: center;
-  padding: 14px 24px;
-  border-bottom: 1px solid var(--border-subtle);
-}
-
-.gate-row:last-child { border-bottom: none; }
-
-.gate-info {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.gate-name {
-  font-size: 0.875rem;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.gate-bot {
-  font-size: 0.75rem;
-  color: var(--text-tertiary);
-  font-family: monospace;
-}
-
-.gate-condition code {
-  font-size: 0.75rem;
-  color: var(--text-secondary);
-  background: var(--bg-tertiary);
-  padding: 3px 8px;
-  border-radius: 4px;
-  font-family: 'Geist Mono', monospace;
-}
-
-.gate-approvers {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.approver-tag {
-  font-size: 0.7rem;
-  padding: 2px 8px;
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border-default);
-  border-radius: 4px;
-  color: var(--text-tertiary);
-}
-
-.gate-status {
-  font-size: 0.78rem;
-  font-weight: 600;
-}
-
-.text-green { color: #34d399; }
-.text-muted { color: var(--text-tertiary); }
-
-.audit-list {
-  display: flex;
-  flex-direction: column;
-}
-
-.audit-row {
-  display: flex;
   align-items: center;
   gap: 12px;
-  padding: 11px 24px;
-  border-bottom: 1px solid var(--border-subtle);
-  font-size: 0.85rem;
-}
-
-.audit-row:last-child { border-bottom: none; }
-
-.audit-action {
-  font-size: 0.72rem;
-  font-weight: 700;
-  padding: 2px 8px;
-  border-radius: 3px;
-  text-transform: uppercase;
-  min-width: 68px;
   text-align: center;
 }
 
-.audit-action.approved { background: rgba(52, 211, 153, 0.15); color: #34d399; }
-.audit-action.rejected { background: rgba(239, 68, 68, 0.15); color: #ef4444; }
-
-.audit-gate { font-weight: 500; color: var(--text-primary); }
-.audit-by { color: var(--text-tertiary); }
-.audit-reason { flex: 1; color: var(--text-secondary); }
-.audit-time { color: var(--text-tertiary); font-size: 0.75rem; white-space: nowrap; }
+.list-empty p {
+  font-size: 0.875rem;
+  color: var(--text-tertiary);
+  margin: 0;
+}
 
 .btn {
   display: flex;
@@ -503,8 +389,17 @@ async function handleReject(pa: PendingApproval) {
   transition: all 0.15s;
 }
 
-.btn-primary { background: var(--accent-cyan); color: #000; }
-.btn-primary:hover { opacity: 0.85; }
+.btn-ghost {
+  padding: 8px 14px;
+  font-size: 0.875rem;
+  background: transparent;
+  border: 1px solid var(--border-default);
+  color: var(--text-secondary);
+  cursor: pointer;
+  border-radius: 8px;
+}
+
+.btn-ghost:hover { border-color: var(--accent-cyan); color: var(--text-primary); }
 
 .btn-approve {
   background: rgba(52, 211, 153, 0.15);
@@ -533,6 +428,8 @@ async function handleReject(pa: PendingApproval) {
   font-size: 0.8rem;
   cursor: pointer;
 }
+
+.btn-reject-confirm:disabled { opacity: 0.4; cursor: not-allowed; }
 
 .btn-ghost-sm {
   background: transparent;

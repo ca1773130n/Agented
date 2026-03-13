@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
+import { configExportApi, ApiError } from '../services/api';
 
 const router = useRouter();
 
@@ -12,6 +13,11 @@ type Environment = 'dev' | 'staging' | 'prod';
 const selectedFormat = ref<Format>('terraform');
 const selectedEnv = ref<Environment>('prod');
 const copyLabel = ref('Copy to Clipboard');
+
+const isLoading = ref(false);
+const loadError = ref<string | null>(null);
+const exportData = ref<string | null>(null);
+const triggerCount = ref(0);
 
 const resources = ref({
   bots: true,
@@ -33,6 +39,23 @@ function toggleSelectAll() {
   resources.value.teams = next;
   resources.value.backends = next;
 }
+
+async function loadExportData() {
+  isLoading.value = true;
+  loadError.value = null;
+  try {
+    const result = await configExportApi.exportAll('json');
+    exportData.value = result.data;
+    triggerCount.value = result.trigger_count;
+  } catch (err) {
+    const msg = err instanceof ApiError ? err.message : 'Failed to load export data';
+    loadError.value = msg;
+  } finally {
+    isLoading.value = false;
+  }
+}
+
+onMounted(loadExportData);
 
 const terraformCode = computed(() => {
   const env = selectedEnv.value;
@@ -422,6 +445,22 @@ const charCount = computed(() => previewCode.value.length);
       </div>
     </div>
 
+    <!-- Loading / Error -->
+    <div v-if="isLoading" class="card" style="padding: 32px; text-align: center; color: var(--text-tertiary);">
+      Loading export configuration...
+    </div>
+    <div v-else-if="loadError" class="card" style="padding: 32px; text-align: center; color: #ef4444;">
+      {{ loadError }}
+      <button class="btn btn-ghost" style="margin-top: 12px;" @click="loadExportData">Retry</button>
+    </div>
+
+    <!-- Export data summary -->
+    <div v-if="exportData && !isLoading" class="card" style="padding: 16px 24px;">
+      <div style="font-size: 0.82rem; color: var(--text-secondary);">
+        Backend export contains <strong>{{ triggerCount }}</strong> trigger configuration(s).
+      </div>
+    </div>
+
     <div class="main-grid">
       <!-- Resource checkboxes -->
       <div class="card resources-card">
@@ -465,7 +504,7 @@ const charCount = computed(() => previewCode.value.length);
               </svg>
             </span>
             <span class="resource-name">Triggers</span>
-            <span class="resource-count">4</span>
+            <span class="resource-count">{{ triggerCount }}</span>
           </label>
           <label class="resource-row">
             <input v-model="resources.workflows" type="checkbox" />

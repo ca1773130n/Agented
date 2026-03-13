@@ -1,226 +1,173 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
+import { marketplaceApi, ApiError } from '../services/api';
+import type { Marketplace, MarketplacePlugin } from '../services/api';
 
 const router = useRouter();
 const showToast = useToast();
 
-type Category = 'all' | 'security' | 'code-quality' | 'devops' | 'productivity' | 'testing' | 'documentation';
-
-interface MarketplaceSkill {
-  id: string;
-  name: string;
-  author: string;
-  authorOrg: string;
-  description: string;
-  category: string;
-  tags: string[];
-  rating: number;
-  ratingCount: number;
-  usageCount: number;
-  version: string;
-  updatedAt: string;
-  installed: boolean;
-  official: boolean;
-}
-
-const skills = ref<MarketplaceSkill[]>([
-  {
-    id: 'sk-m-001',
-    name: 'OWASP Security Scanner',
-    author: 'security-team',
-    authorOrg: 'Agented Official',
-    description: 'Comprehensive OWASP Top 10 vulnerability scanner with structured JSON output. Covers injection, XSS, CSRF, SSRF, and more.',
-    category: 'security',
-    tags: ['OWASP', 'vulnerability', 'JSON output'],
-    rating: 4.9,
-    ratingCount: 312,
-    usageCount: 8400,
-    version: '2.1.0',
-    updatedAt: '2026-03-01T00:00:00Z',
-    installed: true,
-    official: true,
-  },
-  {
-    id: 'sk-m-002',
-    name: 'PR Review Pro',
-    author: 'devtools',
-    authorOrg: 'Agented Official',
-    description: 'Deep pull request reviewer that checks logic, style, performance, and security. Posts inline GitHub comments.',
-    category: 'code-quality',
-    tags: ['PR review', 'inline comments', 'GitHub'],
-    rating: 4.8,
-    ratingCount: 229,
-    usageCount: 6200,
-    version: '3.0.1',
-    updatedAt: '2026-02-25T00:00:00Z',
-    installed: false,
-    official: true,
-  },
-  {
-    id: 'sk-m-003',
-    name: 'Dependency Auditor',
-    author: 'supply-chain',
-    authorOrg: 'Agented Official',
-    description: 'Analyzes package.json, requirements.txt, go.mod and Cargo.toml for security CVEs, license conflicts, and breaking changes.',
-    category: 'security',
-    tags: ['dependencies', 'CVE', 'license'],
-    rating: 4.7,
-    ratingCount: 180,
-    usageCount: 4900,
-    version: '1.4.2',
-    updatedAt: '2026-02-20T00:00:00Z',
-    installed: false,
-    official: true,
-  },
-  {
-    id: 'sk-m-004',
-    name: 'Changelog Writer',
-    author: 'docs-bot',
-    authorOrg: 'Community',
-    description: 'Reads commit messages and PR titles to write clean, user-facing CHANGELOG.md entries in Keep a Changelog format.',
-    category: 'documentation',
-    tags: ['changelog', 'commits', 'markdown'],
-    rating: 4.6,
-    ratingCount: 95,
-    usageCount: 3100,
-    version: '1.2.0',
-    updatedAt: '2026-02-18T00:00:00Z',
-    installed: true,
-    official: false,
-  },
-  {
-    id: 'sk-m-005',
-    name: 'Test Failure Analyst',
-    author: 'qa-team',
-    authorOrg: 'Community',
-    description: 'Parses CI test output, identifies failing tests, traces root causes through stack traces, and suggests fixes.',
-    category: 'testing',
-    tags: ['CI', 'test failures', 'debugging'],
-    rating: 4.5,
-    ratingCount: 143,
-    usageCount: 2800,
-    version: '2.0.0',
-    updatedAt: '2026-02-15T00:00:00Z',
-    installed: false,
-    official: false,
-  },
-  {
-    id: 'sk-m-006',
-    name: 'Infrastructure Drift Detector',
-    author: 'infra-dev',
-    authorOrg: 'Community',
-    description: 'Compares Terraform plan output against expected state and highlights unintended infrastructure changes.',
-    category: 'devops',
-    tags: ['Terraform', 'IaC', 'drift'],
-    rating: 4.4,
-    ratingCount: 67,
-    usageCount: 1500,
-    version: '1.0.3',
-    updatedAt: '2026-02-10T00:00:00Z',
-    installed: false,
-    official: false,
-  },
-  {
-    id: 'sk-m-007',
-    name: 'API Contract Validator',
-    author: 'api-guild',
-    authorOrg: 'Community',
-    description: 'Validates OpenAPI/Swagger specs for breaking changes, missing documentation, and schema inconsistencies.',
-    category: 'code-quality',
-    tags: ['OpenAPI', 'REST', 'breaking changes'],
-    rating: 4.3,
-    ratingCount: 54,
-    usageCount: 1200,
-    version: '1.1.0',
-    updatedAt: '2026-02-05T00:00:00Z',
-    installed: false,
-    official: false,
-  },
-  {
-    id: 'sk-m-008',
-    name: 'Standup Summarizer',
-    author: 'productivity-bots',
-    authorOrg: 'Community',
-    description: 'Generates concise daily standup summaries from recent commits, PR activity, and issue updates.',
-    category: 'productivity',
-    tags: ['standup', 'summaries', 'async'],
-    rating: 4.2,
-    ratingCount: 88,
-    usageCount: 2200,
-    version: '1.3.1',
-    updatedAt: '2026-01-28T00:00:00Z',
-    installed: false,
-    official: false,
-  },
-]);
+const isLoading = ref(true);
+const loadError = ref<string | null>(null);
+const marketplaces = ref<Marketplace[]>([]);
+const plugins = ref<MarketplacePlugin[]>([]);
+const availablePlugins = ref<Array<{ name: string; description?: string; version?: string; source?: string; installed: boolean }>>([]);
 
 const searchQuery = ref('');
-const activeCategory = ref<Category>('all');
-const sortBy = ref<'rating' | 'usage' | 'updated'>('rating');
+const sortBy = ref<'name' | 'installed'>('name');
 const isInstalling = ref<string | null>(null);
+const selectedMarketplaceId = ref<string | null>(null);
 
-const categories: { key: Category; label: string }[] = [
-  { key: 'all', label: 'All' },
-  { key: 'security', label: 'Security' },
-  { key: 'code-quality', label: 'Code Quality' },
-  { key: 'devops', label: 'DevOps' },
-  { key: 'testing', label: 'Testing' },
-  { key: 'documentation', label: 'Documentation' },
-  { key: 'productivity', label: 'Productivity' },
-];
+onMounted(async () => {
+  try {
+    const resp = await marketplaceApi.list();
+    marketplaces.value = resp.marketplaces;
+
+    if (marketplaces.value.length > 0) {
+      selectedMarketplaceId.value = marketplaces.value[0].id;
+      await loadMarketplacePlugins(marketplaces.value[0].id);
+    }
+  } catch (err) {
+    if (err instanceof ApiError) {
+      loadError.value = `Failed to load marketplaces: ${err.message}`;
+    } else {
+      loadError.value = 'An unexpected error occurred while loading marketplaces.';
+    }
+  } finally {
+    isLoading.value = false;
+  }
+});
+
+async function loadMarketplacePlugins(marketplaceId: string) {
+  selectedMarketplaceId.value = marketplaceId;
+  try {
+    const [pluginsResp, discoverResp] = await Promise.all([
+      marketplaceApi.listPlugins(marketplaceId),
+      marketplaceApi.discoverPlugins(marketplaceId).catch(() => ({ plugins: [], total: 0 })),
+    ]);
+    plugins.value = pluginsResp.plugins;
+    availablePlugins.value = discoverResp.plugins;
+  } catch (err) {
+    if (err instanceof ApiError) {
+      showToast(`Failed to load plugins: ${err.message}`, 'error');
+    }
+  }
+}
+
+// Merge installed and available into a unified list
+interface DisplayPlugin {
+  id: string;
+  name: string;
+  description: string;
+  version: string;
+  source: string;
+  installed: boolean;
+  pluginRef?: MarketplacePlugin;
+}
+
+const allPlugins = computed<DisplayPlugin[]>(() => {
+  const installedNames = new Set(plugins.value.map((p) => p.remote_name || p.id));
+  const result: DisplayPlugin[] = [];
+
+  // Add installed plugins
+  for (const p of plugins.value) {
+    result.push({
+      id: p.id,
+      name: p.remote_name || p.id,
+      description: '',
+      version: p.version || 'latest',
+      source: 'installed',
+      installed: true,
+      pluginRef: p,
+    });
+  }
+
+  // Add available (not-yet-installed) plugins
+  for (const p of availablePlugins.value) {
+    if (!installedNames.has(p.name)) {
+      result.push({
+        id: p.name,
+        name: p.name,
+        description: p.description || '',
+        version: p.version || 'latest',
+        source: p.source || 'marketplace',
+        installed: p.installed,
+      });
+    }
+  }
+
+  return result;
+});
 
 const filtered = computed(() => {
-  let list = skills.value;
-  if (activeCategory.value !== 'all') {
-    list = list.filter(s => s.category === activeCategory.value);
-  }
+  let list = allPlugins.value;
   if (searchQuery.value.trim()) {
     const q = searchQuery.value.toLowerCase();
-    list = list.filter(s =>
-      s.name.toLowerCase().includes(q) ||
-      s.description.toLowerCase().includes(q) ||
-      s.tags.some(t => t.toLowerCase().includes(q))
+    list = list.filter(
+      (p) =>
+        p.name.toLowerCase().includes(q) ||
+        p.description.toLowerCase().includes(q)
     );
   }
-  if (sortBy.value === 'rating') list = [...list].sort((a, b) => b.rating - a.rating);
-  else if (sortBy.value === 'usage') list = [...list].sort((a, b) => b.usageCount - a.usageCount);
-  else list = [...list].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  if (sortBy.value === 'installed') {
+    list = [...list].sort((a, b) => (b.installed ? 1 : 0) - (a.installed ? 1 : 0));
+  } else {
+    list = [...list].sort((a, b) => a.name.localeCompare(b.name));
+  }
   return list;
 });
 
-async function installSkill(skill: MarketplaceSkill) {
-  isInstalling.value = skill.id;
+async function installPlugin(plugin: DisplayPlugin) {
+  if (!selectedMarketplaceId.value) return;
+  isInstalling.value = plugin.id;
   try {
-    await new Promise(r => setTimeout(r, 900));
-    skill.installed = true;
-    skill.usageCount += 1;
-    showToast(`"${skill.name}" installed successfully.`, 'success');
+    await marketplaceApi.installPlugin(selectedMarketplaceId.value, {
+      remote_name: plugin.name,
+      version: plugin.version,
+    });
+    plugin.installed = true;
+    showToast(`"${plugin.name}" installed successfully.`, 'success');
+    // Reload plugins
+    await loadMarketplacePlugins(selectedMarketplaceId.value);
+  } catch (err) {
+    if (err instanceof ApiError) {
+      showToast(`Failed to install: ${err.message}`, 'error');
+    } else {
+      showToast('Installation failed', 'error');
+    }
   } finally {
     isInstalling.value = null;
   }
 }
 
-async function uninstallSkill(skill: MarketplaceSkill) {
-  skill.installed = false;
-  showToast(`"${skill.name}" uninstalled.`, 'success');
+async function uninstallPlugin(plugin: DisplayPlugin) {
+  if (!selectedMarketplaceId.value || !plugin.pluginRef) return;
+  try {
+    await marketplaceApi.uninstallPlugin(selectedMarketplaceId.value, plugin.pluginRef.id || plugin.id);
+    plugin.installed = false;
+    showToast(`"${plugin.name}" uninstalled.`, 'success');
+    // Reload plugins
+    await loadMarketplacePlugins(selectedMarketplaceId.value);
+  } catch (err) {
+    if (err instanceof ApiError) {
+      showToast(`Failed to uninstall: ${err.message}`, 'error');
+    }
+  }
 }
 
-function fmtCount(n: number): string {
-  if (n >= 1000) return `${(n / 1000).toFixed(1)}k`;
-  return String(n);
-}
-
-function fmtDate(iso: string): string {
-  return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-}
-
-function renderStars(rating: number): string {
-  const full = Math.floor(rating);
-  return '★'.repeat(full) + (rating % 1 >= 0.5 ? '½' : '') + '☆'.repeat(5 - Math.ceil(rating));
+async function handleSearch() {
+  if (!searchQuery.value.trim()) return;
+  try {
+    const resp = await marketplaceApi.search(searchQuery.value, 'plugin');
+    if (resp.results && resp.results.length > 0) {
+      showToast(`Found ${resp.results.length} result(s)`, 'success');
+    }
+  } catch {
+    // Search is supplementary, don't block on failure
+  }
 }
 </script>
 
@@ -233,94 +180,103 @@ function renderStars(rating: number): string {
 
     <PageHeader
       title="Skill Marketplace"
-      subtitle="Community and official skills — import into any agent with one click. Includes ratings, usage counts, and version history."
+      subtitle="Browse and install plugins from connected marketplaces."
     />
 
-    <!-- Search + sort bar -->
-    <div class="search-bar card">
-      <div class="search-input-wrap">
-        <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
-          <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
-        </svg>
-        <input v-model="searchQuery" class="search-input" placeholder="Search skills by name, description, or tag…" />
-      </div>
-      <div class="sort-row">
-        <span class="sort-label">Sort:</span>
-        <select v-model="sortBy" class="select select-sm">
-          <option value="rating">Top Rated</option>
-          <option value="usage">Most Used</option>
-          <option value="updated">Recently Updated</option>
-        </select>
-      </div>
+    <!-- Loading state -->
+    <div v-if="isLoading" class="card" style="padding: 48px; text-align: center;">
+      <span style="color: var(--text-tertiary); font-size: 0.85rem;">Loading marketplaces...</span>
     </div>
 
-    <div class="marketplace-layout">
-      <!-- Category sidebar -->
-      <aside class="category-sidebar card">
-        <div class="sidebar-title">Categories</div>
-        <button
-          v-for="cat in categories"
-          :key="cat.key"
-          class="cat-btn"
-          :class="{ active: activeCategory === cat.key }"
-          @click="activeCategory = cat.key"
-        >
-          {{ cat.label }}
-          <span class="cat-count">{{ cat.key === 'all' ? skills.length : skills.filter(s => s.category === cat.key).length }}</span>
-        </button>
-      </aside>
+    <!-- Error state -->
+    <div v-else-if="loadError" class="card" style="padding: 48px; text-align: center;">
+      <span style="color: #ef4444; font-size: 0.85rem;">{{ loadError }}</span>
+    </div>
 
-      <!-- Skill grid -->
-      <div class="skill-grid">
-        <div v-if="filtered.length === 0" class="empty-state">
-          <div class="empty-icon">🔍</div>
-          <p>No skills match your search. Try a different keyword or category.</p>
+    <!-- Empty state -->
+    <div v-else-if="marketplaces.length === 0" class="card" style="padding: 48px; text-align: center;">
+      <span style="color: var(--text-tertiary); font-size: 0.85rem;">No marketplaces configured. Add a marketplace to browse plugins.</span>
+    </div>
+
+    <template v-else>
+      <!-- Search + sort bar -->
+      <div class="search-bar card">
+        <div class="search-input-wrap">
+          <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+            <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+          </svg>
+          <input
+            v-model="searchQuery"
+            class="search-input"
+            placeholder="Search plugins by name or description..."
+            @keyup.enter="handleSearch"
+          />
         </div>
+        <div class="sort-row">
+          <span class="sort-label">Sort:</span>
+          <select v-model="sortBy" class="select select-sm">
+            <option value="name">By Name</option>
+            <option value="installed">Installed First</option>
+          </select>
+        </div>
+      </div>
 
-        <div v-for="skill in filtered" :key="skill.id" class="skill-card card">
-          <div class="skill-header">
-            <div class="skill-name-row">
-              <span class="skill-name">{{ skill.name }}</span>
-              <span v-if="skill.official" class="official-badge">Official</span>
+      <div class="marketplace-layout">
+        <!-- Marketplace sidebar -->
+        <aside class="category-sidebar card">
+          <div class="sidebar-title">Marketplaces</div>
+          <button
+            v-for="mp in marketplaces"
+            :key="mp.id"
+            class="cat-btn"
+            :class="{ active: selectedMarketplaceId === mp.id }"
+            @click="loadMarketplacePlugins(mp.id)"
+          >
+            {{ mp.name }}
+          </button>
+        </aside>
+
+        <!-- Plugin grid -->
+        <div class="skill-grid">
+          <div v-if="filtered.length === 0" class="empty-state">
+            <div class="empty-icon" style="font-size: 2.5rem; margin-bottom: 12px; opacity: 0.5;">?</div>
+            <p>No plugins match your search. Try a different keyword.</p>
+          </div>
+
+          <div v-for="plugin in filtered" :key="plugin.id" class="skill-card card">
+            <div class="skill-header">
+              <div class="skill-name-row">
+                <span class="skill-name">{{ plugin.name }}</span>
+              </div>
+              <div class="skill-author">{{ plugin.source }}</div>
             </div>
-            <div class="skill-author">by {{ skill.author }} · {{ skill.authorOrg }}</div>
-          </div>
 
-          <div class="skill-desc">{{ skill.description }}</div>
+            <div class="skill-desc">{{ plugin.description || 'No description available' }}</div>
 
-          <div class="skill-tags">
-            <span v-for="tag in skill.tags" :key="tag" class="skill-tag">{{ tag }}</span>
-          </div>
+            <div class="skill-meta">
+              <span class="version">v{{ plugin.version }}</span>
+            </div>
 
-          <div class="skill-meta">
-            <span class="stars" :title="`${skill.rating} / 5`">{{ renderStars(skill.rating) }}</span>
-            <span class="rating-val">{{ skill.rating.toFixed(1) }}</span>
-            <span class="rating-count">({{ fmtCount(skill.ratingCount) }})</span>
-            <span class="meta-sep">·</span>
-            <span class="usage-count">{{ fmtCount(skill.usageCount) }} installs</span>
-            <span class="meta-sep">·</span>
-            <span class="version">v{{ skill.version }}</span>
-          </div>
-
-          <div class="skill-footer">
-            <span class="updated">Updated {{ fmtDate(skill.updatedAt) }}</span>
-            <div class="footer-actions">
-              <button
-                v-if="!skill.installed"
-                class="btn btn-primary btn-sm"
-                :disabled="isInstalling === skill.id"
-                @click="installSkill(skill)"
-              >
-                {{ isInstalling === skill.id ? 'Installing…' : 'Install' }}
-              </button>
-              <button v-else class="btn btn-installed btn-sm" @click="uninstallSkill(skill)">
-                ✓ Installed
-              </button>
+            <div class="skill-footer">
+              <span class="updated">Source: {{ plugin.source }}</span>
+              <div class="footer-actions">
+                <button
+                  v-if="!plugin.installed"
+                  class="btn btn-primary btn-sm"
+                  :disabled="isInstalling === plugin.id"
+                  @click="installPlugin(plugin)"
+                >
+                  {{ isInstalling === plugin.id ? 'Installing...' : 'Install' }}
+                </button>
+                <button v-else class="btn btn-installed btn-sm" @click="uninstallPlugin(plugin)">
+                  Installed
+                </button>
+              </div>
             </div>
           </div>
         </div>
       </div>
-    </div>
+    </template>
   </div>
 </template>
 

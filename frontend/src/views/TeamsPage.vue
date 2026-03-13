@@ -1139,4 +1139,10 @@ onMounted(() => {
   background: var(--accent-emerald, #00ff88);
   box-shadow: 0 0 6px rgba(0, 255, 136, 0.4);
 }
+
+@media (max-width: 480px) {
+  .teams-grid {
+    grid-template-columns: 1fr;
+  }
+}
 </style>

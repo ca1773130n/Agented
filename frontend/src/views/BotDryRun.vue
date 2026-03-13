@@ -2,7 +2,7 @@
 import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { triggerApi, ApiError } from '../services/api';
-import type { Trigger } from '../services/api';
+import type { Trigger, DryRunResponse } from '../services/api';
 import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
@@ -18,8 +18,16 @@ const payloadJson = ref(JSON.stringify({
   repository: { full_name: 'org/repo' },
 }, null, 2));
 const isRunning = ref(false);
-const result = ref<{ output: string; steps: string[]; wouldSend: string[] } | null>(null);
+const dryRunResult = ref<DryRunResponse | null>(null);
 const payloadError = ref('');
+
+interface DryRunDisplay {
+  steps: string[];
+  output: string;
+  warnings: string[];
+}
+
+const displayResult = ref<DryRunDisplay | null>(null);
 
 async function loadTriggers() {
   try {
@@ -52,25 +60,55 @@ async function handleDryRun() {
   }
 
   isRunning.value = true;
-  result.value = null;
+  dryRunResult.value = null;
+  displayResult.value = null;
+
   try {
-    await new Promise(resolve => setTimeout(resolve, 2000));
+    const payload = JSON.parse(payloadJson.value);
+    const result = await triggerApi.dryRun(selectedTriggerId.value, payload);
+    dryRunResult.value = result;
+
+    // Build display from real response
     const trigger = triggers.value.find(t => t.id === selectedTriggerId.value);
-    result.value = {
-      output: `[DRY RUN] Bot "${trigger?.name ?? 'unknown'}" would have run with the provided payload.\n\nSimulated execution:\n1. Matched trigger condition: pull_request.action === "opened"\n2. Rendered prompt template with payload data\n3. Would call: claude -p "..." --output-format json\n4. Estimated tokens: ~12,400 input, ~800 output\n5. Estimated cost: $0.008\n\nNo actual execution occurred. No side effects.`,
-      steps: [
-        'Payload received and validated',
-        'Matched trigger: ' + (trigger?.name ?? 'N/A'),
-        'Prompt template rendered with payload data',
-        'Command built: claude -p "..." --output-format json',
-        'Estimated token usage computed',
-        'DRY RUN complete — no subprocess spawned',
-      ],
-      wouldSend: [
-        'POST /api/slack/notify (if configured)',
-        'GitHub comment on PR #42 (if enabled)',
-      ],
-    };
+    const steps: string[] = [
+      'Payload received and validated',
+      `Matched trigger: ${result.trigger_name}`,
+      `Prompt template rendered (backend: ${result.backend_type})`,
+      `CLI command built: ${result.cli_command.substring(0, 80)}${result.cli_command.length > 80 ? '...' : ''}`,
+      `Cost estimated (model: ${result.model})`,
+      'DRY RUN complete -- no subprocess spawned',
+    ];
+
+    const est = result.estimated_tokens;
+    const output = [
+      `[DRY RUN] Trigger "${result.trigger_name}" (${result.trigger_id})`,
+      '',
+      `Backend: ${result.backend_type}`,
+      `Model: ${result.model}`,
+      '',
+      `--- CLI Command ---`,
+      result.cli_command,
+      '',
+      `--- Token Estimate (confidence: ${est.confidence}) ---`,
+      `Input tokens:  ~${est.estimated_input_tokens.toLocaleString()}`,
+      `Output tokens: ~${est.estimated_output_tokens.toLocaleString()}`,
+      `Estimated cost: $${est.estimated_cost_usd.toFixed(4)}`,
+      '',
+      `--- Rendered Prompt (${result.rendered_prompt.length} chars) ---`,
+      result.rendered_prompt.substring(0, 500) + (result.rendered_prompt.length > 500 ? '\n...(truncated)' : ''),
+      '',
+      'No actual execution occurred. No side effects.',
+    ].join('\n');
+
+    const warnings: string[] = [];
+    if (trigger?.trigger_source === 'github') {
+      warnings.push('GitHub webhook would be processed (suppressed in dry run)');
+    }
+    if (trigger?.auto_resolve) {
+      warnings.push('Auto-resolve would run after execution (suppressed in dry run)');
+    }
+
+    displayResult.value = { steps, output, warnings };
   } catch (err) {
     const message = err instanceof ApiError ? err.message : 'Dry run failed';
     showToast(message, 'error');
@@ -143,13 +181,13 @@ onMounted(loadTriggers);
               <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
                 <polygon points="5 3 19 12 5 21 5 3"/>
               </svg>
-              {{ isRunning ? 'Running simulation...' : 'Run Dry Run' }}
+              {{ isRunning ? 'Running dry run...' : 'Run Dry Run' }}
             </button>
           </div>
         </div>
       </div>
 
-      <div v-if="result" class="card output-card">
+      <div v-if="displayResult" class="card output-card">
         <div class="card-header">
           <h3>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="18" height="18">
@@ -157,20 +195,20 @@ onMounted(loadTriggers);
               <line x1="9" y1="9" x2="15" y2="9"/>
               <line x1="9" y1="15" x2="15" y2="15"/>
             </svg>
-            Simulation Output
+            Dry Run Output
           </h3>
           <div class="no-effects-badge">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12">
               <polyline points="20 6 9 17 4 12"/>
             </svg>
-            Safe — no side effects
+            Safe -- no side effects
           </div>
         </div>
         <div class="output-body">
           <div class="steps-section">
             <div class="steps-label">Execution Steps</div>
             <div class="steps-list">
-              <div v-for="(step, i) in result.steps" :key="i" class="step-row">
+              <div v-for="(step, i) in displayResult.steps" :key="i" class="step-row">
                 <span class="step-num">{{ i + 1 }}</span>
                 <span class="step-text">{{ step }}</span>
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14" style="color: #34d399; flex-shrink: 0">
@@ -181,13 +219,13 @@ onMounted(loadTriggers);
           </div>
 
           <div class="output-section">
-            <div class="steps-label">Simulated Output</div>
-            <pre class="output-pre">{{ result.output }}</pre>
+            <div class="steps-label">Dry Run Output</div>
+            <pre class="output-pre">{{ displayResult.output }}</pre>
           </div>
 
-          <div class="would-send-section">
-            <div class="steps-label">Would Have Sent (suppressed)</div>
-            <div v-for="s in result.wouldSend" :key="s" class="would-row">
+          <div v-if="displayResult.warnings.length > 0" class="would-send-section">
+            <div class="steps-label">Would Have Triggered (suppressed)</div>
+            <div v-for="s in displayResult.warnings" :key="s" class="would-row">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14" style="color: #f59e0b">
                 <circle cx="12" cy="12" r="10"/>
                 <line x1="12" y1="8" x2="12" y2="12"/>

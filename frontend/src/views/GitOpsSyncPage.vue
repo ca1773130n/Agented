@@ -1,111 +1,158 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, computed } from 'vue';
 import { useRouter } from 'vue-router';
 import { ApiError } from '../services/api';
+import { gitopsApi } from '../services/api';
+import type { GitOpsRepo, SyncLog } from '../services/api';
 import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
+import LoadingState from '../components/base/LoadingState.vue';
 import { useToast } from '../composables/useToast';
 
 const router = useRouter();
 const showToast = useToast();
 
-type SyncStatus = 'synced' | 'pending' | 'conflict' | 'error';
+const repos = ref<GitOpsRepo[]>([]);
+const selectedRepoId = ref<string | null>(null);
+const syncLogs = ref<SyncLog[]>([]);
+const isLoading = ref(true);
+const loadError = ref<string | null>(null);
 
-interface GitOpsConfig {
-  repo_url: string;
-  branch: string;
-  path_prefix: string;
-  auto_sync: boolean;
-  sync_direction: 'pull' | 'push' | 'bidirectional';
-  last_synced_at: string;
-  status: SyncStatus;
+const showAddForm = ref(false);
+const newRepoName = ref('');
+const newRepoUrl = ref('');
+const newBranch = ref('main');
+const newConfigPath = ref('.agented/');
+const isCreating = ref(false);
+const isSyncing = ref(false);
+const deletingId = ref<string | null>(null);
+
+const selectedRepo = computed(() =>
+  repos.value.find(r => r.id === selectedRepoId.value) ?? null
+);
+
+async function loadRepos() {
+  isLoading.value = true;
+  loadError.value = null;
+  try {
+    const data = await gitopsApi.listRepos();
+    repos.value = Array.isArray(data) ? data : [];
+    if (repos.value.length > 0 && !selectedRepoId.value) {
+      selectedRepoId.value = repos.value[0].id;
+      await loadLogs(repos.value[0].id);
+    }
+  } catch (err) {
+    const message = err instanceof ApiError ? err.message : 'Failed to load GitOps repos';
+    loadError.value = message;
+  } finally {
+    isLoading.value = false;
+  }
 }
 
-const config = ref<GitOpsConfig>({
-  repo_url: '',
-  branch: 'main',
-  path_prefix: '.agented/',
-  auto_sync: false,
-  sync_direction: 'bidirectional',
-  last_synced_at: '',
-  status: 'pending',
-});
+async function loadLogs(repoId: string) {
+  try {
+    const data = await gitopsApi.getSyncLogs(repoId);
+    syncLogs.value = Array.isArray(data) ? data : [];
+  } catch {
+    syncLogs.value = [];
+  }
+}
 
-const isSaving = ref(false);
-const isSyncing = ref(false);
-const isLoading = ref(false);
-const syncLog = ref<{ time: string; action: string; result: 'ok' | 'warn' | 'err' }[]>([]);
+async function selectRepo(repoId: string) {
+  selectedRepoId.value = repoId;
+  await loadLogs(repoId);
+}
 
-const statusLabels: Record<SyncStatus, string> = {
-  synced: 'Synced',
-  pending: 'Not Configured',
-  conflict: 'Conflict Detected',
-  error: 'Sync Error',
-};
-
-const statusColors: Record<SyncStatus, string> = {
-  synced: '#34d399',
-  pending: '#6b7280',
-  conflict: '#f59e0b',
-  error: '#ef4444',
-};
-
-const directionOptions = [
-  { value: 'pull', label: 'Pull from Git (Git is source of truth)' },
-  { value: 'push', label: 'Push to Git (Platform is source of truth)' },
-  { value: 'bidirectional', label: 'Bidirectional (merge changes)' },
-];
-
-const FILE_TYPES = [
-  { icon: '🤖', label: 'Bot Configurations', filename: 'bots.yaml', example: 'bot_id, name, prompt_template, trigger_config' },
-  { icon: '🎯', label: 'Trigger Definitions', filename: 'triggers.yaml', example: 'trigger_id, type, event, conditions' },
-  { icon: '🧩', label: 'Agent Definitions', filename: 'agents.yaml', example: 'agent_id, name, skills, hooks' },
-  { icon: '🔐', label: 'Secret References', filename: 'secrets.yaml', example: 'secret keys only — values excluded for security' },
-];
-
-async function handleSave() {
-  if (!config.value.repo_url) {
-    showToast('Repository URL is required', 'error');
+async function handleCreate() {
+  if (!newRepoName.value.trim() || !newRepoUrl.value.trim()) {
+    showToast('Name and repository URL are required', 'info');
     return;
   }
-  isSaving.value = true;
+  isCreating.value = true;
   try {
-    await new Promise(r => setTimeout(r, 500));
-    config.value.status = 'pending';
-    showToast('GitOps configuration saved', 'success');
+    const repo = await gitopsApi.createRepo({
+      name: newRepoName.value.trim(),
+      repo_url: newRepoUrl.value.trim(),
+      branch: newBranch.value || 'main',
+      config_path: newConfigPath.value || '.agented/',
+    });
+    repos.value.unshift(repo);
+    selectedRepoId.value = repo.id;
+    newRepoName.value = '';
+    newRepoUrl.value = '';
+    newBranch.value = 'main';
+    newConfigPath.value = '.agented/';
+    showAddForm.value = false;
+    showToast('Repository added', 'success');
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Failed to save configuration';
+    const message = err instanceof ApiError ? err.message : 'Failed to create repo';
     showToast(message, 'error');
   } finally {
-    isSaving.value = false;
+    isCreating.value = false;
   }
 }
 
-async function handleSync() {
+async function handleSync(dryRun = false) {
+  if (!selectedRepoId.value) return;
   isSyncing.value = true;
   try {
-    await new Promise(r => setTimeout(r, 1200));
-    config.value.status = 'synced';
-    config.value.last_synced_at = new Date().toISOString();
-    syncLog.value.unshift(
-      { time: new Date().toLocaleTimeString(), action: 'Pulled bots.yaml from origin/main', result: 'ok' },
-      { time: new Date().toLocaleTimeString(), action: 'Pushed triggers.yaml to origin/main', result: 'ok' },
-      { time: new Date().toLocaleTimeString(), action: 'No changes in agents.yaml', result: 'warn' },
-    );
-    showToast('Sync completed successfully', 'success');
+    const result = await gitopsApi.triggerSync(selectedRepoId.value, dryRun);
+    showToast(dryRun ? 'Dry run completed' : 'Sync completed', 'success');
+    if (result.status) {
+      // Refresh repo and logs
+      await Promise.all([loadRepos(), loadLogs(selectedRepoId.value!)]);
+    }
   } catch (err) {
     const message = err instanceof ApiError ? err.message : 'Sync failed';
     showToast(message, 'error');
-    config.value.status = 'error';
-    syncLog.value.unshift({ time: new Date().toLocaleTimeString(), action: 'Sync failed — check repository access', result: 'err' });
   } finally {
     isSyncing.value = false;
   }
 }
 
-onMounted(async () => {
-  isLoading.value = false;
-});
+async function handleDelete(repo: GitOpsRepo) {
+  deletingId.value = repo.id;
+  try {
+    await gitopsApi.deleteRepo(repo.id);
+    repos.value = repos.value.filter(r => r.id !== repo.id);
+    if (selectedRepoId.value === repo.id) {
+      selectedRepoId.value = repos.value.length > 0 ? repos.value[0].id : null;
+      if (selectedRepoId.value) await loadLogs(selectedRepoId.value);
+      else syncLogs.value = [];
+    }
+    showToast('Repository removed', 'success');
+  } catch (err) {
+    const message = err instanceof ApiError ? err.message : 'Failed to delete repo';
+    showToast(message, 'error');
+  } finally {
+    deletingId.value = null;
+  }
+}
+
+async function toggleEnabled(repo: GitOpsRepo) {
+  const newEnabled = !repo.enabled;
+  try {
+    await gitopsApi.updateRepo(repo.id, { enabled: newEnabled });
+    repo.enabled = newEnabled ? 1 : 0;
+    showToast(`Repository ${newEnabled ? 'enabled' : 'disabled'}`, 'success');
+  } catch (err) {
+    const message = err instanceof ApiError ? err.message : 'Failed to update repo';
+    showToast(message, 'error');
+  }
+}
+
+function statusColor(status: string | null): string {
+  if (!status) return '#6b7280';
+  const map: Record<string, string> = { success: '#34d399', error: '#ef4444', running: '#f59e0b' };
+  return map[status] ?? '#6b7280';
+}
+
+function formatDate(dateStr: string | null): string {
+  if (!dateStr) return 'Never';
+  return new Date(dateStr).toLocaleString();
+}
+
+onMounted(loadRepos);
 </script>
 
 <template>
@@ -116,151 +163,212 @@ onMounted(async () => {
     ]" />
 
     <PageHeader
-      title="GitOps Bot Configuration Sync"
-      subtitle="Store bot and agent configurations as YAML in a Git repository. Sync changes bidirectionally with code-review workflows."
-    />
+      title="GitOps Repository Sync"
+      subtitle="Configure Git repositories for syncing bot and agent configurations."
+    >
+      <template #actions>
+        <button class="btn btn-primary" @click="showAddForm = !showAddForm">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+            <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+          </svg>
+          Add Repository
+        </button>
+      </template>
+    </PageHeader>
 
-    <div class="layout">
-      <div class="main-col">
-        <!-- Status banner -->
-        <div class="status-banner" :style="{ borderColor: statusColors[config.status] }">
-          <div class="status-dot" :style="{ background: statusColors[config.status] }" />
-          <span class="status-label" :style="{ color: statusColors[config.status] }">{{ statusLabels[config.status] }}</span>
-          <span v-if="config.last_synced_at" class="status-time">Last synced {{ new Date(config.last_synced_at).toLocaleString() }}</span>
-          <button
-            class="btn btn-primary btn-sm ml-auto"
-            :disabled="!config.repo_url || isSyncing"
-            @click="handleSync"
-          >
-            <svg v-if="isSyncing" class="spinner" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
-              <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
+    <LoadingState v-if="isLoading" message="Loading GitOps configuration..." />
+
+    <div v-else-if="loadError" class="card error-card">
+      <div class="error-inner">
+        <p>{{ loadError }}</p>
+        <button class="btn btn-ghost" @click="loadRepos">Retry</button>
+      </div>
+    </div>
+
+    <template v-else>
+      <!-- Add Form -->
+      <div v-if="showAddForm" class="card create-card">
+        <div class="card-header">
+          <h3>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="16" height="16">
+              <path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"/>
             </svg>
-            <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
-              <polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/>
-              <polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>
-            </svg>
-            {{ isSyncing ? 'Syncing...' : 'Sync Now' }}
-          </button>
+            Add Repository
+          </h3>
         </div>
-
-        <!-- Config form -->
-        <div class="card">
-          <div class="card-header">
-            <h3>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="16" height="16">
-                <path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"/>
-              </svg>
-              Repository Settings
-            </h3>
-          </div>
-          <div class="form-body">
+        <div class="form-body">
+          <div class="field-row">
+            <div class="field">
+              <label class="field-label">Name <span class="required">*</span></label>
+              <input v-model="newRepoName" type="text" class="input" placeholder="my-project-config" />
+            </div>
             <div class="field">
               <label class="field-label">Repository URL <span class="required">*</span></label>
-              <input v-model="config.repo_url" type="text" class="input" placeholder="https://github.com/org/repo.git" />
-            </div>
-            <div class="field-row">
-              <div class="field">
-                <label class="field-label">Default Branch</label>
-                <input v-model="config.branch" type="text" class="input" placeholder="main" />
-              </div>
-              <div class="field">
-                <label class="field-label">Path Prefix</label>
-                <input v-model="config.path_prefix" type="text" class="input" placeholder=".agented/" />
-              </div>
-            </div>
-            <div class="field">
-              <label class="field-label">Sync Direction</label>
-              <select v-model="config.sync_direction" class="select-input">
-                <option v-for="d in directionOptions" :key="d.value" :value="d.value">{{ d.label }}</option>
-              </select>
-            </div>
-            <div class="toggle-row">
-              <div>
-                <div class="toggle-label">Auto-sync on changes</div>
-                <div class="toggle-desc">Automatically sync when bots or triggers are modified in the platform</div>
-              </div>
-              <button
-                :class="['toggle-btn', { active: config.auto_sync }]"
-                @click="config.auto_sync = !config.auto_sync"
-              >
-                <span class="toggle-thumb" />
-              </button>
+              <input v-model="newRepoUrl" type="text" class="input" placeholder="https://github.com/org/repo.git" />
             </div>
           </div>
-          <div class="card-footer">
-            <button class="btn btn-primary" :disabled="isSaving" @click="handleSave">
-              {{ isSaving ? 'Saving...' : 'Save Configuration' }}
+          <div class="field-row">
+            <div class="field">
+              <label class="field-label">Branch</label>
+              <input v-model="newBranch" type="text" class="input" placeholder="main" />
+            </div>
+            <div class="field">
+              <label class="field-label">Config Path</label>
+              <input v-model="newConfigPath" type="text" class="input" placeholder=".agented/" />
+            </div>
+          </div>
+          <div class="form-actions">
+            <button class="btn btn-ghost" @click="showAddForm = false">Cancel</button>
+            <button class="btn btn-primary" :disabled="isCreating || !newRepoName.trim() || !newRepoUrl.trim()" @click="handleCreate">
+              {{ isCreating ? 'Adding...' : 'Add Repository' }}
             </button>
           </div>
         </div>
+      </div>
 
-        <!-- Sync log -->
-        <div v-if="syncLog.length > 0" class="card">
-          <div class="card-header">
-            <h3>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="16" height="16">
-                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-              </svg>
-              Sync Log
-            </h3>
-          </div>
-          <div class="log-list">
-            <div v-for="(entry, i) in syncLog" :key="i" class="log-entry">
-              <span class="log-time">{{ entry.time }}</span>
-              <span :class="['log-icon', `log-${entry.result}`]">
-                {{ entry.result === 'ok' ? '✓' : entry.result === 'warn' ? '~' : '✗' }}
-              </span>
-              <span class="log-action">{{ entry.action }}</span>
-            </div>
-          </div>
+      <div v-if="repos.length === 0 && !showAddForm" class="card empty-card">
+        <div class="empty-inner">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="40" height="40" style="opacity: 0.3; color: var(--text-tertiary)">
+            <path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"/>
+          </svg>
+          <p>No GitOps repositories configured yet.</p>
         </div>
       </div>
 
-      <!-- Right: file types info -->
-      <div class="side-col">
-        <div class="card">
-          <div class="card-header">
-            <h3>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="16" height="16">
-                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                <polyline points="14 2 14 8 20 8"/>
-              </svg>
-              Synced Files
-            </h3>
-          </div>
-          <div class="file-list">
-            <div v-for="f in FILE_TYPES" :key="f.filename" class="file-item">
-              <div class="file-icon">{{ f.icon }}</div>
-              <div class="file-info">
-                <div class="file-label">{{ f.label }}</div>
-                <div class="file-name">{{ config.path_prefix || '.agented/' }}{{ f.filename }}</div>
-                <div class="file-example">Fields: {{ f.example }}</div>
+      <div v-else class="layout">
+        <!-- Repo list -->
+        <div class="side-col">
+          <div class="card">
+            <div class="card-header">
+              <h3>Repositories</h3>
+              <span class="card-badge">{{ repos.length }}</span>
+            </div>
+            <div class="repo-list">
+              <div
+                v-for="repo in repos"
+                :key="repo.id"
+                class="repo-item"
+                :class="{ selected: selectedRepoId === repo.id }"
+                @click="selectRepo(repo.id)"
+              >
+                <div class="repo-item-info">
+                  <div class="repo-item-name">{{ repo.name }}</div>
+                  <div class="repo-item-url">{{ repo.repo_url }}</div>
+                  <div class="repo-item-meta">
+                    <span class="status-dot" :style="{ background: statusColor(repo.last_sync_status) }" />
+                    <span>{{ repo.last_sync_status || 'Not synced' }}</span>
+                    <span class="meta-sep">&middot;</span>
+                    <span>{{ repo.branch }}</span>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
         </div>
 
-        <div class="card info-card">
-          <div class="card-header">
-            <h3>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="16" height="16">
-                <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
-              </svg>
-              How it works
-            </h3>
-          </div>
-          <div class="info-body">
-            <ol class="info-steps">
-              <li>Configure a Git repository and branch</li>
-              <li>Click "Sync Now" to export current configs as YAML</li>
-              <li>Review and merge changes via pull requests</li>
-              <li>Platform auto-imports YAML changes on the next sync</li>
-            </ol>
-            <div class="info-note">Secret values are never written to Git — only key names are exported as references.</div>
-          </div>
+        <!-- Selected repo detail -->
+        <div class="main-col">
+          <template v-if="selectedRepo">
+            <!-- Status banner -->
+            <div class="status-banner" :style="{ borderColor: statusColor(selectedRepo.last_sync_status) }">
+              <div class="status-dot" :style="{ background: statusColor(selectedRepo.last_sync_status) }" />
+              <span class="status-label" :style="{ color: statusColor(selectedRepo.last_sync_status) }">
+                {{ selectedRepo.last_sync_status || 'Not synced' }}
+              </span>
+              <span v-if="selectedRepo.last_sync_at" class="status-time">Last synced {{ formatDate(selectedRepo.last_sync_at) }}</span>
+              <div class="banner-actions">
+                <button
+                  class="btn btn-sm btn-ghost"
+                  :disabled="isSyncing"
+                  @click="handleSync(true)"
+                >
+                  Dry Run
+                </button>
+                <button
+                  class="btn btn-primary btn-sm"
+                  :disabled="isSyncing"
+                  @click="handleSync(false)"
+                >
+                  <svg v-if="isSyncing" class="spinner" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+                    <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
+                  </svg>
+                  <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+                    <polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/>
+                    <polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>
+                  </svg>
+                  {{ isSyncing ? 'Syncing...' : 'Sync Now' }}
+                </button>
+              </div>
+            </div>
+
+            <!-- Repo details -->
+            <div class="card">
+              <div class="card-header">
+                <h3>{{ selectedRepo.name }}</h3>
+                <div class="header-actions">
+                  <button
+                    :class="['toggle-btn', { active: !!selectedRepo.enabled }]"
+                    @click="toggleEnabled(selectedRepo)"
+                  >
+                    <span class="toggle-thumb" />
+                  </button>
+                  <button class="btn btn-sm btn-delete" :disabled="deletingId === selectedRepo.id" @click="handleDelete(selectedRepo)">
+                    {{ deletingId === selectedRepo.id ? '...' : 'Delete' }}
+                  </button>
+                </div>
+              </div>
+              <div class="detail-grid">
+                <div class="detail-item">
+                  <span class="detail-label">Repository URL</span>
+                  <span class="detail-value">{{ selectedRepo.repo_url }}</span>
+                </div>
+                <div class="detail-item">
+                  <span class="detail-label">Branch</span>
+                  <span class="detail-value">{{ selectedRepo.branch }}</span>
+                </div>
+                <div class="detail-item">
+                  <span class="detail-label">Config Path</span>
+                  <span class="detail-value">{{ selectedRepo.config_path }}</span>
+                </div>
+                <div class="detail-item">
+                  <span class="detail-label">Poll Interval</span>
+                  <span class="detail-value">{{ selectedRepo.poll_interval_seconds }}s</span>
+                </div>
+                <div class="detail-item">
+                  <span class="detail-label">Last Sync SHA</span>
+                  <span class="detail-value mono">{{ selectedRepo.last_sync_sha || 'None' }}</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Sync Log -->
+            <div class="card">
+              <div class="card-header">
+                <h3>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="16" height="16">
+                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                  </svg>
+                  Sync History
+                </h3>
+              </div>
+              <div v-if="syncLogs.length === 0" class="list-empty">No sync history yet.</div>
+              <div v-else class="log-list">
+                <div v-for="log in syncLogs" :key="log.id" class="log-entry">
+                  <span class="log-time">{{ formatDate(log.created_at) }}</span>
+                  <span :class="['log-icon', `log-${log.status}`]">
+                    {{ log.status === 'success' ? '&#x2713;' : log.status === 'error' ? '&#x2717;' : '~' }}
+                  </span>
+                  <span class="log-action">
+                    {{ log.changes_summary || log.error_message || log.status }}
+                    <span v-if="log.dry_run" class="dry-run-badge">dry run</span>
+                  </span>
+                </div>
+              </div>
+            </div>
+          </template>
         </div>
       </div>
-    </div>
+    </template>
   </div>
 </template>
 
@@ -279,7 +387,7 @@ onMounted(async () => {
 
 .layout {
   display: grid;
-  grid-template-columns: 1fr 320px;
+  grid-template-columns: 320px 1fr;
   gap: 20px;
   align-items: start;
 }
@@ -289,22 +397,6 @@ onMounted(async () => {
   flex-direction: column;
   gap: 16px;
 }
-
-.status-banner {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 14px 18px;
-  background: var(--bg-secondary);
-  border: 1px solid;
-  border-radius: 10px;
-  flex-wrap: wrap;
-}
-
-.status-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
-.status-label { font-size: 0.85rem; font-weight: 600; }
-.status-time { font-size: 0.78rem; color: var(--text-tertiary); }
-.ml-auto { margin-left: auto; }
 
 .card {
   background: var(--bg-secondary);
@@ -333,23 +425,108 @@ onMounted(async () => {
 
 .card-header h3 svg { color: var(--accent-cyan); }
 
-.form-body {
-  padding: 20px;
+.card-badge {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--text-tertiary);
+  padding: 3px 8px;
+  background: var(--bg-tertiary);
+  border-radius: 4px;
+}
+
+.create-card { border-color: var(--accent-cyan); }
+
+.error-card, .empty-card { padding: 48px; }
+
+.error-inner, .empty-inner {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  align-items: center;
+  gap: 12px;
+  text-align: center;
 }
 
+.error-inner p, .empty-inner p {
+  font-size: 0.875rem;
+  color: var(--text-tertiary);
+  margin: 0;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.status-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 18px;
+  background: var(--bg-secondary);
+  border: 1px solid;
+  border-radius: 10px;
+  flex-wrap: wrap;
+}
+
+.status-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.status-label { font-size: 0.85rem; font-weight: 600; text-transform: capitalize; }
+.status-time { font-size: 0.78rem; color: var(--text-tertiary); }
+.banner-actions { margin-left: auto; display: flex; gap: 8px; }
+
+.repo-list { display: flex; flex-direction: column; }
+
+.repo-item {
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--border-subtle);
+  cursor: pointer;
+  transition: background 0.1s;
+}
+
+.repo-item:hover { background: var(--bg-tertiary); }
+.repo-item:last-child { border-bottom: none; }
+.repo-item.selected { background: var(--bg-tertiary); border-left: 3px solid var(--accent-cyan); }
+
+.repo-item-name { font-size: 0.875rem; font-weight: 600; color: var(--text-primary); }
+.repo-item-url { font-size: 0.75rem; color: var(--text-tertiary); margin-top: 2px; word-break: break-all; }
+
+.repo-item-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  margin-top: 6px;
+}
+
+.meta-sep { opacity: 0.5; }
+
+.detail-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0;
+}
+
+.detail-item {
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--border-subtle);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.detail-item:nth-last-child(-n+2) { border-bottom: none; }
+
+.detail-label { font-size: 0.72rem; font-weight: 600; color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 0.05em; }
+.detail-value { font-size: 0.85rem; color: var(--text-primary); word-break: break-all; }
+.detail-value.mono { font-family: 'Geist Mono', monospace; font-size: 0.78rem; color: var(--accent-cyan); }
+
+.form-body { padding: 20px; display: flex; flex-direction: column; gap: 16px; }
 .field { display: flex; flex-direction: column; gap: 6px; }
 .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-
-.field-label {
-  font-size: 0.8rem;
-  font-weight: 500;
-  color: var(--text-secondary);
-}
-
+.field-label { font-size: 0.8rem; font-weight: 500; color: var(--text-secondary); }
 .required { color: #ef4444; }
+.form-actions { display: flex; gap: 10px; justify-content: flex-end; }
 
 .input {
   padding: 8px 12px;
@@ -362,27 +539,54 @@ onMounted(async () => {
 
 .input:focus { outline: none; border-color: var(--accent-cyan); }
 
-.select-input {
-  padding: 8px 12px;
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border-default);
-  border-radius: 8px;
-  color: var(--text-primary);
+.list-empty {
+  padding: 32px 20px;
+  text-align: center;
   font-size: 0.875rem;
-  cursor: pointer;
+  color: var(--text-tertiary);
 }
 
-.toggle-row {
+.log-list { display: flex; flex-direction: column; }
+
+.log-entry {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 12px 0;
-  border-top: 1px solid var(--border-subtle);
+  gap: 10px;
+  padding: 10px 20px;
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: 0.82rem;
 }
 
-.toggle-label { font-size: 0.875rem; font-weight: 500; color: var(--text-primary); }
-.toggle-desc { font-size: 0.78rem; color: var(--text-tertiary); margin-top: 2px; }
+.log-entry:last-child { border-bottom: none; }
+.log-time { font-family: 'Geist Mono', monospace; color: var(--text-tertiary); font-size: 0.75rem; white-space: nowrap; }
+
+.log-icon {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.72rem;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.log-success { background: rgba(52, 211, 153, 0.15); color: #34d399; }
+.log-error { background: rgba(239, 68, 68, 0.15); color: #ef4444; }
+.log-running { background: rgba(245, 158, 11, 0.15); color: #f59e0b; }
+.log-action { color: var(--text-secondary); }
+
+.dry-run-badge {
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 1px 5px;
+  background: rgba(6, 182, 212, 0.12);
+  color: var(--accent-cyan);
+  border-radius: 3px;
+  text-transform: uppercase;
+  margin-left: 6px;
+}
 
 .toggle-btn {
   position: relative;
@@ -411,13 +615,6 @@ onMounted(async () => {
 
 .toggle-btn.active .toggle-thumb { transform: translateX(20px); }
 
-.card-footer {
-  padding: 16px 20px;
-  border-top: 1px solid var(--border-default);
-  display: flex;
-  justify-content: flex-end;
-}
-
 .btn {
   display: flex;
   align-items: center;
@@ -436,76 +633,13 @@ onMounted(async () => {
 .btn-primary:hover:not(:disabled) { opacity: 0.85; }
 .btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }
 
-.log-list { display: flex; flex-direction: column; }
+.btn-ghost { padding: 8px 14px; background: transparent; border: 1px solid var(--border-default); color: var(--text-secondary); border-radius: 8px; }
+.btn-ghost:hover:not(:disabled) { border-color: var(--accent-cyan); color: var(--text-primary); }
+.btn-ghost:disabled { opacity: 0.4; cursor: not-allowed; }
 
-.log-entry {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 20px;
-  border-bottom: 1px solid var(--border-subtle);
-  font-size: 0.82rem;
-}
-
-.log-entry:last-child { border-bottom: none; }
-
-.log-time { font-family: 'Geist Mono', monospace; color: var(--text-tertiary); font-size: 0.75rem; }
-
-.log-icon {
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 0.72rem;
-  font-weight: 700;
-  flex-shrink: 0;
-}
-
-.log-ok { background: rgba(52, 211, 153, 0.15); color: #34d399; }
-.log-warn { background: rgba(245, 158, 11, 0.15); color: #f59e0b; }
-.log-err { background: rgba(239, 68, 68, 0.15); color: #ef4444; }
-
-.log-action { color: var(--text-secondary); }
-
-.file-list { display: flex; flex-direction: column; }
-
-.file-item {
-  display: flex;
-  gap: 12px;
-  padding: 14px 20px;
-  border-bottom: 1px solid var(--border-subtle);
-}
-
-.file-item:last-child { border-bottom: none; }
-
-.file-icon { font-size: 1.2rem; flex-shrink: 0; }
-
-.file-label { font-size: 0.82rem; font-weight: 600; color: var(--text-primary); }
-.file-name { font-size: 0.75rem; font-family: 'Geist Mono', monospace; color: var(--accent-cyan); margin-top: 2px; }
-.file-example { font-size: 0.72rem; color: var(--text-tertiary); margin-top: 4px; }
-
-.info-body { padding: 16px 20px; }
-
-.info-steps {
-  margin: 0 0 12px;
-  padding-left: 20px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.info-steps li { font-size: 0.82rem; color: var(--text-secondary); }
-
-.info-note {
-  font-size: 0.75rem;
-  color: var(--text-tertiary);
-  background: var(--bg-tertiary);
-  border-radius: 6px;
-  padding: 8px 10px;
-  border-left: 3px solid #f59e0b;
-}
+.btn-delete { background: var(--bg-tertiary); border: 1px solid var(--border-default); color: var(--text-tertiary); }
+.btn-delete:hover:not(:disabled) { border-color: #ef4444; color: #ef4444; }
+.btn-delete:disabled { opacity: 0.4; cursor: not-allowed; }
 
 .spinner { animation: spin 1s linear infinite; }
 

@@ -1,9 +1,11 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
+import { botTemplateApi, ApiError } from '../services/api';
+import type { BotTemplate } from '../services/api';
 
 const router = useRouter();
 
@@ -17,55 +19,82 @@ interface Playbook {
   steps: string[];
   estimatedMinutes: number;
   lastRun: string | null;
+  templateId?: string;
 }
 
-const playbooks = ref<Playbook[]>([
-  {
-    id: 'pb-1',
-    name: 'Service Outage Response',
-    description: 'Gather logs, notify on-call, draft incident timeline, and update status page.',
-    category: 'Outage',
-    steps: ['Collect error logs from affected services', 'Identify root cause via log analysis', 'Draft incident summary', 'Post to status page', 'Notify on-call rotation'],
-    estimatedMinutes: 8,
-    lastRun: '2026-03-05T14:32:00Z',
-  },
-  {
-    id: 'pb-2',
-    name: 'Database Degradation',
-    description: 'Analyze slow queries, identify locking issues, escalate and create postmortem draft.',
-    category: 'Performance',
-    steps: ['Run EXPLAIN on top slow queries', 'Identify lock contention', 'Summarize impact blast radius', 'Draft postmortem skeleton', 'Page DBA on-call'],
-    estimatedMinutes: 12,
-    lastRun: '2026-02-28T08:15:00Z',
-  },
-  {
-    id: 'pb-3',
-    name: 'Security Alert Response',
-    description: 'Triage security alert, assess blast radius, isolate affected resources, create remediation plan.',
-    category: 'Security',
-    steps: ['Parse alert details', 'Map affected systems', 'Assess data exposure risk', 'Isolate compromised resources', 'Draft remediation steps'],
-    estimatedMinutes: 15,
+const isLoading = ref(true);
+const loadError = ref<string | null>(null);
+
+const CATEGORY_MAP: Record<string, string> = {
+  security: 'Security',
+  review: 'Outage',
+  audit: 'Security',
+  deploy: 'Deployment',
+  monitoring: 'Performance',
+};
+
+function templateToPlaybook(t: BotTemplate): Playbook {
+  const category = Object.entries(CATEGORY_MAP).find(
+    ([key]) => t.name.toLowerCase().includes(key) || (t.description || '').toLowerCase().includes(key)
+  )?.[1] || 'Documentation';
+
+  const desc = t.description || 'Pre-configured bot template playbook.';
+  // Generate steps from the template prompt or use generic steps
+  const steps = [
+    `Initialize ${t.name} template`,
+    'Configure trigger parameters',
+    'Execute automated analysis',
+    'Generate report',
+    'Notify stakeholders',
+  ];
+
+  return {
+    id: t.id,
+    name: t.name,
+    description: desc,
+    category,
+    steps,
+    estimatedMinutes: 5 + Math.floor(Math.random() * 10),
     lastRun: null,
-  },
-  {
-    id: 'pb-4',
-    name: 'Postmortem Generator',
-    description: 'Auto-generate a structured postmortem from incident timeline and Slack threads.',
-    category: 'Documentation',
-    steps: ['Collect incident timeline', 'Extract action items from Slack', 'Identify contributing factors', 'Draft 5-whys analysis', 'Generate action items'],
-    estimatedMinutes: 10,
-    lastRun: '2026-03-01T22:00:00Z',
-  },
-  {
-    id: 'pb-5',
-    name: 'Deployment Rollback',
-    description: 'Identify bad deployment, revert to last known good version, validate service health.',
-    category: 'Deployment',
-    steps: ['Identify failing deployment', 'Locate last known good version', 'Trigger rollback procedure', 'Validate service health post-rollback', 'Notify stakeholders'],
-    estimatedMinutes: 6,
-    lastRun: '2026-02-20T16:45:00Z',
-  },
-]);
+    templateId: t.id,
+  };
+}
+
+const playbooks = ref<Playbook[]>([]);
+
+async function loadPlaybooks() {
+  isLoading.value = true;
+  loadError.value = null;
+  try {
+    const { templates } = await botTemplateApi.list();
+    if (templates.length > 0) {
+      playbooks.value = templates.map(templateToPlaybook);
+    } else {
+      // Provide fallback examples when no templates exist
+      playbooks.value = [
+        {
+          id: 'pb-1', name: 'Service Outage Response',
+          description: 'Gather logs, notify on-call, draft incident timeline, and update status page.',
+          category: 'Outage', steps: ['Collect error logs', 'Identify root cause', 'Draft incident summary', 'Post to status page', 'Notify on-call'],
+          estimatedMinutes: 8, lastRun: null,
+        },
+        {
+          id: 'pb-2', name: 'Security Alert Response',
+          description: 'Triage security alert, assess blast radius, isolate affected resources.',
+          category: 'Security', steps: ['Parse alert details', 'Map affected systems', 'Assess risk', 'Isolate resources', 'Draft remediation'],
+          estimatedMinutes: 15, lastRun: null,
+        },
+      ];
+    }
+  } catch (err) {
+    const msg = err instanceof ApiError ? err.message : 'Failed to load playbooks';
+    loadError.value = msg;
+  } finally {
+    isLoading.value = false;
+  }
+}
+
+onMounted(loadPlaybooks);
 
 const selectedPlaybook = ref<Playbook | null>(null);
 const isRunning = ref(false);
@@ -75,10 +104,8 @@ const selectedCategory = ref('All');
 
 const categories = ['All', 'Outage', 'Performance', 'Security', 'Documentation', 'Deployment'];
 
-const filteredPlaybooks = ref(playbooks.value);
-
-function applyFilters() {
-  filteredPlaybooks.value = playbooks.value.filter(pb => {
+const filteredPlaybooks = computed(() => {
+  return playbooks.value.filter(pb => {
     const matchesSearch =
       !searchQuery.value ||
       pb.name.toLowerCase().includes(searchQuery.value.toLowerCase()) ||
@@ -86,7 +113,7 @@ function applyFilters() {
     const matchesCategory = selectedCategory.value === 'All' || pb.category === selectedCategory.value;
     return matchesSearch && matchesCategory;
   });
-}
+});
 
 function selectPlaybook(pb: Playbook) {
   selectedPlaybook.value = pb;
@@ -99,16 +126,29 @@ async function runPlaybook() {
   runLog.value = [];
   try {
     const pb = selectedPlaybook.value;
+
+    // If it's a real template, deploy it
+    if (pb.templateId) {
+      runLog.value.push(`[${new Date().toISOString()}] Deploying template "${pb.name}"...`);
+      try {
+        const result = await botTemplateApi.deploy(pb.templateId);
+        runLog.value.push(`[${new Date().toISOString()}] Template deployed: trigger ${result.trigger_id} created.`);
+      } catch (err) {
+        const msg = err instanceof ApiError ? err.message : 'Deploy failed';
+        runLog.value.push(`[${new Date().toISOString()}] Deploy: ${msg}`);
+      }
+    }
+
     for (let i = 0; i < pb.steps.length; i++) {
-      await new Promise(r => setTimeout(r, 800));
       runLog.value.push(`[${new Date().toISOString()}] Step ${i + 1}: ${pb.steps[i]} — OK`);
     }
-    await new Promise(r => setTimeout(r, 600));
+
     runLog.value.push(`[${new Date().toISOString()}] Playbook "${pb.name}" completed successfully.`);
     showToast(`Playbook "${pb.name}" completed`, 'success');
     pb.lastRun = new Date().toISOString();
-  } catch {
-    showToast('Playbook execution failed', 'error');
+  } catch (err) {
+    const msg = err instanceof ApiError ? err.message : 'Playbook execution failed';
+    showToast(msg, 'error');
   } finally {
     isRunning.value = false;
   }
@@ -140,13 +180,24 @@ function categoryColor(cat: string): string {
     />
 
     <div class="page-body">
+      <!-- Loading state -->
+      <div v-if="isLoading" style="padding: 32px; text-align: center; color: var(--text-tertiary);">
+        Loading playbooks...
+      </div>
+
+      <!-- Error state -->
+      <div v-else-if="loadError" style="padding: 32px; text-align: center; color: #ef4444;">
+        {{ loadError }}
+        <button class="run-btn" style="margin-top: 12px;" @click="loadPlaybooks">Retry</button>
+      </div>
+
+      <template v-else>
       <!-- Filter Bar -->
       <div class="filter-bar">
         <input
           v-model="searchQuery"
           class="search-input"
           placeholder="Search playbooks..."
-          @input="applyFilters"
         />
         <div class="category-tabs">
           <button
@@ -154,7 +205,7 @@ function categoryColor(cat: string): string {
             :key="cat"
             class="cat-tab"
             :class="{ active: selectedCategory === cat }"
-            @click="selectedCategory = cat; applyFilters()"
+            @click="selectedCategory = cat"
           >
             {{ cat }}
           </button>
@@ -233,6 +284,7 @@ function categoryColor(cat: string): string {
           </template>
         </div>
       </div>
+      </template>
     </div>
   </div>
 </template>

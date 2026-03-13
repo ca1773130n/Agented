@@ -1,9 +1,11 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
+import { executionApi, triggerApi, ApiError } from '../services/api';
+import type { Execution, Trigger } from '../services/api';
 
 const router = useRouter();
 const showToast = useToast();
@@ -19,48 +21,53 @@ interface WebhookRecord {
   statusCode: number;
 }
 
-const records = ref<WebhookRecord[]>([
-  {
-    id: 'wh-001',
-    source: 'github',
-    bot: 'bot-pr-review',
-    receivedAt: '2026-03-06T14:22:00Z',
+const loading = ref(true);
+const error = ref('');
+const records = ref<WebhookRecord[]>([]);
+const triggers = ref<Trigger[]>([]);
+
+function executionToRecord(exec: Execution): WebhookRecord {
+  return {
+    id: exec.execution_id,
+    source: exec.trigger_type || 'webhook',
+    bot: exec.trigger_id || exec.trigger_name || '',
+    receivedAt: exec.started_at,
     method: 'POST',
-    path: '/api/webhooks/github',
-    statusCode: 200,
-    payload: { action: 'opened', pull_request: { number: 42, title: 'Add auth middleware', head: { sha: 'abc123' } }, repository: { full_name: 'org/repo' } },
-  },
-  {
-    id: 'wh-002',
-    source: 'github',
-    bot: 'bot-security',
-    receivedAt: '2026-03-06T13:10:00Z',
-    method: 'POST',
-    path: '/api/webhooks/github',
-    statusCode: 200,
-    payload: { action: 'push', commits: [{ id: 'def456', message: 'Fix SQL query' }], repository: { full_name: 'org/api' } },
-  },
-  {
-    id: 'wh-003',
-    source: 'custom',
-    bot: 'bot-security',
-    receivedAt: '2026-03-06T10:05:00Z',
-    method: 'POST',
-    path: '/api/webhooks/custom',
-    statusCode: 200,
-    payload: { event: 'deploy_complete', environment: 'staging', version: '2.4.1' },
-  },
-  {
-    id: 'wh-004',
-    source: 'github',
-    bot: 'bot-pr-review',
-    receivedAt: '2026-03-05T16:30:00Z',
-    method: 'POST',
-    path: '/api/webhooks/github',
-    statusCode: 202,
-    payload: { action: 'synchronize', pull_request: { number: 39, title: 'Refactor database layer' }, repository: { full_name: 'org/backend' } },
-  },
-]);
+    path: exec.trigger_type === 'webhook' ? '/api/webhooks/github' : `/admin/triggers/${exec.trigger_id}/run`,
+    payload: {
+      execution_id: exec.execution_id,
+      trigger_name: exec.trigger_name,
+      status: exec.status,
+      prompt: exec.prompt || '',
+      backend_type: exec.backend_type,
+      ...(exec.error_message ? { error: exec.error_message } : {}),
+    },
+    statusCode: exec.status === 'success' ? 200 : exec.status === 'failed' ? 500 : 202,
+  };
+}
+
+async function fetchData() {
+  loading.value = true;
+  error.value = '';
+  try {
+    const [execResult, triggerResult] = await Promise.all([
+      executionApi.listAll({ limit: 50 }),
+      triggerApi.list(),
+    ]);
+    records.value = (execResult?.executions || []).map(executionToRecord);
+    triggers.value = triggerResult?.triggers || [];
+  } catch (err) {
+    if (err instanceof ApiError) {
+      error.value = `Failed to load webhook records: ${err.message}`;
+    } else {
+      error.value = 'Failed to load webhook records';
+    }
+  } finally {
+    loading.value = false;
+  }
+}
+
+onMounted(fetchData);
 
 const filterSource = ref('');
 const filterBot = ref('');
@@ -84,10 +91,16 @@ const filtered = computed(() => records.value.filter(r => {
 async function handleReplay(r: WebhookRecord) {
   isReplaying.value = r.id;
   try {
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    showToast(`Webhook ${r.id} replayed successfully`, 'success');
-  } catch {
-    showToast('Replay failed', 'error');
+    // Find the trigger to re-run it
+    const trigger = triggers.value.find(t => t.id === r.bot);
+    if (trigger) {
+      await triggerApi.run(trigger.id);
+      showToast(`Webhook ${r.id} replayed successfully`, 'success');
+    } else {
+      showToast('Cannot replay: trigger not found', 'error');
+    }
+  } catch (err) {
+    showToast(err instanceof ApiError ? err.message : 'Replay failed', 'error');
   } finally {
     isReplaying.value = null;
   }
@@ -116,7 +129,18 @@ function statusClass(code: number): string {
       subtitle="Browse, inspect, and replay captured webhook payloads."
     />
 
-    <div class="main-layout">
+    <!-- Loading state -->
+    <div v-if="loading" class="card" style="padding: 48px; text-align: center;">
+      <div style="color: var(--text-tertiary); font-size: 0.875rem;">Loading webhook records...</div>
+    </div>
+
+    <!-- Error state -->
+    <div v-else-if="error" class="card" style="padding: 48px; text-align: center;">
+      <div style="color: #ef4444; font-size: 0.875rem; margin-bottom: 12px;">{{ error }}</div>
+      <button class="btn btn-ghost" @click="fetchData">Retry</button>
+    </div>
+
+    <div v-else class="main-layout">
       <div class="left-panel">
         <div class="filters card">
           <div class="filter-header">Filters</div>

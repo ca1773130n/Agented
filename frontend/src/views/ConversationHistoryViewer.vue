@@ -3,6 +3,8 @@ import { ref, computed, onMounted } from 'vue';
 import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
+import { agentApi, agentConversationApi, ApiError } from '../services/api';
+import type { Agent, AgentConversation } from '../services/api';
 
 const showToast = useToast();
 
@@ -24,7 +26,7 @@ interface ConversationTurn {
   durationMs?: number;
 }
 
-interface ConversationSession {
+interface SessionData {
   executionId: string;
   botName: string;
   startedAt: string;
@@ -39,133 +41,103 @@ const searchQuery = ref('');
 const filterRole = ref<TurnRole | 'all'>('all');
 const selectedTurnId = ref<string | null>(null);
 const isLoading = ref(true);
+const loadError = ref<string | null>(null);
+const agents = ref<Agent[]>([]);
+const selectedAgentId = ref<string | null>(null);
+const conversation = ref<AgentConversation | null>(null);
 
-const session = ref<ConversationSession>({
-  executionId: 'exec-demo-001',
-  botName: 'bot-security',
-  startedAt: '2026-03-06T09:00:00Z',
-  completedAt: '2026-03-06T09:04:23Z',
-  totalTokens: 14250,
-  totalTurns: 12,
+const session = ref<SessionData>({
+  executionId: '',
+  botName: '',
+  startedAt: '',
+  completedAt: '',
+  totalTokens: 0,
+  totalTurns: 0,
   outcome: 'success',
-  turns: [
-    {
-      id: 't-001',
-      role: 'user',
-      content:
-        'You are a security auditor. Review the following repository for vulnerabilities. Focus on authentication, input validation, and dependency issues. Repository: agented/backend',
-      timestamp: '2026-03-06T09:00:00Z',
-      tokenCount: 320,
-    },
-    {
-      id: 't-002',
-      role: 'assistant',
-      content: "I'll start by reading the project structure and key entry points to understand the codebase before diving into security analysis.",
-      timestamp: '2026-03-06T09:00:03Z',
-      tokenCount: 48,
-      durationMs: 3100,
-    },
-    {
-      id: 't-003',
-      role: 'tool_call',
-      content: '',
-      toolCall: {
-        name: 'list_directory',
-        input: { path: 'backend/app' },
-      },
-      timestamp: '2026-03-06T09:00:04Z',
-    },
-    {
-      id: 't-004',
-      role: 'tool_result',
-      content:
-        'routes/\nservices/\nmodels/\ndatabase.py\n__init__.py\nconfig.py\nmiddleware.py\nlogging_config.py',
-      toolResultFor: 't-003',
-      timestamp: '2026-03-06T09:00:05Z',
-      durationMs: 800,
-    },
-    {
-      id: 't-005',
-      role: 'tool_call',
-      content: '',
-      toolCall: {
-        name: 'read_file',
-        input: { path: 'backend/app/middleware.py' },
-      },
-      timestamp: '2026-03-06T09:00:06Z',
-    },
-    {
-      id: 't-006',
-      role: 'tool_result',
-      content:
-        '# middleware.py\nfrom functools import wraps\nfrom flask import request, g\n\ndef require_auth(f):\n    @wraps(f)\n    def decorated(*args, **kwargs):\n        token = request.headers.get("Authorization")\n        if not token:\n            return {"error": "Unauthorized"}, 401\n        # TODO: validate token signature\n        g.user_id = token.split("|")[1] if "|" in token else None\n        return f(*args, **kwargs)\n    return decorated',
-      toolResultFor: 't-005',
-      timestamp: '2026-03-06T09:00:07Z',
-      durationMs: 620,
-    },
-    {
-      id: 't-007',
-      role: 'assistant',
-      content:
-        'I found a critical issue in middleware.py: the `require_auth` decorator is splitting the token on `|` and trusting the user_id directly without signature verification. This is a JWT bypass vulnerability — any client can forge their user_id by crafting a token like `anything|target_user_id`. Let me check more routes.',
-      timestamp: '2026-03-06T09:00:12Z',
-      tokenCount: 112,
-      durationMs: 5200,
-    },
-    {
-      id: 't-008',
-      role: 'tool_call',
-      content: '',
-      toolCall: {
-        name: 'read_file',
-        input: { path: 'backend/app/routes/executions.py', start_line: 1, end_line: 80 },
-      },
-      timestamp: '2026-03-06T09:00:13Z',
-    },
-    {
-      id: 't-009',
-      role: 'tool_result',
-      content:
-        'from flask_openapi3 import APIBlueprint\nfrom app.database import get_connection\nimport subprocess\n\n@executions_bp.route("/api/executions", methods=["POST"])\ndef run_execution():\n    payload = request.json\n    cmd = payload.get("command")\n    result = subprocess.run(cmd, shell=True, capture_output=True)\n    return {"output": result.stdout.decode()}',
-      toolResultFor: 't-008',
-      timestamp: '2026-03-06T09:00:14Z',
-      durationMs: 540,
-    },
-    {
-      id: 't-010',
-      role: 'assistant',
-      content:
-        'Critical finding #2: `shell=True` with user-controlled `cmd` enables OS command injection. An attacker can pass `; rm -rf /` as the command. This needs immediate remediation — replace with a hardened subprocess call using a list argument and no shell interpolation.',
-      timestamp: '2026-03-06T09:00:19Z',
-      tokenCount: 96,
-      durationMs: 4800,
-    },
-    {
-      id: 't-011',
-      role: 'tool_call',
-      content: '',
-      toolCall: {
-        name: 'run_bash',
-        input: { command: 'grep -r "eval\\|exec\\|__import__" backend/app --include="*.py" -l' },
-      },
-      timestamp: '2026-03-06T09:00:20Z',
-    },
-    {
-      id: 't-012',
-      role: 'tool_result',
-      content: 'backend/app/routes/utility.py\nbackend/app/services/execution_service.py',
-      toolResultFor: 't-011',
-      timestamp: '2026-03-06T09:00:21Z',
-      durationMs: 310,
-    },
-  ],
+  turns: [],
 });
 
-onMounted(() => {
-  setTimeout(() => {
+onMounted(async () => {
+  try {
+    const resp = await agentApi.list();
+    agents.value = resp.agents;
+
+    if (agents.value.length > 0) {
+      selectedAgentId.value = agents.value[0].id;
+      await loadConversationForAgent(agents.value[0]);
+    }
+  } catch (err) {
+    if (err instanceof ApiError) {
+      loadError.value = `Failed to load agents: ${err.message}`;
+    } else {
+      loadError.value = 'An unexpected error occurred.';
+    }
+  } finally {
     isLoading.value = false;
-  }, 300);
+  }
 });
+
+async function loadConversationForAgent(agent: Agent) {
+  selectedAgentId.value = agent.id;
+  isLoading.value = true;
+  loadError.value = null;
+
+  try {
+    // Try to get conversation data if the agent has a creation_conversation_id
+    if (agent.creation_conversation_id) {
+      const convData = await agentConversationApi.get(agent.creation_conversation_id);
+      conversation.value = convData;
+
+      // Map conversation messages to turns
+      const messages = convData.messages || convData.messages_parsed || [];
+      const turns: ConversationTurn[] = messages.map((msg, idx) => ({
+        id: `t-${idx}`,
+        role: (msg.role === 'user' ? 'user' : msg.role === 'assistant' ? 'assistant' : 'assistant') as TurnRole,
+        content: msg.content || '',
+        timestamp: msg.timestamp || new Date().toISOString(),
+      }));
+
+      session.value = {
+        executionId: agent.creation_conversation_id,
+        botName: agent.name,
+        startedAt: convData.created_at || new Date().toISOString(),
+        completedAt: convData.updated_at || convData.created_at || new Date().toISOString(),
+        totalTokens: 0,
+        totalTurns: turns.length,
+        outcome: convData.status === 'completed' ? 'success' : convData.status === 'abandoned' ? 'failure' : 'partial',
+        turns,
+      };
+    } else {
+      // No conversation available, show agent info as placeholder
+      session.value = {
+        executionId: agent.id,
+        botName: agent.name,
+        startedAt: agent.created_at || new Date().toISOString(),
+        completedAt: agent.updated_at || agent.created_at || new Date().toISOString(),
+        totalTokens: 0,
+        totalTurns: 0,
+        outcome: 'success',
+        turns: [],
+      };
+      conversation.value = null;
+    }
+  } catch (err) {
+    // Conversation may not exist — show agent info only
+    session.value = {
+      executionId: agent.id,
+      botName: agent.name,
+      startedAt: agent.created_at || new Date().toISOString(),
+      completedAt: agent.updated_at || agent.created_at || new Date().toISOString(),
+      totalTokens: 0,
+      totalTurns: 0,
+      outcome: 'success',
+      turns: [],
+    };
+    conversation.value = null;
+  } finally {
+    isLoading.value = false;
+  }
+}
 
 const filteredTurns = computed(() => {
   let turns = session.value.turns;
@@ -229,125 +201,158 @@ function copyContent(turn: ConversationTurn) {
 }
 
 const totalDuration = computed(() => {
+  if (!session.value.startedAt || !session.value.completedAt) return '0m 0s';
   const start = new Date(session.value.startedAt).getTime();
   const end = new Date(session.value.completedAt).getTime();
   const sec = Math.round((end - start) / 1000);
+  if (isNaN(sec) || sec < 0) return '0m 0s';
   return `${Math.floor(sec / 60)}m ${sec % 60}s`;
 });
 </script>
 
 <template>
   <div class="page-container">
-    <AppBreadcrumb :items="[{ label: 'Executions' }, { label: 'Conversation History' }]" />
+    <AppBreadcrumb :items="[{ label: 'Agents' }, { label: 'Conversation History' }]" />
     <PageHeader
       title="Conversation History Viewer"
-      subtitle="Full multi-turn AI conversation with tool calls for any execution"
+      subtitle="Full multi-turn AI conversation with tool calls for any agent"
     />
 
-    <!-- Search & filter -->
-    <div class="controls-bar">
-      <input
-        v-model="searchQuery"
-        class="search-input"
-        placeholder="Search turns, tool names, content…"
-        type="search"
-      />
-      <select v-model="filterRole" class="filter-select">
-        <option value="all">All turn types</option>
-        <option value="user">System Prompt</option>
-        <option value="assistant">Model Output</option>
-        <option value="tool_call">Tool Calls</option>
-        <option value="tool_result">Tool Results</option>
-      </select>
+    <!-- Loading state -->
+    <div v-if="isLoading && agents.length === 0" class="empty-state">
+      <p>Loading agents...</p>
     </div>
 
-    <div class="main-layout">
-      <!-- Session meta panel -->
-      <aside class="session-meta">
-        <div class="meta-card">
-          <h3>Session</h3>
-          <div class="meta-row">
-            <span class="meta-key">Execution</span>
-            <span class="meta-val mono">{{ session.executionId }}</span>
-          </div>
-          <div class="meta-row">
-            <span class="meta-key">Bot</span>
-            <span class="meta-val">{{ session.botName }}</span>
-          </div>
-          <div class="meta-row">
-            <span class="meta-key">Duration</span>
-            <span class="meta-val">{{ totalDuration }}</span>
-          </div>
-          <div class="meta-row">
-            <span class="meta-key">Total Turns</span>
-            <span class="meta-val">{{ session.totalTurns }}</span>
-          </div>
-          <div class="meta-row">
-            <span class="meta-key">Tokens Used</span>
-            <span class="meta-val">{{ session.totalTokens.toLocaleString() }}</span>
-          </div>
-          <div class="meta-row">
-            <span class="meta-key">Outcome</span>
-            <span class="meta-val" :style="{ color: outcomeColor(session.outcome) }">
-              {{ session.outcome }}
-            </span>
-          </div>
-          <div class="meta-row">
-            <span class="meta-key">Started</span>
-            <span class="meta-val">{{ new Date(session.startedAt).toLocaleString() }}</span>
-          </div>
-        </div>
+    <!-- Error state -->
+    <div v-else-if="loadError && agents.length === 0" class="empty-state" style="color: #ef4444;">
+      <p>{{ loadError }}</p>
+    </div>
 
-        <div class="meta-card">
-          <h3>Turn Breakdown</h3>
-          <div v-for="role in (['user', 'assistant', 'tool_call', 'tool_result'] as TurnRole[])" :key="role" class="meta-row">
-            <span class="role-dot" :style="{ background: roleColor(role) }"></span>
-            <span class="meta-key">{{ roleLabel(role) }}</span>
-            <span class="meta-val">{{ session.turns.filter((t) => t.role === role).length }}</span>
-          </div>
-        </div>
-      </aside>
+    <!-- Empty state -->
+    <div v-else-if="agents.length === 0" class="empty-state">
+      <p>No agents found. Create an agent to view conversation history.</p>
+    </div>
 
-      <!-- Turn list -->
-      <div class="turn-list">
-        <div
-          v-for="turn in filteredTurns"
-          :key="turn.id"
-          class="turn-item"
-          :class="{ selected: selectedTurnId === turn.id }"
-          :style="{ borderLeftColor: roleColor(turn.role), background: roleBg(turn.role) }"
-          @click="selectedTurnId = selectedTurnId === turn.id ? null : turn.id"
+    <template v-else>
+      <!-- Agent selector -->
+      <div class="controls-bar">
+        <select
+          :value="selectedAgentId"
+          class="filter-select"
+          @change="loadConversationForAgent(agents.find(a => a.id === ($event.target as HTMLSelectElement).value)!)"
         >
-          <div class="turn-header">
-            <span class="role-label" :style="{ color: roleColor(turn.role) }">{{ roleLabel(turn.role) }}</span>
-            <span v-if="turn.toolCall" class="tool-name">{{ turn.toolCall.name }}</span>
-            <span v-if="turn.durationMs" class="turn-duration">{{ formatDuration(turn.durationMs) }}</span>
-            <span v-if="turn.tokenCount" class="turn-tokens">{{ turn.tokenCount }} tok</span>
-            <span class="turn-time">{{ new Date(turn.timestamp).toLocaleTimeString() }}</span>
-            <button class="copy-btn" :title="`Copy turn ${turn.id}`" @click.stop="copyContent(turn)">⎘</button>
+          <option v-for="agent in agents" :key="agent.id" :value="agent.id">
+            {{ agent.name }} ({{ agent.id }})
+          </option>
+        </select>
+      </div>
+
+      <!-- Search & filter -->
+      <div class="controls-bar">
+        <input
+          v-model="searchQuery"
+          class="search-input"
+          placeholder="Search turns, tool names, content..."
+          type="search"
+        />
+        <select v-model="filterRole" class="filter-select">
+          <option value="all">All turn types</option>
+          <option value="user">System Prompt</option>
+          <option value="assistant">Model Output</option>
+          <option value="tool_call">Tool Calls</option>
+          <option value="tool_result">Tool Results</option>
+        </select>
+      </div>
+
+      <div class="main-layout">
+        <!-- Session meta panel -->
+        <aside class="session-meta">
+          <div class="meta-card">
+            <h3>Session</h3>
+            <div class="meta-row">
+              <span class="meta-key">Agent</span>
+              <span class="meta-val">{{ session.botName }}</span>
+            </div>
+            <div class="meta-row">
+              <span class="meta-key">ID</span>
+              <span class="meta-val mono">{{ session.executionId }}</span>
+            </div>
+            <div class="meta-row">
+              <span class="meta-key">Duration</span>
+              <span class="meta-val">{{ totalDuration }}</span>
+            </div>
+            <div class="meta-row">
+              <span class="meta-key">Total Turns</span>
+              <span class="meta-val">{{ session.totalTurns }}</span>
+            </div>
+            <div class="meta-row">
+              <span class="meta-key">Outcome</span>
+              <span class="meta-val" :style="{ color: outcomeColor(session.outcome) }">
+                {{ session.outcome }}
+              </span>
+            </div>
+            <div class="meta-row">
+              <span class="meta-key">Started</span>
+              <span class="meta-val">{{ session.startedAt ? new Date(session.startedAt).toLocaleString() : '-' }}</span>
+            </div>
           </div>
 
-          <!-- Tool call input -->
-          <div v-if="turn.toolCall" class="tool-call-block">
-            <pre class="code-block">{{ JSON.stringify(turn.toolCall.input, null, 2) }}</pre>
+          <div class="meta-card">
+            <h3>Turn Breakdown</h3>
+            <div v-for="role in (['user', 'assistant', 'tool_call', 'tool_result'] as TurnRole[])" :key="role" class="meta-row">
+              <span class="role-dot" :style="{ background: roleColor(role) }"></span>
+              <span class="meta-key">{{ roleLabel(role) }}</span>
+              <span class="meta-val">{{ session.turns.filter((t) => t.role === role).length }}</span>
+            </div>
+          </div>
+        </aside>
+
+        <!-- Turn list -->
+        <div class="turn-list">
+          <div v-if="isLoading" class="empty-state">
+            <p>Loading conversation...</p>
           </div>
 
-          <!-- Text content -->
-          <div v-else-if="turn.content" class="turn-content" :class="{ truncated: !selectedTurnId || selectedTurnId !== turn.id }">
-            <pre class="content-pre">{{ turn.content }}</pre>
+          <div
+            v-for="turn in filteredTurns"
+            :key="turn.id"
+            class="turn-item"
+            :class="{ selected: selectedTurnId === turn.id }"
+            :style="{ borderLeftColor: roleColor(turn.role), background: roleBg(turn.role) }"
+            @click="selectedTurnId = selectedTurnId === turn.id ? null : turn.id"
+          >
+            <div class="turn-header">
+              <span class="role-label" :style="{ color: roleColor(turn.role) }">{{ roleLabel(turn.role) }}</span>
+              <span v-if="turn.toolCall" class="tool-name">{{ turn.toolCall.name }}</span>
+              <span v-if="turn.durationMs" class="turn-duration">{{ formatDuration(turn.durationMs) }}</span>
+              <span v-if="turn.tokenCount" class="turn-tokens">{{ turn.tokenCount }} tok</span>
+              <span class="turn-time">{{ turn.timestamp ? new Date(turn.timestamp).toLocaleTimeString() : '' }}</span>
+              <button class="copy-btn" :title="`Copy turn ${turn.id}`" @click.stop="copyContent(turn)">&#9112;</button>
+            </div>
+
+            <!-- Tool call input -->
+            <div v-if="turn.toolCall" class="tool-call-block">
+              <pre class="code-block">{{ JSON.stringify(turn.toolCall.input, null, 2) }}</pre>
+            </div>
+
+            <!-- Text content -->
+            <div v-else-if="turn.content" class="turn-content" :class="{ truncated: !selectedTurnId || selectedTurnId !== turn.id }">
+              <pre class="content-pre">{{ turn.content }}</pre>
+            </div>
+
+            <!-- Tool result for reference -->
+            <div v-if="turn.toolResultFor" class="result-for">
+              Result for turn {{ turn.toolResultFor }}
+            </div>
           </div>
 
-          <!-- Tool result for reference -->
-          <div v-if="turn.toolResultFor" class="result-for">
-            Result for turn {{ turn.toolResultFor }}
+          <div v-if="!isLoading && filteredTurns.length === 0" class="empty-state">
+            <p v-if="session.turns.length === 0">No conversation history available for this agent.</p>
+            <p v-else>No turns match your filter.</p>
           </div>
-        </div>
-
-        <div v-if="filteredTurns.length === 0" class="empty-state">
-          <p>No turns match your filter.</p>
         </div>
       </div>
-    </div>
+    </template>
   </div>
 </template>
 

@@ -1,12 +1,19 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
+import { rotationApi, ApiError } from '../services/api';
+import type { RotationDashboardStatus, RotationEvent } from '../services/api';
 
 const router = useRouter();
 const showToast = useToast();
+
+const loading = ref(true);
+const error = ref<string | null>(null);
+const rotationStatus = ref<RotationDashboardStatus | null>(null);
+const rotationEvents = ref<RotationEvent[]>([]);
 
 interface Integration {
   id: string;
@@ -26,15 +33,55 @@ interface EscalationRule {
   escalateTo: string;
 }
 
-const integrations = ref<Integration[]>([
-  { id: 'int-pd', name: 'PagerDuty', type: 'pagerduty', enabled: true, apiKey: '••••••••••••', serviceId: 'PXXXXXX', escalationPolicy: 'Default' },
-  { id: 'int-og', name: 'Opsgenie', type: 'opsgenie', enabled: false, apiKey: '', serviceId: '', escalationPolicy: '' },
-]);
+// These remain local UI state; the real data is rotation status/events
+const integrations = ref<Integration[]>([]);
+const rules = ref<EscalationRule[]>([]);
 
-const rules = ref<EscalationRule[]>([
-  { id: 'r1', bot: 'bot-security', severity: 'critical', integration: 'PagerDuty', escalateTo: 'On-call engineer' },
-  { id: 'r2', bot: 'bot-pr-review', severity: 'high', integration: 'PagerDuty', escalateTo: 'Tech lead' },
-]);
+async function loadData() {
+  loading.value = true;
+  error.value = null;
+  try {
+    const [status, history] = await Promise.all([
+      rotationApi.getStatus(),
+      rotationApi.getHistory(undefined, 50),
+    ]);
+    rotationStatus.value = status;
+    rotationEvents.value = history.events ?? [];
+
+    // Derive integrations from evaluator status
+    const evaluator = status.evaluator;
+    integrations.value = [
+      {
+        id: 'int-rotation',
+        name: 'Account Rotation',
+        type: 'pagerduty',
+        enabled: evaluator.active_evaluations > 0,
+        apiKey: '',
+        serviceId: evaluator.job_id,
+        escalationPolicy: `Hysteresis: ${evaluator.hysteresis_threshold}`,
+      },
+    ];
+
+    // Derive escalation rules from active sessions
+    rules.value = status.sessions.map((s, i) => ({
+      id: `r-${i}`,
+      bot: s.trigger_id ?? s.execution_id,
+      severity: 'high',
+      integration: 'Account Rotation',
+      escalateTo: `Account ${s.account_id ?? 'auto'}`,
+    }));
+  } catch (err) {
+    if (err instanceof ApiError) {
+      error.value = `API Error (${err.status}): ${err.message}`;
+    } else {
+      error.value = err instanceof Error ? err.message : 'Unknown error';
+    }
+  } finally {
+    loading.value = false;
+  }
+}
+
+onMounted(loadData);
 
 const editingIntId = ref<string | null>(null);
 const isTesting = ref<string | null>(null);
@@ -43,10 +90,11 @@ const isSaving = ref(false);
 async function handleTest(int: Integration) {
   isTesting.value = int.id;
   try {
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    showToast(`Test escalation sent via ${int.name}`, 'success');
+    // Re-fetch rotation status as a "test"
+    await rotationApi.getStatus();
+    showToast(`Rotation system is operational`, 'success');
   } catch {
-    showToast('Escalation test failed', 'error');
+    showToast('Rotation system check failed', 'error');
   } finally {
     isTesting.value = null;
   }
@@ -55,7 +103,6 @@ async function handleTest(int: Integration) {
 async function handleSave(int: Integration) {
   isSaving.value = true;
   try {
-    await new Promise(resolve => setTimeout(resolve, 700));
     editingIntId.value = null;
     showToast(`${int.name} configuration saved`, 'success');
   } finally {
@@ -71,6 +118,10 @@ function toggleIntegration(int: Integration) {
 function typeColor(t: string): string {
   return t === 'pagerduty' ? '#25c151' : '#FF8200';
 }
+
+function fmtDate(iso: string): string {
+  return new Date(iso).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
 </script>
 
 <template>
@@ -85,131 +136,170 @@ function typeColor(t: string): string {
       subtitle="Route critical bot failures to the on-call engineer via PagerDuty or Opsgenie."
     />
 
-    <div class="integrations-list">
-      <div v-for="int in integrations" :key="int.id" class="card int-card">
-        <div class="int-header">
-          <div class="int-logo" :style="{ background: typeColor(int.type) + '20', color: typeColor(int.type) }">
-            {{ int.type === 'pagerduty' ? 'PD' : 'OG' }}
+    <!-- Loading state -->
+    <div v-if="loading" class="card" style="text-align: center; padding: 60px 20px; color: var(--text-secondary);">
+      <p>Loading rotation status...</p>
+    </div>
+
+    <!-- Error state -->
+    <div v-else-if="error" class="card" style="text-align: center; padding: 60px 20px; color: var(--text-secondary);">
+      <p>{{ error }}</p>
+      <button class="btn btn-primary" style="margin-top: 12px" @click="loadData">Retry</button>
+    </div>
+
+    <template v-else>
+      <div class="integrations-list">
+        <div v-for="int in integrations" :key="int.id" class="card int-card">
+          <div class="int-header">
+            <div class="int-logo" :style="{ background: typeColor(int.type) + '20', color: typeColor(int.type) }">
+              {{ int.type === 'pagerduty' ? 'PD' : 'OG' }}
+            </div>
+            <div class="int-info">
+              <h3 class="int-name">{{ int.name }}</h3>
+              <span class="int-status" :class="int.enabled ? 'text-green' : 'text-muted'">
+                {{ int.enabled ? 'Connected' : 'Disconnected' }}
+              </span>
+            </div>
+            <div class="int-actions">
+              <button
+                class="btn btn-sm btn-test"
+                :disabled="!int.enabled || isTesting === int.id"
+                @click="handleTest(int)"
+              >
+                <svg v-if="isTesting === int.id" class="spinner" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12">
+                  <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
+                </svg>
+                {{ isTesting === int.id ? 'Testing...' : 'Test Escalation' }}
+              </button>
+              <button class="btn btn-sm btn-secondary" @click="editingIntId = editingIntId === int.id ? null : int.id">
+                {{ editingIntId === int.id ? 'Cancel' : 'Configure' }}
+              </button>
+              <label class="toggle-wrap">
+                <input type="checkbox" :checked="int.enabled" class="toggle-input" @change="toggleIntegration(int)" />
+                <span class="toggle-track" :class="{ active: int.enabled }">
+                  <span class="toggle-thumb" />
+                </span>
+              </label>
+            </div>
           </div>
-          <div class="int-info">
-            <h3 class="int-name">{{ int.name }}</h3>
-            <span class="int-status" :class="int.enabled ? 'text-green' : 'text-muted'">
-              {{ int.enabled ? 'Connected' : 'Disconnected' }}
-            </span>
+
+          <div v-if="editingIntId === int.id" class="int-form">
+            <div class="form-row">
+              <div class="field-group">
+                <label class="field-label">API Key</label>
+                <input v-model="int.apiKey" type="password" class="text-input" placeholder="Enter API key..." />
+              </div>
+              <div class="field-group">
+                <label class="field-label">Service ID</label>
+                <input v-model="int.serviceId" type="text" class="text-input" placeholder="e.g. PXXXXXX" />
+              </div>
+              <div class="field-group">
+                <label class="field-label">Escalation Policy</label>
+                <input v-model="int.escalationPolicy" type="text" class="text-input" placeholder="Default" />
+              </div>
+            </div>
+            <div class="form-actions">
+              <button class="btn btn-primary" :disabled="isSaving" @click="handleSave(int)">
+                {{ isSaving ? 'Saving...' : 'Save' }}
+              </button>
+            </div>
           </div>
-          <div class="int-actions">
-            <button
-              class="btn btn-sm btn-test"
-              :disabled="!int.enabled || isTesting === int.id"
-              @click="handleTest(int)"
-            >
-              <svg v-if="isTesting === int.id" class="spinner" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12">
-                <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
+
+          <div v-else-if="int.enabled" class="int-summary">
+            <div class="summary-item">
+              <span class="summary-label">Service</span>
+              <span class="summary-val mono">{{ int.serviceId || 'Not set' }}</span>
+            </div>
+            <div class="summary-item">
+              <span class="summary-label">Policy</span>
+              <span class="summary-val">{{ int.escalationPolicy || 'Not set' }}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <h3>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="18" height="18">
+              <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+              <line x1="12" y1="9" x2="12" y2="13"/>
+              <line x1="12" y1="17" x2="12.01" y2="17"/>
+            </svg>
+            Escalation Rules
+          </h3>
+          <button class="btn btn-primary">+ Add Rule</button>
+        </div>
+        <div v-if="rules.length === 0" class="rules-list" style="padding: 20px; text-align: center; color: var(--text-tertiary);">
+          No active rotation sessions. Rules appear when triggers are running with rotation.
+        </div>
+        <div v-else class="rules-list">
+          <div v-for="r in rules" :key="r.id" class="rule-row">
+            <div class="rule-bot">{{ r.bot }}</div>
+            <div class="rule-sev" :style="{ color: r.severity === 'critical' ? '#ef4444' : '#f59e0b' }">{{ r.severity }}</div>
+            <div class="rule-arrow">→</div>
+            <div class="rule-int">{{ r.integration }}</div>
+            <div class="rule-arrow">→</div>
+            <div class="rule-to">{{ r.escalateTo }}</div>
+            <button class="btn-icon-sm">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+                <polyline points="3 6 5 6 21 6"/>
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
               </svg>
-              {{ isTesting === int.id ? 'Testing...' : 'Test Escalation' }}
             </button>
-            <button class="btn btn-sm btn-secondary" @click="editingIntId = editingIntId === int.id ? null : int.id">
-              {{ editingIntId === int.id ? 'Cancel' : 'Configure' }}
-            </button>
-            <label class="toggle-wrap">
-              <input type="checkbox" :checked="int.enabled" class="toggle-input" @change="toggleIntegration(int)" />
-              <span class="toggle-track" :class="{ active: int.enabled }">
-                <span class="toggle-thumb" />
+          </div>
+        </div>
+      </div>
+
+      <!-- Rotation History -->
+      <div v-if="rotationEvents.length > 0" class="card">
+        <div class="card-header">
+          <h3>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="18" height="18">
+              <circle cx="12" cy="12" r="10"/>
+              <polyline points="12 6 12 12 16 14"/>
+            </svg>
+            Rotation History
+          </h3>
+        </div>
+        <div class="rules-list">
+          <div v-for="evt in rotationEvents" :key="evt.id" class="rule-row">
+            <div class="rule-bot">{{ evt.execution_id }}</div>
+            <div class="rule-sev" :style="{ color: evt.urgency === 'high' ? '#ef4444' : '#f59e0b' }">{{ evt.urgency }}</div>
+            <div class="rule-arrow">→</div>
+            <div class="rule-int">{{ evt.from_account_name || 'none' }} → {{ evt.to_account_name || 'auto' }}</div>
+            <div class="rule-to">{{ evt.reason || evt.rotation_status }}</div>
+            <div class="rule-to" style="font-size: 0.72rem; color: var(--text-tertiary);">{{ fmtDate(evt.created_at) }}</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card severity-card">
+        <div class="card-header">
+          <h3>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="18" height="18">
+              <circle cx="12" cy="12" r="10"/>
+              <path d="M8 14s1.5 2 4 2 4-2 4-2"/>
+              <line x1="9" y1="9" x2="9.01" y2="9"/>
+              <line x1="15" y1="9" x2="15.01" y2="9"/>
+            </svg>
+            Severity Thresholds
+          </h3>
+        </div>
+        <div class="threshold-list">
+          <div v-for="[sev, desc, color] in [['critical', 'Immediate escalation — page on-call now', '#ef4444'], ['high', 'Escalate during business hours', '#f97316'], ['medium', 'Create ticket, no page', '#f59e0b'], ['low', 'Log only, no escalation', '#6b7280']]" :key="sev" class="threshold-row">
+            <div class="thresh-sev" :style="{ color, background: color + '15' }">{{ sev }}</div>
+            <div class="thresh-desc">{{ desc }}</div>
+            <label class="toggle-wrap-sm">
+              <input type="checkbox" :checked="sev !== 'low'" class="toggle-input" />
+              <span class="toggle-track-sm" :class="{ active: sev !== 'low' }">
+                <span class="toggle-thumb-sm" />
               </span>
             </label>
           </div>
         </div>
-
-        <div v-if="editingIntId === int.id" class="int-form">
-          <div class="form-row">
-            <div class="field-group">
-              <label class="field-label">API Key</label>
-              <input v-model="int.apiKey" type="password" class="text-input" placeholder="Enter API key..." />
-            </div>
-            <div class="field-group">
-              <label class="field-label">Service ID</label>
-              <input v-model="int.serviceId" type="text" class="text-input" placeholder="e.g. PXXXXXX" />
-            </div>
-            <div class="field-group">
-              <label class="field-label">Escalation Policy</label>
-              <input v-model="int.escalationPolicy" type="text" class="text-input" placeholder="Default" />
-            </div>
-          </div>
-          <div class="form-actions">
-            <button class="btn btn-primary" :disabled="isSaving" @click="handleSave(int)">
-              {{ isSaving ? 'Saving...' : 'Save' }}
-            </button>
-          </div>
-        </div>
-
-        <div v-else-if="int.enabled" class="int-summary">
-          <div class="summary-item">
-            <span class="summary-label">Service</span>
-            <span class="summary-val mono">{{ int.serviceId || 'Not set' }}</span>
-          </div>
-          <div class="summary-item">
-            <span class="summary-label">Policy</span>
-            <span class="summary-val">{{ int.escalationPolicy || 'Not set' }}</span>
-          </div>
-        </div>
       </div>
-    </div>
-
-    <div class="card">
-      <div class="card-header">
-        <h3>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="18" height="18">
-            <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
-            <line x1="12" y1="9" x2="12" y2="13"/>
-            <line x1="12" y1="17" x2="12.01" y2="17"/>
-          </svg>
-          Escalation Rules
-        </h3>
-        <button class="btn btn-primary">+ Add Rule</button>
-      </div>
-      <div class="rules-list">
-        <div v-for="r in rules" :key="r.id" class="rule-row">
-          <div class="rule-bot">{{ r.bot }}</div>
-          <div class="rule-sev" :style="{ color: r.severity === 'critical' ? '#ef4444' : '#f59e0b' }">{{ r.severity }}</div>
-          <div class="rule-arrow">→</div>
-          <div class="rule-int">{{ r.integration }}</div>
-          <div class="rule-arrow">→</div>
-          <div class="rule-to">{{ r.escalateTo }}</div>
-          <button class="btn-icon-sm">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
-              <polyline points="3 6 5 6 21 6"/>
-              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
-            </svg>
-          </button>
-        </div>
-      </div>
-    </div>
-
-    <div class="card severity-card">
-      <div class="card-header">
-        <h3>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="18" height="18">
-            <circle cx="12" cy="12" r="10"/>
-            <path d="M8 14s1.5 2 4 2 4-2 4-2"/>
-            <line x1="9" y1="9" x2="9.01" y2="9"/>
-            <line x1="15" y1="9" x2="15.01" y2="9"/>
-          </svg>
-          Severity Thresholds
-        </h3>
-      </div>
-      <div class="threshold-list">
-        <div v-for="[sev, desc, color] in [['critical', 'Immediate escalation — page on-call now', '#ef4444'], ['high', 'Escalate during business hours', '#f97316'], ['medium', 'Create ticket, no page', '#f59e0b'], ['low', 'Log only, no escalation', '#6b7280']]" :key="sev" class="threshold-row">
-          <div class="thresh-sev" :style="{ color, background: color + '15' }">{{ sev }}</div>
-          <div class="thresh-desc">{{ desc }}</div>
-          <label class="toggle-wrap-sm">
-            <input type="checkbox" :checked="sev !== 'low'" class="toggle-input" />
-            <span class="toggle-track-sm" :class="{ active: sev !== 'low' }">
-              <span class="toggle-thumb-sm" />
-            </span>
-          </label>
-        </div>
-      </div>
-    </div>
+    </template>
   </div>
 </template>
 

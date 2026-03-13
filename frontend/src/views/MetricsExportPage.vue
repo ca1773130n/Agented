@@ -1,10 +1,17 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, onMounted } from 'vue';
 import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
+import { analyticsApi, ApiError } from '../services/api';
+import type { CostAnalyticsResponse, ExecutionAnalyticsResponse } from '../services/api';
 
 const showToast = useToast();
+
+const loading = ref(true);
+const error = ref<string | null>(null);
+const costData = ref<CostAnalyticsResponse | null>(null);
+const executionData = ref<ExecutionAnalyticsResponse | null>(null);
 
 type ExportTarget = 'prometheus' | 'datadog' | 'grafana';
 
@@ -19,28 +26,7 @@ interface ExportConfig {
   metrics: string[];
 }
 
-const configs = ref<ExportConfig[]>([
-  {
-    id: 'exp-1',
-    target: 'prometheus',
-    label: 'Prometheus Scrape',
-    endpoint: 'http://prometheus:9090/metrics',
-    apiKey: '',
-    enabled: true,
-    lastPushed: '2 minutes ago',
-    metrics: ['execution_count', 'execution_duration_seconds', 'execution_success_rate'],
-  },
-  {
-    id: 'exp-2',
-    target: 'datadog',
-    label: 'Datadog Events',
-    endpoint: 'https://api.datadoghq.com/api/v1/series',
-    apiKey: 'dd-key-••••••••',
-    enabled: false,
-    lastPushed: null,
-    metrics: ['bot.execution.count', 'bot.execution.duration', 'bot.token.usage'],
-  },
-]);
+const configs = ref<ExportConfig[]>([]);
 
 const targetMeta: Record<ExportTarget, { color: string; icon: string }> = {
   prometheus: { color: '#e84118', icon: 'P' },
@@ -53,6 +39,47 @@ const availableMetrics = [
   'token_usage_total', 'token_cost_usd', 'bot_health_score',
   'trigger_fire_count', 'queue_depth', 'active_bots',
 ];
+
+async function loadData() {
+  loading.value = true;
+  error.value = null;
+  try {
+    const [cost, executions] = await Promise.all([
+      analyticsApi.fetchCostAnalytics(),
+      analyticsApi.fetchExecutionAnalytics(),
+    ]);
+    costData.value = cost;
+    executionData.value = executions;
+
+    // Create a default Prometheus config from fetched data
+    const costMetrics = cost.data?.length ? ['token_cost_usd', 'token_usage_total'] : [];
+    const execMetrics = executions.data?.length ? ['execution_count', 'execution_duration_seconds', 'execution_success_rate'] : [];
+    const allMetrics = [...costMetrics, ...execMetrics];
+
+    if (allMetrics.length > 0) {
+      configs.value = [{
+        id: 'exp-analytics',
+        target: 'prometheus',
+        label: 'Analytics Export',
+        endpoint: '/metrics (local)',
+        apiKey: '',
+        enabled: true,
+        lastPushed: new Date().toLocaleString(),
+        metrics: allMetrics,
+      }];
+    }
+  } catch (err) {
+    if (err instanceof ApiError) {
+      error.value = `API Error (${err.status}): ${err.message}`;
+    } else {
+      error.value = err instanceof Error ? err.message : 'Unknown error';
+    }
+  } finally {
+    loading.value = false;
+  }
+}
+
+onMounted(loadData);
 
 const showAddModal = ref(false);
 const newTarget = ref<ExportTarget>('prometheus');
@@ -68,7 +95,6 @@ function toggleEnabled(cfg: ExportConfig) {
 
 function testConnection(cfg: ExportConfig) {
   showToast(`Testing connection to ${cfg.label}...`, 'success');
-  setTimeout(() => showToast(`${cfg.label} connection successful`, 'success'), 1200);
 }
 
 function removeConfig(id: string) {
@@ -101,6 +127,46 @@ function saveConfig() {
   showAddModal.value = false;
   showToast(`${newLabel.value.trim()} export target added`, 'success');
 }
+
+function exportAsJson() {
+  const exportData = {
+    cost_analytics: costData.value,
+    execution_analytics: executionData.value,
+    exported_at: new Date().toISOString(),
+  };
+  const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `metrics-export-${new Date().toISOString().split('T')[0]}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('Metrics exported as JSON', 'success');
+}
+
+function exportAsCsv() {
+  const rows: string[] = ['type,group,value,date'];
+
+  if (costData.value?.data) {
+    for (const dp of costData.value.data) {
+      rows.push(`cost,${dp.entity_id ?? ''},${dp.total_cost_usd ?? ''},${dp.period ?? ''}`);
+    }
+  }
+  if (executionData.value?.data) {
+    for (const dp of executionData.value.data) {
+      rows.push(`execution,${dp.backend_type ?? ''},${dp.total_executions ?? ''},${dp.period ?? ''}`);
+    }
+  }
+
+  const blob = new Blob([rows.join('\n')], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `metrics-export-${new Date().toISOString().split('T')[0]}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('Metrics exported as CSV', 'success');
+}
 </script>
 
 <template>
@@ -112,6 +178,8 @@ function saveConfig() {
       subtitle="Export execution metrics to Prometheus, Grafana, or Datadog for unified observability."
     >
       <template #actions>
+        <button class="btn btn-secondary" @click="exportAsJson" :disabled="loading">Export JSON</button>
+        <button class="btn btn-secondary" @click="exportAsCsv" :disabled="loading">Export CSV</button>
         <button class="btn btn-primary" @click="showAddModal = true">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
           Add Target
@@ -119,49 +187,69 @@ function saveConfig() {
       </template>
     </PageHeader>
 
-    <div class="info-banner">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-      <span>Prometheus metrics are available at <code>/metrics</code>. Configure Datadog/Grafana push targets to forward metrics automatically.</span>
+    <!-- Loading state -->
+    <div v-if="loading" class="card" style="text-align: center; padding: 60px 20px; color: var(--text-secondary);">
+      <p>Loading analytics data...</p>
     </div>
 
-    <div class="configs-grid">
-      <div v-for="cfg in configs" :key="cfg.id" class="card config-card">
-        <div class="config-card-header">
-          <div class="target-badge" :style="{ background: targetMeta[cfg.target].color + '20', color: targetMeta[cfg.target].color }">
-            {{ targetMeta[cfg.target].icon }}
-          </div>
-          <div class="config-title-area">
-            <span class="config-label">{{ cfg.label }}</span>
-            <span class="config-endpoint">{{ cfg.endpoint }}</span>
-          </div>
-          <div class="config-status" :class="{ active: cfg.enabled }">
-            {{ cfg.enabled ? 'Active' : 'Paused' }}
-          </div>
-        </div>
+    <!-- Error state -->
+    <div v-else-if="error" class="card" style="text-align: center; padding: 60px 20px; color: var(--text-secondary);">
+      <p>{{ error }}</p>
+      <button class="btn btn-primary" style="margin-top: 12px" @click="loadData">Retry</button>
+    </div>
 
-        <div class="metrics-section">
-          <span class="section-label">Exported metrics</span>
-          <div class="metrics-chips">
-            <span v-for="m in cfg.metrics" :key="m" class="metric-chip">{{ m }}</span>
+    <template v-else>
+      <div class="info-banner">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        <span>
+          Analytics loaded: {{ costData?.data?.length ?? 0 }} cost data points, {{ executionData?.data?.length ?? 0 }} execution data points.
+          Use the Export buttons to download as JSON or CSV.
+        </span>
+      </div>
+
+      <div v-if="configs.length === 0" class="card" style="text-align: center; padding: 40px; color: var(--text-tertiary);">
+        <p>No export targets configured. Click "Add Target" to set up metric forwarding.</p>
+      </div>
+
+      <div v-else class="configs-grid">
+        <div v-for="cfg in configs" :key="cfg.id" class="card config-card">
+          <div class="config-card-header">
+            <div class="target-badge" :style="{ background: targetMeta[cfg.target].color + '20', color: targetMeta[cfg.target].color }">
+              {{ targetMeta[cfg.target].icon }}
+            </div>
+            <div class="config-title-area">
+              <span class="config-label">{{ cfg.label }}</span>
+              <span class="config-endpoint">{{ cfg.endpoint }}</span>
+            </div>
+            <div class="config-status" :class="{ active: cfg.enabled }">
+              {{ cfg.enabled ? 'Active' : 'Paused' }}
+            </div>
           </div>
-        </div>
 
-        <div v-if="cfg.lastPushed" class="last-push">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-          Last pushed {{ cfg.lastPushed }}
-        </div>
+          <div class="metrics-section">
+            <span class="section-label">Exported metrics</span>
+            <div class="metrics-chips">
+              <span v-for="m in cfg.metrics" :key="m" class="metric-chip">{{ m }}</span>
+            </div>
+          </div>
 
-        <div class="config-actions">
-          <button class="btn btn-sm btn-secondary" @click="testConnection(cfg)">Test</button>
-          <button class="btn btn-sm" :class="cfg.enabled ? 'btn-pause' : 'btn-primary'" @click="toggleEnabled(cfg)">
-            {{ cfg.enabled ? 'Pause' : 'Enable' }}
-          </button>
-          <button class="icon-btn" @click="removeConfig(cfg.id)" title="Remove">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
-          </button>
+          <div v-if="cfg.lastPushed" class="last-push">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            Last pushed {{ cfg.lastPushed }}
+          </div>
+
+          <div class="config-actions">
+            <button class="btn btn-sm btn-secondary" @click="testConnection(cfg)">Test</button>
+            <button class="btn btn-sm" :class="cfg.enabled ? 'btn-pause' : 'btn-primary'" @click="toggleEnabled(cfg)">
+              {{ cfg.enabled ? 'Pause' : 'Enable' }}
+            </button>
+            <button class="icon-btn" @click="removeConfig(cfg.id)" title="Remove">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+            </button>
+          </div>
         </div>
       </div>
-    </div>
+    </template>
 
     <!-- Add Modal -->
     <div v-if="showAddModal" class="modal-overlay" @click.self="showAddModal = false">

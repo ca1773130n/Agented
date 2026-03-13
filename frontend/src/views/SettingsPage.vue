@@ -233,6 +233,8 @@ onUnmounted(() => {
   margin-bottom: 1.5rem;
   border-bottom: 1px solid var(--border-default);
   padding-bottom: 0.5rem;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .tab {
@@ -245,6 +247,8 @@ onUnmounted(() => {
   cursor: pointer;
   border-radius: 8px 8px 0 0;
   transition: all 0.2s;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .tab:hover {

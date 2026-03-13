@@ -1,9 +1,11 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
+import { integrationApi, ApiError } from '../services/api';
+import type { Integration } from '../services/api';
 
 const router = useRouter();
 const showToast = useToast();
@@ -38,41 +40,71 @@ const eventTypes = [
   { value: 'weekly_digest', label: 'Weekly Digest' },
 ];
 
-const channels = ref<NotificationChannel[]>([
-  {
-    id: 'ch-001',
-    name: 'Engineering Alerts',
-    slackChannel: '#eng-bot-alerts',
-    webhookUrl: 'https://hooks.slack.com/services/T00000000/B00000000/XXXX',
-    enabled: true,
-    events: ['execution_failed', 'execution_timeout'],
-    template: ':red_circle: *{{bot_name}}* failed\n>{{error_summary}}\n<{{execution_url}}|View logs>',
-    bots: ['bot-security', 'bot-pr-review'],
-  },
-  {
-    id: 'ch-002',
-    name: 'Daily Summaries',
-    slackChannel: '#eng-daily-digest',
-    webhookUrl: 'https://hooks.slack.com/services/T00000000/B11111111/YYYY',
-    enabled: true,
-    events: ['daily_digest'],
-    template: ':bar_chart: *Daily Bot Summary*\n{{summary_table}}',
-    bots: [],
-  },
-]);
-
-const logs = ref<NotificationLog[]>([
-  { id: 'log-1', channel: '#eng-bot-alerts', event: 'execution_failed', botId: 'bot-security', status: 'sent', sentAt: '2026-03-06T08:22:00Z', message: ':red_circle: bot-security failed — timeout after 600s' },
-  { id: 'log-2', channel: '#eng-daily-digest', event: 'daily_digest', botId: 'all', status: 'sent', sentAt: '2026-03-06T07:00:00Z', message: 'Daily: 12 executions, 11 success, 1 failed' },
-  { id: 'log-3', channel: '#eng-bot-alerts', event: 'execution_failed', botId: 'bot-pr-review', status: 'failed', sentAt: '2026-03-05T15:10:00Z', message: 'Delivery failed: invalid webhook URL' },
-]);
-
-const selectedChannel = ref<NotificationChannel>(channels.value[0]);
+const loading = ref(true);
+const error = ref('');
+const channels = ref<NotificationChannel[]>([]);
+const logs = ref<NotificationLog[]>([]);
+const selectedChannel = ref<NotificationChannel | null>(null);
 const isTestingSend = ref(false);
 const isSaving = ref(false);
 const activeTab = ref<'config' | 'logs'>('config');
 
+function integrationToChannel(int: Integration): NotificationChannel {
+  const config = int.config || {};
+  return {
+    id: int.id,
+    name: int.name,
+    slackChannel: (config.slack_channel as string) || '',
+    webhookUrl: (config.webhook_url as string) || '',
+    enabled: int.enabled,
+    events: (config.events as string[]) || [],
+    template: (config.template as string) || '{{bot_name}} — {{status}}',
+    bots: (config.bots as string[]) || [],
+  };
+}
+
+function channelToIntegration(ch: NotificationChannel): Partial<Integration> {
+  return {
+    name: ch.name,
+    type: 'slack',
+    enabled: ch.enabled,
+    config: {
+      slack_channel: ch.slackChannel,
+      webhook_url: ch.webhookUrl,
+      events: ch.events,
+      template: ch.template,
+      bots: ch.bots,
+    },
+  };
+}
+
+async function fetchChannels() {
+  loading.value = true;
+  error.value = '';
+  try {
+    const allIntegrations = await integrationApi.list();
+    const slackIntegrations = (allIntegrations || []).filter(
+      (i) => i.type && i.type.toLowerCase().includes('slack')
+    );
+    channels.value = slackIntegrations.map(integrationToChannel);
+    if (channels.value.length > 0 && !selectedChannel.value) {
+      selectedChannel.value = channels.value[0];
+    }
+  } catch (err) {
+    if (err instanceof ApiError) {
+      error.value = `Failed to load Slack integrations: ${err.message}`;
+    } else {
+      error.value = 'Failed to load Slack integrations';
+    }
+  } finally {
+    loading.value = false;
+  }
+}
+
+onMounted(fetchChannels);
+
 function toggleEvent(val: string) {
+  if (!selectedChannel.value) return;
   const evts = selectedChannel.value.events;
   const i = evts.indexOf(val);
   if (i === -1) evts.push(val);
@@ -80,30 +112,39 @@ function toggleEvent(val: string) {
 }
 
 async function handleTestSend() {
+  if (!selectedChannel.value) return;
   isTestingSend.value = true;
   try {
-    await new Promise(r => setTimeout(r, 1200));
-    showToast(`Test message sent to ${selectedChannel.value.slackChannel}`, 'success');
-  } catch {
-    showToast('Test send failed', 'error');
+    const result = await integrationApi.test(selectedChannel.value.id);
+    if (result.success) {
+      showToast(`Test message sent to ${selectedChannel.value.slackChannel}`, 'success');
+    } else {
+      showToast(result.message || 'Test send failed', 'error');
+    }
+  } catch (err) {
+    showToast(err instanceof ApiError ? err.message : 'Test send failed', 'error');
   } finally {
     isTestingSend.value = false;
   }
 }
 
 async function handleSave() {
+  if (!selectedChannel.value) return;
   isSaving.value = true;
   try {
-    await new Promise(r => setTimeout(r, 700));
+    const data = channelToIntegration(selectedChannel.value);
+    await integrationApi.update(selectedChannel.value.id, data);
     showToast('Notification channel saved', 'success');
+  } catch (err) {
+    showToast(err instanceof ApiError ? err.message : 'Failed to save channel', 'error');
   } finally {
     isSaving.value = false;
   }
 }
 
-function addChannel() {
+async function addChannel() {
   const nc: NotificationChannel = {
-    id: `ch-${Date.now()}`,
+    id: '',
     name: 'New Channel',
     slackChannel: '#channel-name',
     webhookUrl: '',
@@ -112,8 +153,15 @@ function addChannel() {
     template: '{{bot_name}} — {{status}}',
     bots: [],
   };
-  channels.value.push(nc);
-  selectedChannel.value = nc;
+  try {
+    const created = await integrationApi.create(channelToIntegration(nc));
+    const createdChannel = integrationToChannel(created);
+    channels.value.push(createdChannel);
+    selectedChannel.value = createdChannel;
+    showToast('New Slack channel created', 'success');
+  } catch (err) {
+    showToast(err instanceof ApiError ? err.message : 'Failed to create channel', 'error');
+  }
 }
 
 function statusColor(s: NotificationLog['status']): string {
@@ -137,7 +185,24 @@ function formatDate(ts: string): string {
       subtitle="Route bot execution results, failures, and summaries to configurable Slack channels."
     />
 
-    <div class="layout">
+    <!-- Loading state -->
+    <div v-if="loading" class="card" style="padding: 48px; text-align: center;">
+      <div style="color: var(--text-tertiary); font-size: 0.875rem;">Loading Slack integrations...</div>
+    </div>
+
+    <!-- Error state -->
+    <div v-else-if="error" class="card" style="padding: 48px; text-align: center;">
+      <div style="color: #ef4444; font-size: 0.875rem; margin-bottom: 12px;">{{ error }}</div>
+      <button class="btn btn-ghost" @click="fetchChannels">Retry</button>
+    </div>
+
+    <!-- Empty state -->
+    <div v-else-if="channels.length === 0 && !loading" class="card" style="padding: 48px; text-align: center;">
+      <div style="color: var(--text-tertiary); font-size: 0.875rem; margin-bottom: 12px;">No Slack notification channels configured yet.</div>
+      <button class="btn btn-primary" @click="addChannel">+ Add Channel</button>
+    </div>
+
+    <div v-else class="layout">
       <!-- Channel list -->
       <aside class="sidebar card">
         <div class="sidebar-header">
@@ -148,7 +213,7 @@ function formatDate(ts: string): string {
           v-for="ch in channels"
           :key="ch.id"
           class="channel-item"
-          :class="{ active: selectedChannel.id === ch.id }"
+          :class="{ active: selectedChannel?.id === ch.id }"
           @click="selectedChannel = ch"
         >
           <div class="channel-row">
@@ -162,7 +227,7 @@ function formatDate(ts: string): string {
       </aside>
 
       <!-- Editor -->
-      <div class="editor">
+      <div v-if="selectedChannel" class="editor">
         <!-- Tabs -->
         <div class="tabs">
           <button :class="['tab', { active: activeTab === 'config' }]" @click="activeTab = 'config'">Configuration</button>
@@ -241,7 +306,10 @@ function formatDate(ts: string): string {
               <span>Recent Deliveries</span>
               <span class="badge-count">{{ logs.length }}</span>
             </div>
-            <div class="log-list">
+            <div v-if="logs.length === 0" style="padding: 32px; text-align: center; color: var(--text-tertiary); font-size: 0.82rem;">
+              No delivery logs available yet.
+            </div>
+            <div v-else class="log-list">
               <div v-for="log in logs" :key="log.id" class="log-row">
                 <span class="log-status-dot" :style="{ background: statusColor(log.status) }"></span>
                 <div class="log-info">

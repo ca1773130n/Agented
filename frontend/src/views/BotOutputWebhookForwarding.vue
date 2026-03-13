@@ -1,12 +1,18 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
+import LoadingState from '../components/base/LoadingState.vue';
 import { useToast } from '../composables/useToast';
+import { integrationApi, ApiError } from '../services/api';
+import type { Integration } from '../services/api';
 
 const router = useRouter();
 const showToast = useToast();
+
+const isLoading = ref(true);
+const error = ref('');
 
 interface ForwardingRule {
   id: string;
@@ -19,28 +25,7 @@ interface ForwardingRule {
   failureCount: number;
 }
 
-const rules = ref<ForwardingRule[]>([
-  {
-    id: 'fwd-001',
-    botName: 'bot-security',
-    targetUrl: 'https://hooks.internal.example.com/security-findings',
-    enabled: true,
-    events: ['execution_complete', 'execution_failed'],
-    lastFiredAt: '2026-03-06T14:00:00Z',
-    deliveryCount: 87,
-    failureCount: 2,
-  },
-  {
-    id: 'fwd-002',
-    botName: 'bot-pr-review',
-    targetUrl: 'https://data.example.com/api/bot-events',
-    enabled: false,
-    events: ['execution_complete'],
-    lastFiredAt: '2026-03-05T10:30:00Z',
-    deliveryCount: 34,
-    failureCount: 0,
-  },
-]);
+const rules = ref<ForwardingRule[]>([]);
 
 const isAdding = ref(false);
 const newBotName = ref('');
@@ -55,6 +40,42 @@ const eventOptions = [
   { value: 'approval_required', label: 'Approval Required' },
 ];
 
+function integrationToRule(i: Integration): ForwardingRule {
+  const config = i.config ?? {};
+  return {
+    id: i.id,
+    botName: i.name || i.trigger_id || 'Unknown',
+    targetUrl: (config.target_url as string) ?? (config.url as string) ?? '',
+    enabled: i.enabled,
+    events: (config.events as string[]) ?? ['execution_complete'],
+    lastFiredAt: (config.last_fired_at as string) ?? null,
+    deliveryCount: (config.delivery_count as number) ?? 0,
+    failureCount: (config.failure_count as number) ?? 0,
+  };
+}
+
+async function loadRules() {
+  isLoading.value = true;
+  error.value = '';
+  try {
+    const integrations = await integrationApi.list();
+    const list = Array.isArray(integrations) ? integrations : [];
+    // Filter to webhook forwarding type
+    rules.value = list
+      .filter((i: Integration) => i.type === 'webhook_forward' || i.type === 'webhook')
+      .map(integrationToRule);
+  } catch (e) {
+    if (e instanceof ApiError) {
+      error.value = e.message;
+    } else {
+      error.value = 'Failed to load forwarding rules';
+    }
+    showToast(error.value, 'error');
+  } finally {
+    isLoading.value = false;
+  }
+}
+
 function toggleEvent(rule: ForwardingRule, event: string) {
   const i = rule.events.indexOf(event);
   if (i === -1) rule.events.push(event);
@@ -64,8 +85,14 @@ function toggleEvent(rule: ForwardingRule, event: string) {
 async function testDelivery(rule: ForwardingRule) {
   isTesting.value = rule.id;
   try {
-    await new Promise(r => setTimeout(r, 1000));
-    showToast(`Test payload delivered to ${rule.targetUrl}`, 'success');
+    const result = await integrationApi.test(rule.id);
+    if (result.success) {
+      showToast(`Test payload delivered to ${rule.targetUrl}`, 'success');
+    } else {
+      showToast(`Test failed: ${result.message}`, 'error');
+    }
+  } catch {
+    showToast('Test delivery failed', 'error');
   } finally {
     isTesting.value = null;
   }
@@ -78,23 +105,34 @@ async function addRule() {
   }
   isSaving.value = true;
   try {
-    await new Promise(r => setTimeout(r, 700));
-    rules.value.push({
-      id: `fwd-${Date.now()}`,
-      botName: newBotName.value,
-      targetUrl: newTargetUrl.value,
+    await integrationApi.create({
+      name: newBotName.value,
+      type: 'webhook_forward',
       enabled: true,
-      events: ['execution_complete'],
-      lastFiredAt: null,
-      deliveryCount: 0,
-      failureCount: 0,
+      config: {
+        target_url: newTargetUrl.value,
+        events: ['execution_complete'],
+      },
     });
     newBotName.value = '';
     newTargetUrl.value = '';
     isAdding.value = false;
     showToast('Forwarding rule added', 'success');
+    await loadRules();
+  } catch {
+    showToast('Failed to add forwarding rule', 'error');
   } finally {
     isSaving.value = false;
+  }
+}
+
+async function removeRule(rule: ForwardingRule) {
+  try {
+    await integrationApi.delete(rule.id);
+    rules.value = rules.value.filter(r => r.id !== rule.id);
+    showToast('Forwarding rule removed', 'success');
+  } catch {
+    showToast('Failed to remove forwarding rule', 'error');
   }
 }
 
@@ -102,6 +140,8 @@ function formatDate(ts: string | null) {
   if (!ts) return 'Never';
   return new Date(ts).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
+
+onMounted(loadRules);
 </script>
 
 <template>
@@ -116,84 +156,96 @@ function formatDate(ts: string | null) {
       subtitle="POST structured bot execution output to external URLs when runs complete — integrate with any system."
     />
 
-    <div class="page-actions">
-      <button class="btn btn-primary" @click="isAdding = !isAdding">
-        {{ isAdding ? 'Cancel' : '+ Add Forwarding Rule' }}
-      </button>
+    <LoadingState v-if="isLoading" message="Loading forwarding rules..." />
+
+    <div v-else-if="error" class="card error-state">
+      <p class="error-text">{{ error }}</p>
+      <button class="btn btn-primary" @click="loadRules">Retry</button>
     </div>
 
-    <div v-if="isAdding" class="card add-card">
-      <div class="add-header">New Forwarding Rule</div>
-      <div class="add-body">
-        <div class="field-group">
-          <label class="field-label">Bot Name</label>
-          <input v-model="newBotName" class="text-input" placeholder="bot-security" />
-        </div>
-        <div class="field-group">
-          <label class="field-label">Target URL</label>
-          <input v-model="newTargetUrl" class="text-input" placeholder="https://hooks.example.com/endpoint" />
-        </div>
-        <div class="add-actions">
-          <button class="btn btn-primary" :disabled="isSaving" @click="addRule">
-            {{ isSaving ? 'Adding...' : 'Add Rule' }}
-          </button>
+    <template v-else>
+      <div class="page-actions">
+        <button class="btn btn-primary" @click="isAdding = !isAdding">
+          {{ isAdding ? 'Cancel' : '+ Add Forwarding Rule' }}
+        </button>
+      </div>
+
+      <div v-if="isAdding" class="card add-card">
+        <div class="add-header">New Forwarding Rule</div>
+        <div class="add-body">
+          <div class="field-group">
+            <label class="field-label">Bot Name</label>
+            <input v-model="newBotName" class="text-input" placeholder="bot-security" />
+          </div>
+          <div class="field-group">
+            <label class="field-label">Target URL</label>
+            <input v-model="newTargetUrl" class="text-input" placeholder="https://hooks.example.com/endpoint" />
+          </div>
+          <div class="add-actions">
+            <button class="btn btn-primary" :disabled="isSaving" @click="addRule">
+              {{ isSaving ? 'Adding...' : 'Add Rule' }}
+            </button>
+          </div>
         </div>
       </div>
-    </div>
 
-    <div class="rules-list">
-      <div v-for="rule in rules" :key="rule.id" class="rule-card card">
-        <div class="rule-header">
-          <div class="rule-left">
-            <button :class="['toggle-btn', { active: rule.enabled }]" @click="rule.enabled = !rule.enabled">
-              <span class="toggle-knob"></span>
-            </button>
-            <div>
-              <div class="rule-bot">{{ rule.botName }}</div>
-              <div class="rule-url">{{ rule.targetUrl }}</div>
+      <div class="rules-list">
+        <div v-for="rule in rules" :key="rule.id" class="rule-card card">
+          <div class="rule-header">
+            <div class="rule-left">
+              <button :class="['toggle-btn', { active: rule.enabled }]" @click="rule.enabled = !rule.enabled">
+                <span class="toggle-knob"></span>
+              </button>
+              <div>
+                <div class="rule-bot">{{ rule.botName }}</div>
+                <div class="rule-url">{{ rule.targetUrl }}</div>
+              </div>
+            </div>
+            <div class="rule-stats">
+              <span class="stat"><span class="stat-num">{{ rule.deliveryCount }}</span> delivered</span>
+              <span v-if="rule.failureCount > 0" class="stat stat-fail"><span class="stat-num">{{ rule.failureCount }}</span> failed</span>
+              <span class="stat last-fired">Last: {{ formatDate(rule.lastFiredAt) }}</span>
             </div>
           </div>
-          <div class="rule-stats">
-            <span class="stat"><span class="stat-num">{{ rule.deliveryCount }}</span> delivered</span>
-            <span v-if="rule.failureCount > 0" class="stat stat-fail"><span class="stat-num">{{ rule.failureCount }}</span> failed</span>
-            <span class="stat last-fired">Last: {{ formatDate(rule.lastFiredAt) }}</span>
+
+          <div class="rule-events">
+            <span class="events-label">Events:</span>
+            <label v-for="opt in eventOptions" :key="opt.value" class="event-check">
+              <input
+                type="checkbox"
+                :checked="rule.events.includes(opt.value)"
+                @change="toggleEvent(rule, opt.value)"
+              />
+              {{ opt.label }}
+            </label>
+          </div>
+
+          <div class="rule-footer">
+            <button
+              class="btn btn-ghost btn-sm"
+              :disabled="isTesting === rule.id"
+              @click="testDelivery(rule)"
+            >
+              {{ isTesting === rule.id ? 'Sending...' : 'Test Delivery' }}
+            </button>
+            <button class="btn btn-danger btn-sm" @click="removeRule(rule)">Remove</button>
           </div>
         </div>
 
-        <div class="rule-events">
-          <span class="events-label">Events:</span>
-          <label v-for="opt in eventOptions" :key="opt.value" class="event-check">
-            <input
-              type="checkbox"
-              :checked="rule.events.includes(opt.value)"
-              @change="toggleEvent(rule, opt.value)"
-            />
-            {{ opt.label }}
-          </label>
-        </div>
-
-        <div class="rule-footer">
-          <button
-            class="btn btn-ghost btn-sm"
-            :disabled="isTesting === rule.id"
-            @click="testDelivery(rule)"
-          >
-            {{ isTesting === rule.id ? 'Sending...' : 'Test Delivery' }}
-          </button>
-          <button class="btn btn-danger btn-sm" @click="rules.splice(rules.indexOf(rule), 1)">Remove</button>
+        <div v-if="rules.length === 0" class="empty-state card">
+          <p>No forwarding rules configured. Add one to start forwarding bot output.</p>
         </div>
       </div>
-
-      <div v-if="rules.length === 0" class="empty-state card">
-        <p>No forwarding rules configured. Add one to start forwarding bot output.</p>
-      </div>
-    </div>
+    </template>
   </div>
 </template>
 
 <style scoped>
 .webhook-fwd { display: flex; flex-direction: column; gap: 24px; animation: fadeIn 0.4s ease; }
 @keyframes fadeIn { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+
+.error-state { padding: 32px 24px; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 12px; }
+.error-text { font-size: 0.875rem; color: #ef4444; margin: 0; }
 
 .page-actions { display: flex; justify-content: flex-end; }
 

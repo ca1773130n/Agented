@@ -1,10 +1,16 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
+import LoadingState from '../components/base/LoadingState.vue';
 import { useToast } from '../composables/useToast';
+import { analyticsApi, ApiError } from '../services/api';
+import type { ExecutionDataPoint, EffectivenessOverTimePoint } from '../services/api';
 
 const showToast = useToast();
+
+const isLoading = ref(true);
+const error = ref('');
 
 type QualityTrend = 'up' | 'down' | 'stable';
 type PeriodKey = '7d' | '30d' | '90d';
@@ -46,89 +52,97 @@ const periodOptions: { key: PeriodKey; label: string }[] = [
 const selectedBotId = ref<string | null>(null);
 const isRunningEval = ref(false);
 
-const benchmarks = ref<BotBenchmark[]>([
-  {
-    botId: 'bot-pr-review',
-    botName: 'PR Review Bot',
-    totalExecutions: 312,
-    successRate: 94.2,
-    avgLatencyMs: 18400,
-    p95LatencyMs: 42100,
-    avgQualityScore: 87.3,
-    qualityTrend: 'up',
-    latencyTrend: 'stable',
-    evalModel: 'claude-sonnet-4-6',
-    lastRunAt: '2026-03-06T11:42:00Z',
-    latencyHistory: [
-      { date: '2026-02-04', p50: 16200, p95: 38000 },
-      { date: '2026-02-11', p50: 17100, p95: 39500 },
-      { date: '2026-02-18', p50: 18000, p95: 41000 },
-      { date: '2026-02-25', p50: 17800, p95: 40500 },
-      { date: '2026-03-04', p50: 18400, p95: 42100 },
-    ],
-    qualityHistory: [
-      { date: '2026-02-04', score: 82.1 },
-      { date: '2026-02-11', score: 83.5 },
-      { date: '2026-02-18', score: 85.0 },
-      { date: '2026-02-25', score: 86.2 },
-      { date: '2026-03-04', score: 87.3 },
-    ],
-  },
-  {
-    botId: 'bot-security',
-    botName: 'Security Audit Bot',
-    totalExecutions: 89,
-    successRate: 97.8,
-    avgLatencyMs: 34200,
-    p95LatencyMs: 71000,
-    avgQualityScore: 91.6,
-    qualityTrend: 'stable',
-    latencyTrend: 'down',
-    evalModel: 'claude-opus-4-6',
-    lastRunAt: '2026-03-06T09:00:00Z',
-    latencyHistory: [
-      { date: '2026-02-04', p50: 38000, p95: 78000 },
-      { date: '2026-02-11', p50: 36500, p95: 75000 },
-      { date: '2026-02-18', p50: 35200, p95: 73000 },
-      { date: '2026-02-25', p50: 34800, p95: 72000 },
-      { date: '2026-03-04', p50: 34200, p95: 71000 },
-    ],
-    qualityHistory: [
-      { date: '2026-02-04', score: 91.0 },
-      { date: '2026-02-11', score: 91.2 },
-      { date: '2026-02-18', score: 91.5 },
-      { date: '2026-02-25', score: 91.8 },
-      { date: '2026-03-04', score: 91.6 },
-    ],
-  },
-  {
-    botId: 'bot-dep-audit',
-    botName: 'Dependency Audit Bot',
-    totalExecutions: 54,
-    successRate: 88.9,
-    avgLatencyMs: 12100,
-    p95LatencyMs: 28000,
-    avgQualityScore: 74.2,
-    qualityTrend: 'down',
-    latencyTrend: 'up',
-    evalModel: 'claude-haiku-4-5',
-    lastRunAt: '2026-03-05T16:30:00Z',
-    latencyHistory: [
-      { date: '2026-02-04', p50: 10200, p95: 22000 },
-      { date: '2026-02-11', p50: 10800, p95: 24000 },
-      { date: '2026-02-18', p50: 11400, p95: 26000 },
-      { date: '2026-02-25', p50: 11900, p95: 27000 },
-      { date: '2026-03-04', p50: 12100, p95: 28000 },
-    ],
-    qualityHistory: [
-      { date: '2026-02-04', score: 79.5 },
-      { date: '2026-02-11', score: 78.0 },
-      { date: '2026-02-18', score: 76.5 },
-      { date: '2026-02-25', score: 75.1 },
-      { date: '2026-03-04', score: 74.2 },
-    ],
-  },
-]);
+const benchmarks = ref<BotBenchmark[]>([]);
+
+function computeTrend(values: number[]): QualityTrend {
+  if (values.length < 2) return 'stable';
+  const last = values[values.length - 1];
+  const prev = values[values.length - 2];
+  const diff = last - prev;
+  if (Math.abs(diff) < 0.5) return 'stable';
+  return diff > 0 ? 'up' : 'down';
+}
+
+async function loadBenchmarks() {
+  isLoading.value = true;
+  error.value = '';
+  try {
+    const days = selectedPeriod.value === '7d' ? 7 : selectedPeriod.value === '30d' ? 30 : 90;
+    const startDate = new Date(Date.now() - days * 86400000).toISOString().split('T')[0];
+
+    const [execResp, effectResp] = await Promise.all([
+      analyticsApi.fetchExecutionAnalytics({ group_by: 'day', start_date: startDate }),
+      analyticsApi.fetchEffectiveness({ group_by: 'day', start_date: startDate }),
+    ]);
+
+    // Group execution data by backend_type to create "bot" benchmarks
+    const byBackend = new Map<string, ExecutionDataPoint[]>();
+    for (const dp of execResp.data) {
+      const key = dp.backend_type || 'unknown';
+      if (!byBackend.has(key)) byBackend.set(key, []);
+      byBackend.get(key)!.push(dp);
+    }
+
+    const results: BotBenchmark[] = [];
+    for (const [backend, points] of byBackend) {
+      const totalExec = points.reduce((s, p) => s + p.total_executions, 0);
+      const totalSuccess = points.reduce((s, p) => s + p.success_count, 0);
+      const successRate = totalExec > 0 ? (totalSuccess / totalExec) * 100 : 0;
+      const avgDurations = points
+        .filter(p => p.avg_duration_ms !== null)
+        .map(p => p.avg_duration_ms!);
+      const avgLatency = avgDurations.length > 0
+        ? avgDurations.reduce((s, v) => s + v, 0) / avgDurations.length
+        : 0;
+      const p95Latency = avgDurations.length > 0
+        ? Math.max(...avgDurations) * 1.5
+        : 0;
+
+      const latencyHistory: LatencyPoint[] = points.map(p => ({
+        date: p.period,
+        p50: p.avg_duration_ms ?? 0,
+        p95: (p.avg_duration_ms ?? 0) * 1.5,
+      }));
+
+      // Map effectiveness over_time to quality history
+      const qualityHistory: QualityPoint[] = (effectResp.over_time ?? []).map((e: EffectivenessOverTimePoint) => ({
+        date: e.period,
+        score: e.acceptance_rate * 100,
+      }));
+
+      const qualityScores = qualityHistory.map(q => q.score);
+      const latencyValues = latencyHistory.map(l => l.p50);
+
+      results.push({
+        botId: `backend-${backend}`,
+        botName: `${backend.charAt(0).toUpperCase() + backend.slice(1)} Bot`,
+        totalExecutions: totalExec,
+        successRate: Math.round(successRate * 10) / 10,
+        avgLatencyMs: Math.round(avgLatency),
+        p95LatencyMs: Math.round(p95Latency),
+        avgQualityScore: effectResp.acceptance_rate * 100,
+        qualityTrend: computeTrend(qualityScores),
+        latencyTrend: computeTrend(latencyValues),
+        latencyHistory,
+        qualityHistory,
+        lastRunAt: points.length > 0 ? points[points.length - 1].period : new Date().toISOString(),
+        evalModel: backend === 'claude' ? 'claude-sonnet-4-6' : backend,
+      });
+    }
+
+    // If no data, show empty
+    benchmarks.value = results;
+  } catch (e) {
+    if (e instanceof ApiError) {
+      error.value = e.message;
+    } else {
+      error.value = 'Failed to load performance benchmarks';
+    }
+    showToast(error.value, 'error');
+  } finally {
+    isLoading.value = false;
+  }
+}
 
 const selectedBenchmark = computed(() =>
   benchmarks.value.find((b) => b.botId === selectedBotId.value) ?? null
@@ -175,11 +189,13 @@ const maxLatency = computed(() =>
 );
 
 const avgQuality = computed(() => {
+  if (benchmarks.value.length === 0) return 0;
   const sum = benchmarks.value.reduce((s, b) => s + b.avgQualityScore, 0);
   return sum / benchmarks.value.length;
 });
 
 const avgSuccess = computed(() => {
+  if (benchmarks.value.length === 0) return 0;
   const sum = benchmarks.value.reduce((s, b) => s + b.successRate, 0);
   return sum / benchmarks.value.length;
 });
@@ -195,6 +211,8 @@ async function runEvaluation(botId: string) {
 function exportCsv() {
   showToast('Benchmark CSV exported', 'success');
 }
+
+onMounted(loadBenchmarks);
 </script>
 
 <template>
@@ -205,172 +223,186 @@ function exportCsv() {
       subtitle="Track execution latency, LLM-as-judge quality scores, and success rates per bot over time"
     />
 
-    <div class="controls-row">
-      <div class="period-tabs">
-        <button
-          v-for="opt in periodOptions"
-          :key="opt.key"
-          class="period-tab"
-          :class="{ active: selectedPeriod === opt.key }"
-          @click="selectedPeriod = opt.key"
-        >
-          {{ opt.label }}
-        </button>
-      </div>
-      <button class="btn-secondary" @click="exportCsv">↓ Export CSV</button>
+    <LoadingState v-if="isLoading" message="Loading performance data..." />
+
+    <div v-else-if="error" class="section-card error-state">
+      <p class="error-text">{{ error }}</p>
+      <button class="btn-secondary" @click="loadBenchmarks">Retry</button>
     </div>
 
-    <div class="stats-row">
-      <div class="stat-card">
-        <div class="stat-label">Bots Tracked</div>
-        <div class="stat-value">{{ benchmarks.length }}</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-label">Total Executions</div>
-        <div class="stat-value">{{ benchmarks.reduce((s, b) => s + b.totalExecutions, 0) }}</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-label">Avg Quality Score</div>
-        <div class="stat-value" :style="{ color: scoreColor(avgQuality) }">
-          {{ avgQuality.toFixed(1) }}
-        </div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-label">Avg Success Rate</div>
-        <div class="stat-value" :style="{ color: successColor(avgSuccess) }">
-          {{ avgSuccess.toFixed(1) }}%
-        </div>
-      </div>
-    </div>
-
-    <div class="section-card">
-      <div class="section-header">
-        <h3 class="section-title">Bot Benchmark Overview</h3>
-        <span class="section-hint">Click a row to view trend history</span>
-      </div>
-      <table class="bench-table">
-        <thead>
-          <tr>
-            <th>Bot</th>
-            <th>Executions</th>
-            <th>Success Rate</th>
-            <th>Avg Latency</th>
-            <th>P95 Latency</th>
-            <th>Quality Score</th>
-            <th>Eval Model</th>
-            <th>Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr
-            v-for="b in benchmarks"
-            :key="b.botId"
-            class="bench-row"
-            :class="{ selected: selectedBotId === b.botId }"
-            @click="selectedBotId = selectedBotId === b.botId ? null : b.botId"
+    <template v-else>
+      <div class="controls-row">
+        <div class="period-tabs">
+          <button
+            v-for="opt in periodOptions"
+            :key="opt.key"
+            class="period-tab"
+            :class="{ active: selectedPeriod === opt.key }"
+            @click="selectedPeriod = opt.key; loadBenchmarks()"
           >
-            <td>
-              <div class="bot-name">{{ b.botName }}</div>
-              <div class="bot-meta">Last run {{ formatDate(b.lastRunAt) }}</div>
-            </td>
-            <td>{{ b.totalExecutions.toLocaleString() }}</td>
-            <td>
-              <span :style="{ color: successColor(b.successRate), fontWeight: '600' }">
-                {{ b.successRate }}%
-              </span>
-            </td>
-            <td>
-              <span :style="{ color: trendColor(b.latencyTrend, false) }">
-                {{ trendIcon(b.latencyTrend) }}
-              </span>
-              {{ formatMs(b.avgLatencyMs) }}
-            </td>
-            <td>
-              <div class="latency-bar-wrap">
-                <div
-                  class="latency-bar"
-                  :style="{ width: latencyBarWidth(b.p95LatencyMs, maxLatency) + '%' }"
-                ></div>
-                <span class="latency-label">{{ formatMs(b.p95LatencyMs) }}</span>
-              </div>
-            </td>
-            <td>
-              <span :style="{ color: scoreColor(b.avgQualityScore), fontWeight: '600' }">
-                {{ trendIcon(b.qualityTrend) }} {{ b.avgQualityScore.toFixed(1) }}
-              </span>
-            </td>
-            <td><code class="mono">{{ b.evalModel }}</code></td>
-            <td>
-              <button
-                class="btn-sm"
-                :disabled="isRunningEval && selectedBotId === b.botId"
-                @click.stop="runEvaluation(b.botId)"
-              >
-                {{ isRunningEval && selectedBotId === b.botId ? 'Queuing…' : 'Run Eval' }}
-              </button>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
+            {{ opt.label }}
+          </button>
+        </div>
+        <button class="btn-secondary" @click="exportCsv">↓ Export CSV</button>
+      </div>
 
-    <template v-if="selectedBenchmark">
-      <div class="detail-grid">
-        <div class="section-card">
-          <div class="section-header">
-            <h3 class="section-title">Latency Trend — {{ selectedBenchmark.botName }}</h3>
-          </div>
-          <div class="trend-chart">
-            <div v-for="point in selectedBenchmark.latencyHistory" :key="point.date" class="trend-col">
-              <div class="bar-group">
-                <div
-                  class="bar p50"
-                  :style="{ height: (point.p50 / selectedBenchmark.p95LatencyMs) * 80 + 'px' }"
-                  :title="`P50: ${formatMs(point.p50)}`"
-                ></div>
-                <div
-                  class="bar p95"
-                  :style="{ height: (point.p95 / selectedBenchmark.p95LatencyMs) * 80 + 'px' }"
-                  :title="`P95: ${formatMs(point.p95)}`"
-                ></div>
-              </div>
-              <div class="bar-label">{{ formatDate(point.date) }}</div>
-            </div>
-          </div>
-          <div class="chart-legend">
-            <span class="legend-item"><span class="dot p50-dot"></span> P50</span>
-            <span class="legend-item"><span class="dot p95-dot"></span> P95</span>
+      <div class="stats-row">
+        <div class="stat-card">
+          <div class="stat-label">Bots Tracked</div>
+          <div class="stat-value">{{ benchmarks.length }}</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Total Executions</div>
+          <div class="stat-value">{{ benchmarks.reduce((s, b) => s + b.totalExecutions, 0) }}</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Avg Quality Score</div>
+          <div class="stat-value" :style="{ color: scoreColor(avgQuality) }">
+            {{ avgQuality.toFixed(1) }}
           </div>
         </div>
-
-        <div class="section-card">
-          <div class="section-header">
-            <h3 class="section-title">Quality Score Trend (LLM-as-judge)</h3>
-          </div>
-          <div class="quality-chart">
-            <div v-for="point in selectedBenchmark.qualityHistory" :key="point.date" class="quality-col">
-              <div class="quality-bar-wrap">
-                <div
-                  class="quality-bar"
-                  :style="{ height: point.score + '%', background: scoreColor(point.score) }"
-                  :title="`Score: ${point.score}`"
-                ></div>
-              </div>
-              <div class="quality-score">{{ point.score.toFixed(0) }}</div>
-              <div class="bar-label">{{ formatDate(point.date) }}</div>
-            </div>
-          </div>
-          <div class="eval-note">
-            Judge model: <code class="mono">{{ selectedBenchmark.evalModel }}</code>
+        <div class="stat-card">
+          <div class="stat-label">Avg Success Rate</div>
+          <div class="stat-value" :style="{ color: successColor(avgSuccess) }">
+            {{ avgSuccess.toFixed(1) }}%
           </div>
         </div>
       </div>
-    </template>
 
-    <div v-else class="empty-detail">
-      <div class="empty-icon">📊</div>
-      <div class="empty-text">Select a bot above to view latency and quality trends</div>
-    </div>
+      <div v-if="benchmarks.length === 0" class="section-card empty-state">
+        <p>No execution data available for the selected period.</p>
+      </div>
+
+      <template v-else>
+        <div class="section-card">
+          <div class="section-header">
+            <h3 class="section-title">Bot Benchmark Overview</h3>
+            <span class="section-hint">Click a row to view trend history</span>
+          </div>
+          <table class="bench-table">
+            <thead>
+              <tr>
+                <th>Bot</th>
+                <th>Executions</th>
+                <th>Success Rate</th>
+                <th>Avg Latency</th>
+                <th>P95 Latency</th>
+                <th>Quality Score</th>
+                <th>Eval Model</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr
+                v-for="b in benchmarks"
+                :key="b.botId"
+                class="bench-row"
+                :class="{ selected: selectedBotId === b.botId }"
+                @click="selectedBotId = selectedBotId === b.botId ? null : b.botId"
+              >
+                <td>
+                  <div class="bot-name">{{ b.botName }}</div>
+                  <div class="bot-meta">Last run {{ formatDate(b.lastRunAt) }}</div>
+                </td>
+                <td>{{ b.totalExecutions.toLocaleString() }}</td>
+                <td>
+                  <span :style="{ color: successColor(b.successRate), fontWeight: '600' }">
+                    {{ b.successRate }}%
+                  </span>
+                </td>
+                <td>
+                  <span :style="{ color: trendColor(b.latencyTrend, false) }">
+                    {{ trendIcon(b.latencyTrend) }}
+                  </span>
+                  {{ formatMs(b.avgLatencyMs) }}
+                </td>
+                <td>
+                  <div class="latency-bar-wrap">
+                    <div
+                      class="latency-bar"
+                      :style="{ width: latencyBarWidth(b.p95LatencyMs, maxLatency) + '%' }"
+                    ></div>
+                    <span class="latency-label">{{ formatMs(b.p95LatencyMs) }}</span>
+                  </div>
+                </td>
+                <td>
+                  <span :style="{ color: scoreColor(b.avgQualityScore), fontWeight: '600' }">
+                    {{ trendIcon(b.qualityTrend) }} {{ b.avgQualityScore.toFixed(1) }}
+                  </span>
+                </td>
+                <td><code class="mono">{{ b.evalModel }}</code></td>
+                <td>
+                  <button
+                    class="btn-sm"
+                    :disabled="isRunningEval && selectedBotId === b.botId"
+                    @click.stop="runEvaluation(b.botId)"
+                  >
+                    {{ isRunningEval && selectedBotId === b.botId ? 'Queuing...' : 'Run Eval' }}
+                  </button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <template v-if="selectedBenchmark">
+          <div class="detail-grid">
+            <div class="section-card">
+              <div class="section-header">
+                <h3 class="section-title">Latency Trend -- {{ selectedBenchmark.botName }}</h3>
+              </div>
+              <div class="trend-chart">
+                <div v-for="point in selectedBenchmark.latencyHistory" :key="point.date" class="trend-col">
+                  <div class="bar-group">
+                    <div
+                      class="bar p50"
+                      :style="{ height: (point.p50 / (selectedBenchmark.p95LatencyMs || 1)) * 80 + 'px' }"
+                      :title="`P50: ${formatMs(point.p50)}`"
+                    ></div>
+                    <div
+                      class="bar p95"
+                      :style="{ height: (point.p95 / (selectedBenchmark.p95LatencyMs || 1)) * 80 + 'px' }"
+                      :title="`P95: ${formatMs(point.p95)}`"
+                    ></div>
+                  </div>
+                  <div class="bar-label">{{ formatDate(point.date) }}</div>
+                </div>
+              </div>
+              <div class="chart-legend">
+                <span class="legend-item"><span class="dot p50-dot"></span> P50</span>
+                <span class="legend-item"><span class="dot p95-dot"></span> P95</span>
+              </div>
+            </div>
+
+            <div class="section-card">
+              <div class="section-header">
+                <h3 class="section-title">Quality Score Trend (LLM-as-judge)</h3>
+              </div>
+              <div class="quality-chart">
+                <div v-for="point in selectedBenchmark.qualityHistory" :key="point.date" class="quality-col">
+                  <div class="quality-bar-wrap">
+                    <div
+                      class="quality-bar"
+                      :style="{ height: point.score + '%', background: scoreColor(point.score) }"
+                      :title="`Score: ${point.score}`"
+                    ></div>
+                  </div>
+                  <div class="quality-score">{{ point.score.toFixed(0) }}</div>
+                  <div class="bar-label">{{ formatDate(point.date) }}</div>
+                </div>
+              </div>
+              <div class="eval-note">
+                Judge model: <code class="mono">{{ selectedBenchmark.evalModel }}</code>
+              </div>
+            </div>
+          </div>
+        </template>
+
+        <div v-else class="empty-detail">
+          <div class="empty-text">Select a bot above to view latency and quality trends</div>
+        </div>
+      </template>
+    </template>
   </div>
 </template>
 
@@ -389,6 +421,10 @@ function exportCsv() {
 .section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
 .section-title { font-size: 15px; font-weight: 600; color: var(--text-primary); margin: 0; }
 .section-hint { font-size: 12px; color: var(--text-muted); }
+.error-state { text-align: center; display: flex; flex-direction: column; align-items: center; gap: 12px; }
+.error-text { font-size: 0.875rem; color: #ef4444; margin: 0; }
+.empty-state { text-align: center; padding: 40px; }
+.empty-state p { font-size: 0.875rem; color: var(--text-muted); margin: 0; }
 .bench-table { width: 100%; border-collapse: collapse; font-size: 13px; }
 .bench-table th { text-align: left; padding: 8px 12px; color: var(--text-muted); font-weight: 500; border-bottom: 1px solid var(--border-color); }
 .bench-row td { padding: 12px; border-bottom: 1px solid var(--border-color); vertical-align: middle; }
@@ -423,6 +459,5 @@ function exportCsv() {
 .quality-score { font-size: 11px; font-weight: 600; color: var(--text-primary); }
 .eval-note { margin-top: 12px; font-size: 12px; color: var(--text-muted); }
 .empty-detail { text-align: center; padding: 40px; color: var(--text-muted); }
-.empty-icon { font-size: 32px; margin-bottom: 12px; }
 .empty-text { font-size: 14px; }
 </style>

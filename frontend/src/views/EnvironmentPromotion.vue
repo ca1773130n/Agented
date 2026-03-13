@@ -1,9 +1,11 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
+import { configExportApi, triggerApi, ApiError } from '../services/api';
+import type { Trigger } from '../services/api';
 
 const router = useRouter();
 const showToast = useToast();
@@ -24,40 +26,83 @@ interface Environment {
   bots: EnvBot[];
 }
 
+const isLoading = ref(true);
+const loadError = ref<string | null>(null);
+
 const environments = ref<Environment[]>([
   {
     id: 'env-staging',
     name: 'Staging',
     type: 'staging',
     status: 'healthy',
-    bots: [
-      { id: 'b1', name: 'Security Audit Bot', status: 'passing', lastRun: '2 hours ago', promoted: false },
-      { id: 'b2', name: 'PR Review Bot', status: 'passing', lastRun: '30 min ago', promoted: false },
-      { id: 'b3', name: 'Dependency Scanner', status: 'failing', lastRun: '1 hour ago', promoted: false },
-    ],
+    bots: [],
   },
   {
     id: 'env-prod',
     name: 'Production',
     type: 'production',
     status: 'healthy',
-    bots: [
-      { id: 'b1', name: 'Security Audit Bot', status: 'passing', lastRun: '6 hours ago', promoted: true },
-      { id: 'b2', name: 'PR Review Bot', status: 'passing', lastRun: '1 hour ago', promoted: true },
-    ],
+    bots: [],
   },
 ]);
 
 const promotingId = ref<string | null>(null);
 const testingId = ref<string | null>(null);
 
+function triggerToEnvBot(t: Trigger): EnvBot {
+  const enabled = t.enabled !== 0;
+  return {
+    id: t.id,
+    name: t.name,
+    status: enabled ? 'passing' : 'pending',
+    lastRun: t.last_run_at || t.created_at || 'Unknown',
+    promoted: false,
+  };
+}
+
+async function loadTriggers() {
+  isLoading.value = true;
+  loadError.value = null;
+  try {
+    const { triggers } = await triggerApi.list();
+    // Populate staging with all triggers
+    const staging = environments.value.find(e => e.type === 'staging')!;
+    staging.bots = triggers.map(triggerToEnvBot);
+
+    // Try to load exported config to see what's in "production"
+    try {
+      const exported = await configExportApi.exportAll('json');
+      if (exported.data) {
+        const parsed = JSON.parse(exported.data);
+        const prodTriggers = Array.isArray(parsed) ? parsed : (parsed.triggers || []);
+        const prod = environments.value.find(e => e.type === 'production')!;
+        prod.bots = prodTriggers.map((t: Trigger) => ({
+          ...triggerToEnvBot(t),
+          promoted: true,
+        }));
+      }
+    } catch {
+      // Export may not be available, that's fine
+    }
+  } catch (err) {
+    const msg = err instanceof ApiError ? err.message : 'Failed to load triggers';
+    loadError.value = msg;
+  } finally {
+    isLoading.value = false;
+  }
+}
+
+onMounted(loadTriggers);
+
 async function handleTest(botId: string) {
   testingId.value = botId;
   try {
-    await new Promise(resolve => setTimeout(resolve, 1500));
+    // Export the trigger config to validate it
+    await configExportApi.exportTrigger(botId, 'json');
     showToast('Staging test completed successfully', 'success');
-  } catch {
-    showToast('Test failed', 'error');
+  } catch (err) {
+    const msg = err instanceof ApiError ? err.message : 'Test failed';
+    showToast(msg, 'error');
   } finally {
     testingId.value = null;
   }
@@ -66,7 +111,9 @@ async function handleTest(botId: string) {
 async function handlePromote(botId: string, botName: string) {
   promotingId.value = botId;
   try {
-    await new Promise(resolve => setTimeout(resolve, 1200));
+    // Export from staging and import to production
+    const exported = await configExportApi.exportTrigger(botId, 'json');
+    await configExportApi.importConfig({ config: exported.data, format: 'json' });
     const prod = environments.value.find(e => e.type === 'production');
     if (prod) {
       const existing = prod.bots.find(b => b.id === botId);
@@ -78,8 +125,9 @@ async function handlePromote(botId: string, botName: string) {
       }
     }
     showToast(`${botName} promoted to production`, 'success');
-  } catch {
-    showToast('Promotion failed', 'error');
+  } catch (err) {
+    const msg = err instanceof ApiError ? err.message : 'Promotion failed';
+    showToast(msg, 'error');
   } finally {
     promotingId.value = null;
   }
@@ -107,7 +155,18 @@ function envTypeColor(t: string): string {
       subtitle="Promote bots from staging to production after successful testing."
     />
 
-    <div class="env-grid">
+    <!-- Loading state -->
+    <div v-if="isLoading" class="card" style="padding: 32px; text-align: center; color: var(--text-tertiary);">
+      Loading environment data...
+    </div>
+
+    <!-- Error state -->
+    <div v-else-if="loadError" class="card" style="padding: 32px; text-align: center; color: #ef4444;">
+      {{ loadError }}
+      <button class="btn btn-secondary" style="margin-top: 12px;" @click="loadTriggers">Retry</button>
+    </div>
+
+    <div v-else class="env-grid">
       <div v-for="env in environments" :key="env.id" class="env-card">
         <div class="env-header" :class="env.type">
           <div class="env-title-row">
@@ -167,7 +226,7 @@ function envTypeColor(t: string): string {
       </div>
     </div>
 
-    <div class="card promo-rules">
+    <div v-if="!isLoading && !loadError" class="card promo-rules">
       <div class="card-header">
         <h3>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="18" height="18">

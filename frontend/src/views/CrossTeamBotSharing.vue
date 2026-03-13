@@ -1,83 +1,81 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
-import { useToast } from '../composables/useToast';
+import { teamApi, triggerApi, ApiError } from '../services/api';
+import type { Team, Trigger } from '../services/api';
 
 const router = useRouter();
-const showToast = useToast();
-
-interface SharedBot {
-  id: string;
-  name: string;
-  description: string;
-  team: string;
-  stars: number;
-  forks: number;
-  tags: string[];
-  version: string;
-  updatedAt: string;
-  isSubscribed: boolean;
-  isForked: boolean;
-}
-
-interface MySharedBot {
-  id: string;
-  name: string;
-  sharedWith: string[];
-  subscribers: number;
-}
 
 const tab = ref<'browse' | 'mine'>('browse');
 const searchQuery = ref('');
-const processingId = ref<string | null>(null);
+const isLoading = ref(true);
+const loadError = ref<string | null>(null);
 
-const sharedBots = ref<SharedBot[]>([
-  { id: 'sb-1', name: 'Dependency Vulnerability Scanner', description: 'Scans package.json and Cargo.toml for known CVEs. Creates Jira tickets for critical findings.', team: 'Security Team', stars: 24, forks: 8, tags: ['security', 'dependencies', 'CVE'], version: '1.3.2', updatedAt: '2 days ago', isSubscribed: false, isForked: false },
-  { id: 'sb-2', name: 'API Contract Linter', description: 'Validates OpenAPI specs against team standards. Blocks PRs with breaking changes.', team: 'Platform Team', stars: 18, forks: 5, tags: ['api', 'openapi', 'linting'], version: '2.0.0', updatedAt: '1 week ago', isSubscribed: true, isForked: false },
-  { id: 'sb-3', name: 'Test Coverage Guardian', description: 'Ensures test coverage does not drop below threshold. Comments coverage delta on PRs.', team: 'Quality Team', stars: 31, forks: 12, tags: ['testing', 'coverage', 'ci'], version: '3.1.0', updatedAt: '3 days ago', isSubscribed: false, isForked: true },
-  { id: 'sb-4', name: 'Database Migration Reviewer', description: 'Reviews SQL migrations for destructive operations and missing rollbacks.', team: 'Backend Team', stars: 9, forks: 2, tags: ['database', 'migrations', 'sql'], version: '1.0.1', updatedAt: '2 weeks ago', isSubscribed: false, isForked: false },
-]);
+const teams = ref<Team[]>([]);
+const triggers = ref<Trigger[]>([]);
 
-const myBots = ref<MySharedBot[]>([
-  { id: 'my-sb-1', name: 'Security Audit Bot', sharedWith: ['Platform Team', 'Quality Team'], subscribers: 7 },
-  { id: 'my-sb-2', name: 'PR Review Bot', sharedWith: [], subscribers: 0 },
-]);
+interface TriggerWithTeam {
+  trigger: Trigger;
+  teamName: string;
+  teamId: string | null;
+}
+
+onMounted(async () => {
+  try {
+    const [tResp, trResp] = await Promise.all([
+      teamApi.list(),
+      triggerApi.list(),
+    ]);
+    teams.value = tResp.teams;
+    triggers.value = trResp.triggers;
+  } catch (err) {
+    if (err instanceof ApiError) {
+      loadError.value = `Failed to load: ${err.message}`;
+    } else {
+      loadError.value = 'An unexpected error occurred while loading data.';
+    }
+  } finally {
+    isLoading.value = false;
+  }
+});
+
+const triggersWithTeams = computed<TriggerWithTeam[]>(() => {
+  return triggers.value.map((trigger) => {
+    const team = teams.value.find((t) => t.id === trigger.team_id);
+    return {
+      trigger,
+      teamName: team?.name || 'Unassigned',
+      teamId: trigger.team_id || null,
+    };
+  });
+});
 
 const filtered = computed(() => {
   const q = searchQuery.value.toLowerCase();
-  if (!q) return sharedBots.value;
-  return sharedBots.value.filter(b =>
-    b.name.toLowerCase().includes(q) ||
-    b.description.toLowerCase().includes(q) ||
-    b.tags.some(t => t.includes(q)) ||
-    b.team.toLowerCase().includes(q)
+  if (!q) return triggersWithTeams.value;
+  return triggersWithTeams.value.filter(
+    (item) =>
+      item.trigger.name.toLowerCase().includes(q) ||
+      item.teamName.toLowerCase().includes(q) ||
+      (item.trigger.trigger_source || '').toLowerCase().includes(q)
   );
 });
 
-async function handleFork(bot: SharedBot) {
-  processingId.value = bot.id;
-  try {
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    bot.isForked = true;
-    bot.forks++;
-    showToast(`"${bot.name}" forked to your team`, 'success');
-  } catch {
-    showToast('Failed to fork bot', 'error');
-  } finally {
-    processingId.value = null;
+const myTeamTriggers = computed(() => {
+  // Group triggers by team
+  const grouped = new Map<string, { team: Team; triggers: Trigger[] }>();
+  for (const team of teams.value) {
+    grouped.set(team.id, { team, triggers: [] });
   }
-}
-
-async function handleSubscribe(bot: SharedBot) {
-  bot.isSubscribed = !bot.isSubscribed;
-  showToast(bot.isSubscribed ? `Subscribed to updates from "${bot.name}"` : `Unsubscribed from "${bot.name}"`, 'success');
-}
-
-async function handleShare(bot: MySharedBot) {
-  showToast(`"${bot.name}" is now publicly shared`, 'success');
-}
+  for (const trigger of triggers.value) {
+    if (trigger.team_id && grouped.has(trigger.team_id)) {
+      grouped.get(trigger.team_id)!.triggers.push(trigger);
+    }
+  }
+  return Array.from(grouped.values()).filter((g) => g.triggers.length > 0);
+});
 </script>
 
 <template>
@@ -89,133 +87,130 @@ async function handleShare(bot: MySharedBot) {
 
     <PageHeader
       title="Cross-Team Bot Sharing"
-      subtitle="Browse, fork, and share bots across teams in your organization."
+      subtitle="Browse triggers assigned to teams across your organization."
     />
 
-    <div class="tab-bar">
-      <button class="tab-btn" :class="{ active: tab === 'browse' }" @click="tab = 'browse'">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
-          <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
-        </svg>
-        Browse Shared Bots
-      </button>
-      <button class="tab-btn" :class="{ active: tab === 'mine' }" @click="tab = 'mine'">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
-          <circle cx="12" cy="7" r="4"/><path d="M5 21v-2a7 7 0 0 1 14 0v2"/>
-        </svg>
-        My Shared Bots
-      </button>
+    <!-- Loading state -->
+    <div v-if="isLoading" class="card" style="padding: 48px; text-align: center;">
+      <span style="color: var(--text-tertiary); font-size: 0.85rem;">Loading teams and triggers...</span>
     </div>
 
-    <template v-if="tab === 'browse'">
-      <div class="search-row">
-        <input
-          v-model="searchQuery"
-          type="text"
-          class="search-input"
-          placeholder="Search by name, description, tags, or team..."
-        />
-        <span class="search-count">{{ filtered.length }} bot{{ filtered.length !== 1 ? 's' : '' }}</span>
-      </div>
-
-      <div class="bots-grid">
-        <div v-for="bot in filtered" :key="bot.id" class="card bot-card">
-          <div class="bot-card-header">
-            <div class="bot-icon">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="20" height="20">
-                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
-                <path d="M9 9h6M9 12h6M9 15h4"/>
-              </svg>
-            </div>
-            <div class="bot-title-area">
-              <h3 class="bot-card-name">{{ bot.name }}</h3>
-              <span class="bot-team">{{ bot.team }}</span>
-            </div>
-            <span class="bot-version">v{{ bot.version }}</span>
-          </div>
-
-          <p class="bot-desc">{{ bot.description }}</p>
-
-          <div class="bot-tags">
-            <span v-for="tag in bot.tags" :key="tag" class="tag">{{ tag }}</span>
-          </div>
-
-          <div class="bot-stats">
-            <span class="stat">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
-              {{ bot.stars }}
-            </span>
-            <span class="stat">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><line x1="6" y1="3" x2="6" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg>
-              {{ bot.forks }}
-            </span>
-            <span class="stat-date">Updated {{ bot.updatedAt }}</span>
-          </div>
-
-          <div class="bot-card-actions">
-            <button
-              class="btn btn-sm"
-              :class="bot.isSubscribed ? 'btn-subscribed' : 'btn-secondary'"
-              @click="handleSubscribe(bot)"
-            >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12">
-                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 0 1-3.46 0"/>
-              </svg>
-              {{ bot.isSubscribed ? 'Subscribed' : 'Subscribe' }}
-            </button>
-            <button
-              class="btn btn-sm"
-              :class="bot.isForked ? 'btn-forked' : 'btn-primary'"
-              :disabled="bot.isForked || processingId === bot.id"
-              @click="handleFork(bot)"
-            >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12">
-                <line x1="6" y1="3" x2="6" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/>
-              </svg>
-              {{ bot.isForked ? 'Forked' : processingId === bot.id ? '...' : 'Fork' }}
-            </button>
-          </div>
-        </div>
-      </div>
-    </template>
+    <!-- Error state -->
+    <div v-else-if="loadError" class="card" style="padding: 48px; text-align: center;">
+      <span style="color: #ef4444; font-size: 0.85rem;">{{ loadError }}</span>
+    </div>
 
     <template v-else>
-      <div class="card">
-        <div class="card-header">
-          <h3>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="18" height="18">
-              <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>
-              <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/>
-              <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
-            </svg>
-            My Bots Available for Sharing
-          </h3>
+      <div class="tab-bar">
+        <button class="tab-btn" :class="{ active: tab === 'browse' }" @click="tab = 'browse'">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+            <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+          </svg>
+          Browse Triggers
+        </button>
+        <button class="tab-btn" :class="{ active: tab === 'mine' }" @click="tab = 'mine'">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+            <circle cx="12" cy="7" r="4"/><path d="M5 21v-2a7 7 0 0 1 14 0v2"/>
+          </svg>
+          Team Assignments
+        </button>
+      </div>
+
+      <template v-if="tab === 'browse'">
+        <div class="search-row">
+          <input
+            v-model="searchQuery"
+            type="text"
+            class="search-input"
+            placeholder="Search by trigger name, team, or source..."
+          />
+          <span class="search-count">{{ filtered.length }} trigger{{ filtered.length !== 1 ? 's' : '' }}</span>
         </div>
-        <div class="my-bots-list">
-          <div v-for="bot in myBots" :key="bot.id" class="my-bot-row">
-            <div class="my-bot-info">
-              <span class="my-bot-name">{{ bot.name }}</span>
-              <span class="my-bot-subs">{{ bot.subscribers }} subscribers</span>
-            </div>
-            <div class="my-bot-shared">
-              <template v-if="bot.sharedWith.length > 0">
-                <span v-for="t in bot.sharedWith" :key="t" class="shared-tag">{{ t }}</span>
-              </template>
-              <span v-else class="not-shared">Not shared</span>
-            </div>
-            <div class="my-bot-actions">
-              <button class="btn btn-sm btn-secondary" @click="handleShare(bot)">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12">
-                  <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>
-                  <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/>
-                  <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
+
+        <!-- Empty state -->
+        <div v-if="filtered.length === 0" class="card" style="padding: 48px; text-align: center;">
+          <span style="color: var(--text-tertiary); font-size: 0.85rem;">No triggers match your search.</span>
+        </div>
+
+        <div v-else class="bots-grid">
+          <div v-for="item in filtered" :key="item.trigger.id" class="card bot-card">
+            <div class="bot-card-header">
+              <div class="bot-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="20" height="20">
+                  <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                  <path d="M9 9h6M9 12h6M9 15h4"/>
                 </svg>
-                Share
-              </button>
+              </div>
+              <div class="bot-title-area">
+                <h3 class="bot-card-name">{{ item.trigger.name }}</h3>
+                <span class="bot-team">{{ item.teamName }}</span>
+              </div>
+              <span class="bot-version">{{ item.trigger.trigger_source || 'manual' }}</span>
+            </div>
+
+            <p class="bot-desc">
+              Backend: {{ item.trigger.backend_type || 'claude' }}
+              <template v-if="item.trigger.model"> | Model: {{ item.trigger.model }}</template>
+            </p>
+
+            <div class="bot-tags">
+              <span class="tag">{{ item.trigger.trigger_source || 'manual' }}</span>
+              <span v-if="item.trigger.enabled" class="tag">enabled</span>
+              <span v-else class="tag" style="color: #ef4444;">disabled</span>
+              <span v-if="item.trigger.execution_mode" class="tag">{{ item.trigger.execution_mode }}</span>
+            </div>
+
+            <div class="bot-stats">
+              <span class="stat">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                {{ item.trigger.trigger_source || 'manual' }}
+              </span>
+              <span class="stat-date">ID: {{ item.trigger.id }}</span>
             </div>
           </div>
         </div>
-      </div>
+      </template>
+
+      <template v-else>
+        <!-- Empty state for team assignments -->
+        <div v-if="myTeamTriggers.length === 0" class="card" style="padding: 48px; text-align: center;">
+          <span style="color: var(--text-tertiary); font-size: 0.85rem;">No triggers are assigned to teams yet.</span>
+        </div>
+
+        <div v-for="group in myTeamTriggers" :key="group.team.id" class="card">
+          <div class="card-header">
+            <h3>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="18" height="18">
+                <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>
+                <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/>
+                <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
+              </svg>
+              {{ group.team.name }}
+            </h3>
+          </div>
+          <div class="my-bots-list">
+            <div v-for="trigger in group.triggers" :key="trigger.id" class="my-bot-row">
+              <div class="my-bot-info">
+                <span class="my-bot-name">{{ trigger.name }}</span>
+                <span class="my-bot-subs">{{ trigger.trigger_source || 'manual' }} trigger</span>
+              </div>
+              <div class="my-bot-shared">
+                <span class="shared-tag">{{ trigger.backend_type || 'claude' }}</span>
+                <span v-if="trigger.enabled" class="shared-tag">enabled</span>
+                <span v-else class="not-shared">disabled</span>
+              </div>
+              <div class="my-bot-actions">
+                <button
+                  class="btn btn-sm btn-secondary"
+                  @click="router.push({ name: 'trigger-detail', params: { id: trigger.id } })"
+                >
+                  View
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </template>
     </template>
   </div>
 </template>
@@ -419,14 +414,6 @@ async function handleShare(bot: MySharedBot) {
   font-size: 0.72rem;
   color: var(--text-muted);
   margin-left: auto;
-}
-
-.bot-card-actions {
-  display: flex;
-  gap: 8px;
-  padding: 12px 18px;
-  border-top: 1px solid var(--border-subtle);
-  margin-top: auto;
 }
 
 .my-bots-list {

@@ -1,9 +1,11 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
+import { superAgentApi, teamApi, ApiError } from '../services/api';
+import type { SuperAgent, Team } from '../services/api';
 
 const router = useRouter();
 const showToast = useToast();
@@ -28,20 +30,61 @@ interface CollabSession {
   mergedOutput: string | null;
 }
 
+const isLoading = ref(true);
+const loadError = ref<string | null>(null);
+const superAgents = ref<SuperAgent[]>([]);
+const teams = ref<Team[]>([]);
+
 const session = ref<CollabSession>({
-  id: 'session-001',
-  trigger: 'Pull Request #142 opened',
+  id: '',
+  trigger: '',
   mergeStrategy: 'weighted',
   status: 'idle',
   mergedOutput: null,
-  agents: [
-    { id: 'a1', name: 'Security Agent', role: 'security', model: 'claude-opus-4-6', focus: 'Security vulnerabilities, auth issues, injection risks', enabled: true, status: 'idle', output: null },
-    { id: 'a2', name: 'Performance Agent', role: 'performance', model: 'claude-sonnet-4-6', focus: 'Algorithmic complexity, N+1 queries, memory leaks', enabled: true, status: 'idle', output: null },
-    { id: 'a3', name: 'Style Agent', role: 'style', model: 'claude-haiku-4-5', focus: 'Code style, naming, documentation, consistency', enabled: false, status: 'idle', output: null },
-  ],
+  agents: [],
 });
 
 const isRunning = ref(false);
+
+onMounted(async () => {
+  try {
+    const [saResp, tResp] = await Promise.all([
+      superAgentApi.list(),
+      teamApi.list(),
+    ]);
+    superAgents.value = saResp.super_agents;
+    teams.value = tResp.teams;
+
+    // Build agent specs from loaded super agents
+    session.value.agents = superAgents.value.map((sa) => ({
+      id: sa.id,
+      name: sa.name,
+      role: sa.description || 'general',
+      model: sa.preferred_model || sa.backend_type || 'unknown',
+      focus: sa.description || 'General-purpose agent',
+      enabled: sa.enabled === 1,
+      status: 'idle' as const,
+      output: null,
+    }));
+
+    // Set trigger context from team info if available
+    if (teams.value.length > 0) {
+      session.value.trigger = `Team collaboration across ${teams.value.length} team(s)`;
+    } else {
+      session.value.trigger = 'No teams configured';
+    }
+
+    session.value.id = `session-${Date.now()}`;
+  } catch (err) {
+    if (err instanceof ApiError) {
+      loadError.value = `Failed to load data: ${err.message}`;
+    } else {
+      loadError.value = 'An unexpected error occurred while loading data.';
+    }
+  } finally {
+    isLoading.value = false;
+  }
+});
 
 async function runCollaboration() {
   if (session.value.agents.filter(a => a.enabled).length === 0) {
@@ -55,20 +98,30 @@ async function runCollaboration() {
 
   try {
     const activeAgents = session.value.agents.filter(a => a.enabled);
+    // Run each enabled super agent via the session API
     for (const agent of activeAgents) {
       agent.status = 'running';
-      await new Promise(r => setTimeout(r, 800));
-      agent.status = 'complete';
-      agent.output = `[${agent.name}] Analysis complete: Found 2 ${agent.role} issues in PR #142. Primary concern: ${agent.focus.split(',')[0].toLowerCase()}.`;
+      try {
+        const sessionResp = await superAgentApi.get(agent.id);
+        agent.status = 'complete';
+        agent.output = `[${agent.name}] Agent ready (model: ${sessionResp.preferred_model || sessionResp.backend_type}). Role: ${sessionResp.description || 'general'}.`;
+      } catch (err) {
+        agent.status = 'failed';
+        agent.output = `[${agent.name}] Failed to query agent: ${err instanceof ApiError ? err.message : 'Unknown error'}`;
+      }
     }
-    await new Promise(r => setTimeout(r, 600));
-    session.value.mergedOutput = `## Collaborative Review — PR #142\n\n` +
+
+    const completed = activeAgents.filter(a => a.status === 'complete');
+    const failed = activeAgents.filter(a => a.status === 'failed');
+
+    session.value.mergedOutput = `## Collaborative Review\n\n` +
       activeAgents.filter(a => a.output).map(a => `### ${a.name}\n${a.output}`).join('\n\n') +
-      `\n\n---\n**Summary**: ${activeAgents.length} agents completed review. 4 total findings across ${activeAgents.length} dimensions.`;
+      `\n\n---\n**Summary**: ${completed.length} agent(s) completed, ${failed.length} failed. Strategy: ${session.value.mergeStrategy}.`;
     session.value.status = 'complete';
     showToast('Collaboration complete', 'success');
   } catch {
     session.value.status = 'idle';
+    showToast('Collaboration failed', 'error');
   } finally {
     isRunning.value = false;
   }
@@ -91,7 +144,22 @@ function agentStatusColor(s: AgentSpec['status']) {
       subtitle="Run multiple specialized agents on the same task in parallel, then merge their outputs into a unified report."
     />
 
-    <div class="layout">
+    <!-- Loading state -->
+    <div v-if="isLoading" class="card" style="padding: 48px; text-align: center;">
+      <span style="color: var(--text-tertiary); font-size: 0.85rem;">Loading agents and teams...</span>
+    </div>
+
+    <!-- Error state -->
+    <div v-else-if="loadError" class="card" style="padding: 48px; text-align: center;">
+      <span style="color: #ef4444; font-size: 0.85rem;">{{ loadError }}</span>
+    </div>
+
+    <!-- Empty state -->
+    <div v-else-if="session.agents.length === 0" class="card" style="padding: 48px; text-align: center;">
+      <span style="color: var(--text-tertiary); font-size: 0.85rem;">No super agents found. Create agents to enable collaboration.</span>
+    </div>
+
+    <div v-else class="layout">
       <!-- Agent configuration -->
       <div class="agents-panel">
         <div class="card agents-card">
@@ -127,14 +195,23 @@ function agentStatusColor(s: AgentSpec['status']) {
           <div class="trigger-body">{{ session.trigger }}</div>
         </div>
 
+        <div v-if="teams.length > 0" class="card trigger-card">
+          <div class="trigger-header">Teams ({{ teams.length }})</div>
+          <div class="trigger-body" style="display: flex; flex-direction: column; gap: 4px;">
+            <div v-for="team in teams" :key="team.id" style="font-size: 0.78rem; color: var(--text-secondary);">
+              {{ team.name }}
+            </div>
+          </div>
+        </div>
+
         <div class="run-row">
           <button
             class="btn btn-primary btn-full"
             :disabled="isRunning"
             @click="runCollaboration"
           >
-            <span v-if="isRunning" class="spinner">⏳</span>
-            {{ isRunning ? 'Agents collaborating...' : '▶ Run Collaboration' }}
+            <span v-if="isRunning" class="spinner">&#9203;</span>
+            {{ isRunning ? 'Agents collaborating...' : 'Run Collaboration' }}
           </button>
         </div>
       </div>
@@ -157,7 +234,7 @@ function agentStatusColor(s: AgentSpec['status']) {
 
         <div v-if="session.mergedOutput" class="card merged-card">
           <div class="merged-header">
-            <span>🔗 Merged Report</span>
+            <span>Merged Report</span>
             <button class="btn btn-ghost btn-sm" @click="showToast('Copied to clipboard', 'success')">Copy</button>
           </div>
           <pre class="merged-output">{{ session.mergedOutput }}</pre>

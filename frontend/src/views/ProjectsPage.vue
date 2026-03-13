@@ -522,4 +522,10 @@ onMounted(() => {
 .local-path-toggle:hover {
   color: var(--accent-cyan, #00d4ff);
 }
+
+@media (max-width: 480px) {
+  .projects-grid {
+    grid-template-columns: 1fr;
+  }
+}
 </style>

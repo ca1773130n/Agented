@@ -288,6 +288,8 @@ onMounted(loadData);
             >
             <tr
               :style="{ '--delay': `${index * 20}ms` }"
+              class="execution-row"
+              @click="viewLogs(execution)"
             >
               <td v-if="!triggerId" class="cell-trigger">
                 <span class="trigger-name">{{ execution.trigger_name || execution.trigger_id || '-' }}</span>
@@ -599,6 +601,10 @@ onMounted(loadData);
 
 .data-table tbody tr:hover {
   background: var(--bg-tertiary);
+}
+
+.execution-row {
+  cursor: pointer;
 }
 
 .cell-trigger {
@@ -927,6 +933,11 @@ onMounted(loadData);
 @keyframes modalSlideIn {
   from { opacity: 0; transform: translateY(-20px) scale(0.95); }
   to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.log-modal .modal-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border-subtle);
 }
 
 .modal-title h3 {

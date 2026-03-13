@@ -742,4 +742,10 @@ onMounted(() => {
 }
 
 .no-components { color: var(--text-secondary, #888); text-align: center; padding: 2rem; }
+
+@media (max-width: 480px) {
+  .plugins-grid {
+    grid-template-columns: 1fr;
+  }
+}
 </style>

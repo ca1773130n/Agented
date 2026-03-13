@@ -1,29 +1,22 @@
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue';
+import { ref, computed, watch, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
+import { triggerApi, ApiError } from '../services/api';
+import type { Trigger } from '../services/api';
 
 const router = useRouter();
 const showToast = useToast();
 
-const prompt = ref(`You are a senior software engineer conducting a code review.
+const triggers = ref<Trigger[]>([]);
+const selectedTriggerId = ref('');
+const isLoadingTriggers = ref(false);
+const isLoadingPrompt = ref(false);
+const loadError = ref('');
 
-Review the following pull request changes:
-{diff}
-
-Repository: {repo}
-PR Author: {author}
-Files changed: {file_count}
-
-Analyze for:
-1. Security vulnerabilities
-2. Logic errors
-3. Performance issues
-4. Code maintainability
-
-Output your findings in structured JSON format.`);
+const prompt = ref('');
 
 const testPayload = ref(JSON.stringify({
   diff: '--- a/src/auth.ts\n+++ b/src/auth.ts\n@@ -5,4 +5,6 @@\n+const token = req.query.token;',
@@ -47,7 +40,6 @@ const renderedPrompt = computed(() => {
     for (const [key, val] of Object.entries(payload)) {
       rendered = rendered.split(`{${key}}`).join(String(val));
     }
-    // Highlight unresolved variables
     return rendered;
   } catch {
     return prompt.value;
@@ -76,11 +68,56 @@ function validatePayload() {
 
 watch(testPayload, () => { if (testPayload.value) validatePayload(); });
 
+onMounted(async () => {
+  await loadTriggers();
+});
+
+async function loadTriggers() {
+  isLoadingTriggers.value = true;
+  loadError.value = '';
+  try {
+    const res = await triggerApi.list();
+    triggers.value = res.triggers;
+    if (triggers.value.length > 0 && !selectedTriggerId.value) {
+      selectedTriggerId.value = triggers.value[0].id;
+      await loadTriggerPrompt(triggers.value[0].id);
+    }
+  } catch (e) {
+    loadError.value = e instanceof ApiError ? e.message : 'Failed to load triggers';
+  } finally {
+    isLoadingTriggers.value = false;
+  }
+}
+
+async function loadTriggerPrompt(triggerId: string) {
+  isLoadingPrompt.value = true;
+  try {
+    const trigger = await triggerApi.get(triggerId);
+    prompt.value = trigger.prompt_template || '';
+  } catch (e) {
+    showToast(e instanceof ApiError ? e.message : 'Failed to load prompt', 'error');
+  } finally {
+    isLoadingPrompt.value = false;
+  }
+}
+
+watch(selectedTriggerId, async (newId) => {
+  if (newId) {
+    await loadTriggerPrompt(newId);
+  }
+});
+
 async function handleSave() {
+  if (!selectedTriggerId.value) {
+    showToast('Select a trigger first', 'info');
+    return;
+  }
   isSaving.value = true;
   try {
-    await new Promise(r => setTimeout(r, 700));
+    await triggerApi.update(selectedTriggerId.value, { prompt_template: prompt.value });
     showToast('Prompt template saved', 'success');
+  } catch (e) {
+    showToast(e instanceof ApiError ? e.message : 'Failed to save prompt', 'error');
   } finally {
     isSaving.value = false;
   }
@@ -105,6 +142,19 @@ function highlightPrompt(text: string) {
       subtitle="Split-pane editor with template variable highlighting, test payload injector, and rendered preview."
     />
 
+    <!-- Trigger selector -->
+    <div v-if="isLoadingTriggers" class="loading-bar">Loading triggers...</div>
+    <div v-else-if="loadError" class="error-bar">{{ loadError }}</div>
+    <div v-else-if="triggers.length === 0" class="empty-bar">No triggers found. Create a trigger first.</div>
+    <div v-else class="trigger-selector">
+      <label class="selector-label">Trigger:</label>
+      <select v-model="selectedTriggerId" class="trigger-select">
+        <option v-for="t in triggers" :key="t.id" :value="t.id">{{ t.name }} ({{ t.id }})</option>
+      </select>
+    </div>
+
+    <div v-if="isLoadingPrompt" class="loading-bar">Loading prompt...</div>
+
     <div class="variables-bar" v-if="variables.length > 0">
       <span class="vars-label">Variables:</span>
       <span
@@ -119,7 +169,7 @@ function highlightPrompt(text: string) {
       <div class="pane">
         <div class="pane-header">
           <span>Prompt Template</span>
-          <button class="btn btn-primary btn-sm" :disabled="isSaving" @click="handleSave">
+          <button class="btn btn-primary btn-sm" :disabled="isSaving || !selectedTriggerId" @click="handleSave">
             {{ isSaving ? 'Saving...' : 'Save' }}
           </button>
         </div>
@@ -157,6 +207,14 @@ function highlightPrompt(text: string) {
 <style scoped>
 .prompt-editor { display: flex; flex-direction: column; gap: 20px; animation: fadeIn 0.4s ease; }
 @keyframes fadeIn { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+
+.trigger-selector { display: flex; align-items: center; gap: 12px; }
+.selector-label { font-size: 0.82rem; font-weight: 600; color: var(--text-secondary); }
+.trigger-select { flex: 1; max-width: 400px; padding: 8px 12px; background: var(--bg-tertiary); border: 1px solid var(--border-default); border-radius: 7px; color: var(--text-primary); font-size: 0.82rem; }
+
+.loading-bar { font-size: 0.82rem; color: var(--text-tertiary); padding: 12px 0; }
+.error-bar { font-size: 0.82rem; color: #ef4444; padding: 12px 0; }
+.empty-bar { font-size: 0.82rem; color: var(--text-muted); padding: 12px 0; }
 
 .variables-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
 .vars-label { font-size: 0.75rem; color: var(--text-tertiary); font-weight: 500; }

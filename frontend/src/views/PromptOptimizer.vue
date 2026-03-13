@@ -1,12 +1,20 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
+import { triggerApi, ApiError } from '../services/api';
+import type { Trigger } from '../services/api';
 
 const router = useRouter();
 const showToast = useToast();
+
+const triggers = ref<Trigger[]>([]);
+const selectedTriggerId = ref('');
+const currentPrompt = ref('');
+const isLoadingTriggers = ref(false);
+const triggerLoadError = ref('');
 
 const isAnalyzing = ref(false);
 const isApplying = ref(false);
@@ -25,76 +33,164 @@ interface Suggestion {
 
 const suggestions = ref<Suggestion[]>([]);
 
-const MOCK_SUGGESTIONS: Suggestion[] = [
-  {
-    id: '1',
-    type: 'truncation',
-    severity: 'high',
-    title: 'Output truncation detected',
-    description: 'Analysis shows 34% of executions hit the output limit. The prompt requests too much detail at once.',
-    before: 'Analyze the entire codebase and list all potential issues with full explanations.',
-    after: 'Analyze the top 10 most critical issues with brief explanations. Focus on severity: critical > high > medium.',
-    selected: true,
-  },
-  {
-    id: '2',
-    type: 'failure',
-    severity: 'high',
-    title: 'Path placeholder missing fallback',
-    description: '12% of failures occur when {paths} is empty. Add a graceful fallback.',
-    before: 'Review files at {paths} for security issues.',
-    after: 'Review files at {paths|default:"the root directory"} for security issues.',
-    selected: true,
-  },
-  {
-    id: '3',
-    type: 'inefficiency',
-    severity: 'medium',
-    title: 'Redundant context instructions',
-    description: 'The prompt repeats role instructions 3 times, consuming ~400 tokens unnecessarily.',
-    before: 'You are a security expert. As a security expert, analyze... Remember you are a security expert...',
-    after: 'You are a security expert. Analyze the following and report findings:',
-    selected: false,
-  },
-  {
-    id: '4',
-    type: 'clarity',
-    severity: 'low',
-    title: 'Ambiguous output format',
-    description: 'Executions produce inconsistent JSON vs markdown output. Specify format explicitly.',
-    before: 'Report your findings.',
-    after: 'Report findings as JSON: { "issues": [{ "severity": "...", "file": "...", "description": "..." }] }',
-    selected: false,
-  },
-];
+onMounted(async () => {
+  await loadTriggers();
+});
+
+async function loadTriggers() {
+  isLoadingTriggers.value = true;
+  triggerLoadError.value = '';
+  try {
+    const res = await triggerApi.list();
+    triggers.value = res.triggers;
+  } catch (e) {
+    triggerLoadError.value = e instanceof ApiError ? e.message : 'Failed to load triggers';
+  } finally {
+    isLoadingTriggers.value = false;
+  }
+}
+
+async function loadTriggerPrompt() {
+  if (!selectedTriggerId.value) return;
+  try {
+    const trigger = await triggerApi.get(selectedTriggerId.value);
+    currentPrompt.value = trigger.prompt_template || '';
+    hasAnalyzed.value = false;
+    suggestions.value = [];
+  } catch (e) {
+    showToast(e instanceof ApiError ? e.message : 'Failed to load trigger', 'error');
+  }
+}
+
+function analyzePrompt(prompt: string): Suggestion[] {
+  const results: Suggestion[] = [];
+  let id = 1;
+
+  // Check for very long prompts
+  const wordCount = prompt.split(/\s+/).length;
+  if (wordCount > 200) {
+    results.push({
+      id: String(id++),
+      type: 'truncation',
+      severity: 'high',
+      title: 'Prompt is very long',
+      description: `The prompt contains approximately ${wordCount} words (~${Math.round(wordCount * 1.3)} tokens). Long prompts increase cost and may cause output truncation.`,
+      before: prompt.substring(0, 80) + '...',
+      after: 'Consider breaking this into a more focused prompt with fewer instructions.',
+      selected: true,
+    });
+  }
+
+  // Check for repeated role instructions
+  const roleMatches = prompt.match(/you are a?\s/gi) || [];
+  if (roleMatches.length > 1) {
+    results.push({
+      id: String(id++),
+      type: 'inefficiency',
+      severity: 'medium',
+      title: 'Redundant role instructions',
+      description: `The prompt repeats role instructions ${roleMatches.length} times, consuming tokens unnecessarily.`,
+      before: 'You are a... As a... Remember you are a...',
+      after: 'State the role once at the beginning of the prompt.',
+      selected: false,
+    });
+  }
+
+  // Check for missing output format
+  if (!/\b(json|markdown|format|output|return)\b/i.test(prompt)) {
+    results.push({
+      id: String(id++),
+      type: 'clarity',
+      severity: 'medium',
+      title: 'No explicit output format specified',
+      description: 'The prompt does not specify an output format. This can lead to inconsistent responses.',
+      before: 'Report your findings.',
+      after: 'Report findings as JSON: { "issues": [{ "severity": "...", "description": "..." }] }',
+      selected: false,
+    });
+  }
+
+  // Check for unguarded placeholders
+  const placeholders = prompt.match(/\{([^}]+)\}/g) || [];
+  if (placeholders.length > 0) {
+    const hasDefault = placeholders.some(p => p.includes('|default'));
+    if (!hasDefault) {
+      results.push({
+        id: String(id++),
+        type: 'failure',
+        severity: 'high',
+        title: 'Placeholders without fallback values',
+        description: `Found ${placeholders.length} placeholder(s) without default fallbacks: ${placeholders.join(', ')}. Empty values may cause failures.`,
+        before: placeholders[0] ?? '',
+        after: `${(placeholders[0] ?? '').slice(0, -1)}|default:"N/A"}`,
+        selected: true,
+      });
+    }
+  }
+
+  // Check for very short prompts
+  if (wordCount < 15 && wordCount > 0) {
+    results.push({
+      id: String(id++),
+      type: 'clarity',
+      severity: 'low',
+      title: 'Prompt may be too brief',
+      description: 'Very short prompts often produce inconsistent results. Consider adding more context or constraints.',
+      before: prompt.substring(0, 60),
+      after: 'Add role, context, constraints, and output format for better results.',
+      selected: false,
+    });
+  }
+
+  return results;
+}
 
 async function handleAnalyze() {
+  if (!selectedTriggerId.value) {
+    showToast('Select a trigger to analyze', 'info');
+    return;
+  }
   isAnalyzing.value = true;
   try {
-    await new Promise(resolve => setTimeout(resolve, 1800));
-    suggestions.value = MOCK_SUGGESTIONS.map(s => ({ ...s }));
+    const trigger = await triggerApi.get(selectedTriggerId.value);
+    currentPrompt.value = trigger.prompt_template || '';
+    const analyzed = analyzePrompt(currentPrompt.value);
+    suggestions.value = analyzed;
     hasAnalyzed.value = true;
-    showToast('Log analysis complete — 4 improvements found', 'success');
-  } catch {
-    showToast('Analysis failed', 'error');
+    if (analyzed.length > 0) {
+      showToast(`Analysis complete — ${analyzed.length} improvement${analyzed.length > 1 ? 's' : ''} found`, 'success');
+    } else {
+      showToast('Analysis complete — prompt looks good!', 'success');
+    }
+  } catch (e) {
+    showToast(e instanceof ApiError ? e.message : 'Analysis failed', 'error');
   } finally {
     isAnalyzing.value = false;
   }
 }
 
 async function handleApply() {
-  const selected = suggestions.value.filter(s => s.selected);
-  if (selected.length === 0) {
+  const selectedSugs = suggestions.value.filter(s => s.selected);
+  if (selectedSugs.length === 0) {
     showToast('Select at least one suggestion to apply', 'info');
     return;
   }
+  if (!selectedTriggerId.value) return;
   isApplying.value = true;
   try {
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    showToast(`Applied ${selected.length} suggestion${selected.length > 1 ? 's' : ''} successfully`, 'success');
+    // Apply textual improvements to the prompt
+    let updatedPrompt = currentPrompt.value;
+    for (const sug of selectedSugs) {
+      if (sug.before && updatedPrompt.includes(sug.before)) {
+        updatedPrompt = updatedPrompt.replace(sug.before, sug.after);
+      }
+    }
+    await triggerApi.update(selectedTriggerId.value, { prompt_template: updatedPrompt });
+    currentPrompt.value = updatedPrompt;
+    showToast(`Applied ${selectedSugs.length} suggestion${selectedSugs.length > 1 ? 's' : ''} successfully`, 'success');
     suggestions.value = suggestions.value.filter(s => !s.selected);
-  } catch {
-    showToast('Failed to apply suggestions', 'error');
+  } catch (e) {
+    showToast(e instanceof ApiError ? e.message : 'Failed to apply suggestions', 'error');
   } finally {
     isApplying.value = false;
   }
@@ -123,16 +219,16 @@ function typeIcon(type: string): string {
       { label: 'Prompt Optimizer' },
     ]" />
 
-    <PageHeader title="Prompt Optimizer" subtitle="Analyze execution logs to identify patterns and improve your bot prompts.">
+    <PageHeader title="Prompt Optimizer" subtitle="Analyze trigger prompts to identify patterns and improve quality.">
       <template #actions>
-        <button class="btn btn-primary" :disabled="isAnalyzing" @click="handleAnalyze">
+        <button class="btn btn-primary" :disabled="isAnalyzing || !selectedTriggerId" @click="handleAnalyze">
           <svg v-if="isAnalyzing" class="spinner" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
             <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
           </svg>
           <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
             <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
           </svg>
-          {{ isAnalyzing ? 'Analyzing...' : 'Analyze Logs' }}
+          {{ isAnalyzing ? 'Analyzing...' : 'Analyze Prompt' }}
         </button>
         <button
           v-if="hasAnalyzed"
@@ -151,18 +247,29 @@ function typeIcon(type: string): string {
       </template>
     </PageHeader>
 
+    <!-- Trigger selector -->
+    <div v-if="isLoadingTriggers" class="loading-msg">Loading triggers...</div>
+    <div v-else-if="triggerLoadError" class="error-msg">{{ triggerLoadError }}</div>
+    <div v-else class="trigger-selector">
+      <label class="selector-label">Select Trigger:</label>
+      <select v-model="selectedTriggerId" class="trigger-select" @change="loadTriggerPrompt">
+        <option value="">Choose a trigger...</option>
+        <option v-for="t in triggers" :key="t.id" :value="t.id">{{ t.name }} ({{ t.id }})</option>
+      </select>
+    </div>
+
     <div v-if="!hasAnalyzed" class="card empty-prompt">
       <div class="empty-inner">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="48" height="48" class="empty-icon">
           <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
         </svg>
         <p class="empty-title">No analysis yet</p>
-        <p class="empty-sub">Click "Analyze Logs" to scan recent execution logs for optimization opportunities.</p>
-        <button class="btn btn-primary" :disabled="isAnalyzing" @click="handleAnalyze">
+        <p class="empty-sub">Select a trigger and click "Analyze Prompt" to find optimization opportunities.</p>
+        <button class="btn btn-primary" :disabled="isAnalyzing || !selectedTriggerId" @click="handleAnalyze">
           <svg v-if="isAnalyzing" class="spinner" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
             <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
           </svg>
-          {{ isAnalyzing ? 'Analyzing...' : 'Analyze Logs' }}
+          {{ isAnalyzing ? 'Analyzing...' : 'Analyze Prompt' }}
         </button>
       </div>
     </div>
@@ -185,8 +292,8 @@ function typeIcon(type: string): string {
 
       <div v-if="suggestions.length === 0" class="card empty-prompt">
         <div class="empty-inner">
-          <p class="empty-title" style="color: var(--accent-emerald)">All improvements applied!</p>
-          <p class="empty-sub">Your prompts are optimized. Run another analysis to check for new issues.</p>
+          <p class="empty-title" style="color: var(--accent-emerald)">Prompt looks good!</p>
+          <p class="empty-sub">No obvious improvements detected. Select another trigger or refine manually.</p>
         </div>
       </div>
 
@@ -215,7 +322,7 @@ function typeIcon(type: string): string {
               <div class="diff-label">Before</div>
               <pre class="diff-code">{{ s.before }}</pre>
             </div>
-            <div class="diff-arrow">→</div>
+            <div class="diff-arrow">&rarr;</div>
             <div class="diff-block diff-after">
               <div class="diff-label">After</div>
               <pre class="diff-code">{{ s.after }}</pre>
@@ -239,6 +346,13 @@ function typeIcon(type: string): string {
   from { opacity: 0; transform: translateY(12px); }
   to { opacity: 1; transform: translateY(0); }
 }
+
+.loading-msg { font-size: 0.82rem; color: var(--text-tertiary); padding: 12px 0; }
+.error-msg { font-size: 0.82rem; color: #ef4444; padding: 12px 0; }
+
+.trigger-selector { display: flex; align-items: center; gap: 12px; }
+.selector-label { font-size: 0.82rem; font-weight: 600; color: var(--text-secondary); }
+.trigger-select { flex: 1; max-width: 400px; padding: 8px 12px; background: var(--bg-tertiary); border: 1px solid var(--border-default); border-radius: 7px; color: var(--text-primary); font-size: 0.82rem; }
 
 .card {
   background: var(--bg-secondary);

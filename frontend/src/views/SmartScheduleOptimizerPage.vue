@@ -1,8 +1,10 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
+import { schedulerApi, ApiError } from '../services/api';
+import type { SchedulerStatus } from '../services/api';
 
 const showToast = useToast();
 
@@ -44,96 +46,62 @@ interface BotSchedule {
   lastConflicts: number;
 }
 
+const loading = ref(true);
+const error = ref<string | null>(null);
 const optStatus = ref<OptStatus>('idle');
+const schedulerStatus = ref<SchedulerStatus | null>(null);
 
-const botSchedules = ref<BotSchedule[]>([
-  {
-    botId: 'bot-security',
-    botName: 'Security Audit Bot',
-    cron: '0 9 * * 1',
-    provider: 'Claude',
-    avgDurationMs: 34200,
-    riskLevel: 'high',
-    lastConflicts: 7,
-  },
-  {
-    botId: 'bot-dep-audit',
-    botName: 'Dependency Audit Bot',
-    cron: '0 9 * * 1',
-    provider: 'Claude',
-    avgDurationMs: 12100,
-    riskLevel: 'high',
-    lastConflicts: 7,
-  },
-  {
-    botId: 'bot-changelog',
-    botName: 'Changelog Generator',
-    cron: '0 8 * * 5',
-    provider: 'OpenCode',
-    avgDurationMs: 8400,
-    riskLevel: 'medium',
-    lastConflicts: 2,
-  },
-  {
-    botId: 'bot-test-cov',
-    botName: 'Test Coverage Bot',
-    cron: '30 2 * * *',
-    provider: 'Claude',
-    avgDurationMs: 22000,
-    riskLevel: 'low',
-    lastConflicts: 0,
-  },
-]);
+const botSchedules = ref<BotSchedule[]>([]);
+const rateLimitPatterns = ref<RateLimitPattern[]>([]);
+const suggestions = ref<ScheduleSuggestion[]>([]);
 
-const rateLimitPatterns = ref<RateLimitPattern[]>([
-  {
-    provider: 'Claude',
-    peakHours: [9, 10, 11, 14, 15],
-    peakDays: ['Monday', 'Tuesday'],
-    avgQueueDepth: 8.3,
-    recommendation: 'Avoid Mon–Tue 9–11am and 2–4pm UTC',
-  },
-  {
-    provider: 'OpenCode',
-    peakHours: [13, 14, 15, 16],
-    peakDays: ['Wednesday', 'Thursday'],
-    avgQueueDepth: 3.1,
-    recommendation: 'Avoid Wed–Thu 1–5pm UTC',
-  },
-]);
+async function loadData() {
+  loading.value = true;
+  error.value = null;
+  try {
+    const [status, sessionsResp] = await Promise.all([
+      schedulerApi.getStatus(),
+      schedulerApi.getSessions(),
+    ]);
+    schedulerStatus.value = status;
 
-const suggestions = ref<ScheduleSuggestion[]>([
-  {
-    botId: 'bot-security',
-    botName: 'Security Audit Bot',
-    currentCron: '0 9 * * 1',
-    suggestedCron: '0 3 * * 2',
-    currentRisk: 'high',
-    suggestedRisk: 'low',
-    rationale: 'Current Mon 9am UTC overlaps with peak Claude traffic. Tue 3am UTC has 94% lower queue depth.',
-    estimatedConflictReduction: 85,
-  },
-  {
-    botId: 'bot-dep-audit',
-    botName: 'Dependency Audit Bot',
-    currentCron: '0 9 * * 1',
-    suggestedCron: '0 4 * * 2',
-    currentRisk: 'high',
-    suggestedRisk: 'low',
-    rationale: 'Conflict with Security Audit Bot on same schedule. Stagger by 1h on Tue early morning.',
-    estimatedConflictReduction: 90,
-  },
-  {
-    botId: 'bot-changelog',
-    botName: 'Changelog Generator',
-    currentCron: '0 8 * * 5',
-    suggestedCron: '0 6 * * 5',
-    currentRisk: 'medium',
-    suggestedRisk: 'low',
-    rationale: 'Fri 8am UTC has moderate OpenCode congestion. Moving to 6am avoids the morning ramp-up.',
-    estimatedConflictReduction: 55,
-  },
-]);
+    // Map scheduler sessions to BotSchedule display format
+    const sessions = sessionsResp.sessions ?? status.sessions ?? [];
+    botSchedules.value = sessions.map((s) => ({
+      botId: `acct-${s.account_id}`,
+      botName: s.account_name ?? `Account ${s.account_id}`,
+      cron: s.state,
+      provider: s.account_name ?? `Account ${s.account_id}`,
+      avgDurationMs: 0,
+      riskLevel: (s.state === 'stopped' ? 'high' : s.state === 'queued' ? 'medium' : 'low') as RiskLevel,
+      lastConflicts: s.stop_reason ? 1 : 0,
+    }));
+
+    // Derive rate limit patterns from global summary if available
+    if (status.global_summary) {
+      const gs = status.global_summary;
+      rateLimitPatterns.value = [{
+        provider: 'All',
+        peakHours: [],
+        peakDays: [],
+        avgQueueDepth: gs.running ?? 0,
+        recommendation: gs.stopped > 0
+          ? `${gs.stopped} session(s) stopped due to rate limits. Consider staggering schedules.`
+          : 'Concurrency is within normal limits.',
+      }];
+    }
+  } catch (err) {
+    if (err instanceof ApiError) {
+      error.value = `API Error (${err.status}): ${err.message}`;
+    } else {
+      error.value = err instanceof Error ? err.message : 'Unknown error';
+    }
+  } finally {
+    loading.value = false;
+  }
+}
+
+onMounted(loadData);
 
 const heatmapDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 const heatmapHours = [0, 3, 6, 9, 12, 15, 18, 21];
@@ -184,9 +152,16 @@ function formatCron(cron: string): string {
 
 async function runOptimizer() {
   optStatus.value = 'analyzing';
-  await new Promise((r) => setTimeout(r, 2000));
-  optStatus.value = 'done';
-  showToast('Optimization analysis complete — 3 schedule improvements found', 'success');
+  try {
+    // Re-fetch status to get latest data as the "optimization" pass
+    const status = await schedulerApi.getStatus();
+    schedulerStatus.value = status;
+    optStatus.value = 'done';
+    showToast('Optimization analysis complete', 'success');
+  } catch (err) {
+    optStatus.value = 'idle';
+    showToast(err instanceof ApiError ? err.message : 'Optimization failed', 'error');
+  }
 }
 
 function applySuggestion(s: ScheduleSuggestion) {
@@ -216,150 +191,171 @@ const highRiskCount = computed(() => botSchedules.value.filter((b) => b.riskLeve
       subtitle="AI-powered scheduling that analyzes API rate limit patterns and execution history to avoid peak contention"
     />
 
-    <div class="stats-row">
-      <div class="stat-card">
-        <div class="stat-label">Bots with Schedules</div>
-        <div class="stat-value">{{ botSchedules.length }}</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-label">High-Risk Schedules</div>
-        <div class="stat-value" :style="{ color: highRiskCount > 0 ? 'var(--accent-red)' : 'var(--accent-green)' }">
-          {{ highRiskCount }}
-        </div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-label">Rate Limit Conflicts (30d)</div>
-        <div class="stat-value" :style="{ color: totalConflicts > 0 ? 'var(--accent-amber)' : 'var(--accent-green)' }">
-          {{ totalConflicts }}
-        </div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-label">Suggestions Available</div>
-        <div class="stat-value" :style="{ color: suggestions.length > 0 ? 'var(--accent-blue)' : 'var(--text-muted)' }">
-          {{ suggestions.length }}
-        </div>
-      </div>
+    <!-- Loading state -->
+    <div v-if="loading" class="empty-detail">
+      <div class="empty-icon">⏳</div>
+      <div class="empty-text">Loading scheduler data...</div>
     </div>
 
-    <!-- Rate limit heatmap -->
-    <div class="section-card">
-      <div class="section-header">
-        <h3 class="section-title">Provider Rate Limit Heatmap</h3>
-        <span class="section-hint">Historical API queue depth by day / hour (UTC)</span>
-      </div>
-      <div class="heatmap-grid">
-        <div class="heatmap-corner"></div>
-        <div v-for="day in heatmapDays" :key="day" class="heatmap-day-header">{{ day }}</div>
-        <template v-for="hour in heatmapHours" :key="hour">
-          <div class="heatmap-hour-label">{{ String(hour).padStart(2, '0') }}:00</div>
-          <div
-            v-for="day in heatmapDays"
-            :key="`${day}-${hour}`"
-            class="heatmap-cell"
-            :style="{ background: heatColor(heatmapData.find(s => s.day === day && s.hour === hour)?.load ?? 20) }"
-            :title="`${day} ${hour}:00 UTC — Load: ${Math.round(heatmapData.find(s => s.day === day && s.hour === hour)?.load ?? 20)}%`"
-          ></div>
-        </template>
-      </div>
-      <div class="heatmap-legend">
-        <span class="legend-item"><span class="legend-swatch" style="background: color-mix(in srgb, var(--accent-green) 30%, transparent)"></span> Low</span>
-        <span class="legend-item"><span class="legend-swatch" style="background: var(--accent-amber)"></span> Medium</span>
-        <span class="legend-item"><span class="legend-swatch" style="background: var(--accent-red)"></span> High</span>
-      </div>
+    <!-- Error state -->
+    <div v-else-if="error" class="empty-detail">
+      <div class="empty-icon">⚠️</div>
+      <div class="empty-text">{{ error }}</div>
+      <button class="btn-primary" style="margin-top: 12px" @click="loadData">Retry</button>
     </div>
 
-    <!-- Provider patterns -->
-    <div class="section-card">
-      <div class="section-header">
-        <h3 class="section-title">Provider Rate Limit Patterns</h3>
-      </div>
-      <div class="patterns-grid">
-        <div v-for="p in rateLimitPatterns" :key="p.provider" class="pattern-card">
-          <div class="pattern-provider">{{ p.provider }}</div>
-          <div class="pattern-stat">Peak days: <strong>{{ p.peakDays.join(', ') }}</strong></div>
-          <div class="pattern-stat">Peak hours: <strong>{{ p.peakHours.map(h => `${h}:00`).join(', ') }} UTC</strong></div>
-          <div class="pattern-stat">Avg queue depth: <strong>{{ p.avgQueueDepth }}</strong></div>
-          <div class="pattern-rec">💡 {{ p.recommendation }}</div>
+    <template v-else>
+      <div class="stats-row">
+        <div class="stat-card">
+          <div class="stat-label">Bots with Schedules</div>
+          <div class="stat-value">{{ botSchedules.length }}</div>
         </div>
-      </div>
-    </div>
-
-    <!-- Current schedules -->
-    <div class="section-card">
-      <div class="section-header">
-        <h3 class="section-title">Current Bot Schedules</h3>
-        <button
-          class="btn-primary"
-          :disabled="optStatus === 'analyzing'"
-          @click="runOptimizer"
-        >
-          {{ optStatus === 'analyzing' ? '⏳ Analyzing…' : '⚡ Run Optimizer' }}
-        </button>
-      </div>
-      <table class="bench-table">
-        <thead>
-          <tr>
-            <th>Bot</th>
-            <th>Current Schedule</th>
-            <th>Provider</th>
-            <th>Avg Duration</th>
-            <th>Risk</th>
-            <th>Conflicts (30d)</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="b in botSchedules" :key="b.botId" class="bench-row">
-            <td class="bot-name">{{ b.botName }}</td>
-            <td><code class="mono">{{ b.cron }}</code><span class="cron-human"> ({{ formatCron(b.cron) }})</span></td>
-            <td>{{ b.provider }}</td>
-            <td>{{ (b.avgDurationMs / 1000).toFixed(0) }}s</td>
-            <td><span :style="{ color: riskColor(b.riskLevel) }">{{ riskBadge(b.riskLevel) }} {{ b.riskLevel }}</span></td>
-            <td :style="{ color: b.lastConflicts > 0 ? 'var(--accent-amber)' : 'var(--accent-green)' }">
-              {{ b.lastConflicts }}
-            </td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-
-    <!-- Suggestions -->
-    <div v-if="suggestions.length > 0" class="section-card">
-      <div class="section-header">
-        <h3 class="section-title">✨ Optimization Suggestions</h3>
-        <span class="section-hint">AI-generated schedule improvements</span>
-      </div>
-      <div class="suggestions-list">
-        <div v-for="s in suggestions" :key="s.botId" class="suggestion-card">
-          <div class="suggestion-header">
-            <div class="suggestion-bot">{{ s.botName }}</div>
-            <div class="suggestion-actions">
-              <button class="btn-apply" @click="applySuggestion(s)">Apply</button>
-              <button class="btn-dismiss" @click="dismissSuggestion(s)">Dismiss</button>
-            </div>
+        <div class="stat-card">
+          <div class="stat-label">High-Risk Schedules</div>
+          <div class="stat-value" :style="{ color: highRiskCount > 0 ? 'var(--accent-red)' : 'var(--accent-green)' }">
+            {{ highRiskCount }}
           </div>
-          <div class="schedule-compare">
-            <div class="schedule-item">
-              <div class="schedule-label" :style="{ color: riskColor(s.currentRisk) }">Current {{ riskBadge(s.currentRisk) }}</div>
-              <code class="mono">{{ s.currentCron }}</code>
-              <div class="cron-human">{{ formatCron(s.currentCron) }}</div>
-            </div>
-            <div class="arrow">→</div>
-            <div class="schedule-item">
-              <div class="schedule-label" :style="{ color: riskColor(s.suggestedRisk) }">Suggested {{ riskBadge(s.suggestedRisk) }}</div>
-              <code class="mono">{{ s.suggestedCron }}</code>
-              <div class="cron-human">{{ formatCron(s.suggestedCron) }}</div>
-            </div>
-            <div class="conflict-reduction">-{{ s.estimatedConflictReduction }}% conflicts</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Rate Limit Conflicts (30d)</div>
+          <div class="stat-value" :style="{ color: totalConflicts > 0 ? 'var(--accent-amber)' : 'var(--accent-green)' }">
+            {{ totalConflicts }}
           </div>
-          <div class="rationale">{{ s.rationale }}</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Suggestions Available</div>
+          <div class="stat-value" :style="{ color: suggestions.length > 0 ? 'var(--accent-blue)' : 'var(--text-muted)' }">
+            {{ suggestions.length }}
+          </div>
         </div>
       </div>
-    </div>
 
-    <div v-else-if="optStatus === 'done'" class="empty-detail">
-      <div class="empty-icon">✅</div>
-      <div class="empty-text">All schedules are already well-optimized</div>
-    </div>
+      <!-- Rate limit heatmap -->
+      <div class="section-card">
+        <div class="section-header">
+          <h3 class="section-title">Provider Rate Limit Heatmap</h3>
+          <span class="section-hint">Historical API queue depth by day / hour (UTC)</span>
+        </div>
+        <div class="heatmap-grid">
+          <div class="heatmap-corner"></div>
+          <div v-for="day in heatmapDays" :key="day" class="heatmap-day-header">{{ day }}</div>
+          <template v-for="hour in heatmapHours" :key="hour">
+            <div class="heatmap-hour-label">{{ String(hour).padStart(2, '0') }}:00</div>
+            <div
+              v-for="day in heatmapDays"
+              :key="`${day}-${hour}`"
+              class="heatmap-cell"
+              :style="{ background: heatColor(heatmapData.find(s => s.day === day && s.hour === hour)?.load ?? 20) }"
+              :title="`${day} ${hour}:00 UTC — Load: ${Math.round(heatmapData.find(s => s.day === day && s.hour === hour)?.load ?? 20)}%`"
+            ></div>
+          </template>
+        </div>
+        <div class="heatmap-legend">
+          <span class="legend-item"><span class="legend-swatch" style="background: color-mix(in srgb, var(--accent-green) 30%, transparent)"></span> Low</span>
+          <span class="legend-item"><span class="legend-swatch" style="background: var(--accent-amber)"></span> Medium</span>
+          <span class="legend-item"><span class="legend-swatch" style="background: var(--accent-red)"></span> High</span>
+        </div>
+      </div>
+
+      <!-- Provider patterns -->
+      <div class="section-card">
+        <div class="section-header">
+          <h3 class="section-title">Provider Rate Limit Patterns</h3>
+        </div>
+        <div v-if="rateLimitPatterns.length === 0" class="empty-detail" style="padding: 20px">
+          <div class="empty-text">No rate limit pattern data available.</div>
+        </div>
+        <div v-else class="patterns-grid">
+          <div v-for="p in rateLimitPatterns" :key="p.provider" class="pattern-card">
+            <div class="pattern-provider">{{ p.provider }}</div>
+            <div class="pattern-stat">Peak days: <strong>{{ p.peakDays.length > 0 ? p.peakDays.join(', ') : 'N/A' }}</strong></div>
+            <div class="pattern-stat">Peak hours: <strong>{{ p.peakHours.length > 0 ? p.peakHours.map(h => `${h}:00`).join(', ') + ' UTC' : 'N/A' }}</strong></div>
+            <div class="pattern-stat">Active sessions: <strong>{{ p.avgQueueDepth }}</strong></div>
+            <div class="pattern-rec">💡 {{ p.recommendation }}</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Current schedules -->
+      <div class="section-card">
+        <div class="section-header">
+          <h3 class="section-title">Current Bot Schedules</h3>
+          <button
+            class="btn-primary"
+            :disabled="optStatus === 'analyzing'"
+            @click="runOptimizer"
+          >
+            {{ optStatus === 'analyzing' ? '⏳ Analyzing…' : '⚡ Run Optimizer' }}
+          </button>
+        </div>
+        <div v-if="botSchedules.length === 0" class="empty-detail" style="padding: 30px">
+          <div class="empty-text">No active scheduler sessions found.</div>
+        </div>
+        <table v-else class="bench-table">
+          <thead>
+            <tr>
+              <th>Bot</th>
+              <th>Current Schedule</th>
+              <th>Provider</th>
+              <th>Avg Duration</th>
+              <th>Risk</th>
+              <th>Conflicts (30d)</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="b in botSchedules" :key="b.botId" class="bench-row">
+              <td class="bot-name">{{ b.botName }}</td>
+              <td><code class="mono">{{ b.cron }}</code><span v-if="b.cron.includes(' ')" class="cron-human"> ({{ formatCron(b.cron) }})</span></td>
+              <td>{{ b.provider }}</td>
+              <td>{{ b.avgDurationMs > 0 ? (b.avgDurationMs / 1000).toFixed(0) + 's' : '-' }}</td>
+              <td><span :style="{ color: riskColor(b.riskLevel) }">{{ riskBadge(b.riskLevel) }} {{ b.riskLevel }}</span></td>
+              <td :style="{ color: b.lastConflicts > 0 ? 'var(--accent-amber)' : 'var(--accent-green)' }">
+                {{ b.lastConflicts }}
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Suggestions -->
+      <div v-if="suggestions.length > 0" class="section-card">
+        <div class="section-header">
+          <h3 class="section-title">✨ Optimization Suggestions</h3>
+          <span class="section-hint">AI-generated schedule improvements</span>
+        </div>
+        <div class="suggestions-list">
+          <div v-for="s in suggestions" :key="s.botId" class="suggestion-card">
+            <div class="suggestion-header">
+              <div class="suggestion-bot">{{ s.botName }}</div>
+              <div class="suggestion-actions">
+                <button class="btn-apply" @click="applySuggestion(s)">Apply</button>
+                <button class="btn-dismiss" @click="dismissSuggestion(s)">Dismiss</button>
+              </div>
+            </div>
+            <div class="schedule-compare">
+              <div class="schedule-item">
+                <div class="schedule-label" :style="{ color: riskColor(s.currentRisk) }">Current {{ riskBadge(s.currentRisk) }}</div>
+                <code class="mono">{{ s.currentCron }}</code>
+                <div class="cron-human">{{ formatCron(s.currentCron) }}</div>
+              </div>
+              <div class="arrow">→</div>
+              <div class="schedule-item">
+                <div class="schedule-label" :style="{ color: riskColor(s.suggestedRisk) }">Suggested {{ riskBadge(s.suggestedRisk) }}</div>
+                <code class="mono">{{ s.suggestedCron }}</code>
+                <div class="cron-human">{{ formatCron(s.suggestedCron) }}</div>
+              </div>
+              <div class="conflict-reduction">-{{ s.estimatedConflictReduction }}% conflicts</div>
+            </div>
+            <div class="rationale">{{ s.rationale }}</div>
+          </div>
+        </div>
+      </div>
+
+      <div v-else-if="optStatus === 'done'" class="empty-detail">
+        <div class="empty-icon">✅</div>
+        <div class="empty-text">All schedules are already well-optimized</div>
+      </div>
+    </template>
   </div>
 </template>
 

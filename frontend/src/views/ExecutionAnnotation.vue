@@ -1,9 +1,11 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
+import { executionApi, ApiError } from '../services/api';
+import type { Execution } from '../services/api';
 
 const router = useRouter();
 const showToast = useToast();
@@ -24,30 +26,64 @@ interface AnnotatedExecution {
   segments: OutputSegment[];
 }
 
-const executions = ref<AnnotatedExecution[]>([
-  {
-    id: 'exec-ann-001',
-    botName: 'bot-pr-review',
-    runAt: '2026-03-06T14:22:00Z',
-    qualityScore: 8.5,
-    rating: 1,
-    segments: [
-      { id: 's1', text: '## Security Analysis\n\nFound 1 potential vulnerability: The `state` parameter in the OAuth callback is not validated, which could allow CSRF attacks.', rating: 1, comment: 'Very accurate finding, exactly what we needed.' },
-      { id: 's2', text: '## Code Quality\n\nThe function `handleCallback` is 87 lines long and handles authentication, session creation, and redirect logic. Consider extracting into smaller, single-responsibility functions.', rating: 1 },
-      { id: 's3', text: '## Performance\n\nNo major performance issues detected. Database queries in auth flow appear optimized with appropriate indexing.', rating: -1, comment: 'Wrong — we have N+1 queries on user groups lookup.' },
-    ],
-  },
-]);
-
-const selected = ref<AnnotatedExecution>(executions.value[0]);
+const loading = ref(true);
+const error = ref('');
+const executions = ref<AnnotatedExecution[]>([]);
+const selected = ref<AnnotatedExecution | null>(null);
 const isSubmittingRating = ref(false);
 const newComment = ref('');
 const commentingSegment = ref<string | null>(null);
 
+function parseSegments(exec: Execution): OutputSegment[] {
+  const output = exec.stdout_log || '';
+  if (!output.trim()) {
+    return [{ id: 's0', text: exec.status === 'success' ? 'Execution completed successfully (no output captured).' : `Execution ${exec.status}.${exec.error_message ? ' Error: ' + exec.error_message : ''}` }];
+  }
+  // Split by markdown headings or double newlines into segments
+  const parts = output.split(/(?=^## )/m).filter(p => p.trim());
+  if (parts.length === 0) {
+    return [{ id: 's0', text: output }];
+  }
+  return parts.map((text, i) => ({ id: `s${i}`, text: text.trim() }));
+}
+
+function executionToAnnotated(exec: Execution): AnnotatedExecution {
+  return {
+    id: exec.execution_id,
+    botName: exec.trigger_name || exec.trigger_id,
+    runAt: exec.started_at,
+    qualityScore: null,
+    segments: parseSegments(exec),
+  };
+}
+
+async function fetchExecutions() {
+  loading.value = true;
+  error.value = '';
+  try {
+    const result = await executionApi.listAll({ limit: 20 });
+    const rawExecutions = result?.executions || [];
+    executions.value = rawExecutions.map(executionToAnnotated);
+    if (executions.value.length > 0) {
+      selected.value = executions.value[0];
+    }
+  } catch (err) {
+    if (err instanceof ApiError) {
+      error.value = `Failed to load executions: ${err.message}`;
+    } else {
+      error.value = 'Failed to load executions';
+    }
+  } finally {
+    loading.value = false;
+  }
+}
+
+onMounted(fetchExecutions);
+
 async function rateExecution(rating: 1 | -1) {
+  if (!selected.value) return;
   isSubmittingRating.value = true;
   try {
-    await new Promise(r => setTimeout(r, 400));
     selected.value.rating = rating;
     showToast(rating === 1 ? 'Rated thumbs up' : 'Rated thumbs down', 'success');
   } finally {
@@ -57,7 +93,6 @@ async function rateExecution(rating: 1 | -1) {
 
 async function rateSegment(seg: OutputSegment, rating: 1 | -1) {
   seg.rating = seg.rating === rating ? undefined : rating;
-  await new Promise(r => setTimeout(r, 200));
 }
 
 async function addComment(seg: OutputSegment) {
@@ -92,96 +127,114 @@ const aggStats = computed(() => {
       subtitle="Rate executions and leave inline comments on output segments to build a quality signal over time."
     />
 
-    <div class="stats-row">
-      <div class="stat-chip card">
-        <div class="stat-num">{{ aggStats.total }}</div>
-        <div class="stat-label">Total executions</div>
-      </div>
-      <div class="stat-chip card">
-        <div class="stat-num">{{ aggStats.rated }}</div>
-        <div class="stat-label">Rated</div>
-      </div>
-      <div class="stat-chip card">
-        <div class="stat-num" style="color: #34d399;">{{ aggStats.positive }}</div>
-        <div class="stat-label">Thumbs up</div>
-      </div>
-      <div class="stat-chip card">
-        <div class="stat-num" style="color: #ef4444;">{{ aggStats.negative }}</div>
-        <div class="stat-label">Thumbs down</div>
-      </div>
+    <!-- Loading state -->
+    <div v-if="loading" class="card" style="padding: 48px; text-align: center;">
+      <div style="color: var(--text-tertiary); font-size: 0.875rem;">Loading executions...</div>
     </div>
 
-    <div class="layout">
-      <!-- Execution list -->
-      <aside class="sidebar">
-        <div
-          v-for="e in executions"
-          :key="e.id"
-          class="exec-item card"
-          :class="{ active: selected.id === e.id }"
-          @click="selected = e"
-        >
-          <div class="exec-top">
-            <span class="exec-bot">{{ e.botName }}</span>
-            <span v-if="e.rating === 1" class="thumb thumb-up">👍</span>
-            <span v-else-if="e.rating === -1" class="thumb thumb-down">👎</span>
-          </div>
-          <div class="exec-date">{{ formatDate(e.runAt) }}</div>
-          <div v-if="e.qualityScore" class="exec-score">Quality: {{ e.qualityScore }}/10</div>
-        </div>
-      </aside>
+    <!-- Error state -->
+    <div v-else-if="error" class="card" style="padding: 48px; text-align: center;">
+      <div style="color: #ef4444; font-size: 0.875rem; margin-bottom: 12px;">{{ error }}</div>
+      <button class="btn btn-ghost" @click="fetchExecutions">Retry</button>
+    </div>
 
-      <!-- Annotation panel -->
-      <main class="annotation-main">
-        <div class="card exec-header-card">
-          <div class="exec-header-content">
-            <div>
-              <div class="exec-title">{{ selected.botName }} — {{ selected.id }}</div>
-              <div class="exec-time">{{ formatDate(selected.runAt) }}</div>
-            </div>
-            <div class="overall-rating">
-              <span class="rating-label">Overall:</span>
-              <button
-                :class="['rate-btn', { active: selected.rating === 1 }]"
-                :disabled="isSubmittingRating"
-                @click="rateExecution(1)"
-              >👍</button>
-              <button
-                :class="['rate-btn', { active: selected.rating === -1 }]"
-                :disabled="isSubmittingRating"
-                @click="rateExecution(-1)"
-              >👎</button>
-            </div>
-          </div>
-        </div>
+    <!-- Empty state -->
+    <div v-else-if="executions.length === 0" class="card" style="padding: 48px; text-align: center;">
+      <div style="color: var(--text-tertiary); font-size: 0.875rem;">No executions available for annotation.</div>
+    </div>
 
-        <div class="segments-list">
-          <div v-for="seg in selected.segments" :key="seg.id" class="segment-card card">
-            <div class="segment-text">{{ seg.text }}</div>
-            <div class="segment-footer">
-              <div class="segment-actions">
-                <button :class="['seg-rate-btn', { active: seg.rating === 1 }]" @click="rateSegment(seg, 1)">👍</button>
-                <button :class="['seg-rate-btn', { active: seg.rating === -1 }]" @click="rateSegment(seg, -1)">👎</button>
-                <button class="seg-comment-btn" @click="commentingSegment = commentingSegment === seg.id ? null : seg.id">
-                  💬 {{ seg.comment ? 'Edit' : 'Comment' }}
-                </button>
+    <template v-else>
+      <div class="stats-row">
+        <div class="stat-chip card">
+          <div class="stat-num">{{ aggStats.total }}</div>
+          <div class="stat-label">Total executions</div>
+        </div>
+        <div class="stat-chip card">
+          <div class="stat-num">{{ aggStats.rated }}</div>
+          <div class="stat-label">Rated</div>
+        </div>
+        <div class="stat-chip card">
+          <div class="stat-num" style="color: #34d399;">{{ aggStats.positive }}</div>
+          <div class="stat-label">Thumbs up</div>
+        </div>
+        <div class="stat-chip card">
+          <div class="stat-num" style="color: #ef4444;">{{ aggStats.negative }}</div>
+          <div class="stat-label">Thumbs down</div>
+        </div>
+      </div>
+
+      <div class="layout">
+        <!-- Execution list -->
+        <aside class="sidebar">
+          <div
+            v-for="e in executions"
+            :key="e.id"
+            class="exec-item card"
+            :class="{ active: selected?.id === e.id }"
+            @click="selected = e"
+          >
+            <div class="exec-top">
+              <span class="exec-bot">{{ e.botName }}</span>
+              <span v-if="e.rating === 1" class="thumb thumb-up">👍</span>
+              <span v-else-if="e.rating === -1" class="thumb thumb-down">👎</span>
+            </div>
+            <div class="exec-date">{{ formatDate(e.runAt) }}</div>
+            <div v-if="e.qualityScore" class="exec-score">Quality: {{ e.qualityScore }}/10</div>
+          </div>
+        </aside>
+
+        <!-- Annotation panel -->
+        <main v-if="selected" class="annotation-main">
+          <div class="card exec-header-card">
+            <div class="exec-header-content">
+              <div>
+                <div class="exec-title">{{ selected.botName }} — {{ selected.id }}</div>
+                <div class="exec-time">{{ formatDate(selected.runAt) }}</div>
               </div>
-            </div>
-            <div v-if="seg.comment" class="existing-comment">
-              <span class="comment-icon">💬</span>
-              <span class="comment-text">{{ seg.comment }}</span>
-            </div>
-            <div v-if="commentingSegment === seg.id" class="comment-input-area">
-              <textarea v-model="newComment" class="comment-textarea" placeholder="Add your feedback..." rows="2"></textarea>
-              <div class="comment-input-actions">
-                <button class="btn btn-ghost btn-sm" @click="commentingSegment = null; newComment = ''">Cancel</button>
-                <button class="btn btn-primary btn-sm" @click="addComment(seg)">Save</button>
+              <div class="overall-rating">
+                <span class="rating-label">Overall:</span>
+                <button
+                  :class="['rate-btn', { active: selected.rating === 1 }]"
+                  :disabled="isSubmittingRating"
+                  @click="rateExecution(1)"
+                >👍</button>
+                <button
+                  :class="['rate-btn', { active: selected.rating === -1 }]"
+                  :disabled="isSubmittingRating"
+                  @click="rateExecution(-1)"
+                >👎</button>
               </div>
             </div>
           </div>
-        </div>
-      </main>
-    </div>
+
+          <div class="segments-list">
+            <div v-for="seg in selected.segments" :key="seg.id" class="segment-card card">
+              <div class="segment-text">{{ seg.text }}</div>
+              <div class="segment-footer">
+                <div class="segment-actions">
+                  <button :class="['seg-rate-btn', { active: seg.rating === 1 }]" @click="rateSegment(seg, 1)">👍</button>
+                  <button :class="['seg-rate-btn', { active: seg.rating === -1 }]" @click="rateSegment(seg, -1)">👎</button>
+                  <button class="seg-comment-btn" @click="commentingSegment = commentingSegment === seg.id ? null : seg.id">
+                    💬 {{ seg.comment ? 'Edit' : 'Comment' }}
+                  </button>
+                </div>
+              </div>
+              <div v-if="seg.comment" class="existing-comment">
+                <span class="comment-icon">💬</span>
+                <span class="comment-text">{{ seg.comment }}</span>
+              </div>
+              <div v-if="commentingSegment === seg.id" class="comment-input-area">
+                <textarea v-model="newComment" class="comment-textarea" placeholder="Add your feedback..." rows="2"></textarea>
+                <div class="comment-input-actions">
+                  <button class="btn btn-ghost btn-sm" @click="commentingSegment = null; newComment = ''">Cancel</button>
+                  <button class="btn btn-primary btn-sm" @click="addComment(seg)">Save</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </main>
+      </div>
+    </template>
   </div>
 </template>
 

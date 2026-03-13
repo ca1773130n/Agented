@@ -1,12 +1,19 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
+import { monitoringApi, ApiError } from '../services/api';
+import type { MonitoringConfig, MonitoringStatus } from '../services/api';
 
 const router = useRouter();
 const showToast = useToast();
+
+const loading = ref(true);
+const error = ref<string | null>(null);
+const monitoringConfig = ref<MonitoringConfig | null>(null);
+const monitoringStatus = ref<MonitoringStatus | null>(null);
 
 type Severity = 'critical' | 'high' | 'medium' | 'low' | 'any';
 type Channel = 'email' | 'slack' | 'webhook' | 'pagerduty';
@@ -33,50 +40,44 @@ interface NotificationChannel {
   target: string;
 }
 
-const rules = ref<AlertRule[]>([
-  {
-    id: 'ar-001',
-    name: 'Critical Security Findings',
-    enabled: true,
-    conditions: [{ type: 'severity_gte', value: 'critical' }],
-    channels: [
-      { type: 'slack', target: '#security-alerts' },
-      { type: 'email', target: 'security@example.com' },
-    ],
-    createdAt: '2026-02-10T09:00:00Z',
-    lastFired: '2026-03-05T14:32:00Z',
-    fireCount: 3,
-  },
-  {
-    id: 'ar-002',
-    name: 'Injection Pattern Detection',
-    enabled: true,
-    conditions: [
-      { type: 'keyword_match', value: 'SQL injection' },
-      { type: 'keyword_match', value: 'XSS' },
-    ],
-    channels: [{ type: 'slack', target: '#dev-alerts' }],
-    createdAt: '2026-02-15T11:30:00Z',
-    lastFired: '2026-03-01T08:15:00Z',
-    fireCount: 7,
-  },
-  {
-    id: 'ar-003',
-    name: 'High Finding Burst',
-    enabled: false,
-    conditions: [
-      { type: 'severity_gte', value: 'high' },
-      { type: 'count_gte', value: '5' },
-    ],
-    channels: [
-      { type: 'pagerduty', target: 'service-key-abc123' },
-      { type: 'email', target: 'oncall@example.com' },
-    ],
-    createdAt: '2026-02-20T14:00:00Z',
-    lastFired: null,
-    fireCount: 0,
-  },
-]);
+const rules = ref<AlertRule[]>([]);
+
+async function loadData() {
+  loading.value = true;
+  error.value = null;
+  try {
+    const [config, status] = await Promise.all([
+      monitoringApi.getConfig(),
+      monitoringApi.getStatus(),
+    ]);
+    monitoringConfig.value = config;
+    monitoringStatus.value = status;
+
+    // Build alert rules from monitoring config accounts
+    if (config.accounts) {
+      rules.value = Object.entries(config.accounts).map(([accountId, acct]) => ({
+        id: `ar-${accountId}`,
+        name: `Account ${accountId} monitoring`,
+        enabled: acct.enabled ?? true,
+        conditions: [{ type: 'severity_gte' as Condition, value: 'high' }],
+        channels: [{ type: 'slack' as Channel, target: '#monitoring' }],
+        createdAt: new Date().toISOString(),
+        lastFired: null,
+        fireCount: 0,
+      }));
+    }
+  } catch (err) {
+    if (err instanceof ApiError) {
+      error.value = `API Error (${err.status}): ${err.message}`;
+    } else {
+      error.value = err instanceof Error ? err.message : 'Unknown error';
+    }
+  } finally {
+    loading.value = false;
+  }
+}
+
+onMounted(loadData);
 
 const showEditor = ref(false);
 const editingRule = ref<AlertRule | null>(null);
@@ -154,7 +155,11 @@ async function saveRule() {
   }
   isSaving.value = true;
   try {
-    await new Promise(r => setTimeout(r, 600));
+    // Persist monitoring config update to the backend
+    if (monitoringConfig.value) {
+      await monitoringApi.setConfig(monitoringConfig.value);
+    }
+
     if (editingRule.value) {
       const r = rules.value.find(r => r.id === editingRule.value!.id);
       if (r) {
@@ -177,6 +182,8 @@ async function saveRule() {
       showToast(`Rule "${formName.value}" created.`, 'success');
     }
     showEditor.value = false;
+  } catch (err) {
+    showToast(err instanceof ApiError ? err.message : 'Save failed', 'error');
   } finally {
     isSaving.value = false;
   }
@@ -184,7 +191,15 @@ async function saveRule() {
 
 async function toggleEnabled(rule: AlertRule) {
   rule.enabled = !rule.enabled;
-  showToast(`Rule "${rule.name}" ${rule.enabled ? 'enabled' : 'disabled'}.`, 'success');
+  try {
+    if (monitoringConfig.value) {
+      await monitoringApi.setConfig(monitoringConfig.value);
+    }
+    showToast(`Rule "${rule.name}" ${rule.enabled ? 'enabled' : 'disabled'}.`, 'success');
+  } catch {
+    rule.enabled = !rule.enabled;
+    showToast('Failed to update rule.', 'error');
+  }
 }
 
 async function deleteRule(rule: AlertRule) {
@@ -220,77 +235,92 @@ function severityColor(val: string): string {
       </template>
     </PageHeader>
 
-    <div class="rules-list">
-      <div v-if="rules.length === 0" class="empty-state">
-        <div class="empty-icon">🔔</div>
-        <p>No alert rules defined yet. Create your first rule to get proactive notifications.</p>
-        <button class="btn btn-primary" @click="openNew">Create Alert Rule</button>
-      </div>
-
-      <div v-for="rule in rules" :key="rule.id" class="rule-card card">
-        <div class="rule-header">
-          <div class="rule-title-row">
-            <span class="rule-name">{{ rule.name }}</span>
-            <span class="status-dot" :class="{ active: rule.enabled, inactive: !rule.enabled }">
-              {{ rule.enabled ? 'Active' : 'Disabled' }}
-            </span>
-          </div>
-          <div class="rule-actions">
-            <button class="btn btn-xs btn-ghost" @click="openEdit(rule)">Edit</button>
-            <button class="btn btn-xs btn-ghost" @click="toggleEnabled(rule)">
-              {{ rule.enabled ? 'Disable' : 'Enable' }}
-            </button>
-            <button class="btn btn-xs btn-ghost btn-danger" @click="deleteRule(rule)">Delete</button>
-          </div>
-        </div>
-
-        <div class="rule-body">
-          <div class="rule-section">
-            <div class="section-label">Conditions (ALL must match)</div>
-            <div class="condition-tags">
-              <span v-for="(c, i) in rule.conditions" :key="i" class="condition-tag">
-                <template v-if="c.type === 'severity_gte'">
-                  Severity ≥ <span :style="{ color: severityColor(c.value), fontWeight: '700' }">{{ c.value }}</span>
-                </template>
-                <template v-else-if="c.type === 'keyword_match'">
-                  Contains <span class="keyword">"{{ c.value }}"</span>
-                </template>
-                <template v-else-if="c.type === 'count_gte'">
-                  Finding count ≥ {{ c.value }}
-                </template>
-                <template v-else>
-                  Bot ID = {{ c.value }}
-                </template>
-              </span>
-            </div>
-          </div>
-
-          <div class="rule-section">
-            <div class="section-label">Notify via</div>
-            <div class="channel-tags">
-              <span v-for="(ch, i) in rule.channels" :key="i" class="channel-tag">
-                {{ channelTypeOptions.find(o => o.value === ch.type)?.icon }}
-                {{ ch.target }}
-              </span>
-            </div>
-          </div>
-        </div>
-
-        <div class="rule-footer">
-          <span class="meta">Created {{ fmtDate(rule.createdAt) }}</span>
-          <span class="sep">·</span>
-          <span class="meta">Fired {{ rule.fireCount }} time{{ rule.fireCount !== 1 ? 's' : '' }}</span>
-          <template v-if="rule.lastFired">
-            <span class="sep">·</span>
-            <span class="meta">Last fired {{ fmtDate(rule.lastFired) }}</span>
-          </template>
-          <template v-else>
-            <span class="sep">·</span>
-            <span class="meta muted">Never fired</span>
-          </template>
-        </div>
-      </div>
+    <!-- Loading state -->
+    <div v-if="loading" class="empty-state">
+      <div class="empty-icon">⏳</div>
+      <p>Loading monitoring configuration...</p>
     </div>
+
+    <!-- Error state -->
+    <div v-else-if="error" class="empty-state">
+      <div class="empty-icon">⚠️</div>
+      <p>{{ error }}</p>
+      <button class="btn btn-primary" @click="loadData">Retry</button>
+    </div>
+
+    <template v-else>
+      <div class="rules-list">
+        <div v-if="rules.length === 0" class="empty-state">
+          <div class="empty-icon">🔔</div>
+          <p>No alert rules defined yet. Create your first rule to get proactive notifications.</p>
+          <button class="btn btn-primary" @click="openNew">Create Alert Rule</button>
+        </div>
+
+        <div v-for="rule in rules" :key="rule.id" class="rule-card card">
+          <div class="rule-header">
+            <div class="rule-title-row">
+              <span class="rule-name">{{ rule.name }}</span>
+              <span class="status-dot" :class="{ active: rule.enabled, inactive: !rule.enabled }">
+                {{ rule.enabled ? 'Active' : 'Disabled' }}
+              </span>
+            </div>
+            <div class="rule-actions">
+              <button class="btn btn-xs btn-ghost" @click="openEdit(rule)">Edit</button>
+              <button class="btn btn-xs btn-ghost" @click="toggleEnabled(rule)">
+                {{ rule.enabled ? 'Disable' : 'Enable' }}
+              </button>
+              <button class="btn btn-xs btn-ghost btn-danger" @click="deleteRule(rule)">Delete</button>
+            </div>
+          </div>
+
+          <div class="rule-body">
+            <div class="rule-section">
+              <div class="section-label">Conditions (ALL must match)</div>
+              <div class="condition-tags">
+                <span v-for="(c, i) in rule.conditions" :key="i" class="condition-tag">
+                  <template v-if="c.type === 'severity_gte'">
+                    Severity ≥ <span :style="{ color: severityColor(c.value), fontWeight: '700' }">{{ c.value }}</span>
+                  </template>
+                  <template v-else-if="c.type === 'keyword_match'">
+                    Contains <span class="keyword">"{{ c.value }}"</span>
+                  </template>
+                  <template v-else-if="c.type === 'count_gte'">
+                    Finding count ≥ {{ c.value }}
+                  </template>
+                  <template v-else>
+                    Bot ID = {{ c.value }}
+                  </template>
+                </span>
+              </div>
+            </div>
+
+            <div class="rule-section">
+              <div class="section-label">Notify via</div>
+              <div class="channel-tags">
+                <span v-for="(ch, i) in rule.channels" :key="i" class="channel-tag">
+                  {{ channelTypeOptions.find(o => o.value === ch.type)?.icon }}
+                  {{ ch.target }}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div class="rule-footer">
+            <span class="meta">Created {{ fmtDate(rule.createdAt) }}</span>
+            <span class="sep">·</span>
+            <span class="meta">Fired {{ rule.fireCount }} time{{ rule.fireCount !== 1 ? 's' : '' }}</span>
+            <template v-if="rule.lastFired">
+              <span class="sep">·</span>
+              <span class="meta">Last fired {{ fmtDate(rule.lastFired) }}</span>
+            </template>
+            <template v-else>
+              <span class="sep">·</span>
+              <span class="meta muted">Never fired</span>
+            </template>
+          </div>
+        </div>
+      </div>
+    </template>
 
     <!-- Editor slide-over -->
     <div v-if="showEditor" class="overlay" @click.self="showEditor = false">

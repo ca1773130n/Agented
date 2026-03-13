@@ -46,3 +46,20 @@ export interface PreviewPromptFullResponse {
   unresolved_placeholders: string[];
   unresolved_snippets: string[];
 }
+
+// Dry Run response (from POST /admin/triggers/<id>/dry-run)
+export interface DryRunResponse {
+  rendered_prompt: string;
+  cli_command: string;
+  backend_type: string;
+  model: string;
+  estimated_tokens: {
+    estimated_input_tokens: number;
+    estimated_output_tokens: number;
+    estimated_cost_usd: number;
+    model: string;
+    confidence: string;
+  };
+  trigger_id: string;
+  trigger_name: string;
+}

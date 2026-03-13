@@ -41,6 +41,13 @@ export { chunkApi } from './chunks';
 export { botTemplateApi } from './bot-templates';
 export { promptSnippetApi } from './prompt-snippets';
 export { specializedBotApi } from './specialized-bots';
+export { secretsApi } from './secrets';
+export { rbacApi } from './rbac';
+export { gitopsApi } from './gitops';
+export { integrationApi } from './integrations';
+export type { Integration } from './integrations';
+export { configExportApi } from './config-export';
+export type { ConfigExport } from './config-export';
 
 // Constant exports from types
 export { CLAUDE_MODELS, OPENCODE_MODELS } from './types';
@@ -320,6 +327,7 @@ export type {
   // Prompt History & Preview types
   PromptHistoryEntry,
   PreviewPromptFullResponse,
+  DryRunResponse,
 
   // Specialized Bot types
   SpecializedBotStatus,
@@ -328,6 +336,15 @@ export type {
   ExecutionSearchResponse,
   ExecutionSearchStats,
 } from './types';
+
+// Secrets types
+export type { SecretMetadata, VaultStatus, RevealedSecret } from './secrets';
+
+// RBAC types
+export type { UserRole, PermissionMatrix } from './rbac';
+
+// GitOps types
+export type { GitOpsRepo, SyncLog, SyncResult } from './gitops';
 
 // GRD types (from grd module, not types module)
 export type {

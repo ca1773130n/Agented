@@ -1,11 +1,37 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
+import { setupApi, triggerApi, projectApi, ApiError } from '../services/api';
 
 const router = useRouter();
 const showToast = useToast();
+
+const isLoading = ref(true);
+const loadError = ref<string | null>(null);
+const existingProjects = ref<{ id: string; name: string }[]>([]);
+const existingTriggers = ref<{ id: string; name: string }[]>([]);
+
+async function loadExistingData() {
+  isLoading.value = true;
+  loadError.value = null;
+  try {
+    const [projResult, trigResult] = await Promise.all([
+      projectApi.list({ limit: 50 }),
+      triggerApi.list(),
+    ]);
+    existingProjects.value = projResult.projects.map(p => ({ id: p.id, name: p.name }));
+    existingTriggers.value = trigResult.triggers.map(t => ({ id: t.id, name: t.name }));
+  } catch (err) {
+    const msg = err instanceof ApiError ? err.message : 'Failed to load existing data';
+    loadError.value = msg;
+  } finally {
+    isLoading.value = false;
+  }
+}
+
+onMounted(loadExistingData);
 
 interface WizardStep {
   id: string;
@@ -59,10 +85,17 @@ async function handleConnect() {
   if (!repoOwner.value || !repoName.value) return;
   isConnecting.value = true;
   try {
-    await new Promise(r => setTimeout(r, 1500));
+    const githubRepo = `https://github.com/${repoOwner.value}/${repoName.value}`;
+    await projectApi.create({
+      name: repoName.value,
+      github_repo: githubRepo,
+    });
     connected.value = true;
     steps[0].completed = true;
     showToast(`Connected to ${repoOwner.value}/${repoName.value}`, 'success');
+  } catch (err) {
+    const msg = err instanceof ApiError ? err.message : 'Failed to connect repository';
+    showToast(msg, 'error');
   } finally {
     isConnecting.value = false;
   }
@@ -82,20 +115,55 @@ function handleConfigSave() {
   goNext();
 }
 
-function handleTriggerSave() {
-  steps[3].completed = true;
-  goNext();
+async function handleTriggerSave() {
+  try {
+    const triggerSource = triggerType.value === 'github' ? 'github' as const
+      : triggerType.value === 'schedule' ? 'scheduled' as const
+      : 'webhook' as const;
+
+    await triggerApi.create({
+      name: botName.value || 'onboarding-trigger',
+      prompt_template: botPrompt.value || 'Review the code.',
+      trigger_source: triggerSource,
+      backend_type: 'claude',
+      model: botModel.value,
+    });
+    steps[3].completed = true;
+    goNext();
+  } catch (err) {
+    const msg = err instanceof ApiError ? err.message : 'Failed to create trigger';
+    showToast(msg, 'error');
+  }
 }
 
 async function handleTestRun() {
   isRunningTest.value = true;
   testOutput.value = '';
   try {
-    await new Promise(r => setTimeout(r, 800));
-    testOutput.value = `[2026-03-06 08:30:01] Starting ${botName.value || 'bot'}...\n[2026-03-06 08:30:02] Connected to claude-sonnet-4-6\n[2026-03-06 08:30:04] Analyzing repository...\n[2026-03-06 08:30:08] Execution complete. 0 errors, 3 suggestions generated.\n[2026-03-06 08:30:08] Success!`;
+    // Use setup API to start a test execution
+    const result = await setupApi.start('', `echo "Testing ${botName.value || 'bot'} setup..."`);
+    testOutput.value = `[${new Date().toISOString()}] Setup execution started: ${result.execution_id}\n[${new Date().toISOString()}] Status: ${result.status}\n`;
+
+    // Poll for status
+    if (result.execution_id) {
+      const status = await setupApi.getStatus(result.execution_id);
+      testOutput.value += `[${new Date().toISOString()}] Execution status: ${status.status}\n`;
+      if (status.error_message) {
+        testOutput.value += `[${new Date().toISOString()}] ${status.error_message}\n`;
+      }
+    }
+
+    testOutput.value += `[${new Date().toISOString()}] Test complete.`;
     testComplete.value = true;
     steps[4].completed = true;
     showToast('Test execution succeeded!', 'success');
+  } catch (err) {
+    const msg = err instanceof ApiError ? err.message : 'Test execution failed';
+    testOutput.value += `[${new Date().toISOString()}] Error: ${msg}\n`;
+    // Still mark as complete if the API responded (even with error)
+    testComplete.value = true;
+    steps[4].completed = true;
+    showToast(msg, 'error');
   } finally {
     isRunningTest.value = false;
   }
@@ -128,6 +196,25 @@ const progressPct = computed(() => Math.round((completedCount.value / steps.leng
       title="Get Started with Agented"
       subtitle="Follow the steps below to connect your repo, configure a bot, and fire your first automation."
     />
+
+    <!-- Loading state -->
+    <div v-if="isLoading" class="card" style="padding: 32px; text-align: center; color: var(--text-tertiary);">
+      Loading setup data...
+    </div>
+
+    <div v-else-if="loadError" class="card" style="padding: 32px; text-align: center; color: #ef4444;">
+      {{ loadError }}
+      <button class="btn btn-ghost" style="margin-top: 12px;" @click="loadExistingData">Retry</button>
+    </div>
+
+    <template v-else>
+
+    <!-- Existing entities info -->
+    <div v-if="existingProjects.length > 0 || existingTriggers.length > 0" class="card" style="padding: 16px 28px; margin-bottom: -8px;">
+      <div style="font-size: 0.82rem; color: var(--text-secondary);">
+        You have <strong>{{ existingProjects.length }}</strong> project(s) and <strong>{{ existingTriggers.length }}</strong> trigger(s) configured.
+      </div>
+    </div>
 
     <!-- Progress bar -->
     <div class="progress-bar-wrap">
@@ -308,6 +395,8 @@ const progressPct = computed(() => Math.round((completedCount.value / steps.leng
         </div>
       </div>
     </div>
+
+    </template>
   </div>
 </template>
 

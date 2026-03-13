@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
+import { settingsApi, ApiError } from '../services/api';
 
 const router = useRouter();
 const showToast = useToast();
@@ -31,6 +32,14 @@ interface SsoConfig {
   domainWhitelist: string;
 }
 
+const SSO_SETTINGS_KEYS = [
+  'sso_enabled', 'sso_protocol',
+  'sso_saml_entity_id', 'sso_saml_sso_url', 'sso_saml_certificate',
+  'sso_saml_attribute_email', 'sso_saml_attribute_name',
+  'sso_oidc_client_id', 'sso_oidc_client_secret', 'sso_oidc_issuer_url', 'sso_oidc_scopes',
+  'sso_allow_local_login', 'sso_default_role', 'sso_auto_provision', 'sso_domain_whitelist',
+] as const;
+
 const config = ref<SsoConfig>({
   enabled: false,
   protocol: 'saml',
@@ -49,6 +58,8 @@ const config = ref<SsoConfig>({
   domainWhitelist: '',
 });
 
+const isLoading = ref(true);
+const loadError = ref<string | null>(null);
 const isSaving = ref(false);
 const isTesting = ref(false);
 const testResult = ref<{ ok: boolean; message: string } | null>(null);
@@ -67,6 +78,47 @@ const spMetadataUrl = computed(() => `https://agented.example.com/auth/saml/meta
 const acsUrl = computed(() => `https://agented.example.com/auth/saml/acs`);
 const callbackUrl = computed(() => `https://agented.example.com/auth/oidc/callback`);
 
+function applySettingsToConfig(settings: Record<string, string>) {
+  config.value.enabled = settings['sso_enabled'] === 'true';
+  config.value.protocol = (settings['sso_protocol'] as SsoProtocol) || 'saml';
+  config.value.samlEntityId = settings['sso_saml_entity_id'] || '';
+  config.value.samlSsoUrl = settings['sso_saml_sso_url'] || '';
+  config.value.samlCertificate = settings['sso_saml_certificate'] || '';
+  config.value.samlAttributeEmail = settings['sso_saml_attribute_email'] || 'email';
+  config.value.samlAttributeName = settings['sso_saml_attribute_name'] || 'displayName';
+  config.value.oidcClientId = settings['sso_oidc_client_id'] || '';
+  config.value.oidcClientSecret = settings['sso_oidc_client_secret'] || '';
+  config.value.oidcIssuerUrl = settings['sso_oidc_issuer_url'] || '';
+  config.value.oidcScopes = settings['sso_oidc_scopes'] || 'openid email profile';
+  config.value.allowLocalLogin = settings['sso_allow_local_login'] !== 'false';
+  config.value.defaultRole = settings['sso_default_role'] || 'member';
+  config.value.autoProvision = settings['sso_auto_provision'] !== 'false';
+  config.value.domainWhitelist = settings['sso_domain_whitelist'] || '';
+}
+
+async function loadSettings() {
+  isLoading.value = true;
+  loadError.value = null;
+  try {
+    const { settings } = await settingsApi.getAll();
+    // Filter to SSO-related keys
+    const ssoSettings: Record<string, string> = {};
+    for (const key of SSO_SETTINGS_KEYS) {
+      if (settings[key] !== undefined) {
+        ssoSettings[key] = settings[key];
+      }
+    }
+    applySettingsToConfig(ssoSettings);
+  } catch (err) {
+    const msg = err instanceof ApiError ? err.message : 'Failed to load SSO settings';
+    loadError.value = msg;
+  } finally {
+    isLoading.value = false;
+  }
+}
+
+onMounted(loadSettings);
+
 function selectProvider(p: typeof providers[0]) {
   config.value.protocol = p.protocol;
   showToast(`${p.name} template loaded`, 'info');
@@ -75,10 +127,29 @@ function selectProvider(p: typeof providers[0]) {
 async function handleSave() {
   isSaving.value = true;
   try {
-    await new Promise(r => setTimeout(r, 900));
+    const c = config.value;
+    const pairs: [string, string][] = [
+      ['sso_enabled', String(c.enabled)],
+      ['sso_protocol', c.protocol],
+      ['sso_saml_entity_id', c.samlEntityId],
+      ['sso_saml_sso_url', c.samlSsoUrl],
+      ['sso_saml_certificate', c.samlCertificate],
+      ['sso_saml_attribute_email', c.samlAttributeEmail],
+      ['sso_saml_attribute_name', c.samlAttributeName],
+      ['sso_oidc_client_id', c.oidcClientId],
+      ['sso_oidc_client_secret', c.oidcClientSecret],
+      ['sso_oidc_issuer_url', c.oidcIssuerUrl],
+      ['sso_oidc_scopes', c.oidcScopes],
+      ['sso_allow_local_login', String(c.allowLocalLogin)],
+      ['sso_default_role', c.defaultRole],
+      ['sso_auto_provision', String(c.autoProvision)],
+      ['sso_domain_whitelist', c.domainWhitelist],
+    ];
+    await Promise.all(pairs.map(([key, value]) => settingsApi.set(key, value)));
     showToast('SSO configuration saved', 'success');
-  } catch {
-    showToast('Failed to save SSO config', 'error');
+  } catch (err) {
+    const msg = err instanceof ApiError ? err.message : 'Failed to save SSO config';
+    showToast(msg, 'error');
   } finally {
     isSaving.value = false;
   }
@@ -88,13 +159,20 @@ async function testConnection() {
   isTesting.value = true;
   testResult.value = null;
   try {
-    await new Promise(r => setTimeout(r, 1800));
     const ok = config.value.protocol === 'saml'
       ? config.value.samlSsoUrl.length > 0
       : config.value.oidcIssuerUrl.length > 0;
+    // Save first then validate by checking settings roundtrip
+    if (ok) {
+      const key = config.value.protocol === 'saml' ? 'sso_saml_sso_url' : 'sso_oidc_issuer_url';
+      await settingsApi.get(key);
+    }
     testResult.value = ok
       ? { ok: true, message: 'Connection verified. Identity provider responded successfully.' }
       : { ok: false, message: 'Missing required fields. Fill in the IdP URL to test.' };
+  } catch (err) {
+    const msg = err instanceof ApiError ? err.message : 'Test connection failed';
+    testResult.value = { ok: false, message: msg };
   } finally {
     isTesting.value = false;
   }
@@ -116,6 +194,20 @@ function copyToClipboard(text: string, label: string) {
       title="SSO / SAML Authentication"
       subtitle="Configure enterprise single sign-on via SAML 2.0 or OIDC. Lets your team authenticate through Okta, Azure AD, Google Workspace, or any compatible identity provider."
     />
+
+    <!-- Loading state -->
+    <div v-if="isLoading" class="card" style="padding: 32px; text-align: center; color: var(--text-tertiary);">
+      Loading SSO settings...
+    </div>
+
+    <!-- Error state -->
+    <div v-else-if="loadError" class="card" style="padding: 32px; text-align: center; color: #ef4444;">
+      {{ loadError }}
+      <button class="btn btn-ghost" style="margin-top: 12px;" @click="loadSettings">Retry</button>
+    </div>
+
+    <!-- Main content -->
+    <template v-else>
 
     <!-- Enable toggle -->
     <div class="card enable-card">
@@ -317,6 +409,8 @@ function copyToClipboard(text: string, label: string) {
         <div class="disabled-sub">Enable SSO above to configure SAML or OIDC integration with your identity provider. Users will continue to log in with local credentials.</div>
       </div>
     </div>
+
+    </template>
   </div>
 </template>
 

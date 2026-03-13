@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue';
+import { useRouter } from 'vue-router';
 import type { Trigger, ProjectPath, PathType, SkillInfo, Project, Team, BudgetLimit } from '../../services/api';
 import { triggerApi, utilityApi, budgetApi, ApiError } from '../../services/api';
 import FallbackChainEditor from './FallbackChainEditor.vue';
@@ -19,6 +20,7 @@ const emit = defineEmits<{
   (e: 'pathChanged'): void;
 }>();
 
+const router = useRouter();
 const showToast = useToast();
 
 // Edit form state
@@ -272,6 +274,10 @@ async function deleteTriggerBudget() {
       <span class="badge trigger-badge" :class="selectedTrigger.trigger_source">
         {{ selectedTrigger.trigger_source === 'webhook' ? 'JSON Webhook' : selectedTrigger.trigger_source === 'github' ? 'GitHub Webhook' : selectedTrigger.trigger_source === 'manual' ? 'Manual' : selectedTrigger.trigger_source === 'scheduled' ? 'Scheduled' : selectedTrigger.trigger_source }}
       </span>
+      <button class="btn btn-secondary btn-sm view-dashboard-btn" @click="router.push({ name: 'trigger-dashboard', params: { triggerId: selectedTrigger.id } })">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15,3 21,3 21,9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+        View Dashboard
+      </button>
     </div>
 
     <form @submit.prevent="saveTrigger" class="detail-form">
@@ -469,6 +475,8 @@ async function deleteTriggerBudget() {
 .detail-panel { margin-top: 24px; padding-top: 24px; border-top: 1px solid var(--border-subtle); }
 .detail-header { display: flex; align-items: center; gap: 12px; margin-bottom: 24px; }
 .detail-header h4 { font-size: 1.1rem; font-weight: 600; color: var(--text-primary); }
+.view-dashboard-btn { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; white-space: nowrap; }
+.view-dashboard-btn svg { width: 14px; height: 14px; }
 .detail-id { font-family: var(--font-mono); font-size: 0.75rem; color: var(--text-muted); padding: 4px 8px; background: var(--bg-tertiary); border-radius: 4px; }
 .badge { display: inline-flex; align-items: center; padding: 3px 8px; border-radius: 4px; font-size: 0.65rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; }
 .badge.trigger-badge.webhook { background: var(--accent-cyan-dim); color: var(--accent-cyan); }
