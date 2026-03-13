@@ -1,37 +1,15 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
+import { repoBotDefaultsApi } from '../services/api/repo-bot-defaults';
+import type { AvailableBot, RepoBotBinding } from '../services/api/repo-bot-defaults';
 
 const showToast = useToast();
 
-interface RepoBotBinding {
-  id: string;
-  repo: string;
-  bots: string[];
-  projectCount: number;
-  enabled: boolean;
-}
-
-interface AvailableBot {
-  id: string;
-  name: string;
-  type: 'security' | 'review' | 'test' | 'docs';
-}
-
-const bindings = ref<RepoBotBinding[]>([
-  { id: 'rb-1', repo: 'acme/payments-service', bots: ['bot-security', 'bot-pr-review'], projectCount: 3, enabled: true },
-  { id: 'rb-2', repo: 'acme/auth-service', bots: ['bot-security'], projectCount: 1, enabled: true },
-  { id: 'rb-3', repo: 'acme/frontend', bots: ['bot-pr-review'], projectCount: 2, enabled: false },
-]);
-
-const availableBots: AvailableBot[] = [
-  { id: 'bot-security', name: 'Security Audit Bot', type: 'security' },
-  { id: 'bot-pr-review', name: 'PR Review Bot', type: 'review' },
-  { id: 'bot-test-cov', name: 'Test Coverage Bot', type: 'test' },
-  { id: 'bot-docs', name: 'Doc Generator Bot', type: 'docs' },
-];
+const bindings = ref<RepoBotBinding[]>([]);
+const availableBots = ref<AvailableBot[]>([]);
 
 const showAddModal = ref(false);
 const newRepo = ref('');
@@ -45,23 +23,34 @@ const botTypeColor: Record<string, string> = {
 };
 
 function botName(id: string) {
-  return availableBots.find(b => b.id === id)?.name ?? id;
+  return availableBots.value.find(b => b.id === id)?.name ?? id;
 }
 
 function botColor(id: string) {
-  const type = availableBots.find(b => b.id === id)?.type ?? 'review';
+  const type = availableBots.value.find(b => b.id === id)?.type ?? 'review';
   return botTypeColor[type];
 }
 
-function toggleEnabled(binding: RepoBotBinding) {
-  binding.enabled = !binding.enabled;
-  showToast(`Default bots ${binding.enabled ? 'enabled' : 'disabled'} for ${binding.repo}`, 'success');
+async function toggleEnabled(binding: RepoBotBinding) {
+  const newEnabled = !binding.enabled;
+  try {
+    await repoBotDefaultsApi.toggleEnabled(binding.repo, newEnabled);
+    binding.enabled = newEnabled;
+    showToast(`Default bots ${newEnabled ? 'enabled' : 'disabled'} for ${binding.repo}`, 'success');
+  } catch {
+    showToast(`Failed to update binding for ${binding.repo}`, 'error');
+  }
 }
 
-function removeBinding(id: string) {
-  const idx = bindings.value.findIndex(b => b.id === id);
-  if (idx !== -1) bindings.value.splice(idx, 1);
-  showToast('Repository binding removed', 'success');
+async function removeBinding(repo: string) {
+  try {
+    await repoBotDefaultsApi.remove(repo);
+    const idx = bindings.value.findIndex(b => b.repo === repo);
+    if (idx !== -1) bindings.value.splice(idx, 1);
+    showToast('Repository binding removed', 'success');
+  } catch {
+    showToast('Failed to remove binding', 'error');
+  }
 }
 
 function openAddModal() {
@@ -76,21 +65,35 @@ function toggleBotSelection(botId: string) {
   else newSelectedBots.value.splice(idx, 1);
 }
 
-function saveBinding() {
+async function saveBinding() {
   if (!newRepo.value.trim() || newSelectedBots.value.length === 0) {
     showToast('Enter a repository and select at least one bot', 'error');
     return;
   }
-  bindings.value.push({
-    id: `rb-${Date.now()}`,
-    repo: newRepo.value.trim(),
-    bots: [...newSelectedBots.value],
-    projectCount: 0,
-    enabled: true,
-  });
-  showAddModal.value = false;
-  showToast(`Default bots configured for ${newRepo.value.trim()}`, 'success');
+  try {
+    await repoBotDefaultsApi.create({
+      repo: newRepo.value.trim(),
+      bot_ids: [...newSelectedBots.value],
+    });
+    // Refresh list from server
+    const data = await repoBotDefaultsApi.list();
+    bindings.value = data.bindings;
+    showAddModal.value = false;
+    showToast(`Default bots configured for ${newRepo.value.trim()}`, 'success');
+  } catch {
+    showToast('Failed to save binding', 'error');
+  }
 }
+
+onMounted(async () => {
+  try {
+    const data = await repoBotDefaultsApi.list();
+    bindings.value = data.bindings;
+    availableBots.value = data.bots;
+  } catch {
+    showToast('Failed to load repository bindings', 'error');
+  }
+});
 
 const totalBound = computed(() => bindings.value.filter(b => b.enabled).length);
 </script>
@@ -139,7 +142,7 @@ const totalBound = computed(() => bindings.value.filter(b => b.enabled).length);
       </div>
 
       <div v-else class="bindings-list">
-        <div v-for="binding in bindings" :key="binding.id" class="binding-row">
+        <div v-for="binding in bindings" :key="binding.repo" class="binding-row">
           <div class="binding-repo">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"/></svg>
             <span class="repo-name">{{ binding.repo }}</span>
@@ -165,7 +168,7 @@ const totalBound = computed(() => bindings.value.filter(b => b.enabled).length);
             >
               {{ binding.enabled ? 'Enabled' : 'Disabled' }}
             </button>
-            <button class="icon-btn" title="Remove" @click="removeBinding(binding.id)">
+            <button class="icon-btn" title="Remove" @click="removeBinding(binding.repo)">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
             </button>
           </div>
