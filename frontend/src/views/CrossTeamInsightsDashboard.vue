@@ -1,155 +1,38 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
+import { analyticsApi } from '../services/api/analytics';
+import type { TeamInsightData, OrgFindingData, RepoRiskData } from '../services/api/types';
 
 const showToast = useToast();
 
 type RiskLevel = 'critical' | 'high' | 'medium' | 'low';
 type SortKey = 'executions' | 'findings' | 'successRate' | 'riskScore';
 
-interface TeamInsight {
-  teamId: string;
-  teamName: string;
-  totalExecutions: number;
-  activeBots: number;
-  findingsCount: number;
-  criticalFindings: number;
-  successRate: number;
-  riskScore: number;
-  topRisks: string[];
-  mostActiveBotName: string;
-  weekOverWeekChange: number;
-}
-
-interface OrgFinding {
-  id: string;
-  title: string;
-  severity: RiskLevel;
-  count: number;
-  affectedTeams: string[];
-  affectedRepos: string[];
-  firstSeen: string;
-  lastSeen: string;
-}
-
-interface RepoRisk {
-  repo: string;
-  team: string;
-  riskScore: number;
-  openFindings: number;
-  lastScanned: string;
-}
+// Keep local interface aliases for template compatibility
+type TeamInsight = TeamInsightData;
+type OrgFinding = OrgFindingData & { severity: RiskLevel };
+type RepoRisk = RepoRiskData;
 
 const sortKey = ref<SortKey>('executions');
 const selectedTeamId = ref<string | null>(null);
 
-const teams = ref<TeamInsight[]>([
-  {
-    teamId: 'team-platform',
-    teamName: 'Platform',
-    totalExecutions: 482,
-    activeBots: 8,
-    findingsCount: 34,
-    criticalFindings: 2,
-    successRate: 96.3,
-    riskScore: 42,
-    topRisks: ['Hardcoded secrets in config', 'Outdated base image'],
-    mostActiveBotName: 'PR Review Bot',
-    weekOverWeekChange: 12,
-  },
-  {
-    teamId: 'team-backend',
-    teamName: 'Backend API',
-    totalExecutions: 318,
-    activeBots: 5,
-    findingsCount: 71,
-    criticalFindings: 7,
-    successRate: 89.0,
-    riskScore: 78,
-    topRisks: ['SQL injection risk in raw queries', 'No rate limiting on /auth', 'Deprecated dependency'],
-    mostActiveBotName: 'Security Audit Bot',
-    weekOverWeekChange: -5,
-  },
-  {
-    teamId: 'team-frontend',
-    teamName: 'Frontend',
-    totalExecutions: 201,
-    activeBots: 4,
-    findingsCount: 18,
-    criticalFindings: 0,
-    successRate: 97.5,
-    riskScore: 22,
-    topRisks: ['Missing CSP header', 'Large bundle size'],
-    mostActiveBotName: 'Changelog Generator',
-    weekOverWeekChange: 8,
-  },
-  {
-    teamId: 'team-data',
-    teamName: 'Data Engineering',
-    totalExecutions: 97,
-    activeBots: 3,
-    findingsCount: 43,
-    criticalFindings: 4,
-    successRate: 82.5,
-    riskScore: 65,
-    topRisks: ['Unencrypted S3 bucket', 'PII in logs', 'Missing audit trail'],
-    mostActiveBotName: 'Security Audit Bot',
-    weekOverWeekChange: 3,
-  },
-]);
+const teams = ref<TeamInsight[]>([]);
+const orgFindings = ref<OrgFinding[]>([]);
+const topRiskyRepos = ref<RepoRisk[]>([]);
 
-const orgFindings = ref<OrgFinding[]>([
-  {
-    id: 'f-001',
-    title: 'Hardcoded API secrets in configuration files',
-    severity: 'critical',
-    count: 12,
-    affectedTeams: ['Platform', 'Backend API'],
-    affectedRepos: ['api-gateway', 'auth-service', 'config-repo'],
-    firstSeen: '2026-01-15T00:00:00Z',
-    lastSeen: '2026-03-05T00:00:00Z',
-  },
-  {
-    id: 'f-002',
-    title: 'Deprecated dependencies with known CVEs',
-    severity: 'high',
-    count: 28,
-    affectedTeams: ['Backend API', 'Data Engineering', 'Platform'],
-    affectedRepos: ['api-gateway', 'data-pipeline', 'worker-service', 'auth-service'],
-    firstSeen: '2026-02-01T00:00:00Z',
-    lastSeen: '2026-03-06T00:00:00Z',
-  },
-  {
-    id: 'f-003',
-    title: 'Missing rate limiting on public endpoints',
-    severity: 'high',
-    count: 7,
-    affectedTeams: ['Backend API'],
-    affectedRepos: ['api-gateway', 'user-service'],
-    firstSeen: '2026-02-20T00:00:00Z',
-    lastSeen: '2026-03-04T00:00:00Z',
-  },
-  {
-    id: 'f-004',
-    title: 'PII data written to application logs',
-    severity: 'medium',
-    count: 5,
-    affectedTeams: ['Data Engineering', 'Backend API'],
-    affectedRepos: ['data-pipeline', 'analytics-service'],
-    firstSeen: '2026-03-01T00:00:00Z',
-    lastSeen: '2026-03-06T00:00:00Z',
-  },
-]);
-
-const topRiskyRepos = ref<RepoRisk[]>([
-  { repo: 'api-gateway', team: 'Backend API', riskScore: 89, openFindings: 14, lastScanned: '2026-03-06T10:00:00Z' },
-  { repo: 'data-pipeline', team: 'Data Engineering', riskScore: 76, openFindings: 11, lastScanned: '2026-03-05T08:00:00Z' },
-  { repo: 'auth-service', team: 'Platform', riskScore: 61, openFindings: 8, lastScanned: '2026-03-06T09:30:00Z' },
-  { repo: 'config-repo', team: 'Platform', riskScore: 55, openFindings: 5, lastScanned: '2026-03-06T07:00:00Z' },
-  { repo: 'analytics-service', team: 'Data Engineering', riskScore: 50, openFindings: 7, lastScanned: '2026-03-05T16:00:00Z' },
-]);
+onMounted(async () => {
+  try {
+    const data = await analyticsApi.fetchCrossTeamInsights();
+    teams.value = data.teams;
+    orgFindings.value = data.org_findings as OrgFinding[];
+    topRiskyRepos.value = data.top_risky_repos;
+  } catch {
+    showToast('Failed to load cross-team insights', 'error');
+  }
+});
 
 const sortedTeams = computed(() => {
   const sorted = [...teams.value];
@@ -164,7 +47,9 @@ const orgTotals = computed(() => ({
   executions: teams.value.reduce((s, t) => s + t.totalExecutions, 0),
   findings: teams.value.reduce((s, t) => s + t.findingsCount, 0),
   critical: teams.value.reduce((s, t) => s + t.criticalFindings, 0),
-  avgSuccess: teams.value.reduce((s, t) => s + t.successRate, 0) / teams.value.length,
+  avgSuccess: teams.value.length
+    ? teams.value.reduce((s, t) => s + t.successRate, 0) / teams.value.length
+    : 0,
 }));
 
 function riskColor(score: number): string {

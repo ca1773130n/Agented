@@ -6,6 +6,7 @@
 import { apiFetch } from './client';
 import type {
   CostAnalyticsResponse,
+  CrossTeamInsightsResponse,
   ExecutionAnalyticsResponse,
   EffectivenessResponse,
   HealthAlertsResponse,
@@ -87,4 +88,7 @@ export const analyticsApi = {
     apiFetch<SchedulingSuggestionsResponse>(
       `/admin/analytics/scheduling-suggestions${triggerId ? `?trigger_id=${triggerId}` : ''}`
     ),
+
+  fetchCrossTeamInsights: () =>
+    apiFetch<CrossTeamInsightsResponse>('/admin/analytics/cross-team-insights'),
 };

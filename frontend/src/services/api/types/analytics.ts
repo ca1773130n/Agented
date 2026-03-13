@@ -49,3 +49,43 @@ export interface EffectivenessResponse {
   acceptance_rate: number;
   over_time: EffectivenessOverTimePoint[];
 }
+
+export interface TeamInsightData {
+  teamId: string;
+  teamName: string;
+  totalExecutions: number;
+  activeBots: number;
+  findingsCount: number;
+  criticalFindings: number;
+  successRate: number;
+  riskScore: number;
+  topRisks: string[];
+  mostActiveBotName: string;
+  weekOverWeekChange: number;
+}
+
+export interface OrgFindingData {
+  id: string;
+  title: string;
+  severity: string;
+  count: number;
+  affectedTeams: string[];
+  affectedRepos: string[];
+  firstSeen: string;
+  lastSeen: string;
+}
+
+export interface RepoRiskData {
+  repo: string;
+  team: string;
+  riskScore: number;
+  openFindings: number;
+  lastScanned: string;
+}
+
+export interface CrossTeamInsightsResponse {
+  teams: TeamInsightData[];
+  org_findings: OrgFindingData[];
+  top_risky_repos: RepoRiskData[];
+  data_available: boolean;
+}
