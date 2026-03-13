@@ -68,12 +68,15 @@ export interface PathValidation {
 
 // Audit event type
 export interface AuditEvent {
+  id?: number;
   ts: string;
   action: string;
   entity_type: string;
   entity_id: string;
   outcome: string;
+  actor: string;
   details?: Record<string, unknown>;
+  created_at?: string;
 }
 
 // Settings types

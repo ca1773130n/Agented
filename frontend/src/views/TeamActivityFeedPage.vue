@@ -1,8 +1,10 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
+import { auditApi } from '../services/api';
+import type { AuditEvent } from '../services/api';
 
 const router = useRouter();
 
@@ -19,18 +21,49 @@ interface ActivityEvent {
   link?: string;
 }
 
-const allEvents = ref<ActivityEvent[]>([
-  { id: 'ev-01', type: 'execution', actor: 'system', summary: 'bot-security executed successfully', detail: '47 findings, 2 critical', timestamp: '2026-03-06T08:22:00Z', botId: 'bot-security' },
-  { id: 'ev-02', type: 'config_change', actor: 'alice@example.com', summary: 'Updated prompt template', detail: 'Changed bot-pr-review prompt to include stricter security checks', timestamp: '2026-03-06T07:50:00Z', botId: 'bot-pr-review' },
-  { id: 'ev-03', type: 'execution_failed', actor: 'system', summary: 'bot-pr-review execution failed', detail: 'Timeout after 600s on PR #1284', timestamp: '2026-03-06T07:30:00Z', botId: 'bot-pr-review' },
-  { id: 'ev-04', type: 'trigger_added', actor: 'bob@example.com', summary: 'Added GitHub webhook trigger', detail: 'New trigger: pull_request.opened on repo agented/core', timestamp: '2026-03-05T16:10:00Z', botId: 'bot-security' },
-  { id: 'ev-05', type: 'bot_created', actor: 'carol@example.com', summary: 'Created new bot: changelog-bot', detail: 'Template: Auto-Generated Changelog, model: claude-sonnet-4-6', timestamp: '2026-03-05T14:45:00Z', botId: 'changelog-bot' },
-  { id: 'ev-06', type: 'execution', actor: 'system', summary: 'bot-pr-review executed successfully', detail: 'PR #1281 reviewed, 3 suggestions posted', timestamp: '2026-03-05T13:20:00Z', botId: 'bot-pr-review' },
-  { id: 'ev-07', type: 'member_joined', actor: 'system', summary: 'dave@example.com joined the team', detail: 'Invited by alice@example.com', timestamp: '2026-03-05T10:00:00Z' },
-  { id: 'ev-08', type: 'config_change', actor: 'alice@example.com', summary: 'Changed execution timeout', detail: 'bot-security timeout: 300s → 600s', timestamp: '2026-03-04T15:30:00Z', botId: 'bot-security' },
-  { id: 'ev-09', type: 'bot_deleted', actor: 'bob@example.com', summary: 'Deleted draft-review-bot', detail: 'Bot removed after 0 executions', timestamp: '2026-03-04T11:20:00Z', botId: 'draft-review-bot' },
-  { id: 'ev-10', type: 'execution', actor: 'system', summary: 'bot-security weekly scan completed', detail: '23 findings, 0 critical', timestamp: '2026-03-03T06:00:00Z', botId: 'bot-security' },
-]);
+function mapAuditEvent(ev: AuditEvent): ActivityEvent {
+  let type: ActivityType;
+  const action = ev.action ?? '';
+  const outcome = ev.outcome ?? '';
+
+  if (action.startsWith('execution.') || action === 'execution') {
+    type = outcome === 'failure' || outcome === 'failed' ? 'execution_failed' : 'execution';
+  } else if (action.startsWith('bot.create') || action === 'bot_created') {
+    type = 'bot_created';
+  } else if (action.startsWith('bot.delete') || action === 'bot_deleted') {
+    type = 'bot_deleted';
+  } else if (action.startsWith('trigger.') || action === 'trigger_added') {
+    type = 'trigger_added';
+  } else if (action.startsWith('member.') || action === 'member_joined') {
+    type = 'member_joined';
+  } else {
+    type = 'config_change';
+  }
+
+  const summary = `${action}${ev.entity_id ? ` on ${ev.entity_id}` : ''}`;
+  const detail = ev.details ? JSON.stringify(ev.details) : '';
+
+  return {
+    id: `${ev.ts}-${ev.entity_id}`,
+    type,
+    actor: ev.actor ?? 'system',
+    summary,
+    detail,
+    timestamp: ev.ts,
+    botId: ev.entity_type === 'bot' ? ev.entity_id : undefined,
+  };
+}
+
+const allEvents = ref<ActivityEvent[]>([]);
+
+onMounted(async () => {
+  try {
+    const result = await auditApi.getEvents(200);
+    allEvents.value = result.events.map(mapAuditEvent);
+  } catch {
+    // keep empty on error
+  }
+});
 
 const filterType = ref<ActivityType | 'all'>('all');
 const filterActor = ref('');
