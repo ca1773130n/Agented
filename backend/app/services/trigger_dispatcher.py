@@ -3,6 +3,7 @@
 Handles webhook and GitHub event dispatching to matching triggers and teams.
 """
 
+import datetime
 import hashlib
 import json
 import logging
@@ -114,6 +115,69 @@ def dispatch_webhook_event(
 
         logger.info("Trigger '%s' triggered by webhook", trigger["name"])
         save_trigger_event_fn(trigger, payload)
+
+        # Route to super agent session if dispatch_type is configured
+        if trigger.get("dispatch_type") == "super_agent" and trigger.get("super_agent_id"):
+            from .super_agent_session_service import (
+                SuperAgentSessionService,
+                SessionLimitError,
+            )
+            from ..db.triggers import create_execution_log, update_execution_log
+            from ..db.ids import generate_execution_id
+
+            # Render prompt template with matched text
+            prompt_template = trigger.get("prompt_template") or "{message}"
+            rendered_prompt = prompt_template.replace("{message}", text)
+
+            execution_id = generate_execution_id(trigger["id"])
+            started_at = datetime.datetime.now().isoformat()
+
+            try:
+                session_id = SuperAgentSessionService.get_or_create_session(
+                    trigger["super_agent_id"]
+                )
+                SuperAgentSessionService.send_message(session_id, rendered_prompt)
+
+                create_execution_log(
+                    execution_id=execution_id,
+                    trigger_id=trigger["id"],
+                    trigger_type="webhook",
+                    started_at=started_at,
+                    prompt=rendered_prompt,
+                    backend_type="super_agent",
+                    command="",
+                    source_type="super_agent",
+                    session_id=session_id,
+                )
+                logger.info(
+                    "Dispatched trigger '%s' to super agent session %s",
+                    trigger["name"],
+                    session_id,
+                )
+                triggered = True
+            except SessionLimitError as exc:
+                create_execution_log(
+                    execution_id=execution_id,
+                    trigger_id=trigger["id"],
+                    trigger_type="webhook",
+                    started_at=started_at,
+                    prompt=rendered_prompt,
+                    backend_type="super_agent",
+                    command="",
+                    source_type="super_agent",
+                )
+                update_execution_log(
+                    execution_id=execution_id,
+                    status="failed",
+                    finished_at=datetime.datetime.now().isoformat(),
+                    error_message=str(exc),
+                )
+                logger.warning(
+                    "Session limit reached for trigger '%s': %s",
+                    trigger["name"],
+                    exc,
+                )
+            continue
 
         # Enqueue for dispatch via ExecutionQueueService (replaces direct thread spawn)
         from .execution_queue_service import ExecutionQueueService, QueueFullError
@@ -302,9 +366,7 @@ def dispatch_pr_comment_commands(
             continue
 
         matched_cmd = kw if kw else next(iter(commands_lower), "")
-        logger.info(
-            "Triggering '%s' for PR comment command '%s'", trigger["name"], matched_cmd
-        )
+        logger.info("Triggering '%s' for PR comment command '%s'", trigger["name"], matched_cmd)
 
         message_text = (
             f"PR comment command: {matched_cmd}\n"
