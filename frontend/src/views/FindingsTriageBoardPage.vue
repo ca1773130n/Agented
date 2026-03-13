@@ -1,28 +1,17 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
+import { findingsApi } from '../services/api/findings';
+import type { TriageFinding } from '../services/api/findings';
 
 const router = useRouter();
 const showToast = useToast();
 
 type Severity = 'critical' | 'high' | 'medium' | 'low';
 type Status = 'open' | 'in_progress' | 'resolved' | 'wont_fix';
-
-interface Finding {
-  id: string;
-  title: string;
-  severity: Severity;
-  status: Status;
-  bot: string;
-  file?: string;
-  owner?: string;
-  createdAt: string;
-  executionId: string;
-  description: string;
-}
 
 const severityColors: Record<Severity, string> = {
   critical: 'var(--accent-red)',
@@ -38,125 +27,37 @@ const columns: { key: Status; label: string; icon: string }[] = [
   { key: 'wont_fix', label: "Won't Fix", icon: '✕' },
 ];
 
-const findings = ref<Finding[]>([
-  {
-    id: 'f-001',
-    title: 'SQL injection in user search endpoint',
-    severity: 'critical',
-    status: 'open',
-    bot: 'bot-security',
-    file: 'backend/app/routes/users.py:142',
-    owner: undefined,
-    createdAt: '2026-03-05T14:22:00Z',
-    executionId: 'exec-abc123',
-    description: 'User-controlled input is concatenated directly into a SQL query without parameterization.',
-  },
-  {
-    id: 'f-002',
-    title: 'Missing rate limiting on /api/auth/login',
-    severity: 'high',
-    status: 'open',
-    bot: 'bot-security',
-    file: 'backend/app/routes/auth.py:88',
-    owner: 'alice',
-    createdAt: '2026-03-05T14:23:00Z',
-    executionId: 'exec-abc123',
-    description: 'The login endpoint has no rate limiting, enabling brute-force credential attacks.',
-  },
-  {
-    id: 'f-003',
-    title: 'Outdated dependency: requests 2.27.1 (CVE-2023-32681)',
-    severity: 'high',
-    status: 'in_progress',
-    bot: 'bot-dep-check',
-    file: 'backend/pyproject.toml',
-    owner: 'bob',
-    createdAt: '2026-03-04T09:10:00Z',
-    executionId: 'exec-def456',
-    description: 'requests 2.27.1 is vulnerable to proxy credential leakage. Upgrade to >=2.31.0.',
-  },
-  {
-    id: 'f-004',
-    title: 'Hardcoded JWT secret in config fallback',
-    severity: 'critical',
-    status: 'in_progress',
-    bot: 'bot-security',
-    file: 'backend/app/config.py:34',
-    owner: 'alice',
-    createdAt: '2026-03-04T09:12:00Z',
-    executionId: 'exec-def456',
-    description: 'A static fallback secret "changeme" is used when JWT_SECRET env var is unset.',
-  },
-  {
-    id: 'f-005',
-    title: 'PR #148: missing null checks in payment handler',
-    severity: 'medium',
-    status: 'open',
-    bot: 'bot-pr-review',
-    file: 'frontend/src/services/payment.ts:67',
-    owner: undefined,
-    createdAt: '2026-03-06T08:00:00Z',
-    executionId: 'exec-ghi789',
-    description: 'paymentResponse.data?.items can be undefined but is accessed without a guard.',
-  },
-  {
-    id: 'f-006',
-    title: 'Excessive permissions on S3 bucket policy',
-    severity: 'high',
-    status: 'resolved',
-    bot: 'bot-security',
-    file: 'deploy/terraform/s3.tf:22',
-    owner: 'carol',
-    createdAt: '2026-03-02T16:00:00Z',
-    executionId: 'exec-jkl012',
-    description: 'Bucket ACL is set to public-read; should be private with explicit grants.',
-  },
-  {
-    id: 'f-007',
-    title: 'console.log with sensitive data in production build',
-    severity: 'low',
-    status: 'resolved',
-    bot: 'bot-pr-review',
-    file: 'frontend/src/composables/useAuth.ts:89',
-    owner: 'bob',
-    createdAt: '2026-03-01T11:30:00Z',
-    executionId: 'exec-mno345',
-    description: 'Auth token is logged to the browser console in the sign-in flow.',
-  },
-  {
-    id: 'f-008',
-    title: 'CORS wildcard on /api/* endpoints',
-    severity: 'medium',
-    status: 'wont_fix',
-    bot: 'bot-security',
-    file: 'backend/app/__init__.py:55',
-    owner: 'carol',
-    createdAt: '2026-02-28T09:00:00Z',
-    executionId: 'exec-pqr678',
-    description: 'All origins allowed; acceptable for internal dev environment, flagged for prod review.',
-  },
-]);
+const findings = ref<TriageFinding[]>([]);
+
+onMounted(async () => {
+  try {
+    const resp = await findingsApi.list();
+    findings.value = resp.findings;
+  } catch {
+    showToast('Failed to load findings', 'error');
+  }
+});
 
 const filterSeverity = ref<Severity | 'all'>('all');
 const filterBot = ref<string>('all');
 const filterOwner = ref<string>('all');
-const selectedFinding = ref<Finding | null>(null);
+const selectedFinding = ref<TriageFinding | null>(null);
 const isDragging = ref<string | null>(null);
 const dragOver = ref<Status | null>(null);
 
-const allBots = computed(() => [...new Set(findings.value.map((f) => f.bot))]);
+const allBots = computed(() => [...new Set(findings.value.map((f) => f.bot_id).filter(Boolean))] as string[]);
 const allOwners = computed(() => [...new Set(findings.value.map((f) => f.owner).filter(Boolean))] as string[]);
 
 const filtered = computed(() =>
   findings.value.filter((f) => {
     if (filterSeverity.value !== 'all' && f.severity !== filterSeverity.value) return false;
-    if (filterBot.value !== 'all' && f.bot !== filterBot.value) return false;
+    if (filterBot.value !== 'all' && f.bot_id !== filterBot.value) return false;
     if (filterOwner.value !== 'all' && f.owner !== filterOwner.value) return false;
     return true;
   })
 );
 
-function columnFindings(status: Status): Finding[] {
+function columnFindings(status: Status): TriageFinding[] {
   return filtered.value.filter((f) => f.status === status);
 }
 
@@ -164,7 +65,7 @@ function colCount(status: Status): number {
   return columnFindings(status).length;
 }
 
-function severityLabel(s: Severity): string {
+function severityLabel(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
@@ -189,12 +90,20 @@ function onDragLeave() {
   dragOver.value = null;
 }
 
-function onDrop(status: Status) {
+async function onDrop(status: Status) {
   if (!isDragging.value) return;
   const finding = findings.value.find((f) => f.id === isDragging.value);
   if (finding && finding.status !== status) {
+    const prevStatus = finding.status;
+    // Optimistic update
     finding.status = status;
-    showToast(`Moved to "${columns.find((c) => c.key === status)?.label}"`, 'success');
+    try {
+      await findingsApi.update(finding.id, { status });
+      showToast(`Moved to "${columns.find((c) => c.key === status)?.label}"`, 'success');
+    } catch {
+      finding.status = prevStatus;
+      showToast('Failed to update finding', 'error');
+    }
   }
   isDragging.value = null;
   dragOver.value = null;
@@ -205,14 +114,30 @@ function onDragEnd() {
   dragOver.value = null;
 }
 
-function assignSelf(finding: Finding) {
+async function assignSelf(finding: TriageFinding) {
+  const prevOwner = finding.owner;
+  // Optimistic update
   finding.owner = 'me';
-  showToast('Assigned to you', 'success');
+  try {
+    await findingsApi.update(finding.id, { owner: 'me' });
+    showToast('Assigned to you', 'success');
+  } catch {
+    finding.owner = prevOwner;
+    showToast('Failed to assign finding', 'error');
+  }
 }
 
-function moveStatus(finding: Finding, status: Status) {
+async function moveStatus(finding: TriageFinding, status: Status) {
+  const prevStatus = finding.status;
+  // Optimistic update
   finding.status = status;
-  showToast(`Moved to "${columns.find((c) => c.key === status)?.label}"`, 'success');
+  try {
+    await findingsApi.update(finding.id, { status });
+    showToast(`Moved to "${columns.find((c) => c.key === status)?.label}"`, 'success');
+  } catch {
+    finding.status = prevStatus;
+    showToast('Failed to update finding', 'error');
+  }
 }
 
 const openCount = computed(() => findings.value.filter((f) => f.status === 'open').length);
@@ -303,15 +228,15 @@ const criticalOpen = computed(
             @dragend="onDragEnd"
             @click="selectedFinding = finding"
           >
-            <div class="card-severity" :style="{ background: severityColors[finding.severity] }">
+            <div class="card-severity" :style="{ background: severityColors[finding.severity as Severity] ?? 'var(--text-tertiary)' }">
               {{ severityLabel(finding.severity) }}
             </div>
             <div class="card-title">{{ finding.title }}</div>
             <div class="card-meta">
-              <span class="card-bot">{{ finding.bot }}</span>
-              <span class="card-time">{{ relativeTime(finding.createdAt) }}</span>
+              <span class="card-bot">{{ finding.bot_id ?? '—' }}</span>
+              <span class="card-time">{{ relativeTime(finding.created_at) }}</span>
             </div>
-            <div v-if="finding.file" class="card-file">{{ finding.file }}</div>
+            <div v-if="finding.file_ref" class="card-file">{{ finding.file_ref }}</div>
             <div class="card-footer">
               <span v-if="finding.owner" class="card-owner">@{{ finding.owner }}</span>
               <button v-else class="card-assign" @click.stop="assignSelf(finding)">Assign me</button>
@@ -330,7 +255,7 @@ const criticalOpen = computed(
           <div class="drawer-header">
             <div
               class="drawer-severity"
-              :style="{ background: severityColors[selectedFinding.severity] }"
+              :style="{ background: severityColors[selectedFinding.severity as Severity] ?? 'var(--text-tertiary)' }"
             >
               {{ severityLabel(selectedFinding.severity) }}
             </div>
@@ -340,15 +265,15 @@ const criticalOpen = computed(
           <p class="drawer-desc">{{ selectedFinding.description }}</p>
           <dl class="drawer-meta">
             <dt>Bot</dt>
-            <dd>{{ selectedFinding.bot }}</dd>
+            <dd>{{ selectedFinding.bot_id ?? '—' }}</dd>
             <dt>File</dt>
-            <dd>{{ selectedFinding.file ?? '—' }}</dd>
+            <dd>{{ selectedFinding.file_ref ?? '—' }}</dd>
             <dt>Owner</dt>
             <dd>{{ selectedFinding.owner ?? 'Unassigned' }}</dd>
             <dt>Reported</dt>
-            <dd>{{ relativeTime(selectedFinding.createdAt) }}</dd>
+            <dd>{{ relativeTime(selectedFinding.created_at) }}</dd>
             <dt>Execution</dt>
-            <dd>{{ selectedFinding.executionId }}</dd>
+            <dd>{{ selectedFinding.execution_id ?? '—' }}</dd>
           </dl>
           <div class="drawer-actions">
             <span class="drawer-label">Move to:</span>
