@@ -248,11 +248,13 @@ export const executionApi = {
   },
 
   // List all executions
-  listAll: (options?: { limit?: number; offset?: number; status?: string }) => {
+  listAll: (options?: { limit?: number; offset?: number; status?: string; date_from?: string; date_to?: string }) => {
     const params = new URLSearchParams();
     if (options?.limit) params.set('limit', String(options.limit));
     if (options?.offset) params.set('offset', String(options.offset));
     if (options?.status) params.set('status', options.status);
+    if (options?.date_from) params.set('date_from', options.date_from);
+    if (options?.date_to) params.set('date_to', options.date_to);
     const query = params.toString();
     return apiFetch<{ executions: Execution[]; total: number }>(
       `/admin/executions${query ? `?${query}` : ''}`

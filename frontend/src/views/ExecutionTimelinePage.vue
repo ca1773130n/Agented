@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, onMounted, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
+import { executionApi } from '../services/api/triggers';
 const router = useRouter();
 
 interface ExecutionBar {
@@ -18,20 +19,41 @@ interface ExecutionBar {
 // Window: last 60 minutes
 const windowMinutes = ref(60);
 const windowMs = computed(() => windowMinutes.value * 60 * 1000);
-const now = Date.now();
-const windowStart = computed(() => now - windowMs.value);
+const now = ref(Date.now());
+const windowStart = computed(() => now.value - windowMs.value);
 
-const executions = ref<ExecutionBar[]>([
-  { id: 'exec-a1', botId: 'bot-security', botName: 'Security Audit', status: 'success',  startTs: 2 * 60000,  durationMs: 8 * 60000,  trigger: 'schedule' },
-  { id: 'exec-a2', botId: 'bot-security', botName: 'Security Audit', status: 'failed',   startTs: 32 * 60000, durationMs: 3 * 60000,  trigger: 'webhook' },
-  { id: 'exec-b1', botId: 'bot-pr-review', botName: 'PR Review',    status: 'success',  startTs: 5 * 60000,  durationMs: 4 * 60000,  trigger: 'github' },
-  { id: 'exec-b2', botId: 'bot-pr-review', botName: 'PR Review',    status: 'success',  startTs: 18 * 60000, durationMs: 5 * 60000,  trigger: 'github' },
-  { id: 'exec-b3', botId: 'bot-pr-review', botName: 'PR Review',    status: 'running',  startTs: 48 * 60000, durationMs: 12 * 60000, trigger: 'github' },
-  { id: 'exec-c1', botId: 'bot-deploy',    botName: 'Deploy Bot',   status: 'success',  startTs: 10 * 60000, durationMs: 15 * 60000, trigger: 'manual' },
-  { id: 'exec-c2', botId: 'bot-deploy',    botName: 'Deploy Bot',   status: 'queued',   startTs: 58 * 60000, durationMs: 0,          trigger: 'schedule' },
-  { id: 'exec-d1', botId: 'bot-docs',      botName: 'Doc Generator', status: 'success', startTs: 20 * 60000, durationMs: 6 * 60000,  trigger: 'webhook' },
-  { id: 'exec-d2', botId: 'bot-docs',      botName: 'Doc Generator', status: 'success', startTs: 40 * 60000, durationMs: 7 * 60000,  trigger: 'webhook' },
-]);
+const executions = ref<ExecutionBar[]>([]);
+
+async function fetchExecutions() {
+  now.value = Date.now();
+  const date_from = new Date(now.value - windowMs.value).toISOString();
+  const result = await executionApi.listAll({ limit: 500, date_from });
+  const ws = now.value - windowMs.value;
+  executions.value = result.executions.map(e => {
+    let status: ExecutionBar['status'];
+    if (e.status === 'completed' || e.status === 'success') {
+      status = 'success';
+    } else if (e.status === 'failed' || e.status === 'timeout' || e.status === 'cancelled' || e.status === 'interrupted') {
+      status = 'failed';
+    } else if (e.status === 'running') {
+      status = 'running';
+    } else {
+      status = 'queued';
+    }
+    return {
+      id: e.execution_id,
+      botId: e.trigger_id,
+      botName: e.trigger_name,
+      status,
+      startTs: Date.parse(e.started_at) - ws,
+      durationMs: e.duration_ms ?? 0,
+      trigger: e.trigger_type,
+    };
+  });
+}
+
+onMounted(fetchExecutions);
+watch(windowMinutes, fetchExecutions);
 
 // Group by bot
 const bots = computed(() => {
@@ -63,7 +85,7 @@ const timeLabels = computed(() => {
 });
 
 const nowPct = computed(() => {
-  const elapsed = now - windowStart.value;
+  const elapsed = now.value - windowStart.value;
   return Math.min(100, (elapsed / windowMs.value) * 100);
 });
 
