@@ -430,9 +430,10 @@ export const miscRoutes: RouteRecordRaw[] = [
   },
   // Live Execution Terminal
   {
-    path: '/executions/terminal',
+    path: '/executions/:executionId/terminal',
     name: 'live-execution-terminal',
     component: () => import('../../views/LiveExecutionTerminal.vue'),
+    props: true,
     meta: { title: 'Live Execution Terminal' },
   },
   // New Engineer Onboarding Automation

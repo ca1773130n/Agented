@@ -2,6 +2,11 @@
 import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue';
 import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
+import { executionApi } from '../services/api';
+import type { AuthenticatedEventSource } from '../services/api';
+import { safeParseSSE } from '../composables/useEventSource';
+
+const props = defineProps<{ executionId: string }>();
 
 interface LogLine {
   id: number;
@@ -17,9 +22,8 @@ interface Section {
   collapsed: boolean;
 }
 
-const executionId = ref('exec-abc123');
-const botName = ref('PR Review Bot');
-const status = ref<'idle' | 'running' | 'completed' | 'failed'>('running');
+const botName = ref('');
+const status = ref<'idle' | 'running' | 'completed' | 'failed'>('idle');
 const searchQuery = ref('');
 const showSearch = ref(false);
 const autoScroll = ref(true);
@@ -27,29 +31,11 @@ const terminalRef = ref<HTMLElement | null>(null);
 const inputText = ref('');
 let lineCounter = 0;
 
-const sections = ref<Section[]>([
-  { id: 1, label: 'Initialization', startLine: 0, collapsed: false },
-  { id: 2, label: 'Fetching PR context', startLine: 5, collapsed: false },
-  { id: 3, label: 'Running analysis', startLine: 10, collapsed: false },
-]);
+const sections = ref<Section[]>([]);
 
-const allLines = ref<LogLine[]>([
-  { id: lineCounter++, text: '=== Agented Execution Terminal ===', type: 'system', timestamp: '14:23:00' },
-  { id: lineCounter++, text: 'Bot: PR Review Bot | Execution: exec-abc123', type: 'system', timestamp: '14:23:00' },
-  { id: lineCounter++, text: '', type: 'stdout', timestamp: '14:23:00' },
-  { id: lineCounter++, text: '[init] Loading bot configuration...', type: 'stdout', timestamp: '14:23:01' },
-  { id: lineCounter++, text: '[init] Model: claude-sonnet-4-6 | Max tokens: 8192', type: 'stdout', timestamp: '14:23:01' },
-  { id: lineCounter++, text: '', type: 'stdout', timestamp: '14:23:01' },
-  { id: lineCounter++, text: '[fetch] Connecting to GitHub API...', type: 'stdout', timestamp: '14:23:02' },
-  { id: lineCounter++, text: '[fetch] PR #312: feat: add execution queue with rate limiting', type: 'stdout', timestamp: '14:23:02' },
-  { id: lineCounter++, text: '[fetch] Changed files: 7 | Additions: +342 | Deletions: -18', type: 'stdout', timestamp: '14:23:02' },
-  { id: lineCounter++, text: '[fetch] Diff downloaded (28.4 KB)', type: 'stdout', timestamp: '14:23:03' },
-  { id: lineCounter++, text: '', type: 'stdout', timestamp: '14:23:03' },
-  { id: lineCounter++, text: '[analysis] Sending prompt to Claude...', type: 'stdout', timestamp: '14:23:04' },
-  { id: lineCounter++, text: '[analysis] Token usage: 4,217 input tokens', type: 'stdout', timestamp: '14:23:04' },
-  { id: lineCounter++, text: '\x1b[33m[warn] Large diff — truncating to 15,000 chars\x1b[0m', type: 'stderr', timestamp: '14:23:04' },
-  { id: lineCounter++, text: '[analysis] Streaming response...', type: 'stdout', timestamp: '14:23:05' },
-]);
+const allLines = ref<LogLine[]>([]);
+
+let eventSource: AuthenticatedEventSource | null = null;
 
 const filteredLines = computed(() => {
   if (!searchQuery.value) return allLines.value;
@@ -107,41 +93,103 @@ function clearTerminal() {
   allLines.value = [];
 }
 
-let intervalId: number | undefined;
+function pushLine(text: string, type: 'stdout' | 'stderr' | 'system') {
+  allLines.value.push({
+    id: lineCounter++,
+    text,
+    type,
+    timestamp: new Date().toLocaleTimeString('en-GB', { hour12: false }),
+  });
+}
 
-onMounted(() => {
-  scrollToBottom();
-  if (status.value === 'running') {
-    const mockLines = [
-      '[analysis] > Reviewing logic in ExecutionQueueService...',
-      '[analysis] > Checking for rate limit handling...',
-      '[analysis] > Verifying queue drain behavior...',
-      '[analysis] ✓ No blocking anti-patterns found',
-      '[output] Posting review comment to PR #312...',
-      '[output] ✓ Review posted successfully',
-      '[done] Execution completed in 8.3s | Cost: $0.042',
-    ];
-    let i = 0;
-    intervalId = window.setInterval(() => {
-      if (i < mockLines.length) {
-        allLines.value.push({
-          id: lineCounter++,
-          text: mockLines[i],
-          type: mockLines[i].includes('✓') ? 'stdout' : 'stdout',
-          timestamp: new Date().toLocaleTimeString('en-GB', { hour12: false }),
+onMounted(async () => {
+  try {
+    const execution = await executionApi.get(props.executionId);
+    botName.value = execution.trigger_name || props.executionId;
+
+    // Map backend status to local status type
+    if (execution.status === 'running') {
+      status.value = 'running';
+    } else if (execution.status === 'success') {
+      status.value = 'completed';
+    } else if (execution.status === 'failed' || execution.status === 'timeout') {
+      status.value = 'failed';
+    } else {
+      status.value = 'idle';
+    }
+
+    // Parse existing logs for completed executions
+    if (execution.stdout_log || execution.stderr_log) {
+      const ts = execution.started_at
+        ? new Date(execution.started_at).toLocaleTimeString('en-GB', { hour12: false })
+        : new Date().toLocaleTimeString('en-GB', { hour12: false });
+
+      if (execution.stdout_log) {
+        execution.stdout_log.split('\n').forEach((line) => {
+          if (line) {
+            allLines.value.push({ id: lineCounter++, text: line, type: 'stdout', timestamp: ts });
+          }
         });
-        i++;
-        scrollToBottom();
-      } else {
-        status.value = 'completed';
-        clearInterval(intervalId);
       }
-    }, 600);
+      if (execution.stderr_log) {
+        execution.stderr_log.split('\n').forEach((line) => {
+          if (line) {
+            allLines.value.push({ id: lineCounter++, text: line, type: 'stderr', timestamp: ts });
+          }
+        });
+      }
+    }
+
+    scrollToBottom();
+
+    // Start SSE streaming if execution is still running
+    if (status.value === 'running') {
+      eventSource = executionApi.streamLogs(props.executionId);
+
+      eventSource.addEventListener('log', (event) => {
+        const data = safeParseSSE<{ content: string; stream: 'stdout' | 'stderr' }>(
+          event as MessageEvent,
+          'execution/log',
+        );
+        if (!data) return;
+        pushLine(data.content, data.stream);
+        scrollToBottom();
+      });
+
+      eventSource.addEventListener('status', (event) => {
+        const data = safeParseSSE<{ status: string }>(event as MessageEvent, 'execution/status');
+        if (!data) return;
+        if (data.status === 'running') status.value = 'running';
+        else if (data.status === 'success') status.value = 'completed';
+        else if (data.status === 'failed' || data.status === 'timeout') status.value = 'failed';
+      });
+
+      eventSource.addEventListener('complete', (event) => {
+        const data = safeParseSSE<{ status: string }>(event as MessageEvent, 'execution/complete');
+        if (data) {
+          if (data.status === 'success') status.value = 'completed';
+          else if (data.status === 'failed' || data.status === 'timeout') status.value = 'failed';
+          else status.value = 'completed';
+        } else {
+          status.value = 'completed';
+        }
+        if (eventSource) {
+          eventSource.close();
+          eventSource = null;
+        }
+      });
+    }
+  } catch {
+    // If loading fails, leave as idle with empty state
+    status.value = 'idle';
   }
 });
 
 onUnmounted(() => {
-  if (intervalId) clearInterval(intervalId);
+  if (eventSource) {
+    eventSource.close();
+    eventSource = null;
+  }
 });
 </script>
 
