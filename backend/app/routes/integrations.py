@@ -123,6 +123,26 @@ def list_trigger_integrations(path: TriggerIntegrationPath):
     return jsonify(results)
 
 
+@integrations_bp.get("/integrations/slack/status")
+def get_slack_status():
+    """Return Slack connection status for the first enabled Slack integration."""
+    results = db_integrations.list_integrations(integration_type="slack")
+    # Find first enabled Slack integration
+    integration = next((r for r in results if r.get("enabled")), results[0] if results else None)
+    if not integration:
+        return jsonify({"connected": False, "id": None, "name": None})
+
+    config = integration.get("config") or {}
+    token = config.get("token") or config.get("bot_token") or ""
+    return jsonify(
+        {
+            "id": integration["id"],
+            "name": integration.get("name"),
+            "connected": bool(token),
+        }
+    )
+
+
 # =============================================================================
 # Slack slash command webhook (public API route)
 # =============================================================================

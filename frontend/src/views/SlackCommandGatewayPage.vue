@@ -1,8 +1,10 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, onMounted } from 'vue';
 import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
+import { slackApi, integrationApi } from '../services/api';
+import type { Integration } from '../services/api';
 
 const showToast = useToast();
 
@@ -27,107 +29,105 @@ interface CommandLog {
   executionId?: string;
 }
 
-const slackConnected = ref(true);
-const workspace = ref('engineering-team.slack.com');
+const slackConnected = ref(false);
+const workspace = ref('');
+const loading = ref(true);
 
-const commands = ref<SlashCommand[]>([
-  {
-    id: 'cmd-1',
-    command: '/agented run pr-review',
-    description: 'Trigger PR review bot on a pull request number',
-    botId: 'bot-pr-review',
-    botName: 'PR Review Bot',
-    enabled: true,
-    usageCount: 142,
-  },
-  {
-    id: 'cmd-2',
-    command: '/agented run security-scan',
-    description: 'Run the weekly security audit bot immediately',
-    botId: 'bot-security',
-    botName: 'Security Audit Bot',
-    enabled: true,
-    usageCount: 37,
-  },
-  {
-    id: 'cmd-3',
-    command: '/agented status',
-    description: 'Show running executions and recent results',
-    botId: 'bot-internal',
-    botName: 'Status Reporter',
-    enabled: true,
-    usageCount: 289,
-  },
-  {
-    id: 'cmd-4',
-    command: '/agented run changelog',
-    description: 'Generate changelog from recent merged PRs',
-    botId: 'bot-changelog',
-    botName: 'Changelog Generator',
-    enabled: false,
-    usageCount: 8,
-  },
-]);
-
-const logs = ref<CommandLog[]>([
-  {
-    id: 'log-1',
-    user: 'alice',
-    channel: '#backend',
-    command: '/agented run pr-review',
-    args: '#312',
-    status: 'success',
-    timestamp: '2026-03-06T14:31:00Z',
-    executionId: 'exec-abc123',
-  },
-  {
-    id: 'log-2',
-    user: 'bob',
-    channel: '#security',
-    command: '/agented run security-scan',
-    args: '',
-    status: 'running',
-    timestamp: '2026-03-06T14:28:00Z',
-    executionId: 'exec-def456',
-  },
-  {
-    id: 'log-3',
-    user: 'carol',
-    channel: '#releases',
-    command: '/agented run changelog',
-    args: '--since=2026-03-01',
-    status: 'failed',
-    timestamp: '2026-03-06T13:10:00Z',
-  },
-]);
+const commands = ref<SlashCommand[]>([]);
+const logs = ref<CommandLog[]>([]);
 
 const showAddCommand = ref(false);
 const newCommand = ref('');
 const newDescription = ref('');
 
-function toggleCommand(id: string) {
-  const cmd = commands.value.find((c) => c.id === id);
-  if (cmd) {
-    cmd.enabled = !cmd.enabled;
-    showToast(`Command ${cmd.enabled ? 'enabled' : 'disabled'}`, 'success');
+function integrationToCommand(integration: Integration): SlashCommand {
+  const config = integration.config as Record<string, unknown>;
+  return {
+    id: integration.id,
+    command: (config.command as string) || integration.name,
+    description: (config.description as string) || '',
+    botId: integration.trigger_id || '',
+    botName: (config.bot_name as string) || integration.trigger_id || 'Unassigned',
+    enabled: integration.enabled,
+    usageCount: 0,
+  };
+}
+
+function mapOutcomeToStatus(outcome: string): 'success' | 'running' | 'failed' {
+  if (outcome === 'received' || outcome === 'running') return 'running';
+  if (outcome === 'success' || outcome === 'completed') return 'success';
+  return 'failed';
+}
+
+async function loadData() {
+  loading.value = true;
+  try {
+    const [statusResult, commandsResult, logsResult] = await Promise.allSettled([
+      slackApi.getStatus(),
+      slackApi.listCommands(),
+      slackApi.listCommandLogs(50),
+    ]);
+
+    if (statusResult.status === 'fulfilled') {
+      slackConnected.value = statusResult.value.connected;
+      workspace.value = statusResult.value.name || '';
+    }
+
+    if (commandsResult.status === 'fulfilled') {
+      const integrations = commandsResult.value as unknown as Integration[];
+      commands.value = integrations.map(integrationToCommand);
+    }
+
+    if (logsResult.status === 'fulfilled') {
+      logs.value = logsResult.value.events.map((event) => {
+        const details = (event.details || {}) as Record<string, unknown>;
+        return {
+          id: event.id,
+          user: (details.user_id as string) || event.actor || 'unknown',
+          channel: (details.channel_id as string) || '',
+          command: (details.command as string) || event.action,
+          args: (details.text as string) || '',
+          status: mapOutcomeToStatus(event.outcome),
+          timestamp: event.created_at,
+        } satisfies CommandLog;
+      });
+    }
+  } catch (err) {
+    showToast('Failed to load Slack data', 'error');
+  } finally {
+    loading.value = false;
   }
 }
 
-function addCommand() {
+async function toggleCommand(id: string) {
+  const cmd = commands.value.find((c) => c.id === id);
+  if (!cmd) return;
+  const newEnabled = !cmd.enabled;
+  try {
+    await integrationApi.update(id, { enabled: newEnabled });
+    cmd.enabled = newEnabled;
+    showToast(`Command ${newEnabled ? 'enabled' : 'disabled'}`, 'success');
+  } catch {
+    showToast('Failed to update command', 'error');
+  }
+}
+
+async function addCommand() {
   if (!newCommand.value || !newDescription.value) return;
-  commands.value.push({
-    id: `cmd-${Date.now()}`,
-    command: newCommand.value,
-    description: newDescription.value,
-    botId: '',
-    botName: 'Unassigned',
-    enabled: false,
-    usageCount: 0,
-  });
-  newCommand.value = '';
-  newDescription.value = '';
-  showAddCommand.value = false;
-  showToast('Command registered', 'success');
+  try {
+    const integration = await slackApi.createCommand({
+      name: newCommand.value,
+      config: { command: newCommand.value, description: newDescription.value },
+      enabled: false,
+    });
+    commands.value.push(integrationToCommand(integration));
+    newCommand.value = '';
+    newDescription.value = '';
+    showAddCommand.value = false;
+    showToast('Command registered', 'success');
+  } catch {
+    showToast('Failed to register command', 'error');
+  }
 }
 
 function statusColor(status: string) {
@@ -139,6 +139,8 @@ function statusColor(status: string) {
 function formatTime(ts: string) {
   return new Date(ts).toLocaleString();
 }
+
+onMounted(loadData);
 </script>
 
 <template>
@@ -156,7 +158,7 @@ function formatTime(ts: string) {
             <span class="status-dot" />
             {{ slackConnected ? 'Connected' : 'Disconnected' }}
           </div>
-          <span class="workspace-label">{{ workspace }}</span>
+          <span class="workspace-label">{{ workspace || '—' }}</span>
           <button class="btn-secondary" @click="showToast('Reconnecting...', 'info')">
             Reconnect
           </button>
@@ -184,7 +186,9 @@ function formatTime(ts: string) {
           </div>
         </div>
 
-        <div class="commands-list">
+        <div v-if="loading" class="empty-state">Loading commands…</div>
+        <div v-else-if="commands.length === 0" class="empty-state">No Slack commands configured yet.</div>
+        <div v-else class="commands-list">
           <div v-for="cmd in commands" :key="cmd.id" class="command-card">
             <div class="command-main">
               <code class="command-text">{{ cmd.command }}</code>
@@ -207,7 +211,9 @@ function formatTime(ts: string) {
 
       <section class="section">
         <h2 class="section-title">Command Logs</h2>
-        <table class="log-table">
+        <div v-if="loading" class="empty-state">Loading logs…</div>
+        <div v-else-if="logs.length === 0" class="empty-state">No command logs yet.</div>
+        <table v-else class="log-table">
           <thead>
             <tr>
               <th>User</th>
@@ -330,6 +336,13 @@ function formatTime(ts: string) {
 .form-actions {
   display: flex;
   gap: 0.5rem;
+}
+
+.empty-state {
+  padding: 1.5rem;
+  text-align: center;
+  color: var(--color-text-muted);
+  font-size: 0.875rem;
 }
 
 .commands-list {
