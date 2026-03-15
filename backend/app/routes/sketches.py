@@ -19,6 +19,7 @@ from ..db.sketches import (
 from ..db.sketches import (
     create_sketch as db_create_sketch,
 )
+from ..services.sketch_execution_service import execute_sketch, find_team_super_agent
 from ..models.common import PaginationQuery
 from ..models.sketch import CreateSketchRequest, UpdateSketchRequest
 
@@ -108,24 +109,44 @@ def classify_sketch_endpoint(path: SketchPath):
 
 @sketches_bp.post("/<sketch_id>/route")
 def route_sketch_endpoint(path: SketchPath):
-    """Route a classified sketch to a SuperAgent or team target."""
-    sketch = get_sketch(path.sketch_id)
+    """Route a classified sketch to a target and execute it."""
+    sketch_id = path.sketch_id
+    sketch = get_sketch(sketch_id)
     if not sketch:
-        return error_response("NOT_FOUND", "Sketch not found", HTTPStatus.NOT_FOUND)
+        return {"error": "Sketch not found"}, HTTPStatus.NOT_FOUND
 
-    if sketch.get("classification_json") is None:
-        return error_response(
-            "BAD_REQUEST", "Sketch must be classified first", HTTPStatus.BAD_REQUEST
-        )
+    classification_raw = sketch.get("classification_json")
+    if not classification_raw:
+        return {"error": "Sketch must be classified first"}, HTTPStatus.BAD_REQUEST
 
-    classification = json.loads(sketch["classification_json"])
+    classification = json.loads(classification_raw) if isinstance(classification_raw, str) else classification_raw
 
     from ..services.sketch_routing_service import SketchRoutingService
 
-    routing = SketchRoutingService.route(classification)
-    update_sketch(
-        path.sketch_id,
-        routing_json=json.dumps(routing),
-        status="routed",
-    )
-    return {"message": "Sketch routed", "routing": routing}, HTTPStatus.OK
+    # Route with project scoping
+    routing = SketchRoutingService.route(classification, project_id=sketch.get("project_id"))
+
+    # Resolve target super agent
+    super_agent_id = None
+    if routing["target_type"] == "super_agent":
+        super_agent_id = routing["target_id"]
+    elif routing["target_type"] == "team":
+        super_agent_id = find_team_super_agent(routing["target_id"])
+
+    if not super_agent_id:
+        update_sketch(sketch_id, status="routed", routing_json=json.dumps(routing))
+        return {"routing": routing}, HTTPStatus.OK
+
+    # Execute on super agent session
+    session_id = execute_sketch(sketch_id, super_agent_id, sketch["content"])
+
+    # Store session info in routing_json for frontend
+    routing["session_id"] = session_id
+    routing["super_agent_id"] = super_agent_id
+    update_sketch(sketch_id, routing_json=json.dumps(routing))
+
+    return {
+        "routing": routing,
+        "session_id": session_id,
+        "super_agent_id": super_agent_id,
+    }, HTTPStatus.OK
