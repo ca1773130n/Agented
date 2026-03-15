@@ -521,6 +521,13 @@ from .prompt_snippets import (  # noqa: F401
     update_snippet,
 )
 
+# Quality ratings (per-execution quality scoring)
+from .quality_ratings import (  # noqa: F401
+    get_bot_quality_stats,
+    get_quality_entries,
+    upsert_quality_rating,
+)
+
 # RBAC (user roles)
 from .rbac import (  # noqa: F401
     VALID_ROLES,
@@ -531,6 +538,14 @@ from .rbac import (  # noqa: F401
     get_user_role,
     list_user_roles,
     update_user_role,
+)
+
+# Retention policies
+from .retention_policies import (  # noqa: F401
+    create_policy,
+    delete_policy,
+    list_policies,
+    update_policy_enabled,
 )
 
 # Replay comparisons (execution replay A/B comparison)
@@ -768,6 +783,7 @@ from .viewer_comments import (  # noqa: F401
     get_comments_for_execution,
     get_comments_for_line,
 )
+
 
 # Workflows (workflows, versions, executions, node executions, approval states)
 from .workflows import (  # noqa: F401

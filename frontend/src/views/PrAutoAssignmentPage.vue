@@ -1,65 +1,15 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, onMounted } from 'vue';
 import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
+import { prAssignmentApi } from '../services/api/pr-assignment';
+import type { OwnershipRule, AssignmentLog } from '../services/api/pr-assignment';
 
 const showToast = useToast();
 
-interface OwnershipRule {
-  id: string;
-  pattern: string;
-  team: string;
-  reviewers: string[];
-  priority: number;
-}
-
-interface AssignmentLog {
-  id: string;
-  prNumber: number;
-  prTitle: string;
-  assignedTo: string[];
-  reason: string;
-  confidence: number;
-  timestamp: string;
-}
-
-const rules = ref<OwnershipRule[]>([
-  { id: 'rule-1', pattern: 'backend/**', team: 'Platform', reviewers: ['alice', 'bob'], priority: 1 },
-  { id: 'rule-2', pattern: 'frontend/src/**', team: 'Frontend', reviewers: ['carol', 'dave'], priority: 1 },
-  { id: 'rule-3', pattern: '**/*.test.ts', team: 'QA', reviewers: ['eve'], priority: 2 },
-  { id: 'rule-4', pattern: 'backend/app/db/**', team: 'Data', reviewers: ['frank', 'grace'], priority: 1 },
-]);
-
-const recentAssignments = ref<AssignmentLog[]>([
-  {
-    id: 'asgn-1',
-    prNumber: 312,
-    prTitle: 'feat: add execution queue with rate limiting',
-    assignedTo: ['alice', 'bob'],
-    reason: 'Changed files in backend/** match Platform team ownership',
-    confidence: 94,
-    timestamp: '2026-03-06T14:23:00Z',
-  },
-  {
-    id: 'asgn-2',
-    prNumber: 311,
-    prTitle: 'fix: resolve SSE streaming memory leak',
-    assignedTo: ['carol'],
-    reason: 'Changed files in frontend/src/** match Frontend team ownership',
-    confidence: 88,
-    timestamp: '2026-03-06T11:05:00Z',
-  },
-  {
-    id: 'asgn-3',
-    prNumber: 310,
-    prTitle: 'refactor: migrate token tracking to new schema',
-    assignedTo: ['frank', 'alice'],
-    reason: 'Mixed changes in backend/app/db/** and backend/**',
-    confidence: 79,
-    timestamp: '2026-03-06T09:47:00Z',
-  },
-]);
+const rules = ref<OwnershipRule[]>([]);
+const recentAssignments = ref<AssignmentLog[]>([]);
 
 const minConfidence = ref(70);
 const maxReviewers = ref(2);
@@ -67,29 +17,72 @@ const enabled = ref(true);
 const newPattern = ref('');
 const newTeam = ref('');
 const newReviewers = ref('');
+const loading = ref(false);
 
-function saveSettings() {
-  showToast('Settings saved', 'success');
+async function loadData() {
+  loading.value = true;
+  try {
+    const [rulesRes, settingsRes, recentRes] = await Promise.all([
+      prAssignmentApi.listRules(),
+      prAssignmentApi.getSettings(),
+      prAssignmentApi.listRecent(),
+    ]);
+    rules.value = rulesRes.rules;
+    recentAssignments.value = recentRes.assignments;
+    enabled.value = settingsRes.pr_assignment_enabled !== 'false';
+    minConfidence.value = parseInt(settingsRes.pr_assignment_min_confidence, 10) || 70;
+    maxReviewers.value = parseInt(settingsRes.pr_assignment_max_reviewers, 10) || 2;
+  } catch {
+    showToast('Failed to load PR assignment data', 'error');
+  } finally {
+    loading.value = false;
+  }
 }
 
-function addRule() {
+async function saveSettings() {
+  try {
+    await prAssignmentApi.updateSettings({
+      pr_assignment_enabled: String(enabled.value),
+      pr_assignment_min_confidence: String(minConfidence.value),
+      pr_assignment_max_reviewers: String(maxReviewers.value),
+    });
+    showToast('Settings saved', 'success');
+  } catch {
+    showToast('Failed to save settings', 'error');
+  }
+}
+
+async function addRule() {
   if (!newPattern.value || !newTeam.value) return;
-  rules.value.push({
-    id: `rule-${Date.now()}`,
-    pattern: newPattern.value,
-    team: newTeam.value,
-    reviewers: newReviewers.value.split(',').map((r) => r.trim()).filter(Boolean),
-    priority: 1,
-  });
-  newPattern.value = '';
-  newTeam.value = '';
-  newReviewers.value = '';
-  showToast('Ownership rule added', 'success');
+  const reviewersList = newReviewers.value
+    .split(',')
+    .map((r) => r.trim())
+    .filter(Boolean);
+  try {
+    const created = await prAssignmentApi.createRule({
+      pattern: newPattern.value,
+      team: newTeam.value,
+      reviewers: reviewersList,
+      priority: 1,
+    });
+    rules.value.push(created);
+    newPattern.value = '';
+    newTeam.value = '';
+    newReviewers.value = '';
+    showToast('Ownership rule added', 'success');
+  } catch {
+    showToast('Failed to add rule', 'error');
+  }
 }
 
-function deleteRule(id: string) {
-  rules.value = rules.value.filter((r) => r.id !== id);
-  showToast('Rule removed', 'success');
+async function deleteRule(id: string) {
+  try {
+    await prAssignmentApi.deleteRule(id);
+    rules.value = rules.value.filter((r) => r.id !== id);
+    showToast('Rule removed', 'success');
+  } catch {
+    showToast('Failed to delete rule', 'error');
+  }
 }
 
 function confidenceColor(score: number) {
@@ -101,6 +94,8 @@ function confidenceColor(score: number) {
 function formatTime(ts: string) {
   return new Date(ts).toLocaleString();
 }
+
+onMounted(loadData);
 </script>
 
 <template>
@@ -172,7 +167,9 @@ function formatTime(ts: string) {
 
       <section class="section">
         <h2 class="section-title">Recent Assignments</h2>
-        <div class="assignment-list">
+        <div v-if="loading" class="empty-state">Loading…</div>
+        <div v-else-if="recentAssignments.length === 0" class="empty-state">No recent assignments.</div>
+        <div v-else class="assignment-list">
           <div v-for="a in recentAssignments" :key="a.id" class="assignment-card">
             <div class="assignment-header">
               <span class="pr-number">#{{ a.prNumber }}</span>
@@ -424,5 +421,12 @@ function formatTime(ts: string) {
 .section {
   display: flex;
   flex-direction: column;
+}
+
+.empty-state {
+  padding: 1.5rem;
+  text-align: center;
+  color: var(--color-text-muted);
+  font-size: 0.875rem;
 }
 </style>

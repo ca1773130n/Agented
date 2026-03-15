@@ -1,12 +1,17 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
-import { useRouter } from 'vue-router';
+import { ref, computed, onMounted } from 'vue';
+import { useRouter, useRoute } from 'vue-router';
 import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
+import { payloadTransformerApi } from '../services/api/payload-transformers';
 
 const router = useRouter();
+const route = useRoute();
 const showToast = useToast();
+
+const triggerId = computed(() => (route.query.triggerId as string) || 'global');
+const isSaving = ref(false);
 
 type TransformMode = 'jsonpath' | 'jq' | 'rename' | 'extract';
 
@@ -35,15 +40,9 @@ const rawPayload = ref(JSON.stringify({
   sender: { login: 'dev' },
 }, null, 2));
 
-const rules = ref<TransformRule[]>([
-  { id: '1', mode: 'jsonpath', expression: '$.pull_request.title', output_key: 'title', description: 'Extract PR title' },
-  { id: '2', mode: 'jsonpath', expression: '$.pull_request.user.login', output_key: 'author', description: 'Extract author login' },
-  { id: '3', mode: 'jsonpath', expression: '$.repository.full_name', output_key: 'repo', description: 'Extract repo name' },
-  { id: '4', mode: 'jsonpath', expression: '$.pull_request.head.sha', output_key: 'sha', description: 'Extract commit SHA' },
-]);
+const rules = ref<TransformRule[]>([]);
 
 const transformedPayload = ref<Record<string, unknown>>({});
-const isTransforming = ref(false);
 const payloadError = ref('');
 const activeRuleId = ref<string | null>(null);
 
@@ -96,7 +95,6 @@ function runTransform() {
     return;
   }
 
-  isTransforming.value = true;
   const result: Record<string, unknown> = {};
 
   for (const rule of rules.value) {
@@ -113,11 +111,36 @@ function runTransform() {
   }
 
   transformedPayload.value = result;
-  isTransforming.value = false;
   showToast('Transform applied', 'success');
 }
 
 const hasTransformResult = computed(() => Object.keys(transformedPayload.value).length > 0);
+
+onMounted(async () => {
+  try {
+    const data = await payloadTransformerApi.get(triggerId.value);
+    if (data.rules && data.rules.length > 0) {
+      rules.value = data.rules as TransformRule[];
+    }
+  } catch {
+    // No transformer saved yet — start with empty rules
+  }
+});
+
+async function saveRules() {
+  isSaving.value = true;
+  try {
+    await payloadTransformerApi.save(triggerId.value, {
+      name: 'default',
+      rules: rules.value,
+    });
+    showToast('Rules saved', 'success');
+  } catch {
+    showToast('Failed to save rules', 'error');
+  } finally {
+    isSaving.value = false;
+  }
+}
 </script>
 
 <template>
@@ -215,6 +238,13 @@ const hasTransformResult = computed(() => Object.keys(transformedPayload.value).
             </div>
           </div>
           <div class="card-footer">
+            <button class="btn btn-secondary btn-sm" :disabled="isSaving" @click="saveRules">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13">
+                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+                <polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/>
+              </svg>
+              {{ isSaving ? 'Saving…' : 'Save Rules' }}
+            </button>
             <button class="btn btn-primary" :disabled="rules.length === 0" @click="runTransform">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
                 <polygon points="5 3 19 12 5 21 5 3"/>
@@ -438,6 +468,7 @@ const hasTransformResult = computed(() => Object.keys(transformedPayload.value).
   border-top: 1px solid var(--border-default);
   display: flex;
   justify-content: flex-end;
+  gap: 8px;
 }
 
 .btn {

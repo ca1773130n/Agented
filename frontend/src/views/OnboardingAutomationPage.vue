@@ -1,119 +1,71 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, onMounted } from 'vue';
 import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
+import { onboardingApi } from '../services/api/onboarding';
+import type { OnboardingStep, OnboardingRun } from '../services/api/onboarding';
 
 const showToast = useToast();
 
-interface OnboardingStep {
-  id: string;
-  order: number;
-  name: string;
-  description: string;
-  type: 'github' | 'slack' | 'jira' | 'email' | 'custom';
-  enabled: boolean;
-  delayMinutes: number;
-}
-
-interface OnboardingRun {
-  id: string;
-  member: string;
-  githubHandle: string;
-  startedAt: string;
-  completedSteps: number;
-  totalSteps: number;
-  status: 'running' | 'completed' | 'failed';
-}
+const ONBOARDING_TRIGGER_ID = 'bot-onboarding';
 
 const triggerEnabled = ref(true);
 const triggerEvent = ref('github.member.added');
+const loading = ref(false);
+const saving = ref(false);
 
-const steps = ref<OnboardingStep[]>([
-  {
-    id: 'step-1',
-    order: 1,
-    name: 'Create Jira account',
-    description: 'Provision a new Jira user account with default project access',
-    type: 'jira',
-    enabled: true,
-    delayMinutes: 0,
-  },
-  {
-    id: 'step-2',
-    order: 2,
-    name: 'Add to Slack channels',
-    description: 'Invite new member to #general, #engineering, and team-specific channels',
-    type: 'slack',
-    enabled: true,
-    delayMinutes: 2,
-  },
-  {
-    id: 'step-3',
-    order: 3,
-    name: 'Assign starter issue',
-    description: 'Find and assign a "good first issue" labeled GitHub issue',
-    type: 'github',
-    enabled: true,
-    delayMinutes: 5,
-  },
-  {
-    id: 'step-4',
-    order: 4,
-    name: 'Send welcome email',
-    description: 'Send personalized AI-generated welcome message with team context',
-    type: 'email',
-    enabled: true,
-    delayMinutes: 10,
-  },
-  {
-    id: 'step-5',
-    order: 5,
-    name: 'Post Slack introduction',
-    description: 'Post a welcome message in #introductions with generated bio',
-    type: 'slack',
-    enabled: false,
-    delayMinutes: 15,
-  },
-]);
+const steps = ref<OnboardingStep[]>([]);
+const recentRuns = ref<OnboardingRun[]>([]);
 
-const recentRuns = ref<OnboardingRun[]>([
-  {
-    id: 'run-1',
-    member: 'Henry Park',
-    githubHandle: 'hpark-dev',
-    startedAt: '2026-03-06T09:00:00Z',
-    completedSteps: 4,
-    totalSteps: 4,
-    status: 'completed',
-  },
-  {
-    id: 'run-2',
-    member: 'Ines Rodrigues',
-    githubHandle: 'ines-r',
-    startedAt: '2026-02-28T14:30:00Z',
-    completedSteps: 4,
-    totalSteps: 4,
-    status: 'completed',
-  },
-  {
-    id: 'run-3',
-    member: 'James Okafor',
-    githubHandle: 'jokafor',
-    startedAt: '2026-03-05T11:15:00Z',
-    completedSteps: 2,
-    totalSteps: 4,
-    status: 'failed',
-  },
-]);
+onMounted(async () => {
+  loading.value = true;
+  try {
+    const [config, runs] = await Promise.all([
+      onboardingApi.getConfig(ONBOARDING_TRIGGER_ID),
+      onboardingApi.getRuns(ONBOARDING_TRIGGER_ID),
+    ]);
+    if (config.trigger) {
+      triggerEnabled.value = Boolean(config.trigger.enabled);
+      triggerEvent.value = config.trigger.trigger_source || 'github.member.added';
+    }
+    steps.value = config.steps;
+    recentRuns.value = runs.runs;
+  } catch {
+    // Trigger may not exist yet — leave defaults
+  } finally {
+    loading.value = false;
+  }
+});
 
 function toggleStep(id: string) {
   const step = steps.value.find((s) => s.id === id);
   if (step) step.enabled = !step.enabled;
 }
 
-function saveConfig() {
-  showToast('Onboarding automation saved', 'success');
+async function saveConfig() {
+  saving.value = true;
+  try {
+    await onboardingApi.saveConfig({
+      trigger_id: ONBOARDING_TRIGGER_ID,
+      trigger_event: triggerEvent.value,
+      enabled: triggerEnabled.value,
+      steps: steps.value.map((s, idx) => ({
+        id: s.id,
+        step_order: s.step_order ?? idx + 1,
+        name: s.name,
+        description: s.description,
+        type: s.type,
+        enabled: s.enabled,
+        delay_minutes: s.delay_minutes,
+      })),
+    });
+    showToast('Onboarding automation saved', 'success');
+  } catch {
+    showToast('Failed to save onboarding config', 'error');
+  } finally {
+    saving.value = false;
+  }
 }
 
 function typeIcon(type: string) {
@@ -188,7 +140,7 @@ function formatTime(ts: string) {
         <p class="section-hint">Steps execute in order. Disabled steps are skipped.</p>
         <div class="steps-list">
           <div v-for="step in steps" :key="step.id" class="step-card" :class="{ disabled: !step.enabled }">
-            <div class="step-order">{{ step.order }}</div>
+            <div class="step-order">{{ step.step_order }}</div>
             <div class="step-icon" :style="{ color: typeColor(step.type) }">
               {{ typeIcon(step.type) }}
             </div>
@@ -197,7 +149,7 @@ function formatTime(ts: string) {
               <div class="step-desc">{{ step.description }}</div>
               <div class="step-meta">
                 <span class="type-badge">{{ step.type }}</span>
-                <span class="delay">+{{ step.delayMinutes }}m delay</span>
+                <span class="delay">+{{ step.delay_minutes }}m delay</span>
               </div>
             </div>
             <button
@@ -213,24 +165,12 @@ function formatTime(ts: string) {
 
       <section class="section">
         <h2 class="section-title">Recent Onboarding Runs</h2>
-        <div class="runs-list">
-          <div v-for="run in recentRuns" :key="run.id" class="run-card">
+        <div v-if="recentRuns.length === 0" class="empty-runs">No runs yet.</div>
+        <div v-else class="runs-list">
+          <div v-for="run in recentRuns" :key="run.execution_id" class="run-card">
             <div class="run-info">
-              <span class="member-name">{{ run.member }}</span>
-              <code class="handle">@{{ run.githubHandle }}</code>
-              <span class="run-date">{{ formatTime(run.startedAt) }}</span>
-            </div>
-            <div class="run-progress">
-              <div class="progress-bar">
-                <div
-                  class="progress-fill"
-                  :style="{
-                    width: `${(run.completedSteps / run.totalSteps) * 100}%`,
-                    background: statusColor(run.status),
-                  }"
-                />
-              </div>
-              <span class="progress-label">{{ run.completedSteps }}/{{ run.totalSteps }} steps</span>
+              <code class="handle">{{ run.execution_id }}</code>
+              <span class="run-date">{{ formatTime(run.started_at) }}</span>
             </div>
             <span class="run-status" :style="{ color: statusColor(run.status) }">
               {{ run.status }}

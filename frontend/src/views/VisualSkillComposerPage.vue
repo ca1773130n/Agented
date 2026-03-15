@@ -1,8 +1,10 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
+import { userSkillsApi, skillSetsApi } from '../services/api';
+import type { UserSkill } from '../services/api';
 
 const showToast = useToast();
 
@@ -19,16 +21,42 @@ interface ComposerSlot {
   skillId: string;
 }
 
-const availableSkills: Skill[] = [
-  { id: 'sk-safety', name: 'Safe Operations', category: 'safety', description: 'Prevents destructive file ops, validates commands before execution.' },
-  { id: 'sk-review', name: 'Code Review', category: 'review', description: 'Structured PR review with categories: correctness, style, security.' },
-  { id: 'sk-security', name: 'Security Analysis', category: 'security', description: 'OWASP top-10 scanning, dependency audit, secrets detection.', conflicts: ['sk-fast'] },
-  { id: 'sk-test', name: 'Test Generation', category: 'testing', description: 'TDD-first approach: writes failing tests before implementation.' },
-  { id: 'sk-docs', name: 'Documentation', category: 'docs', description: 'Generates JSDoc, OpenAPI annotations, and README updates.' },
-  { id: 'sk-git', name: 'Git Workflow', category: 'vcs', description: 'Conventional commits, branch naming, PR best practices.' },
-  { id: 'sk-fast', name: 'Fast Mode', category: 'performance', description: 'Skips exhaustive checks for speed; not for production PRs.', conflicts: ['sk-security'] },
-  { id: 'sk-context', name: 'Context Awareness', category: 'context', description: 'Reads project README, CLAUDE.md, and recent git log before responding.' },
-];
+// Available skills loaded from the API (user skills)
+const availableSkills = ref<Skill[]>([]);
+const loadingSkills = ref(false);
+const saving = ref(false);
+
+// Track the saved set ID to distinguish create vs update
+const savedSetId = ref<string | null>(null);
+
+async function loadSkills() {
+  loadingSkills.value = true;
+  try {
+    const res = await userSkillsApi.list();
+    availableSkills.value = res.skills.map((s: UserSkill) => ({
+      id: String(s.id),
+      name: s.skill_name,
+      category: s.description ? 'custom' : 'general',
+      description: s.description || s.skill_path || '',
+    }));
+  } catch {
+    // Fall back to static demo skills so the UI is still usable
+    availableSkills.value = [
+      { id: 'sk-safety', name: 'Safe Operations', category: 'safety', description: 'Prevents destructive file ops, validates commands before execution.' },
+      { id: 'sk-review', name: 'Code Review', category: 'review', description: 'Structured PR review with categories: correctness, style, security.' },
+      { id: 'sk-security', name: 'Security Analysis', category: 'security', description: 'OWASP top-10 scanning, dependency audit, secrets detection.', conflicts: ['sk-fast'] },
+      { id: 'sk-test', name: 'Test Generation', category: 'testing', description: 'TDD-first approach: writes failing tests before implementation.' },
+      { id: 'sk-docs', name: 'Documentation', category: 'docs', description: 'Generates JSDoc, OpenAPI annotations, and README updates.' },
+      { id: 'sk-git', name: 'Git Workflow', category: 'vcs', description: 'Conventional commits, branch naming, PR best practices.' },
+      { id: 'sk-fast', name: 'Fast Mode', category: 'performance', description: 'Skips exhaustive checks for speed; not for production PRs.', conflicts: ['sk-security'] },
+      { id: 'sk-context', name: 'Context Awareness', category: 'context', description: 'Reads project README, CLAUDE.md, and recent git log before responding.' },
+    ];
+  } finally {
+    loadingSkills.value = false;
+  }
+}
+
+onMounted(loadSkills);
 
 const categoryColors: Record<string, string> = {
   safety: '#34d399',
@@ -39,20 +67,18 @@ const categoryColors: Record<string, string> = {
   vcs: '#94a3b8',
   performance: '#f97316',
   context: '#ec4899',
+  custom: '#a78bfa',
+  general: '#94a3b8',
 };
 
-const composedSlots = ref<ComposerSlot[]>([
-  { order: 0, skillId: 'sk-safety' },
-  { order: 1, skillId: 'sk-review' },
-]);
-
+const composedSlots = ref<ComposerSlot[]>([]);
 const composerName = ref('My PR Review Agent');
 
 const composedSkills = computed(() =>
   composedSlots.value
     .slice()
     .sort((a, b) => a.order - b.order)
-    .map(slot => availableSkills.find(s => s.id === slot.skillId)!)
+    .map(slot => availableSkills.value.find(s => s.id === slot.skillId)!)
     .filter(Boolean)
 );
 
@@ -62,7 +88,7 @@ const conflictWarnings = computed(() => {
     if (skill.conflicts) {
       for (const conflictId of skill.conflicts) {
         if (composedSlots.value.some(s => s.skillId === conflictId)) {
-          const conflictSkill = availableSkills.find(s => s.id === conflictId);
+          const conflictSkill = availableSkills.value.find(s => s.id === conflictId);
           warnings.push(`"${skill.name}" conflicts with "${conflictSkill?.name}"`);
         }
       }
@@ -72,7 +98,7 @@ const conflictWarnings = computed(() => {
 });
 
 const availableToAdd = computed(() =>
-  availableSkills.filter(s => !composedSlots.value.some(slot => slot.skillId === s.id))
+  availableSkills.value.filter(s => !composedSlots.value.some(slot => slot.skillId === s.id))
 );
 
 function addSkill(skill: Skill) {
@@ -101,16 +127,39 @@ function moveDown(idx: number) {
   sorted[idx + 1].order = temp;
 }
 
-function saveComposition() {
+async function saveComposition() {
   if (!composerName.value.trim()) {
     showToast('Please enter a skill set name', 'error');
     return;
   }
-  showToast(`"${composerName.value}" saved with ${composedSkills.value.length} skills`, 'success');
+  saving.value = true;
+  try {
+    const skillIds = composedSkills.value.map(s => s.id);
+    if (savedSetId.value) {
+      // Update existing
+      await skillSetsApi.update(savedSetId.value, {
+        name: composerName.value.trim(),
+        skill_ids: skillIds,
+      });
+      showToast(`"${composerName.value}" updated with ${skillIds.length} skills`, 'success');
+    } else {
+      // Create new
+      const res = await skillSetsApi.create({
+        name: composerName.value.trim(),
+        skill_ids: skillIds,
+      });
+      savedSetId.value = res.skill_set.id;
+      showToast(`"${composerName.value}" saved with ${skillIds.length} skills`, 'success');
+    }
+  } catch {
+    showToast('Failed to save skill set', 'error');
+  } finally {
+    saving.value = false;
+  }
 }
 
 function skillColor(skillId: string) {
-  const cat = availableSkills.find(s => s.id === skillId)?.category ?? 'review';
+  const cat = availableSkills.value.find(s => s.id === skillId)?.category ?? 'review';
   return categoryColors[cat] ?? '#94a3b8';
 }
 </script>

@@ -1,131 +1,64 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
+import { versionPinsApi } from '../services/api/version-pins';
+import type { VersionPin, ComponentVersionHistory, ComponentType, PinStatus } from '../services/api/version-pins';
 
 const showToast = useToast();
 
-type PinStatus = 'pinned' | 'unpinned' | 'outdated';
-type ComponentType = 'skill' | 'plugin';
-
-interface VersionPin {
-  id: string;
-  componentType: ComponentType;
-  componentId: string;
-  componentName: string;
-  pinnedVersion: string;
-  latestVersion: string;
-  botId: string;
-  botName: string;
-  status: PinStatus;
-  pinnedAt: string;
-  changelog?: string;
-}
-
-interface AvailableVersion {
-  version: string;
-  releasedAt: string;
-  breaking: boolean;
-  summary: string;
-}
-
-const pins = ref<VersionPin[]>([
-  {
-    id: 'pin-001',
-    componentType: 'skill',
-    componentId: 'skill-code-review',
-    componentName: 'Code Review Skill',
-    pinnedVersion: '2.3.1',
-    latestVersion: '2.5.0',
-    botId: 'bot-pr-review',
-    botName: 'PR Review Bot',
-    status: 'outdated',
-    pinnedAt: '2026-01-15T00:00:00Z',
-    changelog: 'v2.4.0 adds multi-language support. v2.5.0 improves Python AST parsing.',
-  },
-  {
-    id: 'pin-002',
-    componentType: 'plugin',
-    componentId: 'plug-github',
-    componentName: 'GitHub Plugin',
-    pinnedVersion: '1.8.0',
-    latestVersion: '1.8.0',
-    botId: 'bot-pr-review',
-    botName: 'PR Review Bot',
-    status: 'pinned',
-    pinnedAt: '2026-02-01T00:00:00Z',
-  },
-  {
-    id: 'pin-003',
-    componentType: 'skill',
-    componentId: 'skill-security-scan',
-    componentName: 'Security Scan Skill',
-    pinnedVersion: '3.1.0',
-    latestVersion: '3.2.1',
-    botId: 'bot-security',
-    botName: 'Security Audit Bot',
-    status: 'outdated',
-    pinnedAt: '2026-01-20T00:00:00Z',
-    changelog: 'v3.2.0 adds OWASP Top 10 coverage. v3.2.1 fixes false positive in JWT checks.',
-  },
-  {
-    id: 'pin-004',
-    componentType: 'plugin',
-    componentId: 'plug-slack',
-    componentName: 'Slack Plugin',
-    pinnedVersion: '2.0.0',
-    latestVersion: '2.1.3',
-    botId: 'bot-security',
-    botName: 'Security Audit Bot',
-    status: 'outdated',
-    pinnedAt: '2025-12-01T00:00:00Z',
-    changelog: 'v2.1.x adds thread reply support and improved rate limit handling.',
-  },
-  {
-    id: 'pin-005',
-    componentType: 'skill',
-    componentId: 'skill-changelog-gen',
-    componentName: 'Changelog Generator Skill',
-    pinnedVersion: '1.2.3',
-    latestVersion: '1.2.3',
-    botId: 'bot-changelog',
-    botName: 'Changelog Bot',
-    status: 'pinned',
-    pinnedAt: '2026-02-28T00:00:00Z',
-  },
-]);
-
-const availableVersions: Record<string, AvailableVersion[]> = {
-  'skill-code-review': [
-    { version: '2.5.0', releasedAt: '2026-03-01T00:00:00Z', breaking: false, summary: 'Improved Python AST parsing, reduces false positives by 18%.' },
-    { version: '2.4.0', releasedAt: '2026-02-10T00:00:00Z', breaking: false, summary: 'Multi-language support: added TypeScript and Go coverage.' },
-    { version: '2.3.1', releasedAt: '2026-01-14T00:00:00Z', breaking: false, summary: 'Bug fix: handle empty file diffs gracefully.' },
-    { version: '2.3.0', releasedAt: '2026-01-05T00:00:00Z', breaking: false, summary: 'New: configurable severity thresholds.' },
-    { version: '2.0.0', releasedAt: '2025-11-01T00:00:00Z', breaking: true, summary: 'Breaking: removed legacy JSON output format.' },
-  ],
-  'skill-security-scan': [
-    { version: '3.2.1', releasedAt: '2026-03-03T00:00:00Z', breaking: false, summary: 'Fix false positive in JWT secret detection.' },
-    { version: '3.2.0', releasedAt: '2026-02-20T00:00:00Z', breaking: false, summary: 'Full OWASP Top 10 rule coverage added.' },
-    { version: '3.1.0', releasedAt: '2026-01-18T00:00:00Z', breaking: false, summary: 'Added dependency audit checks.' },
-  ],
-};
+// Local state
+const pins = ref<VersionPin[]>([]);
+const versionHistory = ref<Record<string, ComponentVersionHistory[]>>({});
+const loading = ref(false);
 
 const selectedPinId = ref<string | null>(null);
 const upgradeTargets = ref<Record<string, string>>({});
 const filterStatus = ref<PinStatus | 'all'>('all');
 const filterBot = ref('all');
 
+// ---- Data loading ----
+
+async function loadPins() {
+  loading.value = true;
+  try {
+    const res = await versionPinsApi.listPins();
+    pins.value = res.pins;
+  } catch (err) {
+    showToast('Failed to load version pins', 'error');
+  } finally {
+    loading.value = false;
+  }
+}
+
+async function loadVersionHistory(componentId: string) {
+  if (versionHistory.value[componentId]) return;
+  try {
+    const res = await versionPinsApi.getVersionHistory(componentId);
+    versionHistory.value = { ...versionHistory.value, [componentId]: res.history };
+  } catch {
+    // Non-fatal — panel will show "not available"
+  }
+}
+
+onMounted(loadPins);
+
+// ---- Computed ----
+
 const filteredPins = computed(() => {
   let list = pins.value;
   if (filterStatus.value !== 'all') list = list.filter((p) => p.status === filterStatus.value);
-  if (filterBot.value !== 'all') list = list.filter((p) => p.botId === filterBot.value);
+  if (filterBot.value !== 'all') list = list.filter((p) => p.bot_id === filterBot.value);
   return list;
 });
 
 const bots = computed(() => {
-  const ids = new Set(pins.value.map((p) => p.botId));
-  return [...ids].map((id) => ({ id, name: pins.value.find((p) => p.botId === id)?.botName || id }));
+  const ids = new Set(pins.value.map((p) => p.bot_id).filter(Boolean) as string[]);
+  return [...ids].map((id) => ({
+    id,
+    name: pins.value.find((p) => p.bot_id === id)?.bot_name || id,
+  }));
 });
 
 const outdatedCount = computed(() => pins.value.filter((p) => p.status === 'outdated').length);
@@ -134,45 +67,78 @@ const selectedPin = computed(() => pins.value.find((p) => p.id === selectedPinId
 
 const versionsForSelected = computed(() => {
   if (!selectedPin.value) return [];
-  return availableVersions[selectedPin.value.componentId] || [];
+  return versionHistory.value[selectedPin.value.component_id] || [];
 });
 
+// ---- Helpers ----
+
 function statusColor(status: PinStatus): string {
-  return status === 'pinned' ? 'var(--accent-green)' : status === 'outdated' ? 'var(--accent-amber)' : 'var(--text-secondary)';
+  return status === 'pinned'
+    ? 'var(--accent-green)'
+    : status === 'outdated'
+      ? 'var(--accent-amber)'
+      : 'var(--text-secondary)';
 }
 
 function typeIcon(type: ComponentType): string {
   return type === 'skill' ? '⚡' : '🔌';
 }
 
-function applyPin(pin: VersionPin) {
-  const target = upgradeTargets.value[pin.id] || pin.latestVersion;
-  if (target === pin.pinnedVersion) {
+// ---- Actions ----
+
+async function applyPin(pin: VersionPin) {
+  const target = upgradeTargets.value[pin.id] || pin.latest_version;
+  if (!target) {
+    showToast('No target version selected', 'info');
+    return;
+  }
+  if (target === pin.pinned_version) {
     showToast('Already on that version', 'info');
     return;
   }
-  pin.pinnedVersion = target;
-  pin.status = pin.pinnedVersion === pin.latestVersion ? 'pinned' : 'outdated';
-  pin.pinnedAt = new Date().toISOString();
-  showToast(`${pin.componentName} pinned to v${target}`, 'success');
-  selectedPinId.value = null;
+  try {
+    const updated = await versionPinsApi.updatePin(pin.id, {
+      pinned_version: target,
+      status: target === pin.latest_version ? 'pinned' : 'outdated',
+    });
+    const idx = pins.value.findIndex((p) => p.id === pin.id);
+    if (idx !== -1) pins.value[idx] = updated;
+    showToast(`${pin.component_name} pinned to v${target}`, 'success');
+    selectedPinId.value = null;
+  } catch {
+    showToast('Failed to apply pin', 'error');
+  }
 }
 
-function unpin(pin: VersionPin) {
-  pin.status = 'unpinned';
-  showToast(`${pin.componentName} unpinned — will follow latest`, 'info');
+async function unpin(pin: VersionPin) {
+  try {
+    const updated = await versionPinsApi.unpinPin(pin.id);
+    const idx = pins.value.findIndex((p) => p.id === pin.id);
+    if (idx !== -1) pins.value[idx] = updated;
+    showToast(`${pin.component_name} unpinned — will follow latest`, 'info');
+    selectedPinId.value = null;
+  } catch {
+    showToast('Failed to unpin', 'error');
+  }
 }
 
-function upgradeAll() {
-  const outdated = pins.value.filter((p) => p.status === 'outdated');
-  outdated.forEach((p) => {
-    p.pinnedVersion = p.latestVersion;
-    p.status = 'pinned';
-    p.pinnedAt = new Date().toISOString();
-  });
-  showToast(`Upgraded ${outdated.length} components to latest`, 'success');
+async function upgradeAll() {
+  try {
+    const res = await versionPinsApi.upgradeAll();
+    showToast(`Upgraded ${res.upgraded} components to latest`, 'success');
+    versionHistory.value = {};
+    await loadPins();
+  } catch {
+    showToast('Failed to upgrade all', 'error');
+  }
 }
 
+async function selectPin(pin: VersionPin) {
+  selectedPinId.value = selectedPinId.value === pin.id ? null : pin.id;
+  if (selectedPinId.value) {
+    await loadVersionHistory(pin.component_id);
+  }
+}
 </script>
 
 <template>
@@ -226,7 +192,9 @@ function upgradeAll() {
       </button>
     </div>
 
-    <div class="main-layout">
+    <div v-if="loading" class="loading-state">Loading version pins…</div>
+
+    <div v-else class="main-layout">
       <!-- Pin list -->
       <div class="pin-list">
         <div
@@ -234,22 +202,22 @@ function upgradeAll() {
           :key="pin.id"
           class="pin-item"
           :class="{ selected: selectedPinId === pin.id }"
-          @click="selectedPinId = selectedPinId === pin.id ? null : pin.id"
+          @click="selectPin(pin)"
         >
           <div class="pin-header">
-            <span class="type-icon">{{ typeIcon(pin.componentType) }}</span>
-            <span class="component-name">{{ pin.componentName }}</span>
+            <span class="type-icon">{{ typeIcon(pin.component_type) }}</span>
+            <span class="component-name">{{ pin.component_name }}</span>
             <span class="status-badge" :style="{ background: statusColor(pin.status) + '22', color: statusColor(pin.status) }">
               {{ pin.status === 'pinned' ? 'up to date' : pin.status }}
             </span>
           </div>
           <div class="pin-bot">
-            Bot: <strong>{{ pin.botName }}</strong>
+            Bot: <strong>{{ pin.bot_name || pin.bot_id || '—' }}</strong>
           </div>
           <div class="pin-versions">
-            <span class="pinned-ver">Pinned: <code>v{{ pin.pinnedVersion }}</code></span>
+            <span class="pinned-ver">Pinned: <code>{{ pin.pinned_version ? `v${pin.pinned_version}` : '—' }}</code></span>
             <span v-if="pin.status === 'outdated'" class="latest-ver">
-              Latest: <code>v{{ pin.latestVersion }}</code>
+              Latest: <code>v{{ pin.latest_version }}</code>
             </span>
           </div>
           <div v-if="pin.status === 'outdated' && pin.changelog" class="changelog-hint">
@@ -262,10 +230,10 @@ function upgradeAll() {
       <!-- Version picker panel -->
       <div v-if="selectedPin" class="version-panel">
         <div class="panel-header">
-          <span class="type-icon">{{ typeIcon(selectedPin.componentType) }}</span>
-          <h3>{{ selectedPin.componentName }}</h3>
+          <span class="type-icon">{{ typeIcon(selectedPin.component_type) }}</span>
+          <h3>{{ selectedPin.component_name }}</h3>
         </div>
-        <p class="panel-desc">Select the version to pin for <strong>{{ selectedPin.botName }}</strong>.</p>
+        <p class="panel-desc">Select the version to pin for <strong>{{ selectedPin.bot_name }}</strong>.</p>
 
         <div class="version-list">
           <label
@@ -273,9 +241,9 @@ function upgradeAll() {
             :key="v.version"
             class="version-row"
             :class="{
-              current: v.version === selectedPin.pinnedVersion,
-              latest: v.version === selectedPin.latestVersion,
-              breaking: v.breaking,
+              current: v.version === selectedPin.pinned_version,
+              latest: v.version === selectedPin.latest_version,
+              breaking: !!v.breaking,
             }"
           >
             <input
@@ -286,16 +254,16 @@ function upgradeAll() {
             <div class="version-info">
               <div class="version-header">
                 <span class="version-num">v{{ v.version }}</span>
-                <span v-if="v.version === selectedPin.pinnedVersion" class="ver-badge current-badge">current pin</span>
-                <span v-else-if="v.version === selectedPin.latestVersion" class="ver-badge latest-badge">latest</span>
+                <span v-if="v.version === selectedPin.pinned_version" class="ver-badge current-badge">current pin</span>
+                <span v-else-if="v.version === selectedPin.latest_version" class="ver-badge latest-badge">latest</span>
                 <span v-if="v.breaking" class="ver-badge breaking-badge">breaking</span>
-                <span class="ver-date">{{ new Date(v.releasedAt).toLocaleDateString() }}</span>
+                <span class="ver-date">{{ v.released_at ? new Date(v.released_at).toLocaleDateString() : '' }}</span>
               </div>
               <div class="version-summary">{{ v.summary }}</div>
             </div>
           </label>
           <div v-if="versionsForSelected.length === 0" class="no-versions">
-            Version history not available — pin will track <code>{{ selectedPin.latestVersion }}</code>.
+            Version history not available — pin will track <code>{{ selectedPin.latest_version }}</code>.
           </div>
         </div>
 
@@ -375,6 +343,13 @@ function upgradeAll() {
   font-weight: 600;
   cursor: pointer;
   margin-left: auto;
+}
+
+.loading-state {
+  text-align: center;
+  padding: 48px;
+  color: var(--text-secondary);
+  font-size: 14px;
 }
 
 .main-layout {

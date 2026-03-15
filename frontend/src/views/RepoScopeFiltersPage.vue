@@ -1,30 +1,15 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
+import { scopeFiltersApi } from '../services/api/scope-filters';
+import type { ScopeFilter, ScopeFilterPattern } from '../services/api/scope-filters';
 
 const showToast = useToast();
 
 type FilterMode = 'allowlist' | 'denylist';
 type PatternType = 'repo' | 'branch' | 'author';
-
-interface ScopeFilter {
-  id: string;
-  botId: string;
-  botName: string;
-  mode: FilterMode;
-  patterns: PatternRule[];
-  enabled: boolean;
-  lastModified: string;
-}
-
-interface PatternRule {
-  id: string;
-  type: PatternType;
-  pattern: string;
-  description: string;
-}
 
 interface TestResult {
   input: string;
@@ -33,45 +18,47 @@ interface TestResult {
   matchedBy?: string;
 }
 
-const filters = ref<ScopeFilter[]>([
-  {
-    id: 'sf-001',
-    botId: 'bot-pr-review',
-    botName: 'PR Review Bot',
-    mode: 'denylist',
-    enabled: true,
-    lastModified: '2026-03-01T00:00:00Z',
-    patterns: [
-      { id: 'p-001', type: 'repo', pattern: '.*-prototype$', description: 'Skip prototype repos' },
-      { id: 'p-002', type: 'repo', pattern: '.*-archive$', description: 'Skip archived repos' },
-      { id: 'p-003', type: 'branch', pattern: 'dependabot/.*', description: 'Skip Dependabot PRs' },
-      { id: 'p-004', type: 'author', pattern: 'renovate\\[bot\\]', description: 'Skip Renovate bot PRs' },
-      { id: 'p-005', type: 'author', pattern: 'github-actions\\[bot\\]', description: 'Skip GH Actions bot PRs' },
-    ],
-  },
-  {
-    id: 'sf-002',
-    botId: 'bot-security',
-    botName: 'Security Audit Bot',
-    mode: 'allowlist',
-    enabled: true,
-    lastModified: '2026-02-15T00:00:00Z',
-    patterns: [
-      { id: 'p-006', type: 'repo', pattern: 'org/backend-.*', description: 'Only backend repos' },
-      { id: 'p-007', type: 'repo', pattern: 'org/api-.*', description: 'Only API repos' },
-      { id: 'p-008', type: 'branch', pattern: 'main|master|release/.*', description: 'Only production branches' },
-    ],
-  },
-]);
+const filters = ref<ScopeFilter[]>([]);
+const loading = ref(false);
 
 const selectedFilterId = ref<string | null>(null);
-const newPattern = ref<Partial<PatternRule>>({ type: 'repo', pattern: '', description: '' });
+const newPattern = ref<Partial<ScopeFilterPattern>>({ type: 'repo', pattern: '', description: '' });
 const testInput = ref('');
 const testType = ref<PatternType>('repo');
 const testResults = ref<TestResult[]>([]);
 const addPatternOpen = ref(false);
 
 const selectedFilter = computed(() => filters.value.find((f) => f.id === selectedFilterId.value));
+
+async function loadFilters() {
+  loading.value = true;
+  try {
+    const resp = await scopeFiltersApi.list();
+    filters.value = resp.filters;
+  } catch {
+    showToast('Failed to load scope filters', 'error');
+  } finally {
+    loading.value = false;
+  }
+}
+
+async function loadFilterDetail(filterId: string) {
+  try {
+    const detail = await scopeFiltersApi.get(filterId);
+    const idx = filters.value.findIndex((f) => f.id === filterId);
+    if (idx !== -1) {
+      filters.value[idx] = detail;
+    }
+  } catch {
+    showToast('Failed to load filter details', 'error');
+  }
+}
+
+onMounted(async () => {
+  await loadFilters();
+  // Pre-load patterns for all filters
+  await Promise.all(filters.value.map((f) => loadFilterDetail(f.id)));
+});
 
 function modeLabel(mode: FilterMode): string {
   return mode === 'allowlist' ? 'Allowlist' : 'Denylist';
@@ -90,13 +77,17 @@ function typeLabel(type: PatternType): string {
   return labels[type];
 }
 
-function removePattern(filter: ScopeFilter, patternId: string) {
-  filter.patterns = filter.patterns.filter((p) => p.id !== patternId);
-  filter.lastModified = new Date().toISOString();
-  showToast('Pattern removed', 'info');
+async function removePattern(filter: ScopeFilter, patternId: string) {
+  try {
+    await scopeFiltersApi.deletePattern(filter.id, patternId);
+    await loadFilterDetail(filter.id);
+    showToast('Pattern removed', 'info');
+  } catch {
+    showToast('Failed to remove pattern', 'error');
+  }
 }
 
-function addPattern(filter: ScopeFilter) {
+async function addPattern(filter: ScopeFilter) {
   if (!newPattern.value.pattern?.trim()) {
     showToast('Pattern cannot be empty', 'error');
     return;
@@ -107,27 +98,41 @@ function addPattern(filter: ScopeFilter) {
     showToast('Invalid regex pattern', 'error');
     return;
   }
-  filter.patterns.push({
-    id: `p-${Date.now()}`,
-    type: newPattern.value.type as PatternType,
-    pattern: newPattern.value.pattern,
-    description: newPattern.value.description || '',
-  });
-  filter.lastModified = new Date().toISOString();
-  newPattern.value = { type: 'repo', pattern: '', description: '' };
-  addPatternOpen.value = false;
-  showToast('Pattern added', 'success');
+  try {
+    await scopeFiltersApi.addPattern(filter.id, {
+      type: newPattern.value.type as PatternType,
+      pattern: newPattern.value.pattern,
+      description: newPattern.value.description || '',
+    });
+    await loadFilterDetail(filter.id);
+    newPattern.value = { type: 'repo', pattern: '', description: '' };
+    addPatternOpen.value = false;
+    showToast('Pattern added', 'success');
+  } catch {
+    showToast('Failed to add pattern', 'error');
+  }
 }
 
-function toggleFilter(filter: ScopeFilter) {
-  filter.enabled = !filter.enabled;
-  showToast(`Scope filter ${filter.enabled ? 'enabled' : 'disabled'}`, 'info');
+async function toggleFilter(filter: ScopeFilter) {
+  const newEnabled = !filter.enabled;
+  try {
+    await scopeFiltersApi.update(filter.id, { enabled: newEnabled });
+    filter.enabled = newEnabled;
+    showToast(`Scope filter ${newEnabled ? 'enabled' : 'disabled'}`, 'info');
+  } catch {
+    showToast('Failed to update filter', 'error');
+  }
 }
 
-function toggleMode(filter: ScopeFilter) {
-  filter.mode = filter.mode === 'allowlist' ? 'denylist' : 'allowlist';
-  filter.lastModified = new Date().toISOString();
-  showToast(`Switched to ${modeLabel(filter.mode)}`, 'info');
+async function toggleMode(filter: ScopeFilter) {
+  const newMode: FilterMode = filter.mode === 'allowlist' ? 'denylist' : 'allowlist';
+  try {
+    await scopeFiltersApi.update(filter.id, { mode: newMode });
+    filter.mode = newMode;
+    showToast(`Switched to ${modeLabel(newMode)}`, 'info');
+  } catch {
+    showToast('Failed to update filter mode', 'error');
+  }
 }
 
 function runTest() {
@@ -136,7 +141,7 @@ function runTest() {
     return;
   }
   const filter = selectedFilter.value;
-  const relevant = filter.patterns.filter((p) => p.type === testType.value);
+  const relevant = (filter.patterns || []).filter((p) => p.type === testType.value);
   let matched = false;
   let matchedBy: string | undefined;
   for (const p of relevant) {
@@ -158,17 +163,20 @@ function runTest() {
       : matched
       ? 'Bot SKIPS (denylist match)'
       : 'Bot FIRES (not in denylist)';
-  testResults.value.unshift({
-    input: testInput.value,
-    type: testType.value,
-    matched,
-    matchedBy: matched ? `${fires} — matched by: ${matchedBy}` : fires,
-  });
+  testResults.value = [
+    {
+      input: testInput.value,
+      type: testType.value,
+      matched,
+      matchedBy: matched ? `${fires} — matched by: ${matchedBy}` : fires,
+    },
+    ...testResults.value,
+  ].slice(0, 10);
   testInput.value = '';
 }
 
 const patternCount = computed(() =>
-  filters.value.reduce((sum, f) => sum + f.patterns.length, 0)
+  filters.value.reduce((sum, f) => sum + (f.patterns?.length ?? 0), 0)
 );
 </script>
 
@@ -204,7 +212,9 @@ const patternCount = computed(() =>
       </div>
     </div>
 
-    <div class="main-layout">
+    <div v-if="loading" class="loading-state">Loading scope filters…</div>
+
+    <div v-else class="main-layout">
       <!-- Filter list -->
       <div class="filter-list">
         <div
@@ -215,7 +225,7 @@ const patternCount = computed(() =>
           @click="selectedFilterId = selectedFilterId === filter.id ? null : filter.id"
         >
           <div class="filter-header">
-            <span class="bot-name">{{ filter.botName }}</span>
+            <span class="bot-name">{{ filter.trigger_name ?? filter.trigger_id }}</span>
             <span class="mode-badge" :style="{ background: modeColor(filter.mode) + '22', color: modeColor(filter.mode) }">
               {{ modeLabel(filter.mode) }}
             </span>
@@ -224,13 +234,17 @@ const patternCount = computed(() =>
             </span>
           </div>
           <div class="pattern-summary">
-            <span v-for="(count, type) in { repo: filter.patterns.filter((p) => p.type === 'repo').length, branch: filter.patterns.filter((p) => p.type === 'branch').length, author: filter.patterns.filter((p) => p.type === 'author').length }" :key="type">
+            <span v-for="(count, type) in { repo: (filter.patterns || []).filter((p) => p.type === 'repo').length, branch: (filter.patterns || []).filter((p) => p.type === 'branch').length, author: (filter.patterns || []).filter((p) => p.type === 'author').length }" :key="type">
               <span v-if="(count as number) > 0" class="type-chip">
                 {{ typeIcon(type as PatternType) }} {{ count }} {{ type }}
               </span>
             </span>
           </div>
-          <div class="filter-meta">Last modified {{ new Date(filter.lastModified).toLocaleDateString() }}</div>
+          <div class="filter-meta">Last modified {{ new Date(filter.updated_at).toLocaleDateString() }}</div>
+        </div>
+
+        <div v-if="filters.length === 0" class="empty-state">
+          No scope filters configured yet.
         </div>
       </div>
 
@@ -289,7 +303,7 @@ const patternCount = computed(() =>
               <span v-if="p.description" class="pattern-desc">{{ p.description }}</span>
               <button class="remove-btn" title="Remove pattern" @click="removePattern(selectedFilter, p.id)">✕</button>
             </div>
-            <div v-if="selectedFilter.patterns.length === 0" class="empty-patterns">
+            <div v-if="!selectedFilter.patterns || selectedFilter.patterns.length === 0" class="empty-patterns">
               No patterns defined. Add a pattern to start filtering.
             </div>
           </div>
@@ -366,6 +380,13 @@ const patternCount = computed(() =>
 .stat-value {
   font-size: 28px;
   font-weight: 700;
+}
+
+.loading-state {
+  text-align: center;
+  padding: 48px;
+  color: var(--text-secondary);
+  font-size: 13px;
 }
 
 .main-layout {
@@ -452,6 +473,16 @@ const patternCount = computed(() =>
 .filter-meta {
   font-size: 11px;
   color: var(--text-secondary);
+}
+
+.empty-state {
+  text-align: center;
+  padding: 32px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  background: var(--surface-2);
+  border: 1px dashed var(--border);
+  border-radius: 8px;
 }
 
 .detail-panel {
