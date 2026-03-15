@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
-import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import { triggerApi, agentApi, teamApi } from '../services/api/index';
 
@@ -184,10 +183,6 @@ const viewBox = '0 0 800 480';
 
 <template>
   <div class="dep-graph">
-    <AppBreadcrumb :items="[
-      { label: 'Bots', action: () => router.push({ name: 'bots' }) },
-      { label: 'Dependency Graph' },
-    ]" />
 
     <PageHeader title="Bot Dependency Graph" subtitle="Visualize relationships between bots, triggers, teams, and agents.">
       <template #actions>

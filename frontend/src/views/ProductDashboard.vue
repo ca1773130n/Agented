@@ -3,7 +3,6 @@ import { ref, computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import type { Product, Project, ProductDashboardData } from '../services/api';
 import { productApi, projectApi, ApiError } from '../services/api';
-import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import EntityLayout from '../layouts/EntityLayout.vue';
 import LoadingState from '../components/base/LoadingState.vue';
 import ProductRoadmapTimeline from '../components/product/ProductRoadmapTimeline.vue';
@@ -166,7 +165,6 @@ function getStatusClass(status: string): string {
   <EntityLayout :load-entity="loadData" entity-label="product">
     <template #default="{ reload: _reload }">
   <div class="product-dashboard">
-    <AppBreadcrumb :items="[{ label: 'Products', action: () => router.push({ name: 'products' }) }, { label: product?.name || 'Product' }]" />
 
     <template v-if="product">
       <!-- Product Status Card -->

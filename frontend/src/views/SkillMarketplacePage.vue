@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
-import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
 import { marketplaceApi, ApiError } from '../services/api';
@@ -173,10 +172,6 @@ async function handleSearch() {
 
 <template>
   <div class="skill-marketplace">
-    <AppBreadcrumb :items="[
-      { label: 'Skills', action: () => router.push({ name: 'skills' }) },
-      { label: 'Marketplace' },
-    ]" />
 
     <PageHeader
       title="Skill Marketplace"

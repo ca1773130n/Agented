@@ -3,7 +3,6 @@ import { ref, computed } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import type { McpServer, Project } from '../services/api';
 import { mcpServerApi, projectApi, ApiError } from '../services/api';
-import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import EntityLayout from '../layouts/EntityLayout.vue';
 import { useToast } from '../composables/useToast';
@@ -216,10 +215,6 @@ function getServerTypeBadgeClass(serverType: string) {
   <EntityLayout :load-entity="loadServer" entity-label="MCP server">
     <template #default="{ reload: _reload }">
   <div class="mcp-server-detail-page">
-    <AppBreadcrumb :items="[
-      { label: 'MCP Servers', action: () => router.push({ name: 'mcp-servers' }) },
-      { label: server?.display_name || server?.name || 'Server' },
-    ]" />
 
     <template v-if="server">
       <!-- Server Header -->

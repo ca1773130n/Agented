@@ -3,7 +3,6 @@ import { ref, onMounted, computed, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import type { AuditRecord, ProjectInfo } from '../services/api';
 import { auditApi, ApiError } from '../services/api';
-import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import LoadingState from '../components/base/LoadingState.vue';
 import DataTable from '../components/base/DataTable.vue';
@@ -133,7 +132,6 @@ onMounted(loadData);
 
 <template>
   <div class="audit-history">
-    <AppBreadcrumb :items="[{ label: 'Dashboards', action: () => router.push({ name: 'dashboards' }) }, { label: 'Audit History' }]" />
 
     <PageHeader :title="pageTitle" :subtitle="pageSubtitle">
       <template #actions>

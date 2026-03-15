@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
-import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import { skillsApi, agentApi, ApiError } from '../services/api';
 import type { SkillInfo, Agent } from '../services/api';
@@ -111,10 +110,6 @@ function agentsForSkill(skill: SkillInfo): Agent[] {
 
 <template>
   <div class="skill-discovery">
-    <AppBreadcrumb :items="[
-      { label: 'Agents', action: () => router.push({ name: 'agents' }) },
-      { label: 'Skill Discovery' },
-    ]" />
 
     <PageHeader
       title="Skill Auto-Discovery"

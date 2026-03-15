@@ -362,7 +362,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <PageLayout :breadcrumbs="[{ label: 'Rules' }]">
+  <PageLayout >
     <PageHeader title="Rules" subtitle="Manage validation and check rules for your Claude Code workflows">
       <template #actions>
         <button class="btn btn-ai" @click="showGenerateModal = true">

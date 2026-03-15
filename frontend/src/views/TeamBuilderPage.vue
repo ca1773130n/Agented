@@ -6,7 +6,6 @@ import { teamApi, agentApi, superAgentApi, ApiError } from '../services/api';
 import TeamCanvas from '../components/canvas/TeamCanvas.vue';
 import TopologyPicker from '../components/teams/TopologyPicker.vue';
 import AgentAssignmentEditor from '../components/teams/AgentAssignmentEditor.vue';
-import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import EntityLayout from '../layouts/EntityLayout.vue';
 import { useToast } from '../composables/useToast';
 import { handleApiError } from '../services/api/error-handler';
@@ -226,11 +225,6 @@ watch(viewMode, (newMode) => {
   <div class="team-builder-page">
     <!-- Header bar -->
     <div class="builder-header">
-      <AppBreadcrumb :items="[
-        { label: 'Teams', action: () => router.push({ name: 'teams' }) },
-        { label: team?.name || 'Team', action: () => router.push({ name: 'team-dashboard', params: { teamId: teamId } }) },
-        { label: 'Builder' },
-      ]" />
       <h2 class="builder-title">{{ team?.name || 'Team Builder' }}</h2>
       <div class="view-toggle">
         <button

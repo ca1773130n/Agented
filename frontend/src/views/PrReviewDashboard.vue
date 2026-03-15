@@ -4,7 +4,6 @@ import { useRouter } from 'vue-router';
 import type { PrReview, PrReviewStats, Trigger, PrHistoryPoint } from '../services/api';
 import { prReviewApi, triggerApi, ApiError } from '../services/api';
 import PrHistoryChart from '../components/security/PrHistoryChart.vue';
-import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import DataTable from '../components/base/DataTable.vue';
 import type { DataTableColumn } from '../components/base/DataTable.vue';
 import StatusBadge from '../components/base/StatusBadge.vue';
@@ -151,7 +150,6 @@ onMounted(loadData);
 
 <template>
   <div class="pr-review-dashboard">
-    <AppBreadcrumb :items="[{ label: 'Dashboards', action: () => router.push({ name: 'dashboards' }) }, { label: 'PR Review' }]" />
 
     <LoadingState v-if="isLoading" message="Loading PR review data..." />
 

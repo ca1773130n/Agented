@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
-import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
 import { botMemoryApi } from '../services/api/bot-memory';
@@ -167,7 +166,6 @@ onMounted(loadBotList);
 
 <template>
   <div class="bot-memory">
-    <AppBreadcrumb :items="[{ label: 'Bots' }, { label: 'Bot Memory Store' }]" />
 
     <PageHeader
       title="Per-Bot Persistent Memory"

@@ -1,8 +1,5 @@
 <script setup lang="ts">
-import AppBreadcrumb from './AppBreadcrumb.vue';
-
 defineProps<{
-  breadcrumbs: Array<{ label: string; action?: () => void }>;
   maxWidth?: string;
   fullHeight?: boolean;
 }>();
@@ -14,7 +11,6 @@ defineProps<{
     :class="{ 'full-height': fullHeight }"
     :style="{ maxWidth: maxWidth || '1400px' }"
   >
-    <AppBreadcrumb :items="breadcrumbs" />
     <slot />
   </div>
 </template>

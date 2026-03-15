@@ -11,7 +11,6 @@ import CostTrendChart from '../components/analytics/CostTrendChart.vue';
 import ExecutionVolumeChart from '../components/analytics/ExecutionVolumeChart.vue';
 import SuccessRateChart from '../components/analytics/SuccessRateChart.vue';
 import BotEffectivenessChart from '../components/analytics/BotEffectivenessChart.vue';
-import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import LoadingState from '../components/base/LoadingState.vue';
 import { useToast } from '../composables/useToast';
@@ -117,10 +116,6 @@ onMounted(loadData);
 
 <template>
   <div class="analytics-dashboard">
-    <AppBreadcrumb :items="[
-      { label: 'Dashboards', action: () => router.push({ name: 'dashboards' }) },
-      { label: 'Analytics' },
-    ]" />
     <PageHeader title="Analytics Dashboard" subtitle="Execution costs, volume, success rates, and bot effectiveness">
       <template #actions>
         <div class="filter-controls">

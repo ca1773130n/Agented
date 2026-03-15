@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
-import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
 import { triggerApi, ApiError } from '../services/api';
@@ -210,11 +209,6 @@ async function rollbackTo(v: PromptVersion) {
 
 <template>
   <div class="prompt-version-history">
-    <AppBreadcrumb :items="[
-      { label: 'Bots', action: () => router.push({ name: 'triggers' }) },
-      ...(botId ? [{ label: 'Bot', action: () => router.push({ name: 'trigger-dashboard', params: { triggerId: botId } }) }] : []),
-      { label: 'Prompt Version History' },
-    ]" />
 
     <PageHeader
       title="Prompt Template Version History"

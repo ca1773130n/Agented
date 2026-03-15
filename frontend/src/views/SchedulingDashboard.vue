@@ -1,6 +1,5 @@
 <template>
   <div class="scheduling-dashboard">
-    <AppBreadcrumb :items="[{ label: 'Dashboards', action: () => router.push({ name: 'dashboards' }) }, { label: 'Scheduling' }]" />
     <PageHeader title="Scheduling & Rotation" subtitle="Monitor agent execution scheduler and account rotation">
       <template #actions>
         <label class="auto-refresh-toggle">
@@ -195,7 +194,6 @@ import {
 } from '../services/api';
 import { useWebMcpTool } from '../composables/useWebMcpTool';
 import RotationTimelineChart from '../components/monitoring/RotationTimelineChart.vue';
-import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import StatCard from '../components/base/StatCard.vue';
 import ErrorState from '../components/base/ErrorState.vue';

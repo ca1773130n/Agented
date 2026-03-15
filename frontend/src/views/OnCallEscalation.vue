@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
-import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
 import { rotationApi, ApiError } from '../services/api';
@@ -126,10 +125,6 @@ function fmtDate(iso: string): string {
 
 <template>
   <div class="oncall-escalation">
-    <AppBreadcrumb :items="[
-      { label: 'Integrations', action: () => router.push({ name: 'integrations' }) },
-      { label: 'On-Call Escalation' },
-    ]" />
 
     <PageHeader
       title="On-Call Escalation"

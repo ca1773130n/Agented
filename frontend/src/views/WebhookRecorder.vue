@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
-import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
 import { executionApi, triggerApi, ApiError } from '../services/api';
@@ -119,10 +118,6 @@ function statusClass(code: number): string {
 
 <template>
   <div class="webhook-recorder">
-    <AppBreadcrumb :items="[
-      { label: 'Webhooks', action: () => router.push({ name: 'triggers' }) },
-      { label: 'Recorder' },
-    ]" />
 
     <PageHeader
       title="Webhook Recorder"

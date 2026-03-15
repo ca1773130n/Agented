@@ -146,7 +146,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <PageLayout :breadcrumbs="[{ label: 'Skills' }]">
+  <PageLayout >
     <PageHeader title="Skill Library" subtitle="Manage your collection of Claude skills">
       <template #actions>
         <button class="btn btn-primary" @click="showAddModal = true">

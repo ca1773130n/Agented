@@ -357,7 +357,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <PageLayout :breadcrumbs="[{ label: 'Commands' }]">
+  <PageLayout >
     <PageHeader title="Commands" subtitle="Manage slash commands for Claude Code interactions">
       <template #actions>
         <button class="btn btn-ai" @click="showGenerateModal = true">

@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
-import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import LoadingState from '../components/base/LoadingState.vue';
 import { useToast } from '../composables/useToast';
@@ -146,10 +145,6 @@ onMounted(loadRules);
 
 <template>
   <div class="webhook-fwd">
-    <AppBreadcrumb :items="[
-      { label: 'Integrations', action: () => router.push({ name: 'triggers' }) },
-      { label: 'Webhook Output Forwarding' },
-    ]" />
 
     <PageHeader
       title="Bot Output Webhook Forwarding"

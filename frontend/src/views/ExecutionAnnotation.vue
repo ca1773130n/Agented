@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
-import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
 import { executionApi, ApiError } from '../services/api';
@@ -117,10 +116,6 @@ const aggStats = computed(() => {
 
 <template>
   <div class="exec-annotation">
-    <AppBreadcrumb :items="[
-      { label: 'Executions', action: () => router.push({ name: 'execution-history' }) },
-      { label: 'Annotation & Feedback' },
-    ]" />
 
     <PageHeader
       title="Execution Annotation & Quality Feedback"

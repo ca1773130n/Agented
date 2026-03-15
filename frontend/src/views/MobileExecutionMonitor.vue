@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router';
-import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import LoadingState from '../components/base/LoadingState.vue';
 import { useToast } from '../composables/useToast';
 
@@ -109,10 +108,6 @@ onUnmounted(() => {
 
 <template>
   <div class="mobile-monitor-page">
-    <AppBreadcrumb :items="[
-      { label: 'Dashboards', action: () => router.push({ name: 'dashboards' }) },
-      { label: 'Mobile Execution Monitor' },
-    ]" />
 
     <LoadingState v-if="isLoading" message="Loading executions..." />
 

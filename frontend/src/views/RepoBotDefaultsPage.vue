@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
-import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
 import { repoBotDefaultsApi } from '../services/api/repo-bot-defaults';
@@ -100,7 +99,6 @@ const totalBound = computed(() => bindings.value.filter(b => b.enabled).length);
 
 <template>
   <div class="repo-defaults">
-    <AppBreadcrumb :items="[{ label: 'Bots' }, { label: 'Repository Default Bots' }]" />
 
     <PageHeader
       title="Repository-Level Default Bots"

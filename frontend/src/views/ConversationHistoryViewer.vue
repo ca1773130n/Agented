@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
-import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
 import { agentApi, agentConversationApi, ApiError } from '../services/api';
@@ -212,7 +211,6 @@ const totalDuration = computed(() => {
 
 <template>
   <div class="page-container">
-    <AppBreadcrumb :items="[{ label: 'Agents' }, { label: 'Conversation History' }]" />
     <PageHeader
       title="Conversation History Viewer"
       subtitle="Full multi-turn AI conversation with tool calls for any agent"

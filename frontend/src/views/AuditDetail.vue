@@ -3,7 +3,6 @@ import { ref, computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import type { AuditRecord } from '../services/api';
 import { auditApi } from '../services/api';
-import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import EntityLayout from '../layouts/EntityLayout.vue';
 import { useToast } from '../composables/useToast';
@@ -78,7 +77,6 @@ async function copyCommand(command: string) {
   <EntityLayout :load-entity="loadAudit" entity-label="audit">
     <template #default="{ reload: _reload }">
     <div class="audit-detail">
-    <AppBreadcrumb :items="[{ label: 'Audit History', action: () => router.back() }, { label: 'Audit Detail' }]" />
 
     <template v-if="audit">
       <PageHeader :title="'Audit: ' + (audit.audit_id || '')" :subtitle="audit.trigger_name ? 'Trigger: ' + audit.trigger_name : undefined">

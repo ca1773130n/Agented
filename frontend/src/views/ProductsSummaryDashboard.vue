@@ -3,7 +3,6 @@ import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import type { Product } from '../services/api';
 import { productApi } from '../services/api';
-import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import LoadingState from '../components/base/LoadingState.vue';
 import StatCard from '../components/base/StatCard.vue';
@@ -80,7 +79,6 @@ onMounted(loadData);
 
 <template>
   <div class="summary-dashboard">
-    <AppBreadcrumb :items="[{ label: 'Dashboards', action: () => router.push({ name: 'dashboards' }) }, { label: 'Products' }]" />
 
     <PageHeader title="Products Overview" subtitle="Summary of all products across the organization">
       <template #actions>

@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
-import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
 import { userSkillsApi, skillSetsApi } from '../services/api';
@@ -166,7 +165,6 @@ function skillColor(skillId: string) {
 
 <template>
   <div class="skill-composer">
-    <AppBreadcrumb :items="[{ label: 'Skills' }, { label: 'Visual Skill Composer' }]" />
 
     <PageHeader
       title="Visual Skill Composer"

@@ -4,7 +4,6 @@ import { useRouter } from 'vue-router';
 import type { HealthAlert, HealthStatusResponse } from '../services/api';
 import { analyticsApi, ApiError } from '../services/api';
 import HealthAlertList from '../components/analytics/HealthAlertList.vue';
-import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import LoadingState from '../components/base/LoadingState.vue';
 import StatCard from '../components/base/StatCard.vue';
 import { useToast } from '../composables/useToast';
@@ -84,10 +83,6 @@ onUnmounted(() => {
 
 <template>
   <div class="health-dashboard">
-    <AppBreadcrumb :items="[
-      { label: 'Dashboards', action: () => router.push({ name: 'dashboards' }) },
-      { label: 'Bot Health Monitor' },
-    ]" />
 
     <LoadingState v-if="isLoading" message="Loading health data..." />
 

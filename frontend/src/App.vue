@@ -3,6 +3,7 @@ import { ref, onMounted, onUnmounted, provide, computed } from 'vue';
 import { setupApi } from './services/api';
 import { useRoute } from 'vue-router';
 import AppSidebar from './components/layout/AppSidebar.vue';
+import AppHeader from './components/layout/AppHeader.vue';
 import ErrorBoundary from './components/base/ErrorBoundary.vue';
 import { registerGenericTools } from './webmcp/generic-tools';
 import { useSidebarCollapse } from './composables/useSidebarCollapse';
@@ -106,53 +107,48 @@ onUnmounted(() => {
   <div :class="['app-layout', { 'sidebar-collapsed': isCollapsed && !isMobile, 'sidebar-mobile': isMobile }]">
     <a href="#main-content" class="skip-to-content">Skip to content</a>
 
-    <!-- Mobile hamburger button -->
-    <button v-if="isMobile && !isMobileOpen" class="mobile-menu-btn" @click="toggleMobile" aria-label="Open navigation menu">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <line x1="3" y1="6" x2="21" y2="6"/>
-        <line x1="3" y1="12" x2="21" y2="12"/>
-        <line x1="3" y1="18" x2="21" y2="18"/>
-      </svg>
-    </button>
+    <AppHeader @toggle-sidebar="toggleMobile" />
 
-    <!-- Mobile backdrop overlay -->
-    <div v-if="isMobile && isMobileOpen" class="sidebar-backdrop" @click="closeMobile"></div>
+    <div class="app-body">
+      <!-- Mobile backdrop overlay -->
+      <div v-if="isMobile && isMobileOpen" class="sidebar-backdrop" @click="closeMobile"></div>
 
-    <!-- Desktop collapse toggle -->
-    <button v-if="!isMobile" class="collapse-toggle" :aria-label="isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'" @click="toggleCollapse">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <polyline v-if="isCollapsed" points="9,18 15,12 9,6"/>
-        <polyline v-else points="15,18 9,12 15,6"/>
-      </svg>
-    </button>
+      <!-- Desktop collapse toggle -->
+      <button v-if="!isMobile" class="collapse-toggle" :aria-label="isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'" @click="toggleCollapse">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline v-if="isCollapsed" points="9,18 15,12 9,6"/>
+          <polyline v-else points="15,18 9,12 15,6"/>
+        </svg>
+      </button>
 
-    <AppSidebar
-      :app-version="appVersion"
-      :health-color="healthColor"
-      :health-tooltip="healthTooltip"
-      :active-execution-count="activeExecutionCount"
-      :custom-triggers="customTriggers"
-      :products="products"
-      :projects="projects"
-      :teams="teams"
-      :plugins="plugins"
-      :sidebar-backends="sidebarBackends"
-      :collapsed="isCollapsed"
-      :is-mobile="isMobile"
-      :mobile-open="isMobileOpen"
-      :sidebar-loading="sidebarLoading"
-      :sidebar-errors="sidebarErrors"
-      @close-mobile="closeMobile"
-      @retry-sidebar-section="retrySidebarSection"
-    />
+      <AppSidebar
+        :app-version="appVersion"
+        :health-color="healthColor"
+        :health-tooltip="healthTooltip"
+        :active-execution-count="activeExecutionCount"
+        :custom-triggers="customTriggers"
+        :products="products"
+        :projects="projects"
+        :teams="teams"
+        :plugins="plugins"
+        :sidebar-backends="sidebarBackends"
+        :collapsed="isCollapsed"
+        :is-mobile="isMobile"
+        :mobile-open="isMobileOpen"
+        :sidebar-loading="sidebarLoading"
+        :sidebar-errors="sidebarErrors"
+        @close-mobile="closeMobile"
+        @retry-sidebar-section="retrySidebarSection"
+      />
 
-    <main id="main-content" class="main-content" tabindex="-1">
-      <div class="content-wrapper" :class="{ 'full-bleed': isFullBleed }">
-        <ErrorBoundary>
-          <router-view />
-        </ErrorBoundary>
-      </div>
-    </main>
+      <main id="main-content" class="main-content" tabindex="-1">
+        <div class="content-wrapper" :class="{ 'full-bleed': isFullBleed }">
+          <ErrorBoundary>
+            <router-view />
+          </ErrorBoundary>
+        </div>
+      </main>
+    </div>
 
     <!-- Toast Notifications -->
     <Teleport to="body">
@@ -301,7 +297,14 @@ body {
 /* App Layout */
 .app-layout {
   display: flex;
+  flex-direction: column;
   min-height: 100vh;
+}
+
+.app-body {
+  display: flex;
+  flex: 1;
+  position: relative;
 }
 
 /* Sidebar */
@@ -309,12 +312,14 @@ body {
   width: var(--sidebar-width);
   background: var(--bg-secondary);
   border-right: 1px solid var(--border-subtle);
-  position: fixed;
-  height: 100vh;
+  position: sticky;
+  top: 48px;
+  height: calc(100vh - 48px);
   display: flex;
   flex-direction: column;
   z-index: 100;
   transition: width var(--transition-normal);
+  flex-shrink: 0;
 }
 
 .sidebar.collapsed {
@@ -650,21 +655,12 @@ body {
 /* Main Content */
 .main-content {
   flex: 1;
-  margin-left: var(--sidebar-width);
-  min-height: 100vh;
+  min-height: calc(100vh - 48px);
+  min-width: 0;
   background: var(--bg-primary);
-  transition: margin-left var(--transition-normal);
-}
-
-.app-layout.sidebar-collapsed .main-content {
-  margin-left: var(--sidebar-width-collapsed);
 }
 
 /* Mobile sidebar styles */
-.app-layout.sidebar-mobile .main-content {
-  margin-left: 0;
-}
-
 .app-layout.sidebar-mobile .sidebar {
   display: none;
 }
@@ -672,30 +668,10 @@ body {
 .app-layout.sidebar-mobile .sidebar.mobile-open {
   display: flex;
   position: fixed;
+  top: 48px;
   z-index: 200;
   width: var(--sidebar-width);
-}
-
-/* Mobile hamburger button */
-.mobile-menu-btn {
-  position: fixed;
-  top: 16px;
-  left: 16px;
-  z-index: 150;
-  padding: 8px;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-default);
-  border-radius: 6px;
-  color: var(--text-primary);
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.mobile-menu-btn svg {
-  width: 20px;
-  height: 20px;
+  height: calc(100vh - 48px);
 }
 
 /* Mobile backdrop */
@@ -708,7 +684,7 @@ body {
 
 /* Collapse toggle button */
 .collapse-toggle {
-  position: fixed;
+  position: absolute;
   bottom: 16px;
   left: calc(var(--sidebar-width) - 14px);
   z-index: 101;
@@ -745,7 +721,7 @@ body {
 
 .content-wrapper.full-bleed {
   padding: 0;
-  height: 100vh;
+  height: calc(100vh - 48px);
   overflow: hidden;
 }
 

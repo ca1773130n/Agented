@@ -3,7 +3,6 @@ import { ref, computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import type { Plugin, PluginComponent } from '../services/api';
 import { pluginApi, ApiError } from '../services/api';
-import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import ConfirmModal from '../components/base/ConfirmModal.vue';
 import EntityLayout from '../layouts/EntityLayout.vue';
@@ -213,7 +212,6 @@ function navigateToComponent(_component: PluginComponent) {
   <EntityLayout :load-entity="loadPlugin" entity-label="plugin">
     <template #default="{ reload: _reload }">
     <div class="plugin-detail-page">
-    <AppBreadcrumb :items="[{ label: 'Plugins', action: () => router.push({ name: 'plugins' }) }, { label: plugin?.name || 'Plugin' }]" />
 
     <template v-if="plugin">
       <!-- Plugin Header -->

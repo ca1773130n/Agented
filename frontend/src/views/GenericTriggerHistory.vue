@@ -3,7 +3,6 @@ import { ref, computed, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import type { AuditRecord, Trigger, ProjectInfo } from '../services/api';
 import { auditApi, triggerApi } from '../services/api';
-import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import DataTable from '../components/base/DataTable.vue';
 import type { DataTableColumn } from '../components/base/DataTable.vue';
@@ -109,7 +108,6 @@ function getStatusVariant(status: string): 'success' | 'danger' | 'neutral' {
   <EntityLayout :load-entity="loadData" entity-label="trigger history">
     <template #default="{ reload: _reload }">
   <div class="trigger-history">
-    <AppBreadcrumb :items="[{ label: 'Dashboards', action: () => router.push({ name: 'dashboards' }) }, { label: trigger?.name || 'Trigger', action: () => router.push({ name: 'trigger-dashboard', params: { triggerId } }) }, { label: 'History' }]" />
 
     <PageHeader :title="(trigger?.name || 'Trigger') + ' History'" subtitle="Execution history and results">
       <template #actions>

@@ -3,7 +3,6 @@ import { ref, computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import type { UserSkill } from '../services/api';
 import { userSkillsApi, ApiError } from '../services/api';
-import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import ConfirmModal from '../components/base/ConfirmModal.vue';
 import EntityLayout from '../layouts/EntityLayout.vue';
@@ -126,7 +125,6 @@ async function confirmDeleteSkill() {
   <EntityLayout :load-entity="loadSkill" entity-label="skill">
     <template #default="{ reload: _reload }">
     <div class="skill-detail-page">
-    <AppBreadcrumb :items="[{ label: 'Skills', action: () => router.push({ name: 'my-skills' }) }, { label: skill?.skill_name || 'Skill' }]" />
 
     <template v-if="skill">
       <PageHeader :title="skill.skill_name || 'Skill'" :subtitle="skill.description">

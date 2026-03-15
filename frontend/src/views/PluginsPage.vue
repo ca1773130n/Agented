@@ -3,7 +3,6 @@ import { ref, onMounted, watch, nextTick } from 'vue';
 import { useRouter } from 'vue-router';
 import type { Plugin, Team, Marketplace } from '../services/api';
 import { pluginApi, teamApi, marketplaceApi, ApiError } from '../services/api';
-import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import EmptyState from '../components/base/EmptyState.vue';
 import ErrorState from '../components/base/ErrorState.vue';
@@ -230,7 +229,6 @@ onMounted(() => {
 
 <template>
   <div class="plugins-page">
-    <AppBreadcrumb :items="[{ label: 'Plugins' }]" />
     <PageHeader title="Plugins" subtitle="Create and manage plugins with skills, hooks, and agents">
       <template #actions>
         <button class="btn btn-explore" @click="router.push({ name: 'explore-plugins' })">

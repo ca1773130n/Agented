@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
-import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import LoadingState from '../components/base/LoadingState.vue';
 import { useToast } from '../composables/useToast';
@@ -133,10 +132,6 @@ onMounted(loadSecrets);
 
 <template>
   <div class="secrets-vault">
-    <AppBreadcrumb :items="[
-      { label: 'Admin', action: () => router.push({ name: 'admin' }) },
-      { label: 'Secrets Vault' },
-    ]" />
 
     <PageHeader title="Secrets Vault" subtitle="Manage encrypted secrets used by your bots. Values are encrypted at rest and audit-logged on access.">
       <template #actions>

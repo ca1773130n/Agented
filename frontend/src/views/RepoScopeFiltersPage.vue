@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
-import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
 import { scopeFiltersApi } from '../services/api/scope-filters';
@@ -182,7 +181,6 @@ const patternCount = computed(() =>
 
 <template>
   <div class="page-container">
-    <AppBreadcrumb :items="[{ label: 'Bots' }, { label: 'Repository Scope Filters' }]" />
     <PageHeader
       title="Repository Scope Filters"
       subtitle="Define per-bot inclusion/exclusion patterns for repos, branches, and PR authors"

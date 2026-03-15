@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
-import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
 import { schedulerApi, ApiError } from '../services/api';
@@ -185,7 +184,6 @@ const highRiskCount = computed(() => botSchedules.value.filter((b) => b.riskLeve
 
 <template>
   <div class="page-container">
-    <AppBreadcrumb :items="[{ label: 'Scheduling' }, { label: 'Smart Schedule Optimizer' }]" />
     <PageHeader
       title="Smart Schedule Optimizer"
       subtitle="AI-powered scheduling that analyzes API rate limit patterns and execution history to avoid peak contention"

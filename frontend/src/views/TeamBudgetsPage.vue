@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
-import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import LoadingState from '../components/base/LoadingState.vue';
 import { useToast } from '../composables/useToast';
 
@@ -90,7 +89,6 @@ onMounted(loadBudgets);
 
 <template>
   <div class="team-budgets-page">
-    <AppBreadcrumb :items="[{ label: 'Teams' }, { label: 'Budgets' }]" />
 
     <div class="page-title-row">
       <div>

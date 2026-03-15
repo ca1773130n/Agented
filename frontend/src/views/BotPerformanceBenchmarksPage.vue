@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
-import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import LoadingState from '../components/base/LoadingState.vue';
 import { useToast } from '../composables/useToast';
@@ -217,7 +216,6 @@ onMounted(loadBenchmarks);
 
 <template>
   <div class="page-container">
-    <AppBreadcrumb :items="[{ label: 'Bots' }, { label: 'Performance Benchmarks' }]" />
     <PageHeader
       title="Bot Performance Benchmarks"
       subtitle="Track execution latency, LLM-as-judge quality scores, and success rates per bot over time"

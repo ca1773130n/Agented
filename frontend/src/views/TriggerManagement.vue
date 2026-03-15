@@ -4,7 +4,6 @@ import type { Trigger, BackendCheck, ProjectPath, Project, Team } from '../servi
 import { triggerApi, utilityApi, projectApi, teamApi, backendApi, ApiError } from '../services/api';
 import AddTriggerModal from '../components/triggers/AddTriggerModal.vue';
 import ConfirmModal from '../components/base/ConfirmModal.vue';
-import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import BackendStatusCard from '../components/triggers/BackendStatusCard.vue';
 import TriggerList from '../components/triggers/TriggerList.vue';
 import TriggerDetailPanel from '../components/triggers/TriggerDetailPanel.vue';
@@ -191,7 +190,6 @@ onMounted(() => {
 
 <template>
   <div class="trigger-management">
-    <AppBreadcrumb :items="[{ label: 'Triggers' }]" />
 
     <BackendStatusCard :claudeStatus="claudeStatus" :opencodeStatus="opencodeStatus" />
 

@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
-import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
 import { monitoringApi, ApiError } from '../services/api';
@@ -221,10 +220,6 @@ function severityColor(val: string): string {
 
 <template>
   <div class="smart-alert-rules">
-    <AppBreadcrumb :items="[
-      { label: 'Monitoring', action: () => router.push({ name: 'alert-grouping' }) },
-      { label: 'Smart Alert Rules' },
-    ]" />
 
     <PageHeader
       title="Smart Alert Rules"

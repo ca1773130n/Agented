@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue';
 import { useRouter } from 'vue-router';
-import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
 import { executionApi, analyticsApi, ApiError } from '../services/api';
@@ -142,10 +141,6 @@ const wordCount = computed(() => generated.value?.split(/\s+/).filter(Boolean).l
 
 <template>
   <div class="changelog-generator">
-    <AppBreadcrumb :items="[
-      { label: 'Tools', action: () => router.push({ name: 'tools' }) },
-      { label: 'Changelog Generator' },
-    ]" />
 
     <PageHeader
       title="Changelog Generator"

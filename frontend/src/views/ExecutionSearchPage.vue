@@ -3,7 +3,6 @@ import { ref } from 'vue';
 import { useRouter } from 'vue-router';
 import type { ExecutionSearchResult } from '../services/api';
 import { specializedBotApi, ApiError } from '../services/api';
-import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
 
@@ -72,10 +71,6 @@ function statusClass(status: string): string {
 
 <template>
   <div class="execution-search">
-    <AppBreadcrumb :items="[
-      { label: 'Dashboards', action: () => router.push({ name: 'dashboards' }) },
-      { label: 'Execution Search' },
-    ]" />
 
     <PageHeader title="Execution Search" subtitle="Search execution logs using natural language queries" />
 

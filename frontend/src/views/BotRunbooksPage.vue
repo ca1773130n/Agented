@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
-import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import LoadingState from '../components/base/LoadingState.vue';
 import { useToast } from '../composables/useToast';
 
@@ -135,10 +134,6 @@ onMounted(() => {
 
 <template>
   <div class="runbooks-page">
-    <AppBreadcrumb :items="[
-      { label: 'Bots', action: () => router.push({ name: 'dashboards' }) },
-      { label: 'Bot-Linked Runbooks' },
-    ]" />
 
     <LoadingState v-if="isLoading" message="Loading runbooks..." />
 

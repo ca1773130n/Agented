@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
-import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import { useToast } from '../composables/useToast';
 import { triggerApi } from '../services/api';
 
@@ -79,7 +78,6 @@ function copyWebhookUrl() {
 
 <template>
   <div class="github-actions-page">
-    <AppBreadcrumb :items="[{ label: 'Integrations' }, { label: 'GitHub Actions' }]" />
 
     <div class="page-title-row">
       <div>

@@ -891,7 +891,7 @@ describe('Cross-component integration', () => {
     for (const Component of components) {
       const wrapper = mount(Component, {
         global: {
-          stubs: { AppBreadcrumb: true, PageHeader: true },
+          stubs: { PageHeader: true },
         },
       })
       await flushPromises()
@@ -906,7 +906,7 @@ describe('Cross-component integration', () => {
     const BotDryRun = (await import('../views/BotDryRun.vue')).default
     const wrapper = mount(BotDryRun, {
       global: {
-        stubs: { AppBreadcrumb: true, PageHeader: true },
+        stubs: { PageHeader: true },
       },
     })
     await flushPromises()
@@ -927,7 +927,7 @@ describe('Loading and error states', () => {
     const BotDryRun = (await import('../views/BotDryRun.vue')).default
     const wrapper = mount(BotDryRun, {
       global: {
-        stubs: { AppBreadcrumb: true, PageHeader: true },
+        stubs: { PageHeader: true },
       },
     })
 
@@ -942,7 +942,7 @@ describe('Loading and error states', () => {
     const MultiRepoFanOut = (await import('../views/MultiRepoFanOut.vue')).default
     const wrapper = mount(MultiRepoFanOut, {
       global: {
-        stubs: { AppBreadcrumb: true, PageHeader: true },
+        stubs: { PageHeader: true },
       },
     })
     await flushPromises()
@@ -957,7 +957,7 @@ describe('Loading and error states', () => {
     const NLCreator = (await import('../views/NaturalLanguageBotCreator.vue')).default
     const wrapper = mount(NLCreator, {
       global: {
-        stubs: { AppBreadcrumb: true, PageHeader: true },
+        stubs: { PageHeader: true },
       },
     })
     await flushPromises()
@@ -981,7 +981,7 @@ describe('Loading and error states', () => {
     const ExecutionQueueDashboard = (await import('../views/ExecutionQueueDashboard.vue')).default
     const wrapper = mount(ExecutionQueueDashboard, {
       global: {
-        stubs: { AppBreadcrumb: true, PageHeader: true },
+        stubs: { PageHeader: true },
       },
     })
     await flushPromises()
@@ -997,7 +997,7 @@ describe('Loading and error states', () => {
     const MultiProviderFallback = (await import('../views/MultiProviderFallback.vue')).default
     const wrapper = mount(MultiProviderFallback, {
       global: {
-        stubs: { AppBreadcrumb: true, PageHeader: true },
+        stubs: { PageHeader: true },
       },
     })
     await flushPromises()
@@ -1017,13 +1017,12 @@ describe('Navigation', () => {
     const ExecutionQueueDashboard = (await import('../views/ExecutionQueueDashboard.vue')).default
     const wrapper = mount(ExecutionQueueDashboard, {
       global: {
-        stubs: { AppBreadcrumb: true, PageHeader: true },
+        stubs: { PageHeader: true },
       },
     })
     await flushPromises()
 
-    const breadcrumb = wrapper.findComponent({ name: 'AppBreadcrumb' })
-    expect(breadcrumb.exists()).toBe(true)
+    // AppBreadcrumb removed — breadcrumbs now handled by AppHeader globally
     wrapper.unmount()
   })
 
@@ -1031,13 +1030,12 @@ describe('Navigation', () => {
     const BotDryRun = (await import('../views/BotDryRun.vue')).default
     const wrapper = mount(BotDryRun, {
       global: {
-        stubs: { AppBreadcrumb: true, PageHeader: true },
+        stubs: { PageHeader: true },
       },
     })
     await flushPromises()
 
-    const breadcrumb = wrapper.findComponent({ name: 'AppBreadcrumb' })
-    expect(breadcrumb.exists()).toBe(true)
+    // AppBreadcrumb removed — breadcrumbs now handled by AppHeader globally
     wrapper.unmount()
   })
 
@@ -1047,7 +1045,7 @@ describe('Navigation', () => {
     const NLCreator = (await import('../views/NaturalLanguageBotCreator.vue')).default
     const wrapper = mount(NLCreator, {
       global: {
-        stubs: { AppBreadcrumb: true, PageHeader: true },
+        stubs: { PageHeader: true },
       },
     })
     await flushPromises()

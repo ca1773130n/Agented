@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router';
-import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import LoadingState from '../components/base/LoadingState.vue';
 import StatCard from '../components/base/StatCard.vue';
 import { useToast } from '../composables/useToast';
@@ -151,10 +150,6 @@ onUnmounted(() => { if (refreshInterval) clearInterval(refreshInterval); });
 
 <template>
   <div class="anomaly-page">
-    <AppBreadcrumb :items="[
-      { label: 'Dashboards', action: () => router.push({ name: 'dashboards' }) },
-      { label: 'Execution Anomaly Detection' },
-    ]" />
 
     <LoadingState v-if="isLoading" message="Loading anomaly data..." />
 

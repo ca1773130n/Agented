@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
-import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
 import { triggerApi, ApiError } from '../services/api';
@@ -132,10 +131,6 @@ function highlightPrompt(text: string) {
 
 <template>
   <div class="prompt-editor">
-    <AppBreadcrumb :items="[
-      { label: 'Bots', action: () => router.push({ name: 'triggers' }) },
-      { label: 'Inline Prompt Editor' },
-    ]" />
 
     <PageHeader
       title="Inline Prompt Editor with Live Preview"

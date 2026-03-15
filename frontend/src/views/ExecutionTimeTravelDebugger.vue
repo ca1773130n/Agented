@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
-import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import { executionApi } from '../services/api';
 import type { Execution } from '../services/api';
@@ -173,10 +172,6 @@ function frameTypeColor(type: ExecutionFrame['type']) {
 
 <template>
   <div class="time-travel">
-    <AppBreadcrumb :items="[
-      { label: 'Executions', action: () => router.push({ name: 'execution-history' }) },
-      { label: 'Time-Travel Debugger' },
-    ]" />
 
     <PageHeader
       title="Execution Time-Travel Debugger"

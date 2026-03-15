@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
-import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import LoadingState from '../components/base/LoadingState.vue';
 import { useToast } from '../composables/useToast';
@@ -123,10 +122,6 @@ onMounted(loadRecommendations);
 
 <template>
   <div class="rec-engine">
-    <AppBreadcrumb :items="[
-      { label: 'Bots', action: () => router.push({ name: 'bot-templates' }) },
-      { label: 'Bot Recommendations' },
-    ]" />
 
     <PageHeader
       title="Bot Recommendation Engine"

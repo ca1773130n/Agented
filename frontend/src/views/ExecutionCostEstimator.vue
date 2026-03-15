@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
-import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import { modelPricingApi } from '../services/api/model-pricing';
 
@@ -99,10 +98,6 @@ function speedColor(speed: string): string {
 
 <template>
   <div class="cost-estimator">
-    <AppBreadcrumb :items="[
-      { label: 'Bots', action: () => router.push({ name: 'bots' }) },
-      { label: 'Cost Estimator' },
-    ]" />
 
     <PageHeader
       title="Execution Cost Estimator"

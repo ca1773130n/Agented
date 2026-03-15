@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
-import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import LoadingState from '../components/base/LoadingState.vue';
 
 const router = useRouter();
@@ -63,10 +62,6 @@ onMounted(loadData);
 
 <template>
   <div class="leaderboard-page">
-    <AppBreadcrumb :items="[
-      { label: 'Dashboards', action: () => router.push({ name: 'dashboards' }) },
-      { label: 'Team Automation Leaderboard' },
-    ]" />
 
     <LoadingState v-if="isLoading" message="Loading leaderboard..." />
 

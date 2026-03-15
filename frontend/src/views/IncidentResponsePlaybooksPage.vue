@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
-import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
 import { botTemplateApi, ApiError } from '../services/api';
@@ -173,7 +172,6 @@ function categoryColor(cat: string): string {
 
 <template>
   <div class="incident-playbooks-page">
-    <AppBreadcrumb :items="[{ label: 'Automation', action: () => router.push({ name: 'onboarding-automation' }) }, { label: 'Incident Response Playbooks' }]" />
     <PageHeader
       title="Incident Response Playbooks"
       subtitle="Pre-built bot templates for common incident response steps. Automate the mechanical parts so you can focus on the problem."

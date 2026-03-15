@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
-import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
 import { prReviewApi } from '../services/api/triggers';
@@ -120,7 +119,6 @@ const overallAcceptRate = computed(() => {
 
 <template>
   <div class="page-container">
-    <AppBreadcrumb :items="[{ label: 'Integrations' }, { label: 'PR Review Learning Loop' }]" />
     <PageHeader
       title="PR Review Learning Loop"
       subtitle="Track developer acceptance signals to refine bot prompt coverage over time"

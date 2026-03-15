@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
-import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
 import { settingsApi, triggerApi, ApiError } from '../services/api';
@@ -128,10 +127,6 @@ function typeLabel(t: ContextRule['type']): string {
 
 <template>
   <div class="aci-page">
-    <AppBreadcrumb :items="[
-      { label: 'Bots', action: () => router.push({ name: 'triggers' }) },
-      { label: 'Auto Context Injection' },
-    ]" />
 
     <PageHeader
       title="Automatic Codebase Context Injection"

@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
-import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
 import { analyticsApi, ApiError } from '../services/api';
@@ -171,7 +170,6 @@ function exportAsCsv() {
 
 <template>
   <div class="metrics-export">
-    <AppBreadcrumb :items="[{ label: 'Admin' }, { label: 'Metrics Export' }]" />
 
     <PageHeader
       title="Metrics Export"

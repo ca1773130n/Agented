@@ -1,6 +1,5 @@
 <template>
   <div class="service-health-dashboard">
-    <AppBreadcrumb :items="[{ label: 'AI Backends', action: () => router.push({ name: 'ai-backends' }) }, { label: 'Accounts' }]" />
 
     <PageHeader title="Accounts" subtitle="Monitor status and usage of all registered accounts">
       <template #actions>
@@ -57,7 +56,6 @@ import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { orchestrationApi, type AccountHealth } from '../services/api';
 import ServiceHealthGrid from '../components/monitoring/ServiceHealthGrid.vue';
-import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import ErrorState from '../components/base/ErrorState.vue';
 import EmptyState from '../components/base/EmptyState.vue';

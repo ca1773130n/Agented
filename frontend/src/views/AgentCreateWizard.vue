@@ -4,7 +4,6 @@ import { useRouter } from 'vue-router';
 import { agentConversationApi } from '../services/api';
 import { useConversation, createConfigParser } from '../composables/useConversation';
 import AiChatPanel from '../components/ai/AiChatPanel.vue';
-import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import { useToast } from '../composables/useToast';
 import { useWebMcpTool } from '../composables/useWebMcpTool';
 
@@ -78,10 +77,6 @@ onMounted(() => {
 <template>
   <div class="wizard-page">
     <div class="wizard-header">
-      <AppBreadcrumb :items="[
-        { label: 'Agents', action: () => abandonConversation() },
-        { label: 'Create Agent' },
-      ]" />
       <div class="header-title">
         <h1>Design Agent</h1>
         <p>Chat with Claude to design your AI agent</p>

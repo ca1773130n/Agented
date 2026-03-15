@@ -188,7 +188,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <PageLayout :breadcrumbs="[{ label: 'Agents' }]">
+  <PageLayout >
     <PageHeader title="Agents" subtitle="Manage AI agents with rich context and autonomous capabilities">
       <template #actions>
         <button class="btn btn-primary" @click="router.push({ name: 'agent-create' })">

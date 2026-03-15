@@ -328,24 +328,6 @@ function handleSidebarKeydown(e: KeyboardEvent) {
     aria-label="Main navigation"
     @keydown="handleSidebarKeydown"
   >
-    <div class="sidebar-header">
-      <div class="logo-mark">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-          <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
-        </svg>
-      </div>
-      <div class="logo-text">
-        <div class="logo-line-2">
-          <span>Agented</span>
-          <span class="version-tag">{{ props.appVersion }}</span>
-          <span class="health-indicator" :style="{ backgroundColor: props.healthColor }" :title="props.healthTooltip"></span>
-          <span v-if="props.activeExecutionCount > 0" class="active-badge" :title="`${props.activeExecutionCount} execution(s) running`">
-            {{ props.activeExecutionCount }}
-          </span>
-        </div>
-      </div>
-    </div>
-
     <div v-if="sidebarLoading" class="sidebar-loading">
       <div class="sidebar-loading-spinner" />
       <span>Loading...</span>

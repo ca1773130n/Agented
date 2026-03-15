@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
-import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import { pipeApi } from '../services/api/bot-pipes';
 import type { BotPipe, BotPipeExecution } from '../services/api/bot-pipes';
@@ -42,10 +41,6 @@ onMounted(async () => {
 
 <template>
   <div class="bot-output-piping">
-    <AppBreadcrumb :items="[
-      { label: 'Bots', action: () => router.push({ name: 'bots' }) },
-      { label: 'Output Piping' },
-    ]" />
 
     <PageHeader
       title="Bot Output Piping"

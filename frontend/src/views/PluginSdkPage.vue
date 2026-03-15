@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
-import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import { pluginApi, ApiError } from '../services/api';
 import type { Plugin } from '../services/api';
@@ -186,10 +185,6 @@ const manifestFields = [
 
 <template>
   <div class="plugin-sdk">
-    <AppBreadcrumb :items="[
-      { label: 'Plugins', action: () => router.push({ name: 'plugins' }) },
-      { label: 'SDK & CLI' },
-    ]" />
 
     <PageHeader
       title="Plugin SDK & CLI"

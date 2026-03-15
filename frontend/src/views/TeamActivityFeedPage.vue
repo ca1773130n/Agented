@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
-import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import { auditApi } from '../services/api';
 import type { AuditEvent } from '../services/api';
@@ -133,10 +132,6 @@ function actorInitials(actor: string): string {
 
 <template>
   <div class="team-activity">
-    <AppBreadcrumb :items="[
-      { label: 'Teams', action: () => router.push({ name: 'teams' }) },
-      { label: 'Activity Feed' },
-    ]" />
 
     <PageHeader
       title="Team Activity Feed"

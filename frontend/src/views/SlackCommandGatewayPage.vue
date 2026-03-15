@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
-import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
 import { slackApi, integrationApi } from '../services/api';
@@ -145,7 +144,6 @@ onMounted(loadData);
 
 <template>
   <div class="slack-gateway">
-    <AppBreadcrumb :items="[{ label: 'Integrations' }, { label: 'Slack Command Gateway' }]" />
     <PageHeader
       title="Slack Command Gateway"
       subtitle="Trigger bots directly from Slack with slash commands — results stream back as threaded replies"

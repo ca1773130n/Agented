@@ -3,7 +3,6 @@ import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import type { HistoryStatsPeriod } from '../services/api';
 import { budgetApi } from '../services/api';
-import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import DataTable from '../components/base/DataTable.vue';
 import type { DataTableColumn } from '../components/base/DataTable.vue';
@@ -103,10 +102,6 @@ onMounted(loadData);
 
 <template>
   <div class="usage-history-page">
-    <AppBreadcrumb :items="[
-      { label: 'Dashboards', action: () => router.push({ name: 'dashboards' }) },
-      { label: 'Usage History' },
-    ]" />
 
     <PageHeader title="Usage History" subtitle="Historical token usage, cost, and rate limit statistics">
       <template #actions>

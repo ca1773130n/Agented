@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
-import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import LoadingState from '../components/base/LoadingState.vue';
 import { useToast } from '../composables/useToast';
@@ -100,10 +99,6 @@ onMounted(loadAlerts);
 
 <template>
   <div class="alert-grouping">
-    <AppBreadcrumb :items="[
-      { label: 'Monitoring', action: () => router.push({ name: 'monitoring' }) },
-      { label: 'Health Alerts' },
-    ]" />
 
     <PageHeader
       title="Health Alerts"

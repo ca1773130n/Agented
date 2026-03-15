@@ -3,7 +3,6 @@ import { ref, onMounted, watch, nextTick } from 'vue';
 import { useRouter } from 'vue-router';
 import type { McpServer } from '../services/api';
 import { mcpServerApi, ApiError } from '../services/api';
-import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import EmptyState from '../components/base/EmptyState.vue';
 import ErrorState from '../components/base/ErrorState.vue';
@@ -181,7 +180,6 @@ onMounted(() => {
 
 <template>
   <div class="mcp-servers-page">
-    <AppBreadcrumb :items="[{ label: 'MCP Servers' }]" />
     <PageHeader title="MCP Servers" subtitle="Manage Model Context Protocol server configurations">
       <template #actions>
         <button class="btn btn-primary" @click="showCreateModal = true">

@@ -121,10 +121,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <PageLayout :breadcrumbs="[
-    { label: 'Plugins', action: () => abandonAndCancel() },
-    { label: 'Design Plugin' },
-  ]" fullHeight maxWidth="100%">
+  <PageLayout fullHeight maxWidth="100%">
   <div class="design-page">
     <div class="design-header">
       <div class="header-title">

@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
-import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import LoadingState from '../components/base/LoadingState.vue';
 import { useToast } from '../composables/useToast';
@@ -132,11 +131,6 @@ onMounted(loadVersions);
 
 <template>
   <div class="version-history">
-    <AppBreadcrumb :items="[
-      { label: 'Bots', action: () => router.push({ name: 'bots' }) },
-      { label: botId || 'Bot', action: () => router.push({ name: 'bot-detail', params: { botId } }) },
-      { label: 'Version History' },
-    ]" />
 
     <PageHeader
       :title="`Version History`"

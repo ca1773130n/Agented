@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
-import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
 import { analyticsApi } from '../services/api/analytics';
@@ -85,7 +84,6 @@ function exportReport() {
 
 <template>
   <div class="page-container">
-    <AppBreadcrumb :items="[{ label: 'Dashboards' }, { label: 'Cross-Team Insights' }]" />
     <PageHeader
       title="Cross-Team Insights Dashboard"
       subtitle="Org-level view of automation activity, common findings, and risk signals across all teams"

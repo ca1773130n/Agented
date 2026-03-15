@@ -3,7 +3,6 @@ import { ref, onMounted, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { triggerApi } from '../services/api';
 import type { Trigger, ProjectPath } from '../services/api';
-import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
 
@@ -153,10 +152,6 @@ onMounted(loadTriggers);
 
 <template>
   <div class="multi-repo">
-    <AppBreadcrumb :items="[
-      { label: 'Triggers', action: () => router.push({ name: 'triggers' }) },
-      { label: 'Multi-Repo Fan-Out' },
-    ]" />
 
     <PageHeader title="Multi-Repo Fan-Out" subtitle="Configure a single trigger watching multiple repos with per-repo bot routing.">
       <template #actions>

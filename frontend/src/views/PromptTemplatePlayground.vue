@@ -2,7 +2,6 @@
 import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { triggerApi, ApiError } from '../services/api';
-import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import LoadingState from '../components/base/LoadingState.vue';
 import { useToast } from '../composables/useToast';
@@ -106,10 +105,6 @@ onMounted(loadBots);
 
 <template>
   <div class="playground">
-    <AppBreadcrumb :items="[
-      { label: 'Bots', action: () => router.push({ name: 'dashboards' }) },
-      { label: 'Prompt Playground' },
-    ]" />
 
     <PageHeader
       title="Prompt Template Playground"

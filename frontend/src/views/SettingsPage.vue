@@ -2,7 +2,6 @@
 import { ref, onMounted, onUnmounted, watch } from 'vue';
 import type { Marketplace } from '../services/api';
 import { marketplaceApi, ApiError } from '../services/api';
-import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import GeneralSettings from '../components/settings/GeneralSettings.vue';
 import MarketplaceSettings from '../components/settings/MarketplaceSettings.vue';
@@ -131,7 +130,6 @@ onUnmounted(() => {
 
 <template>
   <div class="settings-page">
-    <AppBreadcrumb :items="[{ label: 'Settings' }]" />
     <PageHeader title="Settings" subtitle="Application settings and configuration" />
 
     <!-- Tabs -->

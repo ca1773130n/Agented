@@ -6,7 +6,6 @@ import { projectApi, grdApi } from '../services/api';
 import { useToast } from '../composables/useToast';
 import { handleApiError } from '../services/api/error-handler';
 import { usePlanningSession } from '../composables/usePlanningSession';
-import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import EntityLayout from '../layouts/EntityLayout.vue';
 import MilestoneOverview from '../components/grd/MilestoneOverview.vue';
@@ -161,7 +160,6 @@ watch(selectedMilestoneId, () => {
   <EntityLayout :load-entity="loadData" entity-label="planning">
     <template #default>
       <div class="planning-page">
-        <AppBreadcrumb :items="breadcrumbs" />
 
         <PageHeader title="Planning" :subtitle="project?.name || undefined">
           <template #actions>

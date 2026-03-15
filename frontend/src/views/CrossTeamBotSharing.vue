@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
-import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import { teamApi, triggerApi, ApiError } from '../services/api';
 import type { Team, Trigger } from '../services/api';
@@ -80,10 +79,6 @@ const myTeamTriggers = computed(() => {
 
 <template>
   <div class="bot-sharing">
-    <AppBreadcrumb :items="[
-      { label: 'Bots', action: () => router.push({ name: 'bots' }) },
-      { label: 'Bot Sharing' },
-    ]" />
 
     <PageHeader
       title="Cross-Team Bot Sharing"

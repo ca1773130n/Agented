@@ -3,7 +3,6 @@ import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import type { Trigger } from '../services/api';
 import { triggerApi, productApi, projectApi, teamApi, agentApi, ApiError } from '../services/api';
-import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import LoadingState from '../components/base/LoadingState.vue';
 import EmptyState from '../components/base/EmptyState.vue';
 import { useToast } from '../composables/useToast';
@@ -189,7 +188,6 @@ onMounted(() => {
 
 <template>
   <div class="dashboards-page">
-    <AppBreadcrumb :items="[{ label: 'Dashboards' }]" />
     <div class="page-intro">
       <div class="intro-icon">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">

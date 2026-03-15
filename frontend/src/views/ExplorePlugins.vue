@@ -3,7 +3,6 @@ import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import type { MarketplaceSearchResult, Marketplace } from '../services/api';
 import { marketplaceApi, pluginExportApi, ApiError } from '../services/api';
-import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import LoadingState from '../components/base/LoadingState.vue';
 import EmptyState from '../components/base/EmptyState.vue';
@@ -175,7 +174,6 @@ onMounted(async () => {
 
 <template>
   <div class="explore-page">
-    <AppBreadcrumb :items="[{ label: 'Plugins', action: () => router.push({ name: 'plugins' }) }, { label: 'Explore' }]" />
     <PageHeader title="Explore Plugins" subtitle="Search plugins across all registered marketplace registries">
       <template #actions>
         <button class="btn-back" @click="router.push({ name: 'plugins' })">

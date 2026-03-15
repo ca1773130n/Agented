@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
-import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
 import { integrationApi, teamApi, ApiError } from '../services/api';
@@ -221,7 +220,6 @@ const lastTestForChannel = (id: string) => testResults.value.find((r) => r.chann
 
 <template>
   <div class="page-container">
-    <AppBreadcrumb :items="[{ label: 'Integrations' }, { label: 'Notification Channels' }]" />
     <PageHeader
       title="Notification Channels"
       subtitle="Configure Slack, Microsoft Teams, and email channels to receive bot execution results and critical alerts"

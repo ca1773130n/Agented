@@ -8,7 +8,6 @@ import ReplayComparison from '../components/triggers/ReplayComparison.vue';
 import PresenceIndicator from '../components/triggers/PresenceIndicator.vue';
 import ChunkResults from '../components/triggers/ChunkResults.vue';
 import BranchNavigator from '../components/triggers/BranchNavigator.vue';
-import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import LoadingState from '../components/base/LoadingState.vue';
 import EmptyState from '../components/base/EmptyState.vue';
@@ -219,7 +218,6 @@ onMounted(loadData);
 
 <template>
   <div class="execution-history">
-    <AppBreadcrumb :items="[{ label: 'Dashboards', action: () => router.push({ name: 'dashboards' }) }, { label: 'Execution History' }]" />
 
     <PageHeader :title="pageTitle" subtitle="View execution logs and history">
       <template #actions>

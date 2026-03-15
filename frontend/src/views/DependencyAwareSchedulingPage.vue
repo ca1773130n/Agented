@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
-import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
 import { schedulerApi, triggerApi, ApiError } from '../services/api';
@@ -155,7 +154,6 @@ function saveJob() {
 
 <template>
   <div class="dep-scheduling">
-    <AppBreadcrumb :items="[{ label: 'Scheduling' }, { label: 'Dependency-Aware Scheduling' }]" />
 
     <PageHeader
       title="Dependency-Aware Scheduling"

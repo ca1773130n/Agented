@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
-import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import { triggerApi, backendApi } from '../services/api';
 import type { Trigger } from '../services/api';
@@ -186,10 +185,6 @@ const detectedPlaceholders = computed(() => {
 
 <template>
   <div class="ctx-visualizer">
-    <AppBreadcrumb :items="[
-      { label: 'Bots', action: () => router.push({ name: 'bots' }) },
-      { label: 'Context Window Visualizer' },
-    ]" />
 
     <PageHeader
       title="Context Window Visualizer"

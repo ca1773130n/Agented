@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
-import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import { activityFeedApi } from '../services/api/activity-feed';
 const router = useRouter();
@@ -80,10 +79,6 @@ const groupedActivities = computed(() => groupByDate(filtered.value));
 
 <template>
   <div class="activity-timeline">
-    <AppBreadcrumb :items="[
-      { label: 'Projects', action: () => router.push({ name: 'projects' }) },
-      { label: 'Activity Timeline' },
-    ]" />
 
     <PageHeader
       title="Project Activity Timeline"

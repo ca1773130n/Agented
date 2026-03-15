@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
-import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
 import { retentionApi } from '../services/api/retention';
@@ -118,7 +117,6 @@ onMounted(loadPolicies);
 
 <template>
   <div class="data-retention">
-    <AppBreadcrumb :items="[{ label: 'Admin' }, { label: 'Data Retention' }]" />
 
     <PageHeader
       title="Data Retention Policies"

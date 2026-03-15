@@ -224,10 +224,7 @@ async function handleCancel() {
 </script>
 
 <template>
-  <PageLayout :breadcrumbs="[
-    { label: 'Commands', action: () => handleCancel() },
-    { label: isEditMode ? 'Edit Command' : 'Design Command' },
-  ]" fullHeight maxWidth="100%">
+  <PageLayout fullHeight maxWidth="100%">
   <div class="design-page">
     <div class="design-header">
       <DesignModeToggle v-model="designMode" />

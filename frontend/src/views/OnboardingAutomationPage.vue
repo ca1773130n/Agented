@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
-import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
 import { onboardingApi } from '../services/api/onboarding';
@@ -103,7 +102,6 @@ function formatTime(ts: string) {
 
 <template>
   <div class="onboarding-page">
-    <AppBreadcrumb :items="[{ label: 'Bots' }, { label: 'Onboarding Automation' }]" />
     <PageHeader
       title="New Engineer Onboarding Automation"
       subtitle="Automatically run onboarding tasks when a new GitHub org member is added"

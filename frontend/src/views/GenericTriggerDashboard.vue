@@ -6,7 +6,6 @@ import { auditApi, triggerApi, executionApi, ApiError } from '../services/api';
 import ExecutionLogViewer from '../components/triggers/ExecutionLogViewer.vue';
 import PromptVersionHistory from '../components/triggers/PromptVersionHistory.vue';
 import WebhookTestConsole from '../components/triggers/WebhookTestConsole.vue';
-import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import EntityLayout from '../layouts/EntityLayout.vue';
 import { useToast } from '../composables/useToast';
 import { handleApiError } from '../services/api/error-handler';
@@ -181,7 +180,6 @@ function getExecutionStatusClass(status?: string): string {
   <EntityLayout :load-entity="loadData" entity-label="trigger">
     <template #default="{ reload: _reload }">
   <div class="trigger-dashboard">
-    <AppBreadcrumb :items="[{ label: 'Dashboards', action: () => router.push({ name: 'dashboards' }) }, { label: trigger?.name || 'Trigger Dashboard' }]" />
 
     <template v-if="trigger">
       <!-- Trigger Status Card -->

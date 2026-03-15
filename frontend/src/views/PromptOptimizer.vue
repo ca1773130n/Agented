@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
-import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
 import { triggerApi, ApiError } from '../services/api';
@@ -214,10 +213,6 @@ function typeIcon(type: string): string {
 
 <template>
   <div class="prompt-optimizer">
-    <AppBreadcrumb :items="[
-      { label: 'Bots', action: () => router.push({ name: 'bots' }) },
-      { label: 'Prompt Optimizer' },
-    ]" />
 
     <PageHeader title="Prompt Optimizer" subtitle="Analyze trigger prompts to identify patterns and improve quality.">
       <template #actions>

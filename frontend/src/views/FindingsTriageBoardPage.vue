@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
-import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
 import { findingsApi } from '../services/api/findings';
@@ -148,9 +147,6 @@ const criticalOpen = computed(
 
 <template>
   <div class="ftb-page">
-    <AppBreadcrumb
-      :items="[{ label: 'Platform' }, { label: 'Findings Triage Board' }]"
-    />
     <PageHeader
       title="Findings Triage Board"
       description="Triage, assign, and track actionable findings from all security, code review, and analysis bots."

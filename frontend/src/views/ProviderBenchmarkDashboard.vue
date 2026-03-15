@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
-import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
 import { orchestrationApi, backendApi, ApiError } from '../services/api';
@@ -116,10 +115,6 @@ function formatDate(ts: string) {
 
 <template>
   <div class="benchmark-page">
-    <AppBreadcrumb :items="[
-      { label: 'Backends', action: () => router.push({ name: 'ai-backends' }) },
-      { label: 'Provider Benchmarks' },
-    ]" />
 
     <PageHeader
       title="Provider Benchmarking Dashboard"

@@ -3,7 +3,6 @@ import { ref, computed, onUnmounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import type { Project, Team, Product } from '../services/api';
 import { projectApi, teamApi, productApi, ApiError } from '../services/api';
-import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import ProjectMcpPanel from '../components/project/ProjectMcpPanel.vue';
 import EntityLayout from '../layouts/EntityLayout.vue';
@@ -255,11 +254,6 @@ async function retryClone() {
   <EntityLayout :load-entity="loadData" entity-label="project settings">
     <template #default="{ reload: _reload }">
   <div class="settings-page">
-    <AppBreadcrumb :items="[
-      { label: 'Projects', action: () => router.push({ name: 'projects' }) },
-      { label: project?.name || 'Project', action: () => router.push({ name: 'project-dashboard', params: { projectId: projectId } }) },
-      { label: 'Settings' },
-    ]" />
 
     <template v-if="project">
       <PageHeader :title="(project?.name ?? '') + ' Settings'" subtitle="Configure project settings and team assignments" />

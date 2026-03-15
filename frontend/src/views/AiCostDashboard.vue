@@ -2,7 +2,6 @@
 import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { triggerApi, teamApi, ApiError } from '../services/api';
-import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import StatCard from '../components/base/StatCard.vue';
 import { useToast } from '../composables/useToast';
@@ -106,10 +105,6 @@ onMounted(loadData);
 
 <template>
   <div class="cost-dashboard">
-    <AppBreadcrumb :items="[
-      { label: 'Dashboards', action: () => router.push({ name: 'dashboards' }) },
-      { label: 'AI Cost Dashboard' },
-    ]" />
 
     <PageHeader
       title="AI Cost Dashboard"

@@ -5,7 +5,6 @@ import type { UsageSummaryEntry, EntityUsageEntry, BudgetLimit, MonitoringStatus
 import { budgetApi, agentApi, teamApi, triggerApi, monitoringApi, rotationApi } from '../services/api';
 import TokenUsageChart from '../components/monitoring/TokenUsageChart.vue';
 import BudgetLimitForm from '../components/monitoring/BudgetLimitForm.vue';
-import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import TokenBreakdownCard from '../components/monitoring/TokenBreakdownCard.vue';
 import MonitoringSection from '../components/monitoring/MonitoringSection.vue';
@@ -365,7 +364,6 @@ onUnmounted(() => {
 
 <template>
   <div class="token-usage-dashboard">
-    <AppBreadcrumb :items="[{ label: 'Dashboards', action: () => router.push({ name: 'dashboards' }) }, { label: 'Token Usage' }]" />
     <PageHeader title="Token Usage" subtitle="Monitor AI spending across agents and teams">
       <template #actions>
         <div class="period-selector">

@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
-import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
 import { triggerApi, ApiError } from '../services/api';
@@ -150,10 +149,6 @@ async function simulate() {
 
 <template>
   <div class="trigger-sim">
-    <AppBreadcrumb :items="[
-      { label: 'Triggers', action: () => router.push({ name: 'triggers' }) },
-      { label: 'Simulation & Test Harness' },
-    ]" />
 
     <PageHeader
       title="Trigger Simulation & Test Harness"

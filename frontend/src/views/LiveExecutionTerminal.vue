@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue';
-import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import { executionApi } from '../services/api';
 import type { AuthenticatedEventSource } from '../services/api';
@@ -195,7 +194,6 @@ onUnmounted(() => {
 
 <template>
   <div class="live-terminal-page">
-    <AppBreadcrumb :items="[{ label: 'Executions' }, { label: 'Live Terminal' }]" />
     <PageHeader
       title="Live Execution Terminal"
       subtitle="Interactive ANSI-aware terminal view with search, collapsible sections, and mid-execution input"

@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
-import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
 import { payloadTransformerApi } from '../services/api/payload-transformers';
@@ -145,10 +144,6 @@ async function saveRules() {
 
 <template>
   <div class="transformer">
-    <AppBreadcrumb :items="[
-      { label: 'Webhooks', action: () => router.push({ name: 'webhook-recorder' }) },
-      { label: 'Payload Transformer' },
-    ]" />
 
     <PageHeader
       title="Webhook Payload Transformer"

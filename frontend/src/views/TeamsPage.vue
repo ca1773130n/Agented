@@ -4,7 +4,6 @@ import { useRouter } from 'vue-router';
 import type { Team, Agent, TopologyType, GeneratedTeamConfig } from '../services/api';
 import { teamApi, agentApi, ApiError } from '../services/api';
 import TopologyPicker from '../components/teams/TopologyPicker.vue';
-import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import LoadingState from '../components/base/LoadingState.vue';
 import EmptyState from '../components/base/EmptyState.vue';
@@ -412,8 +411,6 @@ onMounted(() => {
         </div>
       </div>
     </Teleport>
-
-    <AppBreadcrumb :items="[{ label: 'Teams' }]" />
     <PageHeader title="Teams" subtitle="Manage your organization's teams and their members">
       <template #actions>
         <button class="btn btn-ai" @click="openGenerateModal">

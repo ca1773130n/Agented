@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
-import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import LoadingState from '../components/base/LoadingState.vue';
 import { useToast } from '../composables/useToast';
@@ -135,12 +134,6 @@ onMounted(loadKeys);
 
 <template>
   <div class="api-keys-page">
-    <AppBreadcrumb
-      :items="[
-        { label: 'Settings', action: () => router.push({ name: 'settings' }) },
-        { label: 'API Keys' },
-      ]"
-    />
 
     <PageHeader
       title="API Keys"

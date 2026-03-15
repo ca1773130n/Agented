@@ -3,7 +3,6 @@ import { ref, computed, watch, onUnmounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import type { Project, HarnessStatusResult, ProjectSkill, Hook, Command, Rule, Agent, TeamMember, ProjectInstallation, SuperAgent, SuperAgentSession } from '../services/api';
 import { projectApi, grdApi, hookApi, commandApi, ruleApi, agentApi, teamApi, superAgentApi, superAgentSessionApi, ApiError } from '../services/api';
-import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import EntityLayout from '../layouts/EntityLayout.vue';
 import InteractiveSetup from '../components/projects/InteractiveSetup.vue';
 import ProjectStatusCard from '../components/projects/ProjectStatusCard.vue';
@@ -416,7 +415,6 @@ function onSetupCompleted() {
   <EntityLayout :load-entity="loadData" entity-label="project">
     <template #default="{ reload: _reload }">
   <div class="project-dashboard">
-    <AppBreadcrumb :items="[{ label: 'Projects', action: () => router.push({ name: 'projects' }) }, { label: project?.name || 'Project' }]" />
 
     <template v-if="project">
       <ProjectStatusCard

@@ -247,10 +247,7 @@ function handleBack() {
 </script>
 
 <template>
-  <PageLayout :breadcrumbs="[
-    { label: 'Rules', action: () => handleBack() },
-    { label: isEditMode ? 'Edit Rule' : 'Design Rule' },
-  ]" fullHeight maxWidth="100%">
+  <PageLayout fullHeight maxWidth="100%">
   <div class="design-page">
     <div class="design-header">
       <DesignModeToggle v-model="designMode" />

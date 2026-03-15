@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
-import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import LoadingState from '../components/base/LoadingState.vue';
 import { useToast } from '../composables/useToast';
@@ -98,10 +97,6 @@ onMounted(loadPendingApprovals);
 
 <template>
   <div class="approval-gates">
-    <AppBreadcrumb :items="[
-      { label: 'Workflows', action: () => router.push({ name: 'workflows' }) },
-      { label: 'Approval Gates' },
-    ]" />
 
     <PageHeader
       title="Human Approval Gates"

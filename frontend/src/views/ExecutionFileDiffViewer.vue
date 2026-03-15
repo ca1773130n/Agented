@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
-import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import { executionApi } from '../services/api/triggers';
 import type { Execution } from '../services/api/types';
@@ -81,10 +80,6 @@ onMounted(async () => {
 
 <template>
   <div class="diff-viewer">
-    <AppBreadcrumb :items="[
-      { label: 'Executions', action: () => router.push({ name: 'execution-history' }) },
-      { label: 'File Diff Viewer' },
-    ]" />
 
     <PageHeader
       title="Execution File Diff Viewer"

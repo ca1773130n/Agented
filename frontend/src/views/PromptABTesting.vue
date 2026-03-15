@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
-import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
 import { triggerApi, analyticsApi, ApiError } from '../services/api';
@@ -211,10 +210,6 @@ function scoreBar(score: number) {
 
 <template>
   <div class="ab-testing">
-    <AppBreadcrumb :items="[
-      { label: 'Bots', action: () => router.push({ name: 'triggers' }) },
-      { label: 'Prompt A/B Testing' },
-    ]" />
 
     <PageHeader
       title="Prompt A/B Testing"

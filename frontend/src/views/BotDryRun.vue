@@ -3,7 +3,6 @@ import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { triggerApi, ApiError } from '../services/api';
 import type { Trigger, DryRunResponse } from '../services/api';
-import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
 
@@ -122,10 +121,6 @@ onMounted(loadTriggers);
 
 <template>
   <div class="bot-dry-run">
-    <AppBreadcrumb :items="[
-      { label: 'Bots', action: () => router.push({ name: 'bots' }) },
-      { label: 'Dry Run' },
-    ]" />
 
     <PageHeader
       title="Bot Dry Run"

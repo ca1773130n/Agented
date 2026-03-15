@@ -3,7 +3,6 @@ import { ref, onMounted, onUnmounted, computed, watch, nextTick } from 'vue';
 import { useRouter } from 'vue-router';
 import type { FileNode, AuthenticatedEventSource } from '../services/api';
 import { skillsApi, userSkillsApi, ApiError } from '../services/api';
-import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import { useToast } from '../composables/useToast';
 import { safeParseSSE } from '../composables/useEventSource';
 import { useWebMcpTool } from '../composables/useWebMcpTool';
@@ -215,7 +214,6 @@ onUnmounted(() => {
 
 <template>
   <div class="playground-page">
-    <AppBreadcrumb :items="[{ label: 'Skills', action: () => router.push({ name: 'my-skills' }) }, { label: 'Playground' }]" />
     <div class="page-header">
       <div class="header-content">
         <h1>Skills Playground</h1>

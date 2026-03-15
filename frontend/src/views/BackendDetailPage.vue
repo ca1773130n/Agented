@@ -2,7 +2,6 @@
   <EntityLayout :load-entity="loadBackend" entity-label="backend">
     <template #default="{ reload: _reload }">
   <div class="backend-detail-page">
-    <AppBreadcrumb :items="[{ label: 'AI Backends', action: () => router.push({ name: 'ai-backends' }) }, { label: backend?.name || 'Backend' }]" />
 
     <template v-if="backend">
       <PageHeader :title="backend.name" :subtitle="backend.description">
@@ -364,7 +363,6 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { backendApi, orchestrationApi, BACKEND_PLAN_OPTIONS, BACKEND_LOGIN_INFO, type AIBackendWithAccounts, type BackendAccount, type AccountHealth, type BackendCapabilities, type RateLimitWindow } from '../services/api';
-import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import EntityLayout from '../layouts/EntityLayout.vue';
 import BackendConnect from '../components/monitoring/BackendConnect.vue';

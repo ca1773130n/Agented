@@ -20,7 +20,6 @@ import {
   pluginApi,
   ApiError
 } from '../services/api';
-import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import LoadingState from '../components/base/LoadingState.vue';
 import HarnessConnectionPanel from '../components/harness/HarnessConnectionPanel.vue';
@@ -267,7 +266,6 @@ onMounted(() => {
 
 <template>
   <div class="harness-page">
-    <AppBreadcrumb :items="[{ label: 'Plugins', action: () => router.push({ name: 'plugins' }) }, { label: 'Harness Integration' }]" />
     <PageHeader
       title="Harness Integration"
       :subtitle="project ? `Configure harness settings for ${project.name}` : 'Build your unified harness configuration for Claude Code'"

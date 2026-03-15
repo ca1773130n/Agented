@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
-import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import { configExportApi, ApiError } from '../services/api';
 
@@ -368,12 +367,6 @@ const charCount = computed(() => previewCode.value.length);
 
 <template>
   <div class="iac-export">
-    <AppBreadcrumb
-      :items="[
-        { label: 'Settings', action: () => router.push({ name: 'settings' }) },
-        { label: 'IaC Export' },
-      ]"
-    />
 
     <PageHeader
       title="Infrastructure-as-Code Export"

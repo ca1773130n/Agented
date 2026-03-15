@@ -3,7 +3,6 @@ import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import type { WeeklyReport } from '../services/api';
 import { analyticsApi, ApiError } from '../services/api';
-import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import LoadingState from '../components/base/LoadingState.vue';
 import StatCard from '../components/base/StatCard.vue';
 import { useToast } from '../composables/useToast';
@@ -55,10 +54,6 @@ onMounted(loadData);
 
 <template>
   <div class="team-report">
-    <AppBreadcrumb :items="[
-      { label: 'Dashboards', action: () => router.push({ name: 'dashboards' }) },
-      { label: 'Weekly Impact Report' },
-    ]" />
 
     <LoadingState v-if="isLoading" message="Loading weekly report..." />
 

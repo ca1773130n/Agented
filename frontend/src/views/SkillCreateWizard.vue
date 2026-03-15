@@ -4,7 +4,6 @@ import { useRouter } from 'vue-router';
 import { skillConversationApi } from '../services/api';
 import { useConversation, createConfigParser } from '../composables/useConversation';
 import AiChatPanel from '../components/ai/AiChatPanel.vue';
-import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import { useToast } from '../composables/useToast';
 import { useWebMcpTool } from '../composables/useWebMcpTool';
 
@@ -76,10 +75,6 @@ onMounted(() => {
 <template>
   <div class="wizard-page">
     <div class="wizard-header">
-      <AppBreadcrumb :items="[
-        { label: 'Skills', action: () => abandonConversation() },
-        { label: 'Create Skill' },
-      ]" />
       <div class="header-title">
         <h1>Design a Skill</h1>
         <p>Chat with Claude to design your custom skill</p>

@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
-import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
 import { prReviewApi, ApiError } from '../services/api';
@@ -96,10 +95,6 @@ function statusClass(s: PRAnnotation['status']) {
 
 <template>
   <div class="pr-annotation">
-    <AppBreadcrumb :items="[
-      { label: 'Integrations', action: () => router.push({ name: 'triggers' }) },
-      { label: 'GitHub PR Annotations' },
-    ]" />
 
     <PageHeader
       title="GitHub PR Annotation Integration"

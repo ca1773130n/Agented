@@ -346,7 +346,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <PageLayout :breadcrumbs="[{ label: 'Hooks' }]">
+  <PageLayout >
     <PageHeader title="Hooks" subtitle="Manage event hooks that trigger on specific Claude Code events">
       <template #actions>
         <button class="btn btn-ai" @click="showGenerateModal = true">

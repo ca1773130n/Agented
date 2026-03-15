@@ -3,7 +3,6 @@ import { ref, computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import type { Team, Agent } from '../services/api';
 import { teamApi, agentApi, ApiError } from '../services/api';
-import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import EntityLayout from '../layouts/EntityLayout.vue';
 import { useToast } from '../composables/useToast';
@@ -100,11 +99,6 @@ async function saveSettings() {
   <EntityLayout :load-entity="loadData" entity-label="team settings">
     <template #default="{ reload: _reload }">
   <div class="settings-page">
-    <AppBreadcrumb :items="[
-      { label: 'Teams', action: () => router.push({ name: 'teams' }) },
-      { label: team?.name || 'Team', action: () => router.push({ name: 'team-dashboard', params: { teamId: teamId } }) },
-      { label: 'Settings' },
-    ]" />
 
     <template v-if="team">
       <PageHeader :title="(team?.name ?? '') + ' Settings'" subtitle="Configure team settings and leadership" />

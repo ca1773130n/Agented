@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
-import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
 import { qualityApi } from '../services/api/quality-ratings';
@@ -95,10 +94,6 @@ function starClass(star: number, rating: number | null, pending: number | undefi
 
 <template>
   <div class="quality-scoring">
-    <AppBreadcrumb :items="[
-      { label: 'Agents', action: () => router.push({ name: 'agents' }) },
-      { label: 'Quality Scoring' },
-    ]" />
 
     <PageHeader
       title="Agent Quality Scoring"

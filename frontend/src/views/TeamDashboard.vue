@@ -5,7 +5,6 @@ import type { Team, TopologyType, SuperAgent, SuperAgentSession } from '../servi
 import { teamApi, superAgentApi, superAgentSessionApi, ApiError } from '../services/api';
 import MessageInbox from '../components/super-agents/MessageInbox.vue';
 import AgentAssignmentEditor from '../components/teams/AgentAssignmentEditor.vue';
-import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import TeamTopologyCard from '../components/teams/TeamTopologyCard.vue';
 import TeamTriggerCard from '../components/teams/TeamTriggerCard.vue';
 import TeamMembersList from '../components/teams/TeamMembersList.vue';
@@ -158,7 +157,6 @@ async function runTeam() {
   <EntityLayout :load-entity="loadData" entity-label="team">
     <template #default="{ reload: _reload }">
   <div class="team-dashboard">
-    <AppBreadcrumb :items="[{ label: 'Teams', action: () => router.push({ name: 'teams' }) }, { label: team?.name || 'Team' }]" />
 
     <template v-if="team">
       <!-- Team Status Card -->

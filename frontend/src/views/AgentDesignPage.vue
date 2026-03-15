@@ -252,7 +252,7 @@ async function toggleEnabled() {
 </script>
 
 <template>
-  <PageLayout :breadcrumbs="[{ label: 'Agents', action: () => router.push({ name: 'agents' }) }, { label: agent?.name || 'Agent' }]" fullHeight maxWidth="100%">
+  <PageLayout fullHeight maxWidth="100%">
   <EntityLayout :load-entity="loadAgent" entity-label="agent">
     <template #default="{ reload: _reload }">
   <div class="design-page">

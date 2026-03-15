@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
-import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
 import { configExportApi, triggerApi, ApiError } from '../services/api';
@@ -145,10 +144,6 @@ function envTypeColor(t: string): string {
 
 <template>
   <div class="env-promotion">
-    <AppBreadcrumb :items="[
-      { label: 'Bots', action: () => router.push({ name: 'bots' }) },
-      { label: 'Environment Promotion' },
-    ]" />
 
     <PageHeader
       title="Environment Promotion"

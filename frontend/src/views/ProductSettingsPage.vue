@@ -3,7 +3,6 @@ import { ref, computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import type { Product, Team } from '../services/api';
 import { productApi, teamApi, ApiError } from '../services/api';
-import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import EntityLayout from '../layouts/EntityLayout.vue';
 import { useToast } from '../composables/useToast';
@@ -100,11 +99,6 @@ async function saveSettings() {
   <EntityLayout :load-entity="loadData" entity-label="product settings">
     <template #default="{ reload: _reload }">
   <div class="settings-page">
-    <AppBreadcrumb :items="[
-      { label: 'Products', action: () => router.push({ name: 'products' }) },
-      { label: product?.name || 'Product', action: () => router.push({ name: 'product-dashboard', params: { productId: productId } }) },
-      { label: 'Settings' },
-    ]" />
 
     <template v-if="product">
       <PageHeader :title="(product?.name ?? '') + ' Settings'" subtitle="Configure product settings and ownership" />

@@ -3,7 +3,6 @@ import { ref, onMounted, computed } from 'vue';
 import { useRouter } from 'vue-router';
 import { orchestrationApi, triggerApi, backendApi } from '../services/api';
 import type { AccountHealth, FallbackChainEntry, Trigger, AIBackend } from '../services/api';
-import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
 
@@ -188,10 +187,6 @@ onMounted(loadData);
 
 <template>
   <div class="mpf-page">
-    <AppBreadcrumb :items="[
-      { label: 'Settings', action: () => router.push({ name: 'settings' }) },
-      { label: 'Multi-Provider Fallback' },
-    ]" />
 
     <PageHeader
       title="Multi-Provider Fallback Chains"

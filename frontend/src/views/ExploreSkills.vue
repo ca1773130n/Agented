@@ -3,7 +3,6 @@ import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import type { MarketplaceSearchResult, Marketplace, SkillsShResult } from '../services/api';
 import { marketplaceApi, skillsShApi, userSkillsApi, ApiError } from '../services/api';
-import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import LoadingState from '../components/base/LoadingState.vue';
 import EmptyState from '../components/base/EmptyState.vue';
@@ -221,7 +220,6 @@ onMounted(async () => {
 
 <template>
   <div class="explore-page">
-    <AppBreadcrumb :items="[{ label: 'Skills', action: () => router.push({ name: 'my-skills' }) }, { label: 'Explore' }]" />
     <PageHeader title="Explore Skills" subtitle="Search skills across marketplace registries and skills.sh">
       <template #actions>
         <button class="btn-back" @click="router.push({ name: 'my-skills' })">

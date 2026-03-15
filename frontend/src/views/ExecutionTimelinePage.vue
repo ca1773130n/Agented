@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue';
 import { useRouter } from 'vue-router';
-import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import { executionApi } from '../services/api/triggers';
 const router = useRouter();
@@ -149,10 +148,6 @@ const summary = computed(() => ({
 
 <template>
   <div class="timeline-page">
-    <AppBreadcrumb :items="[
-      { label: 'Executions', action: () => router.push({ name: 'execution-search' }) },
-      { label: 'Timeline' },
-    ]" />
 
     <PageHeader
       title="Execution Timeline"

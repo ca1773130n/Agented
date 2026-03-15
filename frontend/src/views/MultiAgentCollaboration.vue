@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
-import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
 import { superAgentApi, teamApi, ApiError } from '../services/api';
@@ -134,10 +133,6 @@ function agentStatusColor(s: AgentSpec['status']) {
 
 <template>
   <div class="mac-page">
-    <AppBreadcrumb :items="[
-      { label: 'Bots', action: () => router.push({ name: 'triggers' }) },
-      { label: 'Multi-Agent Collaboration' },
-    ]" />
 
     <PageHeader
       title="Multi-Agent Collaboration Mode"

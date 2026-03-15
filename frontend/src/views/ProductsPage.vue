@@ -3,7 +3,6 @@ import { ref, onMounted, watch, nextTick } from 'vue';
 import { useRouter } from 'vue-router';
 import type { Product, Team } from '../services/api';
 import { productApi, teamApi, ApiError } from '../services/api';
-import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import EmptyState from '../components/base/EmptyState.vue';
 import ErrorState from '../components/base/ErrorState.vue';
@@ -166,7 +165,6 @@ onMounted(() => {
 
 <template>
   <div class="products-page">
-    <AppBreadcrumb :items="[{ label: 'Products' }]" />
     <PageHeader title="Products" subtitle="Manage your product portfolio and their associated projects">
       <template #actions>
         <button class="btn btn-primary" @click="showCreateModal = true">

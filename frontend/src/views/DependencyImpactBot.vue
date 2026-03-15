@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
-import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import LoadingState from '../components/base/LoadingState.vue';
 import { useToast } from '../composables/useToast';
@@ -157,10 +156,6 @@ onMounted(loadTriggers);
 
 <template>
   <div class="dep-impact">
-    <AppBreadcrumb :items="[
-      { label: 'Tools', action: () => router.push({ name: 'tools' }) },
-      { label: 'Dependency Impact' },
-    ]" />
 
     <PageHeader
       title="Dependency Impact Bot"

@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
-import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
 import { prAssignmentApi } from '../services/api/pr-assignment';
@@ -100,7 +99,6 @@ onMounted(loadData);
 
 <template>
   <div class="pr-auto-assignment">
-    <AppBreadcrumb :items="[{ label: 'Integrations' }, { label: 'PR Auto-Assignment' }]" />
     <PageHeader
       title="AI-Powered PR Auto-Assignment"
       subtitle="Automatically assign reviewers based on file ownership rules and contributor expertise"

@@ -6,7 +6,6 @@ import { auditApi, triggerApi, ApiError } from '../services/api';
 import FindingsChart from '../components/security/FindingsChart.vue';
 import RunScanModal from '../components/security/RunScanModal.vue';
 import ResolveIssuesModal from '../components/security/ResolveIssuesModal.vue';
-import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import DataTable from '../components/base/DataTable.vue';
 import type { DataTableColumn } from '../components/base/DataTable.vue';
 import StatusBadge from '../components/base/StatusBadge.vue';
@@ -179,7 +178,6 @@ onMounted(loadData);
 
 <template>
   <div class="security-dashboard">
-    <AppBreadcrumb :items="[{ label: 'Dashboards', action: () => router.push({ name: 'dashboards' }) }, { label: 'Security Scan' }]" />
 
     <LoadingState v-if="isLoading" message="Loading security data..." />
 

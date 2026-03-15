@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
-import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
 import { triggerApi, ApiError } from '../services/api';
@@ -190,10 +189,6 @@ function useExample(ex: string) {
 
 <template>
   <div class="nl-trigger">
-    <AppBreadcrumb :items="[
-      { label: 'Triggers', action: () => router.push({ name: 'triggers' }) },
-      { label: 'Natural Language Rule Editor' },
-    ]" />
 
     <PageHeader
       title="Natural Language Trigger Rule Editor"

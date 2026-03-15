@@ -263,10 +263,7 @@ function handleBack() {
 </script>
 
 <template>
-  <PageLayout :breadcrumbs="[
-    { label: 'Hooks', action: () => handleBack() },
-    { label: isEditMode ? 'Edit Hook' : 'Design Hook' },
-  ]" fullHeight maxWidth="100%">
+  <PageLayout fullHeight maxWidth="100%">
   <div class="design-page">
     <!-- Shared header -->
     <div class="design-header">

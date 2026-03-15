@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
-import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import { projectApi, projectHealthApi } from '../services/api';
 import type { Project, HealthCategory, HealthSignal, HealthRecommendation } from '../services/api';
@@ -147,10 +146,6 @@ function formatLastUpdated(iso: string): string {
 
 <template>
   <div class="scorecard-page">
-    <AppBreadcrumb :items="[
-      { label: 'Projects', action: () => router.push({ name: 'projects' }) },
-      { label: 'Health Scorecard' },
-    ]" />
 
     <PageHeader
       title="Project Health Scorecard"

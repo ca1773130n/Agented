@@ -1,5 +1,5 @@
 <template>
-  <PageLayout :breadcrumbs="[{ label: 'AI Backends' }]">
+  <PageLayout >
     <PageHeader title="AI Backends" subtitle="Manage AI backend providers and accounts">
       <template #actions>
         <button

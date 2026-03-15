@@ -94,6 +94,14 @@ vi.mock('../../components/base/ErrorBoundary.vue', () => ({
   }),
 }));
 
+vi.mock('../../components/layout/AppHeader.vue', () => ({
+  default: defineComponent({
+    name: 'AppHeader',
+    emits: ['toggleSidebar'],
+    template: '<header class="app-header" data-testid="app-header">Header</header>',
+  }),
+}));
+
 // ── Helpers ────────────────────────────────────────────────────────────────
 
 function createTestRouter(meta: Record<string, unknown> = {}): Router {

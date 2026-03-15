@@ -5,7 +5,6 @@ import type { Project, GrdMilestone, GrdPhase, GrdPlan, ConversationMessage, Aut
 import { projectApi, grdApi } from '../services/api';
 import { useToast } from '../composables/useToast';
 import { useWebMcpTool } from '../composables/useWebMcpTool';
-import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import EntityLayout from '../layouts/EntityLayout.vue';
 import MilestoneOverview from '../components/grd/MilestoneOverview.vue';
@@ -335,7 +334,6 @@ onUnmounted(() => {
   <EntityLayout :load-entity="loadData" entity-label="project management">
     <template #default="{ reload: _reload }">
   <div class="project-management-page">
-    <AppBreadcrumb :items="breadcrumbs" />
 
     <template v-if="project">
       <PageHeader title="Project Management" :subtitle="project?.name || undefined">

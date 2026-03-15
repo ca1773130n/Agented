@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
-import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
 import { versionPinsApi } from '../services/api/version-pins';
@@ -143,7 +142,6 @@ async function selectPin(pin: VersionPin) {
 
 <template>
   <div class="page-container">
-    <AppBreadcrumb :items="[{ label: 'Settings' }, { label: 'Skill & Plugin Version Pinning' }]" />
     <PageHeader
       title="Skill & Plugin Version Pinning"
       subtitle="Pin bots to specific component versions and receive alerts when newer versions are available"

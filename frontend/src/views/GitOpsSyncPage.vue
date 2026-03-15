@@ -4,7 +4,6 @@ import { useRouter } from 'vue-router';
 import { ApiError } from '../services/api';
 import { gitopsApi } from '../services/api';
 import type { GitOpsRepo, SyncLog } from '../services/api';
-import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import LoadingState from '../components/base/LoadingState.vue';
 import { useToast } from '../composables/useToast';
@@ -157,10 +156,6 @@ onMounted(loadRepos);
 
 <template>
   <div class="gitops">
-    <AppBreadcrumb :items="[
-      { label: 'Settings', action: () => router.push({ name: 'settings' }) },
-      { label: 'GitOps Sync' },
-    ]" />
 
     <PageHeader
       title="GitOps Repository Sync"

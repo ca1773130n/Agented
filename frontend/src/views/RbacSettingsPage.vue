@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
-import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import LoadingState from '../components/base/LoadingState.vue';
 import { useToast } from '../composables/useToast';
 import { rbacApi, ApiError } from '../services/api';
@@ -127,7 +126,6 @@ onMounted(loadData);
 
 <template>
   <div class="rbac-settings-page">
-    <AppBreadcrumb :items="[{ label: 'Admin' }, { label: 'RBAC Settings' }]" />
 
     <div class="page-title-row">
       <div>

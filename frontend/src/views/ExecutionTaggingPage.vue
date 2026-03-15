@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
-import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
 import { executionTaggingApi } from '../services/api/execution-tagging';
@@ -235,7 +234,6 @@ const tagColors: TagColor[] = ['blue', 'green', 'amber', 'red', 'purple'];
 
 <template>
   <div class="page-container">
-    <AppBreadcrumb :items="[{ label: 'Executions' }, { label: 'Tagging & Search' }]" />
     <PageHeader
       title="Execution Tagging & Full-Text Search"
       subtitle="Tag executions with labels and search across full log output to quickly find relevant runs"

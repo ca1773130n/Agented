@@ -3,7 +3,6 @@ import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import type { Execution } from '../services/api';
 import { executionApi, ApiError } from '../services/api';
-import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import LoadingState from '../components/base/LoadingState.vue';
 import { useToast } from '../composables/useToast';
@@ -132,10 +131,6 @@ onMounted(loadExecutions);
 
 <template>
   <div class="share-page">
-    <AppBreadcrumb :items="[
-      { label: 'Executions', action: () => router.push({ name: 'execution-search' }) },
-      { label: 'Shareable Links' },
-    ]" />
 
     <PageHeader
       title="Shareable Execution Live Links"

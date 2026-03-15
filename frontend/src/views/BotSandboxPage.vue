@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
-import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import LoadingState from '../components/base/LoadingState.vue';
 import { useToast } from '../composables/useToast';
 
@@ -184,10 +183,6 @@ onMounted(loadData);
 
 <template>
   <div class="sandbox-page">
-    <AppBreadcrumb :items="[
-      { label: 'Bots', action: () => router.push({ name: 'dashboards' }) },
-      { label: 'Test Sandbox Environments' },
-    ]" />
 
     <LoadingState v-if="isLoading" message="Loading sandboxes..." />
 

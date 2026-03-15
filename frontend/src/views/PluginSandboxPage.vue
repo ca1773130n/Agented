@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
-import AppBreadcrumb from '../components/base/AppBreadcrumb.vue';
 import LoadingState from '../components/base/LoadingState.vue';
 import { useToast } from '../composables/useToast';
 
@@ -168,7 +167,6 @@ onMounted(loadData);
 
 <template>
   <div class="page-container">
-    <AppBreadcrumb :items="[{ label: 'Plugins' }, { label: 'Sandbox' }]" />
 
     <div class="page-header">
       <div>
