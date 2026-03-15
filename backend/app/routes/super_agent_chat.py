@@ -1,7 +1,6 @@
 """SuperAgent chat API endpoints."""
 
 import logging
-import threading
 from http import HTTPStatus
 from typing import Optional
 
@@ -173,71 +172,16 @@ def _launch_background_thread(
     account_id: Optional[str],
     model: Optional[str],
 ) -> None:
-    """Launch a background thread to stream a single-mode LLM response."""
-    from ..services.chat_state_service import ChatStateService
+    """Launch background thread for LLM streaming using shared helper."""
+    from ..services.streaming_helper import run_streaming_response
 
-    _session_id = session_id
-    _super_agent_id = super_agent_id
-
-    def _stream_response():
-        try:
-            from ..services.conversation_streaming import stream_llm_response
-
-            ChatStateService.push_status(_session_id, "streaming")
-
-            system_prompt = SuperAgentSessionService.assemble_system_prompt(
-                _super_agent_id, _session_id
-            )
-            state = SuperAgentSessionService.get_session_state(_session_id)
-            llm_messages = []
-            if system_prompt:
-                llm_messages.append({"role": "system", "content": system_prompt})
-            if state and state.get("conversation_log"):
-                for msg in state["conversation_log"]:
-                    llm_messages.append(
-                        {"role": msg.get("role", "user"), "content": msg.get("content", "")}
-                    )
-
-            accumulated = []
-            for chunk in stream_llm_response(
-                llm_messages,
-                model=model,
-                account_email=account_id,
-                backend=effective_backend,
-            ):
-                if chunk:
-                    accumulated.append(chunk)
-                    ChatStateService.push_delta(_session_id, "content_delta", {"content": chunk})
-
-            full_response = "".join(accumulated)
-            if full_response:
-                SuperAgentSessionService.add_assistant_message(
-                    _session_id, full_response, backend=effective_backend
-                )
-                if effective_backend:
-                    try:
-                        from ..db.backends import update_backend_last_used
-
-                        update_backend_last_used(effective_backend)
-                    except Exception:
-                        logger.error("Unexpected error in super agent operation", exc_info=True)
-
-            ChatStateService.push_delta(
-                _session_id, "finish", {"content": full_response, "backend": effective_backend}
-            )
-            ChatStateService.push_status(_session_id, "idle")
-
-        except Exception as e:
-            logger.exception("Streaming error for session %s", _session_id)
-            try:
-                ChatStateService.push_delta(_session_id, "error", {"error": str(e)})
-                ChatStateService.push_status(_session_id, "error")
-            except Exception:
-                logger.exception(
-                    "Failed to propagate streaming error to client for session %s", _session_id
-                )
-
-    threading.Thread(target=_stream_response, daemon=True).start()
+    run_streaming_response(
+        session_id=session_id,
+        super_agent_id=super_agent_id,
+        backend=effective_backend,
+        account_id=account_id,
+        model=model,
+    )
 
 
 @super_agent_chat_bp.get("/<super_agent_id>/sessions/<session_id>/chat/stream")
