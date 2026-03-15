@@ -286,19 +286,54 @@ class SketchRoutingService:
             return None
 
     @classmethod
-    def route(cls, classification: dict) -> dict:
+    def route(cls, classification: dict, project_id: str = None) -> dict:
         """Route a classified sketch to a SuperAgent or team target.
+
+        When ``project_id`` is provided, only teams assigned to that project
+        (via the ``project_teams`` join table) and their members are considered.
+        When ``project_id`` is ``None``, all super agents and teams are searched
+        (backward-compatible global search).
 
         Returns dict with target_type, target_id, reason.
         """
+        from ..db.connection import get_connection
         from ..db.super_agents import get_all_super_agents
         from ..db.teams import get_all_teams
 
         phase = classification.get("phase", "")
         domains = classification.get("domains", [])
 
-        super_agents = get_all_super_agents()
-        teams = get_all_teams()
+        if project_id:
+            # Scoped search: only teams assigned to this project
+            with get_connection() as conn:
+                team_rows = conn.execute(
+                    "SELECT t.* FROM teams t "
+                    "JOIN project_teams pt ON t.id = pt.team_id "
+                    "WHERE pt.project_id = ?",
+                    (project_id,),
+                ).fetchall()
+                teams = [dict(r) for r in team_rows]
+
+                if not teams:
+                    return {
+                        "target_type": "none",
+                        "target_id": None,
+                        "reason": "No teams assigned to this project",
+                    }
+
+                team_ids = [t["id"] for t in teams]
+                placeholders = ",".join("?" * len(team_ids))
+                sa_rows = conn.execute(
+                    f"SELECT sa.* FROM super_agents sa "
+                    f"JOIN team_members tm ON sa.id = tm.super_agent_id "
+                    f"WHERE tm.team_id IN ({placeholders})",
+                    team_ids,
+                ).fetchall()
+                super_agents = [dict(r) for r in sa_rows]
+        else:
+            # Global search (existing behavior)
+            super_agents = get_all_super_agents()
+            teams = get_all_teams()
 
         # Research or planning -> find SuperAgent whose name/description matches phase
         if phase in ("research", "planning"):
