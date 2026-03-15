@@ -3794,6 +3794,15 @@ def _migrate_88_payload_transformers(conn):
         logger.debug("idx_payload_transformers_trigger_id already exists: %s", e)
 
 
+def _migrate_add_super_agent_source(conn):
+    """Add source column to super_agents table."""
+    cursor = conn.execute("PRAGMA table_info(super_agents)")
+    existing = {row[1] for row in cursor.fetchall()}
+    if "source" not in existing:
+        conn.execute("ALTER TABLE super_agents ADD COLUMN source TEXT DEFAULT 'ui_created'")
+        conn.commit()
+
+
 VERSIONED_MIGRATIONS = [
     (1, "add_github_columns", _migrate_add_github_columns),
     (2, "add_pr_reviews_table", _migrate_add_pr_reviews_table),
@@ -3898,4 +3907,5 @@ VERSIONED_MIGRATIONS = [
     (88, "onboarding_steps", _migrate_83_onboarding_steps),
     # v0.4.0 webhook payload transformer
     (89, "payload_transformers", _migrate_88_payload_transformers),
+    (90, "add_super_agent_source", _migrate_add_super_agent_source),
 ]

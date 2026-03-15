@@ -817,6 +817,7 @@ def create_fresh_schema(conn):
             max_concurrent_sessions INTEGER DEFAULT 10,
             enabled INTEGER DEFAULT 1,
             config_json TEXT,
+            source TEXT DEFAULT 'ui_created',
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE SET NULL,
