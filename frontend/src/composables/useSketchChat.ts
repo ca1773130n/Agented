@@ -1,7 +1,8 @@
 import { ref, onUnmounted } from 'vue';
 import type { Ref } from 'vue';
 import type { Sketch, Project, ConversationMessage } from '../services/api/types';
-import { sketchApi, projectApi, isAbortError } from '../services/api';
+import { sketchApi, projectApi, isAbortError, superAgentSessionApi } from '../services/api';
+import type { AuthenticatedEventSource } from '../services/api';
 
 /**
  * Parse a JSON block from a string (e.g. a JSON field value).
@@ -23,6 +24,11 @@ export function useSketchChat() {
   const isProcessing: Ref<boolean> = ref(false);
   const messages: Ref<ConversationMessage[]> = ref([]);
   const error: Ref<string | null> = ref(null);
+  const streamingContent = ref('');
+  const isStreaming = ref(false);
+  const executionSessionId = ref<string | null>(null);
+  const executionSuperAgentId = ref<string | null>(null);
+  let eventSource: AuthenticatedEventSource | null = null;
 
   // AbortController for cancelling pending requests on unmount or re-execute
   let abortController = new AbortController();
@@ -116,48 +122,100 @@ export function useSketchChat() {
   }
 
   async function routeSketch(sketchId: string) {
-    isProcessing.value = true;
-    error.value = null;
-
     try {
-      await sketchApi.route(sketchId);
-      if (abortController.signal.aborted) return;
-      const fetched = await sketchApi.get(sketchId);
-      if (abortController.signal.aborted) return;
-      currentSketch.value = fetched;
+      isProcessing.value = true;
+      error.value = null;
 
-      let routingSummary = 'Sketch routed successfully.';
-      if (fetched.routing_json) {
-        const rt = parseJsonBlock(fetched.routing_json) as Record<string, unknown> | null;
-        if (rt) {
-          const parts: string[] = [];
-          if (rt.target_type) parts.push(`Target: ${rt.target_type}`);
-          if (rt.target_id) parts.push(`ID: ${rt.target_id}`);
-          if (rt.reason) parts.push(`Reason: ${rt.reason}`);
-          if (parts.length) routingSummary = parts.join(' | ');
-        }
-      }
+      const routeResult = await sketchApi.route(sketchId);
 
-      messages.value.push({
-        role: 'assistant',
-        content: routingSummary,
+      // Fetch updated sketch
+      const updatedSketch = await sketchApi.get(sketchId);
+      currentSketch.value = updatedSketch;
+
+      // Parse routing info
+      const routing = routeResult.routing || routeResult;
+      const routingMsg: ConversationMessage = {
+        role: 'system',
+        content: `Routed to: ${routing.target_type} (${routing.target_id || 'none'})\nReason: ${routing.reason || 'N/A'}`,
         timestamp: new Date().toISOString(),
-      });
+      };
+      messages.value.push(routingMsg);
 
-      await loadSketches();
-    } catch (e: unknown) {
-      if (isAbortError(e) || abortController.signal.aborted) return;
-      const errMsg = e instanceof Error ? e.message : 'Failed to route sketch';
+      // If execution started, open SSE stream
+      const sessionId = routeResult.session_id;
+      const superAgentId = routeResult.super_agent_id;
+
+      if (sessionId && superAgentId) {
+        executionSessionId.value = sessionId;
+        executionSuperAgentId.value = superAgentId;
+        streamingContent.value = '';
+        isStreaming.value = true;
+
+        // Add placeholder assistant message
+        const assistantMsg: ConversationMessage = {
+          role: 'assistant',
+          content: '',
+          timestamp: new Date().toISOString(),
+        };
+        messages.value.push(assistantMsg);
+        const msgIndex = messages.value.length - 1;
+
+        // Open SSE connection (state_delta protocol — same as Playground)
+        eventSource = superAgentSessionApi.chatStream(superAgentId, sessionId);
+        const source = eventSource.source;
+
+        // All events arrive as 'state_delta' with type in JSON data
+        source.addEventListener('state_delta', (e: MessageEvent) => {
+          try {
+            const data = JSON.parse(e.data);
+            switch (data.type) {
+              case 'content_delta':
+                streamingContent.value += data.content || '';
+                messages.value[msgIndex].content = streamingContent.value;
+                break;
+              case 'finish':
+                isStreaming.value = false;
+                if (eventSource) {
+                  eventSource.close();
+                  eventSource = null;
+                }
+                break;
+              case 'error':
+                isStreaming.value = false;
+                error.value = 'Streaming error occurred. You can retry by routing again.';
+                if (eventSource) {
+                  eventSource.close();
+                  eventSource = null;
+                }
+                break;
+            }
+          } catch {
+            // Ignore unparseable events
+          }
+        });
+
+        source.onerror = () => {
+          if (isStreaming.value) {
+            isStreaming.value = false;
+            error.value = 'Connection lost. You can retry by routing again.';
+            if (eventSource) {
+              eventSource.close();
+              eventSource = null;
+            }
+          }
+        };
+      } else if (routing.target_type === 'none') {
+        messages.value.push({
+          role: 'system',
+          content: 'No matching agent found. Assign a team with super agents to this project first.',
+          timestamp: new Date().toISOString(),
+        });
+      }
+    } catch (err: unknown) {
+      const errMsg = err instanceof Error ? err.message : 'Failed to route sketch';
       error.value = errMsg;
-      messages.value.push({
-        role: 'assistant',
-        content: `Error: ${errMsg}`,
-        timestamp: new Date().toISOString(),
-      });
     } finally {
-      if (!abortController.signal.aborted) {
-        isProcessing.value = false;
-      }
+      isProcessing.value = false;
     }
   }
 
@@ -216,6 +274,10 @@ export function useSketchChat() {
 
   onUnmounted(() => {
     abortController.abort();
+    if (eventSource) {
+      eventSource.close();
+      eventSource = null;
+    }
   });
 
   return {
@@ -226,6 +288,10 @@ export function useSketchChat() {
     isProcessing,
     messages,
     error,
+    isStreaming,
+    streamingContent,
+    executionSessionId,
+    executionSuperAgentId,
     loadProjects,
     loadSketches,
     submitSketch,

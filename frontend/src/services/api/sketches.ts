@@ -30,7 +30,7 @@ export const sketchApi = {
       method: 'POST',
     }),
   route: (id: string) =>
-    apiFetch<{ message: string; routing: Record<string, unknown> }>(`/admin/sketches/${id}/route`, {
+    apiFetch<{ message: string; routing: Record<string, unknown>; session_id?: string; super_agent_id?: string }>(`/admin/sketches/${id}/route`, {
       method: 'POST',
     }),
 };
