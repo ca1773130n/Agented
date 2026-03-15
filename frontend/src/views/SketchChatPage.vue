@@ -34,8 +34,12 @@ const {
   selectedProjectId,
   projects,
   isProcessing,
+  isStreaming,
   messages: rawMessages,
   error,
+  streamingContent,
+  executionSessionId,
+  executionSuperAgentId,
   loadProjects,
   loadSketches,
   submitSketch,
@@ -43,6 +47,13 @@ const {
   selectSketch,
   clearChat,
 } = useSketchChat();
+
+const playgroundLink = computed(() => {
+  if (executionSuperAgentId.value) {
+    return `/super-agents/${executionSuperAgentId.value}/playground`;
+  }
+  return null;
+});
 
 const inputText = ref('');
 const isLoading = ref(true);
@@ -189,7 +200,7 @@ onMounted(() => {
       <AiChatPanel
         :messages="chatMessages"
         :isProcessing="isProcessing"
-        streamingContent=""
+        :streamingContent="streamingContent"
         :inputMessage="inputText"
         :conversationId="currentSketch?.id ?? null"
         :canFinalize="false"
@@ -309,6 +320,13 @@ onMounted(() => {
             <div class="loading-spinner small"></div>
             <span>Processing...</span>
           </div>
+        </div>
+
+        <!-- Continue in Playground link -->
+        <div v-if="playgroundLink && currentSketch?.status === 'completed'" class="continue-link">
+          <router-link :to="playgroundLink" class="playground-btn">
+            Continue in Playground →
+          </router-link>
         </div>
       </div>
     </div>
@@ -655,5 +673,25 @@ onMounted(() => {
   gap: 10px;
   color: var(--text-secondary);
   font-size: 13px;
+}
+
+.continue-link {
+  padding: 12px 16px;
+  border-top: 1px solid var(--color-border);
+}
+
+.playground-btn {
+  display: inline-block;
+  padding: 8px 16px;
+  background: var(--color-primary, #00d4ff);
+  color: var(--color-bg, #0a0a0a);
+  border-radius: 6px;
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 0.85rem;
+}
+
+.playground-btn:hover {
+  opacity: 0.9;
 }
 </style>
