@@ -19,9 +19,7 @@ def _generate_policy_id() -> str:
 def list_policies() -> list[dict]:
     """Return all retention policies ordered by created_at desc."""
     with get_connection() as conn:
-        cursor = conn.execute(
-            "SELECT * FROM retention_policies ORDER BY created_at DESC"
-        )
+        cursor = conn.execute("SELECT * FROM retention_policies ORDER BY created_at DESC")
         return [dict(row) for row in cursor.fetchall()]
 
 

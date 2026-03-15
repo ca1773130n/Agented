@@ -1918,10 +1918,7 @@ def create_fresh_schema(conn):
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """)
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_sfp_filter ON scope_filter_patterns(filter_id)"
-    )
-
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_sfp_filter ON scope_filter_patterns(filter_id)")
 
     # --- v0.4.0: Skill and plugin version pinning ---
     conn.execute("""
@@ -1949,9 +1946,7 @@ def create_fresh_schema(conn):
             summary TEXT
         )
     """)
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_vp_component_id ON version_pins(component_id)"
-    )
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_vp_component_id ON version_pins(component_id)")
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_cvh_component_id ON component_version_history(component_id)"
     )

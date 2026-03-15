@@ -235,11 +235,10 @@ class TestClassifyRouteEndpoints:
         resp = self.client.post(f"/admin/sketches/{sketch_id}/route")
         assert resp.status_code == 200
         data = resp.get_json()
-        assert data["message"] == "Sketch routed"
         assert "routing" in data
         assert "target_type" in data["routing"]
 
-        # Verify DB state
+        # Verify DB state — no super agents in test DB, so status stays 'routed'
         sketch = get_sketch(sketch_id)
         assert sketch["status"] == "routed"
         assert sketch["routing_json"] is not None

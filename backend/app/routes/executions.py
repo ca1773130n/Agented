@@ -189,7 +189,13 @@ def get_execution_diff(path: ExecutionPath):
                             }
                         )
                         old_no += 1
-                chunks.append({"header": str(hunk.section_header).strip() or f"@@ -{hunk.source_start},{hunk.source_length} +{hunk.target_start},{hunk.target_length} @@", "lines": lines})
+                chunks.append(
+                    {
+                        "header": str(hunk.section_header).strip()
+                        or f"@@ -{hunk.source_start},{hunk.source_length} +{hunk.target_start},{hunk.target_length} @@",
+                        "lines": lines,
+                    }
+                )
 
             diffs.append(
                 {
@@ -236,13 +242,34 @@ def get_execution_diff(path: ExecutionPath):
                 new_no = int(new_match.group(1)) if new_match else 1
                 for raw_line in body.splitlines():
                     if raw_line.startswith("+"):
-                        lines.append({"type": "added", "content": raw_line, "oldLineNo": None, "newLineNo": new_no})
+                        lines.append(
+                            {
+                                "type": "added",
+                                "content": raw_line,
+                                "oldLineNo": None,
+                                "newLineNo": new_no,
+                            }
+                        )
                         new_no += 1
                     elif raw_line.startswith("-"):
-                        lines.append({"type": "removed", "content": raw_line, "oldLineNo": old_no, "newLineNo": None})
+                        lines.append(
+                            {
+                                "type": "removed",
+                                "content": raw_line,
+                                "oldLineNo": old_no,
+                                "newLineNo": None,
+                            }
+                        )
                         old_no += 1
                     elif raw_line.startswith(" "):
-                        lines.append({"type": "context", "content": raw_line, "oldLineNo": old_no, "newLineNo": new_no})
+                        lines.append(
+                            {
+                                "type": "context",
+                                "content": raw_line,
+                                "oldLineNo": old_no,
+                                "newLineNo": new_no,
+                            }
+                        )
                         old_no += 1
                         new_no += 1
                 chunks.append({"header": header, "lines": lines})

@@ -67,13 +67,9 @@ def test_upsert_quality_rating_update(isolated_db, app):
 def test_upsert_quality_rating_invalid_range(isolated_db, app):
     """upsert_quality_rating raises ValueError for out-of-range rating."""
     with pytest.raises(ValueError):
-        upsert_quality_rating(
-            execution_id="exec-bad", trigger_id=TRIGGER_A, rating=6, feedback=""
-        )
+        upsert_quality_rating(execution_id="exec-bad", trigger_id=TRIGGER_A, rating=6, feedback="")
     with pytest.raises(ValueError):
-        upsert_quality_rating(
-            execution_id="exec-bad", trigger_id=TRIGGER_A, rating=0, feedback=""
-        )
+        upsert_quality_rating(execution_id="exec-bad", trigger_id=TRIGGER_A, rating=0, feedback="")
 
 
 def test_get_quality_entries_empty(isolated_db, app):

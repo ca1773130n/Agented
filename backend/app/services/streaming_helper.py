@@ -70,9 +70,7 @@ def run_streaming_response(
             ):
                 if chunk:
                     accumulated.append(chunk)
-                    ChatStateService.push_delta(
-                        _session_id, "content_delta", {"content": chunk}
-                    )
+                    ChatStateService.push_delta(_session_id, "content_delta", {"content": chunk})
 
             full_response = "".join(accumulated)
             if full_response:
@@ -103,9 +101,7 @@ def run_streaming_response(
                 ChatStateService.push_delta(_session_id, "error", {"error": error_msg})
                 ChatStateService.push_status(_session_id, "error")
             except Exception:
-                logger.exception(
-                    "Failed to propagate streaming error for session %s", _session_id
-                )
+                logger.exception("Failed to propagate streaming error for session %s", _session_id)
 
             if on_error:
                 on_error(error_msg)

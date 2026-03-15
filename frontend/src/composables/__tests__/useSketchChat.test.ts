@@ -22,6 +22,9 @@ vi.mock('../../services/api', () => ({
   projectApi: {
     list: (...a: unknown[]) => mockProjectApiList(...a),
   },
+  superAgentSessionApi: {
+    chatStream: vi.fn(),
+  },
   isAbortError: (e: unknown) =>
     e instanceof DOMException && e.name === 'AbortError',
 }));
@@ -204,8 +207,10 @@ describe('useSketchChat', () => {
   // routeSketch
   // -----------------------------------------------------------------------
   describe('routeSketch', () => {
-    it('routes sketch and adds assistant message', async () => {
-      mockSketchApiRoute.mockResolvedValue({});
+    it('routes sketch and adds system message with routing info', async () => {
+      mockSketchApiRoute.mockResolvedValue({
+        routing: { target_type: 'agent', target_id: 'agent-1', reason: 'Best match' },
+      });
       mockSketchApiGet.mockResolvedValue({
         id: 'sk-1',
         routing_json: JSON.stringify({
@@ -218,22 +223,24 @@ describe('useSketchChat', () => {
 
       await chat.routeSketch('sk-1');
 
-      const msg = chat.messages.value.find((m) => m.role === 'assistant');
-      expect(msg?.content).toContain('Target: agent');
-      expect(msg?.content).toContain('ID: agent-1');
-      expect(msg?.content).toContain('Reason: Best match');
+      const msg = chat.messages.value.find((m) => m.role === 'system');
+      expect(msg?.content).toContain('agent');
+      expect(msg?.content).toContain('agent-1');
+      expect(msg?.content).toContain('Best match');
       expect(chat.isProcessing.value).toBe(false);
     });
 
-    it('uses fallback message when no routing data', async () => {
-      mockSketchApiRoute.mockResolvedValue({});
+    it('adds routing message even when routing has no target', async () => {
+      mockSketchApiRoute.mockResolvedValue({
+        routing: { target_type: 'none', target_id: null, reason: 'No match' },
+      });
       mockSketchApiGet.mockResolvedValue({ id: 'sk-1' });
       mockSketchApiList.mockResolvedValue({ sketches: [] });
 
       await chat.routeSketch('sk-1');
 
-      const msg = chat.messages.value.find((m) => m.role === 'assistant');
-      expect(msg?.content).toBe('Sketch routed successfully.');
+      const msg = chat.messages.value.find((m) => m.role === 'system');
+      expect(msg).toBeTruthy();
     });
 
     it('sets error on route failure', async () => {

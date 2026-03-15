@@ -119,7 +119,11 @@ def route_sketch_endpoint(path: SketchPath):
     if not classification_raw:
         return {"error": "Sketch must be classified first"}, HTTPStatus.BAD_REQUEST
 
-    classification = json.loads(classification_raw) if isinstance(classification_raw, str) else classification_raw
+    classification = (
+        json.loads(classification_raw)
+        if isinstance(classification_raw, str)
+        else classification_raw
+    )
 
     from ..services.sketch_routing_service import SketchRoutingService
 

@@ -20,7 +20,9 @@ class FindingCreate(BaseModel):
 class FindingUpdate(BaseModel):
     """Request model for partially updating a finding."""
 
-    status: Optional[str] = Field(None, description="New status: open, in_progress, resolved, wont_fix")
+    status: Optional[str] = Field(
+        None, description="New status: open, in_progress, resolved, wont_fix"
+    )
     owner: Optional[str] = Field(None, description="Assigned owner username")
 
 

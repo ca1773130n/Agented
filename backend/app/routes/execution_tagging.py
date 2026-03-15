@@ -106,14 +106,14 @@ def list_tagged_executions():
     Pagination via ``limit`` and ``offset`` query params.
     """
     tag_ids_param = request.args.get("tag_ids")
-    tag_ids = (
-        [t.strip() for t in tag_ids_param.split(",") if t.strip()] if tag_ids_param else None
-    )
+    tag_ids = [t.strip() for t in tag_ids_param.split(",") if t.strip()] if tag_ids_param else None
     try:
         limit = int(request.args.get("limit", 50))
         offset = int(request.args.get("offset", 0))
     except ValueError:
-        return error_response("BAD_REQUEST", "limit and offset must be integers", HTTPStatus.BAD_REQUEST)
+        return error_response(
+            "BAD_REQUEST", "limit and offset must be integers", HTTPStatus.BAD_REQUEST
+        )
 
     executions = get_executions_with_tags(limit=limit, offset=offset, tag_ids=tag_ids)
     return {"executions": executions, "total": len(executions)}, HTTPStatus.OK
@@ -143,9 +143,7 @@ def add_tag_to_execution_route(path: ExecutionPath):
 @execution_tagging_bp.delete("/execution-tagging/<execution_id>/tags/<tag_id>")
 def remove_tag_from_execution_route(path: ExecutionTagPath):
     """Remove a tag from an execution."""
-    removed = remove_tag_from_execution(
-        tag_id=path.tag_id, execution_id=path.execution_id
-    )
+    removed = remove_tag_from_execution(tag_id=path.tag_id, execution_id=path.execution_id)
     if not removed:
         return error_response(
             "NOT_FOUND",

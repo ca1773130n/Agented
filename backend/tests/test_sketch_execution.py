@@ -30,9 +30,7 @@ class TestFindTeamSuperAgent:
     def test_returns_none_for_team_without_super_agents(self, client):
         """Returns None for a team with no super agent members."""
         with get_connection() as conn:
-            conn.execute(
-                "INSERT INTO teams (id, name) VALUES ('team-empty', 'Empty Team')"
-            )
+            conn.execute("INSERT INTO teams (id, name) VALUES ('team-empty', 'Empty Team')")
             conn.commit()
         result = find_team_super_agent("team-empty")
         assert result is None
@@ -58,9 +56,7 @@ class TestExecuteSketch:
         assert session_id is not None
         # Verify status was set to in_progress
         with get_connection() as conn:
-            sketch = conn.execute(
-                "SELECT status FROM sketches WHERE id = 'sk-test'"
-            ).fetchone()
+            sketch = conn.execute("SELECT status FROM sketches WHERE id = 'sk-test'").fetchone()
         assert sketch["status"] == "in_progress"
 
     @patch("app.services.sketch_execution_service.run_streaming_response")

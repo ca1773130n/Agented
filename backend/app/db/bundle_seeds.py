@@ -727,9 +727,7 @@ def seed_bundled_teams_and_agents():
     with get_connection() as conn:
         # 1. Seed teams
         for team in BUNDLED_TEAMS:
-            existing = conn.execute(
-                "SELECT id FROM teams WHERE id = ?", (team["id"],)
-            ).fetchone()
+            existing = conn.execute("SELECT id FROM teams WHERE id = ?", (team["id"],)).fetchone()
             if existing:
                 continue
             conn.execute(
@@ -778,8 +776,7 @@ def seed_bundled_teams_and_agents():
         # 4. Seed identity documents
         for doc in BUNDLED_DOCUMENTS:
             existing = conn.execute(
-                "SELECT id FROM super_agent_documents "
-                "WHERE super_agent_id = ? AND doc_type = ?",
+                "SELECT id FROM super_agent_documents WHERE super_agent_id = ? AND doc_type = ?",
                 (doc["super_agent_id"], doc["doc_type"]),
             ).fetchone()
             if existing:

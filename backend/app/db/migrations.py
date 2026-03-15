@@ -3549,7 +3549,6 @@ def _migrate_78_bot_memory(conn):
         logger.debug("idx_bot_memory_bot already exists: %s", e)
 
 
-
 def _migrate_79_execution_tags(conn):
     """Create execution_tags and execution_tag_assignments tables (v0.4.0)."""
     conn.execute("""
@@ -3574,6 +3573,7 @@ def _migrate_79_execution_tags(conn):
         )
     except Exception as e:
         logger.debug("idx_eta_execution already exists: %s", e)
+
 
 def _migrate_80_bot_pipes(conn):
     """Create bot_pipes and bot_pipe_executions tables for output piping (v0.4.0)."""
@@ -3660,7 +3660,6 @@ def _migrate_83_onboarding_steps(conn):
     )
 
 
-
 def _migrate_85_version_pins(conn):
     """Create version_pins and component_version_history tables."""
     conn.execute("""
@@ -3689,9 +3688,7 @@ def _migrate_85_version_pins(conn):
         )
     """)
     try:
-        conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_vp_component_id ON version_pins(component_id)"
-        )
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_vp_component_id ON version_pins(component_id)")
     except Exception as e:
         logger.debug("idx_vp_component_id already exists: %s", e)
     try:
@@ -3702,7 +3699,6 @@ def _migrate_85_version_pins(conn):
     except Exception as e:
         logger.debug("idx_cvh_component_id already exists: %s", e)
     conn.commit()
-
 
 
 def _migrate_82_add_execution_quality_ratings(conn):
@@ -3746,7 +3742,6 @@ def _migrate_87_skill_sets_table(conn):
     """)
 
 
-
 def _migrate_86_scope_filters(conn):
     """Add scope_filters and scope_filter_patterns tables for RepoScopeFiltersPage."""
     conn.execute("""
@@ -3768,9 +3763,7 @@ def _migrate_86_scope_filters(conn):
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """)
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_sfp_filter ON scope_filter_patterns(filter_id)"
-    )
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_sfp_filter ON scope_filter_patterns(filter_id)")
 
 
 def _migrate_88_payload_transformers(conn):
