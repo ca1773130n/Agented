@@ -593,6 +593,7 @@ from .secrets import (
 from .secrets import (
     update_secret as update_secret_record,
 )
+from .bundle_seeds import seed_bundled_teams_and_agents  # noqa: F401
 from .seeds import (  # noqa: F401
     auto_register_project_root,
     migrate_existing_paths,

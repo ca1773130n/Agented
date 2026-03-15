@@ -113,11 +113,13 @@ def _init_database(app) -> None:  # noqa: ARG001 — app reserved for future con
         seed_predefined_triggers,
         seed_preset_mcp_servers,
     )
+    from .db.bundle_seeds import seed_bundled_teams_and_agents
 
     init_db()
     seed_predefined_triggers()
     seed_preset_mcp_servers()
     seed_bot_templates()
+    seed_bundled_teams_and_agents()
     migrate_existing_paths()
     auto_register_project_root()
 
