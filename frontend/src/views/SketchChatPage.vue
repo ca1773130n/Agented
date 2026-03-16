@@ -40,6 +40,7 @@ const {
   streamingContent,
   executionSessionId,
   executionSuperAgentId,
+  delegations,
   loadProjects,
   loadSketches,
   submitSketch,
@@ -103,14 +104,9 @@ const parsedRouting = computed(() => {
   }
 });
 
-const canRoute = computed(() => {
-  if (!currentSketch.value) return false;
-  return currentSketch.value.status === 'classified';
-});
-
 const showResults = computed(() => {
   if (!currentSketch.value) return false;
-  return ['routed', 'in_progress', 'completed'].includes(currentSketch.value.status);
+  return ['routed', 'in_progress', 'collaborating', 'completed'].includes(currentSketch.value.status);
 });
 
 const SKETCH_ICON_PATHS = [
@@ -128,12 +124,6 @@ function handleKeyDown(e: KeyboardEvent) {
   if (e.key === 'Enter' && !e.shiftKey) {
     e.preventDefault();
     handleSubmit();
-  }
-}
-
-function handleRouteClick() {
-  if (currentSketch.value) {
-    routeSketch(currentSketch.value.id);
   }
 }
 
@@ -288,15 +278,6 @@ onMounted(() => {
         <SketchClassification :classification="parsedClassification" />
         <SketchRouting :routing="parsedRouting" @navigateTo="(view: string, id?: string) => handleNavigateTo(view, id)" />
 
-        <div v-if="canRoute" class="route-action">
-          <button class="btn-route" :disabled="isProcessing" @click="handleRouteClick">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
-              <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/>
-            </svg>
-            Route Sketch
-          </button>
-        </div>
-
         <div v-if="showResults" class="results-panel">
           <h4 class="results-title">Routing Results</h4>
           <div v-if="parsedRouting" class="results-content">
@@ -319,6 +300,18 @@ onMounted(() => {
           <div v-else class="results-pending">
             <div class="loading-spinner small"></div>
             <span>Processing...</span>
+          </div>
+        </div>
+
+        <!-- Team Collaboration -->
+        <div v-if="delegations.length > 0" class="delegations-section">
+          <h4 class="delegations-title">Team Collaboration</h4>
+          <div v-for="d in delegations" :key="d.super_agent_id" class="delegation-card">
+            <div class="delegation-header">
+              <span class="agent-name">{{ d.name }}</span>
+              <span class="delegation-status" :class="'delegation-' + d.status">{{ d.status }}</span>
+            </div>
+            <p class="task-summary">{{ d.task }}</p>
           </div>
         </div>
 
@@ -595,36 +588,6 @@ onMounted(() => {
   color: var(--text-primary);
 }
 
-.route-action {
-  padding: 12px 0;
-}
-
-.btn-route {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 16px;
-  font-size: 13px;
-  font-weight: 500;
-  background: var(--accent-primary);
-  color: #fff;
-  border: none;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: opacity 0.15s;
-  width: 100%;
-  justify-content: center;
-}
-
-.btn-route:hover:not(:disabled) {
-  opacity: 0.9;
-}
-
-.btn-route:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
 .results-panel {
   padding: 12px;
   background: var(--bg-secondary);
@@ -694,4 +657,68 @@ onMounted(() => {
 .playground-btn:hover {
   opacity: 0.9;
 }
+
+/* Team Collaboration */
+.delegations-section {
+  margin-top: 4px;
+}
+
+.delegations-title {
+  margin: 0 0 12px 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.delegation-card {
+  padding: 10px 12px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-default);
+  border-radius: 6px;
+  margin-bottom: 8px;
+}
+
+.delegation-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.agent-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.delegation-status {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  text-transform: uppercase;
+  font-weight: 500;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-default);
+}
+
+.delegation-pending { color: var(--text-secondary); }
+.delegation-in_progress { color: var(--accent-amber); border-color: var(--accent-amber); }
+.delegation-completed { color: var(--accent-emerald); border-color: var(--accent-emerald); }
+.delegation-error { color: var(--accent-rose, #f43f5e); border-color: var(--accent-rose, #f43f5e); }
+
+.task-summary {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Collaborating status badge */
+.status-collaborating { color: var(--accent-amber); border-color: var(--accent-amber); }
 </style>
