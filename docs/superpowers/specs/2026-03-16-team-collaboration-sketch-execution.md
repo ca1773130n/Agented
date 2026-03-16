@@ -168,6 +168,23 @@ def get_delegations(sketch_id):
     return {"delegations": routing.get("delegations", [])}
 ```
 
+### 6. Auto-Route After Classification
+
+**File: `frontend/src/composables/useSketchChat.ts`**
+
+Currently `submitSketch()` creates the sketch, classifies it, then stops. The user must manually click "Route Sketch" to trigger `routeSketch()`.
+
+Change: After `sketchApi.classify()` succeeds, immediately call `routeSketch(sketchId)` within `submitSketch()`. Remove the manual routing trigger from the UI.
+
+**File: `frontend/src/views/SketchChatPage.vue`**
+
+- Remove the "Route Sketch" button from the template
+- The classification → routing → execution flow becomes a single continuous pipeline triggered by message submission
+- Keep the classification and routing display panels (they show progress as each step completes)
+- Add a brief "Routing..." loading indicator between classification and routing result
+
+Flow becomes: User sends message → classify → auto-route → execute leader → delegate to team → done.
+
 ## Files Modified
 
 - `backend/app/services/sketch_execution_service.py` — Team context, delegation parsing, delegate execution
