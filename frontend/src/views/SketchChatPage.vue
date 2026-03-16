@@ -44,7 +44,6 @@ const {
   loadProjects,
   loadSketches,
   submitSketch,
-  routeSketch,
   selectSketch,
   clearChat,
 } = useSketchChat();
