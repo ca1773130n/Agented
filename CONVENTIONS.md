@@ -5,280 +5,134 @@
 
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Agented — bot automation platform. Flask backend + Vue 3 frontend. Manages AI bots that execute CLI tools (Claude, OpenCode) via webhooks, GitHub events, schedules, or manual triggers. Also manages products, projects, teams, agents, plugins, skills, hooks, commands, and rules.
 
-## Project Overview
-
-Agented is a bot automation platform with a Flask backend and Vue.js frontend. It manages AI-powered bots that execute CLI tools (Claude, OpenCode) in response to webhooks, GitHub events, schedules, or manual triggers. The platform also provides organization management for products, projects, teams, agents, plugins, skills, hooks, commands, and rules.
-
-## Development Commands
+## Commands
 
 ```bash
-# Bootstrap (fresh clone — installs just, uv, node if missing)
-bash scripts/setup.sh
+# Setup
+bash scripts/setup.sh            # Bootstrap (fresh clone)
+just setup                       # Install all deps
+just dev-backend                 # Backend on :20000
+just dev-frontend                # Frontend on :3000
+just build                       # Production build (vue-tsc + vite)
+just deploy                      # Build + start both
+just kill                        # Kill ports 3000/20000
 
-# Setup (prerequisites already installed)
-just setup                # Install all dependencies (backend + frontend)
-just setup-backend        # cd backend && uv sync
-just setup-frontend       # cd frontend && npm install
+# Tests
+cd backend && uv run pytest                                           # All backend
+cd backend && uv run pytest tests/test_file.py::test_name -v          # Single test
+cd frontend && npm run test:run                                       # All frontend
 
-# Development (run in separate terminals)
-just dev-backend          # Backend on http://127.0.0.1:20000 (debug mode)
-just dev-frontend         # Frontend on http://localhost:3000
-
-# Build & Deploy
-just build                # Build frontend for production
-just deploy               # Build + start both servers
-just kill                 # Kill processes on ports 3000/20000
-
-# Backend tests
-cd backend && uv run pytest                          # Run all tests
-cd backend && uv run pytest tests/test_github_webhook.py  # Single test file
-cd backend && uv run pytest tests/test_github_webhook.py::test_name -v  # Single test
-
-# Frontend tests
-cd frontend && npm run test:run              # Run all tests once
-cd frontend && npm test                      # Watch mode
-cd frontend && npm run test:coverage         # With coverage
-
-# Formatting
-cd backend && uv run ruff format .           # Format Python (line-length=100)
-
-# Context-Mode MCP Tools (use for large output operations)
-ctx_execute(language, code)            # Run code in sandbox — use instead of Bash for large output
-ctx_execute_file(path, language, code) # Run code against a file — use instead of Read for analysis
-ctx_index(path)                        # Index a file/directory for semantic search
-ctx_search(query)                      # Semantic search across indexed content
-ctx_fetch_and_index(url)               # Fetch a URL and index its content
-ctx_batch_execute(commands, queries)   # Run multiple commands in one call
-ctx_doctor()                           # Run diagnostics on context-mode setup
-ctx_stats()                            # Show context savings stats for current session
-ctx_upgrade()                          # Update context-mode to latest version
+# Format
+cd backend && uv run ruff format .    # line-length=100, py310
 ```
-
-Prefer `ctx_execute` over Bash when command output may exceed ~20 lines. Prefer `ctx_execute_file` over Read when analyzing (not editing) large files.
-
-API docs available at http://localhost:20000/docs (Swagger UI via flask-openapi3).
-
-## Architecture
-
-### Backend (`backend/`)
-
-Flask app using the **flask-openapi3** library (not vanilla Flask). Routes use `APIBlueprint` instead of `Blueprint`, and the app is created with `OpenAPI()` instead of `Flask()`.
-
-**Key patterns:**
-- **App factory**: `app/__init__.py` — `create_app()` initializes DB, scheduler, and registers all blueprints
-- **Database**: `app/database.py` — Raw SQLite with `get_connection()` context manager (no ORM). All CRUD functions are defined directly in this file. DB auto-initializes tables and seeds predefined bots on startup
-- **Models**: `app/models/` — Pydantic v2 models for request/response validation (not DB models)
-- **Routes**: `app/routes/` — API blueprints registered via `register_blueprints()` in `routes/__init__.py`
-- **Services**: `app/services/` — Business logic. `ExecutionService` runs bots via subprocess (CLI invocations of `claude` or `opencode`) with real-time log streaming via threads
-
-**Entity ID conventions**: Prefixed random IDs — `bot-`, `agent-`, `conv-`, `team-`, `prod-`, `proj-`, `plug-` (all 6-char random suffix)
-
-**Two predefined bots** are seeded automatically and cannot be deleted:
-- `bot-security` — Weekly Security Audit (webhook trigger)
-- `bot-pr-review` — PR Review (GitHub trigger)
-
-**Route prefix conventions**: Admin/management routes use `/admin/*`, public API routes use `/api/*`
-
-### Frontend (`frontend/`)
-
-Vue 3 SPA with TypeScript. Uses Vue Router 4 with `createWebHistory` for navigation. Routes are defined in `src/router/` with per-domain route files, global navigation guards for entity validation, and `<router-view>` in `App.vue`.
-
-**Key patterns:**
-- **API client**: `src/services/api.ts` — All API types and fetch functions. Each domain has its own API object (e.g., `botApi`, `agentApi`, `teamApi`)
-- **No state management library** — Component-local state with Vue `ref`/`reactive`, parent-child via props/emits, cross-cutting via `provide`/`inject` (e.g., `showToast`)
-- **SSE streaming**: Real-time execution logs and conversation streams use `EventSource`
-- **Charting**: Chart.js for data visualization (FindingsChart, PrHistoryChart)
-- **Testing**: Vitest + happy-dom + @vue/test-utils. Setup in `src/test/setup.ts`
-
-### Frontend-Backend Communication
-
-Vite dev server proxies `/api/*`, `/admin/*`, `/health/*`, `/docs/*`, `/openapi/*` to the backend at `127.0.0.1:20000`.
-
-### Bot Execution Flow
-
-1. Trigger arrives (webhook, GitHub event, schedule, or manual)
-2. `ExecutionService.dispatch_*` matches payload to bots
-3. Bot prompt template is rendered with placeholders (`{paths}`, `{message}`, `{pr_url}`, etc.)
-4. CLI command is built (`claude -p ...` or `opencode run --prompt ...`)
-5. Process runs via `subprocess.Popen` with threaded stdout/stderr streaming
-6. Execution status tracked in-memory with 5-minute TTL after completion
 
 ## Verification
 
-Always verify **both builds and tests** before declaring any task complete:
-
-```bash
-# Frontend build (includes vue-tsc type checking + vite build)
-just build
-
-# Backend tests
-cd backend && uv run pytest
-
-# Frontend tests
-cd frontend && npm run test:run
-```
-
-All three must pass with zero errors. Do not skip the build step — type errors caught by `vue-tsc` will not surface in unit tests alone.
-
-## Conventions
-
-- Python formatting: Ruff with `line-length=100`, target `py310`
-- Backend tests use `isolated_db` fixture (auto-patches `DB_PATH` to temp file per test)
-- Frontend uses Geist font family and a dark theme with CSS custom properties defined in `App.vue`
-
-## GRD Planning
-
-Project roadmap, codebase analysis, and phase plans live in `.planning/`:
-
-- `.planning/config.json` — GRD configuration
-- `.planning/codebase/` — Architecture, stack, structure, conventions, testing, integrations, concerns
-- `.planning/milestones/` — Roadmaps, requirements, and phase docs (v0.2.x, v0.3.0 complete; v0.4.0 active)
-
-<!-- Managed by HarnessSync -->
-# Rules synced from Claude Code
-
-# [Project rules from CLAUDE.md]
-
-# CLAUDE.md
-
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
-
-## Project Overview
-
-Agented is a bot automation platform with a Flask backend and Vue.js frontend. It manages AI-powered bots that execute CLI tools (Claude, OpenCode) in response to webhooks, GitHub events, schedules, or manual triggers. The platform also provides organization management for products, projects, teams, agents, plugins, skills, hooks, commands, and rules.
-
-## Development Commands
-
-```bash
-# Bootstrap (fresh clone — installs just, uv, node if missing)
-bash scripts/setup.sh
-
-# Setup (prerequisites already installed)
-just setup                # Install all dependencies (backend + frontend)
-just setup-backend        # cd backend && uv sync
-just setup-frontend       # cd frontend && npm install
-
-# Development (run in separate terminals)
-just dev-backend          # Backend on http://127.0.0.1:20000 (debug mode)
-just dev-frontend         # Frontend on http://localhost:3000
-
-# Build & Deploy
-just build                # Build frontend for production
-just deploy               # Build + start both servers
-just kill                 # Kill processes on ports 3000/20000
-
-# Backend tests
-cd backend && uv run pytest                          # Run all tests
-cd backend && uv run pytest tests/test_github_webhook.py  # Single test file
-cd backend && uv run pytest tests/test_github_webhook.py::test_name -v  # Single test
-
-# Frontend tests
-cd frontend && npm run test:run              # Run all tests once
-cd frontend && npm test                      # Watch mode
-cd frontend && npm run test:coverage         # With coverage
-
-# Formatting
-cd backend && uv run ruff format .           # Format Python (line-length=100)
-
-# Context-Mode MCP Tools (use for large output operations)
-ctx_execute(language, code)            # Run code in sandbox — use instead of Bash for large output
-ctx_execute_file(path, language, code) # Run code against a file — use instead of Read for analysis
-ctx_index(path)                        # Index a file/directory for semantic search
-ctx_search(query)                      # Semantic search across indexed content
-ctx_fetch_and_index(url)               # Fetch a URL and index its content
-ctx_batch_execute(commands, queries)   # Run multiple commands in one call
-ctx_doctor()                           # Run diagnostics on context-mode setup
-ctx_stats()                            # Show context savings stats for current session
-ctx_upgrade()                          # Update context-mode to latest version
-```
-
-Prefer `ctx_execute` over Bash when command output may exceed ~20 lines. Prefer `ctx_execute_file` over Read when analyzing (not editing) large files.
-
-API docs available at http://localhost:20000/docs (Swagger UI via flask-openapi3).
+All three must pass before any task is complete:
+1. `just build` (vue-tsc type checking + vite build)
+2. `cd backend && uv run pytest`
+3. `cd frontend && npm run test:run`
 
 ## Architecture
 
-### Backend (`backend/`)
+**Backend** (`backend/`) — Flask via **flask-openapi3** (uses `APIBlueprint`, `OpenAPI()`)
+- `app/__init__.py` — `create_app()` factory (DB, scheduler, blueprints)
+- `app/database.py` — Raw SQLite, `get_connection()` context manager, no ORM
+- `app/models/` — Pydantic v2 request/response validation
+- `app/routes/` — `APIBlueprint` routes; `/admin/*` management, `/api/*` public
+- `app/services/` — Business logic; `ExecutionService` runs CLI via `subprocess.Popen`
+- Entity IDs: prefixed random (`bot-`, `agent-`, `conv-`, `team-`, `prod-`, `proj-`, `plug-` + 6-char suffix)
+- Predefined bots (cannot delete): `bot-security`, `bot-pr-review`
 
-Flask app using the **flask-openapi3** library (not vanilla Flask). Routes use `APIBlueprint` instead of `Blueprint`, and the app is created with `OpenAPI()` instead of `Flask()`.
-
-**Key patterns:**
-- **App factory**: `app/__init__.py` — `create_app()` initializes DB, scheduler, and registers all blueprints
-- **Database**: `app/database.py` — Raw SQLite with `get_connection()` context manager (no ORM). All CRUD functions are defined directly in this file. DB auto-initializes tables and seeds predefined bots on startup
-- **Models**: `app/models/` — Pydantic v2 models for request/response validation (not DB models)
-- **Routes**: `app/routes/` — API blueprints registered via `register_blueprints()` in `routes/__init__.py`
-- **Services**: `app/services/` — Business logic. `ExecutionService` runs bots via subprocess (CLI invocations of `claude` or `opencode`) with real-time log streaming via threads
-
-**Entity ID conventions**: Prefixed random IDs — `bot-`, `agent-`, `conv-`, `team-`, `prod-`, `proj-`, `plug-` (all 6-char random suffix)
-
-**Two predefined bots** are seeded automatically and cannot be deleted:
-- `bot-security` — Weekly Security Audit (webhook trigger)
-- `bot-pr-review` — PR Review (GitHub trigger)
-
-**Route prefix conventions**: Admin/management routes use `/admin/*`, public API routes use `/api/*`
-
-### Frontend (`frontend/`)
-
-Vue 3 SPA with TypeScript. Uses Vue Router 4 with `createWebHistory` for navigation. Routes are defined in `src/router/` with per-domain route files, global navigation guards for entity validation, and `<router-view>` in `App.vue`.
-
-**Key patterns:**
-- **API client**: `src/services/api.ts` — All API types and fetch functions. Each domain has its own API object (e.g., `botApi`, `agentApi`, `teamApi`)
-- **No state management library** — Component-local state with Vue `ref`/`reactive`, parent-child via props/emits, cross-cutting via `provide`/`inject` (e.g., `showToast`)
-- **SSE streaming**: Real-time execution logs and conversation streams use `EventSource`
-- **Charting**: Chart.js for data visualization (FindingsChart, PrHistoryChart)
-- **Testing**: Vitest + happy-dom + @vue/test-utils. Setup in `src/test/setup.ts`
-
-### Frontend-Backend Communication
-
-Vite dev server proxies `/api/*`, `/admin/*`, `/health/*`, `/docs/*`, `/openapi/*` to the backend at `127.0.0.1:20000`.
-
-### Bot Execution Flow
-
-1. Trigger arrives (webhook, GitHub event, schedule, or manual)
-2. `ExecutionService.dispatch_*` matches payload to bots
-3. Bot prompt template is rendered with placeholders (`{paths}`, `{message}`, `{pr_url}`, etc.)
-4. CLI command is built (`claude -p ...` or `opencode run --prompt ...`)
-5. Process runs via `subprocess.Popen` with threaded stdout/stderr streaming
-6. Execution status tracked in-memory with 5-minute TTL after completion
-
-## Verification
-
-Always verify **both builds and tests** before declaring any task complete:
-
-```bash
-# Frontend build (includes vue-tsc type checking + vite build)
-just build
-
-# Backend tests
-cd backend && uv run pytest
-
-# Frontend tests
-cd frontend && npm run test:run
-```
-
-All three must pass with zero errors. Do not skip the build step — type errors caught by `vue-tsc` will not surface in unit tests alone.
+**Frontend** (`frontend/`) — Vue 3 + TypeScript, Vue Router 4
+- `src/services/api.ts` — API client with per-domain objects (`botApi`, `agentApi`, etc.)
+- No state library — `ref`/`reactive`, props/emits, `provide`/`inject`
+- SSE streaming for real-time logs/conversations
+- Vitest + happy-dom + @vue/test-utils
+- Vite proxies `/api/*`, `/admin/*`, `/health/*`, `/docs/*`, `/openapi/*` to `:20000`
 
 ## Conventions
 
-- Python formatting: Ruff with `line-length=100`, target `py310`
-- Backend tests use `isolated_db` fixture (auto-patches `DB_PATH` to temp file per test)
-- Frontend uses Geist font family and a dark theme with CSS custom properties defined in `App.vue`
+- Python: Ruff `line-length=100`, target `py310`
+- Backend tests: `isolated_db` fixture (patches `DB_PATH` to temp file)
+- Frontend: Geist font, dark theme, CSS custom props in `App.vue`
+
+## Context-Mode MCP Tools
+
+Use for large output operations instead of Bash/Read:
+
+```
+ctx_execute(language, code)            # Run code in sandbox (use instead of Bash for >20 lines)
+ctx_execute_file(path, language, code) # Analyze file (use instead of Read for analysis)
+ctx_batch_execute(commands, queries)   # Multiple commands in one call
+ctx_search(query)                      # Semantic search across indexed content
+ctx_fetch_and_index(url)               # Fetch URL and index
+ctx_doctor() / ctx_stats() / ctx_upgrade()
+```
 
 ## GRD Planning
 
-Project roadmap, codebase analysis, and phase plans live in `.planning/`:
+`.planning/` contains roadmaps, codebase analysis, and phase plans:
+- `.planning/config.json` — GRD config
+- `.planning/milestones/` — v0.2.x, v0.3.0 complete; v0.4.0 active
 
-- `.planning/config.json` — GRD configuration
-- `.planning/codebase/` — Architecture, stack, structure, conventions, testing, integrations, concerns
-- `.planning/milestones/` — Roadmaps, requirements, and phase docs (v0.2.x, v0.3.0 complete; v0.4.0 active)
+## Tooling
+
+- **GRD**: `/grd:progress`, `/grd:plan-phase`, `/grd:execute-phase`, `/grd:verify-phase`
+- **HarnessSync**: `/harness-sync:sync`, `/harness-sync:sync-status`
+- **Superpowers**: `/superpowers:brainstorming`, `/superpowers:writing-plans`, `/superpowers:executing-plans`, `/superpowers:test-driven-development`
+- **Simplify**: `/simplify` — post-change code review
+- **Commit**: `/commit-commands:commit`, `/commit-commands:commit-push-pr`
 
 
 ---
-*Last synced by HarnessSync: 2026-03-09 01:15:15 UTC*
+*Last synced by HarnessSync: 2026-03-15 10:46:39 UTC*
 <!-- End HarnessSync managed content -->
 
 ---
 *Last synced by HarnessSync: 2026-03-14 04:34:55 UTC*
 <!-- End HarnessSync managed content -->
+
+<!-- User annotations (preserved by HarnessSync) -->
+
+
+---
+*Last synced by HarnessSync: 2026-03-14 04:34:55 UTC*
+
+<!-- User annotations (preserved by HarnessSync) -->
+
+
+---
+*Last synced by HarnessSync: 2026-03-14 04:34:55 UTC*
+
+<!-- User annotations (preserved by HarnessSync) -->
+
+
+---
+*Last synced by HarnessSync: 2026-03-14 04:34:55 UTC*
+
+<!-- User annotations (preserved by HarnessSync) -->
+
+
+---
+*Last synced by HarnessSync: 2026-03-14 04:34:55 UTC*
+
+<!-- User annotations (preserved by HarnessSync) -->
+
+
+---
+*Last synced by HarnessSync: 2026-03-14 04:34:55 UTC*
+
+<!-- User annotations (preserved by HarnessSync) -->
+
+
+---
+*Last synced by HarnessSync: 2026-03-14 04:34:55 UTC*
+
+<!-- User annotations (preserved by HarnessSync) -->
+
+
+---
+*Last synced by HarnessSync: 2026-03-14 04:34:55 UTC*

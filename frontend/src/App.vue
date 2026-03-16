@@ -493,7 +493,7 @@ body {
   border: none;
   text-align: left;
   width: 100%;
-  font: inherit;
+  font-family: inherit;
   cursor: pointer;
   transition: all var(--transition-fast);
   position: relative;
