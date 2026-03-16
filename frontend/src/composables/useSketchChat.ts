@@ -1,6 +1,6 @@
 import { ref, onUnmounted } from 'vue';
 import type { Ref } from 'vue';
-import type { Sketch, Project, ConversationMessage } from '../services/api/types';
+import type { Sketch, Project, ConversationMessage, Delegation } from '../services/api/types';
 import { sketchApi, projectApi, isAbortError, superAgentSessionApi } from '../services/api';
 import type { AuthenticatedEventSource } from '../services/api';
 
@@ -28,7 +28,9 @@ export function useSketchChat() {
   const isStreaming = ref(false);
   const executionSessionId = ref<string | null>(null);
   const executionSuperAgentId = ref<string | null>(null);
+  const delegations = ref<Delegation[]>([]);
   let eventSource: AuthenticatedEventSource | null = null;
+  let delegationPollTimer: ReturnType<typeof setInterval> | null = null;
 
   // AbortController for cancelling pending requests on unmount or re-execute
   let abortController = new AbortController();
@@ -57,6 +59,43 @@ export function useSketchChat() {
       if (isAbortError(e) || abortController.signal.aborted) return;
       error.value = e instanceof Error ? e.message : 'Failed to load sketches';
     }
+  }
+
+  async function loadDelegations(sketchId: string) {
+    try {
+      const result = await sketchApi.getDelegations(sketchId);
+      delegations.value = result.delegations;
+    } catch (e: unknown) {
+      if (isAbortError(e) || abortController.signal.aborted) return;
+      // Silently fail — polling will retry
+    }
+  }
+
+  function stopDelegationPolling() {
+    if (delegationPollTimer) {
+      clearInterval(delegationPollTimer);
+      delegationPollTimer = null;
+    }
+  }
+
+  function startDelegationPolling(sketchId: string) {
+    stopDelegationPolling();
+    // Initial load
+    loadDelegations(sketchId);
+    // Poll every 3 seconds
+    delegationPollTimer = setInterval(async () => {
+      await loadDelegations(sketchId);
+      // Stop when all delegations are completed or errored
+      const allDone =
+        delegations.value.length > 0 &&
+        delegations.value.every(d => d.status === 'completed' || d.status === 'error');
+      if (allDone) {
+        stopDelegationPolling();
+        // Refresh sketch status
+        const updated = await sketchApi.get(sketchId);
+        currentSketch.value = updated;
+      }
+    }, 3000);
   }
 
   async function submitSketch(text: string) {
@@ -105,6 +144,14 @@ export function useSketchChat() {
 
       currentSketch.value = fetched;
       await loadSketches();
+
+      // Auto-route after classification
+      messages.value.push({
+        role: 'system',
+        content: 'Routing...',
+        timestamp: new Date().toISOString(),
+      });
+      await routeSketch(sketchId);
     } catch (e: unknown) {
       if (isAbortError(e) || abortController.signal.aborted) return;
       const errMsg = e instanceof Error ? e.message : 'Failed to create or classify sketch';
@@ -179,6 +226,8 @@ export function useSketchChat() {
                   eventSource.close();
                   eventSource = null;
                 }
+                // Check for delegations (team collaboration)
+                startDelegationPolling(sketchId);
                 break;
               case 'error':
                 isStreaming.value = false;
@@ -278,6 +327,7 @@ export function useSketchChat() {
       eventSource.close();
       eventSource = null;
     }
+    stopDelegationPolling();
   });
 
   return {
@@ -292,6 +342,7 @@ export function useSketchChat() {
     streamingContent,
     executionSessionId,
     executionSuperAgentId,
+    delegations,
     loadProjects,
     loadSketches,
     submitSketch,
