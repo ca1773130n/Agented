@@ -989,7 +989,7 @@ def create_fresh_schema(conn):
             title TEXT NOT NULL,
             content TEXT NOT NULL DEFAULT '',
             project_id TEXT,
-            status TEXT NOT NULL DEFAULT 'draft' CHECK(status IN ('draft', 'classified', 'routed', 'in_progress', 'completed', 'archived')),
+            status TEXT NOT NULL DEFAULT 'draft' CHECK(status IN ('draft', 'classified', 'routed', 'in_progress', 'collaborating', 'completed', 'archived')),
             classification_json TEXT,
             routing_json TEXT,
             parent_sketch_id TEXT,

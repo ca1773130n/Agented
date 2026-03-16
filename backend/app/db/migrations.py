@@ -3796,6 +3796,60 @@ def _migrate_add_super_agent_source(conn):
         conn.commit()
 
 
+def _migrate_91_add_sketch_collaborating_status(conn):
+    """Add 'collaborating' to sketches status CHECK constraint.
+
+    SQLite CHECK constraints cannot be altered via ALTER TABLE, so we use the
+    standard table recreation pattern: create new table, copy data, drop old,
+    rename new, recreate indexes.
+    """
+    table_exists = conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='sketches'"
+    ).fetchone()
+    if not table_exists:
+        return
+
+    # Check if 'collaborating' is already in the constraint
+    sql_row = conn.execute(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='sketches'"
+    ).fetchone()
+    if sql_row and "collaborating" in sql_row[0]:
+        return  # Already has the correct constraint
+
+    conn.execute("""
+        CREATE TABLE _sketches_new (
+            id TEXT PRIMARY KEY,
+            title TEXT NOT NULL,
+            content TEXT NOT NULL DEFAULT '',
+            project_id TEXT,
+            status TEXT NOT NULL DEFAULT 'draft'
+                CHECK(status IN ('draft', 'classified', 'routed', 'in_progress', 'collaborating',
+                                 'completed', 'archived')),
+            classification_json TEXT,
+            routing_json TEXT,
+            parent_sketch_id TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL,
+            FOREIGN KEY (parent_sketch_id) REFERENCES sketches(id) ON DELETE SET NULL
+        )
+    """)
+    conn.execute("""
+        INSERT INTO _sketches_new
+            (id, title, content, project_id, status, classification_json,
+             routing_json, parent_sketch_id, created_at, updated_at)
+        SELECT id, title, content, project_id, status, classification_json,
+               routing_json, parent_sketch_id, created_at, updated_at
+        FROM sketches
+    """)
+    conn.execute("DROP TABLE sketches")
+    conn.execute("ALTER TABLE _sketches_new RENAME TO sketches")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_sketches_project ON sketches(project_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_sketches_status ON sketches(status)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_sketches_parent ON sketches(parent_sketch_id)")
+    conn.commit()
+
+
 VERSIONED_MIGRATIONS = [
     (1, "add_github_columns", _migrate_add_github_columns),
     (2, "add_pr_reviews_table", _migrate_add_pr_reviews_table),
@@ -3901,4 +3955,5 @@ VERSIONED_MIGRATIONS = [
     # v0.4.0 webhook payload transformer
     (89, "payload_transformers", _migrate_88_payload_transformers),
     (90, "add_super_agent_source", _migrate_add_super_agent_source),
+    (91, "add_sketch_collaborating_status", _migrate_91_add_sketch_collaborating_status),
 ]

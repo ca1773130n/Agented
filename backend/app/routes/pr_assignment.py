@@ -54,8 +54,13 @@ def create_rule():
         reviewers = [r.strip() for r in reviewers.split(",") if r.strip()]
 
     rule_id = add_ownership_rule(pattern=pattern, team=team, reviewers=reviewers, priority=priority)
-    return {"id": rule_id, "pattern": pattern, "team": team, "reviewers": reviewers,
-            "priority": priority}, HTTPStatus.CREATED
+    return {
+        "id": rule_id,
+        "pattern": pattern,
+        "team": team,
+        "reviewers": reviewers,
+        "priority": priority,
+    }, HTTPStatus.CREATED
 
 
 @pr_assignment_bp.delete("/rules/<rule_id>")

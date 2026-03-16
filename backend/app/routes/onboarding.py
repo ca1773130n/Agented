@@ -21,13 +21,17 @@ ONBOARDING_TRIGGER_ID = "bot-onboarding"
 
 
 class OnboardingStepIn(BaseModel):
-    id: Optional[str] = Field(default=None, description="Step ID (reuse existing or omit to generate)")
+    id: Optional[str] = Field(
+        default=None, description="Step ID (reuse existing or omit to generate)"
+    )
     step_order: int = Field(..., description="Execution order index")
     name: str = Field(..., min_length=1, description="Step name")
     description: str = Field(default="", description="Step description")
     type: str = Field(default="custom", description="Step type: github, slack, jira, email, custom")
     enabled: bool = Field(default=True, description="Whether the step is active")
-    delay_minutes: int = Field(default=0, ge=0, description="Minutes to wait before executing this step")
+    delay_minutes: int = Field(
+        default=0, ge=0, description="Minutes to wait before executing this step"
+    )
 
 
 class SaveOnboardingConfigBody(BaseModel):
@@ -74,7 +78,9 @@ def save_onboarding_config(body: SaveOnboardingConfigBody):
 
     trigger = get_trigger(trigger_id)
     if not trigger:
-        return error_response("NOT_FOUND", f"Trigger '{trigger_id}' not found", HTTPStatus.NOT_FOUND)
+        return error_response(
+            "NOT_FOUND", f"Trigger '{trigger_id}' not found", HTTPStatus.NOT_FOUND
+        )
 
     # Update the trigger's enabled flag and trigger_source if provided
     update_kwargs: dict = {}

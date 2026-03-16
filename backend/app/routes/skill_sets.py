@@ -18,9 +18,7 @@ from ..db.skill_sets import (
 )
 
 tag = Tag(name="Skill Sets", description="Skill set compositions for the Visual Skill Composer")
-skill_sets_bp = APIBlueprint(
-    "skill_sets", __name__, url_prefix="/api/skill-sets", abp_tags=[tag]
-)
+skill_sets_bp = APIBlueprint("skill_sets", __name__, url_prefix="/api/skill-sets", abp_tags=[tag])
 
 
 class SkillSetPath(BaseModel):

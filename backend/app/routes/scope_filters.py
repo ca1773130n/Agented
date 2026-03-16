@@ -110,7 +110,9 @@ def add_filter_pattern(path: FilterPath, body: AddPatternBody):
         description=body.description,
     )
     updated = get_scope_filter(path.filter_id)
-    new_pattern = next((p for p in (updated or {}).get("patterns", []) if p["id"] == pattern_id), None)
+    new_pattern = next(
+        (p for p in (updated or {}).get("patterns", []) if p["id"] == pattern_id), None
+    )
     return {"message": "Pattern added", "pattern": new_pattern}, HTTPStatus.CREATED
 
 
