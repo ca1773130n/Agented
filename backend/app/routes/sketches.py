@@ -142,7 +142,8 @@ def route_sketch_endpoint(path: SketchPath):
         return {"routing": routing}, HTTPStatus.OK
 
     # Execute on super agent session
-    session_id = execute_sketch(sketch_id, super_agent_id, sketch["content"])
+    team_id = routing["target_id"] if routing["target_type"] == "team" else None
+    session_id = execute_sketch(sketch_id, super_agent_id, sketch["content"], team_id=team_id)
 
     # Store session info in routing_json for frontend
     routing["session_id"] = session_id
@@ -154,3 +155,13 @@ def route_sketch_endpoint(path: SketchPath):
         "session_id": session_id,
         "super_agent_id": super_agent_id,
     }, HTTPStatus.OK
+
+
+@sketches_bp.get("/<sketch_id>/delegations")
+def get_delegations(path: SketchPath):
+    """Get delegation status for a sketch routed to a team."""
+    sketch = get_sketch(path.sketch_id)
+    if not sketch:
+        return error_response("NOT_FOUND", "Sketch not found", HTTPStatus.NOT_FOUND)
+    routing = json.loads(sketch.get("routing_json") or "{}")
+    return {"delegations": routing.get("delegations", [])}, HTTPStatus.OK
