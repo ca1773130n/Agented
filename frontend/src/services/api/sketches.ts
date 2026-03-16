@@ -2,7 +2,7 @@
  * Sketch API module.
  */
 import { apiFetch } from './client';
-import type { Sketch, SketchStatus } from './types';
+import type { Sketch, SketchStatus, Delegation } from './types';
 
 export const sketchApi = {
   list: (params?: { status?: SketchStatus; project_id?: string }) => {
@@ -33,4 +33,6 @@ export const sketchApi = {
     apiFetch<{ message: string; routing: Record<string, unknown>; session_id?: string; super_agent_id?: string }>(`/admin/sketches/${id}/route`, {
       method: 'POST',
     }),
+  getDelegations: (id: string) =>
+    apiFetch<{ delegations: Delegation[] }>(`/admin/sketches/${id}/delegations`),
 };

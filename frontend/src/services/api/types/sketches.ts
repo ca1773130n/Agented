@@ -2,7 +2,14 @@
  * Sketch types.
  */
 
-export type SketchStatus = 'draft' | 'classified' | 'routed' | 'in_progress' | 'completed' | 'archived';
+export type SketchStatus = 'draft' | 'classified' | 'routed' | 'in_progress' | 'collaborating' | 'completed' | 'archived';
+
+export interface Delegation {
+  super_agent_id: string;
+  name: string;
+  task: string;
+  status: 'pending' | 'in_progress' | 'completed' | 'error';
+}
 
 export interface Sketch {
   id: string;
