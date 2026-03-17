@@ -209,10 +209,9 @@ export function useSketchChat() {
 
         // Open SSE connection (state_delta protocol — same as Playground)
         eventSource = superAgentSessionApi.chatStream(superAgentId, sessionId);
-        const source = eventSource.source;
 
         // All events arrive as 'state_delta' with type in JSON data
-        source.addEventListener('state_delta', (e: MessageEvent) => {
+        eventSource.addEventListener('state_delta', (e: MessageEvent) => {
           try {
             const data = JSON.parse(e.data);
             switch (data.type) {
@@ -243,7 +242,7 @@ export function useSketchChat() {
           }
         });
 
-        source.onerror = () => {
+        eventSource.onerror = () => {
           if (isStreaming.value) {
             isStreaming.value = false;
             error.value = 'Connection lost. You can retry by routing again.';
