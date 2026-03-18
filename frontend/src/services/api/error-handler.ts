@@ -110,5 +110,21 @@ export function handleApiError(
   }
 
   showToast(formatted, 'error');
+
+  // Report error to backend (fire-and-forget)
+  try {
+    import('./system').then(({ systemErrorApi }) => {
+      systemErrorApi.reportError({
+        source: 'frontend',
+        category: 'frontend_error',
+        message: formatted,
+        stack_trace: error instanceof Error ? error.stack : undefined,
+        context_json: JSON.stringify({ url: typeof window !== 'undefined' ? window.location.href : '' }),
+      }).catch(() => { /* silently ignore reporting failures */ });
+    }).catch(() => { /* If import fails, skip reporting */ });
+  } catch {
+    // If import fails, skip reporting
+  }
+
   return formatted;
 }

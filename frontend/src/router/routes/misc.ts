@@ -807,4 +807,11 @@ export const miscRoutes: RouteRecordRaw[] = [
     component: () => import('../../views/SkillMarketplacePage.vue'),
     meta: { title: 'Skill Marketplace' },
   },
+  // System Error Dashboard
+  {
+    path: '/admin/system/errors',
+    name: 'system-errors',
+    component: () => import('../../views/SystemErrorsPage.vue'),
+    meta: { title: 'System Errors' },
+  },
 ];

@@ -69,6 +69,49 @@ export const settingsApi = {
 };
 
 // Setup API
+// System Error API
+import type {
+  SystemErrorWithFixes,
+  SystemErrorListResponse,
+  ErrorCountsResponse,
+  ReportErrorRequest,
+} from './types/system';
+
+export const systemErrorApi = {
+  listErrors: (params?: Record<string, string | number>) => {
+    const query = params ? '?' + new URLSearchParams(
+      Object.entries(params).reduce((acc, [k, v]) => { if (v != null) acc[k] = String(v); return acc; }, {} as Record<string, string>)
+    ).toString() : '';
+    return apiFetch<SystemErrorListResponse>(`/admin/system/errors${query}`);
+  },
+
+  getError: (id: string) =>
+    apiFetch<SystemErrorWithFixes>(`/admin/system/errors/${id}`),
+
+  reportError: (data: ReportErrorRequest) =>
+    apiFetch<{ error_id: string }>('/admin/system/errors', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  updateError: (id: string, data: { status: string }) =>
+    apiFetch<{ message: string }>(`/admin/system/errors/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
+
+  retryFix: (id: string) =>
+    apiFetch<{ message: string }>(`/admin/system/errors/${id}/retry-fix`, {
+      method: 'POST',
+    }),
+
+  getLogs: (lines?: number) =>
+    apiFetch<{ lines: string[] }>(`/admin/system/logs${lines ? `?lines=${lines}` : ''}`),
+
+  getCounts: () =>
+    apiFetch<ErrorCountsResponse>('/admin/system/errors/counts'),
+};
+
 export const setupApi = {
   async start(projectId: string, command: string): Promise<{ execution_id: string; status: string }> {
     return apiFetch('/api/setup/start', {

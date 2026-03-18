@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, provide, computed } from 'vue';
+import { ref, onMounted, onUnmounted, provide, computed, getCurrentInstance } from 'vue';
 import { setupApi } from './services/api';
 import { useRoute } from 'vue-router';
 import AppSidebar from './components/layout/AppSidebar.vue';
@@ -28,7 +28,7 @@ let toastId = 0;
 
 function showToast(message: string, type: ToastType = 'info', duration?: number) {
   const id = ++toastId;
-  const defaultDuration = type === 'infrastructure' ? 8000 : 4000;
+  const defaultDuration = type === 'infrastructure' ? 8000 : type === 'error' ? 8000 : 4000;
   toasts.value.push({ id, message, type });
   setTimeout(() => {
     toasts.value = toasts.value.filter(t => t.id !== id);
@@ -43,6 +43,25 @@ provide('showToast', showToast);
 
 // Register WebMCP generic verification tools (app-lifetime, no-ops in non-Canary browsers)
 registerGenericTools();
+
+// Global Vue error handler — report unhandled errors to the system error API
+const appInstance = getCurrentInstance()?.appContext.app;
+if (appInstance) {
+  appInstance.config.errorHandler = (err, _instance, info) => {
+    console.error('Vue error:', err);
+    try {
+      import('./services/api/system').then(({ systemErrorApi }) => {
+        systemErrorApi.reportError({
+          source: 'frontend',
+          category: 'frontend_error',
+          message: err instanceof Error ? err.message : String(err),
+          stack_trace: err instanceof Error ? err.stack : undefined,
+          context_json: JSON.stringify({ component: info, url: window.location.href }),
+        }).catch(() => {});
+      }).catch(() => {});
+    } catch { /* ignore */ }
+  };
+}
 
 // Sidebar collapse/mobile state
 const { isCollapsed, isMobileOpen, isMobile, toggleCollapse, toggleMobile, closeMobile } =

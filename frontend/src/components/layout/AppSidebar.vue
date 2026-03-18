@@ -231,7 +231,7 @@ function isAutomationToolsSectionActive(): boolean {
 }
 
 function isPlatformSectionActive(): boolean {
-  return ['secrets-vault', 'rbac-settings', 'sso-settings', 'team-budgets', 'report-digests', 'execution-quota-controls', 'team-leaderboard', 'bot-sla-uptime', 'mobile-execution-monitor', 'audit-history', 'findings-triage-board', 'skill-version-pinning', 'conversation-history-viewer'].includes(currentRouteName.value);
+  return ['secrets-vault', 'rbac-settings', 'sso-settings', 'team-budgets', 'report-digests', 'execution-quota-controls', 'team-leaderboard', 'bot-sla-uptime', 'mobile-execution-monitor', 'audit-history', 'findings-triage-board', 'skill-version-pinning', 'conversation-history-viewer', 'system-errors'].includes(currentRouteName.value);
 }
 
 // Helper: navigate via router (mobile auto-close handled by router.afterEach)
@@ -1151,6 +1151,9 @@ function handleSidebarKeydown(e: KeyboardEvent) {
         </button>
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('conversation-history-viewer') }" :aria-current="sidebarActive('conversation-history-viewer') ? 'page' : undefined" @click="navTo('conversation-history-viewer')">
           Conversation History
+        </button>
+        <button type="button" class="submenu-item" :class="{ active: sidebarActive('system-errors') }" :aria-current="sidebarActive('system-errors') ? 'page' : undefined" @click="navTo('system-errors')">
+          System Errors
         </button>
       </div>
 
