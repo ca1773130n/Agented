@@ -64,6 +64,10 @@ def capture_error(
 
         context_json = json.dumps(context) if context else None
 
+        # Dedup check: skip autofix if same error occurred recently
+        duplicate = find_recent_duplicate(error_hash, window_seconds=60)
+        skip_autofix = duplicate is not None
+
         error_id = create_system_error(
             source=source,
             category=category,
@@ -78,19 +82,17 @@ def capture_error(
             logger.error("Failed to insert system error (create_system_error returned None)")
             return None
 
-        # Dedup check: skip autofix if same error occurred recently
-        duplicate = find_recent_duplicate(error_hash, window_seconds=60)
-        if duplicate and duplicate["id"] != error_id:
+        if skip_autofix:
             logger.debug(
                 "Skipping autofix for error %s (duplicate of %s)", error_id, duplicate["id"]
             )
             return error_id
 
-        # Trigger autofix in background (import here to avoid circular imports)
+        # Trigger autofix (import here to avoid circular imports)
         try:
             from app.services.autofix_service import trigger_autofix
 
-            trigger_autofix(error_id, category, message, stack_trace, context_json)
+            trigger_autofix(error_id)
         except Exception:
             logger.exception("Failed to trigger autofix for error %s", error_id)
 

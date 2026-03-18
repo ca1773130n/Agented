@@ -18,8 +18,14 @@ from app.db.system_errors import (
     update_fix_attempt,
     update_system_error_status,
 )
+from app.models.system import ErrorStatus, FixStatus
 
 logger = logging.getLogger(__name__)
+
+
+def _now() -> str:
+    """Return current UTC timestamp as ISO string."""
+    return datetime.datetime.now(datetime.timezone.utc).isoformat()
 
 
 # --- Tier 1 fix functions ---
@@ -152,30 +158,29 @@ Investigate this error. You have access to the Agented codebase at the current w
 Diagnose the root cause, apply a fix if possible, and report what you did.
 [END SYSTEM ERROR]"""
 
-        # Store the message
-        from app.db.connection import get_connection
-        from app.db.ids import generate_message_id
+        # Send via the session service (handles message storage + token tracking)
+        SuperAgentSessionService.send_message(session_id, prompt)
 
-        with get_connection() as conn:
-            msg_id = generate_message_id()
-            conn.execute(
-                """INSERT INTO agent_messages (id, session_id, role, content, created_at)
-                   VALUES (?, ?, 'user', ?, CURRENT_TIMESTAMP)""",
-                (msg_id, session_id, prompt),
-            )
-            conn.commit()
+        # Mark as running BEFORE launching streaming
+        update_fix_attempt(fix_attempt_id, FixStatus.RUNNING.value, agent_session_id=session_id)
 
         def on_complete():
-            now = datetime.datetime.utcnow().isoformat()
-            update_fix_attempt(fix_attempt_id, "success", "Agent investigation completed", now)
-            update_system_error_status(error_id, "fixed")
+            update_fix_attempt(
+                fix_attempt_id,
+                FixStatus.SUCCESS.value,
+                "Agent investigation completed",
+                _now(),
+            )
+            update_system_error_status(error_id, ErrorStatus.FIXED.value)
 
         def on_error(err_msg):
-            now = datetime.datetime.utcnow().isoformat()
             update_fix_attempt(
-                fix_attempt_id, "failed", f"Agent investigation failed: {err_msg}", now
+                fix_attempt_id,
+                FixStatus.FAILED.value,
+                f"Agent investigation failed: {err_msg}",
+                _now(),
             )
-            update_system_error_status(error_id, "new")
+            update_system_error_status(error_id, ErrorStatus.NEW.value)
 
         run_streaming_response(
             session_id=session_id,
@@ -185,25 +190,21 @@ Diagnose the root cause, apply a fix if possible, and report what you did.
             on_error=on_error,
         )
 
-        update_fix_attempt(fix_attempt_id, "running")
-
     except Exception as e:
         logger.exception("Tier 2 investigation failed for error %s", error_id)
-        now = datetime.datetime.utcnow().isoformat()
-        update_fix_attempt(fix_attempt_id, "failed", f"Failed to start investigation: {e}", now)
-        update_system_error_status(error_id, "new")
+        update_fix_attempt(
+            fix_attempt_id,
+            FixStatus.FAILED.value,
+            f"Failed to start investigation: {e}",
+            _now(),
+        )
+        update_system_error_status(error_id, ErrorStatus.NEW.value)
 
 
 # --- Main trigger ---
 
 
-def trigger_autofix(
-    error_id: str,
-    category: str,
-    message: str,
-    stack_trace: str = None,
-    context_json: str = None,
-) -> None:
+def trigger_autofix(error_id: str) -> None:
     """Trigger autofix for a system error. Called by capture_error()."""
     try:
         error = get_system_error(error_id)
@@ -211,9 +212,12 @@ def trigger_autofix(
             logger.error("Cannot trigger autofix: error %s not found", error_id)
             return
 
-        if error.get("status") == "ignored":
+        if error.get("status") == ErrorStatus.IGNORED.value:
             logger.debug("Skipping autofix for ignored error %s", error_id)
             return
+
+        category = error["category"]
+        message = error["message"]
 
         # Try Tier 1 first
         fix_fn = _find_tier1_fix(category, message)
@@ -222,28 +226,41 @@ def trigger_autofix(
             fix_attempt_id = create_fix_attempt(error_id, tier=1)
             if not fix_attempt_id:
                 return
-            update_system_error_status(error_id, "investigating")
-            update_fix_attempt(fix_attempt_id, "running")
+            update_system_error_status(error_id, ErrorStatus.INVESTIGATING.value)
+            update_fix_attempt(fix_attempt_id, FixStatus.RUNNING.value)
 
             try:
                 result = fix_fn(error)
-                now = datetime.datetime.utcnow().isoformat()
                 if result.get("success"):
-                    update_fix_attempt(fix_attempt_id, "success", result.get("action_taken"), now)
-                    update_system_error_status(error_id, "fixed")
+                    update_fix_attempt(
+                        fix_attempt_id,
+                        FixStatus.SUCCESS.value,
+                        result.get("action_taken"),
+                        _now(),
+                    )
+                    update_system_error_status(error_id, ErrorStatus.FIXED.value)
                 else:
-                    update_fix_attempt(fix_attempt_id, "failed", result.get("action_taken"), now)
-                    update_system_error_status(error_id, "new")
+                    update_fix_attempt(
+                        fix_attempt_id,
+                        FixStatus.FAILED.value,
+                        result.get("action_taken"),
+                        _now(),
+                    )
+                    update_system_error_status(error_id, ErrorStatus.NEW.value)
             except Exception as e:
-                now = datetime.datetime.utcnow().isoformat()
-                update_fix_attempt(fix_attempt_id, "failed", f"Fix function raised: {e}", now)
-                update_system_error_status(error_id, "new")
+                update_fix_attempt(
+                    fix_attempt_id,
+                    FixStatus.FAILED.value,
+                    f"Fix function raised: {e}",
+                    _now(),
+                )
+                update_system_error_status(error_id, ErrorStatus.NEW.value)
         else:
             # Tier 2: Agent investigation
             fix_attempt_id = create_fix_attempt(error_id, tier=2)
             if not fix_attempt_id:
                 return
-            update_system_error_status(error_id, "investigating")
+            update_system_error_status(error_id, ErrorStatus.INVESTIGATING.value)
             _run_tier2_investigation(error_id, fix_attempt_id, error)
 
     except Exception:

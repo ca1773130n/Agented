@@ -41,7 +41,7 @@ def list_errors(query: SystemErrorListQuery):
         limit=query.limit or 50,
         offset=query.offset or 0,
     )
-    return {"errors": errors, "total_count": total_count}, 200
+    return {"errors": errors, "total_count": total_count}, HTTPStatus.OK
 
 
 @system_bp.post("/errors")
@@ -52,13 +52,21 @@ def report_error(body: ReportErrorRequest):
         message=body.message,
         stack_trace=body.stack_trace,
         context={"raw": body.context_json} if body.context_json else None,
-        source=body.source.value if hasattr(body.source, "value") else body.source,
+        source=body.source,
     )
     if not error_id:
         return error_response(
             "CAPTURE_FAILED", "Failed to capture error", HTTPStatus.INTERNAL_SERVER_ERROR
         )
-    return {"error_id": error_id}, 201
+    return {"error_id": error_id}, HTTPStatus.CREATED
+
+
+# Static route MUST be registered before parameterised /errors/<error_id>
+@system_bp.get("/errors/counts")
+def get_error_counts():
+    """Get error counts by status."""
+    counts = count_errors_by_status()
+    return {"counts": counts}, HTTPStatus.OK
 
 
 @system_bp.get("/errors/<error_id>")
@@ -67,7 +75,7 @@ def get_error_detail(path: ErrorPath):
     error = get_system_error_with_fixes(path.error_id)
     if not error:
         return error_response("NOT_FOUND", "Error not found", HTTPStatus.NOT_FOUND)
-    return error, 200
+    return error, HTTPStatus.OK
 
 
 @system_bp.patch("/errors/<error_id>")
@@ -76,7 +84,7 @@ def update_error(path: ErrorPath, body: UpdateErrorStatusRequest):
     updated = update_system_error_status(path.error_id, body.status.value)
     if not updated:
         return error_response("NOT_FOUND", "Error not found", HTTPStatus.NOT_FOUND)
-    return {"message": "Status updated"}, 200
+    return {"message": "Status updated"}, HTTPStatus.OK
 
 
 @system_bp.post("/errors/<error_id>/retry-fix")
@@ -89,14 +97,8 @@ def retry_fix(path: ErrorPath):
     if not error:
         return error_response("NOT_FOUND", "Error not found", HTTPStatus.NOT_FOUND)
 
-    trigger_autofix(
-        error_id=error["id"],
-        category=error["category"],
-        message=error["message"],
-        stack_trace=error.get("stack_trace"),
-        context_json=error.get("context_json"),
-    )
-    return {"message": "Autofix triggered"}, 200
+    trigger_autofix(error_id=error["id"])
+    return {"message": "Autofix triggered"}, HTTPStatus.OK
 
 
 @system_bp.get("/logs")
@@ -107,9 +109,9 @@ def get_logs(query: LogsQuery):
     )
 
     if not os.path.exists(log_file):
-        return {"lines": []}, 200
+        return {"lines": []}, HTTPStatus.OK
 
-    lines_count = min(query.lines or 100, 1000)
+    lines_count = query.lines
 
     # Read from end of file efficiently
     try:
@@ -118,23 +120,16 @@ def get_logs(query: LogsQuery):
             file_size = f.tell()
 
             if file_size == 0:
-                return {"lines": []}, 200
+                return {"lines": []}, HTTPStatus.OK
 
-            # Read last chunk (estimate ~200 bytes per line)
-            chunk_size = min(file_size, lines_count * 200)
+            # Read last chunk (estimate ~500 bytes per line for stack traces)
+            chunk_size = min(file_size, lines_count * 500)
             f.seek(max(0, file_size - chunk_size))
             content = f.read().decode("utf-8", errors="replace")
 
             all_lines = content.splitlines()
             result_lines = all_lines[-lines_count:]
 
-        return {"lines": result_lines}, 200
+        return {"lines": result_lines}, HTTPStatus.OK
     except Exception:
-        return {"lines": []}, 200
-
-
-@system_bp.get("/errors/counts")
-def get_error_counts():
-    """Get error counts by status."""
-    counts = count_errors_by_status()
-    return {"counts": counts}, 200
+        return {"lines": []}, HTTPStatus.OK

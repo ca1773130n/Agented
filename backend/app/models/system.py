@@ -5,6 +5,8 @@ from typing import List, Optional
 
 from pydantic import BaseModel, Field
 
+from .common import PaginationQuery
+
 
 class ErrorSource(str, Enum):
     BACKEND = "backend"
@@ -93,7 +95,7 @@ class UpdateErrorStatusRequest(BaseModel):
     status: ErrorStatus
 
 
-class SystemErrorListQuery(BaseModel):
+class SystemErrorListQuery(PaginationQuery):
     """Query parameters for listing system errors."""
 
     status: Optional[str] = None
@@ -101,8 +103,6 @@ class SystemErrorListQuery(BaseModel):
     source: Optional[str] = None
     since: Optional[str] = None
     search: Optional[str] = None
-    limit: Optional[int] = Field(default=50, ge=1, le=500)
-    offset: Optional[int] = Field(default=0, ge=0)
 
 
 class SystemErrorListResponse(BaseModel):

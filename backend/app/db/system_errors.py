@@ -8,7 +8,7 @@ import logging
 import sqlite3
 from typing import Optional
 
-from .connection import get_connection
+from .connection import get_connection, safe_set_clause
 from .ids import _get_unique_error_id, _get_unique_fix_attempt_id
 
 logger = logging.getLogger(__name__)
@@ -169,6 +169,7 @@ def update_fix_attempt(
     status: str,
     action_taken: str = None,
     completed_at: str = None,
+    agent_session_id: str = None,
 ) -> bool:
     """Update fix attempt status and result."""
     fields = ["status = ?"]
@@ -180,9 +181,12 @@ def update_fix_attempt(
     if completed_at is not None:
         fields.append("completed_at = ?")
         params.append(completed_at)
+    if agent_session_id is not None:
+        fields.append("agent_session_id = ?")
+        params.append(agent_session_id)
 
     params.append(fix_attempt_id)
-    sql = f"UPDATE fix_attempts SET {', '.join(fields)} WHERE id = ?"
+    sql = f"UPDATE fix_attempts SET {safe_set_clause(fields)} WHERE id = ?"
 
     with get_connection() as conn:
         cursor = conn.execute(sql, params)
