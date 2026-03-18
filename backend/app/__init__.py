@@ -120,8 +120,26 @@ def _init_database(app) -> None:  # noqa: ARG001 — app reserved for future con
     seed_preset_mcp_servers()
     seed_bot_templates()
     seed_bundled_teams_and_agents()
+    _seed_system_agent()
     migrate_existing_paths()
     auto_register_project_root()
+
+
+def _seed_system_agent():
+    """Seed the sa-system super agent for automated error diagnosis."""
+    from .db.connection import get_connection
+
+    with get_connection() as conn:
+        existing = conn.execute("SELECT id FROM super_agents WHERE id = 'sa-system'").fetchone()
+        if existing:
+            return
+        conn.execute(
+            """INSERT INTO super_agents (id, name, description, backend_type, created_at)
+               VALUES ('sa-system', 'System',
+               'Automated error diagnosis and repair agent for the Agented platform',
+               'claude', CURRENT_TIMESTAMP)""",
+        )
+        conn.commit()
 
 
 def _detect_backends() -> None:

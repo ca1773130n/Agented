@@ -73,6 +73,7 @@ def register_blueprints(app):
     from .skills import skills_bp
     from .spa import spa_bp
     from .specialized_bots import specialized_bots_bp
+    from .system import system_bp
     from .super_agent_chat import super_agent_chat_bp
     from .super_agent_documents import super_agent_documents_bp
     from .super_agent_exports import super_agent_exports_bp
@@ -190,6 +191,7 @@ def register_blueprints(app):
             scope_filters_bp,
             payload_transformers_bp,
             quality_ratings_bp,
+            system_bp,
         ]
         for bp in admin_blueprints:
             limiter.limit("120/minute")(bp)
@@ -286,6 +288,7 @@ def register_blueprints(app):
     app.register_api(skill_sets_bp)
     app.register_api(onboarding_bp)
     app.register_api(payload_transformers_bp)
+    app.register_api(system_bp)
 
     # SPA catch-all: MUST be registered LAST so API routes take priority
     app.register_blueprint(spa_bp)
