@@ -16,11 +16,11 @@ Three-layer system: (1) persistent error capture from both backend and frontend,
 
 **File: `backend/app/logging_config.py`**
 
-Add `RotatingFileHandler` alongside the existing `StreamHandler(sys.stderr)`:
+Add `RotatingFileHandler` inside `configure_logging()` alongside the existing `StreamHandler(sys.stderr)`. The function already calls `root.handlers.clear()` before adding handlers, so the file handler is added right after the stderr handler in the same function:
 - Path: `backend/data/logs/agented.log`
 - Max size: 10MB, 5 backup files
 - Same JSON formatter as stderr output
-- Create `data/logs/` directory on startup if missing
+- Create `data/logs/` directory at the top of `configure_logging()` if missing via `os.makedirs(..., exist_ok=True)`
 
 #### New DB Table: `system_errors`
 
@@ -87,7 +87,7 @@ Both POST to `POST /admin/system/errors` with `{ source: 'frontend', category, m
 - `GET /admin/system/errors/<error_id>` — Single error with fix attempts joined.
 - `PATCH /admin/system/errors/<error_id>` — Update status. Body: `{ status }`.
 - `POST /admin/system/errors/<error_id>/retry-fix` — Re-trigger autofix for this error.
-- `GET /admin/system/logs` — Tail recent log file. Query: `lines` (default 100). Returns `{ lines: [...] }`.
+- `GET /admin/system/logs` — Tail recent log file. Query: `lines` (default 100, max 1000 — server-validated). Returns `{ lines: [...] }`. Reads from end of file only to avoid loading the full 10MB log.
 
 ### 2. Autofix Engine
 
@@ -125,9 +125,9 @@ def fix_cliproxy_not_running(error: dict) -> dict:
 Example implementations:
 - `fix_cliproxy_not_running`: Run `subprocess.Popen(["cliproxyapi"])`, wait 2s, health check port 8317
 - `fix_cliproxy_auth`: Re-read global config key, update `~/.cli-proxy-api/config.yaml`, health check
-- `fix_rate_limited`: Query `backend_accounts` for alternate account not rate-limited, update routing
-- `fix_db_locked`: Retry the failed operation with exponential backoff (3 attempts)
-- `fix_stale_session`: Delete and recreate the session
+- `fix_rate_limited`: Call `BackendService.get_accounts(backend_id)` to find an alternate account where `rate_limited_until` is null or expired, then call `BackendService.set_default_account(backend_id, account_id)` to rotate. If no alternate account is available, report failure.
+- `fix_db_locked`: Retry the original DB write with exponential backoff (3 attempts, 0.1s/0.5s/2s delays). Uses `get_connection()` for a fresh connection each retry.
+- `fix_stale_session`: Delete the `super_agent_sessions` row for the session_id in the error's `context_json`, then call `SuperAgentSessionService.get_or_create_session(super_agent_id)` to create a fresh one. The `super_agent_id` and `session_id` are extracted from `context_json`.
 
 #### Tier 2 — Agent Investigation
 
@@ -144,7 +144,7 @@ When no Tier 1 pattern matches:
    Message: {message}
    Stack Trace: {stack_trace}
    Context: {context_json}
-   Recent Related Logs: {last_20_log_lines_matching_request_id}
+   Recent Related Logs: {last_20_log_lines_matching_request_id_or_last_50_lines_if_no_request_id}
 
    Investigate this error. You have access to the Agented codebase at the current working directory.
    Diagnose the root cause, apply a fix if possible, and report what you did.
@@ -198,8 +198,8 @@ trigger_autofix(error_id)
 
 ### 3. System Agent
 
-**Seeded on startup** in `create_app()` alongside predefined bots:
-- `id`: `sa-system`
+**Seeded on startup** in `create_app()` alongside predefined bots. Uses a fixed hardcoded ID (same pattern as `bot-security` and `bot-pr-review` — intentionally not auto-generated). The `sa-` prefix matches existing super agent IDs (`sa-neo`, `sa-trinity`, etc.):
+- `id`: `sa-system` (fixed, not generated — checked for existence before insert)
 - `name`: "System"
 - `description`: "Automated error diagnosis and repair agent for the Agented platform"
 - `backend_type`: `claude`
@@ -259,7 +259,7 @@ Full-width table with filter bar at top. Row click opens detail panel on right (
 
 ### 5. Frontend API Extension
 
-**File: `frontend/src/services/api/system.ts`** — New API module
+**File: `frontend/src/services/api/system.ts`** — Add to existing file (already exports `healthApi`, `versionApi`, `utilityApi`, `settingsApi`, `setupApi`)
 
 ```typescript
 export const systemApi = {
@@ -272,7 +272,7 @@ export const systemApi = {
 };
 ```
 
-**File: `frontend/src/services/api/types/system.ts`** — Types
+**File: `frontend/src/services/api/types/system.ts`** — New file in existing `types/` directory (follows convention: `sketches.ts`, `teams.ts`, etc.)
 
 ```typescript
 export type ErrorSource = 'backend' | 'frontend';
@@ -281,15 +281,41 @@ export type ErrorStatus = 'new' | 'investigating' | 'fixed' | 'ignored';
 export type FixTier = 1 | 2;
 export type FixStatus = 'pending' | 'running' | 'success' | 'failed';
 
-export interface SystemError { ... }
-export interface FixAttempt { ... }
+export interface SystemError {
+  id: string;
+  timestamp: string;
+  source: ErrorSource;
+  category: ErrorCategory;
+  message: string;
+  stack_trace?: string;
+  request_id?: string;
+  context_json?: string;
+  error_hash: string;
+  status: ErrorStatus;
+  fix_attempt_id?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface FixAttempt {
+  id: string;
+  error_id: string;
+  tier: FixTier;
+  status: FixStatus;
+  action_taken?: string;
+  agent_session_id?: string;
+  started_at: string;
+  completed_at?: string;
+  created_at?: string;
+}
 ```
 
 ## Files Modified
 
-- `backend/app/logging_config.py` — Add RotatingFileHandler
+- `backend/app/logging_config.py` — Add RotatingFileHandler inside configure_logging()
 - `backend/app/__init__.py` — Seed sa-system agent, register system blueprint
 - `backend/app/db/schema.py` — Add system_errors and fix_attempts tables
+- `backend/app/db/migrations.py` — Add numbered migrations for system_errors and fix_attempts tables
 - `backend/app/db/system_errors.py` — CRUD for system_errors and fix_attempts (new file)
 - `backend/app/services/autofix_service.py` — Autofix engine (new file)
 - `backend/app/services/error_capture.py` — capture_error() utility (new file)
@@ -299,8 +325,8 @@ export interface FixAttempt { ... }
 - `backend/app/routes/system.py` — System API endpoints (new file)
 - `backend/app/models/system.py` — Pydantic models for system endpoints (new file)
 - `frontend/src/App.vue` — Global error handler, toast duration
-- `frontend/src/services/api/system.ts` — System API module (new file)
-- `frontend/src/services/api/types/system.ts` — System types (new file)
+- `frontend/src/services/api/system.ts` — Add systemApi to existing file
+- `frontend/src/services/api/types/system.ts` — System types (new file in existing types/ dir)
 - `frontend/src/services/api/error-handler.ts` — Enhanced to report errors
 - `frontend/src/views/SystemErrorsPage.vue` — Error dashboard (new file)
 - `frontend/src/composables/useSystemErrors.ts` — Dashboard composable (new file)
