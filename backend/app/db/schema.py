@@ -1979,4 +1979,43 @@ def create_fresh_schema(conn):
         "ON payload_transformers(trigger_id)"
     )
 
+    # --- System error logging tables ---
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS system_errors (
+            id TEXT PRIMARY KEY,
+            timestamp TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            source TEXT NOT NULL CHECK(source IN ('backend', 'frontend')),
+            category TEXT NOT NULL,
+            message TEXT NOT NULL,
+            stack_trace TEXT,
+            request_id TEXT,
+            context_json TEXT,
+            error_hash TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'new' CHECK(status IN ('new', 'investigating', 'fixed', 'ignored')),
+            fix_attempt_id TEXT,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_system_errors_status ON system_errors(status)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_system_errors_hash ON system_errors(error_hash)")
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_system_errors_timestamp ON system_errors(timestamp DESC)"
+    )
+
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS fix_attempts (
+            id TEXT PRIMARY KEY,
+            error_id TEXT NOT NULL REFERENCES system_errors(id),
+            tier INTEGER NOT NULL CHECK(tier IN (1, 2)),
+            status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'running', 'success', 'failed')),
+            action_taken TEXT,
+            agent_session_id TEXT,
+            started_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            completed_at TEXT,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_fix_attempts_error_id ON fix_attempts(error_id)")
+
     conn.commit()

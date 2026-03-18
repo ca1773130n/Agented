@@ -253,6 +253,10 @@ from .ids import (  # noqa: F401
     CAMPAIGN_ID_PREFIX,
     CONVERSATION_ID_LENGTH,
     CONVERSATION_ID_PREFIX,
+    ERROR_ID_LENGTH,
+    ERROR_ID_PREFIX,
+    FIX_ATTEMPT_ID_LENGTH,
+    FIX_ATTEMPT_ID_PREFIX,
     INTEGRATION_ID_LENGTH,
     INTEGRATION_ID_PREFIX,
     MCP_SERVER_ID_LENGTH,
@@ -308,6 +312,8 @@ from .ids import (  # noqa: F401
     _get_unique_bookmark_id,
     _get_unique_campaign_id,
     _get_unique_conversation_id,
+    _get_unique_error_id,
+    _get_unique_fix_attempt_id,
     _get_unique_integration_id,
     _get_unique_mcp_server_id,
     _get_unique_message_id,
@@ -336,7 +342,9 @@ from .ids import (  # noqa: F401
     generate_bookmark_id,
     generate_campaign_id,
     generate_conversation_id,
+    generate_error_id,
     generate_execution_id,
+    generate_fix_attempt_id,
     generate_integration_id,
     generate_mcp_server_id,
     generate_message_id,
@@ -633,6 +641,20 @@ from .sketches import (  # noqa: F401
     get_recent_classified_sketches,
     get_sketch,
     update_sketch,
+)
+
+# System errors and fix attempts
+from .system_errors import (  # noqa: F401
+    count_errors_by_status,
+    create_fix_attempt,
+    create_system_error,
+    find_recent_duplicate,
+    get_system_error,
+    get_system_error_with_fixes,
+    list_fix_attempts,
+    list_system_errors,
+    update_fix_attempt,
+    update_system_error_status,
 )
 
 # Skills (user_skills)

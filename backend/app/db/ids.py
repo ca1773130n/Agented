@@ -94,6 +94,12 @@ SNIPPET_ID_LENGTH = 6
 COMMENT_ID_PREFIX = "cmt-"
 COMMENT_ID_LENGTH = 6
 
+ERROR_ID_PREFIX = "err-"
+ERROR_ID_LENGTH = 6
+
+FIX_ATTEMPT_ID_PREFIX = "fix-"
+FIX_ATTEMPT_ID_LENGTH = 6
+
 
 # --- Central ID factory ---
 
@@ -386,6 +392,16 @@ def generate_comment_id() -> str:
     return generate_id(COMMENT_ID_PREFIX, COMMENT_ID_LENGTH)
 
 
+def generate_error_id() -> str:
+    """Generate a unique error ID like 'err-abc123'."""
+    return generate_id(ERROR_ID_PREFIX, ERROR_ID_LENGTH)
+
+
+def generate_fix_attempt_id() -> str:
+    """Generate a unique fix attempt ID like 'fix-abc123'."""
+    return generate_id(FIX_ATTEMPT_ID_PREFIX, FIX_ATTEMPT_ID_LENGTH)
+
+
 # --- v0.4.0 Collision-safe ID generators ---
 
 
@@ -547,3 +563,21 @@ def _get_unique_snippet_id(conn) -> str:
         cursor = conn.execute("SELECT id FROM prompt_snippets WHERE id = ?", (sid,))
         if cursor.fetchone() is None:
             return sid
+
+
+def _get_unique_error_id(conn) -> str:
+    """Generate an error ID that doesn't exist in the database."""
+    while True:
+        eid = generate_error_id()
+        cursor = conn.execute("SELECT id FROM system_errors WHERE id = ?", (eid,))
+        if cursor.fetchone() is None:
+            return eid
+
+
+def _get_unique_fix_attempt_id(conn) -> str:
+    """Generate a fix attempt ID that doesn't exist in the database."""
+    while True:
+        fid = generate_fix_attempt_id()
+        cursor = conn.execute("SELECT id FROM fix_attempts WHERE id = ?", (fid,))
+        if cursor.fetchone() is None:
+            return fid

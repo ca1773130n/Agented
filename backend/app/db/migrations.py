@@ -3850,6 +3850,48 @@ def _migrate_91_add_sketch_collaborating_status(conn):
     conn.commit()
 
 
+def _migrate_92_system_errors_tables(conn):
+    """Add system_errors and fix_attempts tables for error logging and autofix."""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS system_errors (
+            id TEXT PRIMARY KEY,
+            timestamp TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            source TEXT NOT NULL CHECK(source IN ('backend', 'frontend')),
+            category TEXT NOT NULL,
+            message TEXT NOT NULL,
+            stack_trace TEXT,
+            request_id TEXT,
+            context_json TEXT,
+            error_hash TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'new'
+                CHECK(status IN ('new', 'investigating', 'fixed', 'ignored')),
+            fix_attempt_id TEXT,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_system_errors_status ON system_errors(status)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_system_errors_hash ON system_errors(error_hash)")
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_system_errors_timestamp ON system_errors(timestamp DESC)"
+    )
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS fix_attempts (
+            id TEXT PRIMARY KEY,
+            error_id TEXT NOT NULL REFERENCES system_errors(id),
+            tier INTEGER NOT NULL CHECK(tier IN (1, 2)),
+            status TEXT NOT NULL DEFAULT 'pending'
+                CHECK(status IN ('pending', 'running', 'success', 'failed')),
+            action_taken TEXT,
+            agent_session_id TEXT,
+            started_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            completed_at TEXT,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_fix_attempts_error_id ON fix_attempts(error_id)")
+
+
 VERSIONED_MIGRATIONS = [
     (1, "add_github_columns", _migrate_add_github_columns),
     (2, "add_pr_reviews_table", _migrate_add_pr_reviews_table),
@@ -3956,4 +3998,5 @@ VERSIONED_MIGRATIONS = [
     (89, "payload_transformers", _migrate_88_payload_transformers),
     (90, "add_super_agent_source", _migrate_add_super_agent_source),
     (91, "add_sketch_collaborating_status", _migrate_91_add_sketch_collaborating_status),
+    (92, "system_errors_tables", _migrate_92_system_errors_tables),
 ]
