@@ -431,6 +431,22 @@ def create_app(config=None):
         # Inspect the original exception for more specific error codes.
         # Flask wraps unhandled exceptions in an HTTPException; unwrap if possible.
         original = getattr(e, "original_exception", e)
+
+        # Capture all 500 errors
+        try:
+            import traceback as _tb
+
+            from app.services.error_capture import capture_error
+
+            tb_str = (
+                "".join(_tb.format_exception(type(original), original, original.__traceback__))
+                if hasattr(original, "__traceback__") and original.__traceback__
+                else None
+            )
+            capture_error(category="runtime_error", message=str(original), stack_trace=tb_str)
+        except Exception:
+            pass  # Never let error capture break error handling
+
         if isinstance(original, ValueError):
             return error_response(
                 "VALIDATION_ERROR",
@@ -464,6 +480,12 @@ def create_app(config=None):
         import logging as _db_log
 
         _db_log.getLogger(__name__).error("Database operational error: %s", e, exc_info=True)
+        try:
+            from app.services.error_capture import capture_error
+
+            capture_error(category="db_error", message=str(e))
+        except Exception:
+            pass
         return error_response(
             "SERVICE_UNAVAILABLE",
             "Service temporarily unavailable",

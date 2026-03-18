@@ -158,6 +158,13 @@ def execute_sketch(
     def _on_error(error_msg):
         update_sketch(sketch_id, status="classified")
         logger.error("Sketch %s failed: %s", sketch_id, error_msg)
+        from app.services.error_capture import capture_error
+
+        capture_error(
+            category="streaming_error",
+            message=error_msg,
+            context={"sketch_id": sketch_id, "super_agent_id": super_agent_id},
+        )
 
     run_streaming_response(
         session_id=session_id,
@@ -356,6 +363,13 @@ def execute_delegate(
         )
         _mark_delegation_status(sketch_id, captured_super_agent_id, "error")
         _check_all_delegations_complete(sketch_id)
+        from app.services.error_capture import capture_error
+
+        capture_error(
+            category="streaming_error",
+            message=error_msg,
+            context={"sketch_id": sketch_id, "super_agent_id": captured_super_agent_id},
+        )
 
     try:
         run_streaming_response(

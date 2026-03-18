@@ -6,6 +6,7 @@ chat endpoint and the Sketch execution service.
 
 import logging
 import threading
+import traceback
 from typing import Callable, Optional
 
 from .chat_state_service import ChatStateService
@@ -97,6 +98,14 @@ def run_streaming_response(
         except Exception as e:
             error_msg = str(e)
             logger.exception("Streaming error for session %s", _session_id)
+            from app.services.error_capture import capture_error
+
+            capture_error(
+                category="streaming_error",
+                message=error_msg,
+                stack_trace=traceback.format_exc(),
+                context={"session_id": _session_id, "super_agent_id": _super_agent_id},
+            )
             try:
                 ChatStateService.push_delta(_session_id, "error", {"error": error_msg})
                 ChatStateService.push_status(_session_id, "error")

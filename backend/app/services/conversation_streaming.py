@@ -418,12 +418,21 @@ def _stream_via_proxy(
 
     except httpx.TimeoutException:
         logger.error("Proxy request timed out at %s", api_base, exc_info=True)
+        from app.services.error_capture import capture_error
+
+        capture_error(category="proxy_error", message=f"Proxy request timed out at {api_base}")
         yield "\n\n[Proxy request timed out]"
     except httpx.ConnectError:
         logger.error("Could not connect to proxy at %s", api_base, exc_info=True)
+        from app.services.error_capture import capture_error
+
+        capture_error(category="proxy_error", message=f"Could not connect to proxy at {api_base}")
         yield f"\n\n[Could not connect to proxy at {api_base}]"
     except Exception as exc:
         logger.error("Proxy streaming error: %s", exc, exc_info=True)
+        from app.services.error_capture import capture_error
+
+        capture_error(category="proxy_error", message=str(exc))
         yield f"\n\n[Streaming error: {exc}]"
 
 
@@ -458,6 +467,9 @@ def _stream_via_litellm(
 
     except Exception as exc:
         logger.error("LiteLLM streaming error: %s", exc, exc_info=True)
+        from app.services.error_capture import capture_error
+
+        capture_error(category="streaming_error", message=str(exc))
         yield f"\n\n[Streaming error: {exc}]"
 
 
@@ -548,9 +560,15 @@ def _stream_via_cli(
 
     except FileNotFoundError:
         logger.error("Claude CLI not found", exc_info=True)
+        from app.services.error_capture import capture_error
+
+        capture_error(category="cli_error", message="Claude CLI not found")
         yield "[Error: Claude CLI not found. Please install Claude Code CLI.]"
     except Exception as exc:
         logger.error("CLI streaming error: %s", exc, exc_info=True)
+        from app.services.error_capture import capture_error
+
+        capture_error(category="cli_error", message=str(exc))
         yield f"[Error: {exc}]"
 
 
@@ -647,9 +665,15 @@ def _stream_via_opencode_cli(
 
     except FileNotFoundError:
         logger.error("OpenCode CLI not found", exc_info=True)
+        from app.services.error_capture import capture_error
+
+        capture_error(category="cli_error", message="OpenCode CLI not found")
         yield "[Error: OpenCode CLI not found. Please install OpenCode.]"
     except Exception as exc:
         logger.error("OpenCode CLI streaming error: %s", exc, exc_info=True)
+        from app.services.error_capture import capture_error
+
+        capture_error(category="cli_error", message=str(exc))
         yield f"[Error: {exc}]"
 
 
