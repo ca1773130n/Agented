@@ -17,6 +17,7 @@ Corresponds to 05-RESEARCH.md Recommendations 1-2.
 """
 
 import logging
+import os
 import sys
 from contextvars import ContextVar
 
@@ -53,6 +54,10 @@ def configure_logging(
         ``"json"`` for machine-parseable JSON lines (default), anything
         else for human-readable plaintext.
     """
+    log_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "logs")
+    os.makedirs(log_dir, exist_ok=True)
+    log_file = os.path.join(log_dir, "agented.log")
+
     root = logging.getLogger()
     root.handlers.clear()
     root.setLevel(log_level.upper())
@@ -81,3 +86,14 @@ def configure_logging(
     handler.addFilter(RequestIdFilter())
 
     root.addHandler(handler)
+
+    from logging.handlers import RotatingFileHandler
+
+    file_handler = RotatingFileHandler(
+        log_file,
+        maxBytes=10 * 1024 * 1024,  # 10 MB
+        backupCount=5,
+    )
+    file_handler.setFormatter(formatter)
+    file_handler.addFilter(RequestIdFilter())
+    root.addHandler(file_handler)
