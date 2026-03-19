@@ -96,17 +96,43 @@ def execute_sketch(
 
     Sets status to 'in_progress' before launching the background thread
     to prevent race conditions. When team_id is provided, prepends team
-    context and processes delegations after completion. Returns session_id.
+    context and processes delegations after completion.
+
+    When ``super_agent_id`` starts with ``psa-``, the instance's template SA
+    is used for backend detection, its ``worktree_path`` is passed as cwd,
+    and the template SA ID is used for session management.
+
+    Returns session_id.
     """
     # 1. Set status before launching thread
     update_sketch(sketch_id, status="in_progress")
 
-    # 2. Resolve backend from super agent record
-    sa = get_super_agent(super_agent_id)
-    backend = (sa.get("backend_type") if sa else None) or "claude"
+    # 2. Resolve backend — handle project SA instances (psa-) vs global SAs
+    cwd: Optional[str] = None
+    instance_id: Optional[str] = None
+    if super_agent_id.startswith("psa-"):
+        from ..db.project_sa_instances import get_project_sa_instance
+
+        instance = get_project_sa_instance(super_agent_id)
+        if instance:
+            sa = get_super_agent(instance["template_sa_id"])
+            backend = (sa.get("backend_type") if sa else None) or "claude"
+            cwd = instance.get("worktree_path")
+            instance_id = super_agent_id
+            # Use template SA ID for session management
+            effective_sa_id = instance["template_sa_id"]
+        else:
+            # Instance not found — fall back to treating as regular SA ID
+            sa = get_super_agent(super_agent_id)
+            backend = (sa.get("backend_type") if sa else None) or "claude"
+            effective_sa_id = super_agent_id
+    else:
+        sa = get_super_agent(super_agent_id)
+        backend = (sa.get("backend_type") if sa else None) or "claude"
+        effective_sa_id = super_agent_id
 
     # 3. Get or create session
-    session_id = SuperAgentSessionService.get_or_create_session(super_agent_id)
+    session_id = SuperAgentSessionService.get_or_create_session(effective_sa_id)
 
     # 4. Build content — prepend team context if team_id provided
     team_context = None
@@ -175,10 +201,13 @@ def execute_sketch(
 
     run_streaming_response(
         session_id=session_id,
-        super_agent_id=super_agent_id,
+        super_agent_id=effective_sa_id,
         backend=backend,
         on_complete=_on_complete,
         on_error=_on_error,
+        cwd=cwd,
+        chat_mode="work" if cwd else None,
+        instance_id=instance_id,
     )
 
     return session_id

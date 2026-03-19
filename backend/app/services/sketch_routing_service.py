@@ -300,8 +300,10 @@ class SketchRoutingService:
 
         When ``project_id`` is provided, only teams assigned to that project
         (via the ``project_teams`` join table) and their members are considered.
-        When ``project_id`` is ``None``, all super agents and teams are searched
-        (backward-compatible global search).
+        If the project has SA instances (``project_sa_instances``), the routing
+        prefers a ``psa-`` instance whose template SA matches the resolved
+        super agent. When ``project_id`` is ``None``, all super agents and
+        teams are searched (backward-compatible global search).
 
         Returns dict with target_type, target_id, reason.
         """
@@ -311,6 +313,13 @@ class SketchRoutingService:
 
         phase = classification.get("phase", "")
         domains = classification.get("domains", [])
+
+        # Load project SA instances when project_id is provided
+        psa_instances: list = []
+        if project_id:
+            from ..db.project_sa_instances import get_project_sa_instances_for_project
+
+            psa_instances = get_project_sa_instances_for_project(project_id)
 
         if project_id:
             # Scoped search: only teams assigned to this project
@@ -323,7 +332,7 @@ class SketchRoutingService:
                 ).fetchall()
                 teams = [dict(r) for r in team_rows]
 
-                if not teams:
+                if not teams and not psa_instances:
                     return {
                         "target_type": "none",
                         "target_id": None,
@@ -331,14 +340,17 @@ class SketchRoutingService:
                     }
 
                 team_ids = [t["id"] for t in teams]
-                placeholders = ",".join("?" * len(team_ids))
-                sa_rows = conn.execute(
-                    f"SELECT sa.* FROM super_agents sa "
-                    f"JOIN team_members tm ON sa.id = tm.super_agent_id "
-                    f"WHERE tm.team_id IN ({placeholders})",
-                    team_ids,
-                ).fetchall()
-                super_agents = [dict(r) for r in sa_rows]
+                if team_ids:
+                    placeholders = ",".join("?" * len(team_ids))
+                    sa_rows = conn.execute(
+                        f"SELECT sa.* FROM super_agents sa "
+                        f"JOIN team_members tm ON sa.id = tm.super_agent_id "
+                        f"WHERE tm.team_id IN ({placeholders})",
+                        team_ids,
+                    ).fetchall()
+                    super_agents = [dict(r) for r in sa_rows]
+                else:
+                    super_agents = []
         else:
             # Global search (existing behavior)
             super_agents = get_all_super_agents()
@@ -350,11 +362,12 @@ class SketchRoutingService:
                 sa_name = (sa.get("name") or "").lower()
                 sa_desc = (sa.get("description") or "").lower()
                 if phase in sa_name or phase in sa_desc:
-                    return {
+                    result = {
                         "target_type": "super_agent",
                         "target_id": sa["id"],
                         "reason": f"SuperAgent '{sa.get('name')}' matches phase '{phase}'",
                     }
+                    return cls._resolve_to_instance(result, psa_instances, domains)
 
         # Execution -> find team whose description matches any classified domain
         if phase == "execution" and domains:
@@ -363,11 +376,12 @@ class SketchRoutingService:
                 team_name = (team.get("name") or "").lower()
                 for domain in domains:
                     if domain in team_desc or domain in team_name:
-                        return {
+                        result = {
                             "target_type": "team",
                             "target_id": team["id"],
                             "reason": f"Team '{team.get('name')}' matches domain '{domain}'",
                         }
+                        return cls._resolve_to_instance(result, psa_instances, domains)
 
         # Review -> find SuperAgent with review/audit capabilities
         if phase == "review":
@@ -380,11 +394,26 @@ class SketchRoutingService:
                     or "review" in sa_desc
                     or "audit" in sa_desc
                 ):
-                    return {
+                    result = {
                         "target_type": "super_agent",
                         "target_id": sa["id"],
-                        "reason": f"SuperAgent '{sa.get('name')}' has review/audit capabilities",
+                        "reason": (f"SuperAgent '{sa.get('name')}' has review/audit capabilities"),
                     }
+                    return cls._resolve_to_instance(result, psa_instances, domains)
+
+        # If no match found via teams/SAs but project instances exist, pick the
+        # best matching instance directly.
+        if psa_instances:
+            best = cls._pick_best_instance(psa_instances, domains)
+            if best:
+                return {
+                    "target_type": "super_agent",
+                    "target_id": best["id"],
+                    "reason": (
+                        f"Project SA instance '{best['id']}' "
+                        f"(template {best['template_sa_id']}) selected for project"
+                    ),
+                }
 
         # No match found
         return {
@@ -392,3 +421,75 @@ class SketchRoutingService:
             "target_id": None,
             "reason": f"No matching target found for phase={phase}, domains={domains}",
         }
+
+    # ------------------------------------------------------------------
+    # Instance resolution helpers
+    # ------------------------------------------------------------------
+
+    @classmethod
+    def _resolve_to_instance(cls, result: dict, psa_instances: list, domains: list) -> dict:
+        """If a project SA instance exists for the resolved target, swap in the psa- ID.
+
+        For ``target_type == "super_agent"`` the instance must share the same
+        ``template_sa_id``.  For ``target_type == "team"`` we look up the team
+        leader, then search instances by that template SA.  If no instance
+        matches, the original result is returned unchanged.
+        """
+        if not psa_instances:
+            return result
+
+        sa_id = None
+        if result["target_type"] == "super_agent":
+            sa_id = result["target_id"]
+        elif result["target_type"] == "team":
+            # Resolve team leader for instance matching
+            from .sketch_execution_service import find_team_super_agent
+
+            sa_id = find_team_super_agent(result["target_id"])
+
+        if sa_id:
+            for inst in psa_instances:
+                if inst["template_sa_id"] == sa_id:
+                    result["target_type"] = "super_agent"
+                    result["target_id"] = inst["id"]
+                    result["reason"] += f" (routed to project instance {inst['id']})"
+                    return result
+
+        # No exact match — try domain-based instance selection
+        best = cls._pick_best_instance(psa_instances, domains)
+        if best:
+            result["target_type"] = "super_agent"
+            result["target_id"] = best["id"]
+            result["reason"] += f" (routed to project instance {best['id']} by domain match)"
+
+        return result
+
+    @classmethod
+    def _pick_best_instance(cls, psa_instances: list, domains: list) -> Optional[dict]:
+        """Pick the best project SA instance for the given domains.
+
+        Scores each instance by how many classified domains appear in the
+        template SA's name or description.  Returns the highest scorer, or
+        the first instance if none match.
+        """
+        if not psa_instances:
+            return None
+
+        if not domains:
+            return psa_instances[0]
+
+        from ..db.super_agents import get_super_agent
+
+        best_inst = None
+        best_score = -1
+        for inst in psa_instances:
+            sa = get_super_agent(inst["template_sa_id"])
+            if not sa:
+                continue
+            sa_text = f"{sa.get('name', '')} {sa.get('description', '')}".lower()
+            score = sum(1 for d in domains if d in sa_text)
+            if score > best_score:
+                best_score = score
+                best_inst = inst
+
+        return best_inst or psa_instances[0]
