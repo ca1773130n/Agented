@@ -217,6 +217,15 @@ from .trigger import (
     TriggerListResponse,
     UpdateTriggerRequest,
 )
+from .project_instances import (
+    CreateInstanceRequest,
+    CreateInstanceResponse,
+    InstanceListResponse,
+    ProjectInstancePath,
+    ProjectSAInstance,
+    ProjectTeamInstance,
+    SAInstanceInfo,
+)
 from .workflow import (
     CreateWorkflowRequest,
     CreateWorkflowResponse,
@@ -328,6 +337,14 @@ __all__ = [
     "CreateProjectResponse",
     "UpdateProjectRequest",
     "AssignTeamRequest",
+    # Project Instances
+    "CreateInstanceRequest",
+    "CreateInstanceResponse",
+    "InstanceListResponse",
+    "ProjectInstancePath",
+    "ProjectSAInstance",
+    "ProjectTeamInstance",
+    "SAInstanceInfo",
     # Plugin
     "Plugin",
     "PluginDetail",
