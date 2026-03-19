@@ -37,6 +37,7 @@ class ChatSendRequest(BaseModel):
     account_id: Optional[str] = Field(None, description="Account ID for proxy routing")
     model: Optional[str] = Field(None, description="Model override")
     mode: str = Field("single", description="Chat mode: single, all, compound")
+    chat_mode: Optional[str] = Field(None, description="Chat mode: management or work")
 
 
 def _generate_message_id() -> str:
@@ -50,6 +51,7 @@ def _resolve_session(data: dict, super_agent_id: str, session_id: str) -> dict:
     """Resolve session and effective backend from request data.
 
     Returns a dict with resolved values, or a dict with 'error_response' key on failure.
+    Handles psa- prefixed IDs for project-scoped instances.
     """
     session = get_super_agent_session(session_id)
     if not session:
@@ -65,9 +67,34 @@ def _resolve_session(data: dict, super_agent_id: str, session_id: str) -> dict:
 
     backend = data.get("backend", "auto")
     effective_backend = backend if backend != "auto" else None
-    if not effective_backend:
-        sa = get_super_agent(super_agent_id)
-        effective_backend = (sa.get("backend_type") if sa else None) or "claude"
+
+    instance = None
+    if super_agent_id.startswith("psa-"):
+        from ..db.project_sa_instances import get_project_sa_instance
+
+        instance = get_project_sa_instance(super_agent_id)
+        if not instance:
+            return {
+                "error_response": error_response(
+                    "NOT_FOUND", "Instance not found", HTTPStatus.NOT_FOUND
+                )
+            }
+        # Use the template SA for backend resolution
+        if not effective_backend:
+            sa = get_super_agent(instance["template_sa_id"])
+            effective_backend = (sa.get("backend_type") if sa else None) or "claude"
+    else:
+        if not effective_backend:
+            sa = get_super_agent(super_agent_id)
+            effective_backend = (sa.get("backend_type") if sa else None) or "claude"
+
+    # Resolve chat_mode
+    chat_mode = data.get("chat_mode")
+    if not chat_mode and instance:
+        chat_mode = instance.get("default_chat_mode", "management")
+
+    # Resolve cwd for work mode
+    cwd = instance["worktree_path"] if instance and chat_mode == "work" else None
 
     return {
         "session": session,
@@ -76,6 +103,9 @@ def _resolve_session(data: dict, super_agent_id: str, session_id: str) -> dict:
         "account_id": data.get("account_id"),
         "model": data.get("model"),
         "mode": data.get("mode", "single"),
+        "instance": instance,
+        "chat_mode": chat_mode,
+        "cwd": cwd,
     }
 
 
@@ -171,6 +201,9 @@ def _launch_background_thread(
     effective_backend: str,
     account_id: Optional[str],
     model: Optional[str],
+    cwd: Optional[str] = None,
+    chat_mode: Optional[str] = None,
+    instance_id: Optional[str] = None,
 ) -> None:
     """Launch background thread for LLM streaming using shared helper."""
     from ..services.streaming_helper import run_streaming_response
@@ -181,6 +214,9 @@ def _launch_background_thread(
         backend=effective_backend,
         account_id=account_id,
         model=model,
+        cwd=cwd,
+        chat_mode=chat_mode,
+        instance_id=instance_id,
     )
 
 
@@ -248,6 +284,9 @@ def send_chat_message(path: SessionPath):
     account_id = resolved["account_id"]
     model = resolved["model"]
     mode = resolved["mode"]
+    cwd = resolved.get("cwd")
+    chat_mode = resolved.get("chat_mode")
+    instance = resolved.get("instance")
 
     # Add user message to session via SuperAgentSessionService
     success, error = SuperAgentSessionService.send_message(
@@ -277,7 +316,14 @@ def send_chat_message(path: SessionPath):
         return result, HTTPStatus.OK
 
     _launch_background_thread(
-        path.session_id, path.super_agent_id, effective_backend, account_id, model
+        path.session_id,
+        path.super_agent_id,
+        effective_backend,
+        account_id,
+        model,
+        cwd=cwd,
+        chat_mode=chat_mode,
+        instance_id=instance["id"] if instance else None,
     )
 
     return {"status": "ok", "message_id": message_id}, HTTPStatus.OK

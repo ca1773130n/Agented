@@ -23,6 +23,9 @@ def run_streaming_response(
     model: Optional[str] = None,
     on_complete: Optional[Callable] = None,
     on_error: Optional[Callable] = None,
+    cwd: Optional[str] = None,
+    chat_mode: Optional[str] = None,
+    instance_id: Optional[str] = None,
 ) -> None:
     """Launch a background thread that streams an LLM response.
 
@@ -38,6 +41,9 @@ def run_streaming_response(
         model: Optional model override.
         on_complete: Called after successful completion (no args).
         on_error: Called on error with (error_message: str).
+        cwd: Optional working directory for CLI subprocess (work mode).
+        chat_mode: Optional chat mode ('management' or 'work').
+        instance_id: Optional project SA instance ID for project context.
     """
     _session_id = session_id
     _super_agent_id = super_agent_id
@@ -49,7 +55,10 @@ def run_streaming_response(
             ChatStateService.push_status(_session_id, "streaming")
 
             system_prompt = SuperAgentSessionService.assemble_system_prompt(
-                _super_agent_id, _session_id
+                _super_agent_id,
+                _session_id,
+                chat_mode=chat_mode,
+                instance_id=instance_id,
             )
             # Build LLM messages: system prompt first, then conversation log
             state = SuperAgentSessionService.get_session_state(_session_id)
@@ -68,6 +77,8 @@ def run_streaming_response(
                 model=model,
                 account_email=account_id,
                 backend=backend,
+                cwd=cwd,
+                chat_mode=chat_mode,
             ):
                 if chunk:
                     accumulated.append(chunk)

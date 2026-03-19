@@ -30,8 +30,13 @@ class SessionPath(BaseModel):
 
 @super_agent_sessions_bp.get("/<super_agent_id>/sessions")
 def list_sessions(path: SuperAgentPath):
-    """List all sessions for a super agent."""
-    sessions = get_super_agent_sessions(path.super_agent_id)
+    """List all sessions for a super agent or project-scoped instance."""
+    if path.super_agent_id.startswith("psa-"):
+        from ..db.super_agents import get_sessions_for_instance
+
+        sessions = get_sessions_for_instance(path.super_agent_id)
+    else:
+        sessions = get_super_agent_sessions(path.super_agent_id)
     return {"sessions": sessions}, HTTPStatus.OK
 
 

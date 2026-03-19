@@ -175,17 +175,24 @@ def stream_llm_response(
     api_base: str | None = None,
     account_email: str | None = None,
     backend: str | None = None,
+    cwd: str | None = None,
+    chat_mode: str | None = None,
 ) -> Generator[str, None, None]:
     """Stream an LLM response token by token.
 
     Priority order (adjusted when account_email is set):
-    1. Explicit api_base/api_key args (proxy mode)
-    2. CLIProxyAPI (managed or auto-detected) — required when account_email is set
-    3. ANTHROPIC_API_KEY env var (direct API, no account routing, Claude only)
-    4. Claude CLI subprocess fallback (Claude only)
+    1. Work mode with cwd — forces CLI subprocess with cwd
+    2. Explicit api_base/api_key args (proxy mode)
+    3. CLIProxyAPI (managed or auto-detected) — required when account_email is set
+    4. ANTHROPIC_API_KEY env var (direct API, no account routing, Claude only)
+    5. Claude CLI subprocess fallback (Claude only)
 
     When ``account_email`` is specified, CLIProxyAPI is tried before direct API
     because account routing only works through the proxy's X-Account-Email header.
+
+    Args:
+        cwd: Optional working directory for CLI subprocess (work mode).
+        chat_mode: Optional chat mode ('management' or 'work').
 
     Yields:
         Text chunks as they arrive from the LLM.
@@ -197,6 +204,20 @@ def stream_llm_response(
         resolved_model = _get_default_model(effective_backend)
     resolved_base = api_base or os.environ.get("ANTHROPIC_API_BASE", "").strip()
     resolved_key = api_key or os.environ.get("ANTHROPIC_API_KEY", "").strip()
+
+    # Work mode: force CLI subprocess with cwd
+    if chat_mode == "work" and cwd:
+        logger.info(
+            "Streaming via CLI in work mode (backend=%s, model=%s, cwd=%s)",
+            effective_backend,
+            resolved_model,
+            cwd,
+        )
+        if effective_backend == "opencode":
+            yield from _stream_via_opencode_cli(messages, resolved_model, cwd=cwd)
+        else:
+            yield from _stream_via_cli(messages, resolved_model, cwd=cwd)
+        return
 
     # OpenCode backend ALWAYS uses the OpenCode CLI.
     # OpenCode models use provider/model format (e.g. zhipu/glm-5-free) which
@@ -476,10 +497,14 @@ def _stream_via_litellm(
 def _stream_via_cli(
     messages: List[dict],
     model: str,
+    cwd: str | None = None,
 ) -> Generator[str, None, None]:
     """Stream via Claude CLI with --output-format stream-json --verbose.
 
     Last-resort fallback when no API base or key is configured.
+
+    Args:
+        cwd: Optional working directory for the subprocess.
     """
     prompt_parts = []
     for msg in messages:
@@ -502,6 +527,7 @@ def _stream_via_cli(
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             bufsize=0,
+            cwd=cwd,
         )
 
         timed_out = False
@@ -575,11 +601,15 @@ def _stream_via_cli(
 def _stream_via_opencode_cli(
     messages: List[dict],
     model: str,
+    cwd: str | None = None,
 ) -> Generator[str, None, None]:
-    """Stream via OpenCode CLI for native opencode/* models.
+    """Stream via OpenCode CLI for native opencode models.
 
-    OpenCode native models (e.g. opencode/big-pickle) are only accessible
-    through the ``opencode`` CLI, not through CLIProxyAPI.
+    OpenCode native models are only accessible through the ``opencode`` CLI,
+    not through CLIProxyAPI.
+
+    Args:
+        cwd: Optional working directory for the subprocess.
     """
     prompt_parts = []
     for msg in messages:
@@ -603,6 +633,7 @@ def _stream_via_opencode_cli(
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             bufsize=0,
+            cwd=cwd,
         )
 
         timed_out = False

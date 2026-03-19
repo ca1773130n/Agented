@@ -79,6 +79,7 @@ class SuperAgentSessionService:
                 "summary": None,
                 "token_count": 0,
                 "output_buffer": collections.deque(maxlen=cls.OUTPUT_RING_BUFFER_SIZE),
+                "instance_id": instance_id,
             }
 
             return session_id, None
@@ -282,13 +283,36 @@ class SuperAgentSessionService:
             }
 
     @classmethod
-    def assemble_system_prompt(cls, super_agent_id: str, session_id: str) -> str:
+    def assemble_system_prompt(
+        cls,
+        super_agent_id: str,
+        session_id: str,
+        chat_mode: Optional[str] = None,
+        instance_id: Optional[str] = None,
+    ) -> str:
         """Assemble a system prompt from identity documents and session state.
 
         Includes SOUL, IDENTITY, MEMORY, ROLE documents, session summary,
         and recent conversation history (last 20 messages).
+
+        When instance_id is provided, appends project context (name, description,
+        repository, working directory, chat mode).
         """
-        documents = get_super_agent_documents(super_agent_id)
+        # If super_agent_id is a psa- instance, resolve the template SA
+        effective_sa_id = super_agent_id
+        if super_agent_id.startswith("psa-") and not instance_id:
+            instance_id = super_agent_id
+        if instance_id and instance_id.startswith("psa-"):
+            try:
+                from ..db.project_sa_instances import get_project_sa_instance
+
+                inst = get_project_sa_instance(instance_id)
+                if inst:
+                    effective_sa_id = inst["template_sa_id"]
+            except Exception:
+                pass
+
+        documents = get_super_agent_documents(effective_sa_id)
 
         # Group documents by type
         docs_by_type: Dict[str, List[dict]] = {}
@@ -327,7 +351,7 @@ class SuperAgentSessionService:
         # Inject pending messages from other agents
         from ..db.messages import get_pending_messages, update_message_status
 
-        pending_msgs = get_pending_messages(super_agent_id)
+        pending_msgs = get_pending_messages(effective_sa_id)
         if pending_msgs:
             msg_lines = []
             for msg in pending_msgs:
@@ -338,6 +362,28 @@ class SuperAgentSessionService:
                 msg_lines.append(f"- [{priority.upper()}] From {from_id}: {subject}\n  {content}")
                 update_message_status(msg["id"], "delivered")
             parts.append("## Pending Messages\n\n" + "\n".join(msg_lines) + "\n")
+
+        # Append project context when associated with an instance
+        if instance_id:
+            try:
+                from ..db.project_sa_instances import get_project_sa_instance
+                from ..db.projects import get_project
+
+                instance = get_project_sa_instance(instance_id)
+                if instance:
+                    project = get_project(instance["project_id"])
+                    if project:
+                        project_context = f"\n\n## Project Context\nProject: {project['name']}"
+                        if project.get("description"):
+                            project_context += f"\nDescription: {project['description']}"
+                        if project.get("github_repo"):
+                            project_context += f"\nRepository: {project['github_repo']}"
+                        if instance.get("worktree_path"):
+                            project_context += f"\nWorking Directory: {instance['worktree_path']}"
+                        project_context += f"\nChat Mode: {chat_mode or 'management'}"
+                        parts.append(project_context)
+            except Exception:
+                logger.debug("Failed to load project context for instance %s", instance_id)
 
         return "\n".join(parts)
 
@@ -409,6 +455,7 @@ class SuperAgentSessionService:
                     "summary": row.get("summary"),
                     "token_count": row.get("token_count", 0),
                     "output_buffer": collections.deque(maxlen=cls.OUTPUT_RING_BUFFER_SIZE),
+                    "instance_id": row.get("instance_id"),
                 }
 
             logger.info("Restored %d active sessions from database", len(active_rows))
