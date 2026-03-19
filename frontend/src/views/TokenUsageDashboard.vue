@@ -251,6 +251,24 @@ function startMonitoringPolling() {
 }
 function stopMonitoringPolling() { if (pollingInterval.value) { clearInterval(pollingInterval.value); pollingInterval.value = null; } }
 
+/** Fill date gaps so the chart has a data point for every day in the range. */
+function fillDateGaps(data: UsageSummaryEntry[], startDate: string, endDate: string): UsageSummaryEntry[] {
+  const existing = new Map(data.map(d => [d.period_start, d]));
+  const result: UsageSummaryEntry[] = [];
+  const cur = new Date(startDate + 'T00:00:00');
+  const end = new Date(endDate + 'T00:00:00');
+  while (cur <= end) {
+    const key = cur.toISOString().slice(0, 10);
+    result.push(existing.get(key) ?? {
+      period_start: key, total_cost_usd: 0, total_input_tokens: 0,
+      total_output_tokens: 0, total_cache_read_tokens: 0, total_cache_creation_tokens: 0,
+      execution_count: 0, session_count: 0, total_turns: 0,
+    });
+    cur.setDate(cur.getDate() + 1);
+  }
+  return result;
+}
+
 async function loadData() {
   isLoading.value = true;
   try {
@@ -260,7 +278,8 @@ async function loadData() {
       budgetApi.getUsageByEntity({ entity_type: activeEntityTab.value, start_date, end_date }),
       budgetApi.getLimits(),
     ]);
-    summaryData.value = summaryRes.summary || []; entityData.value = entityRes.entities || [];
+    summaryData.value = fillDateGaps(summaryRes.summary || [], start_date, end_date);
+    entityData.value = entityRes.entities || [];
     budgetLimits.value = limitsRes.limits || [];
   } catch (err) {
     showToast('Failed to load usage data', 'error');

@@ -204,7 +204,7 @@ onMounted(loadData);
       </div>
 
       <!-- Rules List -->
-      <EmptyState v-if="quotaRules.length === 0 && !showForm" title="No quota rules configured" description="Click &quot;Add Rule&quot; to create one." />
+      <EmptyState v-if="quotaRules.length === 0" title="No quota rules configured" description="Click &quot;Add Rule&quot; to create one." />
       <div class="rules-list">
         <div v-for="rule in quotaRules" :key="rule.id" class="card rule-card">
           <div class="rule-header">
