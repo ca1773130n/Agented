@@ -133,6 +133,7 @@ async function loadData() {
     const targetSession = route.query.session as string | undefined;
     if (targetSession) {
       await selectSession(targetSession);
+      rightTab.value = 'identity';
     }
     return data;
   } catch (err) {
@@ -298,7 +299,7 @@ async function loadData() {
                 v-for="sess in sessions"
                 :key="sess.id"
                 :class="['session-card', { active: sess.id === sessionId }]"
-                @click="selectSession(sess.id)"
+                @click="selectSession(sess.id); rightTab = 'identity'"
               >
                 <div class="session-info">
                   <span class="session-id">{{ sess.id }}</span>
