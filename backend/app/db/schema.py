@@ -848,6 +848,7 @@ def create_fresh_schema(conn):
             summary TEXT,
             token_count INTEGER DEFAULT 0,
             last_compacted_at TIMESTAMP,
+            instance_id TEXT REFERENCES project_sa_instances(id) ON DELETE SET NULL,
             started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             ended_at TIMESTAMP,
             FOREIGN KEY (super_agent_id) REFERENCES super_agents(id) ON DELETE CASCADE
@@ -882,6 +883,7 @@ def create_fresh_schema(conn):
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_super_agent_sessions_status ON super_agent_sessions(status)"
     )
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_sas_instance ON super_agent_sessions(instance_id)")
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_agent_messages_to ON agent_messages(to_agent_id, status)"
     )
@@ -2017,5 +2019,39 @@ def create_fresh_schema(conn):
         )
     """)
     conn.execute("CREATE INDEX IF NOT EXISTS idx_fix_attempts_error_id ON fix_attempts(error_id)")
+
+    # --- Project-scoped SA instances ---
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS project_sa_instances (
+            id TEXT PRIMARY KEY,
+            project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+            template_sa_id TEXT NOT NULL REFERENCES super_agents(id),
+            worktree_path TEXT,
+            default_chat_mode TEXT NOT NULL DEFAULT 'management'
+                CHECK(default_chat_mode IN ('management', 'work')),
+            config_overrides TEXT,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(project_id, template_sa_id)
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_psa_project ON project_sa_instances(project_id)")
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_psa_template ON project_sa_instances(template_sa_id)"
+    )
+
+    # --- Project-scoped team instances ---
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS project_team_instances (
+            id TEXT PRIMARY KEY,
+            project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+            template_team_id TEXT NOT NULL REFERENCES teams(id),
+            config_overrides TEXT,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(project_id, template_team_id)
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_pti_project ON project_team_instances(project_id)")
 
     conn.commit()

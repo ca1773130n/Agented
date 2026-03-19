@@ -3919,6 +3919,169 @@ def _migrate_93_repair_health_alerts_table(conn):
     )
 
 
+def _migrate_94_project_scoped_instances(conn):
+    """Add project-scoped SA and team instance tables.
+
+    1. Create project_sa_instances table
+    2. Create project_team_instances table
+    3. ALTER TABLE super_agent_sessions ADD COLUMN instance_id
+    4. CREATE INDEX idx_sas_instance
+    5. Data migration: create instance rows for existing sessions and project_teams
+    """
+    from .ids import _get_unique_psa_id, _get_unique_pti_id
+
+    # 1. Create project_sa_instances table
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS project_sa_instances (
+            id TEXT PRIMARY KEY,
+            project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+            template_sa_id TEXT NOT NULL REFERENCES super_agents(id),
+            worktree_path TEXT,
+            default_chat_mode TEXT NOT NULL DEFAULT 'management'
+                CHECK(default_chat_mode IN ('management', 'work')),
+            config_overrides TEXT,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(project_id, template_sa_id)
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_psa_project ON project_sa_instances(project_id)")
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_psa_template ON project_sa_instances(template_sa_id)"
+    )
+
+    # 2. Create project_team_instances table
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS project_team_instances (
+            id TEXT PRIMARY KEY,
+            project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+            template_team_id TEXT NOT NULL REFERENCES teams(id),
+            config_overrides TEXT,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(project_id, template_team_id)
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_pti_project ON project_team_instances(project_id)")
+
+    # 3. ALTER TABLE super_agent_sessions ADD COLUMN instance_id
+    try:
+        conn.execute(
+            "ALTER TABLE super_agent_sessions ADD COLUMN instance_id TEXT "
+            "REFERENCES project_sa_instances(id) ON DELETE SET NULL"
+        )
+    except Exception:
+        pass  # Column already exists
+
+    # 4. CREATE INDEX on instance_id
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_sas_instance ON super_agent_sessions(instance_id)")
+
+    # 5. Data migration: create instance rows for existing relationships
+    # 5a. For each SA with active sessions, find associated project and create instance
+    active_sa_rows = conn.execute(
+        "SELECT DISTINCT super_agent_id FROM super_agent_sessions WHERE status = 'active'"
+    ).fetchall()
+    for sa_row in active_sa_rows:
+        sa_id = sa_row[0]
+
+        # Try projects.manager_super_agent_id first
+        proj_row = conn.execute(
+            "SELECT id FROM projects WHERE manager_super_agent_id = ? LIMIT 1",
+            (sa_id,),
+        ).fetchone()
+
+        if not proj_row:
+            # Try project_teams -> team_members -> super_agent_id
+            proj_row = conn.execute(
+                """
+                SELECT pt.project_id as id FROM project_teams pt
+                JOIN team_members tm ON pt.team_id = tm.team_id
+                WHERE tm.super_agent_id = ?
+                LIMIT 1
+                """,
+                (sa_id,),
+            ).fetchone()
+
+        if not proj_row:
+            # Fallback: first project
+            proj_row = conn.execute(
+                "SELECT id FROM projects ORDER BY created_at ASC LIMIT 1"
+            ).fetchone()
+
+        if proj_row:
+            project_id = proj_row[0]
+            # Check if instance already exists
+            existing = conn.execute(
+                "SELECT id FROM project_sa_instances WHERE project_id = ? AND template_sa_id = ?",
+                (project_id, sa_id),
+            ).fetchone()
+            if not existing:
+                psa_id = _get_unique_psa_id(conn)
+                conn.execute(
+                    """
+                    INSERT INTO project_sa_instances
+                    (id, project_id, template_sa_id)
+                    VALUES (?, ?, ?)
+                    """,
+                    (psa_id, project_id, sa_id),
+                )
+            else:
+                psa_id = existing[0]
+
+            # Update sessions to point to this instance
+            conn.execute(
+                "UPDATE super_agent_sessions SET instance_id = ? "
+                "WHERE super_agent_id = ? AND status = 'active'",
+                (psa_id, sa_id),
+            )
+
+    # 5b. For each existing project_teams row, create project_team_instance
+    # and project_sa_instance rows for SA members
+    pt_rows = conn.execute("SELECT project_id, team_id FROM project_teams").fetchall()
+    for pt_row in pt_rows:
+        project_id = pt_row[0]
+        team_id = pt_row[1]
+
+        # Create project_team_instance if not exists
+        existing_pti = conn.execute(
+            "SELECT id FROM project_team_instances WHERE project_id = ? AND template_team_id = ?",
+            (project_id, team_id),
+        ).fetchone()
+        if not existing_pti:
+            pti_id = _get_unique_pti_id(conn)
+            conn.execute(
+                """
+                INSERT INTO project_team_instances
+                (id, project_id, template_team_id)
+                VALUES (?, ?, ?)
+                """,
+                (pti_id, project_id, team_id),
+            )
+
+        # Create project_sa_instance for each SA member of this team
+        sa_members = conn.execute(
+            "SELECT super_agent_id FROM team_members "
+            "WHERE team_id = ? AND super_agent_id IS NOT NULL",
+            (team_id,),
+        ).fetchall()
+        for sa_member in sa_members:
+            sa_id = sa_member[0]
+            existing_psa = conn.execute(
+                "SELECT id FROM project_sa_instances WHERE project_id = ? AND template_sa_id = ?",
+                (project_id, sa_id),
+            ).fetchone()
+            if not existing_psa:
+                psa_id = _get_unique_psa_id(conn)
+                conn.execute(
+                    """
+                    INSERT INTO project_sa_instances
+                    (id, project_id, template_sa_id)
+                    VALUES (?, ?, ?)
+                    """,
+                    (psa_id, project_id, sa_id),
+                )
+
+
 VERSIONED_MIGRATIONS = [
     (1, "add_github_columns", _migrate_add_github_columns),
     (2, "add_pr_reviews_table", _migrate_add_pr_reviews_table),
@@ -4027,4 +4190,6 @@ VERSIONED_MIGRATIONS = [
     (91, "add_sketch_collaborating_status", _migrate_91_add_sketch_collaborating_status),
     (92, "system_errors_tables", _migrate_92_system_errors_tables),
     (93, "repair_health_alerts_table", _migrate_93_repair_health_alerts_table),
+    # v0.5.0 project-scoped instances
+    (94, "project_scoped_instances", _migrate_94_project_scoped_instances),
 ]

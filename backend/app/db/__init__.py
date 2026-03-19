@@ -272,6 +272,10 @@ from .ids import (  # noqa: F401
     PLAN_ID_PREFIX,
     PLUGIN_ID_LENGTH,
     PLUGIN_ID_PREFIX,
+    PSA_ID_LENGTH,
+    PSA_ID_PREFIX,
+    PTI_ID_LENGTH,
+    PTI_ID_PREFIX,
     PRODUCT_DECISION_ID_LENGTH,
     PRODUCT_DECISION_ID_PREFIX,
     PRODUCT_ID_LENGTH,
@@ -321,6 +325,8 @@ from .ids import (  # noqa: F401
     _get_unique_phase_id,
     _get_unique_plan_id,
     _get_unique_plugin_id,
+    _get_unique_psa_id,
+    _get_unique_pti_id,
     _get_unique_product_decision_id,
     _get_unique_product_id,
     _get_unique_product_milestone_id,
@@ -352,6 +358,8 @@ from .ids import (  # noqa: F401
     generate_phase_id,
     generate_plan_id,
     generate_plugin_id,
+    generate_psa_id,
+    generate_pti_id,
     generate_product_decision_id,
     generate_product_id,
     generate_product_milestone_id,
@@ -670,6 +678,23 @@ from .skills import (  # noqa: F401
     update_user_skill,
 )
 
+# Project SA instances (project-scoped super agent instances)
+from .project_sa_instances import (  # noqa: F401
+    create_project_sa_instance,
+    delete_project_sa_instance,
+    get_project_sa_instance,
+    get_project_sa_instances_for_project,
+    update_project_sa_instance,
+)
+
+# Project team instances (project-scoped team instances)
+from .project_team_instances import (  # noqa: F401
+    create_project_team_instance,
+    delete_project_team_instance,
+    get_project_team_instance,
+    get_project_team_instances_for_project,
+)
+
 # SuperAgents (super_agents + documents + sessions)
 from .super_agents import (  # noqa: F401
     VALID_DOC_TYPES,
@@ -682,6 +707,7 @@ from .super_agents import (  # noqa: F401
     delete_super_agent_session,
     get_active_sessions_list,
     get_all_super_agents,
+    get_sessions_for_instance,
     get_super_agent,
     get_super_agent_document,
     get_super_agent_documents,

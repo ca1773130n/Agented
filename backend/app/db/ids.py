@@ -100,6 +100,13 @@ ERROR_ID_LENGTH = 6
 FIX_ATTEMPT_ID_PREFIX = "fix-"
 FIX_ATTEMPT_ID_LENGTH = 6
 
+# Project-scoped instance IDs
+PSA_ID_PREFIX = "psa-"
+PSA_ID_LENGTH = 6
+
+PTI_ID_PREFIX = "pti-"
+PTI_ID_LENGTH = 6
+
 
 # --- Central ID factory ---
 
@@ -581,3 +588,34 @@ def _get_unique_fix_attempt_id(conn) -> str:
         cursor = conn.execute("SELECT id FROM fix_attempts WHERE id = ?", (fid,))
         if cursor.fetchone() is None:
             return fid
+
+
+# --- Project-scoped instance ID generators ---
+
+
+def generate_psa_id() -> str:
+    """Generate a unique project SA instance ID like 'psa-abc123'."""
+    return generate_id(PSA_ID_PREFIX, PSA_ID_LENGTH)
+
+
+def generate_pti_id() -> str:
+    """Generate a unique project team instance ID like 'pti-abc123'."""
+    return generate_id(PTI_ID_PREFIX, PTI_ID_LENGTH)
+
+
+def _get_unique_psa_id(conn) -> str:
+    """Generate a project SA instance ID that doesn't exist in the database."""
+    while True:
+        pid = generate_psa_id()
+        cursor = conn.execute("SELECT id FROM project_sa_instances WHERE id = ?", (pid,))
+        if cursor.fetchone() is None:
+            return pid
+
+
+def _get_unique_pti_id(conn) -> str:
+    """Generate a project team instance ID that doesn't exist in the database."""
+    while True:
+        pid = generate_pti_id()
+        cursor = conn.execute("SELECT id FROM project_team_instances WHERE id = ?", (pid,))
+        if cursor.fetchone() is None:
+            return pid

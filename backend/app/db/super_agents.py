@@ -236,18 +236,23 @@ def delete_super_agent_document(doc_id: int) -> bool:
 # =============================================================================
 
 
-def add_super_agent_session(super_agent_id: str) -> Optional[str]:
-    """Add a new session for a super agent. Returns session ID on success, None on failure."""
+def add_super_agent_session(super_agent_id: str, instance_id: str = None) -> Optional[str]:
+    """Add a new session for a super agent. Returns session ID on success, None on failure.
+
+    Args:
+        super_agent_id: The super agent this session belongs to.
+        instance_id: Optional project SA instance ID to associate with this session.
+    """
     with get_connection() as conn:
         try:
             sess_id = _get_unique_session_id(conn)
             conn.execute(
                 """
                 INSERT INTO super_agent_sessions
-                (id, super_agent_id, status, conversation_log, token_count)
-                VALUES (?, ?, 'active', '[]', 0)
+                (id, super_agent_id, status, conversation_log, token_count, instance_id)
+                VALUES (?, ?, 'active', '[]', 0, ?)
             """,
-                (sess_id, super_agent_id),
+                (sess_id, super_agent_id, instance_id),
             )
             conn.commit()
             return sess_id
@@ -338,5 +343,15 @@ def get_active_sessions_list() -> List[dict]:
     with get_connection() as conn:
         cursor = conn.execute(
             "SELECT * FROM super_agent_sessions WHERE status = 'active' ORDER BY started_at ASC"
+        )
+        return [dict(row) for row in cursor.fetchall()]
+
+
+def get_sessions_for_instance(instance_id: str) -> List[dict]:
+    """Get all sessions for a project SA instance ordered by started_at DESC."""
+    with get_connection() as conn:
+        cursor = conn.execute(
+            "SELECT * FROM super_agent_sessions WHERE instance_id = ? ORDER BY started_at DESC",
+            (instance_id,),
         )
         return [dict(row) for row in cursor.fetchall()]
