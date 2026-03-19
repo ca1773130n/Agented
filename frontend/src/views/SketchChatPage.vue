@@ -47,8 +47,12 @@ const {
 } = useSketchChat();
 
 const playgroundLink = computed(() => {
-  if (executionSuperAgentId.value) {
-    return `/super-agents/${executionSuperAgentId.value}/playground`;
+  // Prefer the execution-time superagent ID, fall back to routing_json
+  const saId = executionSuperAgentId.value
+    || parsedRouting.value?.super_agent_id
+    || (parsedRouting.value?.target_type === 'super_agent' ? parsedRouting.value?.target_id : null);
+  if (saId) {
+    return `/super-agents/${saId}/playground`;
   }
   return null;
 });
@@ -312,10 +316,10 @@ onMounted(() => {
           </div>
         </div>
 
-        <!-- Continue in Playground link -->
-        <div v-if="playgroundLink && currentSketch?.status === 'completed'" class="continue-link">
+        <!-- Playground link — show as soon as routed -->
+        <div v-if="playgroundLink && showResults" class="continue-link">
           <router-link :to="playgroundLink" class="playground-btn">
-            Continue in Playground →
+            Open in Playground →
           </router-link>
         </div>
       </div>

@@ -152,6 +152,13 @@ def execute_sketch(
                 # process_delegations will handle status updates
                 return
 
+        # Solo superagent: scan response for @mentions and send mailbox messages
+        state = SuperAgentSessionService.get_session_state(captured_session_id)
+        if state and state.get("conversation_log"):
+            last_msg = state["conversation_log"][-1]
+            if last_msg.get("role") == "assistant" and last_msg.get("content"):
+                _scan_mentions_and_notify(sketch_id, super_agent_id, last_msg["content"])
+
         update_sketch(sketch_id, status="completed")
         logger.info("Sketch %s completed successfully", sketch_id)
 
@@ -175,6 +182,62 @@ def execute_sketch(
     )
 
     return session_id
+
+
+def _scan_mentions_and_notify(sketch_id: str, from_agent_id: str, response_text: str) -> None:
+    """Scan a solo superagent's response for @Name mentions and send mailbox messages.
+
+    Unlike process_delegations (which requires a team context), this looks up
+    @mentions against ALL superagents in the system. It sends informational
+    mailbox messages but does NOT launch delegate sessions — the solo agent
+    is just notifying, not delegating execution.
+    """
+    from ..db.super_agents import get_all_super_agents
+
+    pattern = re.compile(r"@(\w+)[\s\u2014\-:]+(.+?)(?=@\w+|$)", re.DOTALL)
+    matches = pattern.findall(response_text)
+    if not matches:
+        return
+
+    # Build name lookup from all superagents (excluding the sender)
+    all_agents = get_all_super_agents()
+    agent_by_name: dict[str, dict] = {}
+    for sa in all_agents:
+        if sa["id"] == from_agent_id:
+            continue
+        name = sa.get("name") or ""
+        if name:
+            agent_by_name[name.lower()] = sa
+
+    sketch = get_sketch(sketch_id)
+    sketch_title = (sketch.get("title") if sketch else None) or sketch_id
+
+    sent = 0
+    for name, content in matches:
+        content = content.strip()
+        target = agent_by_name.get(name.lower())
+        if not target:
+            continue
+        try:
+            AgentMessageBusService.send_message(
+                from_agent_id=from_agent_id,
+                to_agent_id=target["id"],
+                message_type="message",
+                priority="normal",
+                subject=f"Sketch mention: {sketch_title}",
+                content=content,
+            )
+            sent += 1
+        except Exception as exc:
+            logger.error(
+                "Sketch %s: failed to send mention mail to %s: %s",
+                sketch_id,
+                target["id"],
+                exc,
+            )
+
+    if sent:
+        logger.info("Sketch %s: sent %d mention notifications from solo agent", sketch_id, sent)
 
 
 def process_delegations(
