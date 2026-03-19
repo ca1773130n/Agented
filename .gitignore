@@ -16,6 +16,19 @@ test-dashboard.mjs
 
 # Tooling
 .playwright-mcp/
+.aider.conf.yml
+.avante/
+.clinerules
+.codecompanion/
+.continue/
+.cursor/
+.harness-sync/
+.roo/
+.superpowers/
+.zed/
+
+# Local data
+backend/data/
 
 # Runtime
 *.db
