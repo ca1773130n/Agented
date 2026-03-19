@@ -55,15 +55,19 @@ class SuperAgentSessionService:
         Returns (session_id, None) on success or (None, error_message) on failure.
         """
         with cls._lock:
-            # Check concurrency limit
-            active_count = sum(1 for s in cls._active_sessions.values() if s["status"] == "active")
-            if active_count >= cls.MAX_CONCURRENT_SESSIONS:
-                return None, "Maximum concurrent sessions reached"
-
             # Verify super agent exists
             sa = get_super_agent(super_agent_id)
             if not sa:
                 return None, "SuperAgent not found"
+
+            # Check per-SA concurrency limit
+            sa_limit = sa.get("max_concurrent_sessions", cls.MAX_CONCURRENT_SESSIONS)
+            sa_active = sum(
+                1 for s in cls._active_sessions.values()
+                if s.get("super_agent_id") == super_agent_id and s["status"] == "active"
+            )
+            if sa_active >= sa_limit:
+                return None, f"Maximum concurrent sessions ({sa_limit}) reached for this agent"
 
             # Persist to DB
             session_id = add_super_agent_session(super_agent_id, instance_id=instance_id)
