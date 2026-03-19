@@ -89,6 +89,11 @@ onMounted(loadData);
         </div>
       </div>
 
+      <!-- Empty state -->
+      <div v-if="teams.length === 0" class="card" style="padding: 32px; text-align: center; color: var(--text-secondary);">
+        No team data available yet. Teams will appear here once they start running automations.
+      </div>
+
       <!-- Top 3 Podium -->
       <div class="podium" v-if="teams.length >= 3">
         <div class="podium-slot second">

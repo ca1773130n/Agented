@@ -203,6 +203,9 @@ onMounted(loadData);
       </div>
 
       <!-- Rules List -->
+      <div v-if="quotaRules.length === 0 && !showForm" class="card" style="padding: 32px; text-align: center; color: var(--text-secondary);">
+        No quota rules configured yet. Click "Add Rule" to create one.
+      </div>
       <div class="rules-list">
         <div v-for="rule in quotaRules" :key="rule.id" class="card rule-card">
           <div class="rule-header">

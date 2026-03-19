@@ -95,6 +95,9 @@ onMounted(loadDigests);
     <LoadingState v-if="isLoading" message="Loading digest configurations..." />
 
     <template v-else>
+      <div v-if="digests.length === 0" class="card" style="padding: 32px; text-align: center; color: var(--text-secondary);">
+        No report digests configured yet. Configure digest schedules for your teams to receive automated reports.
+      </div>
       <div class="digest-list">
         <div v-for="d in digests" :key="d.team_id" class="card digest-card">
           <div class="digest-header">

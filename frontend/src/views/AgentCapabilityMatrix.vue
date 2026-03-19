@@ -154,6 +154,9 @@ onMounted(loadData);
               </tr>
             </thead>
             <tbody>
+              <tr v-if="filteredCapabilities.length === 0">
+                <td colspan="4" style="padding: 32px; text-align: center; color: var(--text-secondary);">No capabilities match the current filter.</td>
+              </tr>
               <tr v-for="cap in filteredCapabilities" :key="cap.name" :class="{ 'gap-row': capabilityCount(cap.name) === 0 }">
                 <td class="cap-cell">
                   <span class="cap-name">{{ cap.name }}</span>
