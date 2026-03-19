@@ -277,6 +277,9 @@ class SuperAgentSessionService:
                 }
                 cls._active_sessions[session_id] = session
 
+            if session["status"] == "active":
+                return True, None  # Already active, just needed to be in memory
+
             if session["status"] not in ("paused", "completed"):
                 return False, f"Session is {session['status']}"
 

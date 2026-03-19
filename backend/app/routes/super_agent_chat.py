@@ -58,22 +58,15 @@ def _resolve_session(data: dict, super_agent_id: str, session_id: str) -> dict:
         return {
             "error_response": error_response("NOT_FOUND", "Session not found", HTTPStatus.NOT_FOUND)
         }
-    # Auto-reactivate non-active sessions when user sends a message
-    if session.get("status") != "active":
-        status = session.get("status")
-        if status in ("paused", "completed"):
-            SuperAgentSessionService.resume_session(session_id)
-            session = get_super_agent_session(session_id)
-            if not session or session.get("status") != "active":
-                return {
-                    "error_response": error_response(
-                        "BAD_REQUEST", "Failed to reactivate session", HTTPStatus.BAD_REQUEST
-                    )
-                }
-        else:
+    # Ensure session is in memory + active. Sessions may be in DB but not in memory
+    # after server restart, or may be paused/completed and need reactivation.
+    status = session.get("status")
+    if status in ("paused", "completed") or not SuperAgentSessionService.get_session_state(session_id):
+        success, err = SuperAgentSessionService.resume_session(session_id)
+        if not success:
             return {
                 "error_response": error_response(
-                    "BAD_REQUEST", f"Session is {status}", HTTPStatus.BAD_REQUEST
+                    "BAD_REQUEST", err or "Failed to reactivate session", HTTPStatus.BAD_REQUEST
                 )
             }
 
