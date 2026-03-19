@@ -128,8 +128,12 @@ async function loadData() {
   try {
     const data = await superAgentApi.get(superAgentId.value);
     superAgent.value = data;
-    // Fire-and-forget: load sessions
-    loadSessions();
+    await loadSessions();
+    // Auto-select session from query param (e.g. linked from sketch panel)
+    const targetSession = route.query.session as string | undefined;
+    if (targetSession) {
+      await selectSession(targetSession);
+    }
     return data;
   } catch (err) {
     handleApiError(err, showToast, 'Failed to load super agent');

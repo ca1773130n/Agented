@@ -38,6 +38,7 @@ const {
   error,
   streamingContent,
   executionSuperAgentId,
+  executionSessionId,
   delegations,
   loadProjects,
   loadSketches,
@@ -51,10 +52,10 @@ const playgroundLink = computed(() => {
   const saId = executionSuperAgentId.value
     || parsedRouting.value?.super_agent_id
     || (parsedRouting.value?.target_type === 'super_agent' ? parsedRouting.value?.target_id : null);
-  if (saId) {
-    return `/super-agents/${saId}/playground`;
-  }
-  return null;
+  if (!saId) return null;
+  const sessId = executionSessionId.value || parsedRouting.value?.session_id;
+  const query = sessId ? `?session=${sessId}` : '';
+  return `/super-agents/${saId}/playground${query}`;
 });
 
 const inputText = ref('');
