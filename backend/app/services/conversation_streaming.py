@@ -712,6 +712,7 @@ def _extract_text_from_event(event: dict) -> Optional[str]:
     """Extract text from a Claude CLI stream-json NDJSON event."""
     event_type = event.get("type", "")
 
+    # stream_event wrapper (older CLI format)
     if event_type == "stream_event":
         inner = event.get("event", {})
         if inner.get("type") == "content_block_delta":
@@ -719,9 +720,27 @@ def _extract_text_from_event(event: dict) -> Optional[str]:
             if delta.get("type") == "text_delta":
                 return delta.get("text", "")
 
+    # Direct content_block_delta
     if event_type == "content_block_delta":
         delta = event.get("delta", {})
         if delta.get("type") == "text_delta":
             return delta.get("text", "")
+
+    # "assistant" message event (current CLI format) — extract text from content blocks
+    if event_type == "assistant":
+        message = event.get("message", {})
+        content_blocks = message.get("content", [])
+        texts = []
+        for block in content_blocks:
+            if block.get("type") == "text" and block.get("text"):
+                texts.append(block["text"])
+        if texts:
+            return "".join(texts)
+
+    # "result" event (final message)
+    if event_type == "result":
+        result_text = event.get("result", "")
+        if result_text:
+            return result_text
 
     return None
