@@ -49,7 +49,7 @@ withDefaults(
     <div class="bubble-content">
       <div class="bubble-header">
         <span class="bubble-role">{{ role === 'user' ? 'You' : assistantName }}</span>
-        <span class="bubble-time">{{ new Date(timestamp).toLocaleTimeString() }}</span>
+        <span class="bubble-time">{{ timestamp && !isNaN(new Date(timestamp).getTime()) ? new Date(timestamp).toLocaleTimeString() : '' }}</span>
       </div>
       <div class="bubble-text markdown-body markdown-rendered" v-html="renderMarkdown(content)"></div>
     </div>

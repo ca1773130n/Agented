@@ -263,7 +263,7 @@ const processGroupEntries = computed(() => {
           <div class="message-content">
             <div class="message-header">
               <span class="message-role">{{ msg.role === 'user' ? 'You' : messageAssistantName(msg) }}</span>
-              <span class="message-time">{{ new Date(msg.timestamp).toLocaleTimeString() }}</span>
+              <span class="message-time">{{ msg.timestamp && !isNaN(new Date(msg.timestamp).getTime()) ? new Date(msg.timestamp).toLocaleTimeString() : '' }}</span>
             </div>
             <div class="message-text markdown-body markdown-rendered" v-html="renderMarkdown(msg.content)"></div>
             <MessageActions

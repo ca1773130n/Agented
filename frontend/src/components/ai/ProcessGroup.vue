@@ -98,7 +98,7 @@ function typeBadgeLabel(type: string): string {
         {{ typeBadgeLabel(type) }}
       </span>
       <span class="process-group__label">{{ label }}</span>
-      <span class="process-group__time">{{ new Date(timestamp).toLocaleTimeString() }}</span>
+      <span class="process-group__time">{{ timestamp && !isNaN(new Date(timestamp).getTime()) ? new Date(timestamp).toLocaleTimeString() : '' }}</span>
       <span :class="['process-group__chevron', { expanded: isExpanded }]">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <polyline points="6 9 12 15 18 9"/>

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
 import { useRoute, useRouter, type RouteLocationRaw } from 'vue-router';
-import { productApi, projectApi, teamApi, agentApi } from '../../services/api';
+import { productApi, projectApi, teamApi, agentApi, superAgentApi } from '../../services/api';
 import { useToast } from '../../composables/useToast';
 import CommandPalette from './CommandPalette.vue';
 
@@ -95,6 +95,9 @@ async function resolveEntityName(entityType: string, entityId: string): Promise<
     } else if (entityType === 'agentId') {
       const agent = await agentApi.get(entityId);
       name = agent.name;
+    } else if (entityType === 'superAgentId') {
+      const sa = await superAgentApi.get(entityId);
+      name = sa.name;
     }
     entityNameCache.value.set(cacheKey, name);
   } catch {
@@ -106,7 +109,7 @@ async function resolveEntityName(entityType: string, entityId: string): Promise<
 watch(
   () => route.params,
   (params) => {
-    const knownParams = ['productId', 'projectId', 'teamId', 'agentId'] as const;
+    const knownParams = ['productId', 'projectId', 'teamId', 'agentId', 'superAgentId'] as const;
     for (const paramName of knownParams) {
       const paramValue = params[paramName];
       if (paramValue && typeof paramValue === 'string') {
@@ -139,6 +142,8 @@ const segmentLabels: Record<string, string> = {
   'instances': 'Instances', 'sessions': 'Sessions', 'management': 'Management',
   'planning': 'Planning', 'sketch-chat': 'Sketch', 'audit-history': 'Audit History',
   'reports': 'Reports', 'budgets': 'Budgets', 'admin': 'Admin',
+  'tokens': 'Token Usage', 'security': 'Security', 'analytics': 'Analytics',
+  'health': 'Health', 'rotation': 'Rotation',
 };
 
 // Map path segments to route names for navigation
@@ -152,8 +157,8 @@ const segmentRoutes: Record<string, string> = {
 // Known entity ID prefixes → param name for display resolution
 const idPrefixToParam: Record<string, string> = {
   'prod-': 'productId', 'proj-': 'projectId', 'team-': 'teamId',
-  'agent-': 'agentId', 'super-': 'superAgentId', 'psa-': 'instanceId',
-  'pti-': 'teamInstanceId',
+  'agent-': 'agentId', 'sa-': 'superAgentId', 'super-': 'superAgentId',
+  'psa-': 'instanceId', 'pti-': 'teamInstanceId',
 };
 
 function isEntityId(segment: string): boolean {
