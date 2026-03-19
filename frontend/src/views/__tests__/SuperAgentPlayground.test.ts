@@ -4,8 +4,8 @@ import SuperAgentPlayground from '../SuperAgentPlayground.vue'
 
 const mockPush = vi.fn()
 vi.mock('vue-router', () => ({
-  useRouter: () => ({ push: mockPush }),
-  useRoute: () => ({ params: { superAgentId: 'super-abc123' } }),
+  useRouter: () => ({ push: mockPush, replace: vi.fn(), back: vi.fn() }),
+  useRoute: () => ({ params: { superAgentId: 'super-abc123' }, query: {} }),
 }))
 
 const mockSuperAgent = {
