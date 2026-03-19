@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onUnmounted } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
-import { superAgentApi } from '../services/api';
+import { superAgentApi, projectInstanceApi } from '../services/api';
 import type { ChatMode } from '../services/api';
 import { useStreamingParser } from '../composables/useStreamingParser';
 import { useAiChat } from '../composables/useAiChat';
@@ -147,9 +147,13 @@ function formatSessionDate(dateStr?: string): string {
 
 async function loadData() {
   try {
-    // For instance mode, the superAgentId is the psa- ID which the backend resolves
-    // to the underlying SA for get/session operations.
-    const data = await superAgentApi.get(superAgentId.value);
+    let saId = superAgentId.value;
+    // In instance mode, resolve psa- ID to the template SA for display
+    if (isInstanceMode.value && saId.startsWith('psa-')) {
+      const inst = await projectInstanceApi.get(projectIdComputed.value, saId);
+      saId = inst.template_sa_id;
+    }
+    const data = await superAgentApi.get(saId);
     superAgent.value = data;
     await loadSessions();
     // Auto-select session from query param (e.g. linked from sketch panel)

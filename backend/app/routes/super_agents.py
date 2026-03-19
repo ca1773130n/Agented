@@ -96,8 +96,16 @@ def create_super_agent():
 
 @super_agents_bp.get("/<super_agent_id>")
 def get_super_agent_endpoint(path: SuperAgentPath):
-    """Get a super agent by ID."""
-    sa = get_super_agent(path.super_agent_id)
+    """Get a super agent by ID. Accepts psa- instance IDs (resolves to template SA)."""
+    sa_id = path.super_agent_id
+    if sa_id.startswith("psa-"):
+        from ..db.project_sa_instances import get_project_sa_instance
+
+        instance = get_project_sa_instance(sa_id)
+        if not instance:
+            return error_response("NOT_FOUND", "Instance not found", HTTPStatus.NOT_FOUND)
+        sa_id = instance["template_sa_id"]
+    sa = get_super_agent(sa_id)
     if not sa:
         return error_response("NOT_FOUND", "SuperAgent not found", HTTPStatus.NOT_FOUND)
     return sa, HTTPStatus.OK
