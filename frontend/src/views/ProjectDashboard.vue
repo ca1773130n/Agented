@@ -514,7 +514,7 @@ function onSetupCompleted() {
             <div class="slide-over-body">
               <p class="slide-over-info">Super Agent: <code>{{ chatSuperAgentId }}</code></p>
               <p class="slide-over-info">Session: <code>{{ chatSessionId }}</code></p>
-              <p class="slide-over-hint">Open the <router-link :to="{ name: 'super-agent-playground', params: { superAgentId: chatSuperAgentId } }">Super Agent Playground</router-link> for the full chat experience.</p>
+              <p class="slide-over-hint">Open the <router-link :to="{ name: 'super-agent-playground', params: { superAgentId: chatSuperAgentId }, query: { session: chatSessionId } }">Super Agent Playground</router-link> for the full chat experience.</p>
             </div>
           </div>
         </div>
