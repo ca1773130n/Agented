@@ -185,59 +185,112 @@ def execute_sketch(
 
 
 def _scan_mentions_and_notify(sketch_id: str, from_agent_id: str, response_text: str) -> None:
-    """Scan a solo superagent's response for @Name mentions and send mailbox messages.
+    """Scan a solo superagent's response for agent references and send mailbox messages.
 
-    Unlike process_delegations (which requires a team context), this looks up
-    @mentions against ALL superagents in the system. It sends informational
-    mailbox messages but does NOT launch delegate sessions — the solo agent
-    is just notifying, not delegating execution.
+    Scans for both @Name mentions and agent names appearing in task assignment
+    contexts (e.g. table rows, bullet points with agent names bolded).
+    Extracts the surrounding context as the task content for the mail.
     """
     from ..db.super_agents import get_all_super_agents
 
-    pattern = re.compile(r"@(\w+)[\s\u2014\-:]+(.+?)(?=@\w+|$)", re.DOTALL)
-    matches = pattern.findall(response_text)
-    if not matches:
-        return
-
-    # Build name lookup from all superagents (excluding the sender)
     all_agents = get_all_super_agents()
     agent_by_name: dict[str, dict] = {}
     for sa in all_agents:
         if sa["id"] == from_agent_id:
             continue
         name = sa.get("name") or ""
-        if name:
+        if name and name.lower() != "system":
             agent_by_name[name.lower()] = sa
+
+    if not agent_by_name:
+        return
 
     sketch = get_sketch(sketch_id)
     sketch_title = (sketch.get("title") if sketch else None) or sketch_id
 
+    # Collect tasks per agent (dedup by agent ID)
+    agent_tasks: dict[str, list[str]] = {}
+
+    # Strategy 1: @Name mentions with content
+    at_pattern = re.compile(r"@(\w+)[\s\u2014\-:]+(.+?)(?=@\w+|$)", re.DOTALL)
+    for name, content in at_pattern.findall(response_text):
+        agent = agent_by_name.get(name.lower())
+        if agent:
+            agent_tasks.setdefault(agent["id"], []).append(content.strip())
+
+    # Strategy 2: Table rows with agent names (e.g. "| Task | **Name** | P0 |")
+    # Matches: | description | **AgentName** | priority |
+    # Also: | description | AgentName | priority |
+    table_pattern = re.compile(
+        r"\|([^|]+)\|\s*\*{0,2}("
+        + "|".join(re.escape(n) for n in agent_by_name)
+        + r")\*{0,2}\s*\|([^|]*)\|",
+        re.IGNORECASE,
+    )
+    for task_text, name, extra in table_pattern.findall(response_text):
+        agent = agent_by_name.get(name.strip().lower())
+        if agent:
+            combined = f"{task_text.strip()} {extra.strip()}".strip()
+            agent_tasks.setdefault(agent["id"], []).append(combined)
+
+    # Strategy 3: Lines with bold agent names followed by task description
+    # e.g. "- **Seraph**: Deep-dive into Mastra memory source code"
+    bold_pattern = re.compile(
+        r"[-*]\s*\*{2}("
+        + "|".join(re.escape(n) for n in agent_by_name)
+        + r")\*{2}\s*[:\u2014\-]+\s*(.+)",
+        re.IGNORECASE,
+    )
+    for name, content in bold_pattern.findall(response_text):
+        agent = agent_by_name.get(name.strip().lower())
+        if agent:
+            agent_tasks.setdefault(agent["id"], []).append(content.strip())
+
+    if not agent_tasks:
+        return
+
     sent = 0
-    for name, content in matches:
-        content = content.strip()
-        target = agent_by_name.get(name.lower())
-        if not target:
-            continue
+    for agent_id, tasks in agent_tasks.items():
+        # Deduplicate and combine tasks
+        seen = set()
+        unique_tasks = []
+        for t in tasks:
+            key = t[:100].lower()
+            if key not in seen:
+                seen.add(key)
+                unique_tasks.append(t)
+
+        content = "\n\n".join(f"- {t}" for t in unique_tasks)
+        agent = next(sa for sa in all_agents if sa["id"] == agent_id)
+        agent_name = agent.get("name") or agent_id
+
         try:
             AgentMessageBusService.send_message(
                 from_agent_id=from_agent_id,
-                to_agent_id=target["id"],
-                message_type="message",
-                priority="normal",
-                subject=f"Sketch mention: {sketch_title}",
-                content=content,
+                to_agent_id=agent_id,
+                message_type="request",
+                priority="high",
+                subject=f"Tasks from sketch: {sketch_title}",
+                content=f"You have been assigned the following tasks:\n\n{content}",
             )
             sent += 1
+            logger.info(
+                "Sketch %s: sent %d task(s) to %s (%s)",
+                sketch_id,
+                len(unique_tasks),
+                agent_name,
+                agent_id,
+            )
         except Exception as exc:
             logger.error(
-                "Sketch %s: failed to send mention mail to %s: %s",
+                "Sketch %s: failed to send mail to %s: %s",
                 sketch_id,
-                target["id"],
+                agent_id,
                 exc,
             )
 
     if sent:
-        logger.info("Sketch %s: sent %d mention notifications from solo agent", sketch_id, sent)
+        logger.info("Sketch %s: notified %d agents from solo agent response", sketch_id, sent)
 
 
 def process_delegations(
