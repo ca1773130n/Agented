@@ -27,7 +27,7 @@ const showPreview = ref(false);
 
 async function loadHistory() {
   try {
-    const res = await fetch('/api/bots/code-explanations');
+    const res = await fetch('/admin/bots/code-explanations');
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     explanations.value = (await res.json()).entries ?? [];
   } catch {
@@ -79,7 +79,7 @@ async function runExplanation() {
   isExplaining.value = true;
   showPreview.value = false;
   try {
-    const res = await fetch('/api/bots/code-explanations', {
+    const res = await fetch('/admin/bots/code-explanations', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

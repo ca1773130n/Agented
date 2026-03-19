@@ -332,7 +332,7 @@ async function saveGeneratedConfig(config: GeneratedTeamConfig) {
         // Auto-create skills that don't exist yet
         if (assignment.needs_creation && assignment.entity_type === 'skill') {
           try {
-            const resp = await fetch('/api/skills/user', {
+            const resp = await fetch('/admin/skills/user', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({

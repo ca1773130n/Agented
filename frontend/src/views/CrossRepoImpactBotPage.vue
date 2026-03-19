@@ -32,7 +32,7 @@ const prUrl = ref('');
 
 async function loadHistory() {
   try {
-    const res = await fetch('/api/bots/cross-repo-impact');
+    const res = await fetch('/admin/bots/cross-repo-impact');
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     analyses.value = (await res.json()).analyses ?? [];
   } catch {
@@ -80,7 +80,7 @@ async function runAnalysis() {
   }
   isScanning.value = true;
   try {
-    const res = await fetch('/api/bots/cross-repo-impact', {
+    const res = await fetch('/admin/bots/cross-repo-impact', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ pr_url: prUrl.value }),
