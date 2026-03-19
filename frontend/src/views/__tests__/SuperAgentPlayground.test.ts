@@ -252,7 +252,7 @@ describe('SuperAgentPlayground', () => {
       'super-abc123',
       'sess-new',
       'Hello SuperAgent',
-      { backend: undefined, account_id: undefined, model: undefined },
+      { backend: undefined, account_id: undefined, model: undefined, chat_mode: 'work' },
     )
   })
 

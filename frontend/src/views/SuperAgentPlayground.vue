@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onUnmounted } from 'vue';
+import { ref, computed, onUnmounted, watch } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { superAgentApi, projectInstanceApi } from '../services/api';
 import type { ChatMode } from '../services/api';
@@ -35,8 +35,8 @@ const superAgentId = computed(() =>
   isInstanceMode.value ? instanceIdFromRoute.value : (route.params.superAgentId as string)
 );
 
-// Chat mode for instance playgrounds (management = configure agent, work = agent works on project)
-const chatMode = ref<ChatMode>('management');
+// Default to work mode on playground (management mode is for dashboards/config pages)
+const chatMode = ref<ChatMode>('work');
 
 const {
   sessionId,
@@ -54,6 +54,13 @@ const {
   endSession,
   setOnStreamingChunk,
 } = useAiChat(superAgentId);
+
+// Sync sessionId to URL so refresh preserves the selected session
+watch(sessionId, (newId) => {
+  if (newId && newId !== route.query.session) {
+    router.replace({ query: { ...route.query, session: newId } });
+  }
+});
 
 // ---------------------------------------------------------------------------
 // smd.js streaming markdown parser (shared composable)
@@ -120,6 +127,13 @@ const assistantIconPaths = [
   'M12 22v-8',
   'M8 22h8',
 ];
+
+function handleSelectSession(sessId: string) {
+  selectSession(sessId);
+  rightTab.value = 'identity';
+  // Update URL so refresh preserves the selected session
+  router.replace({ query: { ...route.query, session: sessId } });
+}
 
 function handleSend() {
   if (!inputMessage.value.trim()) return;
@@ -336,7 +350,7 @@ async function loadData() {
                 v-for="sess in sessions"
                 :key="sess.id"
                 :class="['session-card', { active: sess.id === sessionId }]"
-                @click="selectSession(sess.id); rightTab = 'identity'"
+                @click="handleSelectSession(sess.id)"
               >
                 <div class="session-info">
                   <span class="session-id">{{ sess.id }}</span>
