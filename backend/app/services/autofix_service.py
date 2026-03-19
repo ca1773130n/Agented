@@ -113,10 +113,31 @@ def _fix_stale_session(error: dict) -> dict:
         return {"success": False, "action_taken": f"Failed to fix stale session: {e}"}
 
 
+def _fix_cliproxy_auth(error: dict) -> dict:
+    """Attempt to refresh CLIProxyAPI auth by restarting token refresh."""
+    try:
+        from app.services.cliproxy_manager import CLIProxyManager
+
+        CLIProxyManager.refresh_expired_tokens()
+        # Verify the proxy is responsive after refresh
+        import httpx
+
+        resp = httpx.get("http://localhost:8317/health", timeout=5)
+        if resp.status_code == 200:
+            return {
+                "success": True,
+                "action_taken": "Refreshed CLIProxyAPI tokens, health check passed",
+            }
+        return {"success": False, "action_taken": "Token refresh succeeded but health check failed"}
+    except Exception as e:
+        return {"success": False, "action_taken": f"Failed to refresh CLIProxyAPI auth: {e}"}
+
+
 # --- Fix Registry ---
 
 FIX_REGISTRY: dict[str, Callable] = {
     r"proxy_error:.*Could not connect.*8317": _fix_cliproxy_not_running,
+    r"proxy_error:.*(?:Invalid API key|401|AuthenticationError)": _fix_cliproxy_auth,
     r"cli_error:.*rate.limit|429": _fix_rate_limited,
     r"db_error:.*database is locked": _fix_db_locked,
     r"streaming_error:.*session.*stale": _fix_stale_session,

@@ -283,6 +283,15 @@ class SketchRoutingService:
 
         except Exception as e:
             logger.warning("LLM classification failed: %s", e)
+            from app.services.error_capture import capture_error
+
+            capture_error(
+                category="proxy_error"
+                if "401" in str(e) or "API key" in str(e)
+                else "runtime_error",
+                message=f"LLM classification failed: {e}",
+                context={"service": "sketch_routing", "model": model},
+            )
             return None
 
     @classmethod
