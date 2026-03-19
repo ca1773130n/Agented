@@ -27,7 +27,7 @@ const searchQuery = ref('');
 
 async function loadArtifacts() {
   try {
-    const res = await fetch('/api/executions/artifacts');
+    const res = await fetch('/admin/executions/artifacts');
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     artifacts.value = (await res.json()).artifacts ?? [];
   } catch {

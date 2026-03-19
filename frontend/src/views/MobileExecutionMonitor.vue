@@ -26,7 +26,7 @@ const selectedExec = ref<Execution | null>(null);
 
 async function loadData() {
   try {
-    const res = await fetch('/api/executions?limit=30');
+    const res = await fetch('/admin/executions?limit=30');
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     executions.value = (await res.json()).executions ?? [];
   } catch {

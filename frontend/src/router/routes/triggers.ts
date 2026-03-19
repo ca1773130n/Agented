@@ -28,6 +28,12 @@ export const triggerRoutes: RouteRecordRaw[] = [
     meta: { title: 'Security History' },
   },
   {
+    path: '/audit-history',
+    name: 'audit-history',
+    component: () => import('../../views/AuditHistory.vue'),
+    meta: { title: 'Audit History' },
+  },
+  {
     path: '/audits/:auditId',
     name: 'audit-detail',
     component: () => import('../../views/AuditDetail.vue'),
