@@ -38,7 +38,6 @@ const superAgentId = computed(() =>
 // Chat mode for instance playgrounds (management = configure agent, work = agent works on project)
 const chatMode = ref<ChatMode>('management');
 
-const superAgentIdRef = computed(() => superAgentId.value);
 const {
   sessionId,
   sessions,
@@ -54,7 +53,7 @@ const {
   sendMessage,
   endSession,
   setOnStreamingChunk,
-} = useAiChat(superAgentIdRef);
+} = useAiChat(superAgentId);
 
 // ---------------------------------------------------------------------------
 // smd.js streaming markdown parser (shared composable)

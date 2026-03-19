@@ -2,7 +2,7 @@
 import { ref, onMounted, watch, nextTick } from 'vue';
 import { useRouter } from 'vue-router';
 import type { Team, Agent, TopologyType, GeneratedTeamConfig } from '../services/api';
-import { teamApi, agentApi, ApiError } from '../services/api';
+import { teamApi, agentApi, userSkillsApi, ApiError } from '../services/api';
 import TopologyPicker from '../components/teams/TopologyPicker.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import LoadingState from '../components/base/LoadingState.vue';
@@ -332,18 +332,11 @@ async function saveGeneratedConfig(config: GeneratedTeamConfig) {
         // Auto-create skills that don't exist yet
         if (assignment.needs_creation && assignment.entity_type === 'skill') {
           try {
-            const resp = await fetch('/admin/skills/user', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                skill_name: assignment.entity_id,
-                skill_path: `generated/${assignment.entity_id}`,
-                description: assignment.entity_name || assignment.entity_id,
-              }),
+            await userSkillsApi.add({
+              skill_name: assignment.entity_id,
+              skill_path: `generated/${assignment.entity_id}`,
+              description: assignment.entity_name || assignment.entity_id,
             });
-            if (!resp.ok) {
-              // Skill creation failed — still try assignment in case it already exists
-            }
           } catch {
             // Skill creation failed — still try assignment in case it already exists
           }

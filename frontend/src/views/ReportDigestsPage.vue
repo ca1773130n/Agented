@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
 import LoadingState from '../components/base/LoadingState.vue';
+import EmptyState from '../components/base/EmptyState.vue';
 import { useToast } from '../composables/useToast';
 
 const showToast = useToast();
@@ -95,9 +96,7 @@ onMounted(loadDigests);
     <LoadingState v-if="isLoading" message="Loading digest configurations..." />
 
     <template v-else>
-      <div v-if="digests.length === 0" class="card" style="padding: 32px; text-align: center; color: var(--text-secondary);">
-        No report digests configured yet. Configure digest schedules for your teams to receive automated reports.
-      </div>
+      <EmptyState v-if="digests.length === 0" title="No report digests configured" description="Configure digest schedules for your teams to receive automated reports." />
       <div class="digest-list">
         <div v-for="d in digests" :key="d.team_id" class="card digest-card">
           <div class="digest-header">

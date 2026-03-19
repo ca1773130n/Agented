@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import type { Trigger, Product, Project, Team, Plugin, AIBackend, ProjectSAInstance } from '../../services/api';
 import { projectInstanceApi } from '../../services/api';
@@ -288,9 +288,13 @@ function navToAgentCreate() {
   router.push({ name: 'agent-create' });
 }
 
-// Project instance cache: keyed by project ID
+// Project instance cache: keyed by project ID, cleared when project list changes
 const projectInstancesCache = ref<Record<string, ProjectSAInstance[]>>({});
 const expandedProjectInstances = ref<Record<string, boolean>>({});
+
+watch(() => props.projects, () => {
+  projectInstancesCache.value = {};
+});
 
 function toggleProjectInstances(projectId: string) {
   expandedProjectInstances.value[projectId] = !expandedProjectInstances.value[projectId];

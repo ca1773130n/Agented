@@ -2,6 +2,7 @@
 import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import LoadingState from '../components/base/LoadingState.vue';
+import EmptyState from '../components/base/EmptyState.vue';
 
 const router = useRouter();
 
@@ -90,9 +91,7 @@ onMounted(loadData);
       </div>
 
       <!-- Empty state -->
-      <div v-if="teams.length === 0" class="card" style="padding: 32px; text-align: center; color: var(--text-secondary);">
-        No team data available yet. Teams will appear here once they start running automations.
-      </div>
+      <EmptyState v-if="teams.length === 0" title="No team data available" description="Teams will appear here once they start running automations." />
 
       <!-- Top 3 Podium -->
       <div class="podium" v-if="teams.length >= 3">

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
 import LoadingState from '../components/base/LoadingState.vue';
+import EmptyState from '../components/base/EmptyState.vue';
 import { useToast } from '../composables/useToast';
 const showToast = useToast();
 
@@ -203,9 +204,7 @@ onMounted(loadData);
       </div>
 
       <!-- Rules List -->
-      <div v-if="quotaRules.length === 0 && !showForm" class="card" style="padding: 32px; text-align: center; color: var(--text-secondary);">
-        No quota rules configured yet. Click "Add Rule" to create one.
-      </div>
+      <EmptyState v-if="quotaRules.length === 0 && !showForm" title="No quota rules configured" description="Click &quot;Add Rule&quot; to create one." />
       <div class="rules-list">
         <div v-for="rule in quotaRules" :key="rule.id" class="card rule-card">
           <div class="rule-header">
