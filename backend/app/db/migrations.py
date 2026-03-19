@@ -3892,6 +3892,33 @@ def _migrate_92_system_errors_tables(conn):
     conn.execute("CREATE INDEX IF NOT EXISTS idx_fix_attempts_error_id ON fix_attempts(error_id)")
 
 
+def _migrate_93_repair_health_alerts_table(conn):
+    """Repair: create health_alerts if missing due to migration numbering collision.
+
+    Migration 57 (health_alerts) could be skipped on DBs where version 57 was
+    recorded as a different migration (rbac_and_audit_tables) due to a historical
+    numbering mismatch. CREATE TABLE IF NOT EXISTS is safe to re-run.
+    """
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS health_alerts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            alert_type TEXT NOT NULL,
+            trigger_id TEXT,
+            message TEXT NOT NULL,
+            details TEXT,
+            severity TEXT DEFAULT 'warning',
+            acknowledged INTEGER DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_health_alerts_trigger ON health_alerts(trigger_id)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_health_alerts_created ON health_alerts(created_at)"
+    )
+
+
 VERSIONED_MIGRATIONS = [
     (1, "add_github_columns", _migrate_add_github_columns),
     (2, "add_pr_reviews_table", _migrate_add_pr_reviews_table),
@@ -3999,4 +4026,5 @@ VERSIONED_MIGRATIONS = [
     (90, "add_super_agent_source", _migrate_add_super_agent_source),
     (91, "add_sketch_collaborating_status", _migrate_91_add_sketch_collaborating_status),
     (92, "system_errors_tables", _migrate_92_system_errors_tables),
+    (93, "repair_health_alerts_table", _migrate_93_repair_health_alerts_table),
 ]
