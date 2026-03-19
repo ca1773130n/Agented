@@ -282,11 +282,15 @@ def _scan_mentions_and_notify(sketch_id: str, from_agent_id: str, response_text:
                 agent_id,
             )
 
-            # Auto-execute: launch a session so the agent processes the task
-            # The pending message will be injected into the system prompt
-            # by assemble_system_prompt() → get_pending_messages()
+            # Auto-execute: send the task as a user message and launch streaming
             try:
                 session_id = SuperAgentSessionService.get_or_create_session(agent_id)
+                task_prompt = (
+                    f"You have received the following task assignment from "
+                    f"a sketch research by {from_agent_id}:\n\n{content}\n\n"
+                    f"Please work on these tasks now."
+                )
+                SuperAgentSessionService.send_message(session_id, task_prompt)
                 backend = agent.get("backend_type") or "claude"
                 run_streaming_response(
                     session_id=session_id,
