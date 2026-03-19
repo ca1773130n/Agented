@@ -281,6 +281,31 @@ def _scan_mentions_and_notify(sketch_id: str, from_agent_id: str, response_text:
                 agent_name,
                 agent_id,
             )
+
+            # Auto-execute: launch a session so the agent processes the task
+            # The pending message will be injected into the system prompt
+            # by assemble_system_prompt() → get_pending_messages()
+            try:
+                session_id = SuperAgentSessionService.get_or_create_session(agent_id)
+                backend = agent.get("backend_type") or "claude"
+                run_streaming_response(
+                    session_id=session_id,
+                    super_agent_id=agent_id,
+                    backend=backend,
+                )
+                logger.info(
+                    "Sketch %s: auto-launched session %s for %s",
+                    sketch_id,
+                    session_id,
+                    agent_name,
+                )
+            except Exception as launch_exc:
+                logger.error(
+                    "Sketch %s: failed to auto-launch session for %s: %s",
+                    sketch_id,
+                    agent_id,
+                    launch_exc,
+                )
         except Exception as exc:
             logger.error(
                 "Sketch %s: failed to send mail to %s: %s",
