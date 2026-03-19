@@ -413,3 +413,13 @@ export type {
 
 export { executionTaggingApi } from './execution-tagging';
 export type { ExecutionTag, TaggedExecution } from './execution-tagging';
+
+export { projectInstanceApi } from './project-instances';
+export type {
+  ChatMode,
+  ProjectSAInstance,
+  ProjectTeamInstance,
+  SAInstanceInfo,
+  CreateInstanceRequest,
+  CreateInstanceResponse,
+} from './types/project-instances';
