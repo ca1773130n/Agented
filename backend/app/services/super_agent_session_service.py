@@ -43,8 +43,14 @@ class SuperAgentSessionService:
     _lock = threading.RLock()
 
     @classmethod
-    def create_session(cls, super_agent_id: str) -> Tuple[Optional[str], Optional[str]]:
+    def create_session(
+        cls, super_agent_id: str, instance_id: str = None
+    ) -> Tuple[Optional[str], Optional[str]]:
         """Create a new session for a super agent.
+
+        Args:
+            super_agent_id: The super agent to create a session for.
+            instance_id: Optional project SA instance ID to associate with this session.
 
         Returns (session_id, None) on success or (None, error_message) on failure.
         """
@@ -60,7 +66,7 @@ class SuperAgentSessionService:
                 return None, "SuperAgent not found"
 
             # Persist to DB
-            session_id = add_super_agent_session(super_agent_id)
+            session_id = add_super_agent_session(super_agent_id, instance_id=instance_id)
             if not session_id:
                 return None, "Failed to create session"
 

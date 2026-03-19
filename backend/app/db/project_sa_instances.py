@@ -56,6 +56,19 @@ def get_project_sa_instance(instance_id: str) -> Optional[dict]:
         return dict(row) if row else None
 
 
+def get_project_sa_instance_by_project_and_sa(
+    project_id: str, template_sa_id: str
+) -> Optional[dict]:
+    """Get a project SA instance by project_id and template_sa_id combo."""
+    with get_connection() as conn:
+        cursor = conn.execute(
+            "SELECT * FROM project_sa_instances WHERE project_id = ? AND template_sa_id = ?",
+            (project_id, template_sa_id),
+        )
+        row = cursor.fetchone()
+        return dict(row) if row else None
+
+
 def get_project_sa_instances_for_project(project_id: str) -> List[dict]:
     """Get all SA instances for a project ordered by created_at DESC."""
     with get_connection() as conn:
@@ -98,6 +111,13 @@ def update_project_sa_instance(
         )
         conn.commit()
         return cursor.rowcount > 0
+
+
+def get_project_sa_instances_without_worktree() -> List[dict]:
+    """Get all SA instances where worktree_path IS NULL."""
+    with get_connection() as conn:
+        cursor = conn.execute("SELECT * FROM project_sa_instances WHERE worktree_path IS NULL")
+        return [dict(row) for row in cursor.fetchall()]
 
 
 def delete_project_sa_instance(instance_id: str) -> bool:
