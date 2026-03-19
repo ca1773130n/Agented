@@ -185,11 +185,14 @@ class TestChatEndpointWithPsaPrefix:
 
 
 class TestWorkModeRouting:
-    def test_work_mode_routes_to_cli(self):
-        """Work mode with cwd forces _stream_via_cli for claude backend."""
+    def test_work_mode_uses_normal_routing_with_project_context(self):
+        """Work mode uses normal routing (CLIProxy) for real-time streaming.
+
+        Project context is in the system prompt, not via cwd subprocess.
+        """
         with (
-            patch("app.services.conversation_streaming._stream_via_cli") as mock_cli,
             patch("app.services.conversation_streaming._find_cliproxy", return_value=None),
+            patch("app.services.conversation_streaming._stream_via_cli") as mock_cli,
         ):
             mock_cli.return_value = iter(["response"])
 
@@ -204,11 +207,10 @@ class TestWorkModeRouting:
                 )
             )
 
+            # Should use normal CLI fallback (not forced work-mode CLI)
             mock_cli.assert_called_once()
-            _, kwargs = mock_cli.call_args
-            assert kwargs.get("cwd") == "/tmp/worktree"
 
-    def test_work_mode_routes_to_opencode_cli(self):
+    def test_work_mode_opencode_uses_opencode_cli(self):
         """Work mode with opencode backend routes to _stream_via_opencode_cli."""
         with patch("app.services.conversation_streaming._stream_via_opencode_cli") as mock_oc:
             mock_oc.return_value = iter(["response"])
@@ -224,9 +226,8 @@ class TestWorkModeRouting:
                 )
             )
 
+            # OpenCode always uses its own CLI
             mock_oc.assert_called_once()
-            _, kwargs = mock_oc.call_args
-            assert kwargs.get("cwd") == "/tmp/worktree"
 
     def test_management_mode_uses_normal_routing(self):
         """Management mode (or no chat_mode) uses the existing routing."""

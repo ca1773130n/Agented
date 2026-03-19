@@ -205,19 +205,15 @@ def stream_llm_response(
     resolved_base = api_base or os.environ.get("ANTHROPIC_API_BASE", "").strip()
     resolved_key = api_key or os.environ.get("ANTHROPIC_API_KEY", "").strip()
 
-    # Work mode: force CLI subprocess with cwd
+    # Work mode: project context is already in the system prompt via assemble_system_prompt.
+    # Use the normal routing (CLIProxy for real-time streaming) rather than forcing CLI
+    # subprocess, which only outputs the complete response (no token-by-token streaming).
+    # The cwd parameter is logged for debugging but routing follows normal priority.
     if chat_mode == "work" and cwd:
         logger.info(
-            "Streaming via CLI in work mode (backend=%s, model=%s, cwd=%s)",
-            effective_backend,
-            resolved_model,
+            "Work mode active (cwd=%s) — using normal streaming with project context in prompt",
             cwd,
         )
-        if effective_backend == "opencode":
-            yield from _stream_via_opencode_cli(messages, resolved_model, cwd=cwd)
-        else:
-            yield from _stream_via_cli(messages, resolved_model, cwd=cwd)
-        return
 
     # OpenCode backend ALWAYS uses the OpenCode CLI.
     # OpenCode models use provider/model format (e.g. zhipu/glm-5-free) which
