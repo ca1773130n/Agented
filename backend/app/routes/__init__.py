@@ -13,6 +13,7 @@ def register_blueprints(app):
     from .bookmarks import bookmarks_bp
     from .bot_memory import bot_memory_bp
     from .bot_pipes import bot_pipes_bp
+    from .bot_sla import bot_sla_bp
     from .bot_templates import bot_templates_bp
     from .payload_transformers import payload_transformers_bp
     from .budgets import budgets_bp
@@ -56,6 +57,7 @@ def register_blueprints(app):
     from .rbac import rbac_bp
     from .replay import replay_bp
     from .repo_bot_defaults import repo_bot_defaults_bp
+    from .report_digests import report_digests_bp
     from .quality_ratings import quality_ratings_bp
     from .retention import retention_bp
     from .scope_filters import scope_filters_bp
@@ -187,6 +189,8 @@ def register_blueprints(app):
             findings_bp,
             bot_pipes_bp,
             bot_memory_bp,
+            bot_sla_bp,
+            report_digests_bp,
             retention_bp,
             skill_sets_bp,
             onboarding_bp,
@@ -292,6 +296,8 @@ def register_blueprints(app):
     app.register_api(onboarding_bp)
     app.register_api(payload_transformers_bp)
     app.register_api(system_bp)
+    app.register_api(bot_sla_bp)
+    app.register_api(report_digests_bp)
 
     # SPA catch-all: MUST be registered LAST so API routes take priority
     app.register_blueprint(spa_bp)

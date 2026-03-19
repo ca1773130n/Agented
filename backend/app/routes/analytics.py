@@ -79,3 +79,9 @@ def get_effectiveness_analytics():
         end_date=end_date,
     )
     return result, HTTPStatus.OK
+
+
+@analytics_bp.get("/analytics/team-leaderboard")
+def get_team_leaderboard():
+    """Stub: team automation leaderboard data."""
+    return {"teams": []}, HTTPStatus.OK

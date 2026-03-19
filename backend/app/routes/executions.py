@@ -579,3 +579,53 @@ def get_pending_retries():
         "retries": result,
         "total": len(result),
     }, HTTPStatus.OK
+
+
+# --- Anomaly Detection Stubs ---
+
+
+@executions_bp.get("/executions/anomalies")
+def get_execution_anomalies():
+    """Stub: execution anomaly detection data."""
+    return {"anomalies": [], "baselines": []}, HTTPStatus.OK
+
+
+class AnomalyPath(BaseModel):
+    anomaly_id: str = Field(..., description="Anomaly ID")
+
+
+@executions_bp.post("/executions/anomalies/<anomaly_id>/acknowledge")
+def acknowledge_anomaly(path: AnomalyPath):
+    """Stub: acknowledge an execution anomaly."""
+    return {"ok": True}, HTTPStatus.OK
+
+
+# --- Quota Control Stubs ---
+
+
+@executions_bp.get("/executions/quotas")
+def get_execution_quotas():
+    """Stub: execution quota rules."""
+    return {"rules": []}, HTTPStatus.OK
+
+
+@executions_bp.post("/executions/quotas")
+def create_execution_quota():
+    """Stub: create a new execution quota rule."""
+    return {"id": "q-stub", "message": "created"}, HTTPStatus.OK
+
+
+class QuotaPath(BaseModel):
+    quota_id: str = Field(..., description="Quota rule ID")
+
+
+@executions_bp.put("/executions/quotas/<quota_id>")
+def update_execution_quota(path: QuotaPath):
+    """Stub: update an execution quota rule."""
+    return {"ok": True}, HTTPStatus.OK
+
+
+@executions_bp.delete("/executions/quotas/<quota_id>")
+def delete_execution_quota(path: QuotaPath):
+    """Stub: delete an execution quota rule."""
+    return {"ok": True}, HTTPStatus.OK
