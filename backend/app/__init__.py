@@ -116,6 +116,7 @@ def _init_database(app) -> None:  # noqa: ARG001 — app reserved for future con
     from .db.bundle_seeds import seed_bundled_teams_and_agents
 
     from .services.instance_service import InstanceService
+    from .services.super_agent_session_service import SuperAgentSessionService
 
     init_db()
     seed_predefined_triggers()
@@ -126,6 +127,7 @@ def _init_database(app) -> None:  # noqa: ARG001 — app reserved for future con
     migrate_existing_paths()
     auto_register_project_root()
     InstanceService.ensure_worktrees()
+    SuperAgentSessionService.restore_active_sessions()
 
 
 def _seed_system_agent():
