@@ -129,7 +129,7 @@ function handleSend() {
     backend: selectedBackend.value !== 'auto' ? selectedBackend.value : undefined,
     account_id: selectedAccountId.value || undefined,
     model: selectedModel.value || undefined,
-    ...(isInstanceMode.value ? { chat_mode: chatMode.value } : {}),
+    chat_mode: chatMode.value,
   });
 }
 
@@ -186,7 +186,7 @@ async function loadData() {
         <h1>{{ superAgent?.name || 'SuperAgent Playground' }}</h1>
         <p v-if="superAgent?.description">{{ superAgent.description }}</p>
       </div>
-      <div v-if="isInstanceMode" class="chat-mode-toggle">
+      <div class="chat-mode-toggle">
         <button
           :class="['mode-btn', { active: chatMode === 'management' }]"
           @click="chatMode = 'management'"
