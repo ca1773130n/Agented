@@ -75,7 +75,7 @@ export const superAgentSessionApi = {
     superAgentId: string,
     sessionId: string,
     content: string,
-    options?: { backend?: string; account_id?: string; model?: string; mode?: string },
+    options?: { backend?: string; account_id?: string; model?: string; mode?: string; chat_mode?: string },
   ) =>
     apiFetch<{ status: string; message_id: string; backends?: Record<string, unknown> }>(
       `/admin/super-agents/${superAgentId}/sessions/${sessionId}/chat`,

@@ -20,4 +20,11 @@ export const superAgentRoutes: RouteRecordRaw[] = [
     props: true,
     meta: { title: 'Super Agent Playground', requiresEntity: 'superAgentId' },
   },
+  {
+    path: '/projects/:projectId/instances/:instanceId/playground',
+    name: 'project-instance-playground',
+    component: () => import('../../views/SuperAgentPlayground.vue'),
+    props: true,
+    meta: { title: 'Instance Playground' },
+  },
 ];

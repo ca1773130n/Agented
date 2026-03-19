@@ -208,7 +208,7 @@ export function useAiChat(superAgentId: Ref<string>) {
 
   async function sendMessage(
     content: string,
-    options?: { backend?: string; account_id?: string; model?: string },
+    options?: { backend?: string; account_id?: string; model?: string; chat_mode?: string },
   ) {
     if (!content.trim()) return;
 

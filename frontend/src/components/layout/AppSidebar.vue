@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import type { Trigger, Product, Project, Team, Plugin, AIBackend } from '../../services/api';
+import type { Trigger, Product, Project, Team, Plugin, AIBackend, ProjectSAInstance } from '../../services/api';
+import { projectInstanceApi } from '../../services/api';
 import { useWebMcpTool } from '../../composables/useWebMcpTool';
 
 const route = useRoute();
@@ -86,7 +87,7 @@ function autoExpandForRoute() {
   if (['mcp-servers', 'mcp-server-detail', 'explore-mcp-servers'].includes(name)) {
     expandedSections.value.mcpServers = true;
   }
-  if (['projects', 'project-dashboard', 'project-settings', 'project-management', 'project-planning'].includes(name)) {
+  if (['projects', 'project-dashboard', 'project-settings', 'project-management', 'project-planning', 'project-instance-playground'].includes(name)) {
     expandedSections.value.projects = true;
   }
   if (['products', 'product-dashboard', 'product-settings'].includes(name)) {
@@ -183,7 +184,7 @@ function isPluginsSectionActive(): boolean {
 }
 
 function isProjectsSectionActive(): boolean {
-  return ['projects', 'project-dashboard', 'project-settings', 'project-management', 'project-planning'].includes(currentRouteName.value);
+  return ['projects', 'project-dashboard', 'project-settings', 'project-management', 'project-planning', 'project-instance-playground'].includes(currentRouteName.value);
 }
 
 function isProductsSectionActive(): boolean {
@@ -285,6 +286,33 @@ function navToBackendDetail(backendId: string) {
 
 function navToAgentCreate() {
   router.push({ name: 'agent-create' });
+}
+
+// Project instance cache: keyed by project ID
+const projectInstancesCache = ref<Record<string, ProjectSAInstance[]>>({});
+const expandedProjectInstances = ref<Record<string, boolean>>({});
+
+function toggleProjectInstances(projectId: string) {
+  expandedProjectInstances.value[projectId] = !expandedProjectInstances.value[projectId];
+  if (expandedProjectInstances.value[projectId] && !projectInstancesCache.value[projectId]) {
+    loadProjectInstances(projectId);
+  }
+}
+
+async function loadProjectInstances(projectId: string) {
+  try {
+    const data = await projectInstanceApi.list(projectId);
+    projectInstancesCache.value[projectId] = data.instances || [];
+  } catch {
+    projectInstancesCache.value[projectId] = [];
+  }
+}
+
+function navToInstancePlayground(projectId: string, instanceId: string) {
+  router.push({
+    name: 'project-instance-playground',
+    params: { projectId, instanceId },
+  });
 }
 
 const isCollapsedDesktop = () => props.collapsed && !props.isMobile;
@@ -498,24 +526,49 @@ function handleSidebarKeydown(e: KeyboardEvent) {
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('projects') }" :aria-current="sidebarActive('projects') ? 'page' : undefined" @click="navTo('projects')">
           All Projects
         </button>
-        <div v-for="project in props.projects" :key="project.id" class="submenu-item-row">
-          <button type="button" class="submenu-item"
-            :class="{ active: (currentRouteName === 'project-dashboard' || currentRouteName === 'project-settings' || currentRouteName === 'project-planning') && route.params.projectId === project.id }"
-            :aria-current="((currentRouteName === 'project-dashboard' || currentRouteName === 'project-settings' || currentRouteName === 'project-planning') && route.params.projectId === project.id) ? 'page' : undefined"
-            @click="navToProjectDashboard(project.id)">
-            {{ project.name }}
-          </button>
-          <button type="button" class="submenu-settings-btn" title="Planning" @click="router.push({ name: 'project-planning', params: { projectId: project.id } })">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-              <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>
-            </svg>
-          </button>
-          <button type="button" class="submenu-settings-btn" title="Settings" @click="navToProjectSettings(project.id)">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-              <circle cx="12" cy="12" r="3"/>
-              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
-            </svg>
-          </button>
+        <div v-for="project in props.projects" :key="project.id" class="submenu-project-group">
+          <div class="submenu-item-row">
+            <button type="button" class="submenu-item"
+              :class="{ active: (currentRouteName === 'project-dashboard' || currentRouteName === 'project-settings' || currentRouteName === 'project-planning' || currentRouteName === 'project-instance-playground') && route.params.projectId === project.id }"
+              :aria-current="((currentRouteName === 'project-dashboard' || currentRouteName === 'project-settings' || currentRouteName === 'project-planning' || currentRouteName === 'project-instance-playground') && route.params.projectId === project.id) ? 'page' : undefined"
+              @click="navToProjectDashboard(project.id)">
+              {{ project.name }}
+            </button>
+            <button type="button" class="submenu-settings-btn" title="Instances" @click.stop="toggleProjectInstances(project.id)">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <circle cx="12" cy="8" r="4"/>
+                <path d="M6 21v-2a4 4 0 014-4h4a4 4 0 014 4v2"/>
+              </svg>
+            </button>
+            <button type="button" class="submenu-settings-btn" title="Planning" @click="router.push({ name: 'project-planning', params: { projectId: project.id } })">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>
+              </svg>
+            </button>
+            <button type="button" class="submenu-settings-btn" title="Settings" @click="navToProjectSettings(project.id)">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <circle cx="12" cy="12" r="3"/>
+                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+              </svg>
+            </button>
+          </div>
+          <div v-if="expandedProjectInstances[project.id]" class="project-instances-list">
+            <button
+              v-for="inst in (projectInstancesCache[project.id] || [])"
+              :key="inst.id"
+              type="button"
+              class="submenu-item instance-item"
+              :class="{ active: currentRouteName === 'project-instance-playground' && route.params.instanceId === inst.id }"
+              :aria-current="(currentRouteName === 'project-instance-playground' && route.params.instanceId === inst.id) ? 'page' : undefined"
+              @click="navToInstancePlayground(project.id, inst.id)"
+            >
+              <svg class="instance-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="14" height="14">
+                <circle cx="12" cy="8" r="4"/>
+                <path d="M6 21v-2a4 4 0 014-4h4a4 4 0 014 4v2"/>
+              </svg>
+              {{ inst.sa_name || inst.id }}
+            </button>
+          </div>
         </div>
       </div>
       <!-- Teams (expandable) -->
@@ -1227,5 +1280,36 @@ function handleSidebarKeydown(e: KeyboardEvent) {
 
 .section-retry-btn:hover {
   background: rgba(0, 212, 255, 0.1);
+}
+
+/* Project instances sub-items */
+.submenu-project-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.project-instances-list {
+  padding-left: 12px;
+}
+
+.instance-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.75rem;
+  color: var(--text-tertiary);
+}
+
+.instance-item:hover {
+  color: var(--accent-cyan);
+}
+
+.instance-item.active {
+  color: var(--accent-cyan);
+}
+
+.instance-icon {
+  flex-shrink: 0;
+  opacity: 0.7;
 }
 </style>

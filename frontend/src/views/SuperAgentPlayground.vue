@@ -2,6 +2,7 @@
 import { ref, computed, onUnmounted } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { superAgentApi } from '../services/api';
+import type { ChatMode } from '../services/api';
 import { useStreamingParser } from '../composables/useStreamingParser';
 import { useAiChat } from '../composables/useAiChat';
 import EntityLayout from '../layouts/EntityLayout.vue';
@@ -14,12 +15,28 @@ import MessageInbox from '../components/super-agents/MessageInbox.vue';
 import MessageThread from '../components/super-agents/MessageThread.vue';
 import { useWebMcpTool } from '../composables/useWebMcpTool';
 
+const props = defineProps<{
+  instanceId?: string;
+  projectId?: string;
+}>();
+
 const router = useRouter();
 const route = useRoute();
 
 const showToast = useToast();
 
-const superAgentId = computed(() => route.params.superAgentId as string);
+// When an instanceId is provided (project-scoped instance), use it as the effective ID.
+// The psa- prefixed ID works with existing chat endpoints via backend resolution.
+const instanceIdFromRoute = computed(() => (route.params.instanceId as string) || props.instanceId || '');
+const isInstanceMode = computed(() => !!instanceIdFromRoute.value);
+const projectIdComputed = computed(() => (route.params.projectId as string) || props.projectId || '');
+
+const superAgentId = computed(() =>
+  isInstanceMode.value ? instanceIdFromRoute.value : (route.params.superAgentId as string)
+);
+
+// Chat mode for instance playgrounds (management = configure agent, work = agent works on project)
+const chatMode = ref<ChatMode>('management');
 
 const superAgentIdRef = computed(() => superAgentId.value);
 const {
@@ -77,6 +94,10 @@ useWebMcpTool({
         messageCount: messages.value.length,
         isProcessing: isProcessing.value,
         rightTab: rightTab.value,
+        isInstanceMode: isInstanceMode.value,
+        instanceId: instanceIdFromRoute.value || null,
+        projectId: projectIdComputed.value || null,
+        chatMode: chatMode.value,
       }),
     }],
   }),
@@ -109,6 +130,7 @@ function handleSend() {
     backend: selectedBackend.value !== 'auto' ? selectedBackend.value : undefined,
     account_id: selectedAccountId.value || undefined,
     model: selectedModel.value || undefined,
+    ...(isInstanceMode.value ? { chat_mode: chatMode.value } : {}),
   });
 }
 
@@ -126,6 +148,8 @@ function formatSessionDate(dateStr?: string): string {
 
 async function loadData() {
   try {
+    // For instance mode, the superAgentId is the psa- ID which the backend resolves
+    // to the underlying SA for get/session operations.
     const data = await superAgentApi.get(superAgentId.value);
     superAgent.value = data;
     await loadSessions();
@@ -149,7 +173,7 @@ async function loadData() {
   <div class="playground-page">
     <!-- Header -->
     <div class="playground-header">
-      <button class="btn-back" @click="router.push({ name: 'super-agents' })">
+      <button class="btn-back" @click="isInstanceMode ? router.push({ name: 'project-dashboard', params: { projectId: projectIdComputed } }) : router.push({ name: 'super-agents' })">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M19 12H5M12 19l-7-7 7-7"/>
         </svg>
@@ -158,6 +182,16 @@ async function loadData() {
       <div class="header-title">
         <h1>{{ superAgent?.name || 'SuperAgent Playground' }}</h1>
         <p v-if="superAgent?.description">{{ superAgent.description }}</p>
+      </div>
+      <div v-if="isInstanceMode" class="chat-mode-toggle">
+        <button
+          :class="['mode-btn', { active: chatMode === 'management' }]"
+          @click="chatMode = 'management'"
+        >Management</button>
+        <button
+          :class="['mode-btn', { active: chatMode === 'work' }]"
+          @click="chatMode = 'work'"
+        >Work</button>
       </div>
       <div class="header-actions">
         <button
@@ -405,6 +439,37 @@ async function loadData() {
   display: flex;
   gap: 8px;
   flex-shrink: 0;
+}
+
+/* Chat mode toggle for instance playground */
+.chat-mode-toggle {
+  display: flex;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-default);
+  border-radius: 6px;
+  padding: 2px;
+  flex-shrink: 0;
+}
+
+.mode-btn {
+  padding: 5px 14px;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  color: var(--text-tertiary);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.mode-btn:hover {
+  color: var(--text-secondary);
+}
+
+.mode-btn.active {
+  background: var(--accent-violet);
+  color: #fff;
 }
 
 .btn {

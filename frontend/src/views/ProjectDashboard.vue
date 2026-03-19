@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { ref, computed, watch, onUnmounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import type { Project, HarnessStatusResult, ProjectSkill, Hook, Command, Rule, Agent, TeamMember, ProjectInstallation, SuperAgent, SuperAgentSession } from '../services/api';
-import { projectApi, grdApi, hookApi, commandApi, ruleApi, agentApi, teamApi, superAgentApi, superAgentSessionApi, ApiError } from '../services/api';
+import type { Project, HarnessStatusResult, ProjectSkill, Hook, Command, Rule, Agent, TeamMember, ProjectInstallation, SuperAgent, SuperAgentSession, ProjectSAInstance } from '../services/api';
+import { projectApi, grdApi, hookApi, commandApi, ruleApi, agentApi, teamApi, superAgentApi, superAgentSessionApi, projectInstanceApi, ApiError } from '../services/api';
 import EntityLayout from '../layouts/EntityLayout.vue';
 import InteractiveSetup from '../components/projects/InteractiveSetup.vue';
 import ProjectStatusCard from '../components/projects/ProjectStatusCard.vue';
@@ -51,6 +51,10 @@ const isLoadingLibrary = ref(false);
 // Installation state
 const installations = ref<ProjectInstallation[]>([]);
 const isInstallingComponent = ref<Record<string, boolean>>({});
+
+// Project instances state
+const projectInstances = ref<ProjectSAInstance[]>([]);
+const isLoadingInstances = ref(false);
 
 // Active sessions state
 interface SessionInfo {
@@ -127,12 +131,13 @@ useWebMcpTool({
         teamCount: totalTeamCount.value,
         skillsCount: projectSkills.value.length,
         installationsCount: installations.value.length,
+        instancesCount: projectInstances.value.length,
         showSetup: showSetup.value,
         harnessStatus: harnessStatus.value ? 'loaded' : null,
       }),
     }],
   }),
-  deps: [project, isLoadingHarness, isDeployingHarness, totalTeamCount, projectSkills, installations, showSetup, harnessStatus],
+  deps: [project, isLoadingHarness, isDeployingHarness, totalTeamCount, projectSkills, installations, projectInstances, showSetup, harnessStatus],
 });
 
 async function loadData() {
@@ -169,6 +174,7 @@ async function loadData() {
   loadLibraryItems();
   loadGrdStatus();
   loadActiveSessions();
+  loadProjectInstances();
   return project.value;
 }
 
@@ -203,6 +209,25 @@ async function loadActiveSessions() {
     activeSessions.value = sessionInfos;
   } catch { activeSessions.value = []; }
   finally { isLoadingSessions.value = false; }
+}
+
+async function loadProjectInstances() {
+  isLoadingInstances.value = true;
+  try {
+    const data = await projectInstanceApi.list(projectId.value);
+    projectInstances.value = data.instances || [];
+  } catch {
+    projectInstances.value = [];
+  } finally {
+    isLoadingInstances.value = false;
+  }
+}
+
+function navToInstancePlayground(instanceId: string) {
+  router.push({
+    name: 'project-instance-playground',
+    params: { projectId: projectId.value, instanceId },
+  });
 }
 
 function openChat(superAgentId: string, sessionId: string) {
@@ -475,6 +500,36 @@ function onSetupCompleted() {
         @refresh="loadData"
       />
 
+      <!-- Project Instances (Active Agents) -->
+      <div v-if="projectInstances.length > 0 || isLoadingInstances" class="card instances-card">
+        <div class="card-header-sessions">
+          <h3>Active Agents</h3>
+          <span class="card-count">{{ projectInstances.length }} instance{{ projectInstances.length !== 1 ? 's' : '' }}</span>
+        </div>
+        <div v-if="isLoadingInstances" class="sessions-loading">Loading instances...</div>
+        <div v-else-if="projectInstances.length === 0" class="sessions-empty">No instances configured</div>
+        <div v-else class="instance-cards">
+          <div v-for="inst in projectInstances" :key="inst.id" class="instance-card">
+            <div class="instance-card-header">
+              <span class="instance-agent-name">{{ inst.sa_name || inst.template_sa_id }}</span>
+              <span class="instance-backend-badge">{{ inst.sa_backend_type || 'auto' }}</span>
+            </div>
+            <div class="instance-card-meta">
+              <span class="instance-id-label">{{ inst.id }}</span>
+              <span v-if="inst.worktree_path" class="instance-worktree" title="Worktree path">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>
+                worktree active
+              </span>
+              <span class="instance-mode-label">Default: {{ inst.default_chat_mode }}</span>
+            </div>
+            <button class="action-btn instance-chat-btn" @click="navToInstancePlayground(inst.id)">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+              Chat
+            </button>
+          </div>
+        </div>
+      </div>
+
       <!-- Active Sessions -->
       <div v-if="activeSessions.length > 0 || isLoadingSessions" class="card sessions-card">
         <div class="card-header-sessions">
@@ -619,6 +674,19 @@ function onSetupCompleted() {
 .btn-primary { padding: 8px 16px; background: var(--accent-violet); border: none; border-radius: 6px; color: #fff; font-size: 0.9rem; font-weight: 500; cursor: pointer; transition: all 0.15s; }
 .btn-primary:hover:not(:disabled) { background: #9966ff; }
 .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+/* Instances Section */
+.instances-card { padding: 0; }
+.instance-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; padding: 16px 20px; }
+.instance-card { background: var(--bg-tertiary); border: 1px solid var(--border-subtle); border-radius: 8px; padding: 14px 16px; display: flex; flex-direction: column; gap: 8px; }
+.instance-card-header { display: flex; align-items: center; justify-content: space-between; }
+.instance-agent-name { font-weight: 600; font-size: 0.9rem; color: var(--text-primary); }
+.instance-backend-badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 0.65rem; font-weight: 700; text-transform: uppercase; background: var(--accent-violet-dim, rgba(136, 85, 255, 0.15)); color: var(--accent-violet, #8855ff); }
+.instance-card-meta { display: flex; flex-direction: column; gap: 2px; }
+.instance-id-label { font-family: var(--font-mono); font-size: 0.7rem; color: var(--text-muted); }
+.instance-worktree { display: flex; align-items: center; gap: 4px; font-size: 0.75rem; color: var(--accent-emerald, #00ff88); }
+.instance-mode-label { font-size: 0.75rem; color: var(--text-tertiary); }
+.instance-chat-btn { background: var(--accent-cyan-dim, rgba(0, 212, 255, 0.15)); color: var(--accent-cyan, #00d4ff); border: 1px solid transparent; padding: 8px 14px; font-size: 0.85rem; }
+.instance-chat-btn:hover { border-color: var(--accent-cyan, #00d4ff); }
 /* Sessions Section */
 .sessions-card { padding: 0; }
 .card-header-sessions { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; border-bottom: 1px solid var(--border-subtle); }
