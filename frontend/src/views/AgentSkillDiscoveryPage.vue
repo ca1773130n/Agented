@@ -1,11 +1,8 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
-import { useRouter } from 'vue-router';
 import PageHeader from '../components/base/PageHeader.vue';
 import { skillsApi, agentApi, ApiError } from '../services/api';
 import type { SkillInfo, Agent } from '../services/api';
-
-const router = useRouter();
 
 const isLoading = ref(true);
 const loadError = ref<string | null>(null);

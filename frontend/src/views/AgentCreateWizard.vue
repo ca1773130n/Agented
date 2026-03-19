@@ -64,11 +64,6 @@ async function finalizeAgent() {
   }
 }
 
-async function abandonConversation() {
-  await conversation.abandonConversation();
-  router.push({ name: 'agents' });
-}
-
 onMounted(() => {
   conversation.startConversation();
 });

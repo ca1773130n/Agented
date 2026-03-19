@@ -1,12 +1,9 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue';
-import { useRouter } from 'vue-router';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
 import { executionApi, triggerApi, ApiError } from '../services/api';
 import type { Execution, Trigger } from '../services/api';
-
-const router = useRouter();
 const showToast = useToast();
 
 interface QueueEntry {

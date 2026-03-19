@@ -1,9 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
-import { useRouter } from 'vue-router';
 import LoadingState from '../components/base/LoadingState.vue';
-
-const router = useRouter();
 
 const isLoading = ref(true);
 const selectedBot = ref<string>('all');

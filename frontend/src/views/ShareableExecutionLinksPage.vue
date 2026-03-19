@@ -1,13 +1,10 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
-import { useRouter } from 'vue-router';
 import type { Execution } from '../services/api';
 import { executionApi, ApiError } from '../services/api';
 import PageHeader from '../components/base/PageHeader.vue';
 import LoadingState from '../components/base/LoadingState.vue';
 import { useToast } from '../composables/useToast';
-
-const router = useRouter();
 const showToast = useToast();
 
 const executions = ref<Execution[]>([]);

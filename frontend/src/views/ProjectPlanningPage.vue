@@ -49,15 +49,6 @@ const filteredPlans = computed(() => {
   return plans.value.filter((p) => phaseIds.has(p.phase_id));
 });
 
-const breadcrumbs = computed(() => [
-  { label: 'Projects', action: () => router.push({ name: 'projects' }) },
-  {
-    label: project.value?.name || 'Project',
-    action: () =>
-      router.push({ name: 'project-dashboard', params: { projectId: projectId.value } }),
-  },
-  { label: 'Planning' },
-]);
 
 // Data loading
 async function loadData() {

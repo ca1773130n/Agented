@@ -1,12 +1,9 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
-import { useRouter } from 'vue-router';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
 import { triggerApi, ApiError } from '../services/api';
 import type { ProjectPath } from '../services/api';
-
-const router = useRouter();
 const showToast = useToast();
 
 type IndexStatus = 'indexed' | 'indexing' | 'stale' | 'pending';

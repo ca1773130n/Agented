@@ -1,14 +1,12 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
-import { useRouter, useRoute } from 'vue-router';
+import { useRoute } from 'vue-router';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
 import {
   triggerConditionsApi,
   type TriggerConditionRule,
 } from '../services/api/trigger-conditions';
-
-const router = useRouter();
 const route = useRoute();
 const showToast = useToast();
 

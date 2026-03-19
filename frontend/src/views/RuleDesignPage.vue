@@ -238,12 +238,6 @@ watch(designMode, (newMode) => {
   }
 });
 
-function handleBack() {
-  if (designMode.value === 'chat' && conversation.conversationId.value) {
-    conversation.abandonConversation();
-  }
-  router.push({ name: 'rules' });
-}
 </script>
 
 <template>

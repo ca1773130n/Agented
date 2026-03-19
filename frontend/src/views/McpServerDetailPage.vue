@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue';
-import { useRouter, useRoute } from 'vue-router';
+import { useRoute } from 'vue-router';
 import type { McpServer, Project } from '../services/api';
 import { mcpServerApi, projectApi, ApiError } from '../services/api';
 import PageHeader from '../components/base/PageHeader.vue';
@@ -9,8 +9,6 @@ import { useToast } from '../composables/useToast';
 import { handleApiError } from '../services/api/error-handler';
 import { useFocusTrap } from '../composables/useFocusTrap';
 import { useWebMcpTool } from '../composables/useWebMcpTool';
-
-const router = useRouter();
 const route = useRoute();
 const mcpServerId = computed(() => route.params.mcpServerId as string);
 

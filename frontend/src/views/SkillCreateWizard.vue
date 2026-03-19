@@ -62,11 +62,6 @@ async function finalizeSkill() {
   }
 }
 
-async function abandonConversation() {
-  await conversation.abandonConversation();
-  router.push({ name: 'my-skills' });
-}
-
 onMounted(() => {
   conversation.startConversation();
 });

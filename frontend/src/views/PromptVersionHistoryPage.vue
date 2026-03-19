@@ -1,12 +1,10 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue';
-import { useRouter, useRoute } from 'vue-router';
+import { useRoute } from 'vue-router';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
 import { triggerApi, ApiError } from '../services/api';
 import type { Trigger, PromptHistoryEntry } from '../services/api';
-
-const router = useRouter();
 const route = useRoute();
 const showToast = useToast();
 

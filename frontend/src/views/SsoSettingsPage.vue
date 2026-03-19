@@ -1,11 +1,8 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
-import { useRouter } from 'vue-router';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
 import { settingsApi, ApiError } from '../services/api';
-
-const router = useRouter();
 const showToast = useToast();
 
 type SsoProtocol = 'saml' | 'oidc' | 'none';

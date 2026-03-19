@@ -1,11 +1,9 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
-import { useRouter, useRoute } from 'vue-router';
+import { useRoute } from 'vue-router';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
 import { payloadTransformerApi } from '../services/api/payload-transformers';
-
-const router = useRouter();
 const route = useRoute();
 const showToast = useToast();
 

@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
-import { useRouter } from 'vue-router';
 import type { UsageSummaryEntry, EntityUsageEntry, BudgetLimit, MonitoringStatus, SnapshotHistory, SessionStatsSummary, RotationDashboardStatus } from '../services/api';
 import { budgetApi, agentApi, teamApi, triggerApi, monitoringApi, rotationApi } from '../services/api';
 import TokenUsageChart from '../components/monitoring/TokenUsageChart.vue';
@@ -13,8 +12,6 @@ import BudgetLimitsSection from '../components/monitoring/BudgetLimitsSection.vu
 import LoadingState from '../components/base/LoadingState.vue';
 import { useToast } from '../composables/useToast';
 import { useWebMcpTool } from '../composables/useWebMcpTool';
-
-const router = useRouter();
 const showToast = useToast();
 
 // Period selection

@@ -1,12 +1,9 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
-import { useRouter } from 'vue-router';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
 import { monitoringApi, ApiError } from '../services/api';
 import type { MonitoringConfig, MonitoringStatus } from '../services/api';
-
-const router = useRouter();
 const showToast = useToast();
 
 const loading = ref(true);

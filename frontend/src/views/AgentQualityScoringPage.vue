@@ -1,12 +1,9 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
-import { useRouter } from 'vue-router';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
 import { qualityApi } from '../services/api/quality-ratings';
 import type { QualityEntry, BotQualityStats } from '../services/api/quality-ratings';
-
-const router = useRouter();
 const showToast = useToast();
 
 const bots = ref<BotQualityStats[]>([]);

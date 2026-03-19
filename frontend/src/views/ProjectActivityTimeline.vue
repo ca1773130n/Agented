@@ -1,9 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
-import { useRouter } from 'vue-router';
 import PageHeader from '../components/base/PageHeader.vue';
 import { activityFeedApi } from '../services/api/activity-feed';
-const router = useRouter();
 
 type ActivityType = 'bot_run' | 'trigger_fired' | 'config_changed' | 'team_action' | 'execution_failed' | 'approval';
 

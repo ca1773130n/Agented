@@ -1,14 +1,11 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue';
-import { useRouter } from 'vue-router';
 import { ApiError } from '../services/api';
 import { gitopsApi } from '../services/api';
 import type { GitOpsRepo, SyncLog } from '../services/api';
 import PageHeader from '../components/base/PageHeader.vue';
 import LoadingState from '../components/base/LoadingState.vue';
 import { useToast } from '../composables/useToast';
-
-const router = useRouter();
 const showToast = useToast();
 
 const repos = ref<GitOpsRepo[]>([]);

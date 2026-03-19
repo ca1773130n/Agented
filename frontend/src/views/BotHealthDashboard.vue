@@ -1,14 +1,11 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue';
-import { useRouter } from 'vue-router';
 import type { HealthAlert, HealthStatusResponse } from '../services/api';
 import { analyticsApi, ApiError } from '../services/api';
 import HealthAlertList from '../components/analytics/HealthAlertList.vue';
 import LoadingState from '../components/base/LoadingState.vue';
 import StatCard from '../components/base/StatCard.vue';
 import { useToast } from '../composables/useToast';
-
-const router = useRouter();
 const showToast = useToast();
 
 const isLoading = ref(true);

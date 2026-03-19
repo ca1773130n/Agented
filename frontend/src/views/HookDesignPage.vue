@@ -254,12 +254,6 @@ watch(designMode, (newMode) => {
   }
 });
 
-function handleBack() {
-  if (designMode.value === 'chat') {
-    conversation.abandonConversation();
-  }
-  router.push({ name: 'hooks' });
-}
 </script>
 
 <template>

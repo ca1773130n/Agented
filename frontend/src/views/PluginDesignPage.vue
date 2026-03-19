@@ -110,11 +110,6 @@ async function finalizePlugin() {
   }
 }
 
-function abandonAndCancel() {
-  conversation.abandonConversation();
-  router.push({ name: 'plugins' });
-}
-
 onMounted(() => {
   conversation.startConversation();
 });

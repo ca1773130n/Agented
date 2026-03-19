@@ -1,12 +1,9 @@
 <script setup lang="ts">
 import { ref, onMounted, watch } from 'vue';
-import { useRouter } from 'vue-router';
 import { triggerApi } from '../services/api';
 import type { Trigger, ProjectPath } from '../services/api';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
-
-const router = useRouter();
 const showToast = useToast();
 
 // Loading state

@@ -1,11 +1,8 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
-import { useRouter } from 'vue-router';
 import PageHeader from '../components/base/PageHeader.vue';
 import { auditApi } from '../services/api';
 import type { AuditEvent } from '../services/api';
-
-const router = useRouter();
 
 type ActivityType = 'execution' | 'config_change' | 'bot_created' | 'bot_deleted' | 'trigger_added' | 'member_joined' | 'execution_failed';
 

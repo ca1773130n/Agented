@@ -1,12 +1,9 @@
 <script setup lang="ts">
 import { ref } from 'vue';
-import { useRouter } from 'vue-router';
 import type { ExecutionSearchResult } from '../services/api';
 import { specializedBotApi, ApiError } from '../services/api';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
-
-const router = useRouter();
 const showToast = useToast();
 
 const query = ref('');

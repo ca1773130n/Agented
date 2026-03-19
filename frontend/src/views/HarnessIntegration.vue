@@ -26,9 +26,6 @@ import HarnessConnectionPanel from '../components/harness/HarnessConnectionPanel
 import HarnessProjectScanner from '../components/harness/HarnessProjectScanner.vue';
 import { useToast } from '../composables/useToast';
 import { useWebMcpTool } from '../composables/useWebMcpTool';
-import { useRouter } from 'vue-router';
-
-const router = useRouter();
 
 const props = defineProps<{
   projectId?: string;

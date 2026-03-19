@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue';
-import { useRouter } from 'vue-router';
 import { analyticsApi } from '../services/api';
 import type {
   CostDataPoint,
@@ -14,8 +13,6 @@ import BotEffectivenessChart from '../components/analytics/BotEffectivenessChart
 import PageHeader from '../components/base/PageHeader.vue';
 import LoadingState from '../components/base/LoadingState.vue';
 import { useToast } from '../composables/useToast';
-
-const router = useRouter();
 const showToast = useToast();
 
 // Filter state

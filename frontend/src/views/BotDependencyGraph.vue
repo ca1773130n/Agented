@@ -1,10 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
-import { useRouter } from 'vue-router';
 import PageHeader from '../components/base/PageHeader.vue';
 import { triggerApi, agentApi, teamApi } from '../services/api/index';
-
-const router = useRouter();
 
 interface Node {
   id: string;

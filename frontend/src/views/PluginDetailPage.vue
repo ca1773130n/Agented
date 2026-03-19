@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue';
-import { useRoute, useRouter } from 'vue-router';
+import { useRoute } from 'vue-router';
 import type { Plugin, PluginComponent } from '../services/api';
 import { pluginApi, ApiError } from '../services/api';
 import PageHeader from '../components/base/PageHeader.vue';
@@ -16,7 +16,6 @@ const props = defineProps<{
 }>();
 
 const route = useRoute();
-const router = useRouter();
 const pluginId = computed(() => (route.params.pluginId as string) || props.pluginId || '');
 
 const showToast = useToast();

@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, watch } from 'vue';
-import { useRouter } from 'vue-router';
 import type { Execution, MergedChunkResults } from '../services/api';
 import { executionApi, triggerApi, ApiError, chunkApi } from '../services/api';
 import ExecutionLogViewer from '../components/triggers/ExecutionLogViewer.vue';
@@ -21,8 +20,6 @@ const props = withDefaults(defineProps<{
 }>(), {
   triggerId: '',
 });
-
-const router = useRouter();
 
 const showToast = useToast();
 

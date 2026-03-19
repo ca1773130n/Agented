@@ -1,12 +1,9 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
-import { useRouter } from 'vue-router';
 import { triggerApi, teamApi, ApiError } from '../services/api';
 import PageHeader from '../components/base/PageHeader.vue';
 import StatCard from '../components/base/StatCard.vue';
 import { useToast } from '../composables/useToast';
-
-const router = useRouter();
 const showToast = useToast();
 
 type Period = '7d' | '30d' | '90d';

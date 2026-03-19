@@ -57,12 +57,6 @@ const filteredPlans = computed(() => {
   return plans.value.filter((p) => phaseIds.has(p.phase_id));
 });
 
-const breadcrumbs = computed(() => [
-  { label: 'Projects', action: () => router.push({ name: 'projects' }) },
-  { label: project.value?.name || 'Project', action: () => router.push({ name: 'project-dashboard', params: { projectId: projectId.value } }) },
-  { label: 'Management' },
-]);
-
 // WebMCP page-specific tool: exposes kanban board state to verification agents
 useWebMcpTool({
   name: 'agented_project_get_kanban_state',

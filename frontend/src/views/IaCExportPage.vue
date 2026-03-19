@@ -1,10 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
-import { useRouter } from 'vue-router';
 import PageHeader from '../components/base/PageHeader.vue';
 import { configExportApi, ApiError } from '../services/api';
-
-const router = useRouter();
 
 type Format = 'terraform' | 'pulumi';
 type Environment = 'dev' | 'staging' | 'prod';

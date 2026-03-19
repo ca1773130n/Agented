@@ -53,7 +53,6 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
-import { useRouter } from 'vue-router';
 import { orchestrationApi, type AccountHealth } from '../services/api';
 import ServiceHealthGrid from '../components/monitoring/ServiceHealthGrid.vue';
 import PageHeader from '../components/base/PageHeader.vue';
@@ -62,8 +61,6 @@ import EmptyState from '../components/base/EmptyState.vue';
 import StatCard from '../components/base/StatCard.vue';
 import { useToast } from '../composables/useToast';
 import { useWebMcpTool } from '../composables/useWebMcpTool';
-
-const router = useRouter();
 
 const showToast = useToast();
 

@@ -215,12 +215,6 @@ async function finalizeCommand() {
   }
 }
 
-async function handleCancel() {
-  if (conversation.conversationId.value) {
-    await conversation.abandonConversation();
-  }
-  router.push({ name: 'commands' });
-}
 </script>
 
 <template>

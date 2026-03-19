@@ -1,11 +1,8 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue';
-import { useRouter } from 'vue-router';
 import PageHeader from '../components/base/PageHeader.vue';
 import { projectApi, projectHealthApi } from '../services/api';
 import type { Project, HealthCategory, HealthSignal, HealthRecommendation } from '../services/api';
-
-const router = useRouter();
 
 const projects = ref<Project[]>([]);
 const selectedProjectId = ref('');

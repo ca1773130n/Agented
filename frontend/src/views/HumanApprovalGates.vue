@@ -1,12 +1,9 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
-import { useRouter } from 'vue-router';
 import PageHeader from '../components/base/PageHeader.vue';
 import LoadingState from '../components/base/LoadingState.vue';
 import { useToast } from '../composables/useToast';
 import { workflowExecutionApi, ApiError } from '../services/api';
-
-const router = useRouter();
 const showToast = useToast();
 
 interface PendingApproval {

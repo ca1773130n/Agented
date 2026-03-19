@@ -1,13 +1,10 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed, watch, nextTick } from 'vue';
-import { useRouter } from 'vue-router';
 import type { FileNode, AuthenticatedEventSource } from '../services/api';
 import { skillsApi, userSkillsApi, ApiError } from '../services/api';
 import { useToast } from '../composables/useToast';
 import { safeParseSSE } from '../composables/useEventSource';
 import { useWebMcpTool } from '../composables/useWebMcpTool';
-
-const router = useRouter();
 const showToast = useToast();
 
 const skills = ref<{ name: string; description?: string }[]>([]);

@@ -1,11 +1,8 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
-import { useRouter } from 'vue-router';
 import PageHeader from '../components/base/PageHeader.vue';
 import { pipeApi } from '../services/api/bot-pipes';
 import type { BotPipe, BotPipeExecution } from '../services/api/bot-pipes';
-
-const router = useRouter();
 
 const pipes = ref<BotPipe[]>([]);
 const executions = ref<BotPipeExecution[]>([]);

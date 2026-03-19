@@ -1,12 +1,9 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue';
-import { useRouter } from 'vue-router';
 import { orchestrationApi, triggerApi, backendApi } from '../services/api';
 import type { AccountHealth, FallbackChainEntry, Trigger, AIBackend } from '../services/api';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
-
-const router = useRouter();
 const showToast = useToast();
 
 // Loading / error state

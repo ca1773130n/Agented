@@ -1,10 +1,8 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
-import { useRouter } from 'vue-router';
 import PageHeader from '../components/base/PageHeader.vue';
 import { executionApi } from '../services/api/triggers';
 import type { Execution } from '../services/api/types';
-const router = useRouter();
 
 interface FileDiff {
   path: string;

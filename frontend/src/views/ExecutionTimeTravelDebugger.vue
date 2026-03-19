@@ -1,10 +1,8 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue';
-import { useRouter } from 'vue-router';
 import PageHeader from '../components/base/PageHeader.vue';
 import { executionApi } from '../services/api';
 import type { Execution } from '../services/api';
-const router = useRouter();
 
 interface ExecutionFrame {
   index: number;

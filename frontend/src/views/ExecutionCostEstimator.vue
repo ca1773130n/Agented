@@ -1,10 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
-import { useRouter } from 'vue-router';
 import PageHeader from '../components/base/PageHeader.vue';
 import { modelPricingApi } from '../services/api/model-pricing';
-
-const router = useRouter();
 
 const promptText = ref('');
 const codebaseSize = ref<'small' | 'medium' | 'large' | 'xlarge'>('medium');

@@ -1,11 +1,8 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
-import { useRouter } from 'vue-router';
 import PageHeader from '../components/base/PageHeader.vue';
 import { pluginApi, ApiError } from '../services/api';
 import type { Plugin } from '../services/api';
-
-const router = useRouter();
 
 type TabId = 'init' | 'develop' | 'test' | 'publish';
 

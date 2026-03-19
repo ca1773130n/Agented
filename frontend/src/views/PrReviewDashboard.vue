@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
-import { useRouter } from 'vue-router';
 import type { PrReview, PrReviewStats, Trigger, PrHistoryPoint } from '../services/api';
 import { prReviewApi, triggerApi, ApiError } from '../services/api';
 import PrHistoryChart from '../components/security/PrHistoryChart.vue';
@@ -12,8 +11,6 @@ import LoadingState from '../components/base/LoadingState.vue';
 import StatCard from '../components/base/StatCard.vue';
 import { useToast } from '../composables/useToast';
 import { useWebMcpTool } from '../composables/useWebMcpTool';
-
-const router = useRouter();
 const showToast = useToast();
 
 const stats = ref<PrReviewStats | null>(null);

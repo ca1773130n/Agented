@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
-import { useRouter } from 'vue-router';
 import type { HistoryStatsPeriod } from '../services/api';
 import { budgetApi } from '../services/api';
 import PageHeader from '../components/base/PageHeader.vue';
@@ -9,8 +8,6 @@ import type { DataTableColumn } from '../components/base/DataTable.vue';
 import EmptyState from '../components/base/EmptyState.vue';
 import LoadingState from '../components/base/LoadingState.vue';
 import { useWebMcpTool } from '../composables/useWebMcpTool';
-
-const router = useRouter();
 
 const selectedPeriod = ref<'weekly' | 'monthly'>('weekly');
 const monthsBack = ref<number>(6);
