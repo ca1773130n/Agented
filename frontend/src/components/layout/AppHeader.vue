@@ -122,128 +122,90 @@ function getEntityDisplayName(entityType: string, entityId: string): string {
   return entityNameCache.value.get(cacheKey) || entityId;
 }
 
-// --- Breadcrumb ---
+// --- Breadcrumb (path-based, auto-generated) ---
 interface BreadcrumbSegment {
   label: string;
   to?: RouteLocationRaw;
 }
 
-const navigationTargets: Record<string, RouteLocationRaw | null> = {
-  'Home': { name: 'dashboards' },
-  'Organization': null,
-  'Dashboards': { name: 'dashboards' },
-  'Products': { name: 'products' },
-  'Projects': { name: 'projects' },
-  'Teams': { name: 'teams' },
-  'Agents': { name: 'agents' },
-  'Super Agents': { name: 'super-agents' },
-  'Workflows': { name: 'workflows' },
-  'Skills': { name: 'my-skills' },
-  'Plugins': { name: 'plugins' },
-  'MCP Servers': { name: 'mcp-servers' },
-  'Triggers': { name: 'triggers' },
-  'System': null,
+// Map URL path segments to human-readable labels
+const segmentLabels: Record<string, string> = {
+  'products': 'Products', 'projects': 'Projects', 'teams': 'Teams',
+  'agents': 'Agents', 'super-agents': 'Super Agents', 'workflows': 'Workflows',
+  'skills': 'Skills', 'plugins': 'Plugins', 'mcp-servers': 'MCP Servers',
+  'triggers': 'Triggers', 'dashboards': 'Dashboards', 'settings': 'Settings',
+  'executions': 'Executions', 'history': 'History', 'playground': 'Playground',
+  'builder': 'Builder', 'design': 'Design', 'create': 'Create', 'explore': 'Explore',
+  'instances': 'Instances', 'sessions': 'Sessions', 'management': 'Management',
+  'planning': 'Planning', 'sketch-chat': 'Sketch', 'audit-history': 'Audit History',
+  'reports': 'Reports', 'budgets': 'Budgets', 'admin': 'Admin',
 };
 
-function makeSegment(label: string, isLast: boolean): BreadcrumbSegment {
-  if (isLast) return { label };
-  const target = navigationTargets[label];
-  if (target === null) return { label };
-  if (target !== undefined) return { label, to: target };
-  return { label };
-}
-
-function resolveParamSegment(paramName: string): string {
-  const paramValue = route.params[paramName];
-  if (!paramValue || typeof paramValue !== 'string') return paramName;
-  return getEntityDisplayName(paramName, paramValue);
-}
-
-const breadcrumbMap: Record<string, () => string[]> = {
-  'dashboards': () => ['Home'],
-  'security-dashboard': () => ['Home', 'Dashboards', 'Security'],
-  'pr-review-dashboard': () => ['Home', 'Dashboards', 'PR Review'],
-  'products-summary': () => ['Home', 'Dashboards', 'Products Summary'],
-  'projects-summary': () => ['Home', 'Dashboards', 'Projects Summary'],
-  'teams-summary': () => ['Home', 'Dashboards', 'Teams Summary'],
-  'agents-summary': () => ['Home', 'Dashboards', 'Agents Summary'],
-  'rotation-dashboard': () => ['Home', 'Dashboards', 'Rotation'],
-  'analytics-dashboard': () => ['Home', 'Dashboards', 'Analytics'],
-  'health-dashboard': () => ['Home', 'Dashboards', 'Health'],
-  'team-impact-report': () => ['Home', 'Dashboards', 'Team Impact'],
-  'cross-team-insights': () => ['Home', 'Dashboards', 'Cross-Team Insights'],
-  'execution-queue-dashboard': () => ['Home', 'Dashboards', 'Execution Queue'],
-  'execution-anomaly-detection': () => ['Home', 'Dashboards', 'Anomaly Detection'],
-  'team-leaderboard': () => ['Home', 'Dashboards', 'Leaderboard'],
-  'trigger-dashboard': () => ['Home', 'Triggers', route.params.triggerId as string || 'Trigger'],
-  'trigger-history': () => ['Home', 'Triggers', 'History'],
-  'products': () => ['Home', 'Organization', 'Products'],
-  'product-dashboard': () => ['Home', 'Organization', 'Products', resolveParamSegment('productId')],
-  'product-settings': () => ['Home', 'Organization', 'Products', resolveParamSegment('productId'), 'Settings'],
-  'projects': () => ['Home', 'Organization', 'Projects'],
-  'project-dashboard': () => ['Home', 'Organization', 'Projects', resolveParamSegment('projectId')],
-  'project-settings': () => ['Home', 'Organization', 'Projects', resolveParamSegment('projectId'), 'Settings'],
-  'project-management': () => ['Home', 'Organization', 'Projects', resolveParamSegment('projectId'), 'Management'],
-  'project-planning': () => ['Home', 'Organization', 'Projects', resolveParamSegment('projectId'), 'Planning'],
-  'teams': () => ['Home', 'Organization', 'Teams'],
-  'team-dashboard': () => ['Home', 'Organization', 'Teams', resolveParamSegment('teamId')],
-  'team-settings': () => ['Home', 'Organization', 'Teams', resolveParamSegment('teamId'), 'Settings'],
-  'team-builder': () => ['Home', 'Organization', 'Teams', resolveParamSegment('teamId'), 'Builder'],
-  'agents': () => ['Home', 'Organization', 'Agents'],
-  'agent-create': () => ['Home', 'Organization', 'Agents', 'Create'],
-  'agent-design': () => ['Home', 'Organization', 'Agents', resolveParamSegment('agentId')],
-  'super-agents': () => ['Home', 'Super Agents'],
-  'explore-super-agents': () => ['Home', 'Super Agents', 'Explore'],
-  'super-agent-playground': () => ['Home', 'Super Agents', 'Playground'],
-  'workflows': () => ['Home', 'Workflows'],
-  'workflow-playground': () => ['Home', 'Workflows', 'Playground'],
-  'workflow-builder': () => ['Home', 'Workflows', 'Builder'],
-  'my-skills': () => ['Home', 'Skills'],
-  'skill-create': () => ['Home', 'Skills', 'Create'],
-  'skills-playground': () => ['Home', 'Skills', 'Playground'],
-  'explore-skills': () => ['Home', 'Skills', 'Explore'],
-  'skill-detail': () => ['Home', 'Skills', route.params.skillId as string || 'Skill'],
-  'plugins': () => ['Home', 'Plugins'],
-  'plugin-design': () => ['Home', 'Plugins', 'Design'],
-  'explore-plugins': () => ['Home', 'Plugins', 'Explore'],
-  'plugin-detail': () => ['Home', 'Plugins', route.params.pluginId as string || 'Plugin'],
-  'harness-integration': () => ['Home', 'Plugins', 'Harness'],
-  'mcp-servers': () => ['Home', 'MCP Servers'],
-  'explore-mcp-servers': () => ['Home', 'MCP Servers', 'Explore'],
-  'mcp-server-detail': () => ['Home', 'MCP Servers', route.params.mcpServerId as string || 'Server'],
-  'triggers': () => ['Home', 'System', 'Triggers'],
-  'security-history': () => ['Home', 'System', 'Security History'],
-  'audit-detail': () => ['Home', 'System', 'Audit', route.params.auditId as string || 'Audit'],
-  'execution-history': () => ['Home', 'System', 'Execution History'],
-  'usage-history': () => ['Home', 'System', 'Usage History'],
-  'settings': () => ['Home', 'System', 'Settings'],
-  'sso-settings': () => ['Home', 'System', 'Settings', 'SSO'],
-  'execution-search': () => ['Home', 'System', 'Execution Search'],
-  'sketch-chat': () => ['Home', 'Sketch'],
-  'ai-backends': () => ['Home', 'System', 'AI Backends'],
-  'service-health': () => ['Home', 'System', 'Service Health'],
-  'backend-detail': () => ['Home', 'System', 'AI Backends', route.params.backendId as string || 'Backend'],
+// Map path segments to route names for navigation
+const segmentRoutes: Record<string, string> = {
+  'products': 'products', 'projects': 'projects', 'teams': 'teams',
+  'agents': 'agents', 'super-agents': 'super-agents', 'workflows': 'workflows',
+  'skills': 'my-skills', 'plugins': 'plugins', 'mcp-servers': 'mcp-servers',
+  'triggers': 'triggers', 'dashboards': 'dashboards', 'settings': 'settings',
 };
 
-function titleCase(str: string): string {
-  return str.charAt(0).toUpperCase() + str.slice(1);
+// Known entity ID prefixes → param name for display resolution
+const idPrefixToParam: Record<string, string> = {
+  'prod-': 'productId', 'proj-': 'projectId', 'team-': 'teamId',
+  'agent-': 'agentId', 'super-': 'superAgentId', 'psa-': 'instanceId',
+  'pti-': 'teamInstanceId',
+};
+
+function isEntityId(segment: string): boolean {
+  return Object.keys(idPrefixToParam).some(prefix => segment.startsWith(prefix));
 }
 
-const breadcrumbLabels = computed<string[]>(() => {
-  const routeName = route.name as string | undefined;
-  if (!routeName) return ['Home'];
-
-  const mapFn = breadcrumbMap[routeName];
-  if (mapFn) return mapFn();
-
-  // Fallback: split route name on '-', title-case each word, prepend Home
-  const parts = routeName.split('-').map(titleCase);
-  return ['Home', ...parts];
-});
+function resolveSegmentLabel(segment: string): string {
+  // Known label
+  if (segmentLabels[segment]) return segmentLabels[segment];
+  // Entity ID → resolve display name
+  for (const [prefix, paramName] of Object.entries(idPrefixToParam)) {
+    if (segment.startsWith(prefix)) return getEntityDisplayName(paramName, segment);
+  }
+  // Route meta title
+  const meta = route.meta as { title?: string };
+  if (meta?.title && segment === route.path.split('/').filter(Boolean).pop()) return meta.title;
+  // Fallback: title-case hyphenated
+  return segment.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+}
 
 const breadcrumbSegments = computed<BreadcrumbSegment[]>(() => {
-  const labels = breadcrumbLabels.value;
-  return labels.map((label, i) => makeSegment(label, i === labels.length - 1));
+  const pathSegments = route.path.split('/').filter(Boolean);
+  if (pathSegments.length === 0) return [{ label: 'Home' }];
+
+  const segments: BreadcrumbSegment[] = [{ label: 'Home', to: { name: 'dashboards' } }];
+  let accumulated = '';
+
+  for (let i = 0; i < pathSegments.length; i++) {
+    const seg = pathSegments[i];
+    accumulated += '/' + seg;
+    const isLast = i === pathSegments.length - 1;
+    const label = resolveSegmentLabel(seg);
+
+    // Build navigation target for non-final, non-ID segments
+    let to: RouteLocationRaw | undefined;
+    if (!isLast) {
+      const routeName = segmentRoutes[seg];
+      if (routeName) {
+        to = { name: routeName };
+      } else if (!isEntityId(seg)) {
+        // Try resolving the accumulated path
+        try {
+          const resolved = router.resolve(accumulated);
+          if (resolved.name && resolved.name !== 'not-found') to = { path: accumulated };
+        } catch { /* no matching route */ }
+      }
+    }
+
+    segments.push(isLast ? { label } : { label, to });
+  }
+
+  return segments;
 });
 
 // Desktop overflow: collapse middle if > 4 segments
@@ -257,7 +219,7 @@ const desktopSegments = computed<BreadcrumbSegment[]>(() => {
 });
 
 const fullBreadcrumbTitle = computed(() => {
-  return breadcrumbLabels.value.join(' / ');
+  return breadcrumbSegments.value.map(s => s.label).join(' / ');
 });
 
 // Mobile: only last 2 segments

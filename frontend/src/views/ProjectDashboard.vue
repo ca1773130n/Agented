@@ -61,11 +61,26 @@ interface SessionInfo {
   session: SuperAgentSession;
   superAgent: SuperAgent;
 }
+interface GroupedSessions {
+  superAgent: SuperAgent;
+  sessions: SuperAgentSession[];
+  instanceId?: string;
+}
 const activeSessions = ref<SessionInfo[]>([]);
 const isLoadingSessions = ref(false);
-const showChatSlideOver = ref(false);
-const chatSuperAgentId = ref('');
-const chatSessionId = ref('');
+
+const groupedSessions = computed<GroupedSessions[]>(() => {
+  const groups = new Map<string, GroupedSessions>();
+  for (const info of activeSessions.value) {
+    const key = info.superAgent.id;
+    if (!groups.has(key)) {
+      const inst = projectInstances.value.find(i => i.template_sa_id === info.superAgent.id);
+      groups.set(key, { superAgent: info.superAgent, sessions: [], instanceId: inst?.id });
+    }
+    groups.get(key)!.sessions.push(info.session);
+  }
+  return [...groups.values()];
+});
 
 // GRD init status
 const grdInitStatus = ref<string>('none');
@@ -194,17 +209,20 @@ async function loadActiveSessions() {
     const teamSuperAgents = (saData.super_agents || []).filter(
       sa => sa.team_id && teamIds.includes(sa.team_id)
     );
-    // Fetch sessions for each super agent
+    // Fetch sessions for all super agents in parallel
     const sessionInfos: SessionInfo[] = [];
-    for (const sa of teamSuperAgents) {
-      try {
-        const sessData = await superAgentSessionApi.list(sa.id);
-        for (const sess of (sessData.sessions || [])) {
+    const results = await Promise.allSettled(
+      teamSuperAgents.map(sa => superAgentSessionApi.list(sa.id))
+    );
+    for (let i = 0; i < teamSuperAgents.length; i++) {
+      const result = results[i];
+      if (result.status === 'fulfilled') {
+        for (const sess of (result.value.sessions || [])) {
           if (sess.status === 'active') {
-            sessionInfos.push({ session: sess, superAgent: sa });
+            sessionInfos.push({ session: sess, superAgent: teamSuperAgents[i] });
           }
         }
-      } catch { /* skip */ }
+      }
     }
     activeSessions.value = sessionInfos;
   } catch { activeSessions.value = []; }
@@ -230,10 +248,20 @@ function navToInstancePlayground(instanceId: string) {
   });
 }
 
-function openChat(superAgentId: string, sessionId: string) {
-  chatSuperAgentId.value = superAgentId;
-  chatSessionId.value = sessionId;
-  showChatSlideOver.value = true;
+function openChat(superAgentId: string, sessionId: string, instanceId?: string) {
+  if (instanceId) {
+    router.push({
+      name: 'project-instance-playground',
+      params: { projectId: projectId.value, instanceId },
+      query: { session: sessionId },
+    });
+  } else {
+    router.push({
+      name: 'super-agent-playground',
+      params: { superAgentId },
+      query: { session: sessionId },
+    });
+  }
 }
 
 async function loadGrdStatus() {
@@ -530,50 +558,36 @@ function onSetupCompleted() {
         </div>
       </div>
 
-      <!-- Active Sessions -->
+      <!-- Active Sessions (grouped by Super Agent) -->
       <div v-if="activeSessions.length > 0 || isLoadingSessions" class="card sessions-card">
         <div class="card-header-sessions">
           <h3>Active Sessions</h3>
           <span class="card-count">{{ activeSessions.length }} active</span>
         </div>
         <div v-if="isLoadingSessions" class="sessions-loading">Loading sessions...</div>
-        <div v-else-if="activeSessions.length === 0" class="sessions-empty">No active sessions</div>
-        <div v-else class="session-cards">
-          <div v-for="info in activeSessions" :key="info.session.id" class="session-card">
-            <div class="session-card-header">
-              <span class="session-agent-name">{{ info.superAgent.name }}</span>
-              <span class="session-status-badge active">active</span>
+        <div v-else-if="groupedSessions.length === 0" class="sessions-empty">No active sessions</div>
+        <div v-else class="session-groups">
+          <div v-for="group in groupedSessions" :key="group.superAgent.id" class="session-group">
+            <div class="session-group-header">
+              <span class="session-agent-name">{{ group.superAgent.name }}</span>
+              <span class="session-group-count">{{ group.sessions.length }} session{{ group.sessions.length !== 1 ? 's' : '' }}</span>
             </div>
-            <div class="session-card-meta">
-              <span class="session-id-label">{{ info.session.id }}</span>
-              <span v-if="info.session.started_at" class="session-time">Started {{ new Date(info.session.started_at).toLocaleString() }}</span>
+            <div class="session-group-items">
+              <div v-for="sess in group.sessions" :key="sess.id" class="session-card">
+                <div class="session-card-meta">
+                  <span class="session-id-label">{{ sess.id }}</span>
+                  <span class="session-status-badge active">active</span>
+                  <span v-if="sess.started_at" class="session-time">{{ new Date(sess.started_at).toLocaleString() }}</span>
+                </div>
+                <button class="action-btn session-chat-btn" @click="openChat(group.superAgent.id, sess.id, group.instanceId)">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+                  Chat
+                </button>
+              </div>
             </div>
-            <button class="action-btn session-chat-btn" @click="openChat(info.superAgent.id, info.session.id)">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
-              Chat
-            </button>
           </div>
         </div>
       </div>
-
-      <!-- Chat SlideOver -->
-      <Teleport to="body">
-        <div v-if="showChatSlideOver" class="slide-over-overlay" @click.self="showChatSlideOver = false">
-          <div class="slide-over-panel">
-            <div class="slide-over-header">
-              <h3>Chat Session</h3>
-              <button class="modal-close" @click="showChatSlideOver = false">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-              </button>
-            </div>
-            <div class="slide-over-body">
-              <p class="slide-over-info">Super Agent: <code>{{ chatSuperAgentId }}</code></p>
-              <p class="slide-over-info">Session: <code>{{ chatSessionId }}</code></p>
-              <p class="slide-over-hint">Open the <router-link :to="{ name: 'super-agent-playground', params: { superAgentId: chatSuperAgentId }, query: { session: chatSessionId } }">Super Agent Playground</router-link> for the full chat experience.</p>
-            </div>
-          </div>
-        </div>
-      </Teleport>
 
       <ProjectTeamCanvas
         v-if="allTeams.length >= 1"
@@ -693,21 +707,21 @@ function onSetupCompleted() {
 .card-header-sessions h3 { font-size: 0.95rem; font-weight: 600; color: var(--text-primary); margin: 0; }
 .card-count { font-size: 0.75rem; color: var(--text-tertiary); background: var(--bg-tertiary); padding: 4px 8px; border-radius: 4px; }
 .sessions-loading, .sessions-empty { padding: 24px; text-align: center; color: var(--text-muted); font-size: 0.85rem; }
-.session-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; padding: 16px 20px; }
-.session-card { background: var(--bg-tertiary); border: 1px solid var(--border-subtle); border-radius: 8px; padding: 14px 16px; display: flex; flex-direction: column; gap: 8px; }
-.session-card-header { display: flex; align-items: center; justify-content: space-between; }
+.session-groups { padding: 12px 20px; display: flex; flex-direction: column; gap: 16px; }
+.session-group { border: 1px solid var(--border-subtle); border-radius: 8px; overflow: hidden; }
+.session-group-header { display: flex; align-items: center; justify-content: space-between; padding: 10px 16px; background: var(--bg-tertiary); border-bottom: 1px solid var(--border-subtle); }
 .session-agent-name { font-weight: 600; font-size: 0.9rem; color: var(--text-primary); }
-.session-status-badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 0.65rem; font-weight: 700; text-transform: uppercase; }
-.session-status-badge.active { background: var(--accent-emerald-dim); color: var(--accent-emerald); }
-.session-card-meta { display: flex; flex-direction: column; gap: 2px; }
+.session-group-count { font-size: 0.7rem; color: var(--text-tertiary); }
+.session-group-items { display: flex; flex-direction: column; }
+.session-card { padding: 10px 16px; display: flex; align-items: center; justify-content: space-between; gap: 12px; border-bottom: 1px solid var(--border-subtle); }
+.session-card:last-child { border-bottom: none; }
+.session-card-meta { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; }
 .session-id-label { font-family: var(--font-mono); font-size: 0.7rem; color: var(--text-muted); }
+.session-status-badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 0.65rem; font-weight: 700; text-transform: uppercase; flex-shrink: 0; }
+.session-status-badge.active { background: var(--accent-emerald-dim); color: var(--accent-emerald); }
 .session-time { font-size: 0.75rem; color: var(--text-tertiary); }
-.session-chat-btn { background: var(--accent-violet-dim); color: var(--accent-violet); border: 1px solid transparent; padding: 8px 14px; font-size: 0.85rem; }
+.session-chat-btn { background: var(--accent-violet-dim); color: var(--accent-violet); border: 1px solid transparent; padding: 6px 12px; font-size: 0.8rem; flex-shrink: 0; }
 .session-chat-btn:hover { border-color: var(--accent-violet); }
-/* SlideOver */
-.slide-over-overlay { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.5); z-index: 100; display: flex; justify-content: flex-end; }
-.slide-over-panel { width: 400px; max-width: 90vw; background: var(--bg-secondary); border-left: 1px solid var(--border-subtle); display: flex; flex-direction: column; animation: slideIn 0.2s ease; }
-@keyframes slideIn { from { transform: translateX(100%); } to { transform: translateX(0); } }
 .slide-over-header { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; border-bottom: 1px solid var(--border-subtle); }
 .slide-over-header h3 { margin: 0; font-size: 1rem; color: var(--text-primary); }
 .slide-over-body { padding: 20px; flex: 1; overflow-y: auto; }
