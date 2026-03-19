@@ -73,10 +73,10 @@ def _resolve_session(data: dict, super_agent_id: str, session_id: str) -> dict:
     backend = data.get("backend", "auto")
     effective_backend = backend if backend != "auto" else None
 
+    from ..db.project_sa_instances import get_project_sa_instance
+
     instance = None
     if super_agent_id.startswith("psa-"):
-        from ..db.project_sa_instances import get_project_sa_instance
-
         instance = get_project_sa_instance(super_agent_id)
         if not instance:
             return {
@@ -92,6 +92,9 @@ def _resolve_session(data: dict, super_agent_id: str, session_id: str) -> dict:
         if not effective_backend:
             sa = get_super_agent(super_agent_id)
             effective_backend = (sa.get("backend_type") if sa else None) or "claude"
+        # If session has an instance_id, load the instance for project context
+        if not instance and session.get("instance_id"):
+            instance = get_project_sa_instance(session["instance_id"])
 
     # Resolve chat_mode
     chat_mode = data.get("chat_mode")
