@@ -242,8 +242,24 @@ export function useSketchChat() {
           }
         });
 
-        eventSource.onerror = () => {
+        eventSource.onerror = async () => {
           if (isStreaming.value) {
+            // Check if the sketch actually completed before showing an error
+            try {
+              const sketch = await sketchApi.get(sketchId);
+              if (sketch.status === 'completed' || sketch.status === 'collaborating') {
+                // Sketch finished — SSE just disconnected after completion
+                isStreaming.value = false;
+                if (eventSource) {
+                  eventSource.close();
+                  eventSource = null;
+                }
+                startDelegationPolling(sketchId);
+                return;
+              }
+            } catch {
+              // If we can't check status, fall through to error
+            }
             isStreaming.value = false;
             error.value = 'Connection lost. You can retry by routing again.';
             if (eventSource) {
