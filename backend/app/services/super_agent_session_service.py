@@ -249,16 +249,36 @@ class SuperAgentSessionService:
 
     @classmethod
     def resume_session(cls, session_id: str) -> Tuple[bool, Optional[str]]:
-        """Resume a paused session.
+        """Resume a paused or completed session.
 
         Returns (True, None) on success or (False, error_message) on failure.
         """
         with cls._lock:
             session = cls._active_sessions.get(session_id)
             if not session:
-                return False, "Session not found"
-            if session["status"] != "paused":
-                return False, "Session is not paused"
+                # Session not in memory — reload from DB and add to active sessions
+                from ..database import get_super_agent_session
+
+                db_session = get_super_agent_session(session_id)
+                if not db_session:
+                    return False, "Session not found"
+                import collections
+                import json
+
+                session = {
+                    "session_id": session_id,
+                    "super_agent_id": db_session.get("super_agent_id", ""),
+                    "instance_id": db_session.get("instance_id"),
+                    "status": db_session.get("status", "active"),
+                    "conversation_log": json.loads(db_session.get("conversation_log") or "[]"),
+                    "summary": db_session.get("summary"),
+                    "token_count": db_session.get("token_count", 0),
+                    "output_buffer": collections.deque(maxlen=cls.OUTPUT_RING_BUFFER_SIZE),
+                }
+                cls._active_sessions[session_id] = session
+
+            if session["status"] not in ("paused", "completed"):
+                return False, f"Session is {session['status']}"
 
             session["status"] = "active"
             update_super_agent_session(session_id, status="active")
