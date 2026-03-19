@@ -50,6 +50,7 @@ def register_blueprints(app):
     from .pr_reviews import pr_reviews_bp
     from .product_owner import product_owner_bp
     from .products import products_bp
+    from .project_instances import project_instances_bp
     from .projects import projects_bp
     from .prompt_snippets import prompt_snippets_bp
     from .rbac import rbac_bp
@@ -128,6 +129,7 @@ def register_blueprints(app):
             team_edges_bp,
             team_generation_bp,
             products_bp,
+            project_instances_bp,
             projects_bp,
             plugins_bp,
             marketplace_bp,
@@ -224,6 +226,7 @@ def register_blueprints(app):
     app.register_api(team_generation_bp)
     app.register_api(products_bp)
     app.register_api(projects_bp)
+    app.register_api(project_instances_bp)
     app.register_api(plugins_bp)
     app.register_api(marketplace_bp)
     app.register_api(settings_bp)
