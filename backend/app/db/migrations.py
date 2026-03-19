@@ -4082,6 +4082,50 @@ def _migrate_94_project_scoped_instances(conn):
                 )
 
 
+def _migrate_95_trigger_conditions_and_budget_columns(conn):
+    """Create trigger_conditions table and add missing budget_limits columns.
+
+    trigger_conditions was defined in schema.py for fresh databases but had no
+    migration for existing databases.
+
+    budget_limits.max_execution_time_seconds and max_monthly_runs were originally
+    in migration 58, but a version numbering conflict caused that migration to be
+    skipped on databases that already had version 58 applied under a different name.
+    """
+    # --- trigger_conditions table ---
+    cursor = conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='trigger_conditions'"
+    )
+    if cursor.fetchone() is None:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS trigger_conditions (
+                id TEXT PRIMARY KEY,
+                trigger_id TEXT NOT NULL REFERENCES triggers(id) ON DELETE CASCADE,
+                name TEXT NOT NULL DEFAULT '',
+                description TEXT NOT NULL DEFAULT '',
+                enabled INTEGER DEFAULT 1,
+                logic TEXT NOT NULL DEFAULT 'AND',
+                conditions_json TEXT NOT NULL DEFAULT '[]',
+                created_at TEXT DEFAULT (datetime('now')),
+                updated_at TEXT DEFAULT (datetime('now'))
+            )
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_tc_trigger ON trigger_conditions(trigger_id)")
+
+    # --- budget_limits missing columns ---
+    cursor = conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='budget_limits'"
+    )
+    if cursor.fetchone() is not None:
+        cursor = conn.execute("PRAGMA table_info(budget_limits)")
+        existing_cols = {row[1] for row in cursor.fetchall()}
+
+        if "max_execution_time_seconds" not in existing_cols:
+            conn.execute("ALTER TABLE budget_limits ADD COLUMN max_execution_time_seconds INTEGER")
+        if "max_monthly_runs" not in existing_cols:
+            conn.execute("ALTER TABLE budget_limits ADD COLUMN max_monthly_runs INTEGER")
+
+
 VERSIONED_MIGRATIONS = [
     (1, "add_github_columns", _migrate_add_github_columns),
     (2, "add_pr_reviews_table", _migrate_add_pr_reviews_table),
@@ -4192,4 +4236,10 @@ VERSIONED_MIGRATIONS = [
     (93, "repair_health_alerts_table", _migrate_93_repair_health_alerts_table),
     # v0.5.0 project-scoped instances
     (94, "project_scoped_instances", _migrate_94_project_scoped_instances),
+    # v0.5.0 fix: trigger_conditions table + budget_limits missing columns
+    (
+        95,
+        "trigger_conditions_and_budget_columns",
+        _migrate_95_trigger_conditions_and_budget_columns,
+    ),
 ]

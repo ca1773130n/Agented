@@ -60,7 +60,7 @@ def get_version():
 @utility_bp.get("/check-backend")
 def check_backend():
     """Check if a CLI backend (claude/opencode) is installed and runnable."""
-    backend_name = request.args.get("name", "").lower()
+    backend_name = (request.args.get("backend") or request.args.get("name") or "").lower()
 
     if backend_name not in ("claude", "opencode"):
         return error_response(

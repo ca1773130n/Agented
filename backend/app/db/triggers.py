@@ -1064,11 +1064,27 @@ def get_execution_stats(trigger_id: Optional[str] = None) -> Dict:
 
 
 def get_execution_log(execution_id: str) -> Optional[dict]:
-    """Get a single execution log by execution_id."""
+    """Get a single execution log by execution_id or integer id.
+
+    The list endpoints return rows with an integer ``id`` column and a string
+    ``execution_id`` column.  This function first tries to match the string
+    ``execution_id``, then falls back to matching the integer ``id`` so callers
+    can use either identifier.
+    """
     with get_connection() as conn:
         cursor = conn.execute(
             "SELECT * FROM execution_logs WHERE execution_id = ?", (execution_id,)
         )
+        row = cursor.fetchone()
+        if row:
+            return dict(row)
+
+        # Fallback: try matching by integer id
+        try:
+            int_id = int(execution_id)
+        except (ValueError, TypeError):
+            return None
+        cursor = conn.execute("SELECT * FROM execution_logs WHERE id = ?", (int_id,))
         row = cursor.fetchone()
         return dict(row) if row else None
 

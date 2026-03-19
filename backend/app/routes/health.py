@@ -33,7 +33,7 @@ def _is_authenticated_request() -> bool:
 @health_bp.get("/liveness")
 def liveness():
     """Liveness probe - service is alive."""
-    return "", HTTPStatus.OK
+    return {"status": "ok"}, HTTPStatus.OK
 
 
 @health_bp.get("/readiness")
