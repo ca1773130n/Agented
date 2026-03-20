@@ -53,3 +53,39 @@ class TestUnifiedAuthGate:
         monkeypatch.setenv("AGENTED_API_KEY", "env-key-123")
         resp = client.get("/admin/triggers", headers={"X-API-Key": "env-key-123"})
         assert resp.status_code != 401
+
+
+class TestSetupEndpoint:
+    """POST /health/setup generates the first admin API key."""
+
+    def test_setup_creates_admin_key_when_no_keys_exist(self, client, isolated_db):
+        """First call creates admin key and returns it."""
+        resp = client.post("/health/setup", json={"label": "My Admin Key"})
+        assert resp.status_code == 201
+        data = resp.get_json()
+        assert "api_key" in data
+        assert len(data["api_key"]) == 64
+        assert data["role"] == "admin"
+        assert data["label"] == "My Admin Key"
+
+    def test_setup_rejected_when_keys_exist(self, client, isolated_db):
+        """Setup is locked after first key is created."""
+        client.post("/health/setup", json={"label": "First"})
+        resp = client.post("/health/setup", json={"label": "Second"})
+        assert resp.status_code == 403
+        data = resp.get_json()
+        assert "already configured" in data["error"].lower()
+
+    def test_setup_default_label(self, client, isolated_db):
+        """Label defaults to 'Admin' when not provided."""
+        resp = client.post("/health/setup", json={})
+        assert resp.status_code == 201
+        data = resp.get_json()
+        assert data["label"] == "Admin"
+
+    def test_setup_key_works_for_auth(self, client, isolated_db):
+        """The generated key can be used to authenticate."""
+        setup_resp = client.post("/health/setup", json={"label": "Admin"})
+        key = setup_resp.get_json()["api_key"]
+        resp = client.get("/admin/triggers", headers={"X-API-Key": key})
+        assert resp.status_code != 401
