@@ -100,17 +100,20 @@ const { activeExecutionCount, healthColor, healthTooltip, startPolling, stopPoll
 // API key auth state — show banner when backend requires auth and no key is stored
 const showApiKeyBanner = ref(false);
 
-async function checkAuthStatus() {
+async function checkAuthStatus(): Promise<boolean> {
   try {
     const status = await healthApi.authStatus();
     if (status.needs_setup) {
       router.push({ name: 'welcome' });
-      return;
+      return false; // not authenticated — don't load data
     } else if (status.auth_required && !status.authenticated && !getApiKey()) {
       showApiKeyBanner.value = true;
+      return false; // not authenticated — don't load data
     }
+    return true; // authenticated or no auth required
   } catch {
     // Backend unreachable — don't show banner, health polling will handle it
+    return false;
   }
 }
 
@@ -155,10 +158,12 @@ watch(() => route.query.tour, (tourQuery) => {
 onMounted(async () => {
   startPolling(10000);
   // Check if the backend requires API key auth before loading sidebar data
-  await checkAuthStatus();
-  loadSidebarData();
-  // Auto-install bundled marketplace & plugins on first launch (non-blocking)
-  runBundleInstall();
+  const isReady = await checkAuthStatus();
+  if (isReady) {
+    loadSidebarData();
+    // Auto-install bundled marketplace & plugins on first launch (non-blocking)
+    runBundleInstall();
+  }
 });
 
 onUnmounted(() => {
