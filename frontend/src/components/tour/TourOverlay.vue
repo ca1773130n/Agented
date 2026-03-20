@@ -19,19 +19,23 @@ const hasTarget = ref(false)
 const barVisible = ref(false)
 
 let resizeObserver: ResizeObserver | null = null
+let targetEl: Element | null = null
 
 function updateSpotlight() {
   if (!props.step?.target) {
     hasTarget.value = false
+    clearTargetHighlight()
     return
   }
   const el = document.querySelector(props.step.target)
   if (!el) {
     hasTarget.value = false
+    clearTargetHighlight()
     return
   }
+
   const rect = el.getBoundingClientRect()
-  const padding = 12
+  const padding = 16
   spotlightStyle.value = {
     top: `${rect.top - padding}px`,
     left: `${rect.left - padding}px`,
@@ -40,8 +44,34 @@ function updateSpotlight() {
   }
   hasTarget.value = true
 
-  // Scroll the target into view if needed
+  // Apply glow directly to the target element
+  applyTargetHighlight(el)
+
+  // Scroll into view
   el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+}
+
+function applyTargetHighlight(el: Element) {
+  clearTargetHighlight()
+  targetEl = el
+  const htmlEl = el as HTMLElement
+  htmlEl.style.position = htmlEl.style.position || 'relative'
+  htmlEl.style.zIndex = '9999'
+  htmlEl.style.outline = '2px solid #818cf8'
+  htmlEl.style.outlineOffset = '4px'
+  htmlEl.style.borderRadius = htmlEl.style.borderRadius || '8px'
+  htmlEl.classList.add('tour-target-glow')
+}
+
+function clearTargetHighlight() {
+  if (targetEl) {
+    const htmlEl = targetEl as HTMLElement
+    htmlEl.style.zIndex = ''
+    htmlEl.style.outline = ''
+    htmlEl.style.outlineOffset = ''
+    htmlEl.classList.remove('tour-target-glow')
+    targetEl = null
+  }
 }
 
 function setupObserver() {
@@ -50,9 +80,7 @@ function setupObserver() {
   const el = document.querySelector(props.step.target)
   if (!el) return
   if (typeof ResizeObserver !== 'undefined') {
-    resizeObserver = new ResizeObserver(() => {
-      updateSpotlight()
-    })
+    resizeObserver = new ResizeObserver(() => updateSpotlight())
     resizeObserver.observe(el)
   }
 }
@@ -84,6 +112,7 @@ watch(
       }
     } else {
       hasTarget.value = false
+      clearTargetHighlight()
       teardownObserver()
     }
   },
@@ -94,11 +123,10 @@ watch(
   () => props.active,
   (val) => {
     if (val) {
-      requestAnimationFrame(() => {
-        barVisible.value = true
-      })
+      requestAnimationFrame(() => { barVisible.value = true })
     } else {
       barVisible.value = false
+      clearTargetHighlight()
       teardownObserver()
     }
   },
@@ -106,6 +134,21 @@ watch(
 )
 
 onMounted(() => {
+  // Inject global animation keyframes
+  if (!document.getElementById('tour-glow-style')) {
+    const style = document.createElement('style')
+    style.id = 'tour-glow-style'
+    style.textContent = `
+      @keyframes tour-pulse {
+        0%, 100% { box-shadow: 0 0 12px 4px rgba(99,102,241,0.4); }
+        50% { box-shadow: 0 0 24px 8px rgba(99,102,241,0.6); }
+      }
+      .tour-target-glow {
+        animation: tour-pulse 2s ease-in-out infinite !important;
+      }
+    `
+    document.head.appendChild(style)
+  }
   if (props.active && props.step) {
     updateSpotlight()
     setupObserver()
@@ -113,17 +156,19 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
+  clearTargetHighlight()
   teardownObserver()
+  const style = document.getElementById('tour-glow-style')
+  if (style) style.remove()
 })
 </script>
 
 <template>
   <div v-if="active && step" class="tour-overlay">
-    <!-- Dim overlay (shown when no target found) -->
-    <div v-if="!hasTarget" class="tour-dim" />
-
-    <!-- Spotlight on target element (its box-shadow IS the dim layer) -->
+    <!-- Spotlight cutout — its massive box-shadow IS the dim layer -->
     <div v-if="hasTarget" class="tour-spotlight" :style="spotlightStyle" />
+    <!-- Fallback dim when no target found -->
+    <div v-else class="tour-dim" />
 
     <!-- Bottom bar -->
     <div class="tour-bottom-bar" :class="{ 'tour-bottom-bar--visible': barVisible }">
@@ -162,14 +207,14 @@ onUnmounted(() => {
 .tour-dim {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.4);
+  background: rgba(0, 0, 0, 0.7);
   pointer-events: none;
 }
 
 .tour-spotlight {
   position: fixed;
-  border-radius: 10px;
-  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.5), 0 0 24px 6px rgba(79, 70, 229, 0.35);
+  border-radius: 12px;
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.7), 0 0 0 2px rgba(129, 140, 248, 0.6), 0 0 40px 12px rgba(99, 102, 241, 0.4);
   transition: all 400ms cubic-bezier(0.4, 0, 0.2, 1);
   z-index: 9998;
   pointer-events: none;
@@ -182,8 +227,8 @@ onUnmounted(() => {
   right: 0;
   z-index: 9999;
   pointer-events: auto;
-  background: linear-gradient(to top, rgba(9, 9, 11, 0.95) 60%, transparent);
-  padding: 16px 24px;
+  background: linear-gradient(to top, rgba(9, 9, 11, 0.98) 70%, rgba(9, 9, 11, 0.8) 85%, transparent);
+  padding: 20px 32px;
   display: flex;
   flex-direction: row;
   justify-content: space-between;
@@ -199,7 +244,7 @@ onUnmounted(() => {
 .tour-bottom-bar__left {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
 }
 
 .tour-step-tag {
@@ -207,25 +252,26 @@ onUnmounted(() => {
   font-size: 11px;
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.08em;
 }
 
 .tour-step-message {
-  color: #e0e0e0;
-  font-size: 13px;
+  color: #e4e4e7;
+  font-size: 14px;
   line-height: 1.4;
+  max-width: 600px;
 }
 
 .tour-bottom-bar__right {
   display: flex;
   flex-direction: row;
-  gap: 12px;
+  gap: 16px;
   align-items: center;
 }
 
 .tour-progress-dots {
   display: flex;
-  gap: 4px;
+  gap: 5px;
   align-items: center;
 }
 
@@ -238,48 +284,52 @@ onUnmounted(() => {
 
 .tour-dot--completed {
   width: 6px;
-  background: #4f46e5;
+  background: #6366f1;
 }
 
 .tour-dot--current {
-  width: 16px;
-  background: #4f46e5;
+  width: 20px;
+  background: #818cf8;
 }
 
 .tour-dot--remaining {
   width: 6px;
-  background: transparent;
-  border: 1px solid #333;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.15);
   box-sizing: border-box;
 }
 
 .tour-skip-btn {
   background: none;
-  border: none;
-  color: #666;
-  font-size: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #a1a1aa;
+  font-size: 13px;
   cursor: pointer;
-  padding: 6px 8px;
+  padding: 8px 16px;
+  border-radius: 6px;
   font-family: inherit;
+  transition: all 0.15s;
 }
 
 .tour-skip-btn:hover {
-  color: #999;
+  color: #e4e4e7;
+  border-color: rgba(255, 255, 255, 0.2);
 }
 
 .tour-next-btn {
-  background: #4f46e5;
+  background: #6366f1;
   color: white;
   border: none;
-  padding: 6px 16px;
+  padding: 8px 20px;
   border-radius: 6px;
-  font-size: 12px;
+  font-size: 13px;
   cursor: pointer;
   font-family: inherit;
   font-weight: 500;
+  transition: all 0.15s;
 }
 
 .tour-next-btn:hover {
-  background: #6366f1;
+  background: #818cf8;
 }
 </style>
