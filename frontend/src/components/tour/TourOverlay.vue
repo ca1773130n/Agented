@@ -56,7 +56,7 @@ function applyTargetHighlight(el: Element) {
   targetEl = el
   const htmlEl = el as HTMLElement
   htmlEl.style.position = htmlEl.style.position || 'relative'
-  htmlEl.style.zIndex = '9999'
+  htmlEl.style.zIndex = '9998'
   htmlEl.style.outline = '2px solid #818cf8'
   htmlEl.style.outlineOffset = '4px'
   htmlEl.style.borderRadius = htmlEl.style.borderRadius || '8px'
