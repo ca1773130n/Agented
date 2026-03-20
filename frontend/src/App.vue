@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, watch, onMounted, onUnmounted, provide, computed, getCurrentInstance } from 'vue';
-import { setupApi, healthApi, getApiKey } from './services/api';
+import { setupApi, healthApi } from './services/api';
 import { useRoute, useRouter } from 'vue-router';
 import TourOverlay from './components/tour/TourOverlay.vue';
 import { useTour } from './composables/useTour';
@@ -105,14 +105,13 @@ async function checkAuthStatus(): Promise<boolean> {
     const status = await healthApi.authStatus();
     if (status.needs_setup) {
       router.push({ name: 'welcome' });
-      return false; // not authenticated — don't load data
-    } else if (status.auth_required && !status.authenticated && !getApiKey()) {
+      return false;
+    } else if (status.auth_required && !status.authenticated) {
       showApiKeyBanner.value = true;
-      return false; // not authenticated — don't load data
+      return false;
     }
-    return true; // authenticated or no auth required
+    return true;
   } catch {
-    // Backend unreachable — don't show banner, health polling will handle it
     return false;
   }
 }
@@ -279,7 +278,7 @@ onUnmounted(() => {
     <!-- Guided Tour Overlay -->
     <Teleport to="body">
       <TourOverlay
-        :active="tour.active.value"
+        :active="tour.active.value && !isWelcomePage"
         :step="tour.currentStep.value"
         :step-number="tour.displayStepNumber.value"
         :total-steps="tour.totalSteps"
