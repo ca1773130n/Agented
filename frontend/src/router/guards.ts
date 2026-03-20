@@ -13,13 +13,11 @@ import {
   workflowApi,
   mcpServerApi,
   healthApi,
-  getApiKey,
 } from '../services/api';
 
-/** Cached auth state to avoid re-checking on every navigation */
+/** Auth state — checked once per page load, reset on key generation */
 let authChecked = false;
 let needsSetup = false;
-let authRequired = false;
 
 /**
  * Factory that creates an entity validator function from a fetch function.
@@ -87,7 +85,6 @@ export function clearEntityCache(): void {
 export function resetAuthGuard(): void {
   authChecked = false;
   needsSetup = false;
-  authRequired = false;
 }
 
 /**
@@ -116,19 +113,13 @@ export function registerGuards(router: Router): void {
         try {
           const status = await healthApi.authStatus();
           needsSetup = !!status.needs_setup;
-          authRequired = !!status.auth_required;
           authChecked = true;
         } catch {
-          // Backend unreachable — allow navigation, health polling handles it
           authChecked = true;
         }
       }
       if (needsSetup) {
         return { name: 'welcome' };
-      }
-      if (authRequired && !getApiKey()) {
-        // Auth required but no key — App.vue will show ApiKeyBanner
-        // Don't block navigation, just let the banner handle it
       }
     }
 
