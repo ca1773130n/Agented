@@ -611,12 +611,12 @@ export const miscRoutes: RouteRecordRaw[] = [
     component: () => import('../../views/TeamActivityFeedPage.vue'),
     meta: { title: 'Team Activity Feed' },
   },
-  // Guided Onboarding Wizard (Feature 30)
+  // Welcome & Setup
   {
-    path: '/onboarding',
-    name: 'guided-onboarding-wizard',
-    component: () => import('../../views/GuidedOnboardingWizardPage.vue'),
-    meta: { title: 'Get Started' },
+    path: '/welcome',
+    name: 'welcome',
+    component: () => import('../../views/WelcomePage.vue'),
+    meta: { title: 'Welcome to Agented', fullBleed: true },
   },
   // Execution Timeline — Gantt-style view (item 22)
   {
