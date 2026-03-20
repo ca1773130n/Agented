@@ -119,7 +119,7 @@ onMounted(() => {
 
 <template>
   <div class="tab-content">
-    <div class="card">
+    <div class="card" data-tour="harness-plugins">
       <div class="card-header">
         <h3>Harness Integration Plugin</h3>
       </div>

@@ -159,7 +159,7 @@ onMounted(() => {
 
 <template>
   <div class="tab-content">
-    <div class="card">
+    <div class="card" data-tour="workspace-root">
       <div class="card-header">
         <h3>Project Workspace</h3>
       </div>
@@ -210,7 +210,7 @@ onMounted(() => {
     </div>
 
     <!-- Token Monitoring Section -->
-    <div class="card" style="margin-top: 1.5rem;">
+    <div class="card" style="margin-top: 1.5rem;" data-tour="token-monitoring">
       <div class="card-header">
         <h3>Token Monitoring</h3>
       </div>
