@@ -22,6 +22,10 @@ vi.mock('../../services/api/client', () => ({
   setApiKey: vi.fn(),
 }));
 
+vi.mock('../../router/guards', () => ({
+  resetAuthGuard: vi.fn(),
+}));
+
 // Import mocked modules after vi.mock declarations
 import { healthApi } from '../../services/api';
 import { setApiKey } from '../../services/api/client';

@@ -3,6 +3,7 @@ import { ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { healthApi } from '../services/api';
 import { setApiKey } from '../services/api/client';
+import { resetAuthGuard } from '../router/guards';
 
 const router = useRouter();
 
@@ -42,6 +43,7 @@ async function copyKey() {
 
 function continueToApp() {
   setApiKey(generatedKey.value);
+  resetAuthGuard(); // Clear the "needs setup" state so router guard allows navigation
   router.push('/?tour=start');
 }
 </script>

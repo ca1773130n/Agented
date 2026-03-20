@@ -12,7 +12,14 @@ import {
   superAgentApi,
   workflowApi,
   mcpServerApi,
+  healthApi,
+  getApiKey,
 } from '../services/api';
+
+/** Cached auth state to avoid re-checking on every navigation */
+let authChecked = false;
+let needsSetup = false;
+let authRequired = false;
 
 /**
  * Factory that creates an entity validator function from a fetch function.
@@ -76,6 +83,13 @@ export function clearEntityCache(): void {
   validatedCache.clear();
 }
 
+/** Reset auth guard state (call after key generation or login) */
+export function resetAuthGuard(): void {
+  authChecked = false;
+  needsSetup = false;
+  authRequired = false;
+}
+
 /**
  * Register global navigation guards on the router.
  *
@@ -93,6 +107,29 @@ export function registerGuards(router: Router): void {
       document.title = `Agented - ${title}`;
     } else {
       document.title = 'Agented';
+    }
+
+    // Auth guard: redirect to /welcome if not authenticated
+    // Skip for the welcome page itself and not-found
+    if (to.name !== 'welcome' && to.name !== 'not-found') {
+      if (!authChecked) {
+        try {
+          const status = await healthApi.authStatus();
+          needsSetup = !!status.needs_setup;
+          authRequired = !!status.auth_required;
+          authChecked = true;
+        } catch {
+          // Backend unreachable — allow navigation, health polling handles it
+          authChecked = true;
+        }
+      }
+      if (needsSetup) {
+        return { name: 'welcome' };
+      }
+      if (authRequired && !getApiKey()) {
+        // Auth required but no key — App.vue will show ApiKeyBanner
+        // Don't block navigation, just let the banner handle it
+      }
     }
 
     // Prevent infinite redirect loop: never validate the not-found route itself
