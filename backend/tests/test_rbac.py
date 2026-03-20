@@ -182,20 +182,20 @@ class TestRequireRoleDecorator:
         )
         assert resp.status_code == 200
 
-    def test_decorator_missing_api_key_returns_403(self, client, isolated_db):
-        """Missing API key returns 403 when RBAC is active."""
+    def test_decorator_missing_api_key_returns_401(self, client, isolated_db):
+        """Missing API key returns 401 from the auth gate when RBAC is active."""
         create_user_role("key-active", "Active", "admin")
         resp = client.get("/admin/rbac/roles")
-        assert resp.status_code == 403
+        assert resp.status_code == 401
 
-    def test_decorator_invalid_api_key_returns_403(self, client, isolated_db):
-        """Unknown API key returns 403."""
+    def test_decorator_invalid_api_key_returns_401(self, client, isolated_db):
+        """Unknown API key returns 401 from the auth gate."""
         create_user_role("key-known", "Known", "admin")
         resp = client.get(
             "/admin/rbac/roles",
             headers={"X-API-Key": "key-unknown-xyz"},
         )
-        assert resp.status_code == 403
+        assert resp.status_code == 401
 
     def test_graceful_bootstrap_no_roles(self, client, isolated_db):
         """When no roles exist in DB, all requests pass through (bootstrap mode)."""

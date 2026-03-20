@@ -341,13 +341,6 @@ def create_app(config=None):
 
     @app.before_request
     def _require_api_key():
-        # Read API key per-request so changes take effect without restart
-        api_key = os.environ.get("AGENTED_API_KEY", "")
-
-        # Auth disabled when AGENTED_API_KEY is not set (backward compatibility)
-        if not api_key:
-            return None
-
         # Allow CORS preflight requests through
         if request.method == "OPTIONS":
             return None
@@ -361,12 +354,28 @@ def create_app(config=None):
             if request.path == prefix or request.path.startswith(prefix + "/"):
                 return None
 
+        # Bootstrap mode: no keys in DB and no env var = auth disabled
+        from .db.rbac import has_any_keys, get_role_for_api_key
+
+        db_has_keys = has_any_keys()
+        env_key = os.environ.get("AGENTED_API_KEY", "")
+
+        if not db_has_keys and not env_key:
+            return None
+
         # Validate X-API-Key header
         provided_key = request.headers.get("X-API-Key", "")
-        if not provided_key or not hmac.compare_digest(provided_key, api_key):
+        if not provided_key:
             return jsonify({"error": "Unauthorized"}), 401
 
-        return None
+        # Check DB first (primary), then env var (backward compat fallback)
+        if db_has_keys and get_role_for_api_key(provided_key):
+            return None
+
+        if env_key and hmac.compare_digest(provided_key, env_key):
+            return None
+
+        return jsonify({"error": "Unauthorized"}), 401
 
     # In testing mode, DB init is handled by the isolated_db fixture and
     # background services are not needed.
