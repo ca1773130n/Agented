@@ -136,20 +136,21 @@ class TestSessionWithoutAgent:
 
 class TestConcurrentSessionLimit:
     def test_concurrent_session_limit(self, client):
-        """Creating 10 sessions succeeds; 11th returns error."""
+        """Creating sessions up to the SA's max_concurrent_sessions succeeds; next returns error."""
+        # SA is created with max_concurrent_sessions=5 (from SAMPLE_SUPER_AGENT)
         sa_resp = _create_super_agent(client)
         sa_id = sa_resp.get_json()["super_agent_id"]
 
-        # Create 10 sessions (should all succeed)
-        for i in range(10):
+        # Create 5 sessions for the same SA (should all succeed)
+        for i in range(5):
             session_id, error = SuperAgentSessionService.create_session(sa_id)
             assert session_id is not None, f"Session {i + 1} failed: {error}"
             assert error is None
 
-        # 11th should fail
+        # 6th session for the same SA should fail (per-SA limit reached)
         session_id, error = SuperAgentSessionService.create_session(sa_id)
         assert session_id is None
-        assert "Maximum concurrent sessions reached" in error
+        assert "Maximum concurrent sessions" in error
 
 
 class TestTokenCounting:

@@ -901,7 +901,7 @@ class TestSuperAgentChat:
         assert resp.status_code == 404
 
     def test_send_chat_message_session_ended(self, client):
-        """POST chat to ended session returns 400."""
+        """POST chat to ended session auto-reactivates and returns 200."""
         sa_id, session_id = self._create_session(client)
         # End the session
         client.post(f"/admin/super-agents/{sa_id}/sessions/{session_id}/end")
@@ -909,7 +909,8 @@ class TestSuperAgentChat:
             f"/admin/super-agents/{sa_id}/sessions/{session_id}/chat",
             json={"content": "Hello"},
         )
-        assert resp.status_code in (400, 404)
+        # Ended sessions are auto-reactivated (resume_session is called)
+        assert resp.status_code == 200
 
     def test_stream_chat_sse(self, client):
         """GET /<sa_id>/sessions/<sess_id>/chat/stream returns SSE stream."""
