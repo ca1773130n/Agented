@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, provide, computed, getCurrentInstance } from 'vue';
+import { ref, watch, onMounted, onUnmounted, provide, computed, getCurrentInstance } from 'vue';
 import { setupApi, healthApi, getApiKey } from './services/api';
 import { useRoute, useRouter } from 'vue-router';
 import TourOverlay from './components/tour/TourOverlay.vue';
@@ -17,6 +17,7 @@ import { useHealthPolling } from './composables/useHealthPolling';
 const route = useRoute();
 const router = useRouter();
 const isFullBleed = computed(() => route.meta.fullBleed === true);
+const isWelcomePage = computed(() => route.name === 'welcome');
 const tour = useTour();
 
 // Toast notification system
@@ -142,6 +143,15 @@ async function runBundleInstall() {
   }
 }
 
+// Watch for ?tour=start query param (set by WelcomePage after key generation)
+watch(() => route.query.tour, (tourQuery) => {
+  if (tourQuery === 'start') {
+    router.replace({ query: {} });
+    loadSidebarData();
+    tour.startTour();
+  }
+});
+
 onMounted(async () => {
   startPolling(10000);
   // Check if the backend requires API key auth before loading sidebar data
@@ -160,14 +170,22 @@ onUnmounted(() => {
   <div :class="['app-layout', { 'sidebar-collapsed': isCollapsed && !isMobile, 'sidebar-mobile': isMobile }]">
     <a href="#main-content" class="skip-to-content">Skip to content</a>
 
-    <AppHeader @toggle-sidebar="toggleMobile" />
+    <template v-if="!isWelcomePage">
+      <AppHeader @toggle-sidebar="toggleMobile" />
 
-    <ApiKeyBanner
-      v-if="showApiKeyBanner"
-      @authenticated="onAuthenticated"
-    />
+      <ApiKeyBanner
+        v-if="showApiKeyBanner"
+        @authenticated="onAuthenticated"
+      />
+    </template>
 
-    <div class="app-body">
+    <div v-if="isWelcomePage" class="welcome-fullscreen">
+      <ErrorBoundary>
+        <router-view />
+      </ErrorBoundary>
+    </div>
+
+    <div v-else class="app-body">
       <!-- Mobile backdrop overlay -->
       <div v-if="isMobile && isMobileOpen" class="sidebar-backdrop" @click="closeMobile"></div>
 
@@ -369,6 +387,13 @@ body {
   display: flex;
   flex-direction: column;
   min-height: 100vh;
+}
+
+.welcome-fullscreen {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  overflow-y: auto;
 }
 
 .app-body {
