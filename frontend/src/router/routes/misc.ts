@@ -114,7 +114,7 @@ export const miscRoutes: RouteRecordRaw[] = [
   },
   // RBAC Settings
   {
-    path: '/admin/rbac',
+    path: '/settings/rbac',
     name: 'rbac-settings',
     component: () => import('../../views/RbacSettingsPage.vue'),
     meta: { title: 'RBAC Settings' },
@@ -206,7 +206,7 @@ export const miscRoutes: RouteRecordRaw[] = [
   },
   // Secrets Vault
   {
-    path: '/admin/secrets',
+    path: '/settings/secrets',
     name: 'secrets-vault',
     component: () => import('../../views/SecretsVault.vue'),
     meta: { title: 'Secrets Vault' },
@@ -494,7 +494,7 @@ export const miscRoutes: RouteRecordRaw[] = [
   },
   // Execution Quota & Rate Controls (Feature 19)
   {
-    path: '/admin/execution-quotas',
+    path: '/settings/execution-quotas',
     name: 'execution-quota-controls',
     component: () => import('../../views/ExecutionQuotaControls.vue'),
     meta: { title: 'Execution Quotas & Rate Controls' },
@@ -641,7 +641,7 @@ export const miscRoutes: RouteRecordRaw[] = [
   },
   // Metrics Export to Grafana/Datadog (feature 25)
   {
-    path: '/admin/metrics-export',
+    path: '/settings/metrics-export',
     name: 'metrics-export',
     component: () => import('../../views/MetricsExportPage.vue'),
     meta: { title: 'Metrics Export' },
@@ -669,7 +669,7 @@ export const miscRoutes: RouteRecordRaw[] = [
   },
   // Configurable Data Retention Policies (feature 39)
   {
-    path: '/admin/retention',
+    path: '/settings/retention',
     name: 'data-retention-policies',
     component: () => import('../../views/DataRetentionPoliciesPage.vue'),
     meta: { title: 'Data Retention Policies' },
@@ -809,7 +809,7 @@ export const miscRoutes: RouteRecordRaw[] = [
   },
   // System Error Dashboard
   {
-    path: '/admin/system/errors',
+    path: '/settings/system-errors',
     name: 'system-errors',
     component: () => import('../../views/SystemErrorsPage.vue'),
     meta: { title: 'System Errors' },
