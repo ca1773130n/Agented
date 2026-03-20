@@ -160,6 +160,13 @@ onMounted(async () => {
   // Check if the backend requires API key auth before loading sidebar data
   const isReady = await checkAuthStatus();
   if (isReady) {
+    // Check if we should start the tour (coming from WelcomePage)
+    if (route.query.tour === 'start') {
+      router.replace({ query: {} });
+      loadSidebarData();
+      tour.startTour();
+      return;
+    }
     loadSidebarData();
     // Auto-install bundled marketplace & plugins on first launch (non-blocking)
     runBundleInstall();

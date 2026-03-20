@@ -44,7 +44,7 @@ async function copyKey() {
 function continueToApp() {
   setApiKey(generatedKey.value);
   resetAuthGuard(); // Clear the "needs setup" state so router guard allows navigation
-  router.push('/?tour=start');
+  router.push({ path: '/', query: { tour: 'start' } });
 }
 </script>
 
