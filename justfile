@@ -85,6 +85,10 @@ dev:
     @echo "Frontend: http://localhost:3000"
     @echo "Backend API: http://localhost:20000"
 
+# Generate an API key for authentication
+generate-key *ARGS: ensure-backend
+    cd backend && uv run python scripts/generate_key.py {{ARGS}}
+
 # Kill any existing frontend/backend processes
 kill:
     -lsof -ti:3000 | xargs kill -9 2>/dev/null || true
