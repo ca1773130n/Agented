@@ -123,7 +123,7 @@ function autoExpandForRoute() {
   if (['slack-notifications', 'pr-auto-assignment', 'integration-ticketing', 'multi-provider-fallback', 'multi-repo-fan-out', 'github-actions', 'on-call-escalation', 'github-app-install', 'pr-review-learning-loop', 'notification-channels'].includes(name)) {
     expandedSections.value.integrations = true;
   }
-  if (['bot-recommendation-engine', 'bot-clone-fork', 'bot-dependency-graph', 'changelog-generator', 'dependency-impact-bot', 'incident-response-playbooks', 'cross-team-bot-sharing', 'inline-prompt-editor', 'prompt-ab-testing', 'visual-cron-wizard', 'guided-onboarding-wizard', 'structured-output', 'bot-runbooks', 'repo-scope-filters', 'bot-performance-benchmarks', 'smart-schedule-optimizer', 'execution-tagging'].includes(name)) {
+  if (['bot-recommendation-engine', 'bot-clone-fork', 'bot-dependency-graph', 'changelog-generator', 'dependency-impact-bot', 'incident-response-playbooks', 'cross-team-bot-sharing', 'inline-prompt-editor', 'prompt-ab-testing', 'visual-cron-wizard', 'structured-output', 'bot-runbooks', 'repo-scope-filters', 'bot-performance-benchmarks', 'smart-schedule-optimizer', 'execution-tagging'].includes(name)) {
     expandedSections.value.automationTools = true;
   }
   if (['secrets-vault', 'rbac-settings', 'sso-settings', 'team-budgets', 'report-digests', 'execution-quota-controls', 'team-leaderboard', 'bot-sla-uptime', 'mobile-execution-monitor', 'audit-history', 'findings-triage-board', 'skill-version-pinning', 'conversation-history-viewer'].includes(name)) {
@@ -228,7 +228,7 @@ function isIntegrationsSectionActive(): boolean {
 }
 
 function isAutomationToolsSectionActive(): boolean {
-  return ['bot-recommendation-engine', 'bot-clone-fork', 'bot-dependency-graph', 'changelog-generator', 'dependency-impact-bot', 'incident-response-playbooks', 'cross-team-bot-sharing', 'inline-prompt-editor', 'prompt-ab-testing', 'visual-cron-wizard', 'guided-onboarding-wizard', 'structured-output', 'bot-runbooks', 'repo-scope-filters', 'bot-performance-benchmarks', 'smart-schedule-optimizer', 'execution-tagging'].includes(currentRouteName.value);
+  return ['bot-recommendation-engine', 'bot-clone-fork', 'bot-dependency-graph', 'changelog-generator', 'dependency-impact-bot', 'incident-response-playbooks', 'cross-team-bot-sharing', 'inline-prompt-editor', 'prompt-ab-testing', 'visual-cron-wizard', 'structured-output', 'bot-runbooks', 'repo-scope-filters', 'bot-performance-benchmarks', 'smart-schedule-optimizer', 'execution-tagging'].includes(currentRouteName.value);
 }
 
 function isPlatformSectionActive(): boolean {
@@ -955,9 +955,6 @@ function handleSidebarKeydown(e: KeyboardEvent) {
         </button>
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('conditional-trigger-rules') }" :aria-current="sidebarActive('conditional-trigger-rules') ? 'page' : undefined" @click="navTo('conditional-trigger-rules')">
           Trigger Conditions
-        </button>
-        <button type="button" class="submenu-item" :class="{ active: sidebarActive('guided-onboarding-wizard') }" :aria-current="sidebarActive('guided-onboarding-wizard') ? 'page' : undefined" @click="navTo('guided-onboarding-wizard')">
-          Onboarding Wizard
         </button>
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('bot-runbooks') }" :aria-current="sidebarActive('bot-runbooks') ? 'page' : undefined" @click="navTo('bot-runbooks')">
           Bot Runbooks
