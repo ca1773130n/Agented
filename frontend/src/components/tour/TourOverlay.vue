@@ -31,20 +31,17 @@ function updateSpotlight() {
     return
   }
   const rect = el.getBoundingClientRect()
-  const padding = 8
+  const padding = 12
   spotlightStyle.value = {
-    position: 'fixed',
     top: `${rect.top - padding}px`,
     left: `${rect.left - padding}px`,
     width: `${rect.width + padding * 2}px`,
     height: `${rect.height + padding * 2}px`,
-    borderRadius: '8px',
-    boxShadow: '0 0 0 9999px rgba(0,0,0,0.4), 0 0 20px 4px rgba(79,70,229,0.3)',
-    transition: 'all 400ms cubic-bezier(0.4, 0, 0.2, 1)',
-    zIndex: '9998',
-    pointerEvents: 'none',
   }
   hasTarget.value = true
+
+  // Scroll the target into view if needed
+  el.scrollIntoView({ behavior: 'smooth', block: 'center' })
 }
 
 function setupObserver() {
@@ -74,6 +71,17 @@ watch(
       await nextTick()
       updateSpotlight()
       setupObserver()
+      // Retry if target wasn't found yet (page may still be rendering after route change)
+      if (!hasTarget.value) {
+        for (let i = 0; i < 5; i++) {
+          await new Promise(r => setTimeout(r, 300))
+          updateSpotlight()
+          if (hasTarget.value) {
+            setupObserver()
+            break
+          }
+        }
+      }
     } else {
       hasTarget.value = false
       teardownObserver()
@@ -111,10 +119,10 @@ onUnmounted(() => {
 
 <template>
   <div v-if="active && step" class="tour-overlay">
-    <!-- Dim overlay -->
-    <div class="tour-dim" />
+    <!-- Dim overlay (shown when no target found) -->
+    <div v-if="!hasTarget" class="tour-dim" />
 
-    <!-- Spotlight on target element -->
+    <!-- Spotlight on target element (its box-shadow IS the dim layer) -->
     <div v-if="hasTarget" class="tour-spotlight" :style="spotlightStyle" />
 
     <!-- Bottom bar -->
@@ -159,6 +167,11 @@ onUnmounted(() => {
 }
 
 .tour-spotlight {
+  position: fixed;
+  border-radius: 10px;
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.5), 0 0 24px 6px rgba(79, 70, 229, 0.35);
+  transition: all 400ms cubic-bezier(0.4, 0, 0.2, 1);
+  z-index: 9998;
   pointer-events: none;
 }
 
