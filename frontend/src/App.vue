@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, provide, computed, getCurrentInstance } from 'vue';
 import { setupApi, healthApi, getApiKey } from './services/api';
-import { useRoute } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
+import TourOverlay from './components/tour/TourOverlay.vue';
+import { useTour } from './composables/useTour';
 import AppSidebar from './components/layout/AppSidebar.vue';
 import AppHeader from './components/layout/AppHeader.vue';
 import ApiKeyBanner from './components/layout/ApiKeyBanner.vue';
@@ -13,7 +15,9 @@ import { useHealthPolling } from './composables/useHealthPolling';
 
 // Route state for layout decisions
 const route = useRoute();
+const router = useRouter();
 const isFullBleed = computed(() => route.meta.fullBleed === true);
+const tour = useTour();
 
 // Toast notification system
 type ToastType = 'success' | 'error' | 'info' | 'infrastructure';
@@ -98,7 +102,10 @@ const showApiKeyBanner = ref(false);
 async function checkAuthStatus() {
   try {
     const status = await healthApi.authStatus();
-    if (status.auth_required && !status.authenticated && !getApiKey()) {
+    if (status.needs_setup) {
+      router.push({ name: 'welcome' });
+      return;
+    } else if (status.auth_required && !status.authenticated && !getApiKey()) {
       showApiKeyBanner.value = true;
     }
   } catch {
@@ -108,8 +115,12 @@ async function checkAuthStatus() {
 
 function onAuthenticated() {
   showApiKeyBanner.value = false;
-  // Reload sidebar data now that we have a valid API key
+  const shouldStartTour = route.query.tour === 'start';
   loadSidebarData();
+  if (shouldStartTour) {
+    router.replace({ query: {} });
+    tour.startTour();
+  }
 }
 
 async function runBundleInstall() {
@@ -151,7 +162,10 @@ onUnmounted(() => {
 
     <AppHeader @toggle-sidebar="toggleMobile" />
 
-    <ApiKeyBanner v-if="showApiKeyBanner" @authenticated="onAuthenticated" />
+    <ApiKeyBanner
+      v-if="showApiKeyBanner"
+      @authenticated="onAuthenticated"
+    />
 
     <div class="app-body">
       <!-- Mobile backdrop overlay -->
@@ -230,6 +244,18 @@ onUnmounted(() => {
           </div>
         </TransitionGroup>
       </div>
+    </Teleport>
+
+    <!-- Guided Tour Overlay -->
+    <Teleport to="body">
+      <TourOverlay
+        :active="tour.active.value"
+        :step="tour.currentStep.value"
+        :step-number="tour.displayStepNumber.value"
+        :total-steps="tour.totalSteps"
+        @next="tour.nextStep()"
+        @skip="tour.skipStep()"
+      />
     </Teleport>
   </div>
 </template>

@@ -51,7 +51,7 @@ function dismiss() {
       </div>
       <div class="banner-text">
         <strong>API key required</strong>
-        <span class="banner-description">The backend requires authentication. Enter your <code>AGENTED_API_KEY</code> to continue.</span>
+        <span class="banner-description">Enter your API key to continue.</span>
       </div>
       <form class="banner-form" @submit.prevent="submit">
         <input
@@ -72,6 +72,7 @@ function dismiss() {
         </svg>
       </button>
     </div>
+
     <div v-if="error" class="banner-error">{{ error }}</div>
   </div>
 </template>
@@ -114,13 +115,6 @@ function dismiss() {
 .banner-description {
   color: var(--text-secondary, #999);
   font-size: 12px;
-}
-
-.banner-description code {
-  background: var(--surface-secondary, rgba(255, 255, 255, 0.06));
-  padding: 1px 5px;
-  border-radius: 3px;
-  font-size: 11px;
 }
 
 .banner-form {

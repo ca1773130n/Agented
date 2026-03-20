@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { mount, VueWrapper } from '@vue/test-utils';
+import { mount, flushPromises, VueWrapper } from '@vue/test-utils';
 import { ref, computed, inject, defineComponent } from 'vue';
 import { createRouter, createMemoryHistory, type Router } from 'vue-router';
 import App from '../../App.vue';
@@ -13,11 +13,45 @@ const mockRetrySidebarSection = vi.fn();
 const mockRefreshTriggers = vi.fn();
 const mockLoadPlugins = vi.fn();
 const mockRegisterGenericTools = vi.fn();
+const mockStartTour = vi.fn();
+const mockNextStep = vi.fn();
+const mockSkipStep = vi.fn();
 
 // ── Mocks ──────────────────────────────────────────────────────────────────
 
 vi.mock('../../services/api', () => ({
   setupApi: { bundleInstall: vi.fn().mockResolvedValue({ status: 'already_installed' }) },
+  healthApi: {
+    authStatus: vi.fn().mockResolvedValue({ auth_required: false, authenticated: false }),
+  },
+  getApiKey: vi.fn().mockReturnValue(null),
+}));
+
+vi.mock('../../composables/useTour', () => ({
+  useTour: () => ({
+    active: ref(false),
+    currentStepIndex: ref(0),
+    currentStep: computed(() => null),
+    completed: ref([]),
+    totalSteps: 8,
+    displayStepNumber: computed(() => 1),
+    tourComplete: ref(false),
+    startTour: mockStartTour,
+    nextStep: mockNextStep,
+    skipStep: mockSkipStep,
+    endTour: vi.fn(),
+    updateStepRoute: vi.fn(),
+    steps: [],
+  }),
+}));
+
+vi.mock('../../components/tour/TourOverlay.vue', () => ({
+  default: defineComponent({
+    name: 'TourOverlay',
+    props: ['active', 'step', 'stepNumber', 'totalSteps'],
+    emits: ['next', 'skip'],
+    template: '<div data-testid="tour-overlay" v-if="active">Tour</div>',
+  }),
 }));
 
 vi.mock('../../webmcp/generic-tools', () => ({
@@ -123,11 +157,13 @@ async function mountApp(routeMeta: Record<string, unknown> = {}): Promise<VueWra
   router.push('/');
   await router.isReady();
 
-  return mount(App, {
+  const wrapper = mount(App, {
     global: {
       plugins: [router],
     },
   });
+  await flushPromises();
+  return wrapper;
 }
 
 // ── Tests ──────────────────────────────────────────────────────────────────
