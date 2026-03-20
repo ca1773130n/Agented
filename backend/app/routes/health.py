@@ -111,3 +111,44 @@ def readiness():
 
     status_code = 200 if health["status"] == "ok" else 503
     return health, status_code
+
+
+@health_bp.get("/auth-status")
+def auth_status():
+    """Public endpoint: tells the frontend whether API key auth is required.
+
+    Returns auth_required=true when AGENTED_API_KEY is set and the
+    request does not already carry a valid key. The frontend uses this on
+    startup to decide whether to show the API key prompt.
+    """
+    api_key_configured = bool(os.environ.get("AGENTED_API_KEY", ""))
+    authenticated = _is_authenticated_request()
+    return {
+        "auth_required": api_key_configured,
+        "authenticated": authenticated,
+    }, HTTPStatus.OK
+
+
+@health_bp.post("/verify-key")
+def verify_key():
+    """Public endpoint: verify whether a provided API key is valid.
+
+    Accepts {"api_key": "..."} in the request body and returns whether
+    it matches the configured AGENTED_API_KEY. This lets the frontend
+    validate a key before storing it in localStorage.
+    """
+    data = request.get_json(silent=True) or {}
+    provided = data.get("api_key", "")
+    secret = os.environ.get("AGENTED_API_KEY", "")
+
+    if not secret:
+        return {"valid": True, "message": "No API key configured"}, HTTPStatus.OK
+
+    if not provided:
+        return {"valid": False, "message": "No key provided"}, HTTPStatus.OK
+
+    valid = hmac.compare_digest(provided, secret)
+    return {
+        "valid": valid,
+        "message": "Valid" if valid else "Invalid API key",
+    }, HTTPStatus.OK

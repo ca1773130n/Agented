@@ -61,7 +61,9 @@ def _resolve_session(data: dict, super_agent_id: str, session_id: str) -> dict:
     # Ensure session is in memory + active. Sessions may be in DB but not in memory
     # after server restart, or may be paused/completed and need reactivation.
     status = session.get("status")
-    if status in ("paused", "completed") or not SuperAgentSessionService.get_session_state(session_id):
+    if status in ("paused", "completed") or not SuperAgentSessionService.get_session_state(
+        session_id
+    ):
         success, err = SuperAgentSessionService.resume_session(session_id)
         if not success:
             return {

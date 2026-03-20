@@ -35,6 +35,10 @@ class ProjectHooksPath(BaseModel):
     project_id: str = Field(..., description="Project ID")
 
 
+class EventPath(BaseModel):
+    event: str = Field(..., description="Event type")
+
+
 @hooks_bp.get("/")
 def list_hooks(query: PaginationQuery):
     """List all hooks (global + per-project) with optional pagination."""
@@ -116,8 +120,9 @@ def list_project_hooks(path: ProjectHooksPath):
 
 
 @hooks_bp.get("/event/<event>")
-def list_hooks_by_event(event: str):
+def list_hooks_by_event(path: EventPath):
     """List enabled hooks for a specific event type."""
+    event = path.event
     if event not in VALID_EVENTS:
         return error_response(
             "BAD_REQUEST",

@@ -42,6 +42,10 @@ class ProjectRulesPath(BaseModel):
     project_id: str = Field(..., description="Project ID")
 
 
+class RuleTypePath(BaseModel):
+    rule_type: str = Field(..., description="Rule type")
+
+
 @rules_bp.get("/")
 def list_rules(query: PaginationQuery):
     """List all rules (global + per-project) with optional pagination."""
@@ -125,8 +129,9 @@ def list_project_rules(path: ProjectRulesPath):
 
 
 @rules_bp.get("/type/<rule_type>")
-def list_rules_by_type(rule_type: str):
+def list_rules_by_type(path: RuleTypePath):
     """List enabled rules for a specific type."""
+    rule_type = path.rule_type
     if rule_type not in VALID_RULE_TYPES:
         return error_response(
             "BAD_REQUEST",

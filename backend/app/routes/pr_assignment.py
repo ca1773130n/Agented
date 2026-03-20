@@ -48,7 +48,9 @@ def create_rule():
     priority = int(data.get("priority", 0))
 
     if not pattern or not team:
-        return error_response("pattern and team are required"), HTTPStatus.BAD_REQUEST
+        return error_response(
+            "BAD_REQUEST", "pattern and team are required", HTTPStatus.BAD_REQUEST
+        )
 
     if isinstance(reviewers, str):
         reviewers = [r.strip() for r in reviewers.split(",") if r.strip()]
@@ -68,7 +70,7 @@ def delete_rule(path: RuleIdPath):
     """Delete a PR ownership rule by ID."""
     deleted = delete_ownership_rule(path.rule_id)
     if not deleted:
-        return error_response("Rule not found"), HTTPStatus.NOT_FOUND
+        return error_response("NOT_FOUND", "Rule not found", HTTPStatus.NOT_FOUND)
     return {"deleted": True, "id": path.rule_id}, HTTPStatus.OK
 
 

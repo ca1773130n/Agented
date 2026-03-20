@@ -63,7 +63,8 @@ class SuperAgentSessionService:
             # Check per-SA concurrency limit
             sa_limit = sa.get("max_concurrent_sessions", cls.MAX_CONCURRENT_SESSIONS)
             sa_active = sum(
-                1 for s in cls._active_sessions.values()
+                1
+                for s in cls._active_sessions.values()
                 if s.get("super_agent_id") == super_agent_id and s["status"] == "active"
             )
             if sa_active >= sa_limit:

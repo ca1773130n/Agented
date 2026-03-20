@@ -1003,7 +1003,9 @@ describe('Loading and error states', () => {
     await flushPromises()
 
     const text = wrapper.text()
-    expect(text).toContain('Backend service down')
+    // With Promise.allSettled, partial failure shows which data sources failed
+    expect(text).toContain('could not fetch')
+    expect(text).toContain('backends')
     wrapper.unmount()
   })
 })

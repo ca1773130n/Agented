@@ -34,8 +34,18 @@ def send_agent_message(path: SuperAgentPath):
     if not content:
         return error_response("BAD_REQUEST", "content is required", HTTPStatus.BAD_REQUEST)
 
+    # Resolve psa- instance IDs to template SA ID
+    sa_id = path.super_agent_id
+    if sa_id.startswith("psa-"):
+        from ..db.project_sa_instances import get_project_sa_instance
+
+        instance = get_project_sa_instance(sa_id)
+        if not instance:
+            return error_response("NOT_FOUND", "Instance not found", HTTPStatus.NOT_FOUND)
+        sa_id = instance["template_sa_id"]
+
     msg_id = AgentMessageBusService.send_message(
-        from_agent_id=path.super_agent_id,
+        from_agent_id=sa_id,
         to_agent_id=data.get("to_agent_id"),
         message_type=data.get("message_type", "message"),
         priority=data.get("priority", "normal"),

@@ -17,6 +17,17 @@ import type {
 export const healthApi = {
   liveness: () => fetch(`${API_BASE}/health/liveness`).then(r => r.ok),
   readiness: () => apiFetch<HealthStatus>(`/health/readiness`),
+
+  /** Check whether the backend requires API key authentication. Public endpoint. */
+  authStatus: () =>
+    apiFetch<{ auth_required: boolean; authenticated: boolean }>('/health/auth-status'),
+
+  /** Verify an API key without storing it. Public endpoint. */
+  verifyKey: (apiKey: string) =>
+    apiFetch<{ valid: boolean; message: string }>('/health/verify-key', {
+      method: 'POST',
+      body: JSON.stringify({ api_key: apiKey }),
+    }),
 };
 
 // Version API

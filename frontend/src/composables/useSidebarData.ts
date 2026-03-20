@@ -9,6 +9,7 @@ import {
   backendApi,
   versionApi,
   isAbortError,
+  ApiError,
 } from '../services/api';
 import { handleApiError } from '../services/api/error-handler';
 
@@ -39,12 +40,18 @@ export function useSidebarData(showToast: ShowToastFn) {
     version: null,
   });
 
+  /** Check if an error is an auth error (401/403) -- these should not trigger toasts
+   *  because the ApiKeyBanner handles them at the app level. */
+  function isAuthError(err: unknown): boolean {
+    return err instanceof ApiError && (err.status === 401 || err.status === 403);
+  }
+
   async function loadTriggers() {
     try {
       const data = await triggerApi.list();
       triggers.value = data.triggers || [];
     } catch (err) {
-      handleApiError(err, showToast, 'Failed to load triggers');
+      if (!isAuthError(err)) handleApiError(err, showToast, 'Failed to load triggers');
       throw err;
     }
   }
@@ -54,7 +61,7 @@ export function useSidebarData(showToast: ShowToastFn) {
       const data = await projectApi.list();
       projects.value = data.projects || [];
     } catch (err) {
-      handleApiError(err, showToast, 'Failed to load projects');
+      if (!isAuthError(err)) handleApiError(err, showToast, 'Failed to load projects');
       throw err;
     }
   }
@@ -64,7 +71,7 @@ export function useSidebarData(showToast: ShowToastFn) {
       const data = await productApi.list();
       products.value = data.products || [];
     } catch (err) {
-      handleApiError(err, showToast, 'Failed to load products');
+      if (!isAuthError(err)) handleApiError(err, showToast, 'Failed to load products');
       throw err;
     }
   }
@@ -74,7 +81,7 @@ export function useSidebarData(showToast: ShowToastFn) {
       const data = await teamApi.list();
       teams.value = data.teams || [];
     } catch (err) {
-      handleApiError(err, showToast, 'Failed to load teams');
+      if (!isAuthError(err)) handleApiError(err, showToast, 'Failed to load teams');
       throw err;
     }
   }
@@ -84,7 +91,7 @@ export function useSidebarData(showToast: ShowToastFn) {
       const data = await pluginApi.list();
       plugins.value = data.plugins || [];
     } catch (err) {
-      handleApiError(err, showToast, 'Failed to load plugins');
+      if (!isAuthError(err)) handleApiError(err, showToast, 'Failed to load plugins');
       throw err;
     }
   }
@@ -94,7 +101,7 @@ export function useSidebarData(showToast: ShowToastFn) {
       const data = await backendApi.list();
       sidebarBackends.value = data.backends || [];
     } catch (err) {
-      handleApiError(err, showToast, 'Failed to load backends');
+      if (!isAuthError(err)) handleApiError(err, showToast, 'Failed to load backends');
       throw err;
     }
   }

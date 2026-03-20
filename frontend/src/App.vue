@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, provide, computed, getCurrentInstance } from 'vue';
-import { setupApi } from './services/api';
+import { setupApi, healthApi, getApiKey } from './services/api';
 import { useRoute } from 'vue-router';
 import AppSidebar from './components/layout/AppSidebar.vue';
 import AppHeader from './components/layout/AppHeader.vue';
+import ApiKeyBanner from './components/layout/ApiKeyBanner.vue';
 import ErrorBoundary from './components/base/ErrorBoundary.vue';
 import { registerGenericTools } from './webmcp/generic-tools';
 import { useSidebarCollapse } from './composables/useSidebarCollapse';
@@ -91,6 +92,26 @@ provide('refreshTriggers', refreshTriggers);
 const { activeExecutionCount, healthColor, healthTooltip, startPolling, stopPolling } =
   useHealthPolling();
 
+// API key auth state — show banner when backend requires auth and no key is stored
+const showApiKeyBanner = ref(false);
+
+async function checkAuthStatus() {
+  try {
+    const status = await healthApi.authStatus();
+    if (status.auth_required && !status.authenticated && !getApiKey()) {
+      showApiKeyBanner.value = true;
+    }
+  } catch {
+    // Backend unreachable — don't show banner, health polling will handle it
+  }
+}
+
+function onAuthenticated() {
+  showApiKeyBanner.value = false;
+  // Reload sidebar data now that we have a valid API key
+  loadSidebarData();
+}
+
 async function runBundleInstall() {
   try {
     const res = await setupApi.bundleInstall();
@@ -110,8 +131,10 @@ async function runBundleInstall() {
   }
 }
 
-onMounted(() => {
+onMounted(async () => {
   startPolling(10000);
+  // Check if the backend requires API key auth before loading sidebar data
+  await checkAuthStatus();
   loadSidebarData();
   // Auto-install bundled marketplace & plugins on first launch (non-blocking)
   runBundleInstall();
@@ -127,6 +150,8 @@ onUnmounted(() => {
     <a href="#main-content" class="skip-to-content">Skip to content</a>
 
     <AppHeader @toggle-sidebar="toggleMobile" />
+
+    <ApiKeyBanner v-if="showApiKeyBanner" @authenticated="onAuthenticated" />
 
     <div class="app-body">
       <!-- Mobile backdrop overlay -->

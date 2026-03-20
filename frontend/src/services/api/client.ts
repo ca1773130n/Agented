@@ -13,13 +13,35 @@ import { fetchEventSource } from '@microsoft/fetch-event-source';
 
 export const API_BASE = '';  // Use proxy in development, same origin in production
 
+const API_KEY_STORAGE_KEY = 'agented-api-key';
+
 /** Read the API key from localStorage. Returns null when unset. */
 export function getApiKey(): string | null {
   if (typeof window === 'undefined') return null;
   try {
-    return localStorage.getItem('agented-api-key');
+    return localStorage.getItem(API_KEY_STORAGE_KEY);
   } catch {
     return null;
+  }
+}
+
+/** Store the API key in localStorage for subsequent requests. */
+export function setApiKey(key: string): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(API_KEY_STORAGE_KEY, key);
+  } catch {
+    // localStorage unavailable or full — ignore
+  }
+}
+
+/** Remove the stored API key from localStorage. */
+export function clearApiKey(): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.removeItem(API_KEY_STORAGE_KEY);
+  } catch {
+    // ignore
   }
 }
 
