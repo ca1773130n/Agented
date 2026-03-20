@@ -304,6 +304,41 @@ class TestRBACOnTriggerRoutes:
         assert resp.status_code != 403
 
 
+class TestGenerateApiKey:
+    """Tests for API key generation."""
+
+    def test_generate_api_key_returns_64_hex_chars(self):
+        from app.db.rbac import generate_api_key
+
+        key = generate_api_key()
+        assert len(key) == 64
+        assert all(c in "0123456789abcdef" for c in key)
+
+    def test_generate_api_key_unique(self):
+        from app.db.rbac import generate_api_key
+
+        keys = {generate_api_key() for _ in range(100)}
+        assert len(keys) == 100
+
+
+class TestHasAnyKeys:
+    """Tests for cached has_any_keys check."""
+
+    def test_false_when_empty(self, isolated_db):
+        from app.db.rbac import _has_any_keys_cache, has_any_keys
+
+        _has_any_keys_cache.clear()
+        assert has_any_keys() is False
+
+    def test_true_after_create(self, isolated_db):
+        from app.db.rbac import _has_any_keys_cache, has_any_keys
+
+        _has_any_keys_cache.clear()
+        create_user_role("k1", "Admin", "admin")
+        _has_any_keys_cache.clear()
+        assert has_any_keys() is True
+
+
 class TestRBACOnTeamRoutes:
     """Test RBAC enforcement on existing team management routes."""
 

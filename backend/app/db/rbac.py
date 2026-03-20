@@ -4,6 +4,8 @@ Manages user_roles table: maps API keys to roles (viewer, operator, editor, admi
 """
 
 import logging
+import secrets
+import time
 from typing import Optional
 
 from .connection import get_connection
@@ -12,6 +14,35 @@ from .ids import _get_unique_role_id
 logger = logging.getLogger(__name__)
 
 VALID_ROLES = ("viewer", "operator", "editor", "admin")
+
+
+def generate_api_key() -> str:
+    """Generate a cryptographically secure 64-character hex API key."""
+    return secrets.token_hex(32)
+
+
+# Cache for has_any_keys() — avoids a DB query on every request.
+# TTL of 5 seconds: after a key is created, it takes at most 5s for auth to kick in.
+_has_any_keys_cache: dict = {}  # {"result": bool, "ts": float}
+_HAS_ANY_KEYS_TTL = 5.0
+
+
+def has_any_keys() -> bool:
+    """Check if any API keys exist in the database. Cached with 5s TTL."""
+    now = time.monotonic()
+    cached = _has_any_keys_cache.get("result")
+    ts = _has_any_keys_cache.get("ts", 0.0)
+    if cached is not None and (now - ts) < _HAS_ANY_KEYS_TTL:
+        return cached
+    result = count_user_roles() > 0
+    _has_any_keys_cache["result"] = result
+    _has_any_keys_cache["ts"] = now
+    return result
+
+
+def invalidate_key_cache():
+    """Clear the has_any_keys cache (call after creating/deleting keys)."""
+    _has_any_keys_cache.clear()
 
 
 def create_user_role(api_key: str, label: str, role: str = "viewer") -> Optional[str]:
@@ -38,6 +69,7 @@ def create_user_role(api_key: str, label: str, role: str = "viewer") -> Optional
                 (role_id, api_key, label, role),
             )
             conn.commit()
+            invalidate_key_cache()
             return role_id
     except Exception as e:
         logger.error("Failed to create user role: %s", e)
@@ -129,6 +161,7 @@ def delete_user_role(role_id: str) -> bool:
     with get_connection() as conn:
         cursor = conn.execute("DELETE FROM user_roles WHERE id = ?", (role_id,))
         conn.commit()
+        invalidate_key_cache()
         return cursor.rowcount > 0
 
 
