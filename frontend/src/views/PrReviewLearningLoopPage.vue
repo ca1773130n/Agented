@@ -31,6 +31,7 @@ interface RefinementSuggestion {
   appliedAt?: string;
 }
 
+const isLoading = ref(true);
 const signals = ref<FindingSignal[]>([]);
 const suggestions = ref<RefinementSuggestion[]>([]);
 
@@ -41,8 +42,12 @@ onMounted(async () => {
     suggestions.value = data.suggestions;
   } catch {
     showToast('Failed to load learning loop data', 'error');
+  } finally {
+    isLoading.value = false;
   }
 });
+
+const hasData = computed(() => signals.value.length > 0 || suggestions.value.length > 0);
 
 const filterCategory = ref<FindingCategory | 'all'>('all');
 const sortBy = ref<'acceptRate' | 'volume' | 'lastSeen'>('acceptRate');
@@ -124,6 +129,18 @@ const overallAcceptRate = computed(() => {
       subtitle="Track developer acceptance signals to refine bot prompt coverage over time"
     />
 
+    <!-- Loading state -->
+    <div v-if="isLoading" class="card" style="padding: 48px; text-align: center;">
+      <div style="color: var(--text-secondary); font-size: 0.875rem;">Loading learning loop data...</div>
+    </div>
+
+    <!-- Empty state -->
+    <div v-else-if="!hasData" class="card" style="padding: 48px; text-align: center;">
+      <div style="color: var(--text-secondary); font-size: 0.875rem; margin-bottom: 8px;">No PR annotation data available yet.</div>
+      <div style="color: var(--text-secondary); font-size: 0.82rem;">Learning loop signals will appear here once PR reviews generate finding patterns. Configure a PR review trigger to get started.</div>
+    </div>
+
+    <template v-else>
     <!-- Summary Cards -->
     <div class="stats-row">
       <div class="stat-card">
@@ -293,6 +310,7 @@ const overallAcceptRate = computed(() => {
         </div>
       </div>
     </section>
+    </template>
   </div>
 </template>
 

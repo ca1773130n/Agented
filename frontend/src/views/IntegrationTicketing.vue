@@ -22,6 +22,17 @@ const error = ref('');
 const integrations = ref<TicketingIntegration[]>([]);
 const editingId = ref<string | null>(null);
 const isSaving = ref(false);
+const isCreating = ref(false);
+const showCreateForm = ref(false);
+const newIntegration = ref<Omit<TicketingIntegration, 'id'>>({
+  name: '',
+  type: 'jira',
+  enabled: false,
+  host: '',
+  apiKey: '',
+  project: '',
+  severityThreshold: 'high',
+});
 
 function rawToTicketing(int: Integration): TicketingIntegration {
   const config = int.config || {};
@@ -76,6 +87,39 @@ async function fetchIntegrations() {
 
 onMounted(fetchIntegrations);
 
+function resetCreateForm() {
+  newIntegration.value = {
+    name: '',
+    type: 'jira',
+    enabled: false,
+    host: '',
+    apiKey: '',
+    project: '',
+    severityThreshold: 'high',
+  };
+}
+
+async function createIntegration() {
+  if (!newIntegration.value.name) {
+    showToast('Name is required', 'error');
+    return;
+  }
+  isCreating.value = true;
+  try {
+    const payload = ticketingToRaw({ ...newIntegration.value, id: '' });
+    payload.type = newIntegration.value.type === 'linear' ? 'linear' : 'jira';
+    const created = await integrationApi.create(payload);
+    integrations.value.push(rawToTicketing(created));
+    showCreateForm.value = false;
+    resetCreateForm();
+    showToast('Ticketing integration created', 'success');
+  } catch (err) {
+    showToast(err instanceof ApiError ? err.message : 'Failed to create integration', 'error');
+  } finally {
+    isCreating.value = false;
+  }
+}
+
 function editIntegration(id: string) {
   editingId.value = editingId.value === id ? null : id;
 }
@@ -117,7 +161,64 @@ function severityColor(s: string): string {
     <PageHeader
       title="Ticketing Integrations"
       subtitle="Configure Jira and Linear to auto-create tickets from bot findings."
-    />
+    >
+      <template #actions>
+        <button class="btn btn-primary" @click="showCreateForm = !showCreateForm">
+          {{ showCreateForm ? 'Cancel' : '+ Add Integration' }}
+        </button>
+      </template>
+    </PageHeader>
+
+    <!-- Create form -->
+    <div v-if="showCreateForm" class="card create-form">
+      <div class="create-form-header">New Ticketing Integration</div>
+      <div class="int-form">
+        <div class="form-row">
+          <div class="field-group">
+            <label class="field-label">Name</label>
+            <input v-model="newIntegration.name" type="text" class="text-input" placeholder="e.g. Jira Security" />
+          </div>
+          <div class="field-group">
+            <label class="field-label">Type</label>
+            <select v-model="newIntegration.type" class="select-input">
+              <option value="jira">Jira</option>
+              <option value="linear">Linear</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="field-group">
+            <label class="field-label">Host URL</label>
+            <input v-model="newIntegration.host" type="text" class="text-input" placeholder="https://myorg.atlassian.net" />
+          </div>
+          <div class="field-group">
+            <label class="field-label">API Key</label>
+            <input v-model="newIntegration.apiKey" type="password" class="text-input" placeholder="Enter API key..." />
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="field-group">
+            <label class="field-label">Project Key</label>
+            <input v-model="newIntegration.project" type="text" class="text-input" placeholder="e.g. SEC" />
+          </div>
+          <div class="field-group">
+            <label class="field-label">Auto-create threshold</label>
+            <select v-model="newIntegration.severityThreshold" class="select-input">
+              <option value="critical">Critical only</option>
+              <option value="high">High and above</option>
+              <option value="medium">Medium and above</option>
+              <option value="low">All findings</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-actions">
+          <button class="btn btn-secondary" @click="showCreateForm = false; resetCreateForm()">Cancel</button>
+          <button class="btn btn-primary" :disabled="isCreating" @click="createIntegration">
+            {{ isCreating ? 'Creating...' : 'Create Integration' }}
+          </button>
+        </div>
+      </div>
+    </div>
 
     <!-- Loading state -->
     <div v-if="loading" class="card" style="padding: 48px; text-align: center;">
@@ -132,7 +233,8 @@ function severityColor(s: string): string {
 
     <!-- Empty state -->
     <div v-else-if="integrations.length === 0" class="card" style="padding: 48px; text-align: center;">
-      <div style="color: var(--text-tertiary); font-size: 0.875rem;">No ticketing integrations configured yet.</div>
+      <div style="color: var(--text-tertiary); font-size: 0.875rem; margin-bottom: 12px;">No ticketing integrations configured yet.</div>
+      <button class="btn btn-primary" @click="showCreateForm = true">+ Add Integration</button>
     </div>
 
     <template v-else>
@@ -269,6 +371,18 @@ function severityColor(s: string): string {
   padding: 4px 10px;
   background: var(--bg-tertiary);
   border-radius: 4px;
+}
+
+.create-form-header {
+  padding: 16px 24px;
+  border-bottom: 1px solid var(--border-default);
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.create-form .int-form {
+  padding: 20px 24px;
 }
 
 .int-header {
