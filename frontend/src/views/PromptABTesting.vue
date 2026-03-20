@@ -218,9 +218,25 @@ function scoreBar(score: number) {
     </PageHeader>
 
     <div v-if="isLoading" class="loading-msg">Loading triggers and analytics...</div>
-    <div v-else-if="loadError" class="error-msg">{{ loadError }}</div>
-    <div v-else-if="tests.length === 0" class="empty-msg">
-      <p>No A/B tests found. Create variant triggers (name them with [Variant B] suffix) to start testing.</p>
+
+    <div v-else-if="loadError" class="error-card">
+      <p class="error-text">{{ loadError }}</p>
+      <button class="btn btn-ghost" @click="loadTriggers">Retry</button>
+    </div>
+
+    <div v-else-if="tests.length === 0" class="empty-card">
+      <div class="empty-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="40" height="40">
+          <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2" />
+          <rect x="9" y="3" width="6" height="4" rx="1" />
+          <path d="M9 14l2 2 4-4" />
+        </svg>
+      </div>
+      <h3 class="empty-title">No A/B Tests Yet</h3>
+      <p class="empty-desc">
+        Create a variant trigger to start comparing prompt performance.
+        Name your variant with a <code>[Variant B]</code> suffix and it will be automatically paired with the original.
+      </p>
       <button class="btn btn-primary" @click="showCreateDialog = true">+ Create Variant</button>
     </div>
 
@@ -333,11 +349,24 @@ function scoreBar(score: number) {
 .ab-testing { display: flex; flex-direction: column; gap: 24px; animation: fadeIn 0.4s ease; }
 @keyframes fadeIn { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
 
-.loading-msg, .error-msg, .empty-msg { font-size: 0.875rem; padding: 24px; text-align: center; }
-.loading-msg { color: var(--text-tertiary); }
-.error-msg { color: #ef4444; }
-.empty-msg { color: var(--text-muted); display: flex; flex-direction: column; align-items: center; gap: 16px; }
-.empty-msg p { margin: 0; }
+.loading-msg { font-size: 0.875rem; padding: 24px; text-align: center; color: var(--text-tertiary); }
+
+.error-card {
+  display: flex; flex-direction: column; align-items: center; gap: 12px;
+  padding: 32px 24px; text-align: center;
+  background: var(--bg-secondary); border: 1px solid var(--border-default); border-radius: 12px;
+}
+.error-text { margin: 0; color: #ef4444; font-size: 0.875rem; }
+
+.empty-card {
+  display: flex; flex-direction: column; align-items: center; gap: 16px;
+  padding: 48px 24px; text-align: center;
+  background: var(--bg-secondary); border: 1px dashed var(--border-default); border-radius: 12px;
+}
+.empty-icon { color: var(--text-muted); opacity: 0.5; }
+.empty-title { margin: 0; font-size: 1rem; font-weight: 600; color: var(--text-primary); }
+.empty-desc { margin: 0; font-size: 0.82rem; color: var(--text-muted); max-width: 420px; line-height: 1.5; }
+.empty-desc code { background: var(--bg-tertiary); padding: 2px 6px; border-radius: 4px; font-size: 0.78rem; }
 
 .create-dialog { margin-bottom: 8px; }
 .create-header { padding: 14px 20px; border-bottom: 1px solid var(--border-default); font-size: 0.88rem; font-weight: 600; color: var(--text-primary); }

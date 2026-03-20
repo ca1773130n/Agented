@@ -58,23 +58,44 @@ const accountsForBackend = computed(() => {
     accountHealth.value.filter(a => a.backend_type === backendType);
 });
 
-// Load all data on mount
+// Load all data on mount — each call is fault-tolerant so one failure doesn't block everything
 async function loadData() {
   isLoading.value = true;
   loadError.value = null;
+  const errors: string[] = [];
   try {
-    const [triggersRes, backendsRes, healthRes] = await Promise.all([
+    const [triggersRes, backendsRes, healthRes] = await Promise.allSettled([
       triggerApi.list(),
       backendApi.list(),
       orchestrationApi.getHealth(),
     ]);
-    triggers.value = triggersRes.triggers ?? [];
-    backends.value = backendsRes.backends ?? [];
-    accountHealth.value = healthRes.accounts ?? [];
 
-    // Auto-select first trigger and load its chain
-    if (triggers.value.length > 0) {
-      await selectTrigger(triggers.value[0].id);
+    if (triggersRes.status === 'fulfilled') {
+      triggers.value = triggersRes.value.triggers ?? [];
+    } else {
+      errors.push('triggers');
+    }
+    if (backendsRes.status === 'fulfilled') {
+      backends.value = backendsRes.value.backends ?? [];
+    } else {
+      errors.push('backends');
+    }
+    if (healthRes.status === 'fulfilled') {
+      accountHealth.value = healthRes.value.accounts ?? [];
+    } else {
+      errors.push('account health');
+    }
+
+    if (errors.length === 3) {
+      loadError.value = 'Failed to load data. The backend may be unreachable.';
+    } else {
+      if (errors.length > 0) {
+        loadError.value = `Partial load — could not fetch: ${errors.join(', ')}`;
+      }
+      // Auto-select first trigger and load its chain
+      if (triggers.value.length > 0) {
+        await selectTrigger(triggers.value[0].id);
+      }
     }
   } catch (err: unknown) {
     loadError.value = err instanceof Error ? err.message : 'Failed to load data';
@@ -195,8 +216,8 @@ onMounted(loadData);
       <div class="loading-content">Loading fallback chain data...</div>
     </div>
 
-    <!-- Error state -->
-    <div v-else-if="loadError" class="card error-card">
+    <!-- Fatal error state (all calls failed) -->
+    <div v-else-if="loadError && triggers.length === 0" class="card error-card">
       <div class="error-content">
         <span>{{ loadError }}</span>
         <button class="btn btn-ghost" @click="loadData">Retry</button>
@@ -209,6 +230,11 @@ onMounted(loadData);
     </div>
 
     <div v-else class="layout">
+      <!-- Partial-load warning banner -->
+      <div v-if="loadError" class="partial-warning" style="grid-column: 1 / -1;">
+        <span>{{ loadError }}</span>
+        <button class="btn btn-ghost" @click="loadData" style="padding: 4px 10px; font-size: 0.75rem;">Retry</button>
+      </div>
       <!-- Trigger list sidebar -->
       <aside class="sidebar card">
         <div class="sidebar-header">
@@ -337,6 +363,7 @@ onMounted(loadData);
 .loading-card, .error-card, .empty-card { padding: 32px 24px; }
 .loading-content { text-align: center; color: var(--text-tertiary); font-size: 0.875rem; }
 .error-content { display: flex; align-items: center; justify-content: center; gap: 12px; color: #ef4444; font-size: 0.875rem; }
+.partial-warning { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 16px; background: rgba(251,191,36,0.08); border: 1px solid rgba(251,191,36,0.3); border-radius: 8px; color: #fbbf24; font-size: 0.8rem; }
 .empty-content { text-align: center; color: var(--text-tertiary); font-size: 0.875rem; }
 
 .sidebar-header {

@@ -5,6 +5,7 @@ import { useToast } from '../composables/useToast';
 
 const showToast = useToast();
 const isLoading = ref(true);
+const loadError = ref<string | null>(null);
 
 interface SlaEntry {
   bot_id: string;
@@ -26,74 +27,23 @@ const slaEntries = ref<SlaEntry[]>([]);
 const filterStatus = ref<'all' | 'healthy' | 'overdue'>('all');
 
 async function loadData() {
+  isLoading.value = true;
+  loadError.value = null;
   try {
-    const res = await fetch('/admin/bots/sla');
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000);
+    const res = await fetch('/admin/bots/sla', { signal: controller.signal });
+    clearTimeout(timeoutId);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    slaEntries.value = (await res.json()).entries ?? [];
-  } catch {
-    const now = Date.now();
-    slaEntries.value = [
-      {
-        bot_id: 'bot-security',
-        bot_name: 'Weekly Security Audit',
-        trigger_type: 'schedule:weekly',
-        expected_frequency_h: 168,
-        last_run_at: new Date(now - 86400000 * 8).toISOString(),
-        next_expected_at: new Date(now - 86400000).toISOString(),
-        overdue: true,
-        overdue_by_h: 24,
-        uptime_7d: 85.7,
-        uptime_30d: 96.7,
-        success_rate_7d: 75.0,
-        avg_duration_s: 180,
-        alert_enabled: true,
-      },
-      {
-        bot_id: 'bot-pr-review',
-        bot_name: 'PR Review Bot',
-        trigger_type: 'github:pull_request',
-        expected_frequency_h: 4,
-        last_run_at: new Date(now - 3600000 * 2).toISOString(),
-        next_expected_at: new Date(now + 3600000 * 2).toISOString(),
-        overdue: false,
-        overdue_by_h: null,
-        uptime_7d: 100,
-        uptime_30d: 99.2,
-        success_rate_7d: 96.3,
-        avg_duration_s: 47,
-        alert_enabled: true,
-      },
-      {
-        bot_id: 'bot-dep-check',
-        bot_name: 'Dependency Checker',
-        trigger_type: 'schedule:daily',
-        expected_frequency_h: 24,
-        last_run_at: new Date(now - 3600000 * 22).toISOString(),
-        next_expected_at: new Date(now + 3600000 * 2).toISOString(),
-        overdue: false,
-        overdue_by_h: null,
-        uptime_7d: 100,
-        uptime_30d: 98.3,
-        success_rate_7d: 100,
-        avg_duration_s: 32,
-        alert_enabled: false,
-      },
-      {
-        bot_id: 'bot-changelog',
-        bot_name: 'Changelog Generator',
-        trigger_type: 'github:push',
-        expected_frequency_h: 8,
-        last_run_at: new Date(now - 3600000 * 36).toISOString(),
-        next_expected_at: new Date(now - 3600000 * 28).toISOString(),
-        overdue: true,
-        overdue_by_h: 28,
-        uptime_7d: 71.4,
-        uptime_30d: 90.0,
-        success_rate_7d: 66.7,
-        avg_duration_s: 58,
-        alert_enabled: false,
-      },
-    ];
+    const data = await res.json();
+    slaEntries.value = data.entries ?? [];
+  } catch (err) {
+    if (err instanceof DOMException && err.name === 'AbortError') {
+      loadError.value = 'Request timed out. The backend may be unreachable.';
+    } else {
+      loadError.value = err instanceof Error ? err.message : 'Failed to load SLA data';
+    }
+    slaEntries.value = [];
   } finally {
     isLoading.value = false;
   }
@@ -197,6 +147,16 @@ onMounted(loadData);
     </div>
 
     <LoadingState v-if="isLoading" message="Loading SLA data..." />
+
+    <div v-else-if="loadError" class="error-card">
+      <p class="error-msg">{{ loadError }}</p>
+      <button class="retry-btn" @click="loadData">Retry</button>
+    </div>
+
+    <div v-else-if="slaEntries.length === 0" class="empty-card">
+      <p>No SLA entries configured. Bot SLA tracking will appear here once bots have scheduled runs.</p>
+    </div>
+
     <div v-else class="entries-table">
       <div class="table-header">
         <span>Bot</span>
@@ -351,4 +311,10 @@ onMounted(loadData);
 }
 .alert-toggle.enabled { border-color: #34d399; color: #34d399; background: rgba(52,211,153,0.1); }
 .empty-msg { text-align: center; color: var(--color-text-secondary, #a0a0a0); padding: 2rem; margin: 0; }
+.error-card { text-align: center; padding: 3rem 2rem; background: var(--color-surface, #1a1a1a); border: 1px solid var(--color-border, #2a2a2a); border-radius: 8px; }
+.error-card .error-msg { color: #f87171; margin: 0 0 1rem; font-size: 0.875rem; }
+.retry-btn { padding: 0.5rem 1.25rem; border-radius: 6px; border: 1px solid var(--color-border, #2a2a2a); background: var(--color-surface, #1a1a1a); color: var(--color-text-secondary, #a0a0a0); font-size: 0.8rem; cursor: pointer; }
+.retry-btn:hover { border-color: var(--color-accent, #6366f1); color: var(--color-accent, #6366f1); }
+.empty-card { text-align: center; padding: 3rem 2rem; background: var(--color-surface, #1a1a1a); border: 1px dashed var(--color-border, #2a2a2a); border-radius: 8px; color: var(--color-text-secondary, #a0a0a0); font-size: 0.875rem; }
+.empty-card p { margin: 0; }
 </style>

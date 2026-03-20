@@ -14,6 +14,10 @@ const router = useRouter();
 
 const showToast = useToast();
 
+// Page-level loading / error state
+const pageLoading = ref(true);
+const pageError = ref<string | null>(null);
+
 // Search state
 const searchQuery = ref('');
 const searchResults = ref<MarketplaceSearchResult[]>([]);
@@ -167,8 +171,16 @@ async function installPlugin(plugin: MarketplaceSearchResult) {
 }
 
 onMounted(async () => {
-  await loadMarketplaces();
-  await performSearch('');
+  pageLoading.value = true;
+  pageError.value = null;
+  try {
+    await loadMarketplaces();
+    await performSearch('');
+  } catch (e) {
+    pageError.value = e instanceof Error ? e.message : 'Failed to load marketplace data';
+  } finally {
+    pageLoading.value = false;
+  }
 });
 </script>
 
@@ -185,6 +197,18 @@ onMounted(async () => {
       </template>
     </PageHeader>
 
+    <!-- Page-level loading state -->
+    <LoadingState v-if="pageLoading" message="Loading marketplaces..." />
+
+    <!-- Page-level error state -->
+    <div v-else-if="pageError" class="page-error">
+      <p>{{ pageError }}</p>
+      <button class="btn btn-primary" @click="async () => { pageLoading = true; pageError = null; try { await loadMarketplaces(); await performSearch(''); } catch (e) { pageError = e instanceof Error ? e.message : 'Failed to load'; } finally { pageLoading = false; } }">
+        Retry
+      </button>
+    </div>
+
+    <template v-else>
     <!-- Search Bar -->
     <div class="search-bar">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -305,6 +329,8 @@ onMounted(async () => {
       </div>
     </div>
 
+    </template>
+
     <!-- Add Marketplace Modal -->
     <Teleport to="body">
       <div v-if="showAddModal" ref="addModalRef" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modal-title-add-marketplace" tabindex="-1" @click.self="showAddModal = false" @keydown.escape="showAddModal = false">
@@ -396,6 +422,25 @@ onMounted(async () => {
 
 <style scoped>
 .explore-page {
+}
+
+.page-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 48px 24px;
+  text-align: center;
+  color: var(--text-secondary);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-default);
+  border-radius: 12px;
+}
+
+.page-error p {
+  margin: 0;
+  color: #ef4444;
+  font-size: 14px;
 }
 
 .btn-back {

@@ -2,6 +2,8 @@
 import { ref, computed, onMounted } from 'vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
+import { triggerApi } from '../services/api';
+import type { Trigger } from '../services/api';
 import { scopeFiltersApi } from '../services/api/scope-filters';
 import type { ScopeFilter, ScopeFilterPattern } from '../services/api/scope-filters';
 
@@ -19,6 +21,7 @@ interface TestResult {
 
 const filters = ref<ScopeFilter[]>([]);
 const loading = ref(false);
+const loadError = ref<string | null>(null);
 
 const selectedFilterId = ref<string | null>(null);
 const newPattern = ref<Partial<ScopeFilterPattern>>({ type: 'repo', pattern: '', description: '' });
@@ -27,15 +30,23 @@ const testType = ref<PatternType>('repo');
 const testResults = ref<TestResult[]>([]);
 const addPatternOpen = ref(false);
 
+// Create filter dialog state
+const showCreateDialog = ref(false);
+const triggers = ref<Trigger[]>([]);
+const createTriggerId = ref('');
+const createMode = ref<FilterMode>('denylist');
+const isCreating = ref(false);
+
 const selectedFilter = computed(() => filters.value.find((f) => f.id === selectedFilterId.value));
 
 async function loadFilters() {
   loading.value = true;
+  loadError.value = null;
   try {
     const resp = await scopeFiltersApi.list();
     filters.value = resp.filters;
-  } catch {
-    showToast('Failed to load scope filters', 'error');
+  } catch (err) {
+    loadError.value = err instanceof Error ? err.message : 'Failed to load scope filters';
   } finally {
     loading.value = false;
   }
@@ -50,6 +61,41 @@ async function loadFilterDetail(filterId: string) {
     }
   } catch {
     showToast('Failed to load filter details', 'error');
+  }
+}
+
+async function openCreateDialog() {
+  showCreateDialog.value = true;
+  try {
+    const res = await triggerApi.list();
+    triggers.value = res.triggers ?? [];
+  } catch {
+    showToast('Failed to load triggers', 'error');
+  }
+}
+
+async function createFilter() {
+  if (!createTriggerId.value) {
+    showToast('Select a trigger first', 'error');
+    return;
+  }
+  isCreating.value = true;
+  try {
+    await scopeFiltersApi.upsert({
+      trigger_id: createTriggerId.value,
+      mode: createMode.value,
+      enabled: true,
+    });
+    showToast('Scope filter created', 'success');
+    showCreateDialog.value = false;
+    createTriggerId.value = '';
+    createMode.value = 'denylist';
+    await loadFilters();
+    await Promise.all(filters.value.map((f) => loadFilterDetail(f.id)));
+  } catch {
+    showToast('Failed to create scope filter', 'error');
+  } finally {
+    isCreating.value = false;
   }
 }
 
@@ -184,7 +230,11 @@ const patternCount = computed(() =>
     <PageHeader
       title="Repository Scope Filters"
       subtitle="Define per-bot inclusion/exclusion patterns for repos, branches, and PR authors"
-    />
+    >
+      <template #actions>
+        <button class="btn-primary" @click="openCreateDialog">+ Create Filter</button>
+      </template>
+    </PageHeader>
 
     <!-- Summary -->
     <div class="stats-row">
@@ -210,7 +260,39 @@ const patternCount = computed(() =>
       </div>
     </div>
 
-    <div v-if="loading" class="loading-state">Loading scope filters…</div>
+    <div v-if="loading" class="loading-state">Loading scope filters...</div>
+
+    <div v-else-if="loadError" class="error-state">
+      <p>{{ loadError }}</p>
+      <button class="btn-ghost" @click="loadFilters">Retry</button>
+    </div>
+
+    <!-- Create Filter Dialog -->
+    <div v-if="showCreateDialog" class="create-dialog">
+      <div class="create-dialog-header">Create Scope Filter</div>
+      <div class="create-dialog-body">
+        <div class="create-field">
+          <label class="create-label">Trigger</label>
+          <select v-model="createTriggerId" class="filter-select">
+            <option value="">Select a trigger...</option>
+            <option v-for="t in triggers" :key="t.id" :value="t.id">{{ t.name }}</option>
+          </select>
+        </div>
+        <div class="create-field">
+          <label class="create-label">Filter Mode</label>
+          <select v-model="createMode" class="filter-select">
+            <option value="denylist">Denylist (block matching)</option>
+            <option value="allowlist">Allowlist (only allow matching)</option>
+          </select>
+        </div>
+        <div class="create-actions">
+          <button class="btn-ghost" @click="showCreateDialog = false">Cancel</button>
+          <button class="btn-primary" :disabled="isCreating || !createTriggerId" @click="createFilter">
+            {{ isCreating ? 'Creating...' : 'Create Filter' }}
+          </button>
+        </div>
+      </div>
+    </div>
 
     <div v-else class="main-layout">
       <!-- Filter list -->
@@ -242,7 +324,8 @@ const patternCount = computed(() =>
         </div>
 
         <div v-if="filters.length === 0" class="empty-state">
-          No scope filters configured yet.
+          <p>No scope filters configured yet.</p>
+          <button class="btn-primary" style="margin-top: 12px;" @click="openCreateDialog">+ Create Filter</button>
         </div>
       </div>
 
@@ -385,6 +468,59 @@ const patternCount = computed(() =>
   padding: 48px;
   color: var(--text-secondary);
   font-size: 13px;
+}
+
+.error-state {
+  text-align: center;
+  padding: 48px 24px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.error-state p {
+  margin: 0 0 12px;
+  color: #ef4444;
+  font-size: 13px;
+}
+
+.create-dialog {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.create-dialog-header {
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--border);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.create-dialog-body {
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.create-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.create-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.create-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
 }
 
 .main-layout {
