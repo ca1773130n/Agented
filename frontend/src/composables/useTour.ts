@@ -4,159 +4,278 @@ import { driver, type DriveStep, type Config } from 'driver.js'
 import 'driver.js/dist/driver.css'
 
 const STORAGE_KEY = 'agented-tour-state'
-const TOTAL_DISPLAY_STEPS = 8 // 1 welcome + 7 tour steps (backends counted as 1)
 
-interface PersistedTourState {
-  tourComplete?: boolean
-}
-
-interface TourStepGroup {
-  route: string
-  steps: DriveStep[]
-}
-
-function loadState(): PersistedTourState | null {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    return raw ? JSON.parse(raw) : null
-  } catch {
-    return null
-  }
-}
-
-function markComplete() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify({ tourComplete: true }))
-}
+// ---------------------------------------------------------------------------
+// Auto-discovery: scan a container for .form-group elements and generate
+// driver.js steps for each label+input pair automatically.
+// ---------------------------------------------------------------------------
 
 /**
- * Wait for an element to appear in the DOM (handles lazy-loaded pages).
- * Returns true if found, false if timeout.
+ * Scan a container element for .form-group children and return driver.js
+ * steps that highlight each field in order.
  */
+function discoverFormSteps(containerSelector: string): DriveStep[] {
+  const container = document.querySelector(containerSelector)
+  if (!container) return []
+
+  const groups = container.querySelectorAll('.form-group')
+  const steps: DriveStep[] = []
+
+  groups.forEach((group) => {
+    const label = group.querySelector('label')
+    const input = group.querySelector('input, select, textarea')
+    if (!input) return
+
+    const labelText = label?.textContent?.trim() || 'Field'
+    const helpEl = group.querySelector('small, .help-text, .form-help, p')
+    const helpText = helpEl?.textContent?.trim() || `Enter the ${labelText.toLowerCase()}`
+
+    // Use the input's id for precise targeting, fall back to the form-group itself
+    steps.push({
+      element: input.id ? `#${input.id}` : (input as HTMLElement),
+      popover: {
+        title: labelText,
+        description: helpText,
+        side: 'bottom',
+        align: 'start',
+      },
+    })
+  })
+
+  // Also discover the submit button
+  const submitBtn = container.querySelector('.btn.btn-primary, button[type="submit"]')
+  if (submitBtn) {
+    const btnText = submitBtn.textContent?.trim() || 'Submit'
+    steps.push({
+      element: submitBtn as HTMLElement,
+      popover: {
+        title: btnText,
+        description: `Click to ${btnText.toLowerCase()}`,
+        side: 'top',
+        align: 'end',
+      },
+    })
+  }
+
+  return steps
+}
+
+// ---------------------------------------------------------------------------
+// Wait for element utility
+// ---------------------------------------------------------------------------
+
 function waitForElement(selector: string, timeoutMs = 10000): Promise<boolean> {
   return new Promise((resolve) => {
-    const el = document.querySelector(selector)
-    if (el) { resolve(true); return }
-
-    let resolved = false
+    if (document.querySelector(selector)) { resolve(true); return }
+    let done = false
     const observer = new MutationObserver(() => {
       if (document.querySelector(selector)) {
-        resolved = true
+        done = true
         observer.disconnect()
         resolve(true)
       }
     })
     observer.observe(document.body, { childList: true, subtree: true })
-
-    setTimeout(() => {
-      if (!resolved) {
-        observer.disconnect()
-        resolve(false)
-      }
-    }, timeoutMs)
+    setTimeout(() => { if (!done) { observer.disconnect(); resolve(false) } }, timeoutMs)
   })
 }
 
-export function useTour() {
-  const router = useRouter()
-  const saved = loadState()
-  const active = ref(false)
-  const tourComplete = ref(saved?.tourComplete ?? false)
+// ---------------------------------------------------------------------------
+// Driver.js dark theme + glow CSS
+// ---------------------------------------------------------------------------
 
-  // Common driver.js config for dark theme
-  const driverConfig: Config = {
-    animate: true,
-    overlayColor: '#000',
-    overlayOpacity: 0.75,
-    stagePadding: 12,
-    stageRadius: 10,
-    allowClose: false,
-    smoothScroll: true,
-    showProgress: true,
-    progressText: 'Step {{current}} of {{total}}',
-    nextBtnText: 'Next',
-    prevBtnText: 'Back',
-    doneBtnText: 'Done',
-    popoverClass: 'agented-tour-popover',
-  }
+function injectTourStyles() {
+  if (typeof document === 'undefined' || document.getElementById('agented-tour-css')) return
+  const style = document.createElement('style')
+  style.id = 'agented-tour-css'
+  style.textContent = `
+    /* Dark theme popover */
+    .agented-tour-popover {
+      background: #1a1a2e !important;
+      border: 1px solid rgba(129,140,248,0.3) !important;
+      border-radius: 12px !important;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.5), 0 0 20px rgba(99,102,241,0.15) !important;
+      color: #e4e4e7 !important;
+      font-family: 'Geist','Inter',-apple-system,system-ui,sans-serif !important;
+      max-width: 360px !important;
+    }
+    .agented-tour-popover .driver-popover-title {
+      color: #f4f4f5 !important;
+      font-size: 15px !important;
+      font-weight: 600 !important;
+      letter-spacing: -0.3px !important;
+    }
+    .agented-tour-popover .driver-popover-description {
+      color: #a1a1aa !important;
+      font-size: 13px !important;
+      line-height: 1.55 !important;
+    }
+    .agented-tour-popover .driver-popover-progress-text {
+      color: #71717a !important;
+      font-size: 11px !important;
+    }
+    .agented-tour-popover .driver-popover-prev-btn {
+      background: transparent !important;
+      border: 1px solid rgba(255,255,255,0.1) !important;
+      color: #a1a1aa !important;
+      border-radius: 6px !important;
+      font-size: 13px !important;
+      padding: 6px 14px !important;
+    }
+    .agented-tour-popover .driver-popover-prev-btn:hover {
+      border-color: rgba(255,255,255,0.2) !important;
+      color: #e4e4e7 !important;
+    }
+    .agented-tour-popover .driver-popover-next-btn,
+    .agented-tour-popover .driver-popover-done-btn {
+      background: #6366f1 !important;
+      color: white !important;
+      border: none !important;
+      border-radius: 6px !important;
+      font-size: 13px !important;
+      font-weight: 500 !important;
+      padding: 6px 16px !important;
+    }
+    .agented-tour-popover .driver-popover-next-btn:hover,
+    .agented-tour-popover .driver-popover-done-btn:hover {
+      background: #818cf8 !important;
+    }
+    .agented-tour-popover .driver-popover-close-btn {
+      color: #71717a !important;
+    }
+    .agented-tour-popover .driver-popover-close-btn:hover {
+      color: #e4e4e7 !important;
+    }
+    .agented-tour-popover .driver-popover-arrow-side-left .driver-popover-arrow,
+    .agented-tour-popover .driver-popover-arrow-side-right .driver-popover-arrow,
+    .agented-tour-popover .driver-popover-arrow-side-top .driver-popover-arrow,
+    .agented-tour-popover .driver-popover-arrow-side-bottom .driver-popover-arrow {
+      background: #1a1a2e !important;
+      border-color: rgba(129,140,248,0.3) !important;
+    }
 
-  // Define step groups — each group navigates to a route, then runs driver.js steps on that page
-  const stepGroups: TourStepGroup[] = [
-    // Group 1: Settings > General — workspace + monitoring
+    /* Pulsing glow on highlighted element */
+    @keyframes agented-tour-glow {
+      0%, 100% { box-shadow: 0 0 15px 4px rgba(99,102,241,0.4); }
+      50% { box-shadow: 0 0 30px 8px rgba(99,102,241,0.6); }
+    }
+    .driver-active-element {
+      animation: agented-tour-glow 1.5s ease-in-out infinite !important;
+      outline: 2px solid #818cf8 !important;
+      outline-offset: 4px !important;
+    }
+  `
+  document.head.appendChild(style)
+}
+
+// ---------------------------------------------------------------------------
+// Tour step groups — each group navigates to a route, then runs steps.
+// A group can use explicit steps OR auto-discover form fields.
+// ---------------------------------------------------------------------------
+
+interface StepGroup {
+  route: string
+  // Explicit steps to show
+  steps?: DriveStep[]
+  // OR: click a trigger element, wait for a container, then auto-discover its form fields
+  triggerClick?: string       // CSS selector of button to click to open form
+  discoverContainer?: string  // CSS selector of the form container to scan
+  discoverTitle?: string      // Title for the auto-discovered section
+  // Shared config
+  introStep?: DriveStep       // Optional intro step before form fields (e.g., highlight the section)
+}
+
+function buildStepGroups(): StepGroup[] {
+  return [
+    // Step 2: Workspace directory
     {
       route: '/settings#general',
       steps: [
         {
-          element: '[data-tour="workspace-root"]',
+          element: '[data-tour="workspace-root"] input.form-input',
           popover: {
-            title: 'Workspace Directory',
-            description: 'Set the root directory where project repos will be cloned and managed by your agent teams.',
+            title: 'Workspace Root',
+            description: 'Set the root directory where GitHub repos will be cloned for your agent teams. For example: <code>/home/user/workspace</code>',
             side: 'bottom',
-            align: 'center',
+            align: 'start',
+          },
+        },
+        {
+          element: '[data-tour="workspace-root"] .btn.btn-primary',
+          popover: {
+            title: 'Save Workspace',
+            description: 'Click Save after entering your workspace path.',
+            side: 'top',
+            align: 'end',
           },
         },
       ],
     },
-    // Group 2: Claude Code backend
+    // Step 3a: Claude Code — Add Account
     {
       route: '/backends/backend-claude',
-      steps: [
-        {
-          element: '[data-tour="add-account-btn"]',
-          popover: {
-            title: 'Claude Code — Add Account',
-            description: 'Register your Anthropic account. Click "Add Account" to enter your account name, email, and config path.',
-            side: 'left',
-            align: 'start',
-          },
+      introStep: {
+        element: '[data-tour="add-account-btn"]',
+        popover: {
+          title: 'Claude Code — Add Account',
+          description: 'Click "Add Account" to register your Anthropic account.',
+          side: 'left',
+          align: 'start',
         },
-      ],
+      },
+      triggerClick: '[data-tour="add-account-btn"]',
+      discoverContainer: '.inline-account-form',
+      discoverTitle: 'Claude Code Account',
     },
-    // Group 3: Codex backend
+    // Step 3b: Codex CLI
     {
       route: '/backends/backend-codex',
-      steps: [
-        {
-          element: '[data-tour="add-account-btn"]',
-          popover: {
-            title: 'Codex CLI — Add Account',
-            description: 'Register your OpenAI account for Codex CLI.',
-            side: 'left',
-            align: 'start',
-          },
+      introStep: {
+        element: '[data-tour="add-account-btn"]',
+        popover: {
+          title: 'Codex CLI — Add Account',
+          description: 'Click "Add Account" to register your OpenAI account.',
+          side: 'left',
+          align: 'start',
         },
-      ],
+      },
+      triggerClick: '[data-tour="add-account-btn"]',
+      discoverContainer: '.inline-account-form',
+      discoverTitle: 'Codex CLI Account',
     },
-    // Group 4: Gemini backend
+    // Step 3c: Gemini CLI
     {
       route: '/backends/backend-gemini',
-      steps: [
-        {
-          element: '[data-tour="add-account-btn"]',
-          popover: {
-            title: 'Gemini CLI — Add Account',
-            description: 'Register your Google account for Gemini CLI.',
-            side: 'left',
-            align: 'start',
-          },
+      introStep: {
+        element: '[data-tour="add-account-btn"]',
+        popover: {
+          title: 'Gemini CLI — Add Account',
+          description: 'Click "Add Account" to register your Google account.',
+          side: 'left',
+          align: 'start',
         },
-      ],
+      },
+      triggerClick: '[data-tour="add-account-btn"]',
+      discoverContainer: '.inline-account-form',
+      discoverTitle: 'Gemini CLI Account',
     },
-    // Group 5: OpenCode backend
+    // Step 3d: OpenCode
     {
       route: '/backends/backend-opencode',
-      steps: [
-        {
-          element: '[data-tour="add-account-btn"]',
-          popover: {
-            title: 'OpenCode — Add Account',
-            description: 'Register an account for OpenCode.',
-            side: 'left',
-            align: 'start',
-          },
+      introStep: {
+        element: '[data-tour="add-account-btn"]',
+        popover: {
+          title: 'OpenCode — Add Account',
+          description: 'Click "Add Account" to register an OpenCode account.',
+          side: 'left',
+          align: 'start',
         },
-      ],
+      },
+      triggerClick: '[data-tour="add-account-btn"]',
+      discoverContainer: '.inline-account-form',
+      discoverTitle: 'OpenCode Account',
     },
-    // Group 6: Token monitoring
+    // Step 4: Token monitoring
     {
       route: '/settings#general',
       steps: [
@@ -164,14 +283,14 @@ export function useTour() {
           element: '[data-tour="token-monitoring"]',
           popover: {
             title: 'Token Monitoring',
-            description: 'Turn on token monitoring to predict usage and hand off between accounts before hitting rate limits.',
+            description: 'Enable rate limit monitoring to track token usage and predict when to hand off between accounts.',
             side: 'top',
             align: 'center',
           },
         },
       ],
     },
-    // Group 7: Harness plugins
+    // Step 5: Harness plugins
     {
       route: '/settings#harness',
       steps: [
@@ -186,7 +305,7 @@ export function useTour() {
         },
       ],
     },
-    // Group 8: Products
+    // Step 6: Products
     {
       route: '/products',
       steps: [
@@ -194,7 +313,7 @@ export function useTour() {
           element: '[data-tour="create-product"]',
           popover: {
             title: 'Create Your First Product',
-            description: 'Create a product — this is what your agent teams will build. You can skip this for now.',
+            description: 'Products organize your projects. Create one to get started, or skip for now.',
             side: 'bottom',
             align: 'end',
           },
@@ -202,6 +321,37 @@ export function useTour() {
       ],
     },
   ]
+}
+
+// ---------------------------------------------------------------------------
+// Main composable
+// ---------------------------------------------------------------------------
+
+export function useTour() {
+  const router = useRouter()
+  const saved = loadState()
+  const active = ref(false)
+  const tourComplete = ref(saved?.tourComplete ?? false)
+
+  injectTourStyles()
+
+  const driverConfig: Config = {
+    animate: true,
+    overlayColor: '#000',
+    overlayOpacity: 0.75,
+    stagePadding: 10,
+    stageRadius: 8,
+    allowClose: true,
+    smoothScroll: true,
+    showProgress: true,
+    progressText: '{{current}} / {{total}}',
+    nextBtnText: 'Next →',
+    prevBtnText: '← Back',
+    doneBtnText: 'Got it',
+    popoverClass: 'agented-tour-popover',
+  }
+
+  const stepGroups = buildStepGroups()
 
   async function runGroup(index: number) {
     if (index >= stepGroups.length) {
@@ -213,32 +363,84 @@ export function useTour() {
 
     // Navigate to the route
     await router.push(group.route)
+    await new Promise(r => setTimeout(r, 200))
 
-    // Wait for the first element to appear in DOM
-    const firstSelector = typeof group.steps[0].element === 'string' ? group.steps[0].element : ''
-    if (firstSelector) {
-      const found = await waitForElement(firstSelector)
-      if (!found) {
-        // Element not found — skip this group
+    let steps: DriveStep[] = []
+
+    if (group.steps) {
+      // Explicit steps — wait for first element
+      const firstSel = typeof group.steps[0].element === 'string' ? group.steps[0].element : ''
+      if (firstSel) {
+        const found = await waitForElement(firstSel)
+        if (!found) { runGroup(index + 1); return }
+      }
+      steps = group.steps
+    } else if (group.triggerClick && group.discoverContainer) {
+      // Auto-discover: first show intro step, then click trigger, then scan form
+
+      // Wait for the trigger button
+      if (group.introStep) {
+        const triggerSel = typeof group.introStep.element === 'string' ? group.introStep.element : ''
+        if (triggerSel) {
+          const found = await waitForElement(triggerSel)
+          if (!found) { runGroup(index + 1); return }
+        }
+        // Show intro step as a single highlight
+        await new Promise(r => setTimeout(r, 200))
+
+        const introDriver = driver({
+          ...driverConfig,
+          showProgress: false,
+          steps: [group.introStep],
+          onDestroyStarted: () => {
+            introDriver.destroy()
+          },
+          onNextClick: () => {
+            introDriver.destroy()
+          },
+        })
+        introDriver.drive()
+
+        // Wait for user to click "Got it" on the intro
+        await new Promise<void>((resolve) => {
+          const check = setInterval(() => {
+            if (!introDriver.isActive()) {
+              clearInterval(check)
+              resolve()
+            }
+          }, 100)
+        })
+      }
+
+      // Click the trigger to open the form
+      const triggerEl = document.querySelector(group.triggerClick) as HTMLElement
+      if (triggerEl) {
+        triggerEl.click()
+        // Wait for the form container to appear
+        const found = await waitForElement(group.discoverContainer)
+        if (!found) { runGroup(index + 1); return }
+        await new Promise(r => setTimeout(r, 300))
+
+        // Auto-discover form fields
+        steps = discoverFormSteps(group.discoverContainer)
+        if (steps.length === 0) { runGroup(index + 1); return }
+      } else {
         runGroup(index + 1)
         return
       }
     }
 
-    // Small delay for rendering
-    await new Promise(r => setTimeout(r, 200))
+    if (steps.length === 0) { runGroup(index + 1); return }
 
-    // Create driver instance for this group
+    // Run driver.js with the steps
     const driverObj = driver({
       ...driverConfig,
-      steps: group.steps,
+      steps,
       onDestroyStarted: () => {
-        // User clicked close or done
         driverObj.destroy()
         runGroup(index + 1)
       },
       onNextClick: () => {
-        // If more steps in this group, advance. Otherwise go to next group.
         if (!driverObj.isLastStep()) {
           driverObj.moveNext()
         } else {
@@ -260,80 +462,15 @@ export function useTour() {
   function endTour() {
     active.value = false
     tourComplete.value = true
-    markComplete()
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ tourComplete: true }))
     router.push('/')
   }
 
-  // Inject custom dark-theme CSS for driver.js popovers
-  if (typeof document !== 'undefined' && !document.getElementById('agented-tour-driver-css')) {
-    const style = document.createElement('style')
-    style.id = 'agented-tour-driver-css'
-    style.textContent = `
-      .agented-tour-popover {
-        background: #1a1a2e !important;
-        border: 1px solid rgba(129, 140, 248, 0.3) !important;
-        border-radius: 12px !important;
-        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), 0 0 20px rgba(99, 102, 241, 0.15) !important;
-        color: #e4e4e7 !important;
-        font-family: 'Geist', 'Inter', -apple-system, system-ui, sans-serif !important;
-        max-width: 340px !important;
-      }
-      .agented-tour-popover .driver-popover-title {
-        color: #f4f4f5 !important;
-        font-size: 15px !important;
-        font-weight: 600 !important;
-        letter-spacing: -0.3px !important;
-      }
-      .agented-tour-popover .driver-popover-description {
-        color: #a1a1aa !important;
-        font-size: 13px !important;
-        line-height: 1.5 !important;
-      }
-      .agented-tour-popover .driver-popover-progress-text {
-        color: #71717a !important;
-        font-size: 11px !important;
-      }
-      .agented-tour-popover .driver-popover-prev-btn {
-        background: transparent !important;
-        border: 1px solid rgba(255, 255, 255, 0.1) !important;
-        color: #a1a1aa !important;
-        border-radius: 6px !important;
-        font-size: 13px !important;
-        padding: 6px 14px !important;
-      }
-      .agented-tour-popover .driver-popover-prev-btn:hover {
-        border-color: rgba(255, 255, 255, 0.2) !important;
-        color: #e4e4e7 !important;
-      }
-      .agented-tour-popover .driver-popover-next-btn,
-      .agented-tour-popover .driver-popover-done-btn {
-        background: #6366f1 !important;
-        color: white !important;
-        border: none !important;
-        border-radius: 6px !important;
-        font-size: 13px !important;
-        font-weight: 500 !important;
-        padding: 6px 16px !important;
-      }
-      .agented-tour-popover .driver-popover-next-btn:hover,
-      .agented-tour-popover .driver-popover-done-btn:hover {
-        background: #818cf8 !important;
-      }
-      .agented-tour-popover .driver-popover-close-btn {
-        color: #71717a !important;
-      }
-      .agented-tour-popover .driver-popover-close-btn:hover {
-        color: #e4e4e7 !important;
-      }
-      .agented-tour-popover .driver-popover-arrow-side-left .driver-popover-arrow,
-      .agented-tour-popover .driver-popover-arrow-side-right .driver-popover-arrow,
-      .agented-tour-popover .driver-popover-arrow-side-top .driver-popover-arrow,
-      .agented-tour-popover .driver-popover-arrow-side-bottom .driver-popover-arrow {
-        background: #1a1a2e !important;
-        border-color: rgba(129, 140, 248, 0.3) !important;
-      }
-    `
-    document.head.appendChild(style)
+  function loadState(): { tourComplete?: boolean } | null {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY)
+      return raw ? JSON.parse(raw) : null
+    } catch { return null }
   }
 
   return {
@@ -341,12 +478,12 @@ export function useTour() {
     tourComplete,
     startTour,
     endTour,
-    // Keep these for backward compat with App.vue template
+    // Backward compat stubs (TourOverlay removed but App.vue may reference)
     currentStep: ref(null),
     effectiveTarget: ref(null),
     substepLabel: ref(null),
     displayStepNumber: ref(0),
-    totalSteps: TOTAL_DISPLAY_STEPS,
+    totalSteps: 8,
     currentStepIndex: ref(0),
     currentSubstepIndex: ref(0),
     completed: ref<string[]>([]),
