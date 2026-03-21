@@ -1,134 +1,19 @@
-import { ref, computed, watch } from 'vue'
+import { ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { driver, type DriveStep, type Config } from 'driver.js'
+import 'driver.js/dist/driver.css'
 
-export interface TourSubstep {
-  id: string
-  route: string
-  target: string
-  label: string      // e.g., "Claude Code (1/4)"
-  message: string
-  skippable: boolean
-}
-
-export interface TourStep {
-  id: string
-  route: string
-  routeHash?: string
-  target: string
-  title: string
-  message: string
-  skippable: boolean
-  substeps?: TourSubstep[]
-  waitFor?: () => boolean
-  onEnter?: () => void | Promise<void>
-  onComplete?: () => void
-}
+const STORAGE_KEY = 'agented-tour-state'
+const TOTAL_DISPLAY_STEPS = 8 // 1 welcome + 7 tour steps (backends counted as 1)
 
 interface PersistedTourState {
-  active: boolean
-  currentStepIndex: number
-  currentSubstepIndex: number
-  completed: string[]
   tourComplete?: boolean
 }
 
-const STORAGE_KEY = 'agented-tour-state'
-
-const TOUR_STEPS: TourStep[] = [
-  {
-    id: 'workspace',
-    route: '/settings',
-    routeHash: '#general',
-    target: '[data-tour="workspace-root"]',
-    title: 'Workspace Directory',
-    message: 'Set the root directory where project repos will be cloned and managed',
-    skippable: false,
-  },
-  {
-    id: 'backends',
-    route: '/backends/backend-claude',
-    target: '[data-tour="add-account-btn"]',
-    title: 'AI Backend Accounts',
-    message: 'Register your Anthropic account for Claude Code',
-    skippable: true,
-    substeps: [
-      {
-        id: 'backend-claude',
-        route: '/backends/backend-claude',
-        target: '[data-tour="add-account-btn"]',
-        label: 'Claude Code (1/4)',
-        message: 'Register your Anthropic account for Claude Code',
-        skippable: true,
-      },
-      {
-        id: 'backend-codex',
-        route: '/backends/backend-codex',
-        target: '[data-tour="add-account-btn"]',
-        label: 'Codex CLI (2/4)',
-        message: 'Register your OpenAI account for Codex CLI',
-        skippable: true,
-      },
-      {
-        id: 'backend-gemini',
-        route: '/backends/backend-gemini',
-        target: '[data-tour="add-account-btn"]',
-        label: 'Gemini CLI (3/4)',
-        message: 'Register your Google account for Gemini CLI',
-        skippable: true,
-      },
-      {
-        id: 'backend-opencode',
-        route: '/backends/backend-opencode',
-        target: '[data-tour="add-account-btn"]',
-        label: 'OpenCode (4/4)',
-        message: 'Register an account for OpenCode',
-        skippable: true,
-      },
-    ],
-  },
-  {
-    id: 'monitoring',
-    route: '/settings',
-    routeHash: '#general',
-    target: '[data-tour="token-monitoring"]',
-    title: 'Token Monitoring',
-    message: 'Turn on token monitoring to predict usage and hand off between accounts before hitting rate limits',
-    skippable: false,
-  },
-  {
-    id: 'harness',
-    route: '/settings',
-    routeHash: '#harness',
-    target: '[data-tour="harness-plugins"]',
-    title: 'Harness Plugins',
-    message: 'Verifying bundled plugins are installed — HarnessSync, GRD, and Everything Claude Code',
-    skippable: false,
-  },
-  {
-    id: 'product',
-    route: '/products',
-    target: '[data-tour="create-product"]',
-    title: 'First Product',
-    message: 'Create your first product — this is what your agent teams will build',
-    skippable: true,
-  },
-  {
-    id: 'project',
-    route: '',
-    target: '[data-tour="create-project"]',
-    title: 'First Project',
-    message: 'Connect a GitHub repo as a project under your product',
-    skippable: true,
-  },
-  {
-    id: 'teams',
-    route: '',
-    target: '[data-tour="assign-teams"]',
-    title: 'Assign Teams',
-    message: 'Assign Matrix teams to your project — Command, Development, Research, Operations, or QA',
-    skippable: true,
-  },
-]
+interface TourStepGroup {
+  route: string
+  steps: DriveStep[]
+}
 
 function loadState(): PersistedTourState | null {
   try {
@@ -139,162 +24,335 @@ function loadState(): PersistedTourState | null {
   }
 }
 
-function saveState(state: PersistedTourState) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
+function markComplete() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify({ tourComplete: true }))
+}
+
+/**
+ * Wait for an element to appear in the DOM (handles lazy-loaded pages).
+ * Returns true if found, false if timeout.
+ */
+function waitForElement(selector: string, timeoutMs = 10000): Promise<boolean> {
+  return new Promise((resolve) => {
+    const el = document.querySelector(selector)
+    if (el) { resolve(true); return }
+
+    let resolved = false
+    const observer = new MutationObserver(() => {
+      if (document.querySelector(selector)) {
+        resolved = true
+        observer.disconnect()
+        resolve(true)
+      }
+    })
+    observer.observe(document.body, { childList: true, subtree: true })
+
+    setTimeout(() => {
+      if (!resolved) {
+        observer.disconnect()
+        resolve(false)
+      }
+    }, timeoutMs)
+  })
 }
 
 export function useTour() {
   const router = useRouter()
-
   const saved = loadState()
-  const active = ref(saved?.active ?? false)
-  const currentStepIndex = ref(saved?.currentStepIndex ?? 0)
-  const currentSubstepIndex = ref(saved?.currentSubstepIndex ?? 0)
-  const completed = ref<string[]>(saved?.completed ?? [])
+  const active = ref(false)
   const tourComplete = ref(saved?.tourComplete ?? false)
 
-  const currentStep = computed<TourStep | null>(() => {
-    if (!active.value) return null
-    return TOUR_STEPS[currentStepIndex.value] ?? null
-  })
-
-  // The effective step/substep for display and targeting
-  const effectiveTarget = computed(() => {
-    const step = currentStep.value
-    if (!step) return null
-    if (step.substeps && step.substeps.length > 0) {
-      return step.substeps[currentSubstepIndex.value] ?? step.substeps[0]
-    }
-    return step
-  })
-
-  const effectiveRoute = computed(() => {
-    const target = effectiveTarget.value
-    if (!target) return ''
-    if ('routeHash' in target && target.routeHash) return target.route + target.routeHash
-    return target.route
-  })
-
-  const substepLabel = computed(() => {
-    const step = currentStep.value
-    if (!step?.substeps) return null
-    const sub = step.substeps[currentSubstepIndex.value]
-    return sub?.label ?? null
-  })
-
-  const totalSteps = TOUR_STEPS.length
-  const displayStepNumber = computed(() => currentStepIndex.value + 2)
-  const displayTotalSteps = totalSteps + 1
-
-  function persist() {
-    saveState({
-      active: active.value,
-      currentStepIndex: currentStepIndex.value,
-      currentSubstepIndex: currentSubstepIndex.value,
-      completed: completed.value,
-      tourComplete: tourComplete.value,
-    })
+  // Common driver.js config for dark theme
+  const driverConfig: Config = {
+    animate: true,
+    overlayColor: '#000',
+    overlayOpacity: 0.75,
+    stagePadding: 12,
+    stageRadius: 10,
+    allowClose: false,
+    smoothScroll: true,
+    showProgress: true,
+    progressText: 'Step {{current}} of {{total}}',
+    nextBtnText: 'Next',
+    prevBtnText: 'Back',
+    doneBtnText: 'Done',
+    popoverClass: 'agented-tour-popover',
   }
 
-  watch([active, currentStepIndex, currentSubstepIndex, completed], persist, { deep: true })
+  // Define step groups — each group navigates to a route, then runs driver.js steps on that page
+  const stepGroups: TourStepGroup[] = [
+    // Group 1: Settings > General — workspace + monitoring
+    {
+      route: '/settings#general',
+      steps: [
+        {
+          element: '[data-tour="workspace-root"]',
+          popover: {
+            title: 'Workspace Directory',
+            description: 'Set the root directory where project repos will be cloned and managed by your agent teams.',
+            side: 'bottom',
+            align: 'center',
+          },
+        },
+      ],
+    },
+    // Group 2: Claude Code backend
+    {
+      route: '/backends/backend-claude',
+      steps: [
+        {
+          element: '[data-tour="add-account-btn"]',
+          popover: {
+            title: 'Claude Code — Add Account',
+            description: 'Register your Anthropic account. Click "Add Account" to enter your account name, email, and config path.',
+            side: 'left',
+            align: 'start',
+          },
+        },
+      ],
+    },
+    // Group 3: Codex backend
+    {
+      route: '/backends/backend-codex',
+      steps: [
+        {
+          element: '[data-tour="add-account-btn"]',
+          popover: {
+            title: 'Codex CLI — Add Account',
+            description: 'Register your OpenAI account for Codex CLI.',
+            side: 'left',
+            align: 'start',
+          },
+        },
+      ],
+    },
+    // Group 4: Gemini backend
+    {
+      route: '/backends/backend-gemini',
+      steps: [
+        {
+          element: '[data-tour="add-account-btn"]',
+          popover: {
+            title: 'Gemini CLI — Add Account',
+            description: 'Register your Google account for Gemini CLI.',
+            side: 'left',
+            align: 'start',
+          },
+        },
+      ],
+    },
+    // Group 5: OpenCode backend
+    {
+      route: '/backends/backend-opencode',
+      steps: [
+        {
+          element: '[data-tour="add-account-btn"]',
+          popover: {
+            title: 'OpenCode — Add Account',
+            description: 'Register an account for OpenCode.',
+            side: 'left',
+            align: 'start',
+          },
+        },
+      ],
+    },
+    // Group 6: Token monitoring
+    {
+      route: '/settings#general',
+      steps: [
+        {
+          element: '[data-tour="token-monitoring"]',
+          popover: {
+            title: 'Token Monitoring',
+            description: 'Turn on token monitoring to predict usage and hand off between accounts before hitting rate limits.',
+            side: 'top',
+            align: 'center',
+          },
+        },
+      ],
+    },
+    // Group 7: Harness plugins
+    {
+      route: '/settings#harness',
+      steps: [
+        {
+          element: '[data-tour="harness-plugins"]',
+          popover: {
+            title: 'Harness Plugins',
+            description: 'Verify bundled plugins are installed — HarnessSync, GRD, and Everything Claude Code.',
+            side: 'bottom',
+            align: 'center',
+          },
+        },
+      ],
+    },
+    // Group 8: Products
+    {
+      route: '/products',
+      steps: [
+        {
+          element: '[data-tour="create-product"]',
+          popover: {
+            title: 'Create Your First Product',
+            description: 'Create a product — this is what your agent teams will build. You can skip this for now.',
+            side: 'bottom',
+            align: 'end',
+          },
+        },
+      ],
+    },
+  ]
 
-  function startTour() {
-    if (tourComplete.value) return
-    active.value = true
-    currentStepIndex.value = 0
-    currentSubstepIndex.value = 0
-    persist()
-    navigateToCurrent()
-  }
-
-  function nextStep() {
-    const step = TOUR_STEPS[currentStepIndex.value]
-    if (!step) return
-
-    // If step has substeps, try advancing substep first
-    if (step.substeps && currentSubstepIndex.value < step.substeps.length - 1) {
-      currentSubstepIndex.value++
-      persist()
-      navigateToCurrent()
+  async function runGroup(index: number) {
+    if (index >= stepGroups.length) {
+      endTour()
       return
     }
 
-    // Mark step complete and advance to next major step
-    completed.value = [...completed.value, step.id]
-    step.onComplete?.()
-    currentSubstepIndex.value = 0
+    const group = stepGroups[index]
 
-    if (currentStepIndex.value < TOUR_STEPS.length - 1) {
-      currentStepIndex.value++
-      persist()
-      navigateToCurrent()
-    } else {
-      endTour()
-    }
-  }
+    // Navigate to the route
+    await router.push(group.route)
 
-  function skipStep() {
-    const step = TOUR_STEPS[currentStepIndex.value]
-    if (!step) return
-
-    // Check if the current substep is skippable
-    if (step.substeps) {
-      const sub = step.substeps[currentSubstepIndex.value]
-      if (sub?.skippable && currentSubstepIndex.value < step.substeps.length - 1) {
-        // Skip just this substep
-        currentSubstepIndex.value++
-        persist()
-        navigateToCurrent()
+    // Wait for the first element to appear in DOM
+    const firstSelector = typeof group.steps[0].element === 'string' ? group.steps[0].element : ''
+    if (firstSelector) {
+      const found = await waitForElement(firstSelector)
+      if (!found) {
+        // Element not found — skip this group
+        runGroup(index + 1)
         return
       }
     }
 
-    // Skip entire step (or last substep)
-    if (!step.skippable) return
-    currentSubstepIndex.value = 0
-    if (currentStepIndex.value < TOUR_STEPS.length - 1) {
-      currentStepIndex.value++
-      persist()
-      navigateToCurrent()
-    } else {
-      endTour()
-    }
+    // Small delay for rendering
+    await new Promise(r => setTimeout(r, 200))
+
+    // Create driver instance for this group
+    const driverObj = driver({
+      ...driverConfig,
+      steps: group.steps,
+      onDestroyStarted: () => {
+        // User clicked close or done
+        driverObj.destroy()
+        runGroup(index + 1)
+      },
+      onNextClick: () => {
+        // If more steps in this group, advance. Otherwise go to next group.
+        if (!driverObj.isLastStep()) {
+          driverObj.moveNext()
+        } else {
+          driverObj.destroy()
+          runGroup(index + 1)
+        }
+      },
+    })
+
+    driverObj.drive()
+  }
+
+  function startTour() {
+    if (tourComplete.value) return
+    active.value = true
+    runGroup(0)
   }
 
   function endTour() {
     active.value = false
     tourComplete.value = true
-    persist()
+    markComplete()
     router.push('/')
   }
 
-  function navigateToCurrent() {
-    const route = effectiveRoute.value
-    if (route) router.push(route)
-    currentStep.value?.onEnter?.()
-  }
-
-  function updateStepRoute(stepId: string, route: string) {
-    const step = TOUR_STEPS.find((s) => s.id === stepId)
-    if (step) step.route = route
+  // Inject custom dark-theme CSS for driver.js popovers
+  if (typeof document !== 'undefined' && !document.getElementById('agented-tour-driver-css')) {
+    const style = document.createElement('style')
+    style.id = 'agented-tour-driver-css'
+    style.textContent = `
+      .agented-tour-popover {
+        background: #1a1a2e !important;
+        border: 1px solid rgba(129, 140, 248, 0.3) !important;
+        border-radius: 12px !important;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), 0 0 20px rgba(99, 102, 241, 0.15) !important;
+        color: #e4e4e7 !important;
+        font-family: 'Geist', 'Inter', -apple-system, system-ui, sans-serif !important;
+        max-width: 340px !important;
+      }
+      .agented-tour-popover .driver-popover-title {
+        color: #f4f4f5 !important;
+        font-size: 15px !important;
+        font-weight: 600 !important;
+        letter-spacing: -0.3px !important;
+      }
+      .agented-tour-popover .driver-popover-description {
+        color: #a1a1aa !important;
+        font-size: 13px !important;
+        line-height: 1.5 !important;
+      }
+      .agented-tour-popover .driver-popover-progress-text {
+        color: #71717a !important;
+        font-size: 11px !important;
+      }
+      .agented-tour-popover .driver-popover-prev-btn {
+        background: transparent !important;
+        border: 1px solid rgba(255, 255, 255, 0.1) !important;
+        color: #a1a1aa !important;
+        border-radius: 6px !important;
+        font-size: 13px !important;
+        padding: 6px 14px !important;
+      }
+      .agented-tour-popover .driver-popover-prev-btn:hover {
+        border-color: rgba(255, 255, 255, 0.2) !important;
+        color: #e4e4e7 !important;
+      }
+      .agented-tour-popover .driver-popover-next-btn,
+      .agented-tour-popover .driver-popover-done-btn {
+        background: #6366f1 !important;
+        color: white !important;
+        border: none !important;
+        border-radius: 6px !important;
+        font-size: 13px !important;
+        font-weight: 500 !important;
+        padding: 6px 16px !important;
+      }
+      .agented-tour-popover .driver-popover-next-btn:hover,
+      .agented-tour-popover .driver-popover-done-btn:hover {
+        background: #818cf8 !important;
+      }
+      .agented-tour-popover .driver-popover-close-btn {
+        color: #71717a !important;
+      }
+      .agented-tour-popover .driver-popover-close-btn:hover {
+        color: #e4e4e7 !important;
+      }
+      .agented-tour-popover .driver-popover-arrow-side-left .driver-popover-arrow,
+      .agented-tour-popover .driver-popover-arrow-side-right .driver-popover-arrow,
+      .agented-tour-popover .driver-popover-arrow-side-top .driver-popover-arrow,
+      .agented-tour-popover .driver-popover-arrow-side-bottom .driver-popover-arrow {
+        background: #1a1a2e !important;
+        border-color: rgba(129, 140, 248, 0.3) !important;
+      }
+    `
+    document.head.appendChild(style)
   }
 
   return {
     active,
-    currentStepIndex,
-    currentSubstepIndex,
-    currentStep,
-    effectiveTarget,
-    substepLabel,
-    completed,
-    totalSteps: displayTotalSteps,
-    displayStepNumber,
     tourComplete,
     startTour,
-    nextStep,
-    skipStep,
     endTour,
-    updateStepRoute,
-    steps: TOUR_STEPS,
+    // Keep these for backward compat with App.vue template
+    currentStep: ref(null),
+    effectiveTarget: ref(null),
+    substepLabel: ref(null),
+    displayStepNumber: ref(0),
+    totalSteps: TOTAL_DISPLAY_STEPS,
+    currentStepIndex: ref(0),
+    currentSubstepIndex: ref(0),
+    completed: ref<string[]>([]),
+    nextStep: () => {},
+    skipStep: () => {},
+    updateStepRoute: () => {},
+    steps: [],
   }
 }

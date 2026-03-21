@@ -1,0 +1,7 @@
+{
+  "tools": {
+    "allowed": [
+      "mcp__plugin_playwright_playwright__browser_navigate"
+    ]
+  }
+}

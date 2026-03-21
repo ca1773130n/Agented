@@ -20,7 +20,7 @@ export const healthApi = {
 
   /** Check whether the backend requires API key authentication. Public endpoint. */
   authStatus: () =>
-    apiFetch<{ auth_required: boolean; authenticated: boolean }>('/health/auth-status'),
+    apiFetch<{ auth_required: boolean; authenticated: boolean; needs_setup?: boolean }>('/health/auth-status'),
 
   /** Verify an API key without storing it. Public endpoint. */
   verifyKey: (apiKey: string) =>
@@ -28,6 +28,16 @@ export const healthApi = {
       method: 'POST',
       body: JSON.stringify({ api_key: apiKey }),
     }),
+
+  /** First-run setup: generate the initial admin API key. Public endpoint. */
+  setup: (label?: string) =>
+    apiFetch<{ api_key: string; role_id: string; role: string; label: string; message: string }>(
+      '/health/setup',
+      {
+        method: 'POST',
+        body: JSON.stringify({ label: label || 'Admin' }),
+      }
+    ),
 };
 
 // Version API

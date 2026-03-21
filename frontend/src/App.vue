@@ -2,7 +2,6 @@
 import { ref, watch, onMounted, onUnmounted, provide, computed, getCurrentInstance } from 'vue';
 import { setupApi, healthApi } from './services/api';
 import { useRoute, useRouter } from 'vue-router';
-import TourOverlay from './components/tour/TourOverlay.vue';
 import { useTour } from './composables/useTour';
 import AppSidebar from './components/layout/AppSidebar.vue';
 import AppHeader from './components/layout/AppHeader.vue';
@@ -274,19 +273,7 @@ onUnmounted(() => {
       </div>
     </Teleport>
 
-    <!-- Guided Tour Overlay -->
-    <Teleport to="body">
-      <TourOverlay
-        :active="tour.active.value && !isWelcomePage"
-        :step="tour.currentStep.value"
-        :effective-target="tour.effectiveTarget.value"
-        :substep-label="tour.substepLabel.value"
-        :step-number="tour.displayStepNumber.value"
-        :total-steps="tour.totalSteps"
-        @next="tour.nextStep()"
-        @skip="tour.skipStep()"
-      />
-    </Teleport>
+    <!-- Tour is handled by driver.js (no overlay component needed) -->
   </div>
 </template>
 
