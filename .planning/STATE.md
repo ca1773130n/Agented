@@ -10,12 +10,12 @@ See: .planning/PROJECT.md (updated 2026-03-21)
 
 ## Current Position
 
-Phase: 1 of 10 (Backend + State Machine Foundation)
-Plan: 1 of 2 in current phase
-Status: Executing
-Last activity: 2026-03-21 — Completed 01-01-PLAN.md
+Phase: 1 of 10 (Backend + State Machine Foundation) -- COMPLETE
+Plan: 2 of 2 in current phase
+Status: Phase Complete
+Last activity: 2026-03-21 — Completed 01-02-PLAN.md
 
-Progress: [#---------] 5%
+Progress: [##--------] 10%
 
 ## Current Baseline
 
@@ -41,15 +41,15 @@ Progress: [#---------] 5%
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 1
-- Average duration: 21min
-- Total execution time: 0.35 hours
+- Total plans completed: 2
+- Average duration: 13min
+- Total execution time: 0.42 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| 01-backend-state-machine-foundation | 1/2 | 21min | 21min |
+| 01-backend-state-machine-foundation | 2/2 | 25min | 13min |
 
 ## Accumulated Context
 
@@ -61,6 +61,9 @@ Progress: [#---------] 5%
 - 01-01: Used SQLite hex(randomblob()) for UUID — no Python uuid dependency in SQL
 - 01-01: XState v5 setup() API with string-referenced guards for type safety
 - 01-01: backends is hierarchical state; parent NEXT handles transition to verification
+- 01-02: Singleton XState actor pattern — shared across components, survives route changes
+- 01-02: Async guard checks in composable, not machine — keeps tourMachine.ts pure
+- 01-02: Toast z-index conflict (hardcoded 10000 = --z-tour-overlay) deferred to Phase 7
 
 ### Pending Todos
 
@@ -68,11 +71,11 @@ None yet.
 
 ### Blockers/Concerns
 
-- XState v5 + `@xstate/vue` integration needs early spike (snapshot serialization format for persistence)
+- RESOLVED: XState v5 + `@xstate/vue` integration — implemented via manual createActor + shallowRef (01-02)
 - RESOLVED: `app_meta.instance_id` endpoint accessible before auth (implemented in 01-01)
 
 ## Session Continuity
 
 Last session: 2026-03-21
-Stopped at: Completed 01-01-PLAN.md
+Stopped at: Completed 01-02-PLAN.md (Phase 01 complete)
 Resume file: None
