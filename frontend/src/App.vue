@@ -279,6 +279,8 @@ onUnmounted(() => {
       <TourOverlay
         :active="tour.active.value && !isWelcomePage"
         :step="tour.currentStep.value"
+        :effective-target="tour.effectiveTarget.value"
+        :substep-label="tour.substepLabel.value"
         :step-number="tour.displayStepNumber.value"
         :total-steps="tour.totalSteps"
         @next="tour.nextStep()"

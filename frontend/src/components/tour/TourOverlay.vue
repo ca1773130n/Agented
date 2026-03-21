@@ -1,10 +1,12 @@
 <script setup lang="ts">
-import { ref, watch, onMounted, onUnmounted, nextTick } from 'vue'
-import type { TourStep } from '../../composables/useTour'
+import { ref, watch, computed, onMounted, onUnmounted, nextTick } from 'vue'
+import type { TourStep, TourSubstep } from '../../composables/useTour'
 
 const props = defineProps<{
   active: boolean
   step: TourStep | null
+  effectiveTarget: (TourStep | TourSubstep) | null
+  substepLabel: string | null
   stepNumber: number
   totalSteps: number
 }>()
@@ -22,13 +24,23 @@ let resizeObserver: ResizeObserver | null = null
 let mutationObserver: MutationObserver | null = null
 let targetEl: Element | null = null
 
+const targetSelector = computed(() => props.effectiveTarget?.target ?? props.step?.target ?? '')
+const displayMessage = computed(() => props.effectiveTarget?.message ?? props.step?.message ?? '')
+const isSkippable = computed(() => {
+  if (props.effectiveTarget && 'skippable' in props.effectiveTarget) {
+    return props.effectiveTarget.skippable
+  }
+  return props.step?.skippable ?? false
+})
+
 function updateSpotlight() {
-  if (!props.step?.target) {
+  const selector = targetSelector.value
+  if (!selector) {
     hasTarget.value = false
     clearTargetHighlight()
     return
   }
-  const el = document.querySelector(props.step.target)
+  const el = document.querySelector(selector)
   if (!el) {
     hasTarget.value = false
     clearTargetHighlight()
@@ -44,11 +56,7 @@ function updateSpotlight() {
     height: `${rect.height + padding * 2}px`,
   }
   hasTarget.value = true
-
-  // Apply glow directly to the target element
   applyTargetHighlight(el)
-
-  // Scroll into view
   el.scrollIntoView({ behavior: 'smooth', block: 'center' })
 }
 
@@ -79,8 +87,9 @@ function clearTargetHighlight() {
 
 function setupObserver() {
   teardownObserver()
-  if (!props.step?.target) return
-  const el = document.querySelector(props.step.target)
+  const selector = targetSelector.value
+  if (!selector) return
+  const el = document.querySelector(selector)
   if (!el) return
   if (typeof ResizeObserver !== 'undefined') {
     resizeObserver = new ResizeObserver(() => updateSpotlight())
@@ -104,7 +113,6 @@ function teardownMutationObserver() {
 
 function waitForTarget(selector: string) {
   teardownMutationObserver()
-  // Watch the entire document for DOM changes until the target appears
   mutationObserver = new MutationObserver(() => {
     const el = document.querySelector(selector)
     if (el) {
@@ -119,18 +127,20 @@ function waitForTarget(selector: string) {
   })
 }
 
+// Watch effectiveTarget (changes on step AND substep changes)
 watch(
-  () => props.step,
+  () => props.effectiveTarget,
   async () => {
-    if (props.active && props.step) {
+    if (props.active && props.effectiveTarget) {
+      hasTarget.value = false
+      clearTargetHighlight()
+      teardownMutationObserver()
       await nextTick()
-      // Small delay to let route resolve
       await new Promise(r => setTimeout(r, 100))
       updateSpotlight()
       setupObserver()
-      // If target not found yet, watch DOM until it appears
-      if (!hasTarget.value && props.step.target) {
-        waitForTarget(props.step.target)
+      if (!hasTarget.value && targetSelector.value) {
+        waitForTarget(targetSelector.value)
       }
     } else {
       hasTarget.value = false
@@ -151,13 +161,13 @@ watch(
       barVisible.value = false
       clearTargetHighlight()
       teardownObserver()
+      teardownMutationObserver()
     }
   },
   { immediate: true },
 )
 
 onMounted(() => {
-  // Inject global animation keyframes
   if (!document.getElementById('tour-glow-style')) {
     const style = document.createElement('style')
     style.id = 'tour-glow-style'
@@ -175,10 +185,13 @@ onMounted(() => {
       .tour-target-glow {
         animation: tour-pulse 1.5s ease-in-out infinite !important;
       }
+      @keyframes tour-spin {
+        to { transform: rotate(360deg); }
+      }
     `
     document.head.appendChild(style)
   }
-  if (props.active && props.step) {
+  if (props.active && props.effectiveTarget) {
     updateSpotlight()
     setupObserver()
   }
@@ -195,14 +208,20 @@ onUnmounted(() => {
 
 <template>
   <div v-if="active && step" class="tour-overlay">
-    <!-- Spotlight cutout — its massive box-shadow IS the dim layer (only shown when target found) -->
+    <!-- Spotlight cutout (only when target found) -->
     <div v-if="hasTarget" class="tour-spotlight" :style="spotlightStyle" />
 
     <!-- Bottom bar -->
     <div class="tour-bottom-bar" :class="{ 'tour-bottom-bar--visible': barVisible }">
       <div class="tour-bottom-bar__left">
-        <span class="tour-step-tag">STEP {{ stepNumber }} OF {{ totalSteps }}</span>
-        <span class="tour-step-message">{{ step.message }}</span>
+        <div class="tour-step-tag">
+          STEP {{ stepNumber }} OF {{ totalSteps }}
+          <span v-if="substepLabel" class="tour-substep-label"> — {{ substepLabel }}</span>
+        </div>
+        <div class="tour-step-message">
+          <span v-if="!hasTarget" class="tour-spinner" />
+          {{ displayMessage }}
+        </div>
       </div>
       <div class="tour-bottom-bar__right">
         <div class="tour-progress-dots">
@@ -217,7 +236,7 @@ onUnmounted(() => {
             }"
           />
         </div>
-        <button v-if="step.skippable" class="tour-skip-btn" @click="emit('skip')">Skip</button>
+        <button v-if="isSkippable" class="tour-skip-btn" @click="emit('skip')">Skip</button>
         <button class="tour-next-btn" @click="emit('next')">Next</button>
       </div>
     </div>
@@ -229,13 +248,6 @@ onUnmounted(() => {
   position: fixed;
   inset: 0;
   z-index: 9998;
-  pointer-events: none;
-}
-
-.tour-dim {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 20, 0.75);
   pointer-events: none;
 }
 
@@ -283,11 +295,32 @@ onUnmounted(() => {
   letter-spacing: 0.08em;
 }
 
+.tour-substep-label {
+  color: #a5b4fc;
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 500;
+}
+
 .tour-step-message {
   color: #e4e4e7;
   font-size: 14px;
   line-height: 1.4;
   max-width: 600px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tour-spinner {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(129, 140, 248, 0.3);
+  border-top-color: #818cf8;
+  border-radius: 50%;
+  animation: tour-spin 0.8s linear infinite;
+  flex-shrink: 0;
 }
 
 .tour-bottom-bar__right {

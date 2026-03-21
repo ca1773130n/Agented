@@ -33,8 +33,28 @@ describe('useTour', () => {
     const { useTour } = await import('../useTour')
     const tour = useTour()
     tour.startTour()
+    // Step 0 has no substeps, so nextStep advances to step 1
     tour.nextStep()
     expect(tour.currentStepIndex.value).toBe(1)
+  })
+
+  it('advances substeps before major step', async () => {
+    const { useTour } = await import('../useTour')
+    const tour = useTour()
+    tour.startTour()
+    tour.nextStep() // step 0 → step 1 (backends, has 4 substeps)
+    expect(tour.currentStepIndex.value).toBe(1)
+    expect(tour.currentSubstepIndex.value).toBe(0)
+    tour.nextStep() // substep 0 → substep 1
+    expect(tour.currentStepIndex.value).toBe(1) // still on step 1
+    expect(tour.currentSubstepIndex.value).toBe(1)
+    tour.nextStep() // substep 1 → substep 2
+    expect(tour.currentSubstepIndex.value).toBe(2)
+    tour.nextStep() // substep 2 → substep 3
+    expect(tour.currentSubstepIndex.value).toBe(3)
+    tour.nextStep() // substep 3 (last) → step 2
+    expect(tour.currentStepIndex.value).toBe(2)
+    expect(tour.currentSubstepIndex.value).toBe(0)
   })
 
   it('skips only skippable steps', async () => {

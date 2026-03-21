@@ -1,6 +1,15 @@
 import { ref, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
 
+export interface TourSubstep {
+  id: string
+  route: string
+  target: string
+  label: string      // e.g., "Claude Code (1/4)"
+  message: string
+  skippable: boolean
+}
+
 export interface TourStep {
   id: string
   route: string
@@ -9,6 +18,7 @@ export interface TourStep {
   title: string
   message: string
   skippable: boolean
+  substeps?: TourSubstep[]
   waitFor?: () => boolean
   onEnter?: () => void | Promise<void>
   onComplete?: () => void
@@ -17,6 +27,7 @@ export interface TourStep {
 interface PersistedTourState {
   active: boolean
   currentStepIndex: number
+  currentSubstepIndex: number
   completed: string[]
   tourComplete?: boolean
 }
@@ -35,12 +46,45 @@ const TOUR_STEPS: TourStep[] = [
   },
   {
     id: 'backends',
-    route: '/backends',
-    target: '[data-tour="ai-backends"]',
+    route: '/backends/backend-claude',
+    target: '[data-tour="add-account-btn"]',
     title: 'AI Backend Accounts',
-    message:
-      'Register your Anthropic, OpenAI, or other provider accounts — agents schedule work across them seamlessly',
-    skippable: false,
+    message: 'Register your Anthropic account for Claude Code',
+    skippable: true,
+    substeps: [
+      {
+        id: 'backend-claude',
+        route: '/backends/backend-claude',
+        target: '[data-tour="add-account-btn"]',
+        label: 'Claude Code (1/4)',
+        message: 'Register your Anthropic account for Claude Code',
+        skippable: true,
+      },
+      {
+        id: 'backend-codex',
+        route: '/backends/backend-codex',
+        target: '[data-tour="add-account-btn"]',
+        label: 'Codex CLI (2/4)',
+        message: 'Register your OpenAI account for Codex CLI',
+        skippable: true,
+      },
+      {
+        id: 'backend-gemini',
+        route: '/backends/backend-gemini',
+        target: '[data-tour="add-account-btn"]',
+        label: 'Gemini CLI (3/4)',
+        message: 'Register your Google account for Gemini CLI',
+        skippable: true,
+      },
+      {
+        id: 'backend-opencode',
+        route: '/backends/backend-opencode',
+        target: '[data-tour="add-account-btn"]',
+        label: 'OpenCode (4/4)',
+        message: 'Register an account for OpenCode',
+        skippable: true,
+      },
+    ],
   },
   {
     id: 'monitoring',
@@ -48,8 +92,7 @@ const TOUR_STEPS: TourStep[] = [
     routeHash: '#general',
     target: '[data-tour="token-monitoring"]',
     title: 'Token Monitoring',
-    message:
-      'Turn on token monitoring to predict usage and hand off between accounts before hitting rate limits',
+    message: 'Turn on token monitoring to predict usage and hand off between accounts before hitting rate limits',
     skippable: false,
   },
   {
@@ -58,8 +101,7 @@ const TOUR_STEPS: TourStep[] = [
     routeHash: '#harness',
     target: '[data-tour="harness-plugins"]',
     title: 'Harness Plugins',
-    message:
-      'Verifying bundled plugins are installed — HarnessSync, GRD, and Everything Claude Code',
+    message: 'Verifying bundled plugins are installed — HarnessSync, GRD, and Everything Claude Code',
     skippable: false,
   },
   {
@@ -83,8 +125,7 @@ const TOUR_STEPS: TourStep[] = [
     route: '',
     target: '[data-tour="assign-teams"]',
     title: 'Assign Teams',
-    message:
-      'Assign Matrix teams to your project — Command, Development, Research, Operations, or QA',
+    message: 'Assign Matrix teams to your project — Command, Development, Research, Operations, or QA',
     skippable: true,
   },
 ]
@@ -108,12 +149,37 @@ export function useTour() {
   const saved = loadState()
   const active = ref(saved?.active ?? false)
   const currentStepIndex = ref(saved?.currentStepIndex ?? 0)
+  const currentSubstepIndex = ref(saved?.currentSubstepIndex ?? 0)
   const completed = ref<string[]>(saved?.completed ?? [])
   const tourComplete = ref(saved?.tourComplete ?? false)
 
   const currentStep = computed<TourStep | null>(() => {
     if (!active.value) return null
     return TOUR_STEPS[currentStepIndex.value] ?? null
+  })
+
+  // The effective step/substep for display and targeting
+  const effectiveTarget = computed(() => {
+    const step = currentStep.value
+    if (!step) return null
+    if (step.substeps && step.substeps.length > 0) {
+      return step.substeps[currentSubstepIndex.value] ?? step.substeps[0]
+    }
+    return step
+  })
+
+  const effectiveRoute = computed(() => {
+    const target = effectiveTarget.value
+    if (!target) return ''
+    if ('routeHash' in target && target.routeHash) return target.route + target.routeHash
+    return target.route
+  })
+
+  const substepLabel = computed(() => {
+    const step = currentStep.value
+    if (!step?.substeps) return null
+    const sub = step.substeps[currentSubstepIndex.value]
+    return sub?.label ?? null
   })
 
   const totalSteps = TOUR_STEPS.length
@@ -124,32 +190,44 @@ export function useTour() {
     saveState({
       active: active.value,
       currentStepIndex: currentStepIndex.value,
+      currentSubstepIndex: currentSubstepIndex.value,
       completed: completed.value,
       tourComplete: tourComplete.value,
     })
   }
 
-  // Also watch for any external mutations to reactive state
-  watch([active, currentStepIndex, completed], persist, { deep: true })
+  watch([active, currentStepIndex, currentSubstepIndex, completed], persist, { deep: true })
 
   function startTour() {
     if (tourComplete.value) return
     active.value = true
     currentStepIndex.value = 0
+    currentSubstepIndex.value = 0
     persist()
-    navigateToStep(0)
+    navigateToCurrent()
   }
 
   function nextStep() {
     const step = TOUR_STEPS[currentStepIndex.value]
-    if (step) {
-      completed.value = [...completed.value, step.id]
-      step.onComplete?.()
+    if (!step) return
+
+    // If step has substeps, try advancing substep first
+    if (step.substeps && currentSubstepIndex.value < step.substeps.length - 1) {
+      currentSubstepIndex.value++
+      persist()
+      navigateToCurrent()
+      return
     }
+
+    // Mark step complete and advance to next major step
+    completed.value = [...completed.value, step.id]
+    step.onComplete?.()
+    currentSubstepIndex.value = 0
+
     if (currentStepIndex.value < TOUR_STEPS.length - 1) {
       currentStepIndex.value++
       persist()
-      navigateToStep(currentStepIndex.value)
+      navigateToCurrent()
     } else {
       endTour()
     }
@@ -157,11 +235,27 @@ export function useTour() {
 
   function skipStep() {
     const step = TOUR_STEPS[currentStepIndex.value]
-    if (!step?.skippable) return
+    if (!step) return
+
+    // Check if the current substep is skippable
+    if (step.substeps) {
+      const sub = step.substeps[currentSubstepIndex.value]
+      if (sub?.skippable && currentSubstepIndex.value < step.substeps.length - 1) {
+        // Skip just this substep
+        currentSubstepIndex.value++
+        persist()
+        navigateToCurrent()
+        return
+      }
+    }
+
+    // Skip entire step (or last substep)
+    if (!step.skippable) return
+    currentSubstepIndex.value = 0
     if (currentStepIndex.value < TOUR_STEPS.length - 1) {
       currentStepIndex.value++
       persist()
-      navigateToStep(currentStepIndex.value)
+      navigateToCurrent()
     } else {
       endTour()
     }
@@ -174,12 +268,10 @@ export function useTour() {
     router.push('/')
   }
 
-  function navigateToStep(index: number) {
-    const step = TOUR_STEPS[index]
-    if (!step) return
-    const route = step.routeHash ? step.route + step.routeHash : step.route
+  function navigateToCurrent() {
+    const route = effectiveRoute.value
     if (route) router.push(route)
-    step.onEnter?.()
+    currentStep.value?.onEnter?.()
   }
 
   function updateStepRoute(stepId: string, route: string) {
@@ -190,7 +282,10 @@ export function useTour() {
   return {
     active,
     currentStepIndex,
+    currentSubstepIndex,
     currentStep,
+    effectiveTarget,
+    substepLabel,
     completed,
     totalSteps: displayTotalSteps,
     displayStepNumber,
