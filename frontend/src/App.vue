@@ -99,6 +99,7 @@ const { activeExecutionCount, healthColor, healthTooltip, startPolling, stopPoll
 
 // API key auth state — show banner when backend requires auth and no key is stored
 const showApiKeyBanner = ref(false);
+const appReady = ref(false);
 
 async function checkAuthStatus(): Promise<boolean> {
   try {
@@ -156,10 +157,9 @@ watch(() => route.query.tour, (tourQuery) => {
 
 onMounted(async () => {
   startPolling(10000);
-  // Check if the backend requires API key auth before loading sidebar data
   const isReady = await checkAuthStatus();
+  appReady.value = true;
   if (isReady) {
-    // Check if we should start the tour (coming from WelcomePage)
     if (route.query.tour === 'start') {
       router.replace({ query: {} });
       loadSidebarData();
@@ -167,7 +167,6 @@ onMounted(async () => {
       return;
     }
     loadSidebarData();
-    // Auto-install bundled marketplace & plugins on first launch (non-blocking)
     runBundleInstall();
   }
 });
@@ -178,7 +177,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div :class="['app-layout', { 'sidebar-collapsed': isCollapsed && !isMobile, 'sidebar-mobile': isMobile }]">
+  <div v-if="appReady" :class="['app-layout', { 'sidebar-collapsed': isCollapsed && !isMobile, 'sidebar-mobile': isMobile }]">
     <a href="#main-content" class="skip-to-content">Skip to content</a>
 
     <template v-if="!isWelcomePage">
