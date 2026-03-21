@@ -2054,4 +2054,26 @@ def create_fresh_schema(conn):
     """)
     conn.execute("CREATE INDEX IF NOT EXISTS idx_pti_project ON project_team_instances(project_id)")
 
+    # v0.5.0 onboarding — application metadata (instance tracking)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS app_meta (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    conn.execute("""
+        INSERT OR IGNORE INTO app_meta (key, value) VALUES (
+            'instance_id',
+            lower(
+                hex(randomblob(4)) || '-' ||
+                hex(randomblob(2)) || '-4' ||
+                substr(hex(randomblob(2)),2) || '-' ||
+                substr('89ab', abs(random()) % 4 + 1, 1) ||
+                substr(hex(randomblob(2)),2) || '-' ||
+                hex(randomblob(6))
+            )
+        )
+    """)
+
     conn.commit()

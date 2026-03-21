@@ -115,6 +115,24 @@ def readiness():
     return health, status_code
 
 
+@health_bp.get("/instance-id")
+def instance_id():
+    """Public endpoint: returns the database instance ID for staleness detection.
+
+    The instance_id is a UUID generated when the database is first created.
+    It changes on DB reset, allowing the frontend to detect stale tour state.
+    No authentication required — used during onboarding before API keys exist.
+    """
+    from ..database import get_connection
+
+    with get_connection() as conn:
+        row = conn.execute(
+            "SELECT value FROM app_meta WHERE key = 'instance_id'"
+        ).fetchone()
+
+    return {"instance_id": row[0] if row else None}, HTTPStatus.OK
+
+
 @health_bp.get("/auth-status")
 def auth_status():
     """Public endpoint: tells the frontend whether auth is configured.
