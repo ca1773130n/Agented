@@ -57,9 +57,10 @@ function applyTargetHighlight(el: Element) {
   const htmlEl = el as HTMLElement
   htmlEl.style.position = htmlEl.style.position || 'relative'
   htmlEl.style.zIndex = '9998'
-  htmlEl.style.outline = '2px solid #818cf8'
-  htmlEl.style.outlineOffset = '4px'
+  htmlEl.style.outline = '3px solid #818cf8'
+  htmlEl.style.outlineOffset = '6px'
   htmlEl.style.borderRadius = htmlEl.style.borderRadius || '8px'
+  htmlEl.style.background = 'rgba(99, 102, 241, 0.06)'
   htmlEl.classList.add('tour-target-glow')
 }
 
@@ -69,6 +70,7 @@ function clearTargetHighlight() {
     htmlEl.style.zIndex = ''
     htmlEl.style.outline = ''
     htmlEl.style.outlineOffset = ''
+    htmlEl.style.background = ''
     htmlEl.classList.remove('tour-target-glow')
     targetEl = null
   }
@@ -140,11 +142,17 @@ onMounted(() => {
     style.id = 'tour-glow-style'
     style.textContent = `
       @keyframes tour-pulse {
-        0%, 100% { box-shadow: 0 0 12px 4px rgba(99,102,241,0.4); }
-        50% { box-shadow: 0 0 24px 8px rgba(99,102,241,0.6); }
+        0%, 100% {
+          box-shadow: 0 0 20px 6px rgba(99,102,241,0.5), 0 0 60px 15px rgba(99,102,241,0.15);
+          outline-color: #818cf8;
+        }
+        50% {
+          box-shadow: 0 0 35px 12px rgba(99,102,241,0.7), 0 0 80px 25px rgba(99,102,241,0.2);
+          outline-color: #a5b4fc;
+        }
       }
       .tour-target-glow {
-        animation: tour-pulse 2s ease-in-out infinite !important;
+        animation: tour-pulse 1.5s ease-in-out infinite !important;
       }
     `
     document.head.appendChild(style)
@@ -207,14 +215,14 @@ onUnmounted(() => {
 .tour-dim {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.7);
+  background: rgba(0, 0, 20, 0.75);
   pointer-events: none;
 }
 
 .tour-spotlight {
   position: fixed;
   border-radius: 12px;
-  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.7), 0 0 0 2px rgba(129, 140, 248, 0.6), 0 0 40px 12px rgba(99, 102, 241, 0.4);
+  box-shadow: 0 0 0 9999px rgba(0, 0, 20, 0.75), 0 0 0 3px rgba(129, 140, 248, 0.8), 0 0 50px 15px rgba(99, 102, 241, 0.5);
   transition: all 400ms cubic-bezier(0.4, 0, 0.2, 1);
   z-index: 9998;
   pointer-events: none;
