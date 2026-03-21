@@ -148,11 +148,20 @@ def _seed_system_agent():
 
 
 def _detect_backends() -> None:
-    """Detect backend CLIs and log warnings for any that are missing."""
+    """Detect backend CLIs, update DB, and log warnings for any that are missing."""
+    from .db.backends import check_and_update_backend_installed, get_all_backends
     from .services.backend_detection_service import BACKEND_CAPABILITIES, detect_backend
+
+    # Build a map of backend type → backend id
+    all_backends = get_all_backends()
+    type_to_id = {b["type"]: b["id"] for b in all_backends}
 
     for _bt in BACKEND_CAPABILITIES:
         _inst, _ver, _ = detect_backend(_bt)
+        # Update is_installed in the database
+        bid = type_to_id.get(_bt)
+        if bid:
+            check_and_update_backend_installed(bid, _inst, _ver)
         if not _inst:
             _startup_warnings.append(f"cli_missing:{_bt}")
 
