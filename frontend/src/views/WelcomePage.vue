@@ -1,11 +1,17 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { healthApi } from '../services/api';
 import { setApiKey } from '../services/api/client';
 import { resetAuthGuard } from '../router/guards';
 
 const router = useRouter();
+
+// First-run page — clear any stale tour/key state from previous installs
+onMounted(() => {
+  localStorage.removeItem('agented-tour-state');
+  localStorage.removeItem('agented-api-key');
+});
 
 type Phase = 'welcome' | 'keygen';
 const phase = ref<Phase>('welcome');
