@@ -19,6 +19,7 @@ const hasTarget = ref(false)
 const barVisible = ref(false)
 
 let resizeObserver: ResizeObserver | null = null
+let mutationObserver: MutationObserver | null = null
 let targetEl: Element | null = null
 
 function updateSpotlight() {
@@ -94,28 +95,48 @@ function teardownObserver() {
   }
 }
 
+function teardownMutationObserver() {
+  if (mutationObserver) {
+    mutationObserver.disconnect()
+    mutationObserver = null
+  }
+}
+
+function waitForTarget(selector: string) {
+  teardownMutationObserver()
+  // Watch the entire document for DOM changes until the target appears
+  mutationObserver = new MutationObserver(() => {
+    const el = document.querySelector(selector)
+    if (el) {
+      teardownMutationObserver()
+      updateSpotlight()
+      setupObserver()
+    }
+  })
+  mutationObserver.observe(document.body, {
+    childList: true,
+    subtree: true,
+  })
+}
+
 watch(
   () => props.step,
   async () => {
     if (props.active && props.step) {
       await nextTick()
+      // Small delay to let route resolve
+      await new Promise(r => setTimeout(r, 100))
       updateSpotlight()
       setupObserver()
-      // Retry if target wasn't found yet (page may still be rendering after route change)
-      if (!hasTarget.value) {
-        for (let i = 0; i < 5; i++) {
-          await new Promise(r => setTimeout(r, 300))
-          updateSpotlight()
-          if (hasTarget.value) {
-            setupObserver()
-            break
-          }
-        }
+      // If target not found yet, watch DOM until it appears
+      if (!hasTarget.value && props.step.target) {
+        waitForTarget(props.step.target)
       }
     } else {
       hasTarget.value = false
       clearTargetHighlight()
       teardownObserver()
+      teardownMutationObserver()
     }
   },
   { immediate: true },
@@ -166,6 +187,7 @@ onMounted(() => {
 onUnmounted(() => {
   clearTargetHighlight()
   teardownObserver()
+  teardownMutationObserver()
   const style = document.getElementById('tour-glow-style')
   if (style) style.remove()
 })
@@ -173,10 +195,8 @@ onUnmounted(() => {
 
 <template>
   <div v-if="active && step" class="tour-overlay">
-    <!-- Spotlight cutout — its massive box-shadow IS the dim layer -->
+    <!-- Spotlight cutout — its massive box-shadow IS the dim layer (only shown when target found) -->
     <div v-if="hasTarget" class="tour-spotlight" :style="spotlightStyle" />
-    <!-- Fallback dim when no target found -->
-    <div v-else class="tour-dim" />
 
     <!-- Bottom bar -->
     <div class="tour-bottom-bar" :class="{ 'tour-bottom-bar--visible': barVisible }">
