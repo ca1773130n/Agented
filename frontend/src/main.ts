@@ -45,4 +45,6 @@ if (import.meta.env.DEV) {
   };
 }
 
-app.mount('#app')
+// Wait for initial navigation (including async auth guard) before mounting
+// This prevents the dashboard from flashing before redirect to /welcome
+router.isReady().then(() => app.mount('#app'))
