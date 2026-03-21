@@ -396,13 +396,56 @@ All tour content hardcoded in English. Deferred because the entire app is Englis
 
 ---
 
-## Phasing (Implementation Order)
+## Traceability
 
-Requirements map to implementation phases:
-
-| Phase | Requirements | Type |
-|---|---|---|
-| Phase 1: Foundation | OB-04, OB-05, OB-06, OB-07, OB-08, OB-43 | Architecture |
-| Phase 2: Visual Layer | OB-09, OB-10, OB-11, OB-12, OB-13, OB-14, OB-15, OB-16, OB-44 | Design + Implement |
-| Phase 3: Step Content | OB-01, OB-02, OB-03, OB-17-OB-28, OB-29-OB-33, OB-40, OB-41, OB-42 | Implement |
-| Phase 4: Polish | OB-34, OB-35, OB-35a, OB-36, OB-37, OB-38, OB-39, OB-45-OB-48 | Implement + Test |
+| Requirement | Phase | Status |
+|-------------|-------|--------|
+| OB-01 | Phase 3: Welcome Flow + Tour Entry | Pending |
+| OB-02 | Phase 3: Welcome Flow + Tour Entry | Pending |
+| OB-03 | Phase 3: Welcome Flow + Tour Entry | Pending |
+| OB-04 | Phase 1: Backend + State Machine Foundation | Pending |
+| OB-05 | Phase 1: Backend + State Machine Foundation | Pending |
+| OB-06 | Phase 1: Backend + State Machine Foundation | Pending |
+| OB-07 | Phase 1: Backend + State Machine Foundation | Pending |
+| OB-08 | Phase 1: Backend + State Machine Foundation | Pending |
+| OB-09 | Phase 2: Visual Layer | Pending |
+| OB-10 | Phase 2: Visual Layer | Pending |
+| OB-11 | Phase 2: Visual Layer | Pending |
+| OB-12 | Phase 2: Visual Layer | Pending |
+| OB-13 | Phase 2: Visual Layer | Pending |
+| OB-14 | Phase 2: Visual Layer | Pending |
+| OB-15 | Phase 2: Visual Layer | Pending |
+| OB-16 | Phase 2: Visual Layer | Pending |
+| OB-17 | Phase 4: Core Step Content | Pending |
+| OB-18 | Phase 4: Core Step Content | Pending |
+| OB-19 | Phase 4: Core Step Content | Pending |
+| OB-20 | Phase 4: Core Step Content | Pending |
+| OB-21 | Phase 4: Core Step Content | Pending |
+| OB-22 | Phase 9: Post-Tour Experience | Pending |
+| OB-23 | Phase 9: Post-Tour Experience | Pending |
+| OB-24 | Phase 9: Post-Tour Experience | Pending |
+| OB-25 | Phase 5: Form Field Guidance | Pending |
+| OB-26 | Phase 5: Form Field Guidance | Pending |
+| OB-27 | Phase 5: Form Field Guidance | Pending |
+| OB-28 | Phase 5: Form Field Guidance | Pending |
+| OB-29 | Phase 6: Navigation Controls | Pending |
+| OB-30 | Phase 6: Navigation Controls | Pending |
+| OB-31 | Phase 6: Navigation Controls | Pending |
+| OB-32 | Phase 6: Navigation Controls | Pending |
+| OB-33 | Phase 6: Navigation Controls | Pending |
+| OB-34 | Phase 9: Post-Tour Experience | Pending |
+| OB-35 | Phase 9: Post-Tour Experience | Pending |
+| OB-35a | Phase 9: Post-Tour Experience | Pending |
+| OB-36 | Phase 8: Accessibility | Pending |
+| OB-37 | Phase 8: Accessibility | Pending |
+| OB-38 | Phase 8: Accessibility | Pending |
+| OB-39 | Phase 8: Accessibility | Pending |
+| OB-40 | Phase 7: Loading + Error Resilience | Pending |
+| OB-41 | Phase 7: Loading + Error Resilience | Pending |
+| OB-42 | Phase 7: Loading + Error Resilience | Pending |
+| OB-43 | Phase 1: Backend + State Machine Foundation | Pending |
+| OB-44 | Phase 7: Loading + Error Resilience | Pending |
+| OB-45 | Phase 10: Integration Testing | Pending |
+| OB-46 | Phase 10: Integration Testing | Pending |
+| OB-47 | Phase 10: Integration Testing | Pending |
+| OB-48 | Phase 10: Integration Testing | Pending |
