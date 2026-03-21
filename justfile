@@ -96,16 +96,10 @@ kill:
     -pkill -f "npm run dev" 2>/dev/null || true
     -pkill -f "vite" 2>/dev/null || true
 
-# Reset onboarding: wipe DB + tour state, restart fresh
+# Reset onboarding: wipe DB, restart fresh (localStorage auto-clears on welcome page)
 reset: kill
     rm -f backend/agented.db backend/agented.db-wal backend/agented.db-shm
-    @echo "Database cleared. Tour state lives in browser localStorage."
-    @echo ""
-    @echo "To fully reset, also clear localStorage in your browser:"
-    @echo "  DevTools → Application → Local Storage → Clear All"
-    @echo "  Or run in browser console: localStorage.clear()"
-    @echo ""
-    @echo "Then run: just deploy"
+    @echo "Reset complete. Run: just deploy"
 
 # Clean build artifacts
 clean:
