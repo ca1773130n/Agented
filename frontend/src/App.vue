@@ -3,6 +3,7 @@ import { ref, watch, onMounted, onUnmounted, provide, computed, getCurrentInstan
 import { setupApi, healthApi } from './services/api';
 import { useRoute, useRouter } from 'vue-router';
 import { useTour } from './composables/useTour';
+import TourOverlay from './components/tour/TourOverlay.vue';
 import AppSidebar from './components/layout/AppSidebar.vue';
 import AppHeader from './components/layout/AppHeader.vue';
 import ApiKeyBanner from './components/layout/ApiKeyBanner.vue';
@@ -273,7 +274,16 @@ onUnmounted(() => {
       </div>
     </Teleport>
 
-    <!-- Tour is handled by driver.js (no overlay component needed) -->
+    <TourOverlay
+      :active="tour.active.value && !isWelcomePage"
+      :step="tour.currentStep.value"
+      :effective-target="tour.effectiveTarget.value"
+      :substep-label="tour.substepLabel.value"
+      :step-number="tour.displayStepNumber.value"
+      :total-steps="tour.totalSteps"
+      @next="tour.nextStep"
+      @skip="tour.skipStep"
+    />
   </div>
 </template>
 
@@ -341,6 +351,13 @@ onUnmounted(() => {
   --transition-fast: 150ms ease;
   --transition-normal: 250ms ease;
   --transition-slow: 400ms ease;
+
+  /* Tour z-index scale — Phase 1 foundation (OB-43) */
+  --z-tour-overlay: 10000;
+  --z-tour-spotlight: 10001;
+  --z-tour-tooltip: 10002;
+  --z-tour-controls: 10003;
+  --z-tour-progress: 10004;
 }
 
 * {
