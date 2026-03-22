@@ -5,17 +5,17 @@
 See: .planning/PROJECT.md (updated 2026-03-21)
 
 **Core value:** Enable engineering teams to orchestrate AI-powered automation through a unified dashboard
-**Current focus:** Phase 5 — Form Field Guidance
+**Current focus:** Phase 6 — Navigation Controls
 **Primary hypothesis:** A guided onboarding tour can bring new users from zero to first bot execution in under 3 minutes
 
 ## Current Position
 
-Phase: 5 of 10 (Form Field Guidance)
-Plan: 1 of 1 in current phase
-Status: Phase Complete
-Last activity: 2026-03-22 — Completed 05-01-PLAN.md
+Phase: 6 of 10 (Navigation Controls)
+Plan: 1 of 2 in current phase
+Status: In Progress
+Last activity: 2026-03-22 — Completed 06-01-PLAN.md
 
-Progress: [#####-----] 50%
+Progress: [######----] 55%
 
 ## Current Baseline
 
@@ -42,9 +42,9 @@ Progress: [#####-----] 50%
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 10
+- Total plans completed: 11
 - Average duration: 7min
-- Total execution time: 1.15 hours
+- Total execution time: 1.23 hours
 
 **By Phase:**
 
@@ -55,6 +55,7 @@ Progress: [#####-----] 50%
 | 03-welcome-flow-tour-entry | 1/1 | 7min | 7min |
 | 04-core-step-content | 2/2 | 12min | 6min |
 | 05-form-field-guidance | 1/1 | 8min | 8min |
+| 06-navigation-controls | 1/2 | 5min | 5min |
 | 10-integration-testing | 3/4 | 13min | 4min |
 
 ## Accumulated Context
@@ -98,6 +99,9 @@ Progress: [#####-----] 50%
 - 05-01: Selector generation prefers input id-based (.form-group:has(#id)) for uniqueness, nth-of-type fallback
 - 05-01: TourFormGuide is renderless (slot-only template) — zero DOM footprint
 - 05-01: field-change emit { target, message } matches TourOverlay TargetLike interface
+- 06-01: Skip confirmation uses inline v-if/v-else replacement, not modal overlay
+- 06-01: isSignificantStep checks step.title against hardcoded set ['AI Backend Accounts']
+- 06-01: confirmingSkip resets via watch on skippable + stepTitle props
 
 ### Pending Todos
 
@@ -111,5 +115,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-03-22
-Stopped at: Completed 05-01-PLAN.md (Phase 05 complete)
+Stopped at: Completed 06-01-PLAN.md
 Resume file: None
