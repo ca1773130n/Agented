@@ -5,17 +5,17 @@
 See: .planning/PROJECT.md (updated 2026-03-21)
 
 **Core value:** Enable engineering teams to orchestrate AI-powered automation through a unified dashboard
-**Current focus:** Phase 1 — Backend + State Machine Foundation
+**Current focus:** Phase 2 — Visual Layer (Spotlight, Tooltip, Progress Bar)
 **Primary hypothesis:** A guided onboarding tour can bring new users from zero to first bot execution in under 3 minutes
 
 ## Current Position
 
-Phase: 10 of 10 (Integration Testing)
-Plan: 3 of 4 in current phase
+Phase: 2 of 10 (Visual Layer)
+Plan: 1 of 2 in current phase
 Status: In Progress
-Last activity: 2026-03-22 — Completed 10-03-PLAN.md
+Last activity: 2026-03-22 — Completed 02-01-PLAN.md
 
-Progress: [####------] 18%
+Progress: [#####-----] 50%
 
 ## Current Baseline
 
@@ -42,15 +42,16 @@ Progress: [####------] 18%
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 4
-- Average duration: 10min
-- Total execution time: 0.55 hours
+- Total plans completed: 5
+- Average duration: 9min
+- Total execution time: 0.62 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 01-backend-state-machine-foundation | 2/2 | 25min | 13min |
+| 02-visual-layer | 1/2 | 4min | 4min |
 | 10-integration-testing | 3/4 | 13min | 4min |
 
 ## Accumulated Context
@@ -74,6 +75,10 @@ Progress: [####------] 18%
 - 10-03: Tour fixture extends base.ts (not @playwright/test) to inherit global API mocks
 - 10-03: Accessibility tests use graceful degradation — document gaps rather than hard-fail
 - 10-03: Instance-id mismatch documented as useTour limitation (only useTourMachine checks it)
+- 02-01: CSS custom property padding reads from --tour-spotlight-padding with fallback to 8px
+- 02-01: Glow animation uses opacity-based box-shadow per Research Pitfall 6
+- 02-01: Accent color switched from indigo to --accent-cyan to match app design language
+- 02-01: Static analysis test pattern: read .vue source, extract style block, grep for hardcoded values
 
 ### Pending Todos
 
@@ -87,5 +92,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-03-22
-Stopped at: Completed 10-03-PLAN.md
+Stopped at: Completed 02-01-PLAN.md
 Resume file: None
