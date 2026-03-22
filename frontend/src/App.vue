@@ -4,6 +4,7 @@ import { setupApi, healthApi } from './services/api';
 import { useRoute, useRouter } from 'vue-router';
 import { useTourMachine, prefetchTourRoutes } from './composables/useTourMachine';
 import TourOverlay from './components/tour/TourOverlay.vue';
+import TourCompletionScreen from './components/tour/TourCompletionScreen.vue';
 import AppSidebar from './components/layout/AppSidebar.vue';
 import AppHeader from './components/layout/AppHeader.vue';
 import ApiKeyBanner from './components/layout/ApiKeyBanner.vue';
@@ -113,6 +114,14 @@ const tourSubstepLabel = computed(() => {
   };
   return labels[step] ?? null;
 });
+
+// Tour completion screen
+const tourComplete = computed(() => tour.state.value === 'complete');
+
+function handleTourDone() {
+  tour.restartTour(); // Resets machine to idle, clears localStorage
+  router.push('/');
+}
 
 // Navigate to correct route when machine state changes
 watch(() => tour.currentStep.value, (step) => {
@@ -415,6 +424,14 @@ onUnmounted(() => {
       @skip="tour.skipStep"
       @retry="handleTourRetry"
     />
+
+    <Teleport to="body">
+      <TourCompletionScreen
+        v-if="tourComplete"
+        :completed-steps="tour.context.value.completedSteps"
+        @done="handleTourDone"
+      />
+    </Teleport>
   </div>
 </template>
 

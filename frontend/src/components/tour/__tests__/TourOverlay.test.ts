@@ -272,7 +272,7 @@ describe('TourOverlay', () => {
       const liveRegion = wrapper.find('[aria-live="polite"]')
       expect(liveRegion.exists()).toBe(true)
       // sr-only uses clip/overflow hidden, NOT display:none
-      expect(liveRegion.element.style.display).not.toBe('none')
+      expect((liveRegion.element as HTMLElement).style.display).not.toBe('none')
       expect(liveRegion.attributes('aria-atomic')).toBe('true')
       wrapper.unmount()
     })
