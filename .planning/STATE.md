@@ -11,11 +11,11 @@ See: .planning/PROJECT.md (updated 2026-03-21)
 ## Current Position
 
 Phase: 7 of 10 (Loading & Error Resilience)
-Plan: 1 of 2 in current phase
-Status: In Progress
-Last activity: 2026-03-22 — Completed 07-01-PLAN.md
+Plan: 2 of 2 in current phase
+Status: Phase Complete
+Last activity: 2026-03-22 — Completed 07-02-PLAN.md
 
-Progress: [######=---] 65%
+Progress: [#######---] 70%
 
 ## Current Baseline
 
@@ -42,9 +42,9 @@ Progress: [######=---] 65%
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 13
+- Total plans completed: 14
 - Average duration: 7min
-- Total execution time: 1.40 hours
+- Total execution time: 1.48 hours
 
 **By Phase:**
 
@@ -56,7 +56,7 @@ Progress: [######=---] 65%
 | 04-core-step-content | 2/2 | 12min | 6min |
 | 05-form-field-guidance | 1/1 | 8min | 8min |
 | 06-navigation-controls | 2/2 | 9min | 5min |
-| 07-loading-error-resilience | 1/2 | 6min | 6min |
+| 07-loading-error-resilience | 2/2 | 11min | 6min |
 | 10-integration-testing | 3/4 | 13min | 4min |
 
 ## Accumulated Context
@@ -111,6 +111,9 @@ Progress: [######=---] 65%
 - 07-01: MutationObserver scoped to #main-content with document.body fallback
 - 07-01: nextTick + 100ms delay before starting observer to avoid premature observation
 - 07-01: prefetchTourRoutes uses Promise.allSettled for resilient fire-and-forget
+- 07-02: --z-toast: 10005 placed above --z-tour-progress: 10004 in CSS scale
+- 07-02: Modal coordination uses provide/inject setTourModalOpen pattern (not event bus)
+- 07-02: TourOverlay + TourSpotlight both dim to 0.3 opacity when modal open during tour
 
 ### Pending Todos
 
@@ -124,5 +127,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-03-22
-Stopped at: Completed 07-01-PLAN.md
+Stopped at: Completed 07-02-PLAN.md (Phase 7 complete)
 Resume file: None
