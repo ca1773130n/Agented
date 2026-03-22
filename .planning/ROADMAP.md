@@ -55,11 +55,11 @@ Plans:
   3. Tooltips are always fully visible within the viewport — never clipped at any edge
   4. Step transitions use CSS transitions (opacity + transform, 200ms) with no flicker or jump
   5. All tour components use CSS custom properties from App.vue — zero hardcoded color values in tour styles
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 02-01: TourOverlay and TourSpotlight components
-- [ ] 02-02: TourTooltip with Floating UI and TourProgressBar
+- [ ] 02-01-PLAN.md — TourOverlay and TourSpotlight components
+- [ ] 02-02-PLAN.md — TourTooltip with Floating UI and TourProgressBar
 
 ### Phase 3: Welcome Flow + Tour Entry
 **Goal**: First-time users land on the welcome page, generate an API key, and transition smoothly into the guided tour — no dashboard flash, no intermediate blank screens
@@ -71,10 +71,10 @@ Plans:
   1. First-time visitor sees `/welcome` within 200ms of app load with no dashboard flash
   2. API key generates via backend call, displays in monospace with copy button, and shows "will not be shown again" warning
   3. Transition from keygen completion to first tour step takes < 500ms with no visual glitch — welcome fades out, tour overlay fades in
-**Plans**: TBD
+**Plans**: 1 plan
 
 Plans:
-- [ ] 03-01: Welcome page integration and API key flow with tour entry transition
+- [ ] 03-01-PLAN.md — App.vue integration swap from useTour to useTourMachine, WelcomePage machine wiring, cross-fade transition to first tour step
 
 ### Phase 4: Core Step Content
 **Goal**: The tour navigates users through the essential setup steps — workspace directory, four backend account substeps (Claude/Codex/Gemini/OpenCode), token monitoring, and harness plugin verification — with correct route navigation and target element highlighting
