@@ -97,6 +97,7 @@ interface GuardCheckResults {
   workspaceConfigured: boolean
   hasClaudeAccount: boolean
   hasAnyBackend: boolean
+  monitoringConfigured: boolean
 }
 
 async function runGuardChecks(): Promise<GuardCheckResults> {
@@ -104,6 +105,7 @@ async function runGuardChecks(): Promise<GuardCheckResults> {
     workspaceConfigured: false,
     hasClaudeAccount: false,
     hasAnyBackend: false,
+    monitoringConfigured: false,
   }
 
   // Check workspace configuration via settings
@@ -130,6 +132,12 @@ async function runGuardChecks(): Promise<GuardCheckResults> {
         results.hasClaudeAccount = true
       }
     }
+  }
+
+  // Check monitoring configuration
+  const monitoringResp = await fetchWithAuth<{ enabled?: boolean }>('/api/monitoring/config')
+  if (monitoringResp?.enabled) {
+    results.monitoringConfigured = true
   }
 
   return results
@@ -329,6 +337,12 @@ export function useTourMachine() {
 
     // If on workspace step and workspace is configured, auto-advance
     if (val === 'workspace' && checks.workspaceConfigured) {
+      send({ type: 'NEXT' })
+      return
+    }
+
+    // If on monitoring step and monitoring is configured, auto-advance
+    if (val === 'monitoring' && checks.monitoringConfigured) {
       send({ type: 'NEXT' })
       return
     }

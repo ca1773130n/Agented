@@ -36,37 +36,46 @@ const TOUR_STEP_META: Record<string, { target: string; title: string; message: s
   'backends.claude': {
     target: '[data-tour="add-account-btn"]',
     title: 'AI Backend Accounts',
-    message: 'Register a Claude Code account to get started.',
+    message: 'Register a Claude Code account. Click \'Add Account\' to enter your Anthropic credentials.',
     skippable: true,
     route: '/backends/backend-claude',
   },
   'backends.codex': {
     target: '[data-tour="add-account-btn"]',
     title: 'AI Backend Accounts',
-    message: 'Register a Codex CLI account (optional).',
+    message: 'Register a Codex CLI account for OpenAI integration (optional). Click \'Add Account\' to configure.',
     skippable: true,
     route: '/backends/backend-codex',
   },
   'backends.gemini': {
     target: '[data-tour="add-account-btn"]',
     title: 'AI Backend Accounts',
-    message: 'Register a Gemini CLI account (optional).',
+    message: 'Register a Gemini CLI account for Google AI (optional). Click \'Add Account\' to configure.',
     skippable: true,
     route: '/backends/backend-gemini',
   },
   'backends.opencode': {
-    target: '[data-tour="add-account-btn"]',
+    target: '[data-tour="opencode-info"]',
     title: 'AI Backend Accounts',
-    message: 'Register an OpenCode account (optional).',
+    message: 'OpenCode routes through other AI backends. No separate account needed if you registered one above.',
     skippable: true,
     route: '/backends/backend-opencode',
   },
-  'verification': {
-    target: '[data-tour="harness-status"]',
-    title: 'Harness Verification',
-    message: 'Confirm the harness plugin is installed and operational.',
+  'monitoring': {
+    target: '[data-tour="token-monitoring"]',
+    title: 'Token Monitoring',
+    message: 'Configure rate limit monitoring to track token usage across your AI backend accounts.',
     skippable: true,
-    route: '/plugins',
+    route: '/settings',
+    routeHash: '#general',
+  },
+  'verification': {
+    target: '[data-tour="harness-plugins"]',
+    title: 'Harness Verification',
+    message: 'Verify the harness integration plugin is configured for deploying skills to your marketplace.',
+    skippable: true,
+    route: '/settings',
+    routeHash: '#harness',
   },
 };
 
@@ -77,10 +86,11 @@ const STEP_NUMBER_MAP: Record<string, number> = {
   'backends.codex': 2,
   'backends.gemini': 2,
   'backends.opencode': 2,
-  'verification': 3,
+  'monitoring': 3,
+  'verification': 4,
 };
 
-const totalTourSteps = 3;
+const totalTourSteps = 4;
 
 const tourActive = computed(() => tour.isActive.value && !isWelcomePage.value);
 

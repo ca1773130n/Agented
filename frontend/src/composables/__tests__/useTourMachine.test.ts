@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi, type Mock } from 'vitest'
 import { createActor } from 'xstate'
-import { tourMachine } from '../../machines/tourMachine'
+import { tourMachine, type TourEvent } from '../../machines/tourMachine'
 
 // Mock Vue lifecycle hooks BEFORE any other imports
 vi.mock('vue', async () => {
@@ -23,11 +23,11 @@ vi.mock('../../services/api/client', () => ({
  * Create a valid persisted snapshot at a given state by running the machine
  * through events to reach that state.
  */
-function getSnapshotAtState(events: Array<{ type: string }>): unknown {
+function getSnapshotAtState(events: Array<TourEvent>): unknown {
   const actor = createActor(tourMachine)
   actor.start()
   for (const event of events) {
-    actor.send(event as any)
+    actor.send(event)
   }
   const snapshot = actor.getPersistedSnapshot()
   actor.stop()
@@ -538,7 +538,6 @@ describe('useTourMachine', () => {
   describe('checkAndAutoAdvance', () => {
     it('auto-advances from workspace when workspace is configured', async () => {
       // Mock fetch to handle both instance-id and API calls
-      let callCount = 0
       globalThis.fetch = vi.fn().mockImplementation((url: string) => {
         if (url.includes('/health/instance-id')) {
           return Promise.resolve({
@@ -940,7 +939,8 @@ describe('useTourMachine', () => {
         { type: 'NEXT' }, // claude -> codex
         { type: 'NEXT' }, // codex -> gemini
         { type: 'NEXT' }, // gemini -> opencode
-        { type: 'NEXT' }, // backends -> verification (parent handles NEXT from opencode)
+        { type: 'NEXT' }, // backends -> monitoring (parent handles NEXT from opencode)
+        { type: 'NEXT' }, // monitoring -> verification
         { type: 'NEXT' }, // verification -> complete
       ])
       localStorage.setItem(

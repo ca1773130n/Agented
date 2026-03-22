@@ -82,7 +82,7 @@
 
       <!-- OpenCode cross-backend accounts -->
       <div v-if="isOpenCode" class="opencode-section">
-        <div class="opencode-note">
+        <div class="opencode-note" data-tour="opencode-info">
           <span class="note-icon">i</span>
           <span>OpenCode routes through other AI backends. Register accounts on those backends.</span>
         </div>

@@ -11,7 +11,7 @@
 
 import { describe, it, expect, afterEach } from 'vitest'
 import { createActor, type Actor } from 'xstate'
-import { tourMachine } from '../tourMachine'
+import { tourMachine, type TourEvent } from '../tourMachine'
 
 // Helper: create and start actor, track for cleanup
 let activeActor: Actor<typeof tourMachine> | null = null
@@ -31,10 +31,10 @@ afterEach(() => {
 // Helper: navigate to a specific state via event sequence
 function navigateTo(
   actor: Actor<typeof tourMachine>,
-  events: Array<{ type: string }>
+  events: ReadonlyArray<TourEvent>
 ) {
   for (const event of events) {
-    actor.send(event as any)
+    actor.send(event)
   }
 }
 
@@ -45,7 +45,8 @@ const toBackendsClaude = [...toWorkspace, { type: 'NEXT' }] as const
 const toBackendsCodex = [...toBackendsClaude, { type: 'NEXT' }] as const
 const toBackendsGemini = [...toBackendsCodex, { type: 'NEXT' }] as const
 const toBackendsOpencode = [...toBackendsGemini, { type: 'NEXT' }] as const
-const toVerification = [...toBackendsOpencode, { type: 'NEXT' }] as const
+const toMonitoring = [...toBackendsOpencode, { type: 'NEXT' }] as const
+const toVerification = [...toMonitoring, { type: 'NEXT' }] as const
 const toComplete = [...toVerification, { type: 'NEXT' }] as const
 
 // ---------------------------------------------------------------------------
@@ -122,17 +123,27 @@ describe('forward navigation (NEXT)', () => {
     expect(actor.getSnapshot().value).toEqual({ backends: 'opencode' })
   })
 
-  it('backends.opencode -> NEXT -> verification (parent handler fires)', () => {
+  it('backends.opencode -> NEXT -> monitoring (parent handler fires)', () => {
     const actor = startActor()
     navigateTo(actor, [...toBackendsOpencode])
     actor.send({ type: 'NEXT' })
 
     const snap = actor.getSnapshot()
-    expect(snap.value).toBe('verification')
+    expect(snap.value).toBe('monitoring')
     // Parent backends NEXT handler runs markStepCompleted with current state
     expect(snap.context.completedSteps).toContain(
       JSON.stringify({ backends: 'opencode' })
     )
+  })
+
+  it('monitoring -> NEXT -> verification (marks monitoring completed)', () => {
+    const actor = startActor()
+    navigateTo(actor, [...toMonitoring])
+    actor.send({ type: 'NEXT' })
+
+    const snap = actor.getSnapshot()
+    expect(snap.value).toBe('verification')
+    expect(snap.context.completedSteps).toContain('monitoring')
   })
 
   it('verification -> NEXT -> complete (final state)', () => {
@@ -157,6 +168,7 @@ describe('forward navigation (NEXT)', () => {
       JSON.stringify({ backends: 'codex' }),
       JSON.stringify({ backends: 'gemini' }),
       JSON.stringify({ backends: 'opencode' }),
+      'monitoring',
       'verification',
     ])
   })
@@ -202,9 +214,16 @@ describe('backward navigation (BACK)', () => {
     expect(actor.getSnapshot().value).toEqual({ backends: 'gemini' })
   })
 
-  it('verification -> BACK -> backends (re-enters at initial child claude)', () => {
+  it('verification -> BACK -> monitoring', () => {
     const actor = startActor()
     navigateTo(actor, [...toVerification])
+    actor.send({ type: 'BACK' })
+    expect(actor.getSnapshot().value).toBe('monitoring')
+  })
+
+  it('monitoring -> BACK -> backends (re-enters at initial child claude)', () => {
+    const actor = startActor()
+    navigateTo(actor, [...toMonitoring])
     actor.send({ type: 'BACK' })
     expect(actor.getSnapshot().value).toEqual({ backends: 'claude' })
   })
@@ -278,9 +297,16 @@ describe('skip navigation (SKIP)', () => {
     expect(actor.getSnapshot().value).toEqual({ backends: 'opencode' })
   })
 
-  it('backends.opencode -> SKIP -> verification (parent SKIP handler)', () => {
+  it('backends.opencode -> SKIP -> monitoring (parent SKIP handler)', () => {
     const actor = startActor()
     navigateTo(actor, [...toBackendsOpencode])
+    actor.send({ type: 'SKIP' })
+    expect(actor.getSnapshot().value).toBe('monitoring')
+  })
+
+  it('monitoring -> SKIP -> verification', () => {
+    const actor = startActor()
+    navigateTo(actor, [...toMonitoring])
     actor.send({ type: 'SKIP' })
     expect(actor.getSnapshot().value).toBe('verification')
   })
@@ -304,7 +330,8 @@ describe('skip navigation (SKIP)', () => {
     actor.send({ type: 'SKIP' }) // claude -> codex
     actor.send({ type: 'SKIP' }) // codex -> gemini
     actor.send({ type: 'SKIP' }) // gemini -> opencode
-    actor.send({ type: 'SKIP' }) // opencode -> verification (parent)
+    actor.send({ type: 'SKIP' }) // opencode -> monitoring (parent)
+    actor.send({ type: 'SKIP' }) // monitoring -> verification
     actor.send({ type: 'SKIP' }) // verification -> complete
 
     const snap = actor.getSnapshot()
@@ -638,9 +665,9 @@ describe('hierarchical backends substates', () => {
     expect(actor.getSnapshot().value).toEqual({ backends: 'claude' })
   })
 
-  it('BACK from verification goes to backends at initial child claude', () => {
+  it('BACK from monitoring goes to backends at initial child claude', () => {
     const actor = startActor()
-    navigateTo(actor, [...toVerification])
+    navigateTo(actor, [...toMonitoring])
     actor.send({ type: 'BACK' })
     // Re-enters backends at initial child, not where user left
     expect(actor.getSnapshot().value).toEqual({ backends: 'claude' })
@@ -666,14 +693,14 @@ describe('hierarchical backends substates', () => {
     navigateTo(actor, [...toBackendsOpencode])
     // opencode has no NEXT, so parent backends NEXT fires
     actor.send({ type: 'NEXT' })
-    expect(actor.getSnapshot().value).toBe('verification')
+    expect(actor.getSnapshot().value).toBe('monitoring')
   })
 
   it('opencode has no local SKIP handler; parent SKIP fires', () => {
     const actor = startActor()
     navigateTo(actor, [...toBackendsOpencode])
     actor.send({ type: 'SKIP' })
-    expect(actor.getSnapshot().value).toBe('verification')
+    expect(actor.getSnapshot().value).toBe('monitoring')
   })
 
   it('claude BACK uses parent handler to go to workspace', () => {
