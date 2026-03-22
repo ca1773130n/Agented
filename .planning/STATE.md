@@ -5,15 +5,15 @@
 See: .planning/PROJECT.md (updated 2026-03-21)
 
 **Core value:** Enable engineering teams to orchestrate AI-powered automation through a unified dashboard
-**Current focus:** Phase 2 — Visual Layer (Spotlight, Tooltip, Progress Bar)
+**Current focus:** Phase 3 — Welcome Flow + Tour Entry
 **Primary hypothesis:** A guided onboarding tour can bring new users from zero to first bot execution in under 3 minutes
 
 ## Current Position
 
-Phase: 2 of 10 (Visual Layer)
-Plan: 2 of 2 in current phase
+Phase: 3 of 10 (Welcome Flow + Tour Entry)
+Plan: 1 of 1 in current phase
 Status: Phase Complete
-Last activity: 2026-03-22 — Completed 02-02-PLAN.md
+Last activity: 2026-03-22 — Completed 03-01-PLAN.md
 
 Progress: [##########] 100%
 
@@ -42,9 +42,9 @@ Progress: [##########] 100%
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 6
+- Total plans completed: 7
 - Average duration: 8min
-- Total execution time: 0.70 hours
+- Total execution time: 0.82 hours
 
 **By Phase:**
 
@@ -52,6 +52,7 @@ Progress: [##########] 100%
 |-------|-------|-------|----------|
 | 01-backend-state-machine-foundation | 2/2 | 25min | 13min |
 | 02-visual-layer | 2/2 | 9min | 5min |
+| 03-welcome-flow-tour-entry | 1/1 | 7min | 7min |
 | 10-integration-testing | 3/4 | 13min | 4min |
 
 ## Accumulated Context
@@ -83,6 +84,10 @@ Progress: [##########] 100%
 - 02-02: Middleware chain: offset(12) + flip() + shift({padding:8}) + arrow() for viewport-safe tooltip positioning
 - 02-02: Two-phase transition on position change: fade out, recompute, fade in to prevent tooltip flicker
 - 02-02: TourProgressBar uses filter:brightness(1.15) for hover instead of hardcoded color value
+- 03-01: TOUR_STEP_META flat Record maps machine state names to TourOverlay display metadata
+- 03-01: Computed bridge layer in App.vue translates machine state to StepLike interface
+- 03-01: Direct navigation from WelcomePage to /settings#general (no /?tour=start redirect)
+- 03-01: totalTourSteps=3 hardcoded (workspace, backends, verification) pending Phase 4
 
 ### Pending Todos
 
@@ -96,5 +101,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-03-22
-Stopped at: Completed 02-02-PLAN.md (Phase 02 complete)
+Stopped at: Completed 03-01-PLAN.md (Phase 03 complete)
 Resume file: None
