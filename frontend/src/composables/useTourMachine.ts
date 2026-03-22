@@ -376,3 +376,19 @@ export function useTourMachine() {
     checkAndAutoAdvance,
   }
 }
+
+// ---------------------------------------------------------------------------
+// Route prefetching (OB-42) — fire-and-forget on tour start
+// ---------------------------------------------------------------------------
+
+/**
+ * Prefetch route components visited during the tour.
+ * Uses dynamic import() to trigger Vite chunk loading ahead of navigation.
+ * Fire-and-forget — callers should NOT await this.
+ */
+export async function prefetchTourRoutes(): Promise<void> {
+  await Promise.allSettled([
+    import('../views/SettingsPage.vue'),
+    import('../views/BackendDetailPage.vue'),
+  ])
+}

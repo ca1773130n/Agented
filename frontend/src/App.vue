@@ -2,7 +2,7 @@
 import { ref, watch, onMounted, onUnmounted, provide, computed, getCurrentInstance } from 'vue';
 import { setupApi, healthApi } from './services/api';
 import { useRoute, useRouter } from 'vue-router';
-import { useTourMachine } from './composables/useTourMachine';
+import { useTourMachine, prefetchTourRoutes } from './composables/useTourMachine';
 import TourOverlay from './components/tour/TourOverlay.vue';
 import AppSidebar from './components/layout/AppSidebar.vue';
 import AppHeader from './components/layout/AppHeader.vue';
@@ -231,7 +231,16 @@ function onAuthenticated() {
     router.replace({ query: {} });
     tour.startTour();
     tour.nextStep(); // welcome -> workspace (welcome page already shown)
+    prefetchTourRoutes(); // OB-42: fire-and-forget route prefetch
   }
+}
+
+function handleTourRetry() {
+  const step = tour.currentStep.value;
+  const meta = TOUR_STEP_META[step];
+  if (!meta) return;
+  const target = meta.routeHash ? { path: meta.route, hash: meta.routeHash } : { path: meta.route };
+  router.push(target);
 }
 
 async function runBundleInstall() {
@@ -260,6 +269,7 @@ watch(() => route.query.tour, (tourQuery) => {
     loadSidebarData();
     tour.startTour();
     tour.nextStep(); // welcome -> workspace
+    prefetchTourRoutes(); // OB-42: fire-and-forget route prefetch
   }
 });
 
@@ -273,6 +283,7 @@ onMounted(async () => {
       loadSidebarData();
       tour.startTour();
       tour.nextStep(); // welcome -> workspace
+      prefetchTourRoutes(); // OB-42: fire-and-forget route prefetch
       return;
     }
     loadSidebarData();
@@ -392,6 +403,7 @@ onUnmounted(() => {
       :total-steps="totalTourSteps"
       @next="tour.nextStep"
       @skip="tour.skipStep"
+      @retry="handleTourRetry"
     />
   </div>
 </template>

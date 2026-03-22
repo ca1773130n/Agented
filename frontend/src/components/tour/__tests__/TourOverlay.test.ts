@@ -232,4 +232,110 @@ describe('TourOverlay', () => {
     expect(wrapper.emitted('skip')).toBeFalsy()
     wrapper.unmount()
   })
+
+  describe('loading timeout fallback (OB-40)', () => {
+    it('shows loading timeout fallback after 5s without target', async () => {
+      vi.useFakeTimers()
+      const wrapper = mount(TourOverlay, {
+        props: { active: true, step: workspaceStep, effectiveTarget: workspaceStep, substepLabel: null, stepNumber: 2, totalSteps: 8 },
+      })
+      // Initially shows spinner, no fallback
+      expect(wrapper.find('.tour-spinner').exists()).toBe(true)
+      expect(wrapper.find('.tour-timeout-fallback').exists()).toBe(false)
+
+      // Advance past nextTick delay (100ms) + 5s timeout
+      await vi.advanceTimersByTimeAsync(200) // past nextTick + 100ms delay
+      await vi.advanceTimersByTimeAsync(5001)
+
+      expect(wrapper.find('.tour-spinner').exists()).toBe(false)
+      // Element-not-found (3s) fires before loading timeout (5s), so element fallback shows
+      expect(wrapper.find('.tour-element-fallback').exists()).toBe(true)
+
+      wrapper.unmount()
+      vi.useRealTimers()
+    })
+
+    it('shows element-not-found fallback after 3s (before 5s loading timeout)', async () => {
+      vi.useFakeTimers()
+      const wrapper = mount(TourOverlay, {
+        props: { active: true, step: workspaceStep, effectiveTarget: workspaceStep, substepLabel: null, stepNumber: 2, totalSteps: 8 },
+      })
+
+      // Advance past nextTick + 100ms + 3s element timeout
+      await vi.advanceTimersByTimeAsync(200)
+      await vi.advanceTimersByTimeAsync(3001)
+
+      expect(wrapper.find('.tour-element-fallback').exists()).toBe(true)
+      expect(wrapper.text()).toContain("We couldn't find")
+      expect(wrapper.text()).toContain('Workspace Directory')
+
+      wrapper.unmount()
+      vi.useRealTimers()
+    })
+
+    it('clicking Skip in fallback emits skip', async () => {
+      vi.useFakeTimers()
+      const wrapper = mount(TourOverlay, {
+        props: { active: true, step: workspaceStep, effectiveTarget: workspaceStep, substepLabel: null, stepNumber: 2, totalSteps: 8 },
+      })
+
+      await vi.advanceTimersByTimeAsync(200)
+      await vi.advanceTimersByTimeAsync(3001)
+
+      const skipBtn = wrapper.find('.btn-fallback-skip')
+      expect(skipBtn.exists()).toBe(true)
+      await skipBtn.trigger('click')
+      expect(wrapper.emitted('skip')).toBeTruthy()
+
+      wrapper.unmount()
+      vi.useRealTimers()
+    })
+
+    it('clicking Retry in fallback hides fallback and emits retry', async () => {
+      vi.useFakeTimers()
+      const wrapper = mount(TourOverlay, {
+        props: { active: true, step: workspaceStep, effectiveTarget: workspaceStep, substepLabel: null, stepNumber: 2, totalSteps: 8 },
+      })
+
+      await vi.advanceTimersByTimeAsync(200)
+      await vi.advanceTimersByTimeAsync(3001)
+
+      expect(wrapper.find('.tour-element-fallback').exists()).toBe(true)
+
+      const retryBtn = wrapper.find('.btn-fallback-retry')
+      await retryBtn.trigger('click')
+      expect(wrapper.emitted('retry')).toBeTruthy()
+      // Fallback should be hidden after retry
+      expect(wrapper.find('.tour-element-fallback').exists()).toBe(false)
+      // Spinner should show again
+      expect(wrapper.find('.tour-spinner').exists()).toBe(true)
+
+      wrapper.unmount()
+      vi.useRealTimers()
+    })
+
+    it('does not show fallback when element is found before timeout', async () => {
+      vi.useFakeTimers()
+
+      // Create a target element in the DOM
+      const el = document.createElement('div')
+      el.setAttribute('data-tour', 'workspace-root')
+      document.body.appendChild(el)
+
+      const wrapper = mount(TourOverlay, {
+        props: { active: true, step: workspaceStep, effectiveTarget: workspaceStep, substepLabel: null, stepNumber: 2, totalSteps: 8 },
+      })
+
+      await vi.advanceTimersByTimeAsync(200)
+      await vi.advanceTimersByTimeAsync(5001)
+
+      // Element was found, so no fallback
+      expect(wrapper.find('.tour-timeout-fallback').exists()).toBe(false)
+      expect(wrapper.find('.tour-element-fallback').exists()).toBe(false)
+
+      wrapper.unmount()
+      document.body.removeChild(el)
+      vi.useRealTimers()
+    })
+  })
 })
