@@ -179,4 +179,57 @@ describe('TourOverlay', () => {
     })
     expect(wrapper.find('.tour-dim-fallback').exists()).toBe(true)
   })
+
+  it('Enter key emits next when active', async () => {
+    const wrapper = mount(TourOverlay, {
+      props: { active: true, step: workspaceStep, effectiveTarget: workspaceStep, substepLabel: null, stepNumber: 2, totalSteps: 8 },
+    })
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+    await wrapper.vm.$nextTick()
+    expect(wrapper.emitted('next')).toBeTruthy()
+    expect(wrapper.emitted('next')!.length).toBe(1)
+    wrapper.unmount()
+  })
+
+  it('Escape key emits skip when step is skippable', async () => {
+    const wrapper = mount(TourOverlay, {
+      props: { active: true, step: productStep, effectiveTarget: productStep, substepLabel: null, stepNumber: 6, totalSteps: 8 },
+    })
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+    await wrapper.vm.$nextTick()
+    expect(wrapper.emitted('skip')).toBeTruthy()
+    expect(wrapper.emitted('skip')!.length).toBe(1)
+    wrapper.unmount()
+  })
+
+  it('Escape key does nothing when step is not skippable', async () => {
+    const wrapper = mount(TourOverlay, {
+      props: { active: true, step: workspaceStep, effectiveTarget: workspaceStep, substepLabel: null, stepNumber: 2, totalSteps: 8 },
+    })
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+    await wrapper.vm.$nextTick()
+    expect(wrapper.emitted('skip')).toBeFalsy()
+    wrapper.unmount()
+  })
+
+  it('keyboard handler is inactive when active=false', async () => {
+    const wrapper = mount(TourOverlay, {
+      props: { active: false, step: workspaceStep, effectiveTarget: workspaceStep, substepLabel: null, stepNumber: 2, totalSteps: 8 },
+    })
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+    await wrapper.vm.$nextTick()
+    expect(wrapper.emitted('next')).toBeFalsy()
+    wrapper.unmount()
+  })
+
+  it('overlay click does not emit dismiss or any event', async () => {
+    const wrapper = mount(TourOverlay, {
+      props: { active: true, step: workspaceStep, effectiveTarget: workspaceStep, substepLabel: null, stepNumber: 2, totalSteps: 8 },
+    })
+    await wrapper.find('.tour-overlay').trigger('click')
+    // Should not emit next, skip, or any dismiss-like event
+    expect(wrapper.emitted('next')).toBeFalsy()
+    expect(wrapper.emitted('skip')).toBeFalsy()
+    wrapper.unmount()
+  })
 })

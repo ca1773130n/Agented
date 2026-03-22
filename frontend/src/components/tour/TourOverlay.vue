@@ -25,7 +25,7 @@ const props = defineProps<{
   totalSteps: number
 }>()
 
-defineEmits<{
+const emit = defineEmits<{
   next: []
   skip: []
 }>()
@@ -118,15 +118,35 @@ watch(
   { immediate: true },
 )
 
+// Keyboard navigation — Enter=next, Escape=skip (when skippable)
+function handleKeydown(e: KeyboardEvent) {
+  if (!props.active || !props.step) return
+  if (e.key === 'Enter') {
+    e.preventDefault()
+    emit('next')
+  } else if (e.key === 'Escape') {
+    if (props.step.skippable) {
+      e.preventDefault()
+      emit('skip')
+    }
+    // Non-skippable: do nothing (OB-33)
+  }
+}
+
 onMounted(() => {
   if (props.active) findTarget()
+  document.addEventListener('keydown', handleKeydown)
 })
 
-onUnmounted(cleanup)
+onUnmounted(() => {
+  cleanup()
+  document.removeEventListener('keydown', handleKeydown)
+})
 </script>
 
 <template>
-  <div v-if="active && step" class="tour-overlay">
+  <!-- No dismiss on overlay click — OB-32: tour exits only via Skip/Next/complete -->
+  <div v-if="active && step" class="tour-overlay" tabindex="-1" @click.stop>
     <!-- Spotlight highlight -->
     <TourSpotlight :target-rect="targetRect" :visible="!!targetRect" />
 
