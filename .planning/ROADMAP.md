@@ -104,10 +104,10 @@ Plans:
   2. Fields are highlighted one at a time in DOM order — user can type/select in the highlighted field
   3. Help text is extracted from `<label>` and `.form-help`/`.form-description` elements, with `data-tour-help` override
   4. Submit button (`button[type="submit"]`, `.btn-primary`, or `data-tour="submit-btn"`) is the last element highlighted
-**Plans**: TBD
+**Plans**: 1 plan
 
 Plans:
-- [ ] 05-01: TourFormGuide component with auto-discovery and sequential field highlighting
+- [ ] 05-01-PLAN.md — TourFormGuide component with auto-discovery and sequential field highlighting
 
 ### Phase 6: Navigation Controls
 **Goal**: The bottom progress bar shows correct step/substep labels and counts, skip confirmation appears for meaningful steps, the tour cannot be accidentally dismissed, and keyboard navigation works throughout
@@ -121,11 +121,11 @@ Plans:
   3. Skipping meaningful steps (backends, product/project) shows confirmation dialog; trivial skips do not
   4. No X button or close button exists — clicking dimmed overlay does not dismiss the tour
   5. Enter advances, Escape skips (when allowed), Tab is trapped within tooltip + highlighted element
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 06-01: TourProgressBar with step/substep rendering and skip confirmation
-- [ ] 06-02: Dismissal prevention and keyboard navigation
+- [ ] 06-01-PLAN.md — TourProgressBar step title + skip confirmation for meaningful steps (OB-29, OB-30, OB-31)
+- [ ] 06-02-PLAN.md — Dismissal prevention and keyboard navigation in TourOverlay + useFocusTrap wired to TourTooltip (OB-32, OB-33)
 
 ### Phase 7: Loading + Error Resilience
 **Goal**: Tour handles lazy-loaded routes gracefully with spinners and timeouts, missing target elements trigger scoped MutationObserver with fallback UI, routes are prefetched at tour start, and modals that open during tour steps remain interactive
