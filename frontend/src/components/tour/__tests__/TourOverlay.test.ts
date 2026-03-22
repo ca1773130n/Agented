@@ -233,6 +233,51 @@ describe('TourOverlay', () => {
     wrapper.unmount()
   })
 
+  describe('ARIA live announcements (OB-38)', () => {
+    it('renders aria-live region when active', () => {
+      const wrapper = mount(TourOverlay, {
+        props: { active: true, step: workspaceStep, effectiveTarget: workspaceStep, substepLabel: null, stepNumber: 1, totalSteps: 4 },
+      })
+      const liveRegion = wrapper.find('[aria-live="polite"]')
+      expect(liveRegion.exists()).toBe(true)
+      expect(liveRegion.text()).toBe('Step 1 of 4: Workspace Directory. Set the root directory')
+      wrapper.unmount()
+    })
+
+    it('updates announcement when step changes', async () => {
+      const wrapper = mount(TourOverlay, {
+        props: { active: true, step: workspaceStep, effectiveTarget: workspaceStep, substepLabel: null, stepNumber: 1, totalSteps: 4 },
+      })
+      const liveRegion = wrapper.find('[aria-live="polite"]')
+      expect(liveRegion.text()).toContain('Workspace Directory')
+
+      await wrapper.setProps({ step: productStep, effectiveTarget: productStep, stepNumber: 2 })
+      expect(liveRegion.text()).toBe('Step 2 of 4: First Product. Create your first product')
+      wrapper.unmount()
+    })
+
+    it('announcement includes step number and total', () => {
+      const wrapper = mount(TourOverlay, {
+        props: { active: true, step: productStep, effectiveTarget: productStep, substepLabel: null, stepNumber: 3, totalSteps: 5 },
+      })
+      const liveRegion = wrapper.find('[aria-live="polite"]')
+      expect(liveRegion.text()).toMatch(/^Step 3 of 5:/)
+      wrapper.unmount()
+    })
+
+    it('aria-live region is not display:none (screen reader accessible)', () => {
+      const wrapper = mount(TourOverlay, {
+        props: { active: true, step: workspaceStep, effectiveTarget: workspaceStep, substepLabel: null, stepNumber: 1, totalSteps: 4 },
+      })
+      const liveRegion = wrapper.find('[aria-live="polite"]')
+      expect(liveRegion.exists()).toBe(true)
+      // sr-only uses clip/overflow hidden, NOT display:none
+      expect(liveRegion.element.style.display).not.toBe('none')
+      expect(liveRegion.attributes('aria-atomic')).toBe('true')
+      wrapper.unmount()
+    })
+  })
+
   describe('loading timeout fallback (OB-40)', () => {
     it('shows loading timeout fallback after 5s without target', async () => {
       vi.useFakeTimers()

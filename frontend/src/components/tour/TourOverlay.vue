@@ -4,6 +4,8 @@ import TourSpotlight from './TourSpotlight.vue'
 import TourTooltip from './TourTooltip.vue'
 import TourProgressBar from './TourProgressBar.vue'
 
+// OB-38: ARIA live announcement for screen readers
+
 interface StepLike {
   target: string
   title: string
@@ -51,6 +53,12 @@ let elementFindTimeout: ReturnType<typeof setTimeout> | null = null
 // Human-readable name for the element-not-found fallback
 const currentTargetName = computed(() => {
   return props.step?.title ?? 'this element'
+})
+
+// OB-38: ARIA live announcement text for screen readers
+const announcement = computed(() => {
+  if (!props.active || !props.step) return ''
+  return `Step ${props.stepNumber} of ${props.totalSteps}: ${props.step.title}. ${props.step.message}`
 })
 
 function updateRect() {
@@ -238,6 +246,13 @@ onUnmounted(() => {
 <template>
   <!-- No dismiss on overlay click — OB-32: tour exits only via Skip/Next/complete -->
   <div v-if="active && step" class="tour-overlay" tabindex="-1" @click.stop>
+    <!-- OB-38: ARIA live announcements for screen readers -->
+    <div
+      aria-live="polite"
+      aria-atomic="true"
+      class="sr-only"
+    >{{ announcement }}</div>
+
     <!-- Spotlight highlight -->
     <TourSpotlight :target-rect="targetRect" :visible="!!targetRect" :reduced="isModalOpen" />
 
@@ -407,5 +422,18 @@ onUnmounted(() => {
 .btn-fallback-retry:hover {
   background: var(--accent-cyan);
   color: var(--bg-primary);
+}
+
+/* OB-38: Visually hidden but screen-reader accessible */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 </style>
