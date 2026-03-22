@@ -188,13 +188,13 @@ Plans:
   2. Visual component unit tests cover primary rendering states and interactions for TourOverlay, TourTooltip, TourProgressBar, TourFormGuide, TourSpotlight
   3. Playwright E2E tests pass for: complete tour flow, skip-all flow, persistence across reload, keyboard-only navigation, reduced motion, focus trapping
   4. `just build` passes with zero vue-tsc errors and no `any` types in tour composables or components
-**Plans**: TBD
+**Plans**: 4 plans
 
 Plans:
-- [ ] 10-01: Unit tests for state machine and guard system
-- [ ] 10-02: Unit tests for visual components
-- [ ] 10-03: E2E Playwright tests for full tour flows
-- [ ] 10-04: Build verification and type safety audit
+- [ ] 10-01-PLAN.md — Pure XState machine unit tests: all transitions, guards, actions, hierarchical substates, >= 90% branch coverage on tourMachine.ts
+- [ ] 10-02-PLAN.md — useTourMachine composable tests (persistence, instance-id validation, schema versioning, computed props) + expanded TourOverlay component tests
+- [ ] 10-03-PLAN.md — Playwright E2E tests: complete tour flow, skip-all flow, keyboard navigation, persistence across reload, reduced motion, focus trapping
+- [ ] 10-04-PLAN.md — Build verification and type safety audit: vitest coverage thresholds, `just build`, zero `any` types in tour code
 
 ## Progress
 
