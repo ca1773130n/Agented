@@ -5,17 +5,17 @@
 See: .planning/PROJECT.md (updated 2026-03-21)
 
 **Core value:** Enable engineering teams to orchestrate AI-powered automation through a unified dashboard
-**Current focus:** Phase 7 — Loading & Error Resilience
+**Current focus:** Phase 8 — Accessibility
 **Primary hypothesis:** A guided onboarding tour can bring new users from zero to first bot execution in under 3 minutes
 
 ## Current Position
 
-Phase: 7 of 10 (Loading & Error Resilience)
-Plan: 2 of 2 in current phase
+Phase: 8 of 10 (Accessibility)
+Plan: 1 of 1 in current phase
 Status: Phase Complete
-Last activity: 2026-03-22 — Completed 07-02-PLAN.md
+Last activity: 2026-03-22 — Completed 08-01-PLAN.md
 
-Progress: [#######---] 70%
+Progress: [########--] 80%
 
 ## Current Baseline
 
@@ -42,9 +42,9 @@ Progress: [#######---] 70%
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 14
+- Total plans completed: 15
 - Average duration: 7min
-- Total execution time: 1.48 hours
+- Total execution time: 1.56 hours
 
 **By Phase:**
 
@@ -57,6 +57,7 @@ Progress: [#######---] 70%
 | 05-form-field-guidance | 1/1 | 8min | 8min |
 | 06-navigation-controls | 2/2 | 9min | 5min |
 | 07-loading-error-resilience | 2/2 | 11min | 6min |
+| 08-accessibility | 1/1 | 5min | 5min |
 | 10-integration-testing | 3/4 | 13min | 4min |
 
 ## Accumulated Context
@@ -115,6 +116,10 @@ Progress: [#######---] 70%
 - 07-02: Modal coordination uses provide/inject setTourModalOpen pattern (not event bus)
 - 07-02: TourOverlay + TourSpotlight both dim to 0.3 opacity when modal open during tour
 
+- 08-01: getTransitionDuration() reads --tour-transition-speed via getComputedStyle for JS timing bypass
+- 08-01: ARIA live region inside v-if block (renders only during active tour)
+- 08-01: sr-only pattern (clip/overflow hidden) instead of display:none for screen reader accessibility
+
 ### Pending Todos
 
 None yet.
@@ -127,5 +132,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-03-22
-Stopped at: Completed 07-02-PLAN.md (Phase 7 complete)
+Stopped at: Completed 08-01-PLAN.md (Phase 8 complete)
 Resume file: None
