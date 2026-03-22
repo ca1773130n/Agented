@@ -86,4 +86,77 @@ describe('TourOverlay', () => {
     // Target won't be found in test DOM, so spinner should show
     expect(wrapper.find('.tour-spinner').exists()).toBe(true)
   })
+
+  // --- New tests added by 10-02 ---
+
+  it('displays correct step counter text for different step numbers', () => {
+    const wrapper = mount(TourOverlay, {
+      props: { active: true, step: workspaceStep, effectiveTarget: workspaceStep, substepLabel: null, stepNumber: 5, totalSteps: 8 },
+    })
+    expect(wrapper.find('.tour-step-counter').text()).toContain('STEP 5 OF 8')
+  })
+
+  it('does not show substep label when null', () => {
+    const wrapper = mount(TourOverlay, {
+      props: { active: true, step: workspaceStep, effectiveTarget: workspaceStep, substepLabel: null, stepNumber: 2, totalSteps: 8 },
+    })
+    expect(wrapper.find('.tour-substep-label').exists()).toBe(false)
+  })
+
+  it('shows effectiveTarget message when different from step message', () => {
+    const customTarget = {
+      target: '[data-tour="workspace-root"]',
+      message: 'Override message from effective target',
+    }
+    const wrapper = mount(TourOverlay, {
+      props: { active: true, step: workspaceStep, effectiveTarget: customTarget, substepLabel: null, stepNumber: 2, totalSteps: 8 },
+    })
+    expect(wrapper.find('.tour-step-message').text()).toBe('Override message from effective target')
+    expect(wrapper.find('.tour-step-message').text()).not.toBe('Set the root directory')
+  })
+
+  it('applies correct CSS classes when active', () => {
+    const wrapper = mount(TourOverlay, {
+      props: { active: true, step: workspaceStep, effectiveTarget: workspaceStep, substepLabel: null, stepNumber: 2, totalSteps: 8 },
+    })
+    expect(wrapper.find('.tour-overlay').exists()).toBe(true)
+    expect(wrapper.find('.tour-bottom-bar').exists()).toBe(true)
+    expect(wrapper.find('.tour-actions').exists()).toBe(true)
+    expect(wrapper.find('.tour-step-message').exists()).toBe(true)
+    expect(wrapper.find('.tour-bar-left').exists()).toBe(true)
+  })
+
+  it('emits events in correct order for rapid clicks', async () => {
+    const wrapper = mount(TourOverlay, {
+      props: { active: true, step: productStep, effectiveTarget: productStep, substepLabel: null, stepNumber: 2, totalSteps: 8 },
+    })
+    await wrapper.find('.tour-next-btn').trigger('click')
+    await wrapper.find('.tour-next-btn').trigger('click')
+    const nextEmits = wrapper.emitted('next')
+    expect(nextEmits).toBeTruthy()
+    expect(nextEmits!.length).toBe(2)
+  })
+
+  it('handles null step gracefully when active', () => {
+    // active=true but step=null — template condition v-if="active && step" prevents render
+    const wrapper = mount(TourOverlay, {
+      props: { active: true, step: null, effectiveTarget: null, substepLabel: null, stepNumber: 1, totalSteps: 8 },
+    })
+    expect(wrapper.find('.tour-overlay').exists()).toBe(false)
+  })
+
+  it('displays step title in the overlay', () => {
+    const wrapper = mount(TourOverlay, {
+      props: { active: true, step: productStep, effectiveTarget: productStep, substepLabel: null, stepNumber: 6, totalSteps: 8 },
+    })
+    expect(wrapper.text()).toContain('Create your first product')
+  })
+
+  it('shows dim fallback when target element not in DOM', () => {
+    const wrapper = mount(TourOverlay, {
+      props: { active: true, step: workspaceStep, effectiveTarget: workspaceStep, substepLabel: null, stepNumber: 2, totalSteps: 8 },
+    })
+    // Target selector won't match anything in test DOM
+    expect(wrapper.find('.tour-dim-fallback').exists()).toBe(true)
+  })
 })
