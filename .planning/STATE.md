@@ -10,10 +10,10 @@ See: .planning/PROJECT.md (updated 2026-03-21)
 
 ## Current Position
 
-Phase: 1 of 10 (Backend + State Machine Foundation) -- COMPLETE
-Plan: 2 of 2 in current phase
-Status: Phase Complete
-Last activity: 2026-03-21 — Completed 01-02-PLAN.md
+Phase: 10 of 10 (Integration Testing)
+Plan: 1 of 4 in current phase
+Status: In Progress
+Last activity: 2026-03-22 — Completed 10-01-PLAN.md
 
 Progress: [##--------] 10%
 
@@ -24,7 +24,7 @@ Progress: [##--------] 10%
 | Tour completion time | N/A | < 3 min | - | - |
 | Welcome page load | N/A | < 200ms | - | - |
 | Step transition time | N/A | < 300ms | - | - |
-| State machine branch coverage | 0% | >= 90% | - | Phase 10 |
+| State machine branch coverage | 0% | >= 90% | 100% | Phase 10 |
 
 **Last evaluated:** Not yet
 **Trend:** Not enough data
@@ -50,6 +50,7 @@ Progress: [##--------] 10%
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 01-backend-state-machine-foundation | 2/2 | 25min | 13min |
+| 10-integration-testing | 1/4 | 5min | 5min |
 
 ## Accumulated Context
 
@@ -64,6 +65,8 @@ Progress: [##--------] 10%
 - 01-02: Singleton XState actor pattern — shared across components, survives route changes
 - 01-02: Async guard checks in composable, not machine — keeps tourMachine.ts pure
 - 01-02: Toast z-index conflict (hardcoded 10000 = --z-tour-overlay) deferred to Phase 7
+- 10-01: Pure actor testing with createActor — no Vue, no DOM, no mocks
+- 10-01: Guard override via machine.provide() for SKIP_ALL testing
 
 ### Pending Todos
 
@@ -76,6 +79,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-21
-Stopped at: Completed 01-02-PLAN.md (Phase 01 complete)
+Last session: 2026-03-22
+Stopped at: Completed 10-01-PLAN.md
 Resume file: None
