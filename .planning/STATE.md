@@ -11,11 +11,11 @@ See: .planning/PROJECT.md (updated 2026-03-21)
 ## Current Position
 
 Phase: 6 of 10 (Navigation Controls)
-Plan: 1 of 2 in current phase
-Status: In Progress
-Last activity: 2026-03-22 — Completed 06-01-PLAN.md
+Plan: 2 of 2 in current phase
+Status: Phase Complete
+Last activity: 2026-03-22 — Completed 06-02-PLAN.md
 
-Progress: [######----] 55%
+Progress: [######----] 60%
 
 ## Current Baseline
 
@@ -42,9 +42,9 @@ Progress: [######----] 55%
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 11
+- Total plans completed: 12
 - Average duration: 7min
-- Total execution time: 1.23 hours
+- Total execution time: 1.30 hours
 
 **By Phase:**
 
@@ -55,7 +55,7 @@ Progress: [######----] 55%
 | 03-welcome-flow-tour-entry | 1/1 | 7min | 7min |
 | 04-core-step-content | 2/2 | 12min | 6min |
 | 05-form-field-guidance | 1/1 | 8min | 8min |
-| 06-navigation-controls | 1/2 | 5min | 5min |
+| 06-navigation-controls | 2/2 | 9min | 5min |
 | 10-integration-testing | 3/4 | 13min | 4min |
 
 ## Accumulated Context
@@ -102,6 +102,9 @@ Progress: [######----] 55%
 - 06-01: Skip confirmation uses inline v-if/v-else replacement, not modal overlay
 - 06-01: isSignificantStep checks step.title against hardcoded set ['AI Backend Accounts']
 - 06-01: confirmingSkip resets via watch on skippable + stepTitle props
+- 06-02: Document-level keydown listener (not window) for keyboard capture before page content
+- 06-02: Reused floating ref for focus trap container — no extra ref needed
+- 06-02: Focus trap activation synced with tooltip two-phase transition via computed
 
 ### Pending Todos
 
@@ -115,5 +118,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-03-22
-Stopped at: Completed 06-01-PLAN.md
+Stopped at: Completed 06-02-PLAN.md (Phase 06 complete)
 Resume file: None
