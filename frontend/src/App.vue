@@ -479,6 +479,7 @@ onUnmounted(() => {
   --z-tour-tooltip: 10002;
   --z-tour-controls: 10003;
   --z-tour-progress: 10004;
+  --z-toast: 10005;
 
   /* Tour visual layer */
   --tour-overlay-dim: rgba(0, 0, 0, 0.7);
@@ -990,7 +991,7 @@ body {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  z-index: 10000;
+  z-index: var(--z-toast);
   pointer-events: none;
 }
 
