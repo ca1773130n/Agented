@@ -5,17 +5,17 @@
 See: .planning/PROJECT.md (updated 2026-03-21)
 
 **Core value:** Enable engineering teams to orchestrate AI-powered automation through a unified dashboard
-**Current focus:** Phase 6 — Navigation Controls
+**Current focus:** Phase 7 — Loading & Error Resilience
 **Primary hypothesis:** A guided onboarding tour can bring new users from zero to first bot execution in under 3 minutes
 
 ## Current Position
 
-Phase: 6 of 10 (Navigation Controls)
-Plan: 2 of 2 in current phase
-Status: Phase Complete
-Last activity: 2026-03-22 — Completed 06-02-PLAN.md
+Phase: 7 of 10 (Loading & Error Resilience)
+Plan: 1 of 2 in current phase
+Status: In Progress
+Last activity: 2026-03-22 — Completed 07-01-PLAN.md
 
-Progress: [######----] 60%
+Progress: [######=---] 65%
 
 ## Current Baseline
 
@@ -42,9 +42,9 @@ Progress: [######----] 60%
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 12
+- Total plans completed: 13
 - Average duration: 7min
-- Total execution time: 1.30 hours
+- Total execution time: 1.40 hours
 
 **By Phase:**
 
@@ -56,6 +56,7 @@ Progress: [######----] 60%
 | 04-core-step-content | 2/2 | 12min | 6min |
 | 05-form-field-guidance | 1/1 | 8min | 8min |
 | 06-navigation-controls | 2/2 | 9min | 5min |
+| 07-loading-error-resilience | 1/2 | 6min | 6min |
 | 10-integration-testing | 3/4 | 13min | 4min |
 
 ## Accumulated Context
@@ -106,6 +107,11 @@ Progress: [######----] 60%
 - 06-02: Reused floating ref for focus trap container — no extra ref needed
 - 06-02: Focus trap activation synced with tooltip two-phase transition via computed
 
+- 07-01: Element-not-found (3s) takes priority over loading timeout (5s) via v-if/v-else-if chain
+- 07-01: MutationObserver scoped to #main-content with document.body fallback
+- 07-01: nextTick + 100ms delay before starting observer to avoid premature observation
+- 07-01: prefetchTourRoutes uses Promise.allSettled for resilient fire-and-forget
+
 ### Pending Todos
 
 None yet.
@@ -118,5 +124,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-03-22
-Stopped at: Completed 06-02-PLAN.md (Phase 06 complete)
+Stopped at: Completed 07-01-PLAN.md
 Resume file: None
