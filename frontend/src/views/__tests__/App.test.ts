@@ -27,21 +27,23 @@ vi.mock('../../services/api', () => ({
   getApiKey: vi.fn().mockReturnValue(null),
 }));
 
-vi.mock('../../composables/useTour', () => ({
-  useTour: () => ({
-    active: ref(false),
-    currentStepIndex: ref(0),
-    currentStep: computed(() => null),
-    completed: ref([]),
-    totalSteps: 8,
-    displayStepNumber: computed(() => 1),
-    tourComplete: ref(false),
+vi.mock('../../composables/useTourMachine', () => ({
+  useTourMachine: () => ({
+    state: computed(() => null),
+    context: computed(() => ({ instanceId: null, schemaVersion: 1, completedSteps: [] })),
+    isActive: computed(() => false),
+    currentStep: computed(() => 'idle'),
+    canGoBack: computed(() => false),
+    canGoForward: computed(() => false),
+    send: vi.fn(),
     startTour: mockStartTour,
     nextStep: mockNextStep,
+    prevStep: vi.fn(),
     skipStep: mockSkipStep,
-    endTour: vi.fn(),
-    updateStepRoute: vi.fn(),
-    steps: [],
+    completeTour: vi.fn(),
+    restartTour: vi.fn(),
+    clearTourState: vi.fn(),
+    checkAndAutoAdvance: vi.fn(),
   }),
 }));
 

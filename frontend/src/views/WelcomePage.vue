@@ -4,12 +4,15 @@ import { useRouter } from 'vue-router';
 import { healthApi } from '../services/api';
 import { setApiKey } from '../services/api/client';
 import { resetAuthGuard } from '../router/guards';
+import { useTourMachine } from '../composables/useTourMachine';
 
 const router = useRouter();
+const tourMachine = useTourMachine();
 
 // First-run page — clear any stale tour/key state from previous installs
 onMounted(() => {
   localStorage.removeItem('agented-tour-state');
+  localStorage.removeItem('agented-tour-machine-state');
   localStorage.removeItem('agented-api-key');
 });
 
@@ -21,6 +24,7 @@ const error = ref('');
 const copied = ref(false);
 
 function beginSetup() {
+  tourMachine.startTour(); // idle -> welcome
   phase.value = 'keygen';
 }
 
@@ -50,7 +54,8 @@ async function copyKey() {
 function continueToApp() {
   setApiKey(generatedKey.value);
   resetAuthGuard(); // Clear the "needs setup" state so router guard allows navigation
-  router.push({ path: '/', query: { tour: 'start' } });
+  tourMachine.nextStep(); // welcome -> workspace
+  router.push({ path: '/settings', hash: '#general' });
 }
 </script>
 

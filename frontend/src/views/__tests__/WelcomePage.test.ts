@@ -26,6 +26,29 @@ vi.mock('../../router/guards', () => ({
   resetAuthGuard: vi.fn(),
 }));
 
+const mockStartTour = vi.fn();
+const mockNextStep = vi.fn();
+
+vi.mock('../../composables/useTourMachine', () => ({
+  useTourMachine: () => ({
+    startTour: mockStartTour,
+    nextStep: mockNextStep,
+    state: { value: null },
+    isActive: { value: false },
+    currentStep: { value: 'idle' },
+    canGoBack: { value: false },
+    canGoForward: { value: false },
+    context: { value: { instanceId: null, schemaVersion: 1, completedSteps: [] } },
+    send: vi.fn(),
+    prevStep: vi.fn(),
+    skipStep: vi.fn(),
+    completeTour: vi.fn(),
+    restartTour: vi.fn(),
+    clearTourState: vi.fn(),
+    checkAndAutoAdvance: vi.fn(),
+  }),
+}));
+
 // Import mocked modules after vi.mock declarations
 import { healthApi } from '../../services/api';
 import { setApiKey } from '../../services/api/client';
@@ -78,7 +101,7 @@ describe('WelcomePage', () => {
     await flushPromises();
     await wrapper.find('[data-test="continue-btn"]').trigger('click');
     expect(setApiKey).toHaveBeenCalledWith('test-key-abc123');
-    expect(mockPush).toHaveBeenCalledWith('/?tour=start');
+    expect(mockPush).toHaveBeenCalledWith({ path: '/settings', hash: '#general' });
   });
 
   it('shows error state when key generation fails', async () => {
