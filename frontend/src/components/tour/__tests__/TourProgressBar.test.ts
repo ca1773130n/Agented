@@ -97,4 +97,52 @@ describe('TourProgressBar', () => {
     const hardcodedZIndex = styleBlock.match(/z-index:\s*\d+/g) || []
     expect(hardcodedZIndex).toEqual([])
   })
+
+  it('shows step title in left section', () => {
+    const wrapper = mount(TourProgressBar, {
+      props: { ...baseProps, stepTitle: 'Workspace Directory' },
+    })
+    expect(wrapper.find('.tour-step-title').exists()).toBe(true)
+    expect(wrapper.find('.tour-step-title').text()).toBe('Workspace Directory')
+  })
+
+  it('skip without confirmation emits skip directly', async () => {
+    const wrapper = mount(TourProgressBar, {
+      props: { ...baseProps, skippable: true, skipNeedsConfirm: false },
+    })
+    await wrapper.find('.tour-skip-btn').trigger('click')
+    expect(wrapper.emitted('skip')).toBeTruthy()
+    expect(wrapper.find('.tour-skip-confirm').exists()).toBe(false)
+  })
+
+  it('skip with confirmation shows confirm row first', async () => {
+    const wrapper = mount(TourProgressBar, {
+      props: { ...baseProps, skippable: true, skipNeedsConfirm: true },
+    })
+    await wrapper.find('.tour-skip-btn').trigger('click')
+    expect(wrapper.find('.tour-skip-confirm').exists()).toBe(true)
+    expect(wrapper.emitted('skip')).toBeFalsy()
+  })
+
+  it('confirm skip emits skip after confirmation', async () => {
+    const wrapper = mount(TourProgressBar, {
+      props: { ...baseProps, skippable: true, skipNeedsConfirm: true },
+    })
+    await wrapper.find('.tour-skip-btn').trigger('click')
+    expect(wrapper.find('.tour-skip-confirm').exists()).toBe(true)
+    await wrapper.find('.tour-confirm-skip-btn').trigger('click')
+    expect(wrapper.emitted('skip')).toBeTruthy()
+    expect(wrapper.find('.tour-skip-confirm').exists()).toBe(false)
+  })
+
+  it('cancel skip hides confirm row', async () => {
+    const wrapper = mount(TourProgressBar, {
+      props: { ...baseProps, skippable: true, skipNeedsConfirm: true },
+    })
+    await wrapper.find('.tour-skip-btn').trigger('click')
+    expect(wrapper.find('.tour-skip-confirm').exists()).toBe(true)
+    await wrapper.find('.tour-cancel-skip-btn').trigger('click')
+    expect(wrapper.find('.tour-skip-confirm').exists()).toBe(false)
+    expect(wrapper.emitted('skip')).toBeFalsy()
+  })
 })
