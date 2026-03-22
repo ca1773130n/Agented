@@ -138,11 +138,11 @@ Plans:
   2. Missing target elements trigger scoped MutationObserver (not document.body); fallback appears after 3s
   3. After first step, no loading spinner appears for standard step transitions (routes prefetched via dynamic import)
   4. Modals opening during tour steps (e.g., "Add Account") are interactive — overlay adjusts to allow modal interaction
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 07-01: Route prefetching, loading spinners, and missing element fallback
-- [ ] 07-02: Modal coordination during tour
+- [ ] 07-01-PLAN.md — Loading timeout fallback, scoped MutationObserver, and route prefetching (OB-40, OB-41, OB-42)
+- [ ] 07-02-PLAN.md — Toast z-index fix and modal coordination during tour (OB-43 deferred, OB-44)
 
 ### Phase 8: Accessibility
 **Goal**: The tour is fully accessible — animations respect reduced-motion preference, focus is trapped within tooltip + target, step changes announce via ARIA live regions, and the entire tour can be completed keyboard-only
@@ -155,7 +155,7 @@ Plans:
   2. Focus is trapped within tooltip controls + highlighted target element; Tab does not escape to background
   3. ARIA live region updates on every step change with "Step N of M: [title]. [message]"
   4. A keyboard-only user can complete the full tour — all controls reachable via Tab/Shift+Tab and activatable via Enter/Space
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
 - [ ] 08-01: Reduced motion, focus trapping, and ARIA announcements
@@ -171,7 +171,7 @@ Plans:
   2. Sidebar "Setup" checklist persists after tour, reflects actual completion state, and links to relevant settings pages
   3. "Restart Setup Guide" in Settings clears tour state and begins from first incomplete step (re-evaluates guards)
   4. Product, project, and team creation steps guide users through entity creation and are individually skippable
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
 - [ ] 09-01: Completion celebration and sidebar setup checklist
