@@ -16,14 +16,17 @@ interface TargetLike {
   message?: string
 }
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   active: boolean
   step: StepLike | null
   effectiveTarget: TargetLike | null
   substepLabel: string | null
   stepNumber: number
   totalSteps: number
-}>()
+  isModalOpen?: boolean
+}>(), {
+  isModalOpen: false,
+})
 
 const emit = defineEmits<{
   next: []
@@ -236,10 +239,10 @@ onUnmounted(() => {
   <!-- No dismiss on overlay click — OB-32: tour exits only via Skip/Next/complete -->
   <div v-if="active && step" class="tour-overlay" tabindex="-1" @click.stop>
     <!-- Spotlight highlight -->
-    <TourSpotlight :target-rect="targetRect" :visible="!!targetRect" />
+    <TourSpotlight :target-rect="targetRect" :visible="!!targetRect" :reduced="isModalOpen" />
 
     <!-- Fullscreen dim when no target found yet -->
-    <div v-if="!targetEl" class="tour-dim-fallback" />
+    <div v-if="!targetEl" :class="['tour-dim-fallback', { 'modal-open': isModalOpen }]" />
 
     <!-- Element-not-found fallback (OB-41) — takes precedence over loading timeout -->
     <div v-if="!targetEl && elementNotFoundTimeout" class="tour-element-fallback">
@@ -304,6 +307,11 @@ onUnmounted(() => {
   position: fixed;
   inset: 0;
   background: var(--tour-overlay-dim);
+  transition: opacity 0.2s ease;
+}
+
+.tour-dim-fallback.modal-open {
+  opacity: 0.3;
 }
 
 /* === Spinner === */

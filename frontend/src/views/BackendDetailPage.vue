@@ -360,7 +360,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue';
+import { ref, computed, onMounted, onUnmounted, watch, inject } from 'vue';
 import { useRoute } from 'vue-router';
 import { backendApi, orchestrationApi, BACKEND_PLAN_OPTIONS, BACKEND_LOGIN_INFO, type AIBackendWithAccounts, type BackendAccount, type AccountHealth, type BackendCapabilities, type RateLimitWindow } from '../services/api';
 import PageHeader from '../components/base/PageHeader.vue';
@@ -379,6 +379,12 @@ const backend = ref<AIBackendWithAccounts | null>(null);
 const showAddModal = ref(false);
 const editingAccount = ref<BackendAccount | null>(null);
 const isSaving = ref(false);
+
+// OB-44: Signal tour overlay when inline add/edit form is open
+const setTourModalOpen = inject<(open: boolean) => void>('setTourModalOpen', () => {});
+watch([showAddModal, editingAccount], ([addOpen, editing]) => {
+  setTourModalOpen(addOpen || editing !== null);
+});
 
 const showToast = useToast();
 

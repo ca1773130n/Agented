@@ -153,6 +153,15 @@ function dismissToast(id: number) {
 
 provide('showToast', showToast);
 
+// Modal coordination during tour (OB-44)
+const modalOpenDuringTour = ref(false);
+provide('setTourModalOpen', (open: boolean) => {
+  modalOpenDuringTour.value = open;
+});
+watch(tourActive, (active) => {
+  if (!active) modalOpenDuringTour.value = false;
+});
+
 // Register WebMCP generic verification tools (app-lifetime, no-ops in non-Canary browsers)
 registerGenericTools();
 
@@ -401,6 +410,7 @@ onUnmounted(() => {
       :substep-label="tourSubstepLabel"
       :step-number="tourStepNumber"
       :total-steps="totalTourSteps"
+      :is-modal-open="modalOpenDuringTour"
       @next="tour.nextStep"
       @skip="tour.skipStep"
       @retry="handleTourRetry"

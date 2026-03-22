@@ -1,10 +1,13 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   targetRect: DOMRect | null
   visible: boolean
-}>()
+  reduced?: boolean
+}>(), {
+  reduced: false,
+})
 
 const spotlightStyle = computed(() => {
   if (!props.targetRect) return {}
@@ -28,7 +31,7 @@ const spotlightStyle = computed(() => {
   <div
     v-if="targetRect"
     class="tour-spotlight"
-    :class="{ 'tour-spotlight--visible': visible }"
+    :class="{ 'tour-spotlight--visible': visible, 'tour-spotlight--reduced': reduced }"
     :style="spotlightStyle"
   >
     <div class="tour-spotlight-glow" />
@@ -52,6 +55,10 @@ const spotlightStyle = computed(() => {
 
 .tour-spotlight--visible {
   opacity: 1;
+}
+
+.tour-spotlight--reduced {
+  opacity: 0.3;
 }
 
 .tour-spotlight-glow {
