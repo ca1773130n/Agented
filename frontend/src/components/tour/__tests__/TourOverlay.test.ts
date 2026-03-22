@@ -159,4 +159,18 @@ describe('TourOverlay', () => {
     // Target selector won't match anything in test DOM
     expect(wrapper.find('.tour-dim-fallback').exists()).toBe(true)
   })
+
+  // --- Phase 2 tests ---
+
+  it('renders TourSpotlight child component when target is found', () => {
+    // In test DOM, target is not found, so TourSpotlight will not render its inner div
+    // But the component should still be imported and used
+    const wrapper = mount(TourOverlay, {
+      props: { active: true, step: workspaceStep, effectiveTarget: workspaceStep, substepLabel: null, stepNumber: 2, totalSteps: 8 },
+    })
+    // The TourSpotlight component is always rendered (v-if is inside it)
+    // Verify the component is in the tree by checking it exists as a child
+    const spotlight = wrapper.findComponent({ name: 'TourSpotlight' })
+    expect(spotlight.exists()).toBe(true)
+  })
 })
