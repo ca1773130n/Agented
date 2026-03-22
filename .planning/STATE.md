@@ -5,17 +5,17 @@
 See: .planning/PROJECT.md (updated 2026-03-21)
 
 **Core value:** Enable engineering teams to orchestrate AI-powered automation through a unified dashboard
-**Current focus:** Phase 4 — Core Step Content
+**Current focus:** Phase 5 — Form Field Guidance
 **Primary hypothesis:** A guided onboarding tour can bring new users from zero to first bot execution in under 3 minutes
 
 ## Current Position
 
-Phase: 4 of 10 (Core Step Content)
-Plan: 2 of 2 in current phase
+Phase: 5 of 10 (Form Field Guidance)
+Plan: 1 of 1 in current phase
 Status: Phase Complete
-Last activity: 2026-03-22 — Completed 04-02-PLAN.md
+Last activity: 2026-03-22 — Completed 05-01-PLAN.md
 
-Progress: [####------] 40%
+Progress: [#####-----] 50%
 
 ## Current Baseline
 
@@ -42,9 +42,9 @@ Progress: [####------] 40%
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 9
+- Total plans completed: 10
 - Average duration: 7min
-- Total execution time: 1.02 hours
+- Total execution time: 1.15 hours
 
 **By Phase:**
 
@@ -54,6 +54,7 @@ Progress: [####------] 40%
 | 02-visual-layer | 2/2 | 9min | 5min |
 | 03-welcome-flow-tour-entry | 1/1 | 7min | 7min |
 | 04-core-step-content | 2/2 | 12min | 6min |
+| 05-form-field-guidance | 1/1 | 8min | 8min |
 | 10-integration-testing | 3/4 | 13min | 4min |
 
 ## Accumulated Context
@@ -94,6 +95,9 @@ Progress: [####------] 40%
 - 04-01: OpenCode substep targets opencode-info note (add-account-btn hidden for OpenCode)
 - 04-01: totalTourSteps updated to 4 (workspace, backends, monitoring, verification)
 - 04-02: No code changes needed -- 04-01 already updated all test files for monitoring state
+- 05-01: Selector generation prefers input id-based (.form-group:has(#id)) for uniqueness, nth-of-type fallback
+- 05-01: TourFormGuide is renderless (slot-only template) — zero DOM footprint
+- 05-01: field-change emit { target, message } matches TourOverlay TargetLike interface
 
 ### Pending Todos
 
@@ -107,5 +111,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-03-22
-Stopped at: Completed 04-02-PLAN.md (Phase 04 complete)
+Stopped at: Completed 05-01-PLAN.md (Phase 05 complete)
 Resume file: None
