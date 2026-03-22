@@ -1,9 +1,23 @@
 import { describe, it, expect, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
+import { ref } from 'vue'
 import TourOverlay from '../TourOverlay.vue'
 
 vi.mock('vue-router', () => ({
   useRouter: () => ({ push: vi.fn(), currentRoute: { value: { path: '/' } } }),
+}))
+
+vi.mock('@floating-ui/vue', () => ({
+  useFloating: vi.fn(() => ({
+    floatingStyles: ref({ position: 'absolute', top: '100px', left: '200px' }),
+    placement: ref('bottom'),
+    middlewareData: ref({ arrow: { x: 50, y: 0 } }),
+  })),
+  offset: vi.fn(() => ({})),
+  flip: vi.fn(() => ({})),
+  shift: vi.fn(() => ({})),
+  arrow: vi.fn(() => ({})),
+  autoUpdate: vi.fn(),
 }))
 
 const workspaceStep = {
@@ -32,12 +46,41 @@ describe('TourOverlay', () => {
     expect(wrapper.find('.tour-overlay').exists()).toBe(false)
   })
 
-  it('renders overlay and bottom bar when active with a step', () => {
+  it('renders overlay when active with a step', () => {
     const wrapper = mount(TourOverlay, {
       props: { active: true, step: workspaceStep, effectiveTarget: workspaceStep, substepLabel: null, stepNumber: 2, totalSteps: 8 },
     })
     expect(wrapper.find('.tour-overlay').exists()).toBe(true)
-    expect(wrapper.find('.tour-bottom-bar').exists()).toBe(true)
+  })
+
+  it('renders TourSpotlight child component', () => {
+    const wrapper = mount(TourOverlay, {
+      props: { active: true, step: workspaceStep, effectiveTarget: workspaceStep, substepLabel: null, stepNumber: 2, totalSteps: 8 },
+    })
+    const spotlight = wrapper.findComponent({ name: 'TourSpotlight' })
+    expect(spotlight.exists()).toBe(true)
+  })
+
+  it('renders TourTooltip child component', () => {
+    const wrapper = mount(TourOverlay, {
+      props: { active: true, step: workspaceStep, effectiveTarget: workspaceStep, substepLabel: null, stepNumber: 2, totalSteps: 8 },
+    })
+    const tooltip = wrapper.findComponent({ name: 'TourTooltip' })
+    expect(tooltip.exists()).toBe(true)
+  })
+
+  it('renders TourProgressBar child component', () => {
+    const wrapper = mount(TourOverlay, {
+      props: { active: true, step: workspaceStep, effectiveTarget: workspaceStep, substepLabel: null, stepNumber: 2, totalSteps: 8 },
+    })
+    const progressBar = wrapper.findComponent({ name: 'TourProgressBar' })
+    expect(progressBar.exists()).toBe(true)
+  })
+
+  it('shows step counter via TourProgressBar', () => {
+    const wrapper = mount(TourOverlay, {
+      props: { active: true, step: workspaceStep, effectiveTarget: workspaceStep, substepLabel: null, stepNumber: 2, totalSteps: 8 },
+    })
     expect(wrapper.text()).toContain('STEP 2 OF 8')
     expect(wrapper.text()).toContain('Set the root directory')
   })
@@ -83,11 +126,8 @@ describe('TourOverlay', () => {
     const wrapper = mount(TourOverlay, {
       props: { active: true, step: workspaceStep, effectiveTarget: workspaceStep, substepLabel: null, stepNumber: 2, totalSteps: 8 },
     })
-    // Target won't be found in test DOM, so spinner should show
     expect(wrapper.find('.tour-spinner').exists()).toBe(true)
   })
-
-  // --- New tests added by 10-02 ---
 
   it('displays correct step counter text for different step numbers', () => {
     const wrapper = mount(TourOverlay, {
@@ -115,17 +155,6 @@ describe('TourOverlay', () => {
     expect(wrapper.find('.tour-step-message').text()).not.toBe('Set the root directory')
   })
 
-  it('applies correct CSS classes when active', () => {
-    const wrapper = mount(TourOverlay, {
-      props: { active: true, step: workspaceStep, effectiveTarget: workspaceStep, substepLabel: null, stepNumber: 2, totalSteps: 8 },
-    })
-    expect(wrapper.find('.tour-overlay').exists()).toBe(true)
-    expect(wrapper.find('.tour-bottom-bar').exists()).toBe(true)
-    expect(wrapper.find('.tour-actions').exists()).toBe(true)
-    expect(wrapper.find('.tour-step-message').exists()).toBe(true)
-    expect(wrapper.find('.tour-bar-left').exists()).toBe(true)
-  })
-
   it('emits events in correct order for rapid clicks', async () => {
     const wrapper = mount(TourOverlay, {
       props: { active: true, step: productStep, effectiveTarget: productStep, substepLabel: null, stepNumber: 2, totalSteps: 8 },
@@ -138,39 +167,16 @@ describe('TourOverlay', () => {
   })
 
   it('handles null step gracefully when active', () => {
-    // active=true but step=null — template condition v-if="active && step" prevents render
     const wrapper = mount(TourOverlay, {
       props: { active: true, step: null, effectiveTarget: null, substepLabel: null, stepNumber: 1, totalSteps: 8 },
     })
     expect(wrapper.find('.tour-overlay').exists()).toBe(false)
   })
 
-  it('displays step title in the overlay', () => {
-    const wrapper = mount(TourOverlay, {
-      props: { active: true, step: productStep, effectiveTarget: productStep, substepLabel: null, stepNumber: 6, totalSteps: 8 },
-    })
-    expect(wrapper.text()).toContain('Create your first product')
-  })
-
   it('shows dim fallback when target element not in DOM', () => {
     const wrapper = mount(TourOverlay, {
       props: { active: true, step: workspaceStep, effectiveTarget: workspaceStep, substepLabel: null, stepNumber: 2, totalSteps: 8 },
     })
-    // Target selector won't match anything in test DOM
     expect(wrapper.find('.tour-dim-fallback').exists()).toBe(true)
-  })
-
-  // --- Phase 2 tests ---
-
-  it('renders TourSpotlight child component when target is found', () => {
-    // In test DOM, target is not found, so TourSpotlight will not render its inner div
-    // But the component should still be imported and used
-    const wrapper = mount(TourOverlay, {
-      props: { active: true, step: workspaceStep, effectiveTarget: workspaceStep, substepLabel: null, stepNumber: 2, totalSteps: 8 },
-    })
-    // The TourSpotlight component is always rendered (v-if is inside it)
-    // Verify the component is in the tree by checking it exists as a child
-    const spotlight = wrapper.findComponent({ name: 'TourSpotlight' })
-    expect(spotlight.exists()).toBe(true)
   })
 })
