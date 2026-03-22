@@ -2,7 +2,7 @@
 import { ref, watch, onMounted, onUnmounted, provide, computed, getCurrentInstance } from 'vue';
 import { setupApi, healthApi } from './services/api';
 import { useRoute, useRouter } from 'vue-router';
-import { useTour } from './composables/useTour';
+import { useTourMachine } from './composables/useTourMachine';
 import TourOverlay from './components/tour/TourOverlay.vue';
 import AppSidebar from './components/layout/AppSidebar.vue';
 import AppHeader from './components/layout/AppHeader.vue';
@@ -18,7 +18,103 @@ const route = useRoute();
 const router = useRouter();
 const isFullBleed = computed(() => route.meta.fullBleed === true);
 const isWelcomePage = computed(() => route.name === 'welcome');
-const tour = useTour();
+const tour = useTourMachine();
+
+// ---------------------------------------------------------------------------
+// Tour step metadata — maps XState machine states to TourOverlay props
+// ---------------------------------------------------------------------------
+
+const TOUR_STEP_META: Record<string, { target: string; title: string; message: string; skippable: boolean; route: string; routeHash?: string }> = {
+  'workspace': {
+    target: '[data-tour="workspace-root"]',
+    title: 'Workspace Directory',
+    message: 'Set the root directory where repos will be cloned for your agent teams.',
+    skippable: false,
+    route: '/settings',
+    routeHash: '#general',
+  },
+  'backends.claude': {
+    target: '[data-tour="add-account-btn"]',
+    title: 'AI Backend Accounts',
+    message: 'Register a Claude Code account to get started.',
+    skippable: true,
+    route: '/backends/backend-claude',
+  },
+  'backends.codex': {
+    target: '[data-tour="add-account-btn"]',
+    title: 'AI Backend Accounts',
+    message: 'Register a Codex CLI account (optional).',
+    skippable: true,
+    route: '/backends/backend-codex',
+  },
+  'backends.gemini': {
+    target: '[data-tour="add-account-btn"]',
+    title: 'AI Backend Accounts',
+    message: 'Register a Gemini CLI account (optional).',
+    skippable: true,
+    route: '/backends/backend-gemini',
+  },
+  'backends.opencode': {
+    target: '[data-tour="add-account-btn"]',
+    title: 'AI Backend Accounts',
+    message: 'Register an OpenCode account (optional).',
+    skippable: true,
+    route: '/backends/backend-opencode',
+  },
+  'verification': {
+    target: '[data-tour="harness-status"]',
+    title: 'Harness Verification',
+    message: 'Confirm the harness plugin is installed and operational.',
+    skippable: true,
+    route: '/plugins',
+  },
+};
+
+// Map machine states to step numbers (1-based)
+const STEP_NUMBER_MAP: Record<string, number> = {
+  'workspace': 1,
+  'backends.claude': 2,
+  'backends.codex': 2,
+  'backends.gemini': 2,
+  'backends.opencode': 2,
+  'verification': 3,
+};
+
+const totalTourSteps = 3;
+
+const tourActive = computed(() => tour.isActive.value && !isWelcomePage.value);
+
+const tourStep = computed(() => {
+  const step = tour.currentStep.value;
+  const meta = TOUR_STEP_META[step];
+  if (!meta) return null;
+  return { target: meta.target, title: meta.title, message: meta.message, skippable: meta.skippable };
+});
+
+const tourStepNumber = computed(() => STEP_NUMBER_MAP[tour.currentStep.value] ?? 1);
+
+const tourSubstepLabel = computed(() => {
+  const step = tour.currentStep.value;
+  const labels: Record<string, string> = {
+    'backends.claude': 'Claude Code (1/4)',
+    'backends.codex': 'Codex CLI (2/4)',
+    'backends.gemini': 'Gemini CLI (3/4)',
+    'backends.opencode': 'OpenCode (4/4)',
+  };
+  return labels[step] ?? null;
+});
+
+// Navigate to correct route when machine state changes
+watch(() => tour.currentStep.value, (step) => {
+  const meta = TOUR_STEP_META[step];
+  if (!meta) return;
+  const target = meta.routeHash ? { path: meta.route, hash: meta.routeHash } : { path: meta.route };
+  const currentPath = route.path;
+  const currentHash = route.hash;
+  if (currentPath !== meta.route || (meta.routeHash && currentHash !== meta.routeHash)) {
+    router.push(target);
+  }
+});
 
 // Toast notification system
 type ToastType = 'success' | 'error' | 'info' | 'infrastructure';
@@ -124,6 +220,7 @@ function onAuthenticated() {
   if (shouldStartTour) {
     router.replace({ query: {} });
     tour.startTour();
+    tour.nextStep(); // welcome -> workspace (welcome page already shown)
   }
 }
 
@@ -152,6 +249,7 @@ watch(() => route.query.tour, (tourQuery) => {
     router.replace({ query: {} });
     loadSidebarData();
     tour.startTour();
+    tour.nextStep(); // welcome -> workspace
   }
 });
 
@@ -164,6 +262,7 @@ onMounted(async () => {
       router.replace({ query: {} });
       loadSidebarData();
       tour.startTour();
+      tour.nextStep(); // welcome -> workspace
       return;
     }
     loadSidebarData();
@@ -275,12 +374,12 @@ onUnmounted(() => {
     </Teleport>
 
     <TourOverlay
-      :active="tour.active.value && !isWelcomePage"
-      :step="tour.currentStep.value"
-      :effective-target="tour.effectiveTarget.value"
-      :substep-label="tour.substepLabel.value"
-      :step-number="tour.displayStepNumber.value"
-      :total-steps="tour.totalSteps"
+      :active="tourActive"
+      :step="tourStep"
+      :effective-target="null"
+      :substep-label="tourSubstepLabel"
+      :step-number="tourStepNumber"
+      :total-steps="totalTourSteps"
       @next="tour.nextStep"
       @skip="tour.skipStep"
     />
