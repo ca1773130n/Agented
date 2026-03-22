@@ -11,11 +11,11 @@ See: .planning/PROJECT.md (updated 2026-03-21)
 ## Current Position
 
 Phase: 10 of 10 (Integration Testing)
-Plan: 1 of 4 in current phase
+Plan: 2 of 4 in current phase
 Status: In Progress
-Last activity: 2026-03-22 — Completed 10-01-PLAN.md
+Last activity: 2026-03-22 — Completed 10-02-PLAN.md
 
-Progress: [##--------] 10%
+Progress: [###-------] 15%
 
 ## Current Baseline
 
@@ -24,7 +24,8 @@ Progress: [##--------] 10%
 | Tour completion time | N/A | < 3 min | - | - |
 | Welcome page load | N/A | < 200ms | - | - |
 | Step transition time | N/A | < 300ms | - | - |
-| State machine branch coverage | 0% | >= 90% | 100% | Phase 10 |
+| State machine branch coverage | 0% | >= 90% | 5% | Phase 10 |
+| useTourMachine branch coverage | 0% | >= 90% | 5% | Phase 10 |
 
 **Last evaluated:** Not yet
 **Trend:** Not enough data
@@ -41,16 +42,16 @@ Progress: [##--------] 10%
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 2
-- Average duration: 13min
-- Total execution time: 0.42 hours
+- Total plans completed: 3
+- Average duration: 12min
+- Total execution time: 0.52 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 01-backend-state-machine-foundation | 2/2 | 25min | 13min |
-| 10-integration-testing | 1/4 | 5min | 5min |
+| 10-integration-testing | 2/4 | 11min | 6min |
 
 ## Accumulated Context
 
@@ -67,6 +68,9 @@ Progress: [##--------] 10%
 - 01-02: Toast z-index conflict (hardcoded 10000 = --z-tour-overlay) deferred to Phase 7
 - 10-01: Pure actor testing with createActor — no Vue, no DOM, no mocks
 - 10-01: Guard override via machine.provide() for SKIP_ALL testing
+- 10-02: vi.resetModules + dynamic import pattern for singleton composable testing
+- 10-02: getSnapshotAtState helper creates valid XState snapshots for persistence tests
+- 10-02: Mutable mockApiKey for testing X-API-Key header inclusion
 
 ### Pending Todos
 
@@ -80,5 +84,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-03-22
-Stopped at: Completed 10-01-PLAN.md
+Stopped at: Completed 10-02-PLAN.md
 Resume file: None
