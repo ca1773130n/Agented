@@ -87,11 +87,11 @@ Plans:
   2. Tour cycles through 4 backend pages with individually skippable substeps; completing one backend satisfies the step requirement
   3. Per-backend form fields are highlighted sequentially with actionable help text after clicking "Add Account"
   4. Tour navigates to monitoring settings for token configuration and to harness page for plugin verification
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 04-01: Workspace and backend account step definitions with substep sequences
-- [ ] 04-02: Token monitoring and harness verification steps
+- [ ] 04-01-PLAN.md — Add monitoring state to machine, fix verification selector/route, update TOUR_STEP_META with all 7 state entries, step numbering, OpenCode special case, monitoring guard
+- [ ] 04-02-PLAN.md — Update tourMachine.test.ts, useTourMachine.test.ts, and App.test.ts for monitoring state in navigation sequences and assertions
 
 ### Phase 5: Form Field Guidance
 **Goal**: The TourFormGuide component auto-discovers `.form-group` elements on any page, highlights fields one by one in DOM order, shows contextual help text derived from labels, and ends with submit button guidance
