@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@dagrejs/dagre": "^2.0.4",
+    "@floating-ui/vue": "^1.1.11",
     "@mcp-b/global": "^1.5.0",
     "@mcp-b/webmcp-types": "^0.2.1",
     "@microsoft/fetch-event-source": "^2.0.1",

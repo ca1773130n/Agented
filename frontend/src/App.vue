@@ -358,6 +358,15 @@ onUnmounted(() => {
   --z-tour-tooltip: 10002;
   --z-tour-controls: 10003;
   --z-tour-progress: 10004;
+
+  /* Tour visual layer */
+  --tour-overlay-dim: rgba(0, 0, 0, 0.7);
+  --tour-spotlight-radius: 8px;
+  --tour-spotlight-padding: 8px;
+  --tour-glow-color: var(--accent-cyan);
+  --tour-glow-dim: rgba(0, 212, 255, 0.3);
+  --tour-glow-bright: rgba(0, 212, 255, 0.5);
+  --tour-transition-speed: 200ms;
 }
 
 * {
