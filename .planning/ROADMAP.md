@@ -152,13 +152,13 @@ Plans:
 **Verification Level**: proxy
 **Success Criteria** (what must be TRUE):
   1. With `prefers-reduced-motion: reduce`, no animations play — spotlight, tooltip, and glow are instant, tour remains fully functional
-  2. Focus is trapped within tooltip controls + highlighted target element; Tab does not escape to background
+  2. Focus is trapped within tooltip controls + highlighted target element; Tab does not escape to background (done in Phase 6)
   3. ARIA live region updates on every step change with "Step N of M: [title]. [message]"
-  4. A keyboard-only user can complete the full tour — all controls reachable via Tab/Shift+Tab and activatable via Enter/Space
-**Plans**: 2 plans
+  4. A keyboard-only user can complete the full tour — all controls reachable via Tab/Shift+Tab and activatable via Enter/Space (done in Phase 6)
+**Plans**: 1 plan
 
 Plans:
-- [ ] 08-01: Reduced motion, focus trapping, and ARIA announcements
+- [ ] 08-01-PLAN.md — Reduced motion CSS + JS bypass and ARIA live announcements (OB-36, OB-38; OB-37/OB-39 done in Phase 6)
 
 ### Phase 9: Post-Tour Experience
 **Goal**: Tour completion shows a celebration screen with summary of configured/skipped items, a persistent sidebar checklist tracks setup progress, the tour can be restarted from settings, and optional steps (product, project, team) guide entity creation
@@ -174,8 +174,8 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 09-01: Completion celebration and sidebar setup checklist
-- [ ] 09-02: Product, project, and team creation steps with restart capability
+- [ ] 09-01-PLAN.md — Completion celebration and sidebar setup checklist
+- [ ] 09-02-PLAN.md — Product, project, and team creation steps with restart capability
 
 ### Phase 10: Integration Testing
 **Goal**: Comprehensive test coverage validates the full tour system — unit tests for state machine and all visual components, E2E Playwright tests for complete flows, and the entire codebase passes vue-tsc + Vite build
