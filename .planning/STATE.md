@@ -5,17 +5,17 @@
 See: .planning/PROJECT.md (updated 2026-03-21)
 
 **Core value:** Enable engineering teams to orchestrate AI-powered automation through a unified dashboard
-**Current focus:** Phase 3 — Welcome Flow + Tour Entry
+**Current focus:** Phase 4 — Core Step Content
 **Primary hypothesis:** A guided onboarding tour can bring new users from zero to first bot execution in under 3 minutes
 
 ## Current Position
 
-Phase: 3 of 10 (Welcome Flow + Tour Entry)
-Plan: 1 of 1 in current phase
-Status: Phase Complete
-Last activity: 2026-03-22 — Completed 03-01-PLAN.md
+Phase: 4 of 10 (Core Step Content)
+Plan: 1 of 2 in current phase
+Status: In Progress
+Last activity: 2026-03-22 — Completed 04-01-PLAN.md
 
-Progress: [##########] 100%
+Progress: [####------] 40%
 
 ## Current Baseline
 
@@ -42,9 +42,9 @@ Progress: [##########] 100%
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 7
+- Total plans completed: 8
 - Average duration: 8min
-- Total execution time: 0.82 hours
+- Total execution time: 1.00 hours
 
 **By Phase:**
 
@@ -53,6 +53,7 @@ Progress: [##########] 100%
 | 01-backend-state-machine-foundation | 2/2 | 25min | 13min |
 | 02-visual-layer | 2/2 | 9min | 5min |
 | 03-welcome-flow-tour-entry | 1/1 | 7min | 7min |
+| 04-core-step-content | 1/2 | 11min | 11min |
 | 10-integration-testing | 3/4 | 13min | 4min |
 
 ## Accumulated Context
@@ -88,6 +89,10 @@ Progress: [##########] 100%
 - 03-01: Computed bridge layer in App.vue translates machine state to StepLike interface
 - 03-01: Direct navigation from WelcomePage to /settings#general (no /?tour=start redirect)
 - 03-01: totalTourSteps=3 hardcoded (workspace, backends, verification) pending Phase 4
+- 04-01: Monitoring step targets token-monitoring card on /settings#general
+- 04-01: Verification step changed to harness-plugins on /settings#harness (not /plugins)
+- 04-01: OpenCode substep targets opencode-info note (add-account-btn hidden for OpenCode)
+- 04-01: totalTourSteps updated to 4 (workspace, backends, monitoring, verification)
 
 ### Pending Todos
 
@@ -101,5 +106,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-03-22
-Stopped at: Completed 03-01-PLAN.md (Phase 03 complete)
+Stopped at: Completed 04-01-PLAN.md
 Resume file: None
