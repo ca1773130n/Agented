@@ -54,6 +54,7 @@ export const tourMachine = setup({
     isWorkspaceConfigured: () => false,
     hasClaudeAccount: () => false,
     hasAnyBackend: () => false,
+    isMonitoringConfigured: () => false,
     canSkipAll: () => false,
   },
 
@@ -121,11 +122,11 @@ export const tourMachine = setup({
       initial: 'claude',
       on: {
         NEXT: {
-          target: 'verification',
+          target: 'monitoring',
           actions: ['markStepCompleted'],
         },
         BACK: { target: 'workspace' },
-        SKIP: { target: 'verification' },
+        SKIP: { target: 'monitoring' },
       },
       states: {
         claude: {
@@ -165,13 +166,24 @@ export const tourMachine = setup({
       },
     },
 
+    monitoring: {
+      on: {
+        NEXT: {
+          target: 'verification',
+          actions: ['markStepCompleted'],
+        },
+        BACK: { target: 'backends' },
+        SKIP: { target: 'verification' },
+      },
+    },
+
     verification: {
       on: {
         NEXT: {
           target: 'complete',
           actions: ['markStepCompleted'],
         },
-        BACK: { target: 'backends' },
+        BACK: { target: 'monitoring' },
         SKIP: { target: 'complete' },
       },
     },
