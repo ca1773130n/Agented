@@ -79,4 +79,13 @@ const spotlightStyle = computed(() => {
     box-shadow: 0 0 24px 6px var(--tour-glow-bright);
   }
 }
+
+@media (prefers-reduced-motion: reduce) {
+  .tour-spotlight-glow {
+    animation: none;
+  }
+  .tour-spotlight {
+    transition: none;
+  }
+}
 </style>

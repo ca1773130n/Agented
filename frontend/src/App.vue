@@ -1853,5 +1853,9 @@ body {
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
+
+  :root {
+    --tour-transition-speed: 0ms;
+  }
 }
 </style>

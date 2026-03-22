@@ -3,6 +3,14 @@ import { computed, ref, watch } from 'vue'
 import { useFloating, offset, flip, shift, arrow, autoUpdate } from '@floating-ui/vue'
 import { useFocusTrap } from '../../composables/useFocusTrap'
 
+function getTransitionDuration(): number {
+  const raw = getComputedStyle(document.documentElement)
+    .getPropertyValue('--tour-transition-speed')
+    .trim()
+  // e.g. "200ms" -> 200, "0ms" -> 0
+  return parseInt(raw, 10) || 0
+}
+
 const props = defineProps<{
   targetRect: DOMRect | null
   title: string
@@ -78,7 +86,7 @@ watch(
       setTimeout(() => {
         isVisible.value = true
         isTransitioning.value = false
-      }, 200)
+      }, getTransitionDuration())
     }
   },
 )
@@ -168,5 +176,11 @@ useFocusTrap(floating, isTrapActive)
   background: var(--bg-elevated);
   border: 1px solid var(--border-default);
   transform: rotate(45deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tour-tooltip {
+    transition: none;
+  }
 }
 </style>
