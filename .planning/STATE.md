@@ -11,11 +11,11 @@ See: .planning/PROJECT.md (updated 2026-03-21)
 ## Current Position
 
 Phase: 10 of 10 (Integration Testing)
-Plan: 2 of 4 in current phase
+Plan: 3 of 4 in current phase
 Status: In Progress
-Last activity: 2026-03-22 — Completed 10-02-PLAN.md
+Last activity: 2026-03-22 — Completed 10-03-PLAN.md
 
-Progress: [###-------] 15%
+Progress: [####------] 18%
 
 ## Current Baseline
 
@@ -42,16 +42,16 @@ Progress: [###-------] 15%
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 3
-- Average duration: 12min
-- Total execution time: 0.52 hours
+- Total plans completed: 4
+- Average duration: 10min
+- Total execution time: 0.55 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 01-backend-state-machine-foundation | 2/2 | 25min | 13min |
-| 10-integration-testing | 2/4 | 11min | 6min |
+| 10-integration-testing | 3/4 | 13min | 4min |
 
 ## Accumulated Context
 
@@ -71,6 +71,9 @@ Progress: [###-------] 15%
 - 10-02: vi.resetModules + dynamic import pattern for singleton composable testing
 - 10-02: getSnapshotAtState helper creates valid XState snapshots for persistence tests
 - 10-02: Mutable mockApiKey for testing X-API-Key header inclusion
+- 10-03: Tour fixture extends base.ts (not @playwright/test) to inherit global API mocks
+- 10-03: Accessibility tests use graceful degradation — document gaps rather than hard-fail
+- 10-03: Instance-id mismatch documented as useTour limitation (only useTourMachine checks it)
 
 ### Pending Todos
 
@@ -84,5 +87,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-03-22
-Stopped at: Completed 10-02-PLAN.md
+Stopped at: Completed 10-03-PLAN.md
 Resume file: None
