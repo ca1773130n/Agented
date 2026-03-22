@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useFloating, offset, flip, shift, arrow, autoUpdate } from '@floating-ui/vue'
+import { useFocusTrap } from '../../composables/useFocusTrap'
 
 const props = defineProps<{
   targetRect: DOMRect | null
@@ -101,6 +102,10 @@ const arrowStyle = computed(() => {
   style[arrowSide.value] = '-4px'
   return style
 })
+
+// Focus trap — contain Tab within tooltip while visible
+const isTrapActive = computed(() => props.visible && isVisible.value)
+useFocusTrap(floating, isTrapActive)
 </script>
 
 <template>
@@ -110,6 +115,7 @@ const arrowStyle = computed(() => {
     class="tour-tooltip"
     :class="{ 'tour-tooltip--visible': isVisible && !isTransitioning }"
     :style="floatingStyles"
+    tabindex="-1"
   >
     <h4 class="tour-tooltip-title">{{ title }}</h4>
     <p class="tour-tooltip-message">{{ message }}</p>
