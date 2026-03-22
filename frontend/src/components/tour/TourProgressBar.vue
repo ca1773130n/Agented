@@ -1,30 +1,61 @@
 <script setup lang="ts">
-defineProps<{
+import { ref, watch } from 'vue'
+
+const props = defineProps<{
   stepNumber: number
   totalSteps: number
   substepLabel: string | null
   message: string
   skippable: boolean
   visible: boolean
+  stepTitle: string
+  skipNeedsConfirm: boolean
 }>()
 
 defineEmits<{
   next: []
   skip: []
 }>()
+
+const confirmingSkip = ref(false)
+
+function onSkipClick(emit: (evt: 'skip') => void) {
+  if (props.skipNeedsConfirm) {
+    confirmingSkip.value = true
+  } else {
+    emit('skip')
+  }
+}
+
+function onConfirmSkip(emit: (evt: 'skip') => void) {
+  confirmingSkip.value = false
+  emit('skip')
+}
+
+watch([() => props.skippable, () => props.stepTitle], () => {
+  confirmingSkip.value = false
+})
 </script>
 
 <template>
   <div v-if="visible" class="tour-progress-bar">
     <div class="tour-bar-left">
-      <span class="tour-step-counter">
-        STEP {{ stepNumber }} OF {{ totalSteps }}
-      </span>
-      <span v-if="substepLabel" class="tour-substep-label">{{ substepLabel }}</span>
+      <span class="tour-step-title">{{ stepTitle }}</span>
+      <div class="tour-bar-meta">
+        <span class="tour-step-counter">
+          STEP {{ stepNumber }} OF {{ totalSteps }}
+        </span>
+        <span v-if="substepLabel" class="tour-substep-label">{{ substepLabel }}</span>
+      </div>
     </div>
     <p class="tour-step-message">{{ message }}</p>
-    <div class="tour-actions">
-      <button v-if="skippable" class="tour-skip-btn" @click="$emit('skip')">
+    <div v-if="confirmingSkip" class="tour-skip-confirm">
+      <span class="tour-skip-confirm-text">Skip this step? You can complete it later from the setup checklist.</span>
+      <button class="tour-confirm-skip-btn" @click="onConfirmSkip($emit)">Skip anyway</button>
+      <button class="tour-cancel-skip-btn" @click="confirmingSkip = false">Keep going</button>
+    </div>
+    <div v-else class="tour-actions">
+      <button v-if="skippable" class="tour-skip-btn" @click="onSkipClick($emit)">
         Skip
       </button>
       <button class="tour-next-btn" @click="$emit('next')">
@@ -54,9 +85,25 @@ defineEmits<{
 
 .tour-bar-left {
   display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.tour-step-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+  display: block;
+  margin-bottom: 2px;
+}
+
+.tour-bar-meta {
+  display: flex;
   align-items: center;
   gap: 8px;
-  flex-shrink: 0;
 }
 
 .tour-step-counter {
@@ -121,6 +168,54 @@ defineEmits<{
 }
 
 .tour-next-btn:hover {
+  filter: brightness(1.15);
+}
+
+.tour-skip-confirm {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.tour-skip-confirm-text {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.tour-confirm-skip-btn {
+  padding: 6px 14px;
+  background: transparent;
+  border: 1px solid var(--accent-crimson);
+  color: var(--text-secondary);
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: border-color var(--transition-fast), color var(--transition-fast);
+  font-family: inherit;
+  white-space: nowrap;
+}
+
+.tour-confirm-skip-btn:hover {
+  color: var(--text-primary);
+}
+
+.tour-cancel-skip-btn {
+  padding: 6px 16px;
+  background: var(--accent-cyan);
+  color: var(--text-on-accent);
+  border: none;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: filter var(--transition-fast);
+  font-family: inherit;
+  white-space: nowrap;
+}
+
+.tour-cancel-skip-btn:hover {
   filter: brightness(1.15);
 }
 </style>

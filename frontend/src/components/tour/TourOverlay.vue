@@ -95,6 +95,12 @@ function cleanup() {
   targetRect.value = null
 }
 
+const SIGNIFICANT_STEP_TITLES = ['AI Backend Accounts']
+
+function isSignificantStep(step: StepLike): boolean {
+  return SIGNIFICANT_STEP_TITLES.includes(step.title)
+}
+
 watch(
   [() => props.active, () => props.step, () => props.effectiveTarget],
   () => {
@@ -151,6 +157,8 @@ onUnmounted(cleanup)
       :message="effectiveTarget?.message || step.message"
       :skippable="step.skippable"
       :visible="true"
+      :step-title="step.title"
+      :skip-needs-confirm="step.skippable && isSignificantStep(step)"
       @next="$emit('next')"
       @skip="$emit('skip')"
     />

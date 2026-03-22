@@ -11,6 +11,8 @@ const baseProps = {
   message: 'Configure your workspace',
   skippable: false,
   visible: true,
+  stepTitle: 'Configure Workspace',
+  skipNeedsConfirm: false,
 }
 
 describe('TourProgressBar', () => {
