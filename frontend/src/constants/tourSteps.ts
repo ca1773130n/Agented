@@ -10,6 +10,8 @@
 export interface TourStepDefinition {
   /** Machine state key, e.g. 'workspace' or 'backends.claude' */
   key: string
+  /** i18n locale key suffix under `tour.steps.*` */
+  localeKey: string
   /** Human-readable label shown in checklists and completion screen */
   label: string
   /** CSS selector for the tour spotlight target */
@@ -28,11 +30,14 @@ export interface TourStepDefinition {
   stepNumber: number
   /** Substep label if this step is part of a multi-step group */
   substepLabel?: string
+  /** Toast message substring that triggers auto-advance when matched */
+  autoAdvanceOnToast?: string
 }
 
 export const TOUR_STEP_DEFINITIONS: TourStepDefinition[] = [
   {
     key: 'workspace',
+    localeKey: 'workspace',
     label: 'Workspace Directory',
     target: '[data-tour="workspace-root"]',
     title: 'Workspace Directory',
@@ -41,9 +46,11 @@ export const TOUR_STEP_DEFINITIONS: TourStepDefinition[] = [
     route: '/settings',
     routeHash: '#general',
     stepNumber: 1,
+    autoAdvanceOnToast: 'Workspace root saved',
   },
   {
     key: 'backends.claude',
+    localeKey: 'claude',
     label: 'Claude Code',
     target: '[data-tour="add-account-btn"]',
     title: 'AI Backend Accounts',
@@ -52,9 +59,11 @@ export const TOUR_STEP_DEFINITIONS: TourStepDefinition[] = [
     route: '/backends/backend-claude',
     stepNumber: 2,
     substepLabel: 'Claude Code (1/4)',
+    autoAdvanceOnToast: 'Account saved',
   },
   {
     key: 'backends.codex',
+    localeKey: 'codex',
     label: 'Codex CLI',
     target: '[data-tour="add-account-btn"]',
     title: 'AI Backend Accounts',
@@ -63,9 +72,11 @@ export const TOUR_STEP_DEFINITIONS: TourStepDefinition[] = [
     route: '/backends/backend-codex',
     stepNumber: 2,
     substepLabel: 'Codex CLI (2/4)',
+    autoAdvanceOnToast: 'Account saved',
   },
   {
     key: 'backends.gemini',
+    localeKey: 'gemini',
     label: 'Gemini CLI',
     target: '[data-tour="add-account-btn"]',
     title: 'AI Backend Accounts',
@@ -74,9 +85,11 @@ export const TOUR_STEP_DEFINITIONS: TourStepDefinition[] = [
     route: '/backends/backend-gemini',
     stepNumber: 2,
     substepLabel: 'Gemini CLI (3/4)',
+    autoAdvanceOnToast: 'Account saved',
   },
   {
     key: 'backends.opencode',
+    localeKey: 'opencode',
     label: 'OpenCode',
     target: '[data-tour="opencode-info"]',
     title: 'AI Backend Accounts',
@@ -88,6 +101,7 @@ export const TOUR_STEP_DEFINITIONS: TourStepDefinition[] = [
   },
   {
     key: 'monitoring',
+    localeKey: 'monitoring',
     label: 'Token Monitoring',
     target: '[data-tour="token-monitoring"]',
     title: 'Token Monitoring',
@@ -96,9 +110,11 @@ export const TOUR_STEP_DEFINITIONS: TourStepDefinition[] = [
     route: '/settings',
     routeHash: '#general',
     stepNumber: 3,
+    autoAdvanceOnToast: 'Monitoring settings saved',
   },
   {
     key: 'verification',
+    localeKey: 'verification',
     label: 'Harness Verification',
     target: '[data-tour="harness-plugins"]',
     title: 'Harness Verification',
@@ -110,6 +126,7 @@ export const TOUR_STEP_DEFINITIONS: TourStepDefinition[] = [
   },
   {
     key: 'create_product',
+    localeKey: 'product',
     label: 'First Product',
     target: '[data-tour="create-product"]',
     title: 'Create Your First Product',
@@ -120,6 +137,7 @@ export const TOUR_STEP_DEFINITIONS: TourStepDefinition[] = [
   },
   {
     key: 'create_project',
+    localeKey: 'project',
     label: 'First Project',
     target: '[data-tour="create-project"]',
     title: 'Create Your First Project',
@@ -130,6 +148,7 @@ export const TOUR_STEP_DEFINITIONS: TourStepDefinition[] = [
   },
   {
     key: 'create_team',
+    localeKey: 'team',
     label: 'Team Setup',
     target: '[data-tour="assign-teams"]',
     title: 'Set Up a Team',

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { RouterLink } from 'vue-router';
 import { TOUR_STEP_DEFINITIONS } from '../../constants/tourSteps';
 
@@ -8,6 +9,8 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{ done: [] }>();
+
+const { t } = useI18n();
 
 function stepToDisplay(def: typeof TOUR_STEP_DEFINITIONS[number]) {
   const link = def.routeHash ? `${def.route}${def.routeHash}` : def.route;
@@ -37,8 +40,8 @@ const skippedItems = computed(() =>
         </svg>
       </div>
 
-      <h2 class="completion-heading">Setup Complete</h2>
-      <p class="completion-subtext">Your workspace is ready. Here's what you configured:</p>
+      <h2 class="completion-heading">{{ t('tour.setupComplete') }}</h2>
+      <p class="completion-subtext">{{ t('tour.setupCompleteDesc') }}</p>
 
       <!-- Configured items -->
       <div v-if="configuredItems.length > 0" class="completion-section">
@@ -56,7 +59,7 @@ const skippedItems = computed(() =>
 
       <!-- Skipped items -->
       <div v-if="skippedItems.length > 0" class="completion-section">
-        <div class="section-divider-label">Skipped</div>
+        <div class="section-divider-label">{{ t('tour.skipped') }}</div>
         <ul class="completion-list">
           <li v-for="item in skippedItems" :key="item.label" class="completion-list-item skipped">
             <RouterLink :to="item.link" class="skipped-link" @click.prevent="emit('done')">
@@ -72,7 +75,7 @@ const skippedItems = computed(() =>
       </div>
 
       <button type="button" class="completion-btn" @click="emit('done')">
-        Go to Dashboard
+        {{ t('tour.goToDashboard') }}
       </button>
     </div>
   </div>

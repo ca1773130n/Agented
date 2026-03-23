@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, watch, computed, onMounted, onUnmounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import TourSpotlight from './TourSpotlight.vue'
 import TourTooltip from './TourTooltip.vue'
 import TourProgressBar from './TourProgressBar.vue'
@@ -36,6 +37,8 @@ const emit = defineEmits<{
   retry: []
 }>()
 
+const { t } = useI18n()
+
 const targetEl = ref<HTMLElement | null>(null)
 const targetRect = ref<DOMRect | null>(null)
 let observer: MutationObserver | null = null
@@ -58,7 +61,8 @@ const currentTargetName = computed(() => {
 // OB-38: ARIA live announcement text for screen readers
 const announcement = computed(() => {
   if (!props.active || !props.step) return ''
-  return `Step ${props.stepNumber} of ${props.totalSteps}: ${props.step.title}. ${props.step.message}`
+  const stepOf = t('tour.stepOf', { current: props.stepNumber, total: props.totalSteps })
+  return `${stepOf}: ${props.step.title}. ${props.step.message}`
 })
 
 function updateRect() {
@@ -254,8 +258,8 @@ onUnmounted(() => {
     <div v-if="!targetEl && elementNotFoundTimeout" class="tour-element-fallback">
       <p>We couldn't find <strong>{{ currentTargetName }}</strong>.</p>
       <div class="fallback-actions">
-        <button class="btn-fallback-skip" @click="$emit('skip')">Skip</button>
-        <button class="btn-fallback-retry" @click="handleElementRetry">Retry</button>
+        <button class="btn-fallback-skip" @click="$emit('skip')">{{ t('common.skip') }}</button>
+        <button class="btn-fallback-retry" @click="handleElementRetry">{{ t('common.retry') }}</button>
       </div>
     </div>
 
@@ -263,8 +267,8 @@ onUnmounted(() => {
     <div v-else-if="!targetEl && loadingTimedOut" class="tour-timeout-fallback">
       <p class="fallback-text">This page is taking longer than expected.</p>
       <div class="fallback-actions">
-        <button class="btn-fallback-skip" @click="$emit('skip')">Skip</button>
-        <button class="btn-fallback-retry" @click="handleRetry">Retry</button>
+        <button class="btn-fallback-skip" @click="$emit('skip')">{{ t('common.skip') }}</button>
+        <button class="btn-fallback-retry" @click="handleRetry">{{ t('common.retry') }}</button>
       </div>
     </div>
 
@@ -273,7 +277,7 @@ onUnmounted(() => {
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="spinner-icon">
         <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
       </svg>
-      <span class="spinner-text">Loading...</span>
+      <span class="spinner-text">{{ t('common.loading') }}</span>
     </div>
 
     <!-- Tooltip anchored to spotlight target -->

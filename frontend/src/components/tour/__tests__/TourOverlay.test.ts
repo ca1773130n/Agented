@@ -240,7 +240,7 @@ describe('TourOverlay', () => {
       })
       const liveRegion = wrapper.find('[aria-live="polite"]')
       expect(liveRegion.exists()).toBe(true)
-      expect(liveRegion.text()).toBe('Step 1 of 4: Workspace Directory. Set the root directory')
+      expect(liveRegion.text()).toBe('STEP 1 OF 4: Workspace Directory. Set the root directory')
       wrapper.unmount()
     })
 
@@ -252,7 +252,7 @@ describe('TourOverlay', () => {
       expect(liveRegion.text()).toContain('Workspace Directory')
 
       await wrapper.setProps({ step: productStep, effectiveTarget: productStep, stepNumber: 2 })
-      expect(liveRegion.text()).toBe('Step 2 of 4: First Product. Create your first product')
+      expect(liveRegion.text()).toBe('STEP 2 OF 4: First Product. Create your first product')
       wrapper.unmount()
     })
 
@@ -261,7 +261,7 @@ describe('TourOverlay', () => {
         props: { active: true, step: productStep, effectiveTarget: productStep, substepLabel: null, stepNumber: 3, totalSteps: 5 },
       })
       const liveRegion = wrapper.find('[aria-live="polite"]')
-      expect(liveRegion.text()).toMatch(/^Step 3 of 5:/)
+      expect(liveRegion.text()).toMatch(/^STEP 3 OF 5:/)
       wrapper.unmount()
     })
 

@@ -10,6 +10,7 @@
  *   4) Plan & Save (choose plan, set default, save)
  */
 import { ref, computed, watch, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { backendApi, utilityApi, BACKEND_PLAN_OPTIONS, BACKEND_LOGIN_INFO } from '../../services/api';
 
 const props = defineProps<{
@@ -26,6 +27,8 @@ const emit = defineEmits<{
   skip: [];
   addAnother: [];
 }>();
+
+const { t } = useI18n();
 
 // ---------------------------------------------------------------------------
 // Wizard step management
@@ -282,7 +285,7 @@ function addAnotherAccount() {
 <template>
   <div class="wizard-container">
     <div class="wizard-header">
-      <h3>Add Account</h3>
+      <h3>{{ t('accountWizard.addAccount') }}</h3>
       <button class="wizard-close" @click="emit('close')">&times;</button>
     </div>
 
@@ -314,20 +317,20 @@ function addAnotherAccount() {
     <!-- Step 1: Subscription -->
     <div v-if="currentStep === 'subscription'" class="wizard-step">
       <div class="step-body">
-        <p class="step-question">Do you have a {{ backendName }} subscription?</p>
+        <p class="step-question">{{ t('accountWizard.subscription', { backend: backendName }) }}</p>
 
         <div class="radio-group">
           <label class="radio-card" :class="{ selected: hasSubscription === 'yes' }">
             <input type="radio" v-model="hasSubscription" value="yes" />
             <div class="radio-card-content">
-              <span class="radio-card-title">Yes, I have an account</span>
+              <span class="radio-card-title">{{ t('accountWizard.yesHaveAccount') }}</span>
               <span class="radio-card-desc">I have credentials and want to register this backend</span>
             </div>
           </label>
           <label class="radio-card" :class="{ selected: hasSubscription === 'no' }">
             <input type="radio" v-model="hasSubscription" value="no" />
             <div class="radio-card-content">
-              <span class="radio-card-title">No, skip this backend</span>
+              <span class="radio-card-title">{{ t('accountWizard.noSkip') }}</span>
               <span class="radio-card-desc">I don't have a subscription or want to set it up later</span>
             </div>
           </label>
@@ -337,23 +340,23 @@ function addAnotherAccount() {
         <Transition name="slide-down">
           <div v-if="hasSubscription === 'yes'" class="account-fields">
             <div class="form-group">
-              <label for="wiz-name">Account Name <span class="required">*</span></label>
+              <label for="wiz-name">{{ t('accountWizard.accountName') }} <span class="required">*</span></label>
               <input
                 id="wiz-name"
                 v-model="accountName"
                 type="text"
-                placeholder="e.g., Personal, Work"
+                :placeholder="t('accountWizard.accountNamePlaceholder')"
                 autofocus
                 @input="suggestConfigPath"
               />
             </div>
             <div class="form-group">
-              <label for="wiz-email">Email</label>
+              <label for="wiz-email">{{ t('accountWizard.email') }}</label>
               <input
                 id="wiz-email"
                 v-model="email"
                 type="email"
-                placeholder="e.g., user@example.com"
+                :placeholder="t('accountWizard.emailPlaceholder')"
               />
               <small>Login email for this account (optional)</small>
             </div>
@@ -361,14 +364,14 @@ function addAnotherAccount() {
         </Transition>
       </div>
       <div class="step-actions">
-        <button class="btn btn-secondary" @click="emit('close')">Cancel</button>
+        <button class="btn btn-secondary" @click="emit('close')">{{ t('common.cancel') }}</button>
         <button
           class="btn"
           :class="hasSubscription === 'no' ? 'btn-outline' : 'btn-primary'"
           :disabled="!subscriptionValid"
           @click="handleSubscriptionNext"
         >
-          {{ hasSubscription === 'no' ? 'Skip Backend' : 'Continue' }}
+          {{ hasSubscription === 'no' ? t('accountWizard.noSkip') : t('accountWizard.continueBtn') }}
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
             <polyline points="9 18 15 12 9 6"/>
           </svg>
@@ -402,16 +405,16 @@ function addAnotherAccount() {
           <div class="status-info">
             <span class="status-title">{{ backendName }} CLI</span>
             <span v-if="cliInstalled" class="status-detail">
-              Installed{{ cliVersion ? ` (${cliVersion})` : '' }}
+              {{ t('accountWizard.cliInstalled') }}{{ cliVersion ? ` (${cliVersion})` : '' }}
             </span>
-            <span v-else class="status-detail">Not installed</span>
+            <span v-else class="status-detail">{{ t('accountWizard.cliNotInstalled') }}</span>
           </div>
           <button
             v-if="!cliInstalled && !isInstallingCli"
             class="btn btn-primary btn-sm"
             @click="installCli"
           >
-            Install CLI
+            {{ t('accountWizard.installCli') }}
           </button>
           <div v-if="isInstallingCli" class="spinner-sm"></div>
         </div>
@@ -419,7 +422,7 @@ function addAnotherAccount() {
 
         <!-- Config directory -->
         <div v-if="configPath" class="config-dir-section">
-          <div class="config-dir-label">Config directory</div>
+          <div class="config-dir-label">{{ t('accountWizard.configPath') }}</div>
           <div class="config-dir-path">
             <code>{{ configPath }}</code>
             <button
@@ -428,20 +431,20 @@ function addAnotherAccount() {
               :disabled="isCreatingDir"
               @click="createConfigDir"
             >
-              {{ isCreatingDir ? 'Creating...' : 'Create Directory' }}
+              {{ isCreatingDir ? t('accountWizard.creating') : t('accountWizard.createDir') }}
             </button>
             <span v-else class="dir-created-badge">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12">
                 <polyline points="20 6 9 17 4 12"/>
               </svg>
-              Created
+              {{ t('accountWizard.configCreated') }}
             </span>
           </div>
           <div v-if="dirError" class="error-text">{{ dirError }}</div>
 
           <div class="config-path-edit">
             <button class="btn-link-sm" @click="configPathManuallyEdited = true" v-if="!configPathManuallyEdited">
-              Customize path
+              {{ t('accountWizard.customizePath') }}
             </button>
             <div v-if="configPathManuallyEdited" class="form-group compact">
               <input
@@ -455,7 +458,7 @@ function addAnotherAccount() {
 
         <!-- API key env info -->
         <div v-if="apiKeyEnv" class="api-key-info">
-          <span class="api-key-label">API Key Env Variable</span>
+          <span class="api-key-label">{{ t('accountWizard.apiKeyEnv') }}</span>
           <code>{{ apiKeyEnv }}</code>
         </div>
       </div>
@@ -464,10 +467,10 @@ function addAnotherAccount() {
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
             <polyline points="15 18 9 12 15 6"/>
           </svg>
-          Back
+          {{ t('common.back') }}
         </button>
         <button class="btn btn-primary" @click="goNext">
-          Continue
+          {{ t('accountWizard.continueBtn') }}
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
             <polyline points="9 18 15 12 9 6"/>
           </svg>
@@ -491,7 +494,7 @@ function addAnotherAccount() {
               </svg>
             </div>
             <div class="login-option-content">
-              <span class="login-option-title">Open {{ loginInfo.label }}</span>
+              <span class="login-option-title">{{ t('accountWizard.openConsole', { service: loginInfo.label }) }}</span>
               <span class="login-option-desc">Sign in via browser</span>
             </div>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16" class="login-option-arrow">
@@ -514,7 +517,7 @@ function addAnotherAccount() {
               </svg>
             </div>
             <div class="login-option-content">
-              <span class="login-option-title">Login via CLI Proxy</span>
+              <span class="login-option-title">{{ t('accountWizard.loginViaCli') }}</span>
               <span class="login-option-desc">OAuth flow through CLI proxy</span>
             </div>
             <div v-if="isLoggingIn" class="spinner-sm"></div>
@@ -553,7 +556,7 @@ function addAnotherAccount() {
         </div>
 
         <div class="skip-note">
-          You can skip login and set it up later.
+          {{ t('accountWizard.loginOptional') }}
         </div>
       </div>
       <div class="step-actions">
@@ -561,10 +564,10 @@ function addAnotherAccount() {
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
             <polyline points="15 18 9 12 15 6"/>
           </svg>
-          Back
+          {{ t('common.back') }}
         </button>
         <button class="btn btn-primary" @click="goNext">
-          {{ loginStatus === 'idle' ? 'Skip' : 'Continue' }}
+          {{ loginStatus === 'idle' ? t('common.skip') : t('accountWizard.continueBtn') }}
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
             <polyline points="9 18 15 12 9 6"/>
           </svg>
@@ -578,27 +581,27 @@ function addAnotherAccount() {
         <!-- Review card -->
         <div class="review-card">
           <div class="review-row">
-            <span class="review-label">Account</span>
+            <span class="review-label">{{ t('accountWizard.accountName') }}</span>
             <span class="review-value">{{ accountName }}</span>
           </div>
           <div v-if="email" class="review-row">
-            <span class="review-label">Email</span>
+            <span class="review-label">{{ t('accountWizard.email') }}</span>
             <span class="review-value">{{ email }}</span>
           </div>
           <div v-if="configPath" class="review-row">
-            <span class="review-label">Config Path</span>
+            <span class="review-label">{{ t('accountWizard.configPath') }}</span>
             <code class="review-value">{{ configPath }}</code>
           </div>
           <div v-if="apiKeyEnv" class="review-row">
-            <span class="review-label">API Key Env</span>
+            <span class="review-label">{{ t('accountWizard.apiKeyEnv') }}</span>
             <code class="review-value">{{ apiKeyEnv }}</code>
           </div>
         </div>
 
         <div v-if="planOptions.length > 0" class="form-group">
-          <label for="wiz-plan">Subscription Plan</label>
+          <label for="wiz-plan">{{ t('accountWizard.plan') }}</label>
           <select id="wiz-plan" v-model="selectedPlan">
-            <option value="">Select plan...</option>
+            <option value="">{{ t('accountWizard.selectPlan') }}</option>
             <option v-for="opt in planOptions" :key="opt.value" :value="opt.value">
               {{ opt.label }}
             </option>
@@ -607,7 +610,7 @@ function addAnotherAccount() {
         <div class="form-group checkbox">
           <label>
             <input type="checkbox" v-model="isDefault" />
-            Set as default account
+            {{ t('accountWizard.setDefault') }}
           </label>
         </div>
         <div v-if="saveError" class="error-text">{{ saveError }}</div>
@@ -617,11 +620,11 @@ function addAnotherAccount() {
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
             <polyline points="15 18 9 12 15 6"/>
           </svg>
-          Back
+          {{ t('common.back') }}
         </button>
         <button class="btn btn-primary" :disabled="isSaving" @click="saveAccount">
           <div v-if="isSaving" class="spinner-sm"></div>
-          {{ isSaving ? 'Saving...' : 'Save Account' }}
+          {{ isSaving ? t('accountWizard.saving') : t('accountWizard.saveAccount') }}
         </button>
       </div>
     </div>
@@ -635,14 +638,14 @@ function addAnotherAccount() {
             <polyline points="22 4 12 14.01 9 11.01"/>
           </svg>
         </div>
-        <h4>Account Created</h4>
-        <p>"{{ accountName }}" has been added to {{ backendName }}.</p>
+        <h4>{{ t('accountWizard.accountCreated') }}</h4>
+        <p>{{ t('accountWizard.accountCreatedDesc', { name: accountName, backend: backendName }) }}</p>
         <div class="done-actions">
           <button class="btn btn-outline" @click="addAnotherAccount">
-            Add Another Account
+            {{ t('accountWizard.addAnother') }}
           </button>
           <button class="btn btn-primary" @click="emit('close')">
-            Done
+            {{ t('common.done') }}
           </button>
         </div>
       </div>

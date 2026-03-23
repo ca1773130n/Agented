@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
+import { useI18n } from 'vue-i18n';
 import { healthApi } from '../services/api';
 import { setApiKey } from '../services/api/client';
 import { resetAuthGuard } from '../router/guards';
 import { useTourMachine } from '../composables/useTourMachine';
 
 const router = useRouter();
+const { t } = useI18n();
 const tourMachine = useTourMachine();
 
 // First-run page — clear any stale tour/key state from previous installs
@@ -35,7 +37,7 @@ async function generateKey() {
     const result = await healthApi.setup('Admin');
     generatedKey.value = result.api_key;
   } catch (err) {
-    error.value = 'Failed to generate API key. Please try again.';
+    error.value = t('welcome.generateFailed');
   } finally {
     generating.value = false;
   }
@@ -85,44 +87,40 @@ function continueToApp() {
         <section class="hero">
           <div class="hero-badge">
             <span class="badge-dot"></span>
-            <span>First-time setup</span>
+            <span>{{ t('welcome.badge') }}</span>
           </div>
-          <h1 class="hero-headline">Your virtual startup, fully autonomous</h1>
-          <p class="hero-subtitle">
-            The first end-to-end platform for building real products with autonomous AI agents.
-            Define what to build, assign agent teams, and let them ship &mdash; from architecture to QA,
-            every department runs itself.
-          </p>
+          <h1 class="hero-headline">{{ t('welcome.headline') }}</h1>
+          <p class="hero-subtitle">{{ t('welcome.subtitle') }}</p>
         </section>
 
         <!-- Bento grid -->
         <section class="bento-grid">
           <div class="bento-cell">
-            <span class="bento-tag">Vision</span>
-            <span class="bento-label">Products &amp; Projects</span>
-            <span class="bento-desc">Define what you're building. Connect GitHub repos as projects under each product. Your agents take it from there.</span>
+            <span class="bento-tag">{{ t('welcome.bento.vision') }}</span>
+            <span class="bento-label">{{ t('welcome.bento.productsProjects') }}</span>
+            <span class="bento-desc">{{ t('welcome.bento.productsDesc') }}</span>
           </div>
           <div class="bento-cell">
-            <span class="bento-tag">Workforce</span>
-            <span class="bento-label">Agent Teams</span>
-            <span class="bento-desc">5 departments, 17 agents. <span class="hl">Command</span> sets direction. <span class="hl">Dev</span> builds. <span class="hl">Research</span> explores. <span class="hl">Ops</span> solves. <span class="hl">QA</span> validates.</span>
+            <span class="bento-tag">{{ t('welcome.bento.workforce') }}</span>
+            <span class="bento-label">{{ t('welcome.bento.agentTeams') }}</span>
+            <span class="bento-desc" v-html="t('welcome.bento.teamsDesc', { command: '<span class=\'hl\'>Command</span>', dev: '<span class=\'hl\'>Dev</span>', research: '<span class=\'hl\'>Research</span>', ops: '<span class=\'hl\'>Ops</span>', qa: '<span class=\'hl\'>QA</span>' })"></span>
           </div>
           <div class="bento-cell">
-            <span class="bento-tag">Fully autonomous</span>
-            <span class="bento-label">Seamless Backend Scheduling</span>
-            <span class="bento-desc">Agents move seamlessly between Claude Code, ChatGPT, Gemini, OpenCode &mdash; harness sync keeps configs aligned, token usage prediction triggers handoff before limits hit.</span>
+            <span class="bento-tag">{{ t('welcome.bento.autonomous') }}</span>
+            <span class="bento-label">{{ t('welcome.bento.scheduling') }}</span>
+            <span class="bento-desc">{{ t('welcome.bento.schedulingDesc') }}</span>
           </div>
           <div class="bento-cell">
-            <span class="bento-tag">Engineering</span>
-            <span class="bento-label">Harness &amp; Plugins</span>
-            <span class="bento-desc">Full harness engineering &mdash; config sync, GRD planning, MCP servers, marketplace plugins, custom skills and hooks.</span>
+            <span class="bento-tag">{{ t('welcome.bento.engineering') }}</span>
+            <span class="bento-label">{{ t('welcome.bento.harnessPlugins') }}</span>
+            <span class="bento-desc">{{ t('welcome.bento.harnessDesc') }}</span>
           </div>
         </section>
 
         <!-- CTA -->
         <div class="cta-area">
-          <button class="cta-btn" @click="beginSetup">Begin setup &rarr;</button>
-          <span class="cta-hint">8 steps &middot; about 2 minutes</span>
+          <button class="cta-btn" @click="beginSetup">{{ t('welcome.beginSetup') }}</button>
+          <span class="cta-hint">{{ t('welcome.stepsHint') }}</span>
         </div>
       </div>
     </Transition>
@@ -131,10 +129,8 @@ function continueToApp() {
     <Transition name="phase-fade">
       <div v-if="phase === 'keygen'" key="keygen" class="keygen-content">
         <div class="keygen-card">
-          <h2 class="keygen-heading">Generate your admin API key</h2>
-          <p class="keygen-explanation">
-            This key secures your Agented instance. Store it safely &mdash; it won't be shown again.
-          </p>
+          <h2 class="keygen-heading">{{ t('welcome.generateKeyHeading') }}</h2>
+          <p class="keygen-explanation">{{ t('welcome.generateKeyExplanation') }}</p>
 
           <div v-if="!generatedKey && !error" class="keygen-action">
             <button
@@ -146,21 +142,21 @@ function continueToApp() {
               <svg v-if="generating" class="spin-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
               </svg>
-              {{ generating ? 'Generating...' : 'Generate Admin Key' }}
+              {{ generating ? t('welcome.generating') : t('welcome.generateKey') }}
             </button>
           </div>
 
           <div v-if="error" class="keygen-error">
             <p>{{ error }}</p>
-            <button data-test="generate-key-btn" class="generate-btn" @click="generateKey">Try again</button>
+            <button data-test="generate-key-btn" class="generate-btn" @click="generateKey">{{ t('welcome.tryAgain') }}</button>
           </div>
 
           <div v-if="generatedKey" class="keygen-result">
             <div class="key-display">
               <code class="key-value">{{ generatedKey }}</code>
-              <button class="copy-btn" @click="copyKey">{{ copied ? 'Copied' : 'Copy' }}</button>
+              <button class="copy-btn" @click="copyKey">{{ copied ? t('welcome.copied') : t('welcome.copyKey') }}</button>
             </div>
-            <button data-test="continue-btn" class="continue-btn" @click="continueToApp">Continue &rarr;</button>
+            <button data-test="continue-btn" class="continue-btn" @click="continueToApp">{{ t('welcome.continue') }}</button>
           </div>
         </div>
       </div>

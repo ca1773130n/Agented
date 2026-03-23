@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 
 const props = defineProps<{
   stepNumber: number
@@ -17,6 +18,7 @@ defineEmits<{
   skip: []
 }>()
 
+const { t } = useI18n()
 const confirmingSkip = ref(false)
 
 function onSkipClick(emit: (evt: 'skip') => void) {
@@ -43,23 +45,23 @@ watch([() => props.skippable, () => props.stepTitle], () => {
       <span class="tour-step-title">{{ stepTitle }}</span>
       <div class="tour-bar-meta">
         <span class="tour-step-counter">
-          STEP {{ stepNumber }} OF {{ totalSteps }}
+          {{ t('tour.stepOf', { current: stepNumber, total: totalSteps }) }}
         </span>
         <span v-if="substepLabel" class="tour-substep-label">{{ substepLabel }}</span>
       </div>
     </div>
     <p class="tour-step-message">{{ message }}</p>
     <div v-if="confirmingSkip" class="tour-skip-confirm">
-      <span class="tour-skip-confirm-text">Skip this step? You can complete it later from the setup checklist.</span>
-      <button class="tour-confirm-skip-btn" @click="onConfirmSkip($emit)">Skip anyway</button>
-      <button class="tour-cancel-skip-btn" @click="confirmingSkip = false">Keep going</button>
+      <span class="tour-skip-confirm-text">{{ t('tour.skipConfirmTitle') }} {{ t('tour.skipConfirmMessage') }}</span>
+      <button class="tour-confirm-skip-btn" @click="onConfirmSkip($emit)">{{ t('tour.skipAnyway') }}</button>
+      <button class="tour-cancel-skip-btn" @click="confirmingSkip = false">{{ t('tour.keepGoing') }}</button>
     </div>
     <div v-else class="tour-actions">
       <button v-if="skippable" class="tour-skip-btn" @click="onSkipClick($emit)">
-        Skip
+        {{ t('common.skip') }}
       </button>
       <button class="tour-next-btn" @click="$emit('next')">
-        Next
+        {{ t('common.next') }}
       </button>
     </div>
   </div>

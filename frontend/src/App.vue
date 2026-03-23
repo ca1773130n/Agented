@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, watch, onMounted, onUnmounted, provide, computed, getCurrentInstance } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { setupApi, healthApi } from './services/api';
 import { useRoute, useRouter } from 'vue-router';
 import { useTourMachine, prefetchTourRoutes } from './composables/useTourMachine';
@@ -18,6 +19,7 @@ import { useHealthPolling } from './composables/useHealthPolling';
 // Route state for layout decisions
 const route = useRoute();
 const router = useRouter();
+const { t } = useI18n();
 const isFullBleed = computed(() => route.meta.fullBleed === true);
 const isWelcomePage = computed(() => route.name === 'welcome');
 const tour = useTourMachine();
@@ -31,7 +33,10 @@ const tourActive = computed(() => tour.isActive.value && !isWelcomePage.value);
 const tourStep = computed(() => {
   const meta = TOUR_STEP_MAP[tour.currentStep.value];
   if (!meta) return null;
-  return { target: meta.target, title: meta.title, message: meta.message, skippable: meta.skippable };
+  const lk = meta.localeKey;
+  const title = t(`tour.steps.${lk}.title`, meta.title);
+  const message = t(`tour.steps.${lk}.message`, meta.message);
+  return { target: meta.target, title, message, skippable: meta.skippable };
 });
 
 const tourStepNumber = computed(() => TOUR_STEP_MAP[tour.currentStep.value]?.stepNumber ?? 1);
@@ -79,6 +84,14 @@ function showToast(message: string, type: ToastType = 'info', duration?: number)
   setTimeout(() => {
     toasts.value = toasts.value.filter(t => t.id !== id);
   }, duration ?? defaultDuration);
+
+  // Auto-advance tour when a success toast matches the current step's trigger
+  if (type === 'success' && tour.isActive.value) {
+    const meta = TOUR_STEP_MAP[tour.currentStep.value];
+    if (meta?.autoAdvanceOnToast && message.includes(meta.autoAdvanceOnToast)) {
+      setTimeout(() => tour.nextStep(), 800);
+    }
+  }
 }
 
 function dismissToast(id: number) {

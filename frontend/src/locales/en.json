@@ -124,8 +124,8 @@
     "emailPlaceholder": "e.g., user{'@'}example.com",
     "continueBtn": "Continue",
     "cliSetup": "CLI & Config Setup",
-    "cliInstalled": "CLI Installed",
-    "cliNotInstalled": "CLI Not Installed",
+    "cliInstalled": "Installed",
+    "cliNotInstalled": "Not installed",
     "installCli": "Install CLI",
     "installing": "Installing...",
     "configPath": "Config Directory",
@@ -144,10 +144,13 @@
     "saveAccount": "Save Account",
     "saving": "Saving...",
     "addAnother": "Add Another Account",
-    "switchToAdvanced": "Switch to Advanced Form"
+    "switchToAdvanced": "Switch to Advanced Form",
+    "addAccount": "Add Account",
+    "accountCreated": "Account Created",
+    "accountCreatedDesc": "\"{name}\" has been added to {backend}."
   },
   "directoryBrowser": {
-    "title": "Select Directory",
+    "title": "Browse Directory",
     "selectThis": "Select This Directory",
     "newFolder": "New Folder",
     "creating": "Creating...",
