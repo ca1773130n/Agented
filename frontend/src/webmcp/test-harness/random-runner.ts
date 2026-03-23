@@ -37,7 +37,7 @@ export interface RunReport {
   toolCoverage: Map<string, number>;
 }
 
-export const DEFAULT_CONFIG: RunnerConfig = {
+const DEFAULT_CONFIG: RunnerConfig = {
   maxIterations: 100,
   delayMs: 100,
   allowDestructive: false,
