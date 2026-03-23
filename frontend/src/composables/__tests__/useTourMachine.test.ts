@@ -941,7 +941,10 @@ describe('useTourMachine', () => {
         { type: 'NEXT' }, // gemini -> opencode
         { type: 'NEXT' }, // backends -> monitoring (parent handles NEXT from opencode)
         { type: 'NEXT' }, // monitoring -> verification
-        { type: 'NEXT' }, // verification -> complete
+        { type: 'NEXT' }, // verification -> create_product
+        { type: 'NEXT' }, // create_product -> create_project
+        { type: 'NEXT' }, // create_project -> create_team
+        { type: 'NEXT' }, // create_team -> complete
       ])
       localStorage.setItem(
         STORAGE_KEY,

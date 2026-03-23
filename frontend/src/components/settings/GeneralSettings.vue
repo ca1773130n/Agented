@@ -1,10 +1,21 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
+import { useRouter } from 'vue-router';
 import type { MonitoringConfig } from '../../services/api';
 import { settingsApi, monitoringApi, backendApi, ApiError } from '../../services/api';
 import { useToast } from '../../composables/useToast';
+import { useTourMachine } from '../../composables/useTourMachine';
 
 const showToast = useToast();
+const tourMachine = useTourMachine();
+const settingsRouter = useRouter();
+
+function handleRestartTour(): void {
+  tourMachine.restartTour();
+  settingsRouter.push('/settings#general');
+  tourMachine.startTour();
+  tourMachine.nextStep(); // welcome -> workspace (skip welcome since user is already authenticated)
+}
 
 // General settings
 const workspaceRoot = ref('');
@@ -294,6 +305,22 @@ onMounted(() => {
         </template>
       </div>
     </div>
+
+    <!-- OB-35a: Restart Setup Guide -->
+    <div class="card" style="margin-top: 1.5rem;">
+      <div class="card-header">
+        <h3>Setup Guide</h3>
+      </div>
+      <div class="card-body">
+        <p class="form-help" style="margin-bottom: 1rem;">
+          Restart the onboarding tour to re-run through workspace setup and account configuration.
+          Your existing configuration will not be affected.
+        </p>
+        <button type="button" class="btn btn-secondary restart-tour-btn" @click="handleRestartTour">
+          Restart Setup Guide
+        </button>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -536,5 +563,15 @@ onMounted(() => {
 
 .toggle-switch-sm.active .toggle-knob {
   transform: translateX(16px);
+}
+
+/* Restart tour button */
+.restart-tour-btn {
+  padding: 0.5rem 1rem;
+  font-size: 0.85rem;
+  font-weight: 500;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
 }
 </style>

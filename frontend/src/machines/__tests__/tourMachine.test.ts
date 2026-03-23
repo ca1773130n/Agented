@@ -47,7 +47,10 @@ const toBackendsGemini = [...toBackendsCodex, { type: 'NEXT' }] as const
 const toBackendsOpencode = [...toBackendsGemini, { type: 'NEXT' }] as const
 const toMonitoring = [...toBackendsOpencode, { type: 'NEXT' }] as const
 const toVerification = [...toMonitoring, { type: 'NEXT' }] as const
-const toComplete = [...toVerification, { type: 'NEXT' }] as const
+const toCreateProduct = [...toVerification, { type: 'NEXT' }] as const
+const toCreateProject = [...toCreateProduct, { type: 'NEXT' }] as const
+const toCreateTeam = [...toCreateProject, { type: 'NEXT' }] as const
+const toComplete = [...toCreateTeam, { type: 'NEXT' }] as const
 
 // ---------------------------------------------------------------------------
 // 1. Initial state
@@ -146,14 +149,45 @@ describe('forward navigation (NEXT)', () => {
     expect(snap.context.completedSteps).toContain('monitoring')
   })
 
-  it('verification -> NEXT -> complete (final state)', () => {
+  it('verification -> NEXT -> create_product', () => {
     const actor = startActor()
     navigateTo(actor, [...toVerification])
     actor.send({ type: 'NEXT' })
 
     const snap = actor.getSnapshot()
+    expect(snap.value).toBe('create_product')
+    expect(snap.context.completedSteps).toContain('verification')
+  })
+
+  it('create_product -> NEXT -> create_project', () => {
+    const actor = startActor()
+    navigateTo(actor, [...toCreateProduct])
+    actor.send({ type: 'NEXT' })
+
+    const snap = actor.getSnapshot()
+    expect(snap.value).toBe('create_project')
+    expect(snap.context.completedSteps).toContain('create_product')
+  })
+
+  it('create_project -> NEXT -> create_team', () => {
+    const actor = startActor()
+    navigateTo(actor, [...toCreateProject])
+    actor.send({ type: 'NEXT' })
+
+    const snap = actor.getSnapshot()
+    expect(snap.value).toBe('create_team')
+    expect(snap.context.completedSteps).toContain('create_project')
+  })
+
+  it('create_team -> NEXT -> complete (final state)', () => {
+    const actor = startActor()
+    navigateTo(actor, [...toCreateTeam])
+    actor.send({ type: 'NEXT' })
+
+    const snap = actor.getSnapshot()
     expect(snap.value).toBe('complete')
     expect(snap.status).toBe('done')
+    expect(snap.context.completedSteps).toContain('create_team')
   })
 
   it('complete forward path accumulates all completed steps', () => {
@@ -170,6 +204,9 @@ describe('forward navigation (NEXT)', () => {
       JSON.stringify({ backends: 'opencode' }),
       'monitoring',
       'verification',
+      'create_product',
+      'create_project',
+      'create_team',
     ])
   })
 })
@@ -311,9 +348,32 @@ describe('skip navigation (SKIP)', () => {
     expect(actor.getSnapshot().value).toBe('verification')
   })
 
-  it('verification -> SKIP -> complete', () => {
+  it('verification -> SKIP -> create_product', () => {
     const actor = startActor()
     navigateTo(actor, [...toVerification])
+    actor.send({ type: 'SKIP' })
+
+    const snap = actor.getSnapshot()
+    expect(snap.value).toBe('create_product')
+  })
+
+  it('create_product -> SKIP -> create_project', () => {
+    const actor = startActor()
+    navigateTo(actor, [...toCreateProduct])
+    actor.send({ type: 'SKIP' })
+    expect(actor.getSnapshot().value).toBe('create_project')
+  })
+
+  it('create_project -> SKIP -> create_team', () => {
+    const actor = startActor()
+    navigateTo(actor, [...toCreateProject])
+    actor.send({ type: 'SKIP' })
+    expect(actor.getSnapshot().value).toBe('create_team')
+  })
+
+  it('create_team -> SKIP -> complete', () => {
+    const actor = startActor()
+    navigateTo(actor, [...toCreateTeam])
     actor.send({ type: 'SKIP' })
 
     const snap = actor.getSnapshot()
@@ -332,7 +392,10 @@ describe('skip navigation (SKIP)', () => {
     actor.send({ type: 'SKIP' }) // gemini -> opencode
     actor.send({ type: 'SKIP' }) // opencode -> monitoring (parent)
     actor.send({ type: 'SKIP' }) // monitoring -> verification
-    actor.send({ type: 'SKIP' }) // verification -> complete
+    actor.send({ type: 'SKIP' }) // verification -> create_product
+    actor.send({ type: 'SKIP' }) // create_product -> create_project
+    actor.send({ type: 'SKIP' }) // create_project -> create_team
+    actor.send({ type: 'SKIP' }) // create_team -> complete
 
     const snap = actor.getSnapshot()
     expect(snap.value).toBe('complete')

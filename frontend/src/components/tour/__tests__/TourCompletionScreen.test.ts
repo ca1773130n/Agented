@@ -62,6 +62,9 @@ describe('TourCompletionScreen', () => {
       'backends.opencode',
       'monitoring',
       'verification',
+      'create_product',
+      'create_project',
+      'create_team',
     ]
     const wrapper = mount(TourCompletionScreen, {
       props: {
