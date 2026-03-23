@@ -90,7 +90,7 @@ const configPath = ref('');
 const configPathManuallyEdited = ref(false);
 
 function generateSlug(name: string): string {
-  return name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/-+$/, '');
+  return name.toLowerCase().replace(/\s+/g, '').replace(/[^a-z0-9]/g, '');
 }
 
 function suggestConfigPath() {
@@ -173,8 +173,7 @@ async function createConfigDir() {
   isCreatingDir.value = true;
   dirError.value = '';
   try {
-    const expanded = configPath.value.replace(/^~/, '$HOME');
-    await utilityApi.createDirectory(expanded);
+    await utilityApi.createDirectory(configPath.value);
     dirCreated.value = true;
   } catch (e: unknown) {
     dirError.value = e instanceof Error ? e.message : 'Failed to create directory';

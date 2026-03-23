@@ -1,6 +1,7 @@
 """Utility API endpoints."""
 
 import logging
+import os
 import shutil
 
 logger = logging.getLogger(__name__)
@@ -205,3 +206,144 @@ def discover_skills():
 
     skills = SkillDiscoveryService.discover_cli_skills(scan_paths)
     return {"skills": skills}, HTTPStatus.OK
+
+
+# ---------------------------------------------------------------------------
+# Directory browser helpers
+# ---------------------------------------------------------------------------
+
+_ALLOWED_BASES = [Path.home(), Path("/tmp"), Path("/opt")]
+
+
+def _is_path_allowed(resolved: Path) -> bool:
+    """Return True if resolved path is under an allowed base directory."""
+    resolved_str = str(resolved)
+    return any(
+        resolved_str == str(base) or resolved_str.startswith(str(base) + os.sep)
+        for base in _ALLOWED_BASES
+    )
+
+
+@utility_bp.get("/browse-directory")
+def browse_directory():
+    """List subdirectories of a given path (directory picker).
+
+    Query params:
+      path — directory to list (defaults to the user's home directory).
+
+    Only directories are returned. Restricted to paths under the user's home
+    directory, /tmp, or /opt. Symlinks that resolve outside allowed paths are
+    skipped.
+    """
+    raw_path = request.args.get("path", "") or str(Path.home())
+
+    path_obj = Path(raw_path)
+    try:
+        resolved = path_obj.resolve()
+    except (OSError, ValueError):
+        return error_response("BAD_REQUEST", "Invalid path", HTTPStatus.BAD_REQUEST)
+
+    if not _is_path_allowed(resolved):
+        return error_response(
+            "FORBIDDEN",
+            "Path must be under home directory, /tmp, or /opt",
+            HTTPStatus.FORBIDDEN,
+        )
+
+    if not resolved.is_dir():
+        return error_response("NOT_FOUND", "Directory does not exist", HTTPStatus.NOT_FOUND)
+
+    # Build parent path (stop at the shallowest allowed base)
+    parent = resolved.parent
+    parent_path = str(parent) if _is_path_allowed(parent) else None
+
+    entries = []
+    try:
+        for entry in sorted(resolved.iterdir(), key=lambda e: e.name.lower()):
+            try:
+                entry_resolved = entry.resolve()
+            except (OSError, ValueError):
+                continue
+
+            # Only directories
+            if not entry_resolved.is_dir():
+                continue
+
+            # Skip hidden directories
+            if entry.name.startswith("."):
+                continue
+
+            # Skip symlinks that escape allowed paths
+            if entry.is_symlink() and not _is_path_allowed(entry_resolved):
+                continue
+
+            # Skip entries the user cannot read
+            if not os.access(entry_resolved, os.R_OK):
+                continue
+
+            entries.append(
+                {
+                    "name": entry.name,
+                    "path": str(entry_resolved),
+                    "type": "directory",
+                }
+            )
+    except PermissionError:
+        return error_response("FORBIDDEN", "Cannot read directory contents", HTTPStatus.FORBIDDEN)
+
+    return {
+        "current_path": str(resolved),
+        "parent_path": parent_path,
+        "entries": entries,
+    }, HTTPStatus.OK
+
+
+@utility_bp.post("/create-directory")
+def create_directory():
+    """Create a new directory (mkdir -p equivalent).
+
+    JSON body:
+      path — absolute path of the directory to create.
+
+    Restricted to paths under the user's home directory, /tmp, or /opt.
+    """
+    data = request.get_json(silent=True)
+    if not data or not data.get("path"):
+        return error_response(
+            "BAD_REQUEST", "path is required in JSON body", HTTPStatus.BAD_REQUEST
+        )
+
+    raw_path = data["path"]
+    # Expand ~ to home directory
+    path_obj = Path(raw_path).expanduser()
+
+    if not path_obj.is_absolute():
+        return error_response("BAD_REQUEST", "Path must be absolute", HTTPStatus.BAD_REQUEST)
+
+    # Resolve the *parent* that already exists to validate against allowed bases.
+    # The target directory may not exist yet, so walk up to find an existing ancestor.
+    try:
+        # Resolve as much as possible — Path.resolve() works even for non-existent paths
+        resolved = path_obj.resolve()
+    except (OSError, ValueError):
+        return error_response("BAD_REQUEST", "Invalid path", HTTPStatus.BAD_REQUEST)
+
+    if not _is_path_allowed(resolved):
+        return error_response(
+            "FORBIDDEN",
+            "Path must be under home directory, /tmp, or /opt",
+            HTTPStatus.FORBIDDEN,
+        )
+
+    try:
+        resolved.mkdir(parents=True, exist_ok=True)
+    except PermissionError:
+        return error_response(
+            "FORBIDDEN", "Permission denied when creating directory", HTTPStatus.FORBIDDEN
+        )
+    except OSError as exc:
+        return error_response(
+            "BAD_REQUEST", f"Cannot create directory: {exc}", HTTPStatus.BAD_REQUEST
+        )
+
+    return {"created": True, "path": str(resolved)}, HTTPStatus.CREATED
