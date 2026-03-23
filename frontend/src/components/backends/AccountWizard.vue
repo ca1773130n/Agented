@@ -11,7 +11,7 @@
  */
 import { ref, computed, watch, onMounted } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { backendApi, utilityApi, BACKEND_PLAN_OPTIONS, BACKEND_LOGIN_INFO } from '../../services/api';
+import { backendApi, utilityApi, BACKEND_PLAN_OPTIONS } from '../../services/api';
 
 const props = defineProps<{
   backendId: string;
@@ -195,7 +195,6 @@ watch(configPath, () => {
 // ---------------------------------------------------------------------------
 // Step 3: Login
 // ---------------------------------------------------------------------------
-const loginInfo = computed(() => BACKEND_LOGIN_INFO[props.backendType] || null);
 const isLoggingIn = ref(false);
 const loginStatus = ref<'idle' | 'started' | 'completed' | 'error'>('idle');
 const oauthUrl = ref('');
@@ -228,9 +227,25 @@ async function startProxyLogin() {
   }
 }
 
-function openBrowserLogin() {
-  if (loginInfo.value) {
-    window.open(loginInfo.value.url, '_blank');
+async function startCliProxyLogin() {
+  isLoggingIn.value = true;
+  loginStatus.value = 'idle';
+  loginMessage.value = '';
+  try {
+    const result = await backendApi.proxyLogin(props.backendType, configPath.value || undefined);
+    if (result.status === 'started') {
+      loginStatus.value = 'started';
+      loginMessage.value = result.message || 'Authenticating via CLI Proxy...';
+      if (result.oauth_url) window.open(result.oauth_url, '_blank');
+    } else if (result.status === 'error') {
+      loginStatus.value = 'error';
+      loginMessage.value = result.message || 'CLI Proxy login failed';
+    }
+  } catch (e: unknown) {
+    loginStatus.value = 'error';
+    loginMessage.value = e instanceof Error ? e.message : 'CLI Proxy login failed';
+  } finally {
+    isLoggingIn.value = false;
   }
 }
 
@@ -484,31 +499,34 @@ function addAnotherAccount() {
         <p class="step-description">Choose how to authenticate this account.</p>
 
         <div class="login-options">
-          <!-- Browser login -->
-          <div v-if="loginInfo" class="login-option" @click="openBrowserLogin">
-            <div class="login-option-icon">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="22" height="22">
-                <circle cx="12" cy="12" r="10"/>
-                <line x1="2" y1="12" x2="22" y2="12"/>
-                <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
-              </svg>
-            </div>
-            <div class="login-option-content">
-              <span class="login-option-title">{{ t('accountWizard.openConsole', { service: loginInfo.label }) }}</span>
-              <span class="login-option-desc">Sign in via browser</span>
-            </div>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16" class="login-option-arrow">
-              <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
-              <polyline points="15 3 21 3 21 9"/>
-              <line x1="10" y1="14" x2="21" y2="3"/>
-            </svg>
-          </div>
-
-          <!-- CLI Proxy login -->
+          <!-- CLI OAuth login (primary — launches OAuth flow via backend) -->
           <div
             class="login-option"
             :class="{ disabled: isLoggingIn }"
             @click="!isLoggingIn && startProxyLogin()"
+          >
+            <div class="login-option-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="22" height="22">
+                <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/>
+                <polyline points="10 17 15 12 10 7"/>
+                <line x1="15" y1="12" x2="3" y2="12"/>
+              </svg>
+            </div>
+            <div class="login-option-content">
+              <span class="login-option-title">Login with OAuth</span>
+              <span class="login-option-desc">Opens browser to authenticate with {{ props.backendName }}</span>
+            </div>
+            <div v-if="isLoggingIn" class="spinner-sm"></div>
+            <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16" class="login-option-arrow">
+              <polyline points="9 18 15 12 9 6"/>
+            </svg>
+          </div>
+
+          <!-- CLI Proxy API login (secondary — for proxy-based auth) -->
+          <div
+            class="login-option"
+            :class="{ disabled: isLoggingIn }"
+            @click="!isLoggingIn && startCliProxyLogin()"
           >
             <div class="login-option-icon">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="22" height="22">
@@ -518,7 +536,7 @@ function addAnotherAccount() {
             </div>
             <div class="login-option-content">
               <span class="login-option-title">{{ t('accountWizard.loginViaCli') }}</span>
-              <span class="login-option-desc">OAuth flow through CLI proxy</span>
+              <span class="login-option-desc">Authenticate via CLI Proxy API</span>
             </div>
             <div v-if="isLoggingIn" class="spinner-sm"></div>
             <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16" class="login-option-arrow">

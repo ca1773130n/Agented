@@ -50,6 +50,7 @@ watch([() => props.skippable, () => props.stepTitle], () => {
         <span v-if="substepLabel" class="tour-substep-label">{{ substepLabel }}</span>
       </div>
     </div>
+    <div class="tour-bar-separator" />
     <p class="tour-step-message">{{ message }}</p>
     <div v-if="confirmingSkip" class="tour-skip-confirm">
       <span class="tour-skip-confirm-text">{{ t('tour.skipConfirmTitle') }} {{ t('tour.skipConfirmMessage') }}</span>
@@ -90,6 +91,13 @@ watch([() => props.skippable, () => props.stepTitle], () => {
   flex-direction: column;
   align-items: flex-start;
   gap: 2px;
+  flex-shrink: 0;
+}
+
+.tour-bar-separator {
+  width: 1px;
+  align-self: stretch;
+  background: rgba(255, 255, 255, 0.12);
   flex-shrink: 0;
 }
 
