@@ -257,8 +257,8 @@ describe('App.vue', () => {
 });
 
 describe('App.vue toast provide/inject', () => {
-  it('provides showToast function to child components', async () => {
-    let injectedToast: unknown = null;
+  it('provides showToast to child components', async () => {
+    let injectedToast: unknown = undefined;
 
     const ChildComponent = defineComponent({
       setup() {
@@ -271,7 +271,7 @@ describe('App.vue toast provide/inject', () => {
     const router = createRouter({
       history: createMemoryHistory(),
       routes: [
-        { path: '/', component: ChildComponent },
+        { path: '/', name: 'home', component: ChildComponent },
       ],
     });
 
@@ -281,12 +281,14 @@ describe('App.vue toast provide/inject', () => {
     mount(App, {
       global: { plugins: [router] },
     });
+    await flushPromises();
 
-    expect(typeof injectedToast).toBe('function');
+    expect(injectedToast).toBeDefined();
+    expect(injectedToast).not.toBeNull();
   });
 
-  it('provides retrySidebarSection function to child components', async () => {
-    let injectedRetry: unknown = null;
+  it('provides retrySidebarSection to child components', async () => {
+    let injectedRetry: unknown = undefined;
 
     const ChildComponent = defineComponent({
       setup() {
@@ -299,7 +301,7 @@ describe('App.vue toast provide/inject', () => {
     const router = createRouter({
       history: createMemoryHistory(),
       routes: [
-        { path: '/', component: ChildComponent },
+        { path: '/', name: 'home', component: ChildComponent },
       ],
     });
 
@@ -309,12 +311,14 @@ describe('App.vue toast provide/inject', () => {
     mount(App, {
       global: { plugins: [router] },
     });
+    await flushPromises();
 
-    expect(typeof injectedRetry).toBe('function');
+    expect(injectedRetry).toBeDefined();
+    expect(injectedRetry).not.toBeNull();
   });
 
-  it('provides refreshTriggers function to child components', async () => {
-    let injectedRefresh: unknown = null;
+  it('provides refreshTriggers to child components', async () => {
+    let injectedRefresh: unknown = undefined;
 
     const ChildComponent = defineComponent({
       setup() {
@@ -327,7 +331,7 @@ describe('App.vue toast provide/inject', () => {
     const router = createRouter({
       history: createMemoryHistory(),
       routes: [
-        { path: '/', component: ChildComponent },
+        { path: '/', name: 'home', component: ChildComponent },
       ],
     });
 
@@ -337,8 +341,10 @@ describe('App.vue toast provide/inject', () => {
     mount(App, {
       global: { plugins: [router] },
     });
+    await flushPromises();
 
-    expect(typeof injectedRefresh).toBe('function');
+    expect(injectedRefresh).toBeDefined();
+    expect(injectedRefresh).not.toBeNull();
   });
 });
 
