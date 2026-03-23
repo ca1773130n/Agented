@@ -146,7 +146,7 @@ watch(
     <div
       v-if="visible"
       ref="modalRef"
-      class="modal-overlay"
+      class="modal-overlay dir-browser-overlay"
       role="dialog"
       aria-modal="true"
       aria-label="Browse directories"
@@ -284,6 +284,10 @@ watch(
 </template>
 
 <style scoped>
+.dir-browser-overlay {
+  z-index: var(--z-tour-progress, 10004) !important;
+}
+
 .dir-browser-modal {
   max-width: 560px;
   width: 90%;
