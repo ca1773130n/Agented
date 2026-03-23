@@ -114,7 +114,7 @@ async function runGuardChecks(): Promise<GuardCheckResults> {
     results.workspaceConfigured = true
   }
 
-  // Check backends
+  // Check backends — account data is included in the list response
   const backends = await fetchWithAuth<{ backends: Array<{ id: string; accounts?: unknown[] }> }>(
     '/admin/backends',
   )
@@ -124,13 +124,12 @@ async function runGuardChecks(): Promise<GuardCheckResults> {
         ((b as Record<string, unknown>).accounts as unknown[]).length > 0,
     )
     const claudeBackend = backends.backends.find((b) => b.id === 'backend-claude')
-    if (claudeBackend) {
-      const detail = await fetchWithAuth<{
-        accounts?: Array<Record<string, unknown>>
-      }>(`/admin/backends/${claudeBackend.id}`)
-      if (detail?.accounts && detail.accounts.length > 0) {
-        results.hasClaudeAccount = true
-      }
+    if (
+      claudeBackend &&
+      Array.isArray((claudeBackend as Record<string, unknown>).accounts) &&
+      ((claudeBackend as Record<string, unknown>).accounts as unknown[]).length > 0
+    ) {
+      results.hasClaudeAccount = true
     }
   }
 
