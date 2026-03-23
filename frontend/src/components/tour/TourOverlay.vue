@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch, computed, onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, watch, computed, onMounted, onUnmounted } from 'vue'
 import TourSpotlight from './TourSpotlight.vue'
 import TourTooltip from './TourTooltip.vue'
 import TourProgressBar from './TourProgressBar.vue'
@@ -202,16 +202,7 @@ watch(
 
     findTarget()
     if (!targetEl.value) {
-      // Use nextTick + 100ms delay before starting observer (OB-41)
-      nextTick(() => {
-        setTimeout(() => {
-          // Re-check — element may have appeared during the delay
-          findTarget()
-          if (!targetEl.value) {
-            startObserverWithTimeouts()
-          }
-        }, 100)
-      })
+      startObserverWithTimeouts()
     }
   },
   { immediate: true },
