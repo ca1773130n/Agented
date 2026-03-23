@@ -30,6 +30,7 @@ def register_blueprints(app):
     from .executions import executions_bp
     from .findings import findings_bp
     from .github_webhook import github_webhook_bp
+    from .oauth_callback import oauth_callback_bp
     from .onboarding import onboarding_bp
     from .trigger_conditions import trigger_conditions_bp
     from .gitops import gitops_bp
@@ -202,9 +203,10 @@ def register_blueprints(app):
         for bp in admin_blueprints:
             limiter.limit("120/minute")(bp)
 
-        # Exempt health from rate limiting
+        # Exempt health and oauth-callback from rate limiting
         # (04-RESEARCH.md: health probes must always respond)
         limiter.exempt(health_bp)
+        limiter.exempt(oauth_callback_bp)
 
     # Register blueprints (AFTER rate limit decoration)
     app.register_api(health_bp)
@@ -298,6 +300,7 @@ def register_blueprints(app):
     app.register_api(system_bp)
     app.register_api(bot_sla_bp)
     app.register_api(report_digests_bp)
+    app.register_api(oauth_callback_bp)
 
     # SPA catch-all: MUST be registered LAST so API routes take priority
     app.register_blueprint(spa_bp)

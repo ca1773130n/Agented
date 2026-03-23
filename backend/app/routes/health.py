@@ -126,9 +126,7 @@ def instance_id():
     from ..database import get_connection
 
     with get_connection() as conn:
-        row = conn.execute(
-            "SELECT value FROM app_meta WHERE key = 'instance_id'"
-        ).fetchone()
+        row = conn.execute("SELECT value FROM app_meta WHERE key = 'instance_id'").fetchone()
 
     return {"instance_id": row[0] if row else None}, HTTPStatus.OK
 

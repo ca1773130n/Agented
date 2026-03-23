@@ -45,6 +45,24 @@ export const versionApi = {
   get: () => apiFetch<{ version: string }>('/api/version'),
 };
 
+// Directory browser types
+export interface DirectoryEntry {
+  name: string;
+  path: string;
+  type: 'directory';
+}
+
+export interface BrowseDirectoryResponse {
+  current_path: string;
+  parent_path: string | null;
+  entries: DirectoryEntry[];
+}
+
+export interface CreateDirectoryResponse {
+  created: boolean;
+  path: string;
+}
+
 // Utility API
 export const utilityApi = {
   checkBackend: (name: 'claude' | 'opencode') =>
@@ -62,6 +80,17 @@ export const utilityApi = {
     const query = params.toString();
     return apiFetch<{ skills: SkillInfo[] }>(`/api/discover-skills${query ? `?${query}` : ''}`);
   },
+
+  browseDirectory: (path?: string) => {
+    const params = path ? `?path=${encodeURIComponent(path)}` : '';
+    return apiFetch<BrowseDirectoryResponse>(`/api/browse-directory${params}`);
+  },
+
+  createDirectory: (path: string) =>
+    apiFetch<CreateDirectoryResponse>('/api/create-directory', {
+      method: 'POST',
+      body: JSON.stringify({ path }),
+    }),
 };
 
 // Settings API

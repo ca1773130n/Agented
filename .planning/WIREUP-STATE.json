@@ -1,0 +1,23 @@
+{
+  "features_discovered": 32,
+  "scenarios_generated": 32,
+  "scenarios_passed": 15,
+  "scenarios_failed": 17,
+  "fixes_applied": 0,
+  "iteration_history": [
+    {
+      "iteration": 1,
+      "timestamp": "2026-03-23T15:39:41.239Z",
+      "scenarios_run": 32,
+      "passed": 15,
+      "failed": 17,
+      "fixes_applied": 0,
+      "features_tested": 32,
+      "issues_found": 8,
+      "fixes_verified": 0
+    }
+  ],
+  "timestamp": "2026-03-23T15:39:41.239Z",
+  "milestone": "v0.5.0",
+  "last_report_path": "/Users/neo/Developer/Workspaces/projects/Agented/.planning/milestones/anonymous/wireup/WIREUP-REPORT.md"
+}

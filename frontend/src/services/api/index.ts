@@ -29,6 +29,7 @@ export { monitoringApi } from './monitoring';
 export { rotationApi } from './rotation';
 export { schedulerApi } from './scheduler';
 export { healthApi, versionApi, utilityApi, settingsApi, setupApi, systemErrorApi } from './system';
+export type { DirectoryEntry, BrowseDirectoryResponse, CreateDirectoryResponse } from './system';
 export type { SystemError, FixAttempt, SystemErrorWithFixes, ErrorSource, ErrorCategory, ErrorStatus, FixTier, FixStatus, SystemErrorListResponse, ErrorCountsResponse, ReportErrorRequest } from './types/system';
 export { superAgentApi, superAgentDocumentApi, superAgentSessionApi, agentMessageApi } from './super-agents';
 export { workflowApi, workflowExecutionApi } from './workflows';

@@ -61,7 +61,6 @@ watch(
 function nextField(): void {
   const advanced = formGuide.nextField()
   if (!advanced) {
-    // Was at last field (submit button) — form guidance complete
     emit('complete')
   }
 }
@@ -70,6 +69,7 @@ function prevField(): void {
   formGuide.prevField()
 }
 
+defineExpose({ nextField, prevField })
 </script>
 
 <template>

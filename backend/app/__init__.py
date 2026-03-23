@@ -346,7 +346,13 @@ def create_app(config=None):
     _configure_cors(app)
 
     # Paths that bypass authentication (public endpoints)
-    _AUTH_BYPASS_PREFIXES = ("/health", "/docs", "/openapi", "/api/webhooks/github")
+    _AUTH_BYPASS_PREFIXES = (
+        "/health",
+        "/docs",
+        "/openapi",
+        "/api/webhooks/github",
+        "/api/oauth-callback",
+    )
 
     @app.before_request
     def _require_api_key():
