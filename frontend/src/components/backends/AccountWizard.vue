@@ -9,7 +9,7 @@
  *   3) Login (browser or CLI proxy)
  *   4) Plan & Save (choose plan, set default, save)
  */
-import { ref, computed, watch, onMounted } from 'vue';
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { backendApi, utilityApi, BACKEND_PLAN_OPTIONS } from '../../services/api';
 
@@ -193,61 +193,109 @@ watch(configPath, () => {
 });
 
 // ---------------------------------------------------------------------------
-// Step 3: Login
+// Step 3: Login — uses PTY-based CLI connect (claude /login, codex login, etc.)
 // ---------------------------------------------------------------------------
-const isLoggingIn = ref(false);
-const loginStatus = ref<'idle' | 'started' | 'completed' | 'error'>('idle');
-const oauthUrl = ref('');
-const loginMessage = ref('');
-const deviceCode = ref('');
+const loginStatus = ref<'idle' | 'connecting' | 'streaming' | 'completed' | 'error'>('idle');
+const loginSessionId = ref('');
+const loginLines = ref<string[]>([]);
+const loginError = ref('');
+const pendingQuestion = ref('');
+const userResponse = ref('');
+let loginEventSource: EventSource | null = null;
 
-async function startProxyLogin() {
-  isLoggingIn.value = true;
-  loginStatus.value = 'idle';
-  loginMessage.value = '';
-  oauthUrl.value = '';
-  deviceCode.value = '';
+async function startCliLogin() {
+  loginStatus.value = 'connecting';
+  loginLines.value = [];
+  loginError.value = '';
+  pendingQuestion.value = '';
   try {
-    const result = await backendApi.proxyLogin(props.backendType, configPath.value || undefined);
-    if (result.status === 'started' && result.oauth_url) {
-      oauthUrl.value = result.oauth_url;
-      loginStatus.value = 'started';
-      loginMessage.value = result.message || 'Complete login in the browser';
-      if (result.device_code) deviceCode.value = result.device_code;
-      window.open(result.oauth_url, '_blank');
-    } else if (result.status === 'error') {
+    const result = await backendApi.startConnect(props.backendId, configPath.value || undefined);
+    loginSessionId.value = result.session_id;
+    loginStatus.value = 'streaming';
+    // Open SSE stream
+    const streamUrl = backendApi.streamConnectUrl(props.backendId, result.session_id);
+    loginEventSource = new EventSource(streamUrl);
+    loginEventSource.addEventListener('output', (e: MessageEvent) => {
+      const data = JSON.parse(e.data);
+      if (data.text) {
+        loginLines.value.push(data.text);
+        scrollTerminal();
+      }
+    });
+    loginEventSource.addEventListener('question', (e: MessageEvent) => {
+      const data = JSON.parse(e.data);
+      pendingQuestion.value = data.text || data.question || '';
+      if (data.options) {
+        loginLines.value.push(data.text || '');
+        data.options.forEach((opt: string, i: number) => {
+          loginLines.value.push(`  ${i + 1}. ${opt}`);
+        });
+      }
+      scrollTerminal();
+    });
+    loginEventSource.addEventListener('auth_url', (e: MessageEvent) => {
+      const data = JSON.parse(e.data);
+      if (data.url) window.open(data.url, '_blank');
+      loginLines.value.push(`Opening browser for authentication...`);
+      scrollTerminal();
+    });
+    loginEventSource.addEventListener('complete', () => {
+      loginStatus.value = 'completed';
+      loginEventSource?.close();
+      loginEventSource = null;
+    });
+    loginEventSource.addEventListener('error_event', (e: MessageEvent) => {
+      const data = JSON.parse(e.data);
+      loginError.value = data.message || 'Login failed';
       loginStatus.value = 'error';
-      loginMessage.value = result.message || 'Login failed';
-    }
+      loginEventSource?.close();
+      loginEventSource = null;
+    });
+    loginEventSource.onerror = () => {
+      if (loginStatus.value === 'streaming') {
+        // SSE closed — check if it was a normal completion
+        loginStatus.value = 'completed';
+      }
+      loginEventSource?.close();
+      loginEventSource = null;
+    };
   } catch (e: unknown) {
+    loginError.value = e instanceof Error ? e.message : 'Failed to start login session';
     loginStatus.value = 'error';
-    loginMessage.value = e instanceof Error ? e.message : 'Login failed';
-  } finally {
-    isLoggingIn.value = false;
   }
 }
 
-async function startCliProxyLogin() {
-  isLoggingIn.value = true;
-  loginStatus.value = 'idle';
-  loginMessage.value = '';
+async function sendResponse() {
+  if (!userResponse.value.trim() || !loginSessionId.value) return;
   try {
-    const result = await backendApi.proxyLogin(props.backendType, configPath.value || undefined);
-    if (result.status === 'started') {
-      loginStatus.value = 'started';
-      loginMessage.value = result.message || 'Authenticating via CLI Proxy...';
-      if (result.oauth_url) window.open(result.oauth_url, '_blank');
-    } else if (result.status === 'error') {
-      loginStatus.value = 'error';
-      loginMessage.value = result.message || 'CLI Proxy login failed';
-    }
-  } catch (e: unknown) {
-    loginStatus.value = 'error';
-    loginMessage.value = e instanceof Error ? e.message : 'CLI Proxy login failed';
-  } finally {
-    isLoggingIn.value = false;
+    await backendApi.respondConnect(props.backendId, loginSessionId.value, 'wizard', { text: userResponse.value.trim() });
+    loginLines.value.push(`> ${userResponse.value.trim()}`);
+    userResponse.value = '';
+    pendingQuestion.value = '';
+    scrollTerminal();
+  } catch {
+    // Ignore — session may have ended
   }
 }
+
+function scrollTerminal() {
+  setTimeout(() => {
+    const el = document.querySelector('.login-terminal-output');
+    if (el) el.scrollTop = el.scrollHeight;
+  }, 50);
+}
+
+function cleanupLogin() {
+  if (loginEventSource) {
+    loginEventSource.close();
+    loginEventSource = null;
+  }
+  if (loginSessionId.value) {
+    backendApi.cancelConnect(props.backendId, loginSessionId.value).catch(() => {});
+  }
+}
+
+onUnmounted(cleanupLogin);
 
 // ---------------------------------------------------------------------------
 // Step 4: Plan & Save
@@ -288,9 +336,13 @@ function addAnotherAccount() {
   configPathManuallyEdited.value = false;
   selectedPlan.value = '';
   isDefault.value = false;
+  cleanupLogin();
   loginStatus.value = 'idle';
-  oauthUrl.value = '';
-  deviceCode.value = '';
+  loginSessionId.value = '';
+  loginLines.value = [];
+  loginError.value = '';
+  pendingQuestion.value = '';
+  userResponse.value = '';
   dirCreated.value = false;
   currentStep.value = 'subscription';
   emit('addAnother');
@@ -496,86 +548,70 @@ function addAnotherAccount() {
     <!-- Step 3: Login -->
     <div v-if="currentStep === 'login'" class="wizard-step">
       <div class="step-body">
-        <p class="step-description">Choose how to authenticate this account.</p>
-
-        <div class="login-options">
-          <!-- CLI OAuth login (primary — launches OAuth flow via backend) -->
-          <div
-            class="login-option"
-            :class="{ disabled: isLoggingIn }"
-            @click="!isLoggingIn && startProxyLogin()"
-          >
-            <div class="login-option-icon">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="22" height="22">
-                <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/>
-                <polyline points="10 17 15 12 10 7"/>
-                <line x1="15" y1="12" x2="3" y2="12"/>
-              </svg>
-            </div>
-            <div class="login-option-content">
-              <span class="login-option-title">Login with OAuth</span>
-              <span class="login-option-desc">Opens browser to authenticate with {{ props.backendName }}</span>
-            </div>
-            <div v-if="isLoggingIn" class="spinner-sm"></div>
-            <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16" class="login-option-arrow">
-              <polyline points="9 18 15 12 9 6"/>
+        <!-- Idle — show start button -->
+        <template v-if="loginStatus === 'idle'">
+          <p class="step-description">Authenticate your {{ props.backendName }} account via CLI login.</p>
+          <button class="btn btn-primary login-start-btn" @click="startCliLogin">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+              <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/>
+              <polyline points="10 17 15 12 10 7"/>
+              <line x1="15" y1="12" x2="3" y2="12"/>
             </svg>
-          </div>
+            Start Login
+          </button>
+          <div class="skip-note">{{ t('accountWizard.loginOptional') }}</div>
+        </template>
 
-          <!-- CLI Proxy API login (secondary — for proxy-based auth) -->
-          <div
-            class="login-option"
-            :class="{ disabled: isLoggingIn }"
-            @click="!isLoggingIn && startCliProxyLogin()"
-          >
-            <div class="login-option-icon">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="22" height="22">
-                <polyline points="4 17 10 11 4 5"/>
-                <line x1="12" y1="19" x2="20" y2="19"/>
-              </svg>
-            </div>
-            <div class="login-option-content">
-              <span class="login-option-title">{{ t('accountWizard.loginViaCli') }}</span>
-              <span class="login-option-desc">Authenticate via CLI Proxy API</span>
-            </div>
-            <div v-if="isLoggingIn" class="spinner-sm"></div>
-            <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16" class="login-option-arrow">
-              <polyline points="9 18 15 12 9 6"/>
-            </svg>
-          </div>
-        </div>
-
-        <!-- Login status -->
-        <div v-if="loginStatus !== 'idle'" class="login-status" :class="`login-${loginStatus}`">
-          <template v-if="loginStatus === 'started'">
+        <!-- Connecting -->
+        <template v-else-if="loginStatus === 'connecting'">
+          <div class="login-status login-connecting">
             <div class="spinner-sm"></div>
-            <span>{{ loginMessage }}</span>
-          </template>
-          <template v-else-if="loginStatus === 'error'">
+            <span>Starting login session...</span>
+          </div>
+        </template>
+
+        <!-- Streaming — interactive terminal -->
+        <template v-else-if="loginStatus === 'streaming'">
+          <div class="login-terminal">
+            <div class="login-terminal-output">
+              <div v-for="(line, i) in loginLines" :key="i" class="terminal-line" v-html="line"></div>
+            </div>
+            <div v-if="pendingQuestion" class="login-terminal-input">
+              <span class="terminal-prompt">&gt;</span>
+              <input
+                v-model="userResponse"
+                class="terminal-input"
+                :placeholder="pendingQuestion"
+                @keydown.enter="sendResponse"
+                autofocus
+              />
+              <button class="btn btn-sm btn-primary" @click="sendResponse">Send</button>
+            </div>
+          </div>
+        </template>
+
+        <!-- Completed -->
+        <template v-else-if="loginStatus === 'completed'">
+          <div class="login-status login-completed">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
+              <polyline points="20 6 9 17 4 12"/>
+            </svg>
+            <span>Login completed successfully</span>
+          </div>
+        </template>
+
+        <!-- Error -->
+        <template v-else-if="loginStatus === 'error'">
+          <div class="login-status login-error">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
               <circle cx="12" cy="12" r="10"/>
               <line x1="15" y1="9" x2="9" y2="15"/>
               <line x1="9" y1="9" x2="15" y2="15"/>
             </svg>
-            <span>{{ loginMessage }}</span>
-          </template>
-          <template v-else-if="loginStatus === 'completed'">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
-              <polyline points="20 6 9 17 4 12"/>
-            </svg>
-            <span>Login completed</span>
-          </template>
-        </div>
-
-        <!-- Device code for Codex -->
-        <div v-if="deviceCode" class="device-code-section">
-          <span class="device-code-label">Enter this code in the browser:</span>
-          <code class="device-code">{{ deviceCode }}</code>
-        </div>
-
-        <div class="skip-note">
-          {{ t('accountWizard.loginOptional') }}
-        </div>
+            <span>{{ loginError }}</span>
+          </div>
+          <button class="btn btn-secondary" style="margin-top: 12px;" @click="loginStatus = 'idle'">Try Again</button>
+        </template>
       </div>
       <div class="step-actions">
         <button class="btn btn-secondary" @click="goPrev">
@@ -1121,7 +1157,73 @@ function addAnotherAccount() {
   color: var(--text-primary);
 }
 
-/* Login options */
+/* Login start button */
+.login-start-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+/* Login terminal */
+.login-terminal {
+  background: #0a0a0f;
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.login-terminal-output {
+  padding: 12px 16px;
+  font-family: 'Geist Mono', 'SF Mono', 'Monaco', monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  color: #a1a1aa;
+  max-height: 250px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.terminal-line {
+  min-height: 1.2em;
+}
+
+.login-terminal-input {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-top: 1px solid var(--border-default);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.terminal-prompt {
+  color: var(--accent-cyan);
+  font-family: 'Geist Mono', monospace;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.terminal-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: var(--text-primary);
+  font-family: 'Geist Mono', monospace;
+  font-size: 12px;
+  outline: none;
+}
+
+.terminal-input::placeholder {
+  color: #52525b;
+}
+
+.login-connecting {
+  color: var(--accent-cyan);
+}
+
+/* Login options (kept for potential future use) */
 .login-options {
   display: flex;
   flex-direction: column;
