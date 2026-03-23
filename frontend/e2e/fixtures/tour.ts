@@ -39,7 +39,7 @@ const MOCK_BACKEND_DETAIL = {
 // TourPage helper
 // ---------------------------------------------------------------------------
 
-export class TourPage {
+class TourPage {
   readonly page: Page;
   readonly overlay: Locator;
   readonly nextBtn: Locator;
