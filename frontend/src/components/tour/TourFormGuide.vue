@@ -46,7 +46,6 @@ watch(
   { immediate: true },
 )
 
-// Watch currentField to emit field-change on navigation
 watch(
   () => formGuide.currentField.value,
   (field: FormField | null) => {
@@ -71,15 +70,6 @@ function prevField(): void {
   formGuide.prevField()
 }
 
-defineExpose({
-  nextField,
-  prevField,
-  fields: formGuide.fields,
-  currentIndex: formGuide.currentIndex,
-  currentField: formGuide.currentField,
-  totalFields: formGuide.totalFields,
-  isActive: formGuide.isActive,
-})
 </script>
 
 <template>

@@ -71,7 +71,6 @@ watch(
   { immediate: true },
 )
 
-// On targetRect change while visible, do a two-phase transition
 watch(
   () => props.targetRect,
   (_newRect, oldRect) => {
@@ -91,7 +90,6 @@ watch(
   },
 )
 
-// Arrow side computation from placement
 const arrowSide = computed(() => {
   const side = actualPlacement.value.split('-')[0]
   return {
