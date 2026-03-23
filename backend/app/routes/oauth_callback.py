@@ -66,14 +66,12 @@ def oauth_callback_proxy(rest: str):
         ), 502
     except Exception as exc:
         logger.error("OAuth callback proxy error: %s", exc, exc_info=True)
-        return (f"<html><body><h2>OAuth callback error</h2><p>{exc}</p></body></html>"), 502
+        return (
+            "<html><body><h2>OAuth callback error</h2>"
+            "<p>An internal error occurred. Please try again.</p></body></html>"
+        ), 502
 
 
 def _find_callback_port() -> int:
     """Find the callback port from active CLI sessions, or return default."""
-    with BackendCLIService._lock:
-        for session in BackendCLIService._sessions.values():
-            port = session.get("callback_port")
-            if port:
-                return port
-    return 54545
+    return BackendCLIService.get_callback_port()

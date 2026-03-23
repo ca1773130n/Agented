@@ -749,6 +749,16 @@ class BackendCLIService:
             cls._cleanup_timers.pop(session_id, None)
 
     @classmethod
+    def get_callback_port(cls) -> int:
+        """Return the OAuth callback port from any active session, or the default (54545)."""
+        with cls._lock:
+            for session in cls._sessions.values():
+                port = session.get("callback_port")
+                if port:
+                    return port
+        return 54545
+
+    @classmethod
     def _try_parse_interaction(cls, content: str) -> Optional[dict]:
         """Try to parse a line as an interaction request.
 

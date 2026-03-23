@@ -197,16 +197,19 @@ async function checkAuthStatus(): Promise<boolean> {
   }
 }
 
+function beginTourIfRequested(): boolean {
+  if (route.query.tour !== 'start' || tour.isActive.value) return false;
+  router.replace({ query: {} });
+  tour.startTour();
+  tour.nextStep(); // welcome -> workspace (welcome page already shown)
+  prefetchTourRoutes(); // OB-42: fire-and-forget route prefetch
+  return true;
+}
+
 function onAuthenticated() {
   showApiKeyBanner.value = false;
-  const shouldStartTour = route.query.tour === 'start';
   loadSidebarData();
-  if (shouldStartTour) {
-    router.replace({ query: {} });
-    tour.startTour();
-    tour.nextStep(); // welcome -> workspace (welcome page already shown)
-    prefetchTourRoutes(); // OB-42: fire-and-forget route prefetch
-  }
+  beginTourIfRequested();
 }
 
 function handleTourRetry() {
@@ -235,11 +238,8 @@ async function runBundleInstall() {
 // Watch for ?tour=start query param (set by WelcomePage after key generation)
 watch(() => route.query.tour, (tourQuery) => {
   if (tourQuery === 'start') {
-    router.replace({ query: {} });
     loadSidebarData();
-    tour.startTour();
-    tour.nextStep(); // welcome -> workspace
-    prefetchTourRoutes(); // OB-42: fire-and-forget route prefetch
+    beginTourIfRequested();
   }
 });
 
@@ -248,16 +248,10 @@ onMounted(async () => {
   const isReady = await checkAuthStatus();
   appReady.value = true;
   if (isReady) {
-    if (route.query.tour === 'start') {
-      router.replace({ query: {} });
-      loadSidebarData();
-      tour.startTour();
-      tour.nextStep(); // welcome -> workspace
-      prefetchTourRoutes(); // OB-42: fire-and-forget route prefetch
-      return;
-    }
     loadSidebarData();
-    runBundleInstall();
+    if (!beginTourIfRequested()) {
+      runBundleInstall();
+    }
   }
 });
 

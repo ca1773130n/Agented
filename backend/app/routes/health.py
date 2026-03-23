@@ -181,6 +181,11 @@ def verify_key():
     return {"valid": False, "message": "Invalid API key"}, HTTPStatus.OK
 
 
+_setup_rate_limit: dict = {}  # {"ip": [...timestamps]}
+_SETUP_RATE_MAX = 5
+_SETUP_RATE_WINDOW = 60  # seconds
+
+
 @health_bp.post("/setup")
 def setup():
     """Public endpoint: generate the first admin API key.
@@ -188,6 +193,15 @@ def setup():
     Only works when no API keys exist in the database (first-run bootstrap).
     Returns the generated key — this is the only time it will be shown.
     """
+    import time as _time
+
+    ip = request.remote_addr or "unknown"
+    now = _time.monotonic()
+    hits = _setup_rate_limit.setdefault(ip, [])
+    hits[:] = [t for t in hits if now - t < _SETUP_RATE_WINDOW]
+    if len(hits) >= _SETUP_RATE_MAX:
+        return {"error": "Too many requests"}, 429
+    hits.append(now)
     from ..db.rbac import generate_api_key, invalidate_key_cache
     from ..db.connection import get_connection
     from ..db.ids import _get_unique_role_id

@@ -52,8 +52,15 @@ def _get_secret_key() -> str:
     try:
         key_file.write_text(key)
         key_file.chmod(0o600)  # Owner-readable only
-    except OSError:
-        pass  # Fallback: ephemeral key (not ideal but won't crash)
+    except OSError as e:
+        import logging as _sk_log
+
+        _sk_log.getLogger(__name__).warning(
+            "Failed to persist SECRET_KEY to %s: %s — using ephemeral key (sessions will not "
+            "survive restarts)",
+            key_file,
+            e,
+        )
     return key
 
 
@@ -473,8 +480,10 @@ def create_app(config=None):
                 else None
             )
             capture_error(category="runtime_error", message=str(original), stack_trace=tb_str)
-        except Exception:
-            pass  # Never let error capture break error handling
+        except Exception as _cap_err:
+            import logging as _cap_log
+
+            _cap_log.getLogger(__name__).debug("Error capture failed: %s", _cap_err)
 
         if isinstance(original, ValueError):
             return error_response(
@@ -513,8 +522,10 @@ def create_app(config=None):
             from app.services.error_capture import capture_error
 
             capture_error(category="db_error", message=str(e))
-        except Exception:
-            pass
+        except Exception as _cap_err:
+            import logging as _cap_log
+
+            _cap_log.getLogger(__name__).debug("Error capture failed: %s", _cap_err)
         return error_response(
             "SERVICE_UNAVAILABLE",
             "Service temporarily unavailable",

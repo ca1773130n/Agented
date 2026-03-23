@@ -283,8 +283,10 @@ async function startCliLogin() {
     });
     loginEventSource.onerror = () => {
       if (loginStatus.value === 'streaming') {
-        // SSE closed — check if it was a normal completion
-        loginStatus.value = 'completed';
+        // SSE closed unexpectedly — treat as error, not success.
+        // Normal completions arrive via the 'complete' event above.
+        loginError.value = 'Connection lost — login may not have completed. Please retry.';
+        loginStatus.value = 'error';
       }
       loginEventSource?.close();
       loginEventSource = null;
