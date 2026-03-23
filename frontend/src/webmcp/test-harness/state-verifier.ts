@@ -51,20 +51,6 @@ export function getStateToolForAction(actionToolName: string): string | null {
 }
 
 /**
- * Parses a ToolResponse-shaped result to extract the JSON data.
- */
-export function parseToolResponse(result: unknown): unknown {
-  if (!result || typeof result !== 'object') return null;
-  const r = result as { content?: { type: string; text: string }[] };
-  if (!r.content || !Array.isArray(r.content) || r.content.length === 0) return null;
-  try {
-    return JSON.parse(r.content[0].text);
-  } catch {
-    return null;
-  }
-}
-
-/**
  * Verifies that after an action tool was invoked, the corresponding
  * state tool reflects the expected change.
  */
