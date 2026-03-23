@@ -1,5 +1,6 @@
 import { computed } from 'vue'
 import { useTourMachine } from './useTourMachine'
+import { TOUR_STEP_DEFINITIONS } from '../constants/tourSteps'
 
 export interface ChecklistItem {
   key: string
@@ -9,31 +10,21 @@ export interface ChecklistItem {
   linkHash?: string
 }
 
-const CHECKLIST_DEFS: Array<{ key: string; label: string; link: string; linkHash?: string }> = [
-  { key: 'workspace', label: 'Workspace Directory', link: '/settings', linkHash: '#general' },
-  { key: 'backends.claude', label: 'Claude Code', link: '/backends/backend-claude' },
-  { key: 'backends.codex', label: 'Codex CLI', link: '/backends/backend-codex' },
-  { key: 'backends.gemini', label: 'Gemini CLI', link: '/backends/backend-gemini' },
-  { key: 'backends.opencode', label: 'OpenCode', link: '/backends/backend-opencode' },
-  { key: 'monitoring', label: 'Token Monitoring', link: '/settings', linkHash: '#general' },
-  { key: 'verification', label: 'Harness Verification', link: '/settings', linkHash: '#harness' },
-  { key: 'create_product', label: 'First Product', link: '/products' },
-  { key: 'create_project', label: 'First Project', link: '/products' },
-  { key: 'create_team', label: 'Team Setup', link: '/projects' },
-]
-
 export function useTourChecklist() {
   const tour = useTourMachine()
 
   const checklistItems = computed<ChecklistItem[]>(() =>
-    CHECKLIST_DEFS.map(def => ({
-      ...def,
+    TOUR_STEP_DEFINITIONS.map(def => ({
+      key: def.key,
+      label: def.label,
+      link: def.route,
+      linkHash: def.routeHash,
       completed: tour.context.value.completedSteps.includes(def.key),
     }))
   )
 
   const completedCount = computed(() => checklistItems.value.filter(i => i.completed).length)
-  const totalCount = computed(() => CHECKLIST_DEFS.length)
+  const totalCount = computed(() => TOUR_STEP_DEFINITIONS.length)
 
   // Show checklist when tour has any completed steps or is in complete state
   const showChecklist = computed(() => {

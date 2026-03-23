@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { RouterLink } from 'vue-router';
+import { TOUR_STEP_DEFINITIONS } from '../../constants/tourSteps';
 
 const props = defineProps<{
   completedSteps: string[]
@@ -8,27 +9,21 @@ const props = defineProps<{
 
 const emit = defineEmits<{ done: [] }>();
 
-const STEP_META: Record<string, { label: string; link: string }> = {
-  workspace: { label: 'Workspace Directory', link: '/settings#general' },
-  'backends.claude': { label: 'Claude Code', link: '/backends/backend-claude' },
-  'backends.codex': { label: 'Codex CLI', link: '/backends/backend-codex' },
-  'backends.gemini': { label: 'Gemini CLI', link: '/backends/backend-gemini' },
-  'backends.opencode': { label: 'OpenCode', link: '/backends/backend-opencode' },
-  monitoring: { label: 'Token Monitoring', link: '/settings#general' },
-  verification: { label: 'Harness Verification', link: '/settings#harness' },
-  create_product: { label: 'First Product', link: '/products' },
-  create_project: { label: 'First Project', link: '/products' },
-  create_team: { label: 'Team Setup', link: '/projects' },
-};
-
-const ALL_STEPS = Object.keys(STEP_META);
+function stepToDisplay(def: typeof TOUR_STEP_DEFINITIONS[number]) {
+  const link = def.routeHash ? `${def.route}${def.routeHash}` : def.route;
+  return { label: def.label, link };
+}
 
 const configuredItems = computed(() =>
-  ALL_STEPS.filter(s => props.completedSteps.includes(s)).map(s => STEP_META[s])
+  TOUR_STEP_DEFINITIONS
+    .filter(d => props.completedSteps.includes(d.key))
+    .map(stepToDisplay)
 );
 
 const skippedItems = computed(() =>
-  ALL_STEPS.filter(s => !props.completedSteps.includes(s)).map(s => STEP_META[s])
+  TOUR_STEP_DEFINITIONS
+    .filter(d => !props.completedSteps.includes(d.key))
+    .map(stepToDisplay)
 );
 </script>
 
