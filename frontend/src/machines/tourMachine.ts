@@ -180,10 +180,43 @@ export const tourMachine = setup({
     verification: {
       on: {
         NEXT: {
-          target: 'complete',
+          target: 'create_product',
           actions: ['markStepCompleted'],
         },
         BACK: { target: 'monitoring' },
+        SKIP: { target: 'create_product' },
+      },
+    },
+
+    create_product: {
+      on: {
+        NEXT: {
+          target: 'create_project',
+          actions: ['markStepCompleted'],
+        },
+        BACK: { target: 'verification' },
+        SKIP: { target: 'create_project' },
+      },
+    },
+
+    create_project: {
+      on: {
+        NEXT: {
+          target: 'create_team',
+          actions: ['markStepCompleted'],
+        },
+        BACK: { target: 'create_product' },
+        SKIP: { target: 'create_team' },
+      },
+    },
+
+    create_team: {
+      on: {
+        NEXT: {
+          target: 'complete',
+          actions: ['markStepCompleted'],
+        },
+        BACK: { target: 'create_project' },
         SKIP: { target: 'complete' },
       },
     },

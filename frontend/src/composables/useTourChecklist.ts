@@ -17,6 +17,9 @@ const CHECKLIST_DEFS: Array<{ key: string; label: string; link: string; linkHash
   { key: 'backends.opencode', label: 'OpenCode', link: '/backends/backend-opencode' },
   { key: 'monitoring', label: 'Token Monitoring', link: '/settings', linkHash: '#general' },
   { key: 'verification', label: 'Harness Verification', link: '/settings', linkHash: '#harness' },
+  { key: 'create_product', label: 'First Product', link: '/products' },
+  { key: 'create_project', label: 'First Project', link: '/products' },
+  { key: 'create_team', label: 'Team Setup', link: '/projects' },
 ]
 
 export function useTourChecklist() {

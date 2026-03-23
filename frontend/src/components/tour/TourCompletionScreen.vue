@@ -16,6 +16,9 @@ const STEP_META: Record<string, { label: string; link: string }> = {
   'backends.opencode': { label: 'OpenCode', link: '/backends/backend-opencode' },
   monitoring: { label: 'Token Monitoring', link: '/settings#general' },
   verification: { label: 'Harness Verification', link: '/settings#harness' },
+  create_product: { label: 'First Product', link: '/products' },
+  create_project: { label: 'First Project', link: '/products' },
+  create_team: { label: 'Team Setup', link: '/projects' },
 };
 
 const ALL_STEPS = Object.keys(STEP_META);

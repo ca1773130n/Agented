@@ -78,6 +78,27 @@ const TOUR_STEP_META: Record<string, { target: string; title: string; message: s
     route: '/settings',
     routeHash: '#harness',
   },
+  'create_product': {
+    target: '[data-tour="create-product"]',
+    title: 'Create Your First Product',
+    message: 'Products group related projects under a shared context. Click to create your first product.',
+    skippable: true,
+    route: '/products',
+  },
+  'create_project': {
+    target: '[data-tour="create-project"]',
+    title: 'Create Your First Project',
+    message: 'Projects track work within a product. Click to add your first project.',
+    skippable: true,
+    route: '/products',
+  },
+  'create_team': {
+    target: '[data-tour="assign-teams"]',
+    title: 'Set Up a Team',
+    message: 'Teams assign agents to projects. Set up a team to start running bots.',
+    skippable: true,
+    route: '/projects',
+  },
 };
 
 // Map machine states to step numbers (1-based)
@@ -89,9 +110,12 @@ const STEP_NUMBER_MAP: Record<string, number> = {
   'backends.opencode': 2,
   'monitoring': 3,
   'verification': 4,
+  'create_product': 5,
+  'create_project': 6,
+  'create_team': 7,
 };
 
-const totalTourSteps = 4;
+const totalTourSteps = 7;
 
 const tourActive = computed(() => tour.isActive.value && !isWelcomePage.value);
 
