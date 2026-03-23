@@ -1,0 +1,168 @@
+{
+  "common": {
+    "save": "保存",
+    "cancel": "取消",
+    "delete": "删除",
+    "close": "关闭",
+    "next": "下一步",
+    "back": "返回",
+    "skip": "跳过",
+    "done": "完成",
+    "loading": "加载中...",
+    "retry": "重试",
+    "search": "搜索",
+    "confirm": "确认",
+    "create": "创建",
+    "edit": "编辑",
+    "yes": "是",
+    "no": "否",
+    "add": "添加",
+    "remove": "移除",
+    "browse": "浏览",
+    "select": "选择",
+    "installed": "已安装",
+    "notInstalled": "未安装"
+  },
+  "welcome": {
+    "badge": "初次设置",
+    "headline": "你的虚拟初创公司，完全自主运转",
+    "subtitle": "首个用自主 AI 智能体打造真实产品的端到端平台。定义要构建的内容，分配智能体团队，从架构到 QA，每个部门自动运转。",
+    "beginSetup": "开始设置 →",
+    "stepsHint": "8 个步骤 · 约 2 分钟",
+    "generateKey": "生成 Admin 密钥",
+    "generateKeyHeading": "生成你的 Admin API 密钥",
+    "generateKeyExplanation": "此密钥用于保护你的 Agented 实例。请妥善保管 — 密钥不会再次显示。",
+    "generating": "生成中...",
+    "generateFailed": "API 密钥生成失败，请重试。",
+    "tryAgain": "重试",
+    "copyKey": "复制",
+    "copied": "已复制",
+    "continue": "继续 →",
+    "bento": {
+      "vision": "愿景",
+      "productsProjects": "产品与项目",
+      "productsDesc": "定义你要构建的内容。将 GitHub 仓库作为项目关联到各产品下，智能体会接手完成剩余工作。",
+      "workforce": "团队力量",
+      "agentTeams": "智能体团队",
+      "teamsDesc": "5 个部门，17 个智能体。{command} 把握方向，{dev} 负责开发，{research} 深入探索，{ops} 解决问题，{qa} 验证质量。",
+      "autonomous": "完全自主",
+      "scheduling": "无缝后端调度",
+      "schedulingDesc": "智能体在 Claude Code、ChatGPT、Gemini、OpenCode 之间无缝切换。Harness 同步保持配置一致，token 用量预测在触达限额前自动触发切换。",
+      "engineering": "工程能力",
+      "harnessPlugins": "Harness 与插件",
+      "harnessDesc": "完整的 Harness 工程能力 — 配置同步、GRD 规划、MCP 服务器、市场插件、自定义技能与钩子。"
+    }
+  },
+  "tour": {
+    "stepOf": "第 {current} 步，共 {total} 步",
+    "setupComplete": "设置完成",
+    "setupCompleteDesc": "你的工作区已就绪。以下是你的配置内容：",
+    "skipped": "已跳过",
+    "goToDashboard": "前往仪表盘",
+    "skipConfirmTitle": "要跳过此步骤吗？",
+    "skipConfirmMessage": "你可以之后在设置清单中完成它。",
+    "skipAnyway": "直接跳过",
+    "keepGoing": "继续",
+    "restartSetupGuide": "重新开始设置引导",
+    "restartDesc": "重新启动引导流程，重新完成工作区设置和账号配置。现有配置不会受到影响。",
+    "setupChecklist": "设置",
+    "steps": {
+      "workspace": {
+        "title": "工作区目录",
+        "message": "设置智能体团队克隆仓库的根目录。"
+      },
+      "claude": {
+        "title": "AI 后端账号",
+        "message": "注册 Claude Code 账号。点击「添加账号」输入你的 Anthropic 凭据。",
+        "substep": "Claude Code (1/4)"
+      },
+      "codex": {
+        "title": "AI 后端账号",
+        "message": "注册用于 OpenAI 集成的 Codex CLI 账号（可选）。点击「添加账号」进行配置。",
+        "substep": "Codex CLI (2/4)"
+      },
+      "gemini": {
+        "title": "AI 后端账号",
+        "message": "注册用于 Google AI 的 Gemini CLI 账号（可选）。点击「添加账号」进行配置。",
+        "substep": "Gemini CLI (3/4)"
+      },
+      "opencode": {
+        "title": "AI 后端账号",
+        "message": "OpenCode 通过其他 AI 后端运行。如果你已在上方注册了账号，则无需单独注册。",
+        "substep": "OpenCode (4/4)"
+      },
+      "monitoring": {
+        "title": "Token 监控",
+        "message": "配置速率限制监控，追踪所有 AI 后端账号的 token 使用情况。"
+      },
+      "verification": {
+        "title": "Harness 验证",
+        "message": "验证 Harness 集成插件是否已配置，用于向市场部署技能。"
+      },
+      "product": {
+        "title": "创建第一个产品",
+        "message": "产品将相关项目归入共同上下文中。点击创建你的第一个产品。"
+      },
+      "project": {
+        "title": "创建第一个项目",
+        "message": "项目用于追踪产品内的工作。点击添加你的第一个项目。"
+      },
+      "team": {
+        "title": "设置团队",
+        "message": "团队将智能体分配给项目。设置团队后即可开始运行机器人。"
+      }
+    }
+  },
+  "accountWizard": {
+    "stepOf": "第 {current} 步，共 {total} 步",
+    "subscription": "你是否有 {backend} 订阅？",
+    "yesHaveAccount": "是的，我有账号",
+    "noSkip": "没有，跳过此后端",
+    "accountName": "账号名称",
+    "accountNamePlaceholder": "例如：个人、工作",
+    "email": "邮箱",
+    "emailPlaceholder": "例如：user{'@'}example.com",
+    "continueBtn": "继续",
+    "cliSetup": "CLI 与配置",
+    "cliInstalled": "CLI 已安装",
+    "cliNotInstalled": "CLI 未安装",
+    "installCli": "安装 CLI",
+    "installing": "安装中...",
+    "configPath": "配置目录",
+    "configCreated": "目录已创建",
+    "createDir": "创建目录",
+    "customizePath": "自定义路径",
+    "apiKeyEnv": "API 密钥变量",
+    "login": "登录",
+    "openConsole": "打开 {service} 控制台",
+    "loginViaCli": "通过 CLI 代理登录",
+    "loginOptional": "已完成认证则无需登录，直接继续即可",
+    "planDetails": "套餐与详情",
+    "plan": "套餐",
+    "selectPlan": "选择套餐...",
+    "setDefault": "设为默认账号",
+    "saveAccount": "保存账号",
+    "saving": "保存中...",
+    "addAnother": "添加其他账号",
+    "switchToAdvanced": "切换到高级表单"
+  },
+  "directoryBrowser": {
+    "title": "选择目录",
+    "selectThis": "选择此目录",
+    "newFolder": "新建文件夹",
+    "creating": "创建中...",
+    "createFolder": "创建",
+    "enterFolderName": "输入文件夹名称...",
+    "parentDir": "上级目录",
+    "emptyDir": "此目录为空",
+    "errorLoading": "目录加载失败",
+    "errorCreating": "文件夹创建失败"
+  },
+  "language": {
+    "label": "语言",
+    "en": "English",
+    "ko": "한국어",
+    "ja": "日本語",
+    "zh": "中文"
+  }
+}
