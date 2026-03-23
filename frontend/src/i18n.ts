@@ -43,3 +43,11 @@ export async function setLocale(lang: SupportedLocale) {
   localStorage.setItem(STORAGE_KEY, lang)
   document.documentElement.lang = lang
 }
+
+/** Load the initial locale if it's not English (called once on app startup) */
+export async function loadInitialLocale() {
+  const initial = getInitialLocale()
+  if (initial !== 'en') {
+    await setLocale(initial)
+  }
+}
