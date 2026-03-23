@@ -9,9 +9,11 @@
  *   3) Login (browser or CLI proxy)
  *   4) Plan & Save (choose plan, set default, save)
  */
-import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
+import { ref, computed, watch, onMounted, onUnmounted, inject } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { backendApi, utilityApi, BACKEND_PLAN_OPTIONS } from '../../services/api';
+
+const setTourGuide = inject<(msg: string | null) => void>('setTourGuide', () => {});
 
 const props = defineProps<{
   backendId: string;
@@ -40,6 +42,7 @@ const VISIBLE_STEPS: WizardStep[] = ['subscription', 'cli', 'login', 'plan'];
 const currentStep = ref<WizardStep>('subscription');
 
 const currentStepIndex = computed(() => STEP_ORDER.indexOf(currentStep.value));
+
 const stepLabels: Record<WizardStep, string> = {
   subscription: 'Subscription',
   cli: 'CLI Setup',
@@ -199,6 +202,33 @@ const loginStatus = ref<'idle' | 'connecting' | 'streaming' | 'completed' | 'err
 const loginSessionId = ref('');
 const loginLines = ref<string[]>([]);
 const loginError = ref('');
+
+// ---------------------------------------------------------------------------
+// Tour guide — contextual messages for the bottom onboarding panel
+// ---------------------------------------------------------------------------
+const guideMessages: Record<WizardStep, () => string> = {
+  subscription: () => `Do you have a ${props.backendName} subscription? Select Yes and enter your account name to get started.`,
+  cli: () => cliInstalled.value
+    ? `${props.backendName} CLI is installed (${cliVersion.value || 'detected'}). Review the config directory and continue.`
+    : `${props.backendName} CLI is not installed. Click "Install CLI" to set it up automatically.`,
+  login: () => loginStatus.value === 'completed'
+    ? 'Login successful! Click Continue to choose your plan.'
+    : loginStatus.value === 'streaming'
+    ? 'Complete the authentication in the terminal below. An OAuth page may open in your browser.'
+    : `Click "Start Login" to authenticate via ${props.backendName} OAuth. Skip if already logged in.`,
+  plan: () => `Choose your subscription plan for this ${props.backendName} account and save.`,
+  done: () => `Account saved! Add another ${props.backendName} account or click "Done — Next Backend" to continue.`,
+};
+
+watch(currentStep, (step) => {
+  setTourGuide(guideMessages[step]());
+}, { immediate: true });
+
+watch(() => loginStatus.value, () => {
+  if (currentStep.value === 'login') setTourGuide(guideMessages.login());
+});
+
+onUnmounted(() => { setTourGuide(null); });
 const pendingQuestion = ref('');
 const userResponse = ref('');
 let loginEventSource: EventSource | null = null;
@@ -233,7 +263,7 @@ async function startCliLogin() {
       }
       scrollTerminal();
     });
-    loginEventSource.addEventListener('auth_url', (e: MessageEvent) => {
+    loginEventSource.addEventListener('oauth_url', (e: MessageEvent) => {
       const data = JSON.parse(e.data);
       if (data.url) window.open(data.url, '_blank');
       loginLines.value.push(`Opening browser for authentication...`);

@@ -43,6 +43,19 @@ const tourStepNumber = computed(() => TOUR_STEP_MAP[tour.currentStep.value]?.ste
 
 const tourSubstepLabel = computed(() => TOUR_STEP_MAP[tour.currentStep.value]?.substepLabel ?? null);
 
+// Dynamic guide message — components can override the default step message
+const tourGuideOverride = ref<string | null>(null);
+provide('setTourGuide', (msg: string | null) => { tourGuideOverride.value = msg; });
+
+// Reset override when step changes
+watch(() => tour.currentStep.value, () => { tourGuideOverride.value = null; });
+
+const tourStepWithGuide = computed(() => {
+  if (!tourStep.value) return null;
+  if (!tourGuideOverride.value) return tourStep.value;
+  return { ...tourStep.value, message: tourGuideOverride.value };
+});
+
 // Tour completion screen
 const tourComplete = computed(() => tour.state.value === 'complete');
 
@@ -353,7 +366,7 @@ onUnmounted(() => {
 
     <TourOverlay
       :active="tourActive"
-      :step="tourStep"
+      :step="tourStepWithGuide"
       :effective-target="null"
       :substep-label="tourSubstepLabel"
       :step-number="tourStepNumber"
