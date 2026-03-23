@@ -1,6 +1,6 @@
 import type { Trigger, ProjectPath, ExecutionStatus } from '../../services/api'
 
-export const mockExecutionStatus: ExecutionStatus = {
+const mockExecutionStatus: ExecutionStatus = {
   status: 'idle'
 }
 
