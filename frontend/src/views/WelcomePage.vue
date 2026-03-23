@@ -6,9 +6,15 @@ import { healthApi } from '../services/api';
 import { setApiKey } from '../services/api/client';
 import { resetAuthGuard } from '../router/guards';
 import { useTourMachine } from '../composables/useTourMachine';
+import { SUPPORTED_LOCALES, setLocale } from '../i18n';
 
 const router = useRouter();
-const { t } = useI18n();
+const { t, locale } = useI18n();
+
+function onLocaleChange(e: Event) {
+  const lang = (e.target as HTMLSelectElement).value as 'en' | 'ko' | 'ja' | 'zh';
+  setLocale(lang);
+}
 const tourMachine = useTourMachine();
 
 // First-run page — clear any stale tour/key state from previous installs
@@ -80,6 +86,18 @@ function continueToApp() {
             </div>
             <span class="logo-name">Agented</span>
             <span class="logo-version">v0.4.0</span>
+          </div>
+          <div class="top-bar-lang">
+            <svg class="lang-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+              <circle cx="12" cy="12" r="10"/>
+              <line x1="2" y1="12" x2="22" y2="12"/>
+              <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+            </svg>
+            <select class="lang-select" :value="locale" @change="onLocaleChange">
+              <option v-for="loc in SUPPORTED_LOCALES" :key="loc.code" :value="loc.code">
+                {{ loc.nativeName }}
+              </option>
+            </select>
           </div>
         </header>
 
@@ -256,6 +274,45 @@ function continueToApp() {
   padding: 32px 0 0;
   display: flex;
   align-items: center;
+  justify-content: space-between;
+}
+
+.top-bar-lang {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.lang-icon {
+  color: #71717a;
+}
+
+.lang-select {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #a1a1aa;
+  font-size: 12px;
+  font-weight: 500;
+  padding: 5px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%2371717a' fill='none' stroke-width='1.5'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+  padding-right: 24px;
+}
+
+.lang-select:hover {
+  border-color: rgba(255, 255, 255, 0.2);
+  color: #e4e4e7;
+}
+
+.lang-select option {
+  background: #18181b;
+  color: #e4e4e7;
 }
 
 .top-bar-logo {
