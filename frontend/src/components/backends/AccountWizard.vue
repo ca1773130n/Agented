@@ -26,6 +26,7 @@ const emit = defineEmits<{
   saved: [];
   skip: [];
   addAnother: [];
+  done: []; // Close wizard AND advance tour to next backend
 }>();
 
 const { t } = useI18n();
@@ -698,8 +699,8 @@ function addAnotherAccount() {
           <button class="btn btn-outline" @click="addAnotherAccount">
             {{ t('accountWizard.addAnother') }}
           </button>
-          <button class="btn btn-primary" @click="emit('close')">
-            {{ t('common.done') }}
+          <button class="btn btn-primary" @click="emit('done')">
+            Done — Next Backend
           </button>
         </div>
       </div>

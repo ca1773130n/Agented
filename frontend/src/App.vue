@@ -86,10 +86,15 @@ function showToast(message: string, type: ToastType = 'info', duration?: number)
   }, duration ?? defaultDuration);
 
   // Auto-advance tour when a success toast matches the current step's trigger
+  // Skip auto-advance for backend account steps — the AccountWizard controls advancement
   if (type === 'success' && tour.isActive.value) {
-    const meta = TOUR_STEP_MAP[tour.currentStep.value];
-    if (meta?.autoAdvanceOnToast && message.includes(meta.autoAdvanceOnToast)) {
-      setTimeout(() => tour.nextStep(), 800);
+    const step = tour.currentStep.value;
+    const isBackendStep = step.startsWith('backends.');
+    if (!isBackendStep) {
+      const meta = TOUR_STEP_MAP[step];
+      if (meta?.autoAdvanceOnToast && message.includes(meta.autoAdvanceOnToast)) {
+        setTimeout(() => tour.nextStep(), 800);
+      }
     }
   }
 }

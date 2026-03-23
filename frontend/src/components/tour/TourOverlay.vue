@@ -199,15 +199,23 @@ watch(
       return
     }
 
-    // Reset timeout states on step/target change
+    // Reset on step/target change — clear immediately to avoid stale rects
     loadingTimedOut.value = false
     elementNotFoundTimeout.value = false
     clearTimers()
+    stopTracking()
+    disconnectResizeObserver()
+    targetEl.value = null
+    targetRect.value = null
 
-    findTarget()
-    if (!targetEl.value) {
-      startObserverWithTimeouts()
-    }
+    // Delay search to let route transition complete (avoids finding stale elements)
+    setTimeout(() => {
+      if (!props.active) return
+      findTarget()
+      if (!targetEl.value) {
+        startObserverWithTimeouts()
+      }
+    }, 150)
   },
   { immediate: true },
 )

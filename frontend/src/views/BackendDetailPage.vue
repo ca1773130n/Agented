@@ -142,6 +142,7 @@
           @close="closeModal"
           @saved="onWizardSaved"
           @skip="onWizardSkip"
+          @done="onWizardDone"
           @add-another="onWizardAddAnother"
         />
 
@@ -480,11 +481,13 @@ import BackendConnect from '../components/monitoring/BackendConnect.vue';
 import AccountLoginModal from '../components/monitoring/AccountLoginModal.vue';
 import AccountWizard from '../components/backends/AccountWizard.vue';
 import ConfirmModal from '../components/base/ConfirmModal.vue';
+import { useTourMachine } from '../composables/useTourMachine';
 import { useToast } from '../composables/useToast';
 import { handleApiError } from '../services/api/error-handler';
 import { useWebMcpTool } from '../composables/useWebMcpTool';
 const route = useRoute();
 const backendId = computed(() => route.params.backendId as string);
+const tourMachine = useTourMachine();
 
 const backend = ref<AIBackendWithAccounts | null>(null);
 
@@ -695,6 +698,14 @@ async function onWizardSaved() {
 function onWizardSkip() {
   showAddModal.value = false;
   showToast?.('Backend skipped', 'info');
+  // Advance tour past this backend
+  tourMachine.nextStep();
+}
+
+function onWizardDone() {
+  closeModal();
+  // Advance tour to next backend/step
+  tourMachine.nextStep();
 }
 
 function onWizardAddAnother() {
