@@ -5,17 +5,17 @@
 See: .planning/PROJECT.md (updated 2026-03-21)
 
 **Core value:** Enable engineering teams to orchestrate AI-powered automation through a unified dashboard
-**Current focus:** Phase 8 — Accessibility
+**Current focus:** Phase 9 — Post-Tour Experience
 **Primary hypothesis:** A guided onboarding tour can bring new users from zero to first bot execution in under 3 minutes
 
 ## Current Position
 
-Phase: 8 of 10 (Accessibility)
-Plan: 1 of 1 in current phase
+Phase: 9 of 10 (Post-Tour Experience)
+Plan: 2 of 2 in current phase
 Status: Phase Complete
-Last activity: 2026-03-22 — Completed 08-01-PLAN.md
+Last activity: 2026-03-23 — Completed 09-02-PLAN.md
 
-Progress: [########--] 80%
+Progress: [#########-] 90%
 
 ## Current Baseline
 
@@ -42,9 +42,9 @@ Progress: [########--] 80%
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 15
-- Average duration: 7min
-- Total execution time: 1.56 hours
+- Total plans completed: 17
+- Average duration: 8min
+- Total execution time: 1.96 hours
 
 **By Phase:**
 
@@ -58,6 +58,7 @@ Progress: [########--] 80%
 | 06-navigation-controls | 2/2 | 9min | 5min |
 | 07-loading-error-resilience | 2/2 | 11min | 6min |
 | 08-accessibility | 1/1 | 5min | 5min |
+| 09-post-tour-experience | 2/2 | 24min | 12min |
 | 10-integration-testing | 3/4 | 13min | 4min |
 
 ## Accumulated Context
@@ -120,6 +121,13 @@ Progress: [########--] 80%
 - 08-01: ARIA live region inside v-if block (renders only during active tour)
 - 08-01: sr-only pattern (clip/overflow hidden) instead of display:none for screen reader accessibility
 
+- 09-01: RouterLink in skipped items emits done to close overlay before navigation
+- 09-01: Sidebar checklist hidden when desktop sidebar is collapsed via isCollapsedDesktop()
+- 09-01: restartTour() resets machine to idle (not start) so completion screen hides cleanly
+- 09-02: Restart button placed in GeneralSettings.vue (General tab content component)
+- 09-02: restartTour + startTour + nextStep sequence skips welcome for returning users
+- 09-02: create_project route set to /products with Phase 7 graceful fallback
+
 ### Pending Todos
 
 None yet.
@@ -131,6 +139,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-22
-Stopped at: Completed 08-01-PLAN.md (Phase 8 complete)
+Last session: 2026-03-23
+Stopped at: Completed 09-02-PLAN.md (Phase 9 complete)
 Resume file: None
