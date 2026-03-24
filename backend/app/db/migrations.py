@@ -4150,6 +4150,177 @@ def _migrate_96_app_meta(conn):
     """)
 
 
+def _migrate_97_agent_memory_tables(conn):
+    """Create agent memory tables: memory_threads, memory_messages, FTS5, working memory."""
+    # memory_threads
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS memory_threads (
+            id TEXT PRIMARY KEY,
+            resource_id TEXT NOT NULL,
+            resource_type TEXT NOT NULL DEFAULT 'agent',
+            title TEXT,
+            metadata TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_memory_threads_resource "
+        "ON memory_threads(resource_id, resource_type)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_memory_threads_updated "
+        "ON memory_threads(updated_at DESC)"
+    )
+
+    # memory_messages
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS memory_messages (
+            id TEXT PRIMARY KEY,
+            thread_id TEXT NOT NULL REFERENCES memory_threads(id) ON DELETE CASCADE,
+            role TEXT NOT NULL,
+            content TEXT NOT NULL,
+            type TEXT NOT NULL DEFAULT 'text',
+            metadata TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_memory_messages_thread "
+        "ON memory_messages(thread_id, created_at)"
+    )
+
+    # FTS5 virtual table for semantic recall
+    cursor = conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='memory_messages_fts'"
+    )
+    if cursor.fetchone() is None:
+        conn.execute("""
+            CREATE VIRTUAL TABLE memory_messages_fts
+            USING fts5(
+                content,
+                content='memory_messages',
+                content_rowid='rowid',
+                tokenize='porter unicode61'
+            )
+        """)
+
+    # Triggers to keep FTS index in sync
+    conn.execute("""
+        CREATE TRIGGER IF NOT EXISTS memory_messages_ai AFTER INSERT ON memory_messages BEGIN
+            INSERT INTO memory_messages_fts(rowid, content) VALUES (new.rowid, new.content);
+        END
+    """)
+    conn.execute("""
+        CREATE TRIGGER IF NOT EXISTS memory_messages_ad AFTER DELETE ON memory_messages BEGIN
+            INSERT INTO memory_messages_fts(memory_messages_fts, rowid, content)
+            VALUES ('delete', old.rowid, old.content);
+        END
+    """)
+    conn.execute("""
+        CREATE TRIGGER IF NOT EXISTS memory_messages_au AFTER UPDATE ON memory_messages BEGIN
+            INSERT INTO memory_messages_fts(memory_messages_fts, rowid, content)
+            VALUES ('delete', old.rowid, old.content);
+            INSERT INTO memory_messages_fts(rowid, content) VALUES (new.rowid, new.content);
+        END
+    """)
+
+    # agent_working_memory
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS agent_working_memory (
+            entity_id TEXT NOT NULL,
+            entity_type TEXT NOT NULL DEFAULT 'agent',
+            content TEXT NOT NULL DEFAULT '',
+            template TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (entity_id, entity_type)
+        )
+    """)
+
+    # Add memory_config column to agents table
+    cursor = conn.execute("PRAGMA table_info(agents)")
+    columns = {row[1] for row in cursor.fetchall()}
+    if "memory_config" not in columns:
+        conn.execute("ALTER TABLE agents ADD COLUMN memory_config TEXT")
+        logger.info("Added memory_config column to agents")
+
+
+def _migrate_98_tracing_tables(conn):
+    """Create structured tracing tables: traces and trace_spans."""
+    tables_created = []
+
+    cursor = conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='traces'"
+    )
+    if cursor.fetchone() is None:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS traces (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                entity_type TEXT NOT NULL,
+                entity_id TEXT NOT NULL,
+                execution_id TEXT,
+                status TEXT NOT NULL DEFAULT 'running',
+                input TEXT,
+                output TEXT,
+                metadata TEXT,
+                error_message TEXT,
+                duration_ms INTEGER,
+                started_at TIMESTAMP NOT NULL,
+                finished_at TIMESTAMP,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_traces_entity ON traces(entity_type, entity_id)"
+        )
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_traces_execution ON traces(execution_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_traces_started ON traces(started_at DESC)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_traces_status ON traces(status)")
+        tables_created.append("traces")
+
+    cursor = conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='trace_spans'"
+    )
+    if cursor.fetchone() is None:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS trace_spans (
+                id TEXT PRIMARY KEY,
+                trace_id TEXT NOT NULL,
+                parent_span_id TEXT,
+                name TEXT NOT NULL,
+                span_type TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'running',
+                input TEXT,
+                output TEXT,
+                attributes TEXT,
+                metadata TEXT,
+                error_message TEXT,
+                duration_ms INTEGER,
+                started_at TIMESTAMP NOT NULL,
+                finished_at TIMESTAMP,
+                FOREIGN KEY (trace_id) REFERENCES traces(id) ON DELETE CASCADE,
+                FOREIGN KEY (parent_span_id) REFERENCES trace_spans(id) ON DELETE SET NULL
+            )
+        """)
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_trace_spans_trace "
+            "ON trace_spans(trace_id, started_at)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_trace_spans_parent ON trace_spans(parent_span_id)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_trace_spans_type ON trace_spans(span_type)"
+        )
+        tables_created.append("trace_spans")
+
+    if tables_created:
+        conn.commit()
+        logger.info("Created tracing tables: %s", ", ".join(tables_created))
+
+
 VERSIONED_MIGRATIONS = [
     (1, "add_github_columns", _migrate_add_github_columns),
     (2, "add_pr_reviews_table", _migrate_add_pr_reviews_table),
@@ -4268,4 +4439,8 @@ VERSIONED_MIGRATIONS = [
     ),
     # v0.5.0 onboarding — application metadata (instance tracking)
     (96, "app_meta_instance_id", _migrate_96_app_meta),
+    # Agent memory system
+    (97, "agent_memory_tables", _migrate_97_agent_memory_tables),
+    # Structured tracing system
+    (98, "tracing_tables", _migrate_98_tracing_tables),
 ]

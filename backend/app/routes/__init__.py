@@ -5,6 +5,7 @@ def register_blueprints(app):
     """Register all route blueprints with the Flask app."""
     from .activity_feed import activity_feed_bp
     from .agent_conversations import agent_conversations_bp
+    from .agent_memory import agent_memory_bp
     from .agents import agents_bp
     from .analytics import analytics_bp
     from .cross_team_insights import cross_team_insights_bp
@@ -90,6 +91,7 @@ def register_blueprints(app):
     from .team_generation import team_generation_bp
     from .team_members import team_members_bp
     from .teams import teams_bp
+    from .tracing import tracing_bp
     from .triggers import triggers_bp
     from .utility import utility_bp
     from .webhook import webhook_bp
@@ -190,6 +192,7 @@ def register_blueprints(app):
             findings_bp,
             bot_pipes_bp,
             bot_memory_bp,
+            agent_memory_bp,
             bot_sla_bp,
             report_digests_bp,
             retention_bp,
@@ -199,6 +202,7 @@ def register_blueprints(app):
             payload_transformers_bp,
             quality_ratings_bp,
             system_bp,
+            tracing_bp,
         ]
         for bp in admin_blueprints:
             limiter.limit("120/minute")(bp)
@@ -293,6 +297,7 @@ def register_blueprints(app):
     app.register_api(findings_bp)
     app.register_api(bot_pipes_bp)
     app.register_api(bot_memory_bp)
+    app.register_api(agent_memory_bp)
     app.register_api(retention_bp)
     app.register_api(skill_sets_bp)
     app.register_api(onboarding_bp)
@@ -300,6 +305,7 @@ def register_blueprints(app):
     app.register_api(system_bp)
     app.register_api(bot_sla_bp)
     app.register_api(report_digests_bp)
+    app.register_api(tracing_bp)
     app.register_api(oauth_callback_bp)
 
     # SPA catch-all: MUST be registered LAST so API routes take priority

@@ -92,6 +92,10 @@ export { skillSetsApi } from './skill-sets';
 export type { SkillSet } from './skill-sets';
 export { payloadTransformerApi } from './payload-transformers';
 export type { PayloadTransformer, TransformRuleItem, UpsertTransformerRequest, UpsertTransformerResponse } from './payload-transformers';
+export { agentMemoryApi } from './agent-memory';
+export type { MemoryThread, MemoryMessage, WorkingMemory, MemoryConfig, ThreadListResponse, MessageListResponse, RecallResponse, SaveMessagesRequest } from './agent-memory';
+export { tracingApi } from './tracing';
+export type { Trace, TraceSpan, TraceStats, SpanType, TraceStatus, EntityType as TraceEntityType, TraceListResponse as TracingListResponse, SpanListResponse, CreateTraceRequest, EndTraceRequest, CreateSpanRequest, EndSpanRequest } from './tracing';
 
 // Constant exports from types
 export { CLAUDE_MODELS, OPENCODE_MODELS } from './types';

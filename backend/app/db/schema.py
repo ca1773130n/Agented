@@ -238,6 +238,7 @@ def create_fresh_schema(conn):
             matched_skills TEXT,
             preferred_model TEXT,
             effort_level TEXT DEFAULT 'medium',
+            memory_config TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
@@ -2053,6 +2054,139 @@ def create_fresh_schema(conn):
         )
     """)
     conn.execute("CREATE INDEX IF NOT EXISTS idx_pti_project ON project_team_instances(project_id)")
+
+    # --- Agent Memory tables ---
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS memory_threads (
+            id TEXT PRIMARY KEY,
+            resource_id TEXT NOT NULL,
+            resource_type TEXT NOT NULL DEFAULT 'agent',
+            title TEXT,
+            metadata TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_memory_threads_resource "
+        "ON memory_threads(resource_id, resource_type)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_memory_threads_updated "
+        "ON memory_threads(updated_at DESC)"
+    )
+
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS memory_messages (
+            id TEXT PRIMARY KEY,
+            thread_id TEXT NOT NULL REFERENCES memory_threads(id) ON DELETE CASCADE,
+            role TEXT NOT NULL,
+            content TEXT NOT NULL,
+            type TEXT NOT NULL DEFAULT 'text',
+            metadata TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_memory_messages_thread "
+        "ON memory_messages(thread_id, created_at)"
+    )
+
+    # FTS5 virtual table for semantic recall (external content mode)
+    conn.execute("""
+        CREATE VIRTUAL TABLE IF NOT EXISTS memory_messages_fts
+        USING fts5(
+            content,
+            content='memory_messages',
+            content_rowid='rowid',
+            tokenize='porter unicode61'
+        )
+    """)
+
+    # Triggers to keep FTS index in sync
+    conn.execute("""
+        CREATE TRIGGER IF NOT EXISTS memory_messages_ai AFTER INSERT ON memory_messages BEGIN
+            INSERT INTO memory_messages_fts(rowid, content) VALUES (new.rowid, new.content);
+        END
+    """)
+    conn.execute("""
+        CREATE TRIGGER IF NOT EXISTS memory_messages_ad AFTER DELETE ON memory_messages BEGIN
+            INSERT INTO memory_messages_fts(memory_messages_fts, rowid, content)
+            VALUES ('delete', old.rowid, old.content);
+        END
+    """)
+    conn.execute("""
+        CREATE TRIGGER IF NOT EXISTS memory_messages_au AFTER UPDATE ON memory_messages BEGIN
+            INSERT INTO memory_messages_fts(memory_messages_fts, rowid, content)
+            VALUES ('delete', old.rowid, old.content);
+            INSERT INTO memory_messages_fts(rowid, content) VALUES (new.rowid, new.content);
+        END
+    """)
+
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS agent_working_memory (
+            entity_id TEXT NOT NULL,
+            entity_type TEXT NOT NULL DEFAULT 'agent',
+            content TEXT NOT NULL DEFAULT '',
+            template TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (entity_id, entity_type)
+        )
+    """)
+
+    # --- Structured tracing tables ---
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS traces (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            entity_type TEXT NOT NULL,
+            entity_id TEXT NOT NULL,
+            execution_id TEXT,
+            status TEXT NOT NULL DEFAULT 'running',
+            input TEXT,
+            output TEXT,
+            metadata TEXT,
+            error_message TEXT,
+            duration_ms INTEGER,
+            started_at TIMESTAMP NOT NULL,
+            finished_at TIMESTAMP,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_traces_entity ON traces(entity_type, entity_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_traces_execution ON traces(execution_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_traces_started ON traces(started_at DESC)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_traces_status ON traces(status)")
+
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS trace_spans (
+            id TEXT PRIMARY KEY,
+            trace_id TEXT NOT NULL,
+            parent_span_id TEXT,
+            name TEXT NOT NULL,
+            span_type TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'running',
+            input TEXT,
+            output TEXT,
+            attributes TEXT,
+            metadata TEXT,
+            error_message TEXT,
+            duration_ms INTEGER,
+            started_at TIMESTAMP NOT NULL,
+            finished_at TIMESTAMP,
+            FOREIGN KEY (trace_id) REFERENCES traces(id) ON DELETE CASCADE,
+            FOREIGN KEY (parent_span_id) REFERENCES trace_spans(id) ON DELETE SET NULL
+        )
+    """)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_trace_spans_trace "
+        "ON trace_spans(trace_id, started_at)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_trace_spans_parent ON trace_spans(parent_span_id)"
+    )
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_trace_spans_type ON trace_spans(span_type)")
 
     # v0.5.0 onboarding — application metadata (instance tracking)
     conn.execute("""
