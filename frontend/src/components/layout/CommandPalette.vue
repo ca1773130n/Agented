@@ -84,7 +84,7 @@ async function fetchAllEntities(): Promise<void> {
   error.value = false;
 
   try {
-    const [productsRes, projectsRes, teamsRes, agentsRes, pluginsRes, triggersRes, workflowsRes, superAgentsRes] = await Promise.all([
+    const settled = await Promise.allSettled([
       productApi.list(),
       projectApi.list(),
       teamApi.list(),
@@ -95,17 +95,27 @@ async function fetchAllEntities(): Promise<void> {
       superAgentApi.list(),
     ]);
 
+    const val = <T>(r: PromiseSettledResult<T>): T | null =>
+      r.status === 'fulfilled' ? r.value : null;
+
+    const [pRes, prRes, tRes, aRes, plRes, trRes, wRes, saRes] = settled;
+
     cachedData = {
-      products: productsRes.products.map((p) => ({ id: p.id, name: p.name })),
-      projects: projectsRes.projects.map((p) => ({ id: p.id, name: p.name })),
-      teams: teamsRes.teams.map((t) => ({ id: t.id, name: t.name })),
-      agents: agentsRes.agents.map((a) => ({ id: a.id, name: a.name })),
-      plugins: pluginsRes.plugins.map((p) => ({ id: p.id, name: p.name })),
-      triggers: triggersRes.triggers.map((t: { id: string; name: string }) => ({ id: t.id, name: t.name })),
-      workflows: workflowsRes.workflows.map((w: { id: string; name: string }) => ({ id: w.id, name: w.name })),
-      superAgents: superAgentsRes.super_agents.map((s: { id: string; name: string }) => ({ id: s.id, name: s.name })),
+      products: val(pRes)?.products?.map((p: { id: string; name: string }) => ({ id: p.id, name: p.name })) ?? [],
+      projects: val(prRes)?.projects?.map((p: { id: string; name: string }) => ({ id: p.id, name: p.name })) ?? [],
+      teams: val(tRes)?.teams?.map((t: { id: string; name: string }) => ({ id: t.id, name: t.name })) ?? [],
+      agents: val(aRes)?.agents?.map((a: { id: string; name: string }) => ({ id: a.id, name: a.name })) ?? [],
+      plugins: val(plRes)?.plugins?.map((p: { id: string; name: string }) => ({ id: p.id, name: p.name })) ?? [],
+      triggers: val(trRes)?.triggers?.map((t: { id: string; name: string }) => ({ id: t.id, name: t.name })) ?? [],
+      workflows: val(wRes)?.workflows?.map((w: { id: string; name: string }) => ({ id: w.id, name: w.name })) ?? [],
+      superAgents: val(saRes)?.super_agents?.map((s: { id: string; name: string }) => ({ id: s.id, name: s.name })) ?? [],
       timestamp: Date.now(),
     };
+
+    const failures = settled.filter((r) => r.status === 'rejected');
+    if (failures.length === settled.length) {
+      error.value = true;
+    }
   } catch {
     error.value = true;
   } finally {
@@ -150,7 +160,7 @@ function filterResults(q: string): SearchResult[] {
 
 const groupedResults = computed(() => {
   const groups: { type: EntityType; items: SearchResult[] }[] = [];
-  const typeOrder: EntityType[] = ['Product', 'Project', 'Team', 'Agent', 'Plugin'];
+  const typeOrder: EntityType[] = ['Product', 'Project', 'Team', 'Agent', 'Plugin', 'Trigger', 'Workflow', 'SuperAgent'];
 
   for (const type of typeOrder) {
     const items = results.value.filter((r) => r.type === type);

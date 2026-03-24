@@ -364,8 +364,8 @@ onMounted(async () => {
     if (testAgentId.value) {
       await createSession();
     }
-  } catch {
-    // Test agent setup is optional — don't block the page
+  } catch (e) {
+    console.warn('[AIBackendsPage] Test agent setup failed:', e);
   }
 });
 </script>
