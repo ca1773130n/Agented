@@ -82,7 +82,7 @@
 
       <!-- OpenCode cross-backend accounts -->
       <div v-if="isOpenCode" class="opencode-section">
-        <div class="opencode-note">
+        <div class="opencode-note" data-tour="opencode-info">
           <span class="note-icon">i</span>
           <span>OpenCode routes through other AI backends. Register accounts on those backends.</span>
         </div>
@@ -123,7 +123,7 @@
       <div class="accounts-section">
         <div class="section-header">
           <h2>{{ isOpenCode ? 'OpenCode Accounts' : 'Accounts' }}</h2>
-          <button v-if="!isOpenCode" class="btn btn-primary" @click="showAddModal = true">
+          <button v-if="!isOpenCode" class="btn btn-primary" data-tour="add-account-btn" @click="showAddModal = true">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M12 5v14M5 12h14"/>
             </svg>
@@ -131,14 +131,36 @@
           </button>
         </div>
 
-        <!-- Inline Add/Edit Account Form -->
-        <div v-if="showAddModal || editingAccount" class="inline-account-form">
+        <!-- Account Wizard (for adding new accounts) -->
+        <AccountWizard
+          v-if="showAddModal && !editingAccount && backend"
+          :backend-id="backend.id"
+          :backend-type="backend.type"
+          :backend-name="backend.name"
+          :is-installed="!!backend.is_installed"
+          :version="backend.version"
+          @close="closeModal"
+          @saved="onWizardSaved"
+          @skip="onWizardSkip"
+          @done="onWizardDone"
+          @add-another="onWizardAddAnother"
+        />
+
+        <!-- Advanced inline form link (when wizard is showing) -->
+        <div v-if="showAddModal && !editingAccount && !useAdvancedForm" class="advanced-toggle">
+          <button class="btn-link" @click="useAdvancedForm = true; showAddModal = false">
+            Prefer the advanced form?
+          </button>
+        </div>
+
+        <!-- Advanced Inline Add Form (power users) -->
+        <div v-if="useAdvancedForm && !editingAccount" class="inline-account-form">
           <div class="inline-form-header">
-            <h3>{{ editingAccount ? 'Edit Account' : 'Add Account' }}</h3>
-            <button class="btn-close" @click="closeModal">&times;</button>
+            <h3>Add Account (Advanced)</h3>
+            <button class="btn-close" @click="closeAdvancedForm">&times;</button>
           </div>
           <form @submit.prevent="saveAccount">
-            <div v-if="!editingAccount && loginInfo" class="login-banner">
+            <div v-if="loginInfo" class="login-banner">
               <span class="banner-icon">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
                   <circle cx="12" cy="12" r="10"/>
@@ -226,9 +248,99 @@
               </label>
             </div>
             <div class="inline-form-actions">
+              <button type="button" class="btn btn-secondary" @click="closeAdvancedForm">Cancel</button>
+              <button type="submit" class="btn btn-primary" :disabled="isSaving">
+                {{ isSaving ? 'Saving...' : 'Add Account' }}
+              </button>
+            </div>
+          </form>
+        </div>
+
+        <!-- Inline Edit Account Form (editing existing accounts) -->
+        <div v-if="editingAccount" class="inline-account-form">
+          <div class="inline-form-header">
+            <h3>Edit Account</h3>
+            <button class="btn-close" @click="closeModal">&times;</button>
+          </div>
+          <form @submit.prevent="saveAccount">
+            <div class="form-group">
+              <label for="edit_account_name">Account Name *</label>
+              <input
+                id="edit_account_name"
+                v-model="accountForm.account_name"
+                type="text"
+                required
+                placeholder="e.g., Personal, Work"
+              />
+            </div>
+            <div class="form-group">
+              <label for="edit_email">Email</label>
+              <input
+                id="edit_email"
+                v-model="accountForm.email"
+                type="email"
+                placeholder="e.g., user@example.com"
+              />
+              <small>Login email for this account</small>
+            </div>
+            <div class="form-group">
+              <label for="edit_config_path">Config Path</label>
+              <input
+                id="edit_config_path"
+                v-model="accountForm.config_path"
+                type="text"
+                placeholder="e.g., ~/.claude-work"
+              />
+              <small>Path to the backend's config directory for this account</small>
+            </div>
+            <div class="form-group">
+              <label for="edit_api_key_env">API Key Environment Variable</label>
+              <input
+                id="edit_api_key_env"
+                v-model="accountForm.api_key_env"
+                type="text"
+                placeholder="e.g., ANTHROPIC_API_KEY_WORK"
+              />
+              <small>Name of the environment variable containing the API key</small>
+            </div>
+            <div v-if="planOptions.length > 0" class="form-group">
+              <label for="edit_plan">Plan</label>
+              <select id="edit_plan" v-model="accountForm.plan">
+                <option value="">Select plan...</option>
+                <option v-for="opt in planOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+              </select>
+            </div>
+            <template v-if="backend?.type === 'codex'">
+              <div class="form-group">
+                <label for="edit_reasoning_level">Reasoning Level</label>
+                <select id="edit_reasoning_level" v-model="codexSettings.reasoning_level">
+                  <option value="">Default</option>
+                  <option value="low">Low</option>
+                  <option value="medium">Medium</option>
+                  <option value="high">High</option>
+                </select>
+                <small>Controls how much reasoning the model performs</small>
+              </div>
+              <div class="form-group">
+                <label for="edit_summary_level">Summary Level</label>
+                <select id="edit_summary_level" v-model="codexSettings.summary_level">
+                  <option value="">Default</option>
+                  <option value="concise">Concise</option>
+                  <option value="detailed">Detailed</option>
+                </select>
+                <small>Controls output verbosity</small>
+              </div>
+            </template>
+            <div class="form-group checkbox">
+              <label>
+                <input type="checkbox" v-model="accountForm.is_default" />
+                Set as default account
+              </label>
+            </div>
+            <div class="inline-form-actions">
               <button type="button" class="btn btn-secondary" @click="closeModal">Cancel</button>
               <button type="submit" class="btn btn-primary" :disabled="isSaving">
-                {{ isSaving ? 'Saving...' : (editingAccount ? 'Update' : 'Add Account') }}
+                {{ isSaving ? 'Saving...' : 'Update' }}
               </button>
             </div>
           </form>
@@ -360,25 +472,37 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue';
+import { ref, computed, onMounted, onUnmounted, watch, inject } from 'vue';
 import { useRoute } from 'vue-router';
 import { backendApi, orchestrationApi, BACKEND_PLAN_OPTIONS, BACKEND_LOGIN_INFO, type AIBackendWithAccounts, type BackendAccount, type AccountHealth, type BackendCapabilities, type RateLimitWindow } from '../services/api';
 import PageHeader from '../components/base/PageHeader.vue';
 import EntityLayout from '../layouts/EntityLayout.vue';
 import BackendConnect from '../components/monitoring/BackendConnect.vue';
 import AccountLoginModal from '../components/monitoring/AccountLoginModal.vue';
+import AccountWizard from '../components/backends/AccountWizard.vue';
 import ConfirmModal from '../components/base/ConfirmModal.vue';
+import { useTourMachine } from '../composables/useTourMachine';
 import { useToast } from '../composables/useToast';
 import { handleApiError } from '../services/api/error-handler';
 import { useWebMcpTool } from '../composables/useWebMcpTool';
 const route = useRoute();
 const backendId = computed(() => route.params.backendId as string);
+const tourMachine = useTourMachine();
 
 const backend = ref<AIBackendWithAccounts | null>(null);
 
 const showAddModal = ref(false);
 const editingAccount = ref<BackendAccount | null>(null);
 const isSaving = ref(false);
+
+// Advanced form state (for power users who prefer the raw form)
+const useAdvancedForm = ref(false);
+
+// OB-44: Signal tour overlay when inline add/edit form is open
+const setTourModalOpen = inject<(open: boolean) => void>('setTourModalOpen', () => {});
+watch([showAddModal, editingAccount, useAdvancedForm], ([addOpen, editing, advanced]) => {
+  setTourModalOpen(addOpen || editing !== null || advanced);
+});
 
 const showToast = useToast();
 
@@ -539,6 +663,7 @@ function editAccount(account: BackendAccount) {
 function closeModal() {
   showAddModal.value = false;
   editingAccount.value = null;
+  useAdvancedForm.value = false;
   accountForm.value = {
     account_name: '',
     email: '',
@@ -549,6 +674,43 @@ function closeModal() {
   };
   configPathManuallyEdited.value = false;
   codexSettings.value = { reasoning_level: '', summary_level: '' };
+}
+
+function closeAdvancedForm() {
+  useAdvancedForm.value = false;
+  accountForm.value = {
+    account_name: '',
+    email: '',
+    config_path: '',
+    api_key_env: '',
+    plan: '',
+    is_default: false,
+  };
+  configPathManuallyEdited.value = false;
+  codexSettings.value = { reasoning_level: '', summary_level: '' };
+}
+
+async function onWizardSaved() {
+  showToast?.('Account saved successfully', 'success');
+  await loadBackend();
+}
+
+function onWizardSkip() {
+  showAddModal.value = false;
+  showToast?.('Backend skipped', 'info');
+  // Advance tour past this backend
+  tourMachine.nextStep();
+}
+
+function onWizardDone() {
+  closeModal();
+  // Advance tour to next backend/step
+  tourMachine.nextStep();
+}
+
+function onWizardAddAnother() {
+  // Wizard handles its own reset; just reload backend data
+  loadBackend();
 }
 
 async function saveAccount() {
@@ -1308,6 +1470,28 @@ onUnmounted(() => {
   border-radius: 4px;
   font-family: monospace;
   font-size: 0.75rem;
+}
+
+/* Advanced toggle link */
+.advanced-toggle {
+  text-align: right;
+  margin-top: -0.75rem;
+  margin-bottom: 1rem;
+}
+
+.btn-link {
+  background: none;
+  border: none;
+  color: var(--text-tertiary);
+  font-size: 0.75rem;
+  cursor: pointer;
+  padding: 0;
+  text-decoration: underline;
+  font-family: inherit;
+}
+
+.btn-link:hover {
+  color: var(--text-secondary);
 }
 
 /* Connect section */

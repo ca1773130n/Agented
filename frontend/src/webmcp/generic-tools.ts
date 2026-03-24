@@ -25,8 +25,8 @@ const capturedErrors: string[] = [];
 /** Original console.error for passthrough. */
 let originalConsoleError: typeof console.error | null = null;
 
-/** Exposed for testing: get current captured errors. */
-export function getConsoleErrors(): string[] {
+/** Get current captured errors. */
+function getConsoleErrors(): string[] {
   return [...capturedErrors];
 }
 

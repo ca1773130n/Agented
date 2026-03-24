@@ -20,7 +20,7 @@ export const healthApi = {
 
   /** Check whether the backend requires API key authentication. Public endpoint. */
   authStatus: () =>
-    apiFetch<{ auth_required: boolean; authenticated: boolean }>('/health/auth-status'),
+    apiFetch<{ auth_required: boolean; authenticated: boolean; needs_setup?: boolean }>('/health/auth-status'),
 
   /** Verify an API key without storing it. Public endpoint. */
   verifyKey: (apiKey: string) =>
@@ -28,12 +28,40 @@ export const healthApi = {
       method: 'POST',
       body: JSON.stringify({ api_key: apiKey }),
     }),
+
+  /** First-run setup: generate the initial admin API key. Public endpoint. */
+  setup: (label?: string) =>
+    apiFetch<{ api_key: string; role_id: string; role: string; label: string; message: string }>(
+      '/health/setup',
+      {
+        method: 'POST',
+        body: JSON.stringify({ label: label || 'Admin' }),
+      }
+    ),
 };
 
 // Version API
 export const versionApi = {
   get: () => apiFetch<{ version: string }>('/api/version'),
 };
+
+// Directory browser types
+export interface DirectoryEntry {
+  name: string;
+  path: string;
+  type: 'directory';
+}
+
+export interface BrowseDirectoryResponse {
+  current_path: string;
+  parent_path: string | null;
+  entries: DirectoryEntry[];
+}
+
+export interface CreateDirectoryResponse {
+  created: boolean;
+  path: string;
+}
 
 // Utility API
 export const utilityApi = {
@@ -52,6 +80,17 @@ export const utilityApi = {
     const query = params.toString();
     return apiFetch<{ skills: SkillInfo[] }>(`/api/discover-skills${query ? `?${query}` : ''}`);
   },
+
+  browseDirectory: (path?: string) => {
+    const params = path ? `?path=${encodeURIComponent(path)}` : '';
+    return apiFetch<BrowseDirectoryResponse>(`/api/browse-directory${params}`);
+  },
+
+  createDirectory: (path: string) =>
+    apiFetch<CreateDirectoryResponse>('/api/create-directory', {
+      method: 'POST',
+      body: JSON.stringify({ path }),
+    }),
 };
 
 // Settings API

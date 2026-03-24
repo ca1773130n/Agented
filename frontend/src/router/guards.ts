@@ -12,7 +12,12 @@ import {
   superAgentApi,
   workflowApi,
   mcpServerApi,
+  healthApi,
 } from '../services/api';
+
+/** Auth state — checked once per page load, reset on key generation */
+let authChecked = false;
+let needsSetup = false;
 
 /**
  * Factory that creates an entity validator function from a fetch function.
@@ -76,6 +81,12 @@ export function clearEntityCache(): void {
   validatedCache.clear();
 }
 
+/** Reset auth guard state (call after key generation or login) */
+export function resetAuthGuard(): void {
+  authChecked = false;
+  needsSetup = false;
+}
+
 /**
  * Register global navigation guards on the router.
  *
@@ -93,6 +104,23 @@ export function registerGuards(router: Router): void {
       document.title = `Agented - ${title}`;
     } else {
       document.title = 'Agented';
+    }
+
+    // Auth guard: redirect to /welcome if not authenticated
+    // Skip for the welcome page itself and not-found
+    if (to.name !== 'welcome' && to.name !== 'not-found') {
+      if (!authChecked) {
+        try {
+          const status = await healthApi.authStatus();
+          needsSetup = !!status.needs_setup;
+          authChecked = true;
+        } catch {
+          authChecked = true;
+        }
+      }
+      if (needsSetup) {
+        return { name: 'welcome' };
+      }
     }
 
     // Prevent infinite redirect loop: never validate the not-found route itself

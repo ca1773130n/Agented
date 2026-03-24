@@ -1,0 +1,171 @@
+{
+  "common": {
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "close": "Close",
+    "next": "Next",
+    "back": "Back",
+    "skip": "Skip",
+    "done": "Done",
+    "loading": "Loading...",
+    "retry": "Retry",
+    "search": "Search",
+    "confirm": "Confirm",
+    "create": "Create",
+    "edit": "Edit",
+    "yes": "Yes",
+    "no": "No",
+    "add": "Add",
+    "remove": "Remove",
+    "browse": "Browse",
+    "select": "Select",
+    "installed": "Installed",
+    "notInstalled": "Not Installed"
+  },
+  "welcome": {
+    "badge": "First-time setup",
+    "headline": "Your virtual startup, fully autonomous",
+    "subtitle": "The first end-to-end platform for building real products with autonomous AI agents. Define what to build, assign agent teams, and let them ship — from architecture to QA, every department runs itself.",
+    "beginSetup": "Begin setup →",
+    "stepsHint": "8 steps · about 2 minutes",
+    "generateKey": "Generate Admin Key",
+    "generateKeyHeading": "Generate your admin API key",
+    "generateKeyExplanation": "This key secures your Agented instance. Store it safely — it won't be shown again.",
+    "generating": "Generating...",
+    "generateFailed": "Failed to generate API key. Please try again.",
+    "tryAgain": "Try again",
+    "copyKey": "Copy",
+    "copied": "Copied",
+    "continue": "Continue →",
+    "bento": {
+      "vision": "Vision",
+      "productsProjects": "Products & Projects",
+      "productsDesc": "Define what you're building. Connect GitHub repos as projects under each product. Your agents take it from there.",
+      "workforce": "Workforce",
+      "agentTeams": "Agent Teams",
+      "teamsDesc": "5 departments, 17 agents. {command} sets direction. {dev} builds. {research} explores. {ops} solves. {qa} validates.",
+      "autonomous": "Fully autonomous",
+      "scheduling": "Seamless Backend Scheduling",
+      "schedulingDesc": "Agents move seamlessly between Claude Code, ChatGPT, Gemini, OpenCode — harness sync keeps configs aligned, token usage prediction triggers handoff before limits hit.",
+      "engineering": "Engineering",
+      "harnessPlugins": "Harness & Plugins",
+      "harnessDesc": "Full harness engineering — config sync, GRD planning, MCP servers, marketplace plugins, custom skills and hooks."
+    }
+  },
+  "tour": {
+    "stepOf": "STEP {current} OF {total}",
+    "setupComplete": "Setup Complete",
+    "setupCompleteDesc": "Your workspace is ready. Here's what you configured:",
+    "skipped": "Skipped",
+    "goToDashboard": "Go to Dashboard",
+    "skipConfirmTitle": "Skip this step?",
+    "skipConfirmMessage": "You can complete it later from the setup checklist.",
+    "skipAnyway": "Skip anyway",
+    "keepGoing": "Keep going",
+    "restartSetupGuide": "Restart Setup Guide",
+    "restartDesc": "Restart the onboarding tour to re-run through workspace setup and account configuration. Your existing configuration will not be affected.",
+    "setupChecklist": "Setup",
+    "steps": {
+      "workspace": {
+        "title": "Workspace Directory",
+        "message": "Set the root directory where repos will be cloned for your agent teams."
+      },
+      "claude": {
+        "title": "AI Backend Accounts",
+        "message": "Register a Claude Code account. Click 'Add Account' to enter your Anthropic credentials.",
+        "substep": "Claude Code (1/4)"
+      },
+      "codex": {
+        "title": "AI Backend Accounts",
+        "message": "Register a Codex CLI account for OpenAI integration (optional). Click 'Add Account' to configure.",
+        "substep": "Codex CLI (2/4)"
+      },
+      "gemini": {
+        "title": "AI Backend Accounts",
+        "message": "Register a Gemini CLI account for Google AI (optional). Click 'Add Account' to configure.",
+        "substep": "Gemini CLI (3/4)"
+      },
+      "opencode": {
+        "title": "AI Backend Accounts",
+        "message": "OpenCode routes through other AI backends. No separate account needed if you registered one above.",
+        "substep": "OpenCode (4/4)"
+      },
+      "monitoring": {
+        "title": "Token Monitoring",
+        "message": "Configure rate limit monitoring to track token usage across your AI backend accounts."
+      },
+      "verification": {
+        "title": "Harness Verification",
+        "message": "Verify the harness integration plugin is configured for deploying skills to your marketplace."
+      },
+      "product": {
+        "title": "Create Your First Product",
+        "message": "Products group related projects under a shared context. Click to create your first product."
+      },
+      "project": {
+        "title": "Create Your First Project",
+        "message": "Projects track work within a product. Click to add your first project."
+      },
+      "team": {
+        "title": "Set Up a Team",
+        "message": "Teams assign agents to projects. Set up a team to start running bots."
+      }
+    }
+  },
+  "accountWizard": {
+    "stepOf": "Step {current} of {total}",
+    "subscription": "Do you have a {backend} subscription?",
+    "yesHaveAccount": "Yes, I have an account",
+    "noSkip": "No, skip this backend",
+    "accountName": "Account Name",
+    "accountNamePlaceholder": "e.g., Personal, Work",
+    "email": "Email",
+    "emailPlaceholder": "e.g., user{'@'}example.com",
+    "continueBtn": "Continue",
+    "cliSetup": "CLI & Config Setup",
+    "cliInstalled": "Installed",
+    "cliNotInstalled": "Not installed",
+    "installCli": "Install CLI",
+    "installing": "Installing...",
+    "configPath": "Config Directory",
+    "configCreated": "Directory created",
+    "createDir": "Create Directory",
+    "customizePath": "Customize path",
+    "apiKeyEnv": "API Key Variable",
+    "login": "Login",
+    "openConsole": "Open {service} Console",
+    "loginViaCli": "Login via CLI Proxy",
+    "loginOptional": "Login is optional — continue if already authenticated",
+    "planDetails": "Plan & Details",
+    "plan": "Plan",
+    "selectPlan": "Select plan...",
+    "setDefault": "Set as default account",
+    "saveAccount": "Save Account",
+    "saving": "Saving...",
+    "addAnother": "Add Another Account",
+    "switchToAdvanced": "Switch to Advanced Form",
+    "addAccount": "Add Account",
+    "accountCreated": "Account Created",
+    "accountCreatedDesc": "\"{name}\" has been added to {backend}."
+  },
+  "directoryBrowser": {
+    "title": "Browse Directory",
+    "selectThis": "Select This Directory",
+    "newFolder": "New Folder",
+    "creating": "Creating...",
+    "createFolder": "Create",
+    "enterFolderName": "Enter folder name...",
+    "parentDir": "Parent Directory",
+    "emptyDir": "This directory is empty",
+    "errorLoading": "Failed to load directory",
+    "errorCreating": "Failed to create folder"
+  },
+  "language": {
+    "label": "Language",
+    "en": "English",
+    "ko": "한국어",
+    "ja": "日本語",
+    "zh": "中文"
+  }
+}

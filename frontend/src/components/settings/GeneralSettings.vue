@@ -1,16 +1,41 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, inject, watch } from 'vue';
+import { useRouter } from 'vue-router';
 import type { MonitoringConfig } from '../../services/api';
 import { settingsApi, monitoringApi, backendApi, ApiError } from '../../services/api';
 import { useToast } from '../../composables/useToast';
+import { useTourMachine } from '../../composables/useTourMachine';
+import DirectoryBrowser from '../base/DirectoryBrowser.vue';
 
 const showToast = useToast();
+const setTourGuide = inject<(msg: string | null) => void>('setTourGuide', () => {});
+const tourMachine = useTourMachine();
+const settingsRouter = useRouter();
+
+function handleRestartTour(): void {
+  tourMachine.restartTour();
+  settingsRouter.push('/settings#general');
+  tourMachine.startTour();
+  tourMachine.nextStep(); // welcome -> workspace (skip welcome since user is already authenticated)
+}
 
 // General settings
 const workspaceRoot = ref('');
 const originalWorkspaceRoot = ref('');
 const loadingGeneral = ref(false);
 const savingGeneral = ref(false);
+const showDirectoryBrowser = ref(false);
+
+// Tour guide — update bottom bar when user interacts with workspace settings
+watch(showDirectoryBrowser, (open) => {
+  if (open) {
+    setTourGuide('Browse to select your workspace directory. You can create a new folder if needed.');
+  } else if (tourMachine.isActive.value) {
+    setTourGuide(workspaceRoot.value
+      ? 'Workspace path set. Click Save to confirm, then the tour will advance automatically.'
+      : 'Enter or browse for the workspace root directory where project repos will be cloned.');
+  }
+});
 
 // Marketplace auto-update setting
 const marketplaceAutoUpdate = ref(true);
@@ -159,7 +184,7 @@ onMounted(() => {
 
 <template>
   <div class="tab-content">
-    <div class="card">
+    <div class="card" data-tour="workspace-root">
       <div class="card-header">
         <h3>Project Workspace</h3>
       </div>
@@ -167,12 +192,21 @@ onMounted(() => {
         <div class="form-group">
           <label>Workspace Root</label>
           <p class="form-help">Root directory where GitHub repos are cloned for project team execution.</p>
-          <input
-            v-model="workspaceRoot"
-            type="text"
-            class="form-input"
-            placeholder="/home/user/workspace"
-          />
+          <div class="input-with-browse">
+            <input
+              v-model="workspaceRoot"
+              type="text"
+              class="form-input"
+              placeholder="/home/user/workspace"
+            />
+            <button
+              type="button"
+              class="btn btn-secondary browse-btn"
+              @click="showDirectoryBrowser = true"
+            >
+              Browse
+            </button>
+          </div>
           <p class="form-hint">Projects will be cloned to: <code>{{ workspaceRoot || '{workspace_root}' }}/projects/{project_name}/</code></p>
         </div>
         <div class="form-actions">
@@ -210,7 +244,7 @@ onMounted(() => {
     </div>
 
     <!-- Token Monitoring Section -->
-    <div class="card" style="margin-top: 1.5rem;">
+    <div class="card" style="margin-top: 1.5rem;" data-tour="token-monitoring">
       <div class="card-header">
         <h3>Token Monitoring</h3>
       </div>
@@ -294,6 +328,28 @@ onMounted(() => {
         </template>
       </div>
     </div>
+
+    <!-- OB-35a: Restart Setup Guide -->
+    <div class="card" style="margin-top: 1.5rem;">
+      <div class="card-header">
+        <h3>Setup Guide</h3>
+      </div>
+      <div class="card-body">
+        <p class="form-help" style="margin-bottom: 1rem;">
+          Restart the onboarding tour to re-run through workspace setup and account configuration.
+          Your existing configuration will not be affected.
+        </p>
+        <button type="button" class="btn btn-secondary restart-tour-btn" @click="handleRestartTour">
+          Restart Setup Guide
+        </button>
+      </div>
+    </div>
+
+    <DirectoryBrowser
+      v-model="workspaceRoot"
+      :visible="showDirectoryBrowser"
+      @close="showDirectoryBrowser = false"
+    />
   </div>
 </template>
 
@@ -536,5 +592,34 @@ onMounted(() => {
 
 .toggle-switch-sm.active .toggle-knob {
   transform: translateX(16px);
+}
+
+/* Input with browse button */
+.input-with-browse {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+}
+
+.input-with-browse .form-input {
+  flex: 1;
+}
+
+.browse-btn {
+  padding: 0.6rem 1rem;
+  font-size: 0.85rem;
+  font-weight: 500;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* Restart tour button */
+.restart-tour-btn {
+  padding: 0.5rem 1rem;
+  font-size: 0.85rem;
+  font-weight: 500;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
 }
 </style>

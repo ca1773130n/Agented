@@ -401,7 +401,7 @@ async function retryClone() {
             <p v-else>All teams are assigned as owner. Add more teams to select additional collaborators.</p>
           </div>
 
-          <div v-else class="teams-grid">
+          <div v-else class="teams-grid" data-tour="assign-teams">
             <div
               v-for="team in additionalTeams"
               :key="team.id"

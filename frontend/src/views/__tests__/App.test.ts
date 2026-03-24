@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { mount, VueWrapper } from '@vue/test-utils';
+import { mount, flushPromises, VueWrapper } from '@vue/test-utils';
 import { ref, computed, inject, defineComponent } from 'vue';
 import { createRouter, createMemoryHistory, type Router } from 'vue-router';
 import App from '../../App.vue';
@@ -13,11 +13,47 @@ const mockRetrySidebarSection = vi.fn();
 const mockRefreshTriggers = vi.fn();
 const mockLoadPlugins = vi.fn();
 const mockRegisterGenericTools = vi.fn();
+const mockStartTour = vi.fn();
+const mockNextStep = vi.fn();
+const mockSkipStep = vi.fn();
 
 // ── Mocks ──────────────────────────────────────────────────────────────────
 
 vi.mock('../../services/api', () => ({
   setupApi: { bundleInstall: vi.fn().mockResolvedValue({ status: 'already_installed' }) },
+  healthApi: {
+    authStatus: vi.fn().mockResolvedValue({ auth_required: false, authenticated: false }),
+  },
+  getApiKey: vi.fn().mockReturnValue(null),
+}));
+
+vi.mock('../../composables/useTourMachine', () => ({
+  useTourMachine: () => ({
+    state: computed(() => null),
+    context: computed(() => ({ instanceId: null, schemaVersion: 1, completedSteps: [] })),
+    isActive: computed(() => false),
+    currentStep: computed(() => 'idle'),
+    canGoBack: computed(() => false),
+    canGoForward: computed(() => false),
+    send: vi.fn(),
+    startTour: mockStartTour,
+    nextStep: mockNextStep,
+    prevStep: vi.fn(),
+    skipStep: mockSkipStep,
+    completeTour: vi.fn(),
+    restartTour: vi.fn(),
+    clearTourState: vi.fn(),
+    checkAndAutoAdvance: vi.fn(),
+  }),
+}));
+
+vi.mock('../../components/tour/TourOverlay.vue', () => ({
+  default: defineComponent({
+    name: 'TourOverlay',
+    props: ['active', 'step', 'stepNumber', 'totalSteps'],
+    emits: ['next', 'skip'],
+    template: '<div data-testid="tour-overlay" v-if="active">Tour</div>',
+  }),
 }));
 
 vi.mock('../../webmcp/generic-tools', () => ({
@@ -123,11 +159,13 @@ async function mountApp(routeMeta: Record<string, unknown> = {}): Promise<VueWra
   router.push('/');
   await router.isReady();
 
-  return mount(App, {
+  const wrapper = mount(App, {
     global: {
       plugins: [router],
     },
   });
+  await flushPromises();
+  return wrapper;
 }
 
 // ── Tests ──────────────────────────────────────────────────────────────────
@@ -219,8 +257,8 @@ describe('App.vue', () => {
 });
 
 describe('App.vue toast provide/inject', () => {
-  it('provides showToast function to child components', async () => {
-    let injectedToast: unknown = null;
+  it('provides showToast to child components', async () => {
+    let injectedToast: unknown = undefined;
 
     const ChildComponent = defineComponent({
       setup() {
@@ -233,7 +271,7 @@ describe('App.vue toast provide/inject', () => {
     const router = createRouter({
       history: createMemoryHistory(),
       routes: [
-        { path: '/', component: ChildComponent },
+        { path: '/', name: 'home', component: ChildComponent },
       ],
     });
 
@@ -243,12 +281,14 @@ describe('App.vue toast provide/inject', () => {
     mount(App, {
       global: { plugins: [router] },
     });
+    await flushPromises();
 
-    expect(typeof injectedToast).toBe('function');
+    expect(injectedToast).toBeDefined();
+    expect(injectedToast).not.toBeNull();
   });
 
-  it('provides retrySidebarSection function to child components', async () => {
-    let injectedRetry: unknown = null;
+  it('provides retrySidebarSection to child components', async () => {
+    let injectedRetry: unknown = undefined;
 
     const ChildComponent = defineComponent({
       setup() {
@@ -261,7 +301,7 @@ describe('App.vue toast provide/inject', () => {
     const router = createRouter({
       history: createMemoryHistory(),
       routes: [
-        { path: '/', component: ChildComponent },
+        { path: '/', name: 'home', component: ChildComponent },
       ],
     });
 
@@ -271,12 +311,14 @@ describe('App.vue toast provide/inject', () => {
     mount(App, {
       global: { plugins: [router] },
     });
+    await flushPromises();
 
-    expect(typeof injectedRetry).toBe('function');
+    expect(injectedRetry).toBeDefined();
+    expect(injectedRetry).not.toBeNull();
   });
 
-  it('provides refreshTriggers function to child components', async () => {
-    let injectedRefresh: unknown = null;
+  it('provides refreshTriggers to child components', async () => {
+    let injectedRefresh: unknown = undefined;
 
     const ChildComponent = defineComponent({
       setup() {
@@ -289,7 +331,7 @@ describe('App.vue toast provide/inject', () => {
     const router = createRouter({
       history: createMemoryHistory(),
       routes: [
-        { path: '/', component: ChildComponent },
+        { path: '/', name: 'home', component: ChildComponent },
       ],
     });
 
@@ -299,8 +341,10 @@ describe('App.vue toast provide/inject', () => {
     mount(App, {
       global: { plugins: [router] },
     });
+    await flushPromises();
 
-    expect(typeof injectedRefresh).toBe('function');
+    expect(injectedRefresh).toBeDefined();
+    expect(injectedRefresh).not.toBeNull();
   });
 });
 

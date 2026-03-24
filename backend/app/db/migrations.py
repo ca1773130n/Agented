@@ -4126,6 +4126,30 @@ def _migrate_95_trigger_conditions_and_budget_columns(conn):
             conn.execute("ALTER TABLE budget_limits ADD COLUMN max_monthly_runs INTEGER")
 
 
+def _migrate_96_app_meta(conn):
+    """Create app_meta table with instance_id for DB-reset detection."""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS app_meta (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    conn.execute("""
+        INSERT OR IGNORE INTO app_meta (key, value) VALUES (
+            'instance_id',
+            lower(
+                hex(randomblob(4)) || '-' ||
+                hex(randomblob(2)) || '-4' ||
+                substr(hex(randomblob(2)),2) || '-' ||
+                substr('89ab', abs(random()) % 4 + 1, 1) ||
+                substr(hex(randomblob(2)),2) || '-' ||
+                hex(randomblob(6))
+            )
+        )
+    """)
+
+
 VERSIONED_MIGRATIONS = [
     (1, "add_github_columns", _migrate_add_github_columns),
     (2, "add_pr_reviews_table", _migrate_add_pr_reviews_table),
@@ -4242,4 +4266,6 @@ VERSIONED_MIGRATIONS = [
         "trigger_conditions_and_budget_columns",
         _migrate_95_trigger_conditions_and_budget_columns,
     ),
+    # v0.5.0 onboarding — application metadata (instance tracking)
+    (96, "app_meta_instance_id", _migrate_96_app_meta),
 ]

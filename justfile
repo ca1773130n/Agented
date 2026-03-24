@@ -85,12 +85,21 @@ dev:
     @echo "Frontend: http://localhost:3000"
     @echo "Backend API: http://localhost:20000"
 
+# Generate an API key for authentication
+generate-key *ARGS: ensure-backend
+    cd backend && uv run python scripts/generate_key.py {{ARGS}}
+
 # Kill any existing frontend/backend processes
 kill:
     -lsof -ti:3000 | xargs kill -9 2>/dev/null || true
     -lsof -ti:20000 | xargs kill -9 2>/dev/null || true
     -pkill -f "npm run dev" 2>/dev/null || true
     -pkill -f "vite" 2>/dev/null || true
+
+# Reset onboarding: wipe DB, restart fresh (localStorage auto-clears on welcome page)
+reset: kill
+    rm -f backend/agented.db backend/agented.db-wal backend/agented.db-shm
+    @echo "Reset complete. Run: just deploy"
 
 # Clean build artifacts
 clean:

@@ -29,7 +29,7 @@
       </template>
     </EmptyState>
 
-    <div v-else class="backends-grid">
+    <div v-else class="backends-grid" data-tour="ai-backends">
       <div
         v-for="backend in backends"
         :key="backend.id"

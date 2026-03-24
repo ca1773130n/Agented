@@ -1,0 +1,168 @@
+{
+  "common": {
+    "save": "保存",
+    "cancel": "キャンセル",
+    "delete": "削除",
+    "close": "閉じる",
+    "next": "次へ",
+    "back": "戻る",
+    "skip": "スキップ",
+    "done": "完了",
+    "loading": "読み込み中...",
+    "retry": "再試行",
+    "search": "検索",
+    "confirm": "確認",
+    "create": "作成",
+    "edit": "編集",
+    "yes": "はい",
+    "no": "いいえ",
+    "add": "追加",
+    "remove": "削除",
+    "browse": "参照",
+    "select": "選択",
+    "installed": "インストール済み",
+    "notInstalled": "未インストール"
+  },
+  "welcome": {
+    "badge": "初回セットアップ",
+    "headline": "あなただけの仮想スタートアップ、完全自律で動く",
+    "subtitle": "自律AIエージェントで実際のプロダクトを作る、初のエンドツーエンドプラットフォームです。作るものを定義してエージェントチームを割り当てれば、アーキテクチャからQAまで、すべての部門が自走します。",
+    "beginSetup": "セットアップを始める →",
+    "stepsHint": "8ステップ・約2分",
+    "generateKey": "Admin キーを生成",
+    "generateKeyHeading": "Admin API キーを生成してください",
+    "generateKeyExplanation": "このキーはAgentedインスタンスを保護します。再表示されないので、安全な場所に保管してください。",
+    "generating": "生成中...",
+    "generateFailed": "API キーの生成に失敗しました。もう一度お試しください。",
+    "tryAgain": "もう一度試す",
+    "copyKey": "コピー",
+    "copied": "コピーしました",
+    "continue": "次へ進む →",
+    "bento": {
+      "vision": "ビジョン",
+      "productsProjects": "プロダクト & プロジェクト",
+      "productsDesc": "作るものを定義しましょう。GitHubリポジトリを各プロダクトのプロジェクトとして接続すれば、エージェントが後は引き継いでくれます。",
+      "workforce": "ワークフォース",
+      "agentTeams": "エージェントチーム",
+      "teamsDesc": "5部門、17名のエージェント。{command}が方向を示し、{dev}が開発し、{research}が探求し、{ops}が解決し、{qa}が検証します。",
+      "autonomous": "完全自律",
+      "scheduling": "シームレスなバックエンドスケジューリング",
+      "schedulingDesc": "エージェントがClaude Code、ChatGPT、Gemini、OpenCodeをシームレスに行き来します。ハーネス同期で設定を統一し、トークン使用量の予測で上限に達する前に自動切り替えします。",
+      "engineering": "エンジニアリング",
+      "harnessPlugins": "ハーネス & プラグイン",
+      "harnessDesc": "本格的なハーネスエンジニアリング — 設定同期、GRDプランニング、MCPサーバー、マーケットプレイスプラグイン、カスタムスキルとフック。"
+    }
+  },
+  "tour": {
+    "stepOf": "ステップ {current} / {total}",
+    "setupComplete": "セットアップ完了",
+    "setupCompleteDesc": "ワークスペースの準備ができました。設定内容を確認してください：",
+    "skipped": "スキップ済み",
+    "goToDashboard": "ダッシュボードへ",
+    "skipConfirmTitle": "このステップをスキップしますか？",
+    "skipConfirmMessage": "セットアップチェックリストから後で完了できます。",
+    "skipAnyway": "スキップする",
+    "keepGoing": "続ける",
+    "restartSetupGuide": "セットアップガイドを再開",
+    "restartDesc": "オンボーディングツアーを再開して、ワークスペースのセットアップとアカウント設定をやり直せます。既存の設定には影響しません。",
+    "setupChecklist": "セットアップ",
+    "steps": {
+      "workspace": {
+        "title": "ワークスペースディレクトリ",
+        "message": "エージェントチームのリポジトリがクローンされるルートディレクトリを設定してください。"
+      },
+      "claude": {
+        "title": "AI バックエンドアカウント",
+        "message": "Claude Codeのアカウントを登録します。「アカウントを追加」をクリックしてAnthropicの認証情報を入力してください。",
+        "substep": "Claude Code (1/4)"
+      },
+      "codex": {
+        "title": "AI バックエンドアカウント",
+        "message": "OpenAI連携用のCodex CLIアカウントを登録します（任意）。「アカウントを追加」をクリックして設定してください。",
+        "substep": "Codex CLI (2/4)"
+      },
+      "gemini": {
+        "title": "AI バックエンドアカウント",
+        "message": "Google AI用のGemini CLIアカウントを登録します（任意）。「アカウントを追加」をクリックして設定してください。",
+        "substep": "Gemini CLI (3/4)"
+      },
+      "opencode": {
+        "title": "AI バックエンドアカウント",
+        "message": "OpenCodeは他のAIバックエンドを通じて動作します。上でアカウントを登録済みであれば、別途アカウントは不要です。",
+        "substep": "OpenCode (4/4)"
+      },
+      "monitoring": {
+        "title": "トークンモニタリング",
+        "message": "AIバックエンドアカウント全体のトークン使用量を追跡するレート制限モニタリングを設定します。"
+      },
+      "verification": {
+        "title": "ハーネス検証",
+        "message": "マーケットプレイスへのスキルデプロイに必要なハーネス連携プラグインが設定されているか確認します。"
+      },
+      "product": {
+        "title": "最初のプロダクトを作成",
+        "message": "プロダクトは関連プロジェクトを共通コンテキストでまとめます。クリックして最初のプロダクトを作成してください。"
+      },
+      "project": {
+        "title": "最初のプロジェクトを作成",
+        "message": "プロジェクトはプロダクト内の作業を管理します。クリックして最初のプロジェクトを追加してください。"
+      },
+      "team": {
+        "title": "チームを設定",
+        "message": "チームはエージェントをプロジェクトに割り当てます。チームを設定してボットを動かしましょう。"
+      }
+    }
+  },
+  "accountWizard": {
+    "stepOf": "ステップ {current} / {total}",
+    "subscription": "{backend}のサブスクリプションをお持ちですか？",
+    "yesHaveAccount": "はい、アカウントがあります",
+    "noSkip": "いいえ、このバックエンドはスキップします",
+    "accountName": "アカウント名",
+    "accountNamePlaceholder": "例：個人用、仕事用",
+    "email": "メールアドレス",
+    "emailPlaceholder": "例：user{'@'}example.com",
+    "continueBtn": "次へ",
+    "cliSetup": "CLI & 設定",
+    "cliInstalled": "CLIインストール済み",
+    "cliNotInstalled": "CLI未インストール",
+    "installCli": "CLIをインストール",
+    "installing": "インストール中...",
+    "configPath": "設定ディレクトリ",
+    "configCreated": "ディレクトリを作成しました",
+    "createDir": "ディレクトリを作成",
+    "customizePath": "パスをカスタマイズ",
+    "apiKeyEnv": "API キー変数",
+    "login": "ログイン",
+    "openConsole": "{service}コンソールを開く",
+    "loginViaCli": "CLI プロキシでログイン",
+    "loginOptional": "認証済みの場合、ログインは省略できます",
+    "planDetails": "プラン & 詳細",
+    "plan": "プラン",
+    "selectPlan": "プランを選択...",
+    "setDefault": "デフォルトアカウントに設定",
+    "saveAccount": "アカウントを保存",
+    "saving": "保存中...",
+    "addAnother": "別のアカウントを追加",
+    "switchToAdvanced": "詳細フォームに切り替え"
+  },
+  "directoryBrowser": {
+    "title": "ディレクトリを選択",
+    "selectThis": "このディレクトリを選択",
+    "newFolder": "新しいフォルダ",
+    "creating": "作成中...",
+    "createFolder": "作成",
+    "enterFolderName": "フォルダ名を入力...",
+    "parentDir": "親ディレクトリ",
+    "emptyDir": "このディレクトリは空です",
+    "errorLoading": "ディレクトリの読み込みに失敗しました",
+    "errorCreating": "フォルダの作成に失敗しました"
+  },
+  "language": {
+    "label": "言語",
+    "en": "English",
+    "ko": "한국어",
+    "ja": "日本語",
+    "zh": "中文"
+  }
+}

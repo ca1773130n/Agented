@@ -1,7 +1,12 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, provide, computed, getCurrentInstance } from 'vue';
-import { setupApi, healthApi, getApiKey } from './services/api';
-import { useRoute } from 'vue-router';
+import { ref, watch, onMounted, onUnmounted, provide, computed, getCurrentInstance } from 'vue';
+import { useI18n } from 'vue-i18n';
+import { setupApi, healthApi } from './services/api';
+import { useRoute, useRouter } from 'vue-router';
+import { useTourMachine, prefetchTourRoutes } from './composables/useTourMachine';
+import TourOverlay from './components/tour/TourOverlay.vue';
+import TourCompletionScreen from './components/tour/TourCompletionScreen.vue';
+import { TOUR_STEP_MAP, TOTAL_TOUR_STEPS } from './constants/tourSteps';
 import AppSidebar from './components/layout/AppSidebar.vue';
 import AppHeader from './components/layout/AppHeader.vue';
 import ApiKeyBanner from './components/layout/ApiKeyBanner.vue';
@@ -13,7 +18,65 @@ import { useHealthPolling } from './composables/useHealthPolling';
 
 // Route state for layout decisions
 const route = useRoute();
+const router = useRouter();
+const { t } = useI18n();
 const isFullBleed = computed(() => route.meta.fullBleed === true);
+const isWelcomePage = computed(() => route.name === 'welcome');
+const tour = useTourMachine();
+
+// ---------------------------------------------------------------------------
+// Tour step metadata — derived from shared TOUR_STEP_DEFINITIONS
+// ---------------------------------------------------------------------------
+
+const tourActive = computed(() => tour.isActive.value && !isWelcomePage.value);
+
+const tourStep = computed(() => {
+  const meta = TOUR_STEP_MAP[tour.currentStep.value];
+  if (!meta) return null;
+  const lk = meta.localeKey;
+  const title = t(`tour.steps.${lk}.title`, meta.title);
+  const message = t(`tour.steps.${lk}.message`, meta.message);
+  return { target: meta.target, title, message, skippable: meta.skippable };
+});
+
+const tourStepNumber = computed(() => TOUR_STEP_MAP[tour.currentStep.value]?.stepNumber ?? 1);
+
+const tourSubstepLabel = computed(() => TOUR_STEP_MAP[tour.currentStep.value]?.substepLabel ?? null);
+
+// Dynamic guide message — components can override the default step message
+const tourGuideOverride = ref<string | null>(null);
+provide('setTourGuide', (msg: string | null) => { tourGuideOverride.value = msg; });
+
+// Reset override when step changes
+watch(() => tour.currentStep.value, () => { tourGuideOverride.value = null; });
+
+const tourStepWithGuide = computed(() => {
+  if (!tourStep.value) return null;
+  if (!tourGuideOverride.value) return tourStep.value;
+  return { ...tourStep.value, message: tourGuideOverride.value };
+});
+
+// Tour completion screen
+const tourComplete = computed(() => tour.state.value === 'complete');
+
+function handleTourDone() {
+  tour.restartTour(); // Resets machine to idle, clears localStorage
+  router.push('/');
+}
+
+/** Navigate to the route for a given tour step (deduplicates against current route) */
+function navigateToTourStep(step: string) {
+  const meta = TOUR_STEP_MAP[step];
+  if (!meta) return;
+  if (route.path === meta.route && (!meta.routeHash || route.hash === meta.routeHash)) return;
+  const target = meta.routeHash ? { path: meta.route, hash: meta.routeHash } : { path: meta.route };
+  router.push(target);
+}
+
+// Navigate to correct route when machine state changes
+watch(() => tour.currentStep.value, (step) => {
+  navigateToTourStep(step);
+});
 
 // Toast notification system
 type ToastType = 'success' | 'error' | 'info' | 'infrastructure';
@@ -34,6 +97,19 @@ function showToast(message: string, type: ToastType = 'info', duration?: number)
   setTimeout(() => {
     toasts.value = toasts.value.filter(t => t.id !== id);
   }, duration ?? defaultDuration);
+
+  // Auto-advance tour when a success toast matches the current step's trigger
+  // Skip auto-advance for backend account steps — the AccountWizard controls advancement
+  if (type === 'success' && tour.isActive.value) {
+    const step = tour.currentStep.value;
+    const isBackendStep = step.startsWith('backends.');
+    if (!isBackendStep) {
+      const meta = TOUR_STEP_MAP[step];
+      if (meta?.autoAdvanceOnToast && message.includes(meta.autoAdvanceOnToast)) {
+        setTimeout(() => tour.nextStep(), 800);
+      }
+    }
+  }
 }
 
 function dismissToast(id: number) {
@@ -41,6 +117,15 @@ function dismissToast(id: number) {
 }
 
 provide('showToast', showToast);
+
+// Modal coordination during tour (OB-44)
+const modalOpenDuringTour = ref(false);
+provide('setTourModalOpen', (open: boolean) => {
+  modalOpenDuringTour.value = open;
+});
+watch(tourActive, (active) => {
+  if (!active) modalOpenDuringTour.value = false;
+});
 
 // Register WebMCP generic verification tools (app-lifetime, no-ops in non-Canary browsers)
 registerGenericTools();
@@ -94,22 +179,41 @@ const { activeExecutionCount, healthColor, healthTooltip, startPolling, stopPoll
 
 // API key auth state — show banner when backend requires auth and no key is stored
 const showApiKeyBanner = ref(false);
+const appReady = ref(false);
 
-async function checkAuthStatus() {
+async function checkAuthStatus(): Promise<boolean> {
   try {
     const status = await healthApi.authStatus();
-    if (status.auth_required && !status.authenticated && !getApiKey()) {
+    if (status.needs_setup) {
+      router.push({ name: 'welcome' });
+      return false;
+    } else if (status.auth_required && !status.authenticated) {
       showApiKeyBanner.value = true;
+      return false;
     }
+    return true;
   } catch {
-    // Backend unreachable — don't show banner, health polling will handle it
+    return false;
   }
+}
+
+function beginTourIfRequested(): boolean {
+  if (route.query.tour !== 'start' || tour.isActive.value) return false;
+  router.replace({ query: {} });
+  tour.startTour();
+  tour.nextStep(); // welcome -> workspace (welcome page already shown)
+  prefetchTourRoutes(); // OB-42: fire-and-forget route prefetch
+  return true;
 }
 
 function onAuthenticated() {
   showApiKeyBanner.value = false;
-  // Reload sidebar data now that we have a valid API key
   loadSidebarData();
+  beginTourIfRequested();
+}
+
+function handleTourRetry() {
+  navigateToTourStep(tour.currentStep.value);
 }
 
 async function runBundleInstall() {
@@ -131,13 +235,24 @@ async function runBundleInstall() {
   }
 }
 
+// Watch for ?tour=start query param (set by WelcomePage after key generation)
+watch(() => route.query.tour, (tourQuery) => {
+  if (tourQuery === 'start') {
+    loadSidebarData();
+    beginTourIfRequested();
+  }
+});
+
 onMounted(async () => {
   startPolling(10000);
-  // Check if the backend requires API key auth before loading sidebar data
-  await checkAuthStatus();
-  loadSidebarData();
-  // Auto-install bundled marketplace & plugins on first launch (non-blocking)
-  runBundleInstall();
+  const isReady = await checkAuthStatus();
+  appReady.value = true;
+  if (isReady) {
+    loadSidebarData();
+    if (!beginTourIfRequested()) {
+      runBundleInstall();
+    }
+  }
 });
 
 onUnmounted(() => {
@@ -146,14 +261,25 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div :class="['app-layout', { 'sidebar-collapsed': isCollapsed && !isMobile, 'sidebar-mobile': isMobile }]">
+  <div v-if="appReady" :class="['app-layout', { 'sidebar-collapsed': isCollapsed && !isMobile, 'sidebar-mobile': isMobile }]">
     <a href="#main-content" class="skip-to-content">Skip to content</a>
 
-    <AppHeader @toggle-sidebar="toggleMobile" />
+    <template v-if="!isWelcomePage">
+      <AppHeader @toggle-sidebar="toggleMobile" />
 
-    <ApiKeyBanner v-if="showApiKeyBanner" @authenticated="onAuthenticated" />
+      <ApiKeyBanner
+        v-if="showApiKeyBanner"
+        @authenticated="onAuthenticated"
+      />
+    </template>
 
-    <div class="app-body">
+    <div v-if="isWelcomePage" class="welcome-fullscreen">
+      <ErrorBoundary>
+        <router-view />
+      </ErrorBoundary>
+    </div>
+
+    <div v-else class="app-body">
       <!-- Mobile backdrop overlay -->
       <div v-if="isMobile && isMobileOpen" class="sidebar-backdrop" @click="closeMobile"></div>
 
@@ -231,6 +357,27 @@ onUnmounted(() => {
         </TransitionGroup>
       </div>
     </Teleport>
+
+    <TourOverlay
+      :active="tourActive"
+      :step="tourStepWithGuide"
+      :effective-target="null"
+      :substep-label="tourSubstepLabel"
+      :step-number="tourStepNumber"
+      :total-steps="TOTAL_TOUR_STEPS"
+      :is-modal-open="modalOpenDuringTour"
+      @next="tour.nextStep"
+      @skip="tour.skipStep"
+      @retry="handleTourRetry"
+    />
+
+    <Teleport to="body">
+      <TourCompletionScreen
+        v-if="tourComplete"
+        :completed-steps="tour.context.value.completedSteps"
+        @done="handleTourDone"
+      />
+    </Teleport>
   </div>
 </template>
 
@@ -298,6 +445,23 @@ onUnmounted(() => {
   --transition-fast: 150ms ease;
   --transition-normal: 250ms ease;
   --transition-slow: 400ms ease;
+
+  /* Tour z-index scale — Phase 1 foundation (OB-43) */
+  --z-tour-overlay: 10000;
+  --z-tour-spotlight: 10001;
+  --z-tour-tooltip: 10002;
+  --z-tour-controls: 10003;
+  --z-tour-progress: 10004;
+  --z-toast: 10005;
+
+  /* Tour visual layer */
+  --tour-overlay-dim: rgba(0, 0, 0, 0.7);
+  --tour-spotlight-radius: 8px;
+  --tour-spotlight-padding: 8px;
+  --tour-glow-color: var(--accent-cyan);
+  --tour-glow-dim: rgba(0, 212, 255, 0.3);
+  --tour-glow-bright: rgba(0, 212, 255, 0.5);
+  --tour-transition-speed: 200ms;
 }
 
 * {
@@ -343,6 +507,13 @@ body {
   display: flex;
   flex-direction: column;
   min-height: 100vh;
+}
+
+.welcome-fullscreen {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  overflow-y: auto;
 }
 
 .app-body {
@@ -793,7 +964,7 @@ body {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  z-index: 10000;
+  z-index: var(--z-toast);
   pointer-events: none;
 }
 
@@ -1644,6 +1815,10 @@ body {
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
+  }
+
+  :root {
+    --tour-transition-speed: 0ms;
   }
 }
 </style>

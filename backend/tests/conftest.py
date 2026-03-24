@@ -62,6 +62,24 @@ def client(app):
 
 
 @pytest.fixture(autouse=True)
+def reset_rbac_cache():
+    """Clear RBAC has_any_keys cache between tests to prevent cross-test interference."""
+    try:
+        from app.db.rbac import invalidate_key_cache
+
+        invalidate_key_cache()
+    except ImportError:
+        logger.debug("Could not import invalidate_key_cache (module not loaded)")
+    yield
+    try:
+        from app.db.rbac import invalidate_key_cache
+
+        invalidate_key_cache()
+    except ImportError:
+        logger.debug("Could not import invalidate_key_cache (module not loaded)")
+
+
+@pytest.fixture(autouse=True)
 def reset_github_webhook_rate_limit():
     """Clear per-repo rate limit state between tests to prevent cross-test interference."""
     try:

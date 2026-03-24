@@ -167,7 +167,7 @@ onMounted(() => {
   <div class="products-page">
     <PageHeader title="Products" subtitle="Manage your product portfolio and their associated projects">
       <template #actions>
-        <button class="btn btn-primary" @click="showCreateModal = true">
+        <button class="btn btn-primary" data-tour="create-product" @click="showCreateModal = true">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M12 5v14M5 12h14"/>
           </svg>

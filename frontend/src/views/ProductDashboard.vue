@@ -219,7 +219,7 @@ function getStatusClass(status: string): string {
             <h3>Projects</h3>
             <span class="card-count">{{ product.projects?.length || 0 }} projects</span>
           </div>
-          <button class="add-btn" @click="openAddProjectModal">
+          <button class="add-btn" data-tour="create-project" @click="openAddProjectModal">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M12 5v14M5 12h14"/>
             </svg>

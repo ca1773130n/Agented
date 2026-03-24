@@ -17,6 +17,7 @@ const newApiKey = ref('');
 const newLabel = ref('');
 const newRole = ref('viewer');
 const isCreating = ref(false);
+const generatedKeyDisplay = ref<string | null>(null);
 const deletingId = ref<string | null>(null);
 const editingId = ref<string | null>(null);
 const editRole = ref('');
@@ -65,6 +66,42 @@ async function handleCreate() {
     showToast('Role created', 'success');
   } catch (err) {
     const message = err instanceof ApiError ? err.message : 'Failed to create role';
+    showToast(message, 'error');
+  } finally {
+    isCreating.value = false;
+  }
+}
+
+async function copyKey() {
+  if (generatedKeyDisplay.value) {
+    try {
+      await navigator.clipboard.writeText(generatedKeyDisplay.value);
+      showToast('Key copied to clipboard', 'success');
+    } catch {
+      showToast('Failed to copy — select and copy manually', 'info');
+    }
+  }
+}
+
+async function generateNewKey() {
+  isCreating.value = true;
+  try {
+    const key = Array.from(crypto.getRandomValues(new Uint8Array(32)))
+      .map(b => b.toString(16).padStart(2, '0'))
+      .join('');
+    await rbacApi.createRole({
+      api_key: key,
+      label: newLabel.value || 'New API Key',
+      role: newRole.value,
+    });
+    showToast('API key created', 'success');
+    generatedKeyDisplay.value = key;
+    showCreateForm.value = false;
+    newLabel.value = '';
+    newRole.value = 'viewer';
+    await loadData();
+  } catch (err) {
+    const message = err instanceof ApiError ? err.message : 'Failed to create key';
     showToast(message, 'error');
   } finally {
     isCreating.value = false;
@@ -174,11 +211,22 @@ onMounted(loadData);
           </div>
           <div class="form-actions">
             <button class="btn btn-ghost" @click="showCreateForm = false">Cancel</button>
+            <button class="btn btn-ghost" :disabled="isCreating" @click="generateNewKey">
+              {{ isCreating ? 'Generating...' : 'Generate Key' }}
+            </button>
             <button class="btn btn-primary" :disabled="isCreating || !newApiKey.trim() || !newLabel.trim()" @click="handleCreate">
               {{ isCreating ? 'Creating...' : 'Create Role' }}
             </button>
           </div>
         </div>
+      </div>
+
+      <!-- Generated key notice -->
+      <div v-if="generatedKeyDisplay" class="generated-key-notice">
+        <strong>New API key created — copy it now:</strong>
+        <code class="key-display">{{ generatedKeyDisplay }}</code>
+        <button class="copy-btn" @click="copyKey">Copy</button>
+        <button class="dismiss-btn" @click="generatedKeyDisplay = null">Dismiss</button>
       </div>
 
       <!-- Permission matrix -->
@@ -547,4 +595,49 @@ onMounted(loadData);
 .btn-delete { background: var(--bg-tertiary); border: 1px solid var(--border-default); color: var(--text-tertiary); }
 .btn-delete:hover:not(:disabled) { border-color: #ef4444; color: #ef4444; }
 .btn-delete:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.generated-key-notice {
+  background: var(--surface-elevated, #1a1a2e);
+  border: 1px solid var(--accent-green, #22c55e);
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin-bottom: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.generated-key-notice strong {
+  font-size: 13px;
+  color: var(--text-primary, #e0e0e0);
+}
+
+.key-display {
+  background: var(--surface-secondary, rgba(255, 255, 255, 0.06));
+  border: 1px solid var(--border-primary, rgba(255, 255, 255, 0.1));
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 11px;
+  color: var(--accent-green, #22c55e);
+  font-family: 'GeistMono', monospace;
+  word-break: break-all;
+  max-width: 400px;
+  user-select: all;
+}
+
+.copy-btn, .dismiss-btn {
+  background: var(--surface-secondary, rgba(255, 255, 255, 0.06));
+  border: 1px solid var(--border-primary, rgba(255, 255, 255, 0.1));
+  border-radius: 6px;
+  padding: 4px 12px;
+  font-size: 12px;
+  color: var(--text-primary, #e0e0e0);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.copy-btn:hover, .dismiss-btn:hover {
+  background: var(--surface-hover, rgba(255, 255, 255, 0.1));
+}
 </style>

@@ -17,7 +17,7 @@ export interface ToolWeight {
 }
 
 /** Default weight configuration. */
-export const DEFAULT_WEIGHTS: ToolWeight[] = [
+const DEFAULT_WEIGHTS: ToolWeight[] = [
   // Read-only state tools — high weight (safe to call repeatedly)
   { pattern: '*_get_state', weight: 40 },
   { pattern: '*_get_list_state', weight: 40 },

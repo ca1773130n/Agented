@@ -22,6 +22,7 @@ BUNDLE_MARKETPLACE_NAME = "Claude Code Plugin Marketplace"
 BUNDLE_PLUGINS = [
     {"remote_name": "HarnessSync", "is_harness": True},
     {"remote_name": "grd", "is_harness": False},
+    {"remote_name": "affaan-m/everything-claude-code", "is_harness": False},
 ]
 
 

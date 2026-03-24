@@ -1,6 +1,6 @@
 import type { AuditRecord, Finding, AuditStats } from '../../services/api'
 
-export const mockFinding: Finding = {
+const mockFinding: Finding = {
   package: 'lodash',
   current_version: '4.17.20',
   installed_version: '4.17.20',

@@ -7,7 +7,7 @@ import subprocess
 logger = logging.getLogger(__name__)
 
 MARKETPLACE_REPO = "ca1773130n/claude-code-plugin-marketplace"
-BUNDLE_PLUGINS = ["HarnessSync", "grd"]
+BUNDLE_PLUGINS = ["HarnessSync", "grd", "everything-claude-code"]
 
 
 class HarnessPluginInstaller:

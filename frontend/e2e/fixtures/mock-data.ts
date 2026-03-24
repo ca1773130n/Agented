@@ -116,7 +116,6 @@ export const MOCK_TRIGGER = {
 
 // --- Mock data for specific sections ---
 
-export const MOCK_HOOKS = { hooks: [] };
 export const MOCK_COMMANDS = { commands: [] };
 export const MOCK_RULES = { rules: [] };
 export const MOCK_AGENTS = { agents: [] };

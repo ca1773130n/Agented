@@ -13,21 +13,23 @@ health_bp = APIBlueprint("health", __name__, url_prefix="/health", abp_tags=[tag
 
 
 def _is_authenticated_request() -> bool:
-    """Check if request carries a valid API key.
+    """Check if request carries a valid API key (DB or env var)."""
+    from ..db.rbac import has_any_keys, get_role_for_api_key
 
-    Self-contained auth check for the health endpoint (SEC-03).
-    Compares X-API-Key header against AGENTED_API_KEY env var -- the same
-    env var used by Phase 3's auth middleware in create_app().
-
-    Returns False if AGENTED_API_KEY is not set (safe default: redact).
-    """
     api_key = request.headers.get("X-API-Key")
     if not api_key:
         return False
+
+    # Check DB keys first
+    if has_any_keys() and get_role_for_api_key(api_key):
+        return True
+
+    # Fallback: check env var
     secret = os.environ.get("AGENTED_API_KEY", "")
-    if not secret:
-        return False
-    return hmac.compare_digest(api_key, secret)
+    if secret and hmac.compare_digest(api_key, secret):
+        return True
+
+    return False
 
 
 @health_bp.get("/liveness")
@@ -113,42 +115,121 @@ def readiness():
     return health, status_code
 
 
+@health_bp.get("/instance-id")
+def instance_id():
+    """Public endpoint: returns the database instance ID for staleness detection.
+
+    The instance_id is a UUID generated when the database is first created.
+    It changes on DB reset, allowing the frontend to detect stale tour state.
+    No authentication required — used during onboarding before API keys exist.
+    """
+    from ..database import get_connection
+
+    with get_connection() as conn:
+        row = conn.execute("SELECT value FROM app_meta WHERE key = 'instance_id'").fetchone()
+
+    return {"instance_id": row[0] if row else None}, HTTPStatus.OK
+
+
 @health_bp.get("/auth-status")
 def auth_status():
-    """Public endpoint: tells the frontend whether API key auth is required.
+    """Public endpoint: tells the frontend whether auth is configured.
 
-    Returns auth_required=true when AGENTED_API_KEY is set and the
-    request does not already carry a valid key. The frontend uses this on
-    startup to decide whether to show the API key prompt.
+    Returns:
+      - needs_setup: true when no API keys exist (first-run)
+      - auth_required: true when keys exist and request isn't authenticated
+      - authenticated: true when request carries a valid key
     """
-    api_key_configured = bool(os.environ.get("AGENTED_API_KEY", ""))
+    from ..db.rbac import has_any_keys
+
+    has_db_keys = has_any_keys()
+    env_key_set = bool(os.environ.get("AGENTED_API_KEY", ""))
+    auth_configured = has_db_keys or env_key_set
     authenticated = _is_authenticated_request()
+
     return {
-        "auth_required": api_key_configured,
+        "needs_setup": not auth_configured,
+        "auth_required": auth_configured,
         "authenticated": authenticated,
     }, HTTPStatus.OK
 
 
 @health_bp.post("/verify-key")
 def verify_key():
-    """Public endpoint: verify whether a provided API key is valid.
+    """Public endpoint: verify whether a provided API key is valid."""
+    from ..db.rbac import has_any_keys, get_role_for_api_key
 
-    Accepts {"api_key": "..."} in the request body and returns whether
-    it matches the configured AGENTED_API_KEY. This lets the frontend
-    validate a key before storing it in localStorage.
-    """
     data = request.get_json(silent=True) or {}
     provided = data.get("api_key", "")
-    secret = os.environ.get("AGENTED_API_KEY", "")
-
-    if not secret:
-        return {"valid": True, "message": "No API key configured"}, HTTPStatus.OK
 
     if not provided:
         return {"valid": False, "message": "No key provided"}, HTTPStatus.OK
 
-    valid = hmac.compare_digest(provided, secret)
+    # Check DB
+    if has_any_keys() and get_role_for_api_key(provided):
+        return {"valid": True, "message": "Valid"}, HTTPStatus.OK
+
+    # Fallback: env var
+    secret = os.environ.get("AGENTED_API_KEY", "")
+    if secret and hmac.compare_digest(provided, secret):
+        return {"valid": True, "message": "Valid"}, HTTPStatus.OK
+
+    # No auth configured at all
+    if not has_any_keys() and not secret:
+        return {"valid": True, "message": "No authentication configured"}, HTTPStatus.OK
+
+    return {"valid": False, "message": "Invalid API key"}, HTTPStatus.OK
+
+
+_setup_rate_limit: dict = {}  # {"ip": [...timestamps]}
+_SETUP_RATE_MAX = 5
+_SETUP_RATE_WINDOW = 60  # seconds
+
+
+@health_bp.post("/setup")
+def setup():
+    """Public endpoint: generate the first admin API key.
+
+    Only works when no API keys exist in the database (first-run bootstrap).
+    Returns the generated key — this is the only time it will be shown.
+    """
+    import time as _time
+
+    ip = request.remote_addr or "unknown"
+    now = _time.monotonic()
+    hits = _setup_rate_limit.setdefault(ip, [])
+    hits[:] = [t for t in hits if now - t < _SETUP_RATE_WINDOW]
+    if len(hits) >= _SETUP_RATE_MAX:
+        return {"error": "Too many requests"}, 429
+    hits.append(now)
+    from ..db.rbac import generate_api_key, invalidate_key_cache
+    from ..db.connection import get_connection
+    from ..db.ids import _get_unique_role_id
+
+    data = request.get_json(silent=True) or {}
+    label = data.get("label", "Admin")
+
+    api_key = generate_api_key()
+
+    # Atomic check-and-insert to prevent race conditions
+    with get_connection() as conn:
+        existing = conn.execute("SELECT COUNT(*) FROM user_roles").fetchone()[0]
+        if existing > 0:
+            return {"error": "Already configured. Use the admin API to manage keys."}, 403
+
+        role_id = _get_unique_role_id(conn)
+        conn.execute(
+            "INSERT INTO user_roles (id, api_key, label, role) VALUES (?, ?, ?, ?)",
+            (role_id, api_key, label, "admin"),
+        )
+        conn.commit()
+
+    invalidate_key_cache()
+
     return {
-        "valid": valid,
-        "message": "Valid" if valid else "Invalid API key",
-    }, HTTPStatus.OK
+        "api_key": api_key,
+        "role_id": role_id,
+        "role": "admin",
+        "label": label,
+        "message": "Admin API key created. Save this key — it will not be shown again.",
+    }, 201

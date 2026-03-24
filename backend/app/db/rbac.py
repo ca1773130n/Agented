@@ -3,7 +3,11 @@
 Manages user_roles table: maps API keys to roles (viewer, operator, editor, admin).
 """
 
+import hmac
 import logging
+import secrets
+import threading
+import time
 from typing import Optional
 
 from .connection import get_connection
@@ -12,6 +16,39 @@ from .ids import _get_unique_role_id
 logger = logging.getLogger(__name__)
 
 VALID_ROLES = ("viewer", "operator", "editor", "admin")
+
+
+def generate_api_key() -> str:
+    """Generate a cryptographically secure 64-character hex API key."""
+    return secrets.token_hex(32)
+
+
+# Cache for has_any_keys() — avoids a DB query on every request.
+# TTL of 5 seconds: after a key is created, it takes at most 5s for auth to kick in.
+_has_any_keys_cache: dict = {}  # {"result": bool, "ts": float}
+_has_any_keys_lock = threading.Lock()
+_HAS_ANY_KEYS_TTL = 5.0
+
+
+def has_any_keys() -> bool:
+    """Check if any API keys exist in the database. Cached with 5s TTL."""
+    now = time.monotonic()
+    with _has_any_keys_lock:
+        cached = _has_any_keys_cache.get("result")
+        ts = _has_any_keys_cache.get("ts", 0.0)
+        if cached is not None and (now - ts) < _HAS_ANY_KEYS_TTL:
+            return cached
+    result = count_user_roles() > 0
+    with _has_any_keys_lock:
+        _has_any_keys_cache["result"] = result
+        _has_any_keys_cache["ts"] = now
+    return result
+
+
+def invalidate_key_cache():
+    """Clear the has_any_keys cache (call after creating/deleting keys)."""
+    with _has_any_keys_lock:
+        _has_any_keys_cache.clear()
 
 
 def create_user_role(api_key: str, label: str, role: str = "viewer") -> Optional[str]:
@@ -38,6 +75,7 @@ def create_user_role(api_key: str, label: str, role: str = "viewer") -> Optional
                 (role_id, api_key, label, role),
             )
             conn.commit()
+            invalidate_key_cache()
             return role_id
     except Exception as e:
         logger.error("Failed to create user role: %s", e)
@@ -45,14 +83,17 @@ def create_user_role(api_key: str, label: str, role: str = "viewer") -> Optional
 
 
 def get_role_for_api_key(api_key: str) -> Optional[str]:
-    """Look up the role string for a given API key.
+    """Look up the role string for a given API key using constant-time comparison.
 
     Returns:
         The role string (e.g. 'admin'), or None if not found.
     """
     with get_connection() as conn:
-        row = conn.execute("SELECT role FROM user_roles WHERE api_key = ?", (api_key,)).fetchone()
-        return row[0] if row else None
+        rows = conn.execute("SELECT api_key, role FROM user_roles").fetchall()
+        for row_key, role in rows:
+            if hmac.compare_digest(api_key, row_key):
+                return role
+        return None
 
 
 def get_user_role(role_id: str) -> Optional[dict]:
@@ -129,6 +170,7 @@ def delete_user_role(role_id: str) -> bool:
     with get_connection() as conn:
         cursor = conn.execute("DELETE FROM user_roles WHERE id = ?", (role_id,))
         conn.commit()
+        invalidate_key_cache()
         return cursor.rowcount > 0
 
 

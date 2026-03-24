@@ -52,8 +52,15 @@ def _get_secret_key() -> str:
     try:
         key_file.write_text(key)
         key_file.chmod(0o600)  # Owner-readable only
-    except OSError:
-        pass  # Fallback: ephemeral key (not ideal but won't crash)
+    except OSError as e:
+        import logging as _sk_log
+
+        _sk_log.getLogger(__name__).warning(
+            "Failed to persist SECRET_KEY to %s: %s — using ephemeral key (sessions will not "
+            "survive restarts)",
+            key_file,
+            e,
+        )
     return key
 
 
@@ -148,11 +155,20 @@ def _seed_system_agent():
 
 
 def _detect_backends() -> None:
-    """Detect backend CLIs and log warnings for any that are missing."""
+    """Detect backend CLIs, update DB, and log warnings for any that are missing."""
+    from .db.backends import check_and_update_backend_installed, get_all_backends
     from .services.backend_detection_service import BACKEND_CAPABILITIES, detect_backend
+
+    # Build a map of backend type → backend id
+    all_backends = get_all_backends()
+    type_to_id = {b["type"]: b["id"] for b in all_backends}
 
     for _bt in BACKEND_CAPABILITIES:
         _inst, _ver, _ = detect_backend(_bt)
+        # Update is_installed in the database
+        bid = type_to_id.get(_bt)
+        if bid:
+            check_and_update_backend_installed(bid, _inst, _ver)
         if not _inst:
             _startup_warnings.append(f"cli_missing:{_bt}")
 
@@ -337,17 +353,16 @@ def create_app(config=None):
     _configure_cors(app)
 
     # Paths that bypass authentication (public endpoints)
-    _AUTH_BYPASS_PREFIXES = ("/health", "/docs", "/openapi", "/api/webhooks/github")
+    _AUTH_BYPASS_PREFIXES = (
+        "/health",
+        "/docs",
+        "/openapi",
+        "/api/webhooks/github",
+        "/api/oauth-callback",
+    )
 
     @app.before_request
     def _require_api_key():
-        # Read API key per-request so changes take effect without restart
-        api_key = os.environ.get("AGENTED_API_KEY", "")
-
-        # Auth disabled when AGENTED_API_KEY is not set (backward compatibility)
-        if not api_key:
-            return None
-
         # Allow CORS preflight requests through
         if request.method == "OPTIONS":
             return None
@@ -361,12 +376,28 @@ def create_app(config=None):
             if request.path == prefix or request.path.startswith(prefix + "/"):
                 return None
 
+        # Bootstrap mode: no keys in DB and no env var = auth disabled
+        from .db.rbac import has_any_keys, get_role_for_api_key
+
+        db_has_keys = has_any_keys()
+        env_key = os.environ.get("AGENTED_API_KEY", "")
+
+        if not db_has_keys and not env_key:
+            return None
+
         # Validate X-API-Key header
         provided_key = request.headers.get("X-API-Key", "")
-        if not provided_key or not hmac.compare_digest(provided_key, api_key):
+        if not provided_key:
             return jsonify({"error": "Unauthorized"}), 401
 
-        return None
+        # Check DB first (primary), then env var (backward compat fallback)
+        if db_has_keys and get_role_for_api_key(provided_key):
+            return None
+
+        if env_key and hmac.compare_digest(provided_key, env_key):
+            return None
+
+        return jsonify({"error": "Unauthorized"}), 401
 
     # In testing mode, DB init is handled by the isolated_db fixture and
     # background services are not needed.
@@ -449,8 +480,10 @@ def create_app(config=None):
                 else None
             )
             capture_error(category="runtime_error", message=str(original), stack_trace=tb_str)
-        except Exception:
-            pass  # Never let error capture break error handling
+        except Exception as _cap_err:
+            import logging as _cap_log
+
+            _cap_log.getLogger(__name__).debug("Error capture failed: %s", _cap_err)
 
         if isinstance(original, ValueError):
             return error_response(
@@ -489,8 +522,10 @@ def create_app(config=None):
             from app.services.error_capture import capture_error
 
             capture_error(category="db_error", message=str(e))
-        except Exception:
-            pass
+        except Exception as _cap_err:
+            import logging as _cap_log
+
+            _cap_log.getLogger(__name__).debug("Error capture failed: %s", _cap_err)
         return error_response(
             "SERVICE_UNAVAILABLE",
             "Service temporarily unavailable",

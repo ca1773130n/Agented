@@ -3,9 +3,11 @@ import { createApp } from 'vue'
 import './style.css'
 import App from './App.vue'
 import { router } from './router'
+import { i18n, loadInitialLocale } from './i18n'
 
 const app = createApp(App)
 app.use(router)
+app.use(i18n)
 
 /**
  * Global Vue error handler.
@@ -45,4 +47,5 @@ if (import.meta.env.DEV) {
   };
 }
 
-app.mount('#app')
+// Load non-English locale before mounting, then wait for router
+loadInitialLocale().then(() => router.isReady()).then(() => app.mount('#app'))

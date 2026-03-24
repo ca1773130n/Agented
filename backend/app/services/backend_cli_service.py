@@ -18,6 +18,7 @@ import time
 import uuid
 from queue import Empty, Queue
 from typing import Dict, Generator, List, Optional
+from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 
 from .pty_service import strip_ansi
 
@@ -187,6 +188,17 @@ class BackendCLIService:
         os.close(slave_fd)
         started_at = datetime.datetime.now().isoformat()
 
+        # Capture the host URL from the Flask request context so the PTY
+        # reader thread (which runs outside request context) can rewrite
+        # OAuth redirect_uris to point back through our proxy.
+        host_url = None
+        try:
+            from flask import request as flask_request
+
+            host_url = flask_request.host_url.rstrip("/")
+        except RuntimeError:
+            pass  # Outside request context — host_url stays None
+
         with cls._lock:
             cls._sessions[session_id] = {
                 "master_fd": master_fd,
@@ -196,6 +208,7 @@ class BackendCLIService:
                 "action": action,
                 "status": "running",
                 "started_at": started_at,
+                "host_url": host_url,
             }
             cls._subscribers[session_id] = []
 
@@ -245,15 +258,16 @@ class BackendCLIService:
                     idle_ticks += 1
                     # Flush any pending OAuth URL on idle
                     if pending_oauth_url is not None and idle_ticks >= 2:
+                        rewritten_url = cls._rewrite_oauth_url(session_id, pending_oauth_url)
                         logger.info(
-                            "CLI %s: OAuth URL (flushed): %s…", session_id, pending_oauth_url[:80]
+                            "CLI %s: OAuth URL (flushed): %s…", session_id, rewritten_url[:80]
                         )
                         cls._broadcast(
                             session_id,
                             "oauth_url",
                             {
-                                "url": pending_oauth_url,
-                                "content": pending_oauth_url,
+                                "url": rewritten_url,
+                                "content": rewritten_url,
                                 "timestamp": datetime.datetime.now().isoformat(),
                             },
                         )
@@ -430,17 +444,20 @@ class BackendCLIService:
                                 pending_oauth_url += stripped
                                 continue
                             else:
+                                rewritten_url = cls._rewrite_oauth_url(
+                                    session_id, pending_oauth_url
+                                )
                                 logger.info(
                                     "CLI %s: OAuth URL (assembled): %s…",
                                     session_id,
-                                    pending_oauth_url[:80],
+                                    rewritten_url[:80],
                                 )
                                 cls._broadcast(
                                     session_id,
                                     "oauth_url",
                                     {
-                                        "url": pending_oauth_url,
-                                        "content": pending_oauth_url,
+                                        "url": rewritten_url,
+                                        "content": rewritten_url,
                                         "timestamp": datetime.datetime.now().isoformat(),
                                     },
                                 )
@@ -732,6 +749,16 @@ class BackendCLIService:
             cls._cleanup_timers.pop(session_id, None)
 
     @classmethod
+    def get_callback_port(cls) -> int:
+        """Return the OAuth callback port from any active session, or the default (54545)."""
+        with cls._lock:
+            for session in cls._sessions.values():
+                port = session.get("callback_port")
+                if port:
+                    return port
+        return 54545
+
+    @classmethod
     def _try_parse_interaction(cls, content: str) -> Optional[dict]:
         """Try to parse a line as an interaction request.
 
@@ -1018,6 +1045,76 @@ class BackendCLIService:
             return {"success": False, "output": None, "error": f"CLI not found: {cmd_list[0]}"}
         except Exception as e:
             return {"success": False, "output": None, "error": str(e)}
+
+    @classmethod
+    def _rewrite_oauth_url(cls, session_id: str, oauth_url: str) -> str:
+        """Rewrite an OAuth URL's redirect_uri to route through our proxy.
+
+        Also extracts and stores the callback port from the original
+        redirect_uri so the proxy route knows where to forward.
+
+        Args:
+            session_id: The CLI session that produced this URL.
+            oauth_url: The raw OAuth URL from the CLI output.
+
+        Returns:
+            The rewritten OAuth URL (or the original if rewriting fails).
+        """
+        with cls._lock:
+            session = cls._sessions.get(session_id)
+        if not session or not session.get("host_url"):
+            return oauth_url
+
+        host_url = session["host_url"]
+
+        try:
+            parsed = urlparse(oauth_url)
+            qs = parse_qs(parsed.query, keep_blank_values=True)
+            redirect_uri_list = qs.get("redirect_uri")
+            if not redirect_uri_list:
+                return oauth_url
+
+            original_redirect = redirect_uri_list[0]
+            redirect_parsed = urlparse(original_redirect)
+
+            # Extract and store the callback port
+            callback_port = redirect_parsed.port or 54545
+            with cls._lock:
+                if session_id in cls._sessions:
+                    cls._sessions[session_id]["callback_port"] = callback_port
+
+            # Build the new redirect_uri through our proxy
+            # Original: http://localhost:54545/callback
+            # New:      {host_url}/api/oauth-callback/callback
+            redirect_path = redirect_parsed.path.lstrip("/")
+            new_redirect = f"{host_url}/api/oauth-callback/{redirect_path}"
+
+            # Replace redirect_uri in the query string
+            qs["redirect_uri"] = [new_redirect]
+
+            # Rebuild the URL — urlencode with doseq=True for list values
+            new_query = urlencode(qs, doseq=True)
+            new_url = urlunparse(
+                (
+                    parsed.scheme,
+                    parsed.netloc,
+                    parsed.path,
+                    parsed.params,
+                    new_query,
+                    parsed.fragment,
+                )
+            )
+
+            logger.info(
+                "CLI %s: rewrote redirect_uri: port=%d, new=%s",
+                session_id,
+                callback_port,
+                new_redirect,
+            )
+            return new_url
+        except Exception as exc:
+            logger.warning("CLI %s: failed to rewrite OAuth URL: %s", session_id, exc)
+            return oauth_url
 
     @classmethod
     def _broadcast(cls, session_id: str, event_type: str, data: dict) -> None:

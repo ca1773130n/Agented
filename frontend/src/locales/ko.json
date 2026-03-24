@@ -1,0 +1,168 @@
+{
+  "common": {
+    "save": "저장",
+    "cancel": "취소",
+    "delete": "삭제",
+    "close": "닫기",
+    "next": "다음",
+    "back": "이전",
+    "skip": "건너뛰기",
+    "done": "완료",
+    "loading": "불러오는 중...",
+    "retry": "다시 시도",
+    "search": "검색",
+    "confirm": "확인",
+    "create": "만들기",
+    "edit": "편집",
+    "yes": "예",
+    "no": "아니오",
+    "add": "추가",
+    "remove": "제거",
+    "browse": "찾아보기",
+    "select": "선택",
+    "installed": "설치됨",
+    "notInstalled": "설치되지 않음"
+  },
+  "welcome": {
+    "badge": "처음 설정",
+    "headline": "나만의 가상 스타트업, 완전 자율 운영",
+    "subtitle": "자율 AI 에이전트로 실제 제품을 만드는 최초의 엔드투엔드 플랫폼이에요. 무엇을 만들지 정의하고, 에이전트 팀을 배정하면 — 아키텍처부터 QA까지 모든 부서가 스스로 움직여요.",
+    "beginSetup": "설정 시작하기 →",
+    "stepsHint": "8단계 · 약 2분 소요",
+    "generateKey": "Admin 키 생성",
+    "generateKeyHeading": "Admin API 키를 생성하세요",
+    "generateKeyExplanation": "이 키로 Agented 인스턴스를 보호해요. 다시 표시되지 않으니 안전한 곳에 저장해두세요.",
+    "generating": "생성 중...",
+    "generateFailed": "API 키 생성에 실패했어요. 다시 시도해주세요.",
+    "tryAgain": "다시 시도",
+    "copyKey": "복사",
+    "copied": "복사됨",
+    "continue": "계속하기 →",
+    "bento": {
+      "vision": "비전",
+      "productsProjects": "제품 & 프로젝트",
+      "productsDesc": "무엇을 만들지 정의해요. GitHub 저장소를 각 제품 아래 프로젝트로 연결하면, 에이전트들이 알아서 진행해요.",
+      "workforce": "인력",
+      "agentTeams": "에이전트 팀",
+      "teamsDesc": "5개 부서, 17명의 에이전트. {command}는 방향을 잡고, {dev}는 개발하고, {research}는 탐구하고, {ops}는 해결하고, {qa}는 검증해요.",
+      "autonomous": "완전 자율",
+      "scheduling": "매끄러운 백엔드 스케줄링",
+      "schedulingDesc": "에이전트가 Claude Code, ChatGPT, Gemini, OpenCode 사이를 자유롭게 이동해요. 하네스 동기화로 설정이 맞춰지고, 토큰 사용량 예측으로 한도 초과 전에 자동 전환돼요.",
+      "engineering": "엔지니어링",
+      "harnessPlugins": "하네스 & 플러그인",
+      "harnessDesc": "완전한 하네스 엔지니어링 — 설정 동기화, GRD 플래닝, MCP 서버, 마켓플레이스 플러그인, 커스텀 스킬과 훅."
+    }
+  },
+  "tour": {
+    "stepOf": "{current} / {total} 단계",
+    "setupComplete": "설정 완료",
+    "setupCompleteDesc": "워크스페이스가 준비됐어요. 설정한 내용을 확인해보세요:",
+    "skipped": "건너뜀",
+    "goToDashboard": "대시보드로 이동",
+    "skipConfirmTitle": "이 단계를 건너뛸까요?",
+    "skipConfirmMessage": "설정 체크리스트에서 나중에 완료할 수 있어요.",
+    "skipAnyway": "건너뛰기",
+    "keepGoing": "계속하기",
+    "restartSetupGuide": "설정 가이드 다시 시작",
+    "restartDesc": "온보딩 투어를 다시 시작해 워크스페이스 설정과 계정 구성을 다시 진행할 수 있어요. 기존 설정에는 영향을 주지 않아요.",
+    "setupChecklist": "설정",
+    "steps": {
+      "workspace": {
+        "title": "워크스페이스 디렉토리",
+        "message": "에이전트 팀의 저장소가 클론될 루트 디렉토리를 설정해요."
+      },
+      "claude": {
+        "title": "AI 백엔드 계정",
+        "message": "Claude Code 계정을 등록해요. '계정 추가'를 클릭해 Anthropic 인증 정보를 입력하세요.",
+        "substep": "Claude Code (1/4)"
+      },
+      "codex": {
+        "title": "AI 백엔드 계정",
+        "message": "OpenAI 연동을 위한 Codex CLI 계정을 등록해요 (선택 사항). '계정 추가'를 클릭해 설정하세요.",
+        "substep": "Codex CLI (2/4)"
+      },
+      "gemini": {
+        "title": "AI 백엔드 계정",
+        "message": "Google AI를 위한 Gemini CLI 계정을 등록해요 (선택 사항). '계정 추가'를 클릭해 설정하세요.",
+        "substep": "Gemini CLI (3/4)"
+      },
+      "opencode": {
+        "title": "AI 백엔드 계정",
+        "message": "OpenCode는 다른 AI 백엔드를 통해 동작해요. 위에서 계정을 등록했다면 별도 계정은 필요 없어요.",
+        "substep": "OpenCode (4/4)"
+      },
+      "monitoring": {
+        "title": "토큰 모니터링",
+        "message": "AI 백엔드 계정 전반의 토큰 사용량을 추적하기 위해 속도 제한 모니터링을 설정해요."
+      },
+      "verification": {
+        "title": "하네스 검증",
+        "message": "마켓플레이스에 스킬을 배포하기 위한 하네스 연동 플러그인이 설정되어 있는지 확인해요."
+      },
+      "product": {
+        "title": "첫 번째 제품 만들기",
+        "message": "제품은 관련 프로젝트를 공통 맥락 아래 묶어줘요. 클릭해서 첫 번째 제품을 만들어보세요."
+      },
+      "project": {
+        "title": "첫 번째 프로젝트 만들기",
+        "message": "프로젝트는 제품 내 작업을 추적해요. 클릭해서 첫 번째 프로젝트를 추가해보세요."
+      },
+      "team": {
+        "title": "팀 구성하기",
+        "message": "팀은 에이전트를 프로젝트에 배정해요. 팀을 구성해서 봇을 실행해보세요."
+      }
+    }
+  },
+  "accountWizard": {
+    "stepOf": "{current} / {total} 단계",
+    "subscription": "{backend} 구독이 있으신가요?",
+    "yesHaveAccount": "네, 계정이 있어요",
+    "noSkip": "아니요, 이 백엔드는 건너뛸게요",
+    "accountName": "계정 이름",
+    "accountNamePlaceholder": "예: 개인, 회사",
+    "email": "이메일",
+    "emailPlaceholder": "예: user{'@'}example.com",
+    "continueBtn": "계속하기",
+    "cliSetup": "CLI & 설정",
+    "cliInstalled": "CLI 설치됨",
+    "cliNotInstalled": "CLI 설치되지 않음",
+    "installCli": "CLI 설치",
+    "installing": "설치 중...",
+    "configPath": "설정 디렉토리",
+    "configCreated": "디렉토리 생성됨",
+    "createDir": "디렉토리 만들기",
+    "customizePath": "경로 직접 입력",
+    "apiKeyEnv": "API 키 변수",
+    "login": "로그인",
+    "openConsole": "{service} 콘솔 열기",
+    "loginViaCli": "CLI 프록시로 로그인",
+    "loginOptional": "이미 인증된 경우 로그인은 선택 사항이에요",
+    "planDetails": "플랜 & 세부 정보",
+    "plan": "플랜",
+    "selectPlan": "플랜 선택...",
+    "setDefault": "기본 계정으로 설정",
+    "saveAccount": "계정 저장",
+    "saving": "저장 중...",
+    "addAnother": "다른 계정 추가",
+    "switchToAdvanced": "고급 양식으로 전환"
+  },
+  "directoryBrowser": {
+    "title": "디렉토리 선택",
+    "selectThis": "이 디렉토리 선택",
+    "newFolder": "새 폴더",
+    "creating": "만드는 중...",
+    "createFolder": "만들기",
+    "enterFolderName": "폴더 이름 입력...",
+    "parentDir": "상위 디렉토리",
+    "emptyDir": "이 디렉토리는 비어 있어요",
+    "errorLoading": "디렉토리를 불러오지 못했어요",
+    "errorCreating": "폴더를 만들지 못했어요"
+  },
+  "language": {
+    "label": "언어",
+    "en": "English",
+    "ko": "한국어",
+    "ja": "日本語",
+    "zh": "中文"
+  }
+}
