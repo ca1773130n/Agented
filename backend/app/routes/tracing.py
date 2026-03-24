@@ -71,6 +71,16 @@ def create_new_trace(body: CreateTraceBody):
     return trace, HTTPStatus.CREATED
 
 
+@tracing_bp.get("/traces/stats")
+def get_stats(query: TraceStatsQuery):
+    """Get aggregate trace statistics."""
+    stats = get_trace_stats(
+        entity_type=query.entity_type,
+        entity_id=query.entity_id,
+    )
+    return stats, HTTPStatus.OK
+
+
 @tracing_bp.get("/traces/<trace_id>")
 def get_trace_detail(path: TracePath):
     """Get a trace with its full span tree."""
@@ -101,16 +111,6 @@ def delete_trace_route(path: TracePath):
     if not delete_trace(path.trace_id):
         return error_response("NOT_FOUND", "Trace not found", HTTPStatus.NOT_FOUND)
     return {"message": f"Trace {path.trace_id} deleted"}, HTTPStatus.OK
-
-
-@tracing_bp.get("/traces/stats")
-def get_stats(query: TraceStatsQuery):
-    """Get aggregate trace statistics."""
-    stats = get_trace_stats(
-        entity_type=query.entity_type,
-        entity_id=query.entity_id,
-    )
-    return stats, HTTPStatus.OK
 
 
 # --- Span endpoints ---

@@ -184,69 +184,81 @@ def recall_messages(
     (message_range messages before and after each match).
     """
     with get_connection() as conn:
-        # Build FTS5 query: split into words, join with OR for broad matching
-        words = query.split()
+        # Build FTS5 query: split into alphanumeric words, join with OR
+        import re
+        words = re.findall(r'\w+', query)
         if not words:
             return []
-        # Escape each word and join with OR for broad matching
-        safe_words = [w.replace('"', '""') for w in words if w.strip()]
-        fts_query = " OR ".join(f'"{w}"' for w in safe_words)
+        # Quote each word for safe FTS5 matching
+        fts_query = " OR ".join(f'"{w}"' for w in words)
 
-        if thread_id:
-            cursor = conn.execute(
-                """SELECT m.*, rank
-                   FROM memory_messages_fts fts
-                   JOIN memory_messages m ON m.rowid = fts.rowid
-                   WHERE memory_messages_fts MATCH ?
-                     AND m.thread_id = ?
-                   ORDER BY rank
-                   LIMIT ?""",
-                (fts_query, thread_id, top_k),
-            )
-        elif resource_id:
-            cursor = conn.execute(
-                """SELECT m.*, rank
-                   FROM memory_messages_fts fts
-                   JOIN memory_messages m ON m.rowid = fts.rowid
-                   JOIN memory_threads t ON t.id = m.thread_id
-                   WHERE memory_messages_fts MATCH ?
-                     AND t.resource_id = ? AND t.resource_type = ?
-                   ORDER BY rank
-                   LIMIT ?""",
-                (fts_query, resource_id, resource_type, top_k),
-            )
-        else:
+        try:
+            return _execute_recall(conn, fts_query, thread_id, resource_id, resource_type,
+                                   top_k, message_range)
+        except Exception:
+            logger.warning("FTS5 recall query failed for: %s", query[:100])
             return []
 
-        matches = [_msg_row_to_dict(row) for row in cursor.fetchall()]
 
-        if message_range <= 0:
-            return matches
+def _execute_recall(
+    conn, fts_query: str, thread_id, resource_id, resource_type, top_k, message_range
+) -> list[dict]:
+    """Execute the FTS5 recall query and expand context."""
+    if thread_id:
+        cursor = conn.execute(
+            """SELECT m.id, m.thread_id, m.role, m.content, m.type, m.metadata, m.created_at
+               FROM memory_messages_fts fts
+               JOIN memory_messages m ON m.rowid = fts.rowid
+               WHERE memory_messages_fts MATCH ?
+                 AND m.thread_id = ?
+               ORDER BY rank
+               LIMIT ?""",
+            (fts_query, thread_id, top_k),
+        )
+    elif resource_id:
+        cursor = conn.execute(
+            """SELECT m.id, m.thread_id, m.role, m.content, m.type, m.metadata, m.created_at
+               FROM memory_messages_fts fts
+               JOIN memory_messages m ON m.rowid = fts.rowid
+               JOIN memory_threads t ON t.id = m.thread_id
+               WHERE memory_messages_fts MATCH ?
+                 AND t.resource_id = ? AND t.resource_type = ?
+               ORDER BY rank
+               LIMIT ?""",
+            (fts_query, resource_id, resource_type, top_k),
+        )
+    else:
+        return []
 
-        # Expand with surrounding context
-        expanded = []
-        seen_ids: set = set()
-        for match in matches:
-            cursor = conn.execute(
-                """SELECT * FROM memory_messages
-                   WHERE thread_id = ? AND created_at <= ?
-                   ORDER BY created_at DESC LIMIT ?""",
-                (match["thread_id"], match["created_at"], message_range + 1),
-            )
-            before = [_msg_row_to_dict(r) for r in cursor.fetchall()]
+    matches = [_msg_row_to_dict(row) for row in cursor.fetchall()]
 
-            cursor = conn.execute(
-                """SELECT * FROM memory_messages
-                   WHERE thread_id = ? AND created_at > ?
-                   ORDER BY created_at ASC LIMIT ?""",
-                (match["thread_id"], match["created_at"], message_range),
-            )
-            after = [_msg_row_to_dict(r) for r in cursor.fetchall()]
+    if message_range <= 0:
+        return matches
 
-            for m in list(reversed(before)) + after:
-                if m["id"] not in seen_ids:
-                    seen_ids.add(m["id"])
-                    expanded.append(m)
+    # Expand with surrounding context
+    expanded: list[dict] = []
+    seen_ids: set = set()
+    for match in matches:
+        cursor = conn.execute(
+            """SELECT * FROM memory_messages
+               WHERE thread_id = ? AND created_at <= ?
+               ORDER BY created_at DESC LIMIT ?""",
+            (match["thread_id"], match["created_at"], message_range + 1),
+        )
+        before = [_msg_row_to_dict(r) for r in cursor.fetchall()]
+
+        cursor = conn.execute(
+            """SELECT * FROM memory_messages
+               WHERE thread_id = ? AND created_at > ?
+               ORDER BY created_at ASC LIMIT ?""",
+            (match["thread_id"], match["created_at"], message_range),
+        )
+        after = [_msg_row_to_dict(r) for r in cursor.fetchall()]
+
+        for m in list(reversed(before)) + after:
+            if m["id"] not in seen_ids:
+                seen_ids.add(m["id"])
+                expanded.append(m)
 
         return expanded
 
@@ -313,7 +325,8 @@ def _row_with_json_metadata(row) -> dict:
         try:
             d["metadata"] = json.loads(d["metadata"])
         except (json.JSONDecodeError, TypeError):
-            pass
+            logger.warning("Failed to parse metadata JSON: %s", str(d["metadata"])[:100])
+            d["metadata"] = None
     return d
 
 

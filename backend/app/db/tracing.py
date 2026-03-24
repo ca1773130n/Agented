@@ -229,13 +229,19 @@ def end_span(
                 existing.update(attributes)
                 merged_attrs = json.dumps(existing)
 
-        updates = "status = ?, output = ?, error_message = ?, duration_ms = ?, finished_at = ?"
+        update_exprs = [
+            "status = ?", "output = ?", "error_message = ?",
+            "duration_ms = ?", "finished_at = ?",
+        ]
         params: list = [status, output_json, error_message, duration_ms, now]
         if merged_attrs:
-            updates += ", attributes = ?"
+            update_exprs.append("attributes = ?")
             params.append(merged_attrs)
         params.append(span_id)
-        conn.execute(f"UPDATE trace_spans SET {updates} WHERE id = ?", params)
+        conn.execute(
+            f"UPDATE trace_spans SET {safe_set_clause(update_exprs)} WHERE id = ?",
+            params,
+        )
         conn.commit()
     return get_span(span_id)
 
@@ -322,7 +328,8 @@ def _parse_json_field(value):
     try:
         return json.loads(value)
     except (json.JSONDecodeError, TypeError):
-        return value
+        logger.warning("Failed to parse JSON field: %s", value[:100] if isinstance(value, str) else value)
+        return None
 
 
 def _trace_row_to_dict(row) -> dict:

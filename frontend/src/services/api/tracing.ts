@@ -175,7 +175,7 @@ export const tracingApi = {
       body: JSON.stringify(body),
     }),
 
-  // Agent-specific
+  // Agent-specific (uses filter params, no dedicated backend route)
   listAgentTraces: (agentId: string) =>
-    apiFetch<TraceListResponse>(`/admin/agents/${agentId}/traces`),
+    apiFetch<TraceListResponse>(`/admin/traces${toQueryString({ entity_type: 'agent', entity_id: agentId })}`),
 };

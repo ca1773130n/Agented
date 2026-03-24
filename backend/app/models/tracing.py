@@ -1,7 +1,7 @@
 """Pydantic models for tracing API."""
 
 from enum import Enum
-from typing import Optional
+from typing import Any, Optional
 
 from pydantic import BaseModel, Field
 
@@ -49,15 +49,15 @@ class SpanPath(BaseModel):
 
 
 class TraceListQuery(BaseModel):
-    entity_type: Optional[str] = None
+    entity_type: Optional[EntityType] = None
     entity_id: Optional[str] = None
-    status: Optional[str] = None
+    status: Optional[TraceStatus] = None
     limit: int = Field(50, ge=1, le=200)
     offset: int = Field(0, ge=0)
 
 
 class TraceStatsQuery(BaseModel):
-    entity_type: Optional[str] = None
+    entity_type: Optional[EntityType] = None
     entity_id: Optional[str] = None
 
 
@@ -66,30 +66,30 @@ class TraceStatsQuery(BaseModel):
 
 class CreateTraceBody(BaseModel):
     name: str = Field(..., description="Trace name")
-    entity_type: str = Field(..., description="Entity type (agent, bot, trigger, team)")
+    entity_type: EntityType = Field(..., description="Entity type")
     entity_id: str = Field(..., description="Entity ID")
     execution_id: Optional[str] = None
-    input: Optional[dict] = None
-    metadata: Optional[dict] = None
+    input: Optional[dict[str, Any]] = None
+    metadata: Optional[dict[str, Any]] = None
 
 
 class EndTraceBody(BaseModel):
-    status: str = Field("completed", description="Final status")
-    output: Optional[dict] = None
+    status: TraceStatus = Field(TraceStatus.COMPLETED, description="Final status")
+    output: Optional[dict[str, Any]] = None
     error_message: Optional[str] = None
 
 
 class CreateSpanBody(BaseModel):
     name: str = Field(..., description="Span name")
-    span_type: str = Field(..., description="Span type")
+    span_type: SpanType = Field(..., description="Span type")
     parent_span_id: Optional[str] = None
-    input: Optional[dict] = None
-    attributes: Optional[dict] = None
-    metadata: Optional[dict] = None
+    input: Optional[dict[str, Any]] = None
+    attributes: Optional[dict[str, Any]] = None
+    metadata: Optional[dict[str, Any]] = None
 
 
 class EndSpanBody(BaseModel):
-    status: str = Field("completed", description="Final status")
-    output: Optional[dict] = None
+    status: TraceStatus = Field(TraceStatus.COMPLETED, description="Final status")
+    output: Optional[dict[str, Any]] = None
     error_message: Optional[str] = None
-    attributes: Optional[dict] = None
+    attributes: Optional[dict[str, Any]] = None

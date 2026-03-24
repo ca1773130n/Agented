@@ -69,9 +69,9 @@ export interface RecallResponse {
 
 export interface SaveMessagesRequest {
   messages: Array<{
-    role: string;
+    role: 'user' | 'assistant' | 'system' | 'tool';
     content: string;
-    type?: string;
+    type?: 'text' | 'tool_call' | 'tool_result';
     metadata?: Record<string, unknown>;
   }>;
 }
