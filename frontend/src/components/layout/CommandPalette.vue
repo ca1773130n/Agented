@@ -2,7 +2,7 @@
 import { ref, watch, onMounted, onUnmounted, nextTick, computed } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import type { RouteLocationRaw } from 'vue-router';
-import { productApi, projectApi, teamApi, agentApi, pluginApi } from '../../services/api';
+import { productApi, projectApi, teamApi, agentApi, pluginApi, triggerApi, workflowApi, superAgentApi } from '../../services/api';
 
 const props = defineProps<{ open: boolean }>();
 const emit = defineEmits<{ 'update:open': [value: boolean] }>();
@@ -12,7 +12,7 @@ const route = useRoute();
 
 // --- Types ---
 
-type EntityType = 'Product' | 'Project' | 'Team' | 'Agent' | 'Plugin';
+type EntityType = 'Product' | 'Project' | 'Team' | 'Agent' | 'Plugin' | 'Trigger' | 'Workflow' | 'SuperAgent';
 
 interface SearchResult {
   type: EntityType;
@@ -39,6 +39,9 @@ interface CachedData {
   teams: { id: string; name: string }[];
   agents: { id: string; name: string }[];
   plugins: { id: string; name: string }[];
+  triggers: { id: string; name: string }[];
+  workflows: { id: string; name: string }[];
+  superAgents: { id: string; name: string }[];
   timestamp: number;
 }
 
@@ -63,6 +66,12 @@ function buildRoute(type: EntityType, id: string): RouteLocationRaw {
       return { name: 'agent-design', params: { agentId: id } };
     case 'Plugin':
       return { name: 'plugin-detail', params: { pluginId: id } };
+    case 'Trigger':
+      return { name: 'trigger-dashboard', params: { triggerId: id } };
+    case 'Workflow':
+      return { name: 'workflow-builder', params: { workflowId: id } };
+    case 'SuperAgent':
+      return { name: 'super-agent-playground', params: { agentId: id } };
   }
 }
 
@@ -75,22 +84,38 @@ async function fetchAllEntities(): Promise<void> {
   error.value = false;
 
   try {
-    const [productsRes, projectsRes, teamsRes, agentsRes, pluginsRes] = await Promise.all([
+    const settled = await Promise.allSettled([
       productApi.list(),
       projectApi.list(),
       teamApi.list(),
       agentApi.list(),
       pluginApi.list(),
+      triggerApi.list(),
+      workflowApi.list(),
+      superAgentApi.list(),
     ]);
 
+    const val = <T>(r: PromiseSettledResult<T>): T | null =>
+      r.status === 'fulfilled' ? r.value : null;
+
+    const [pRes, prRes, tRes, aRes, plRes, trRes, wRes, saRes] = settled;
+
     cachedData = {
-      products: productsRes.products.map((p) => ({ id: p.id, name: p.name })),
-      projects: projectsRes.projects.map((p) => ({ id: p.id, name: p.name })),
-      teams: teamsRes.teams.map((t) => ({ id: t.id, name: t.name })),
-      agents: agentsRes.agents.map((a) => ({ id: a.id, name: a.name })),
-      plugins: pluginsRes.plugins.map((p) => ({ id: p.id, name: p.name })),
+      products: val(pRes)?.products?.map((p: { id: string; name: string }) => ({ id: p.id, name: p.name })) ?? [],
+      projects: val(prRes)?.projects?.map((p: { id: string; name: string }) => ({ id: p.id, name: p.name })) ?? [],
+      teams: val(tRes)?.teams?.map((t: { id: string; name: string }) => ({ id: t.id, name: t.name })) ?? [],
+      agents: val(aRes)?.agents?.map((a: { id: string; name: string }) => ({ id: a.id, name: a.name })) ?? [],
+      plugins: val(plRes)?.plugins?.map((p: { id: string; name: string }) => ({ id: p.id, name: p.name })) ?? [],
+      triggers: val(trRes)?.triggers?.map((t: { id: string; name: string }) => ({ id: t.id, name: t.name })) ?? [],
+      workflows: val(wRes)?.workflows?.map((w: { id: string; name: string }) => ({ id: w.id, name: w.name })) ?? [],
+      superAgents: val(saRes)?.super_agents?.map((s: { id: string; name: string }) => ({ id: s.id, name: s.name })) ?? [],
       timestamp: Date.now(),
     };
+
+    const failures = settled.filter((r) => r.status === 'rejected');
+    if (failures.length === settled.length) {
+      error.value = true;
+    }
   } catch {
     error.value = true;
   } finally {
@@ -110,6 +135,9 @@ function filterResults(q: string): SearchResult[] {
     { type: 'Team', items: cachedData.teams },
     { type: 'Agent', items: cachedData.agents },
     { type: 'Plugin', items: cachedData.plugins },
+    { type: 'Trigger', items: cachedData.triggers },
+    { type: 'Workflow', items: cachedData.workflows },
+    { type: 'SuperAgent', items: cachedData.superAgents },
   ];
 
   for (const group of entityGroups) {
@@ -132,7 +160,7 @@ function filterResults(q: string): SearchResult[] {
 
 const groupedResults = computed(() => {
   const groups: { type: EntityType; items: SearchResult[] }[] = [];
-  const typeOrder: EntityType[] = ['Product', 'Project', 'Team', 'Agent', 'Plugin'];
+  const typeOrder: EntityType[] = ['Product', 'Project', 'Team', 'Agent', 'Plugin', 'Trigger', 'Workflow', 'SuperAgent'];
 
   for (const type of typeOrder) {
     const items = results.value.filter((r) => r.type === type);

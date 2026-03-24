@@ -1,6 +1,15 @@
 import type { RouteRecordRaw } from 'vue-router';
 
 export const miscRoutes: RouteRecordRaw[] = [
+  // Base redirects for expandable sidebar sections
+  {
+    path: '/integrations',
+    redirect: '/integrations/slack-notifications',
+  },
+  {
+    path: '/platform',
+    redirect: '/settings',
+  },
   // Execution Search
   {
     path: '/execution-search',

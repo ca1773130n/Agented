@@ -145,7 +145,7 @@ async function handleQuickAdd(title: string, status: string) {
   // Use first phase as default target
   const targetPhase = filteredPhases.value[0];
   if (!targetPhase) {
-    showToast('No phase available to add card to', 'error');
+    showToast('Create a milestone and phase first via the Planning tab', 'info');
     return;
   }
   try {

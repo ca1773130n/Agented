@@ -12,6 +12,7 @@ const props = defineProps<{
   plans: GrdPlan[];
   phases: GrdPhase[];
   phaseLookup: Record<string, GrdPhase>;
+  canAdd?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -175,7 +176,7 @@ function handleQuickAddKeydown(event: KeyboardEvent) {
     </div>
 
     <!-- Quick-add form / button -->
-    <div class="kanban-column-footer">
+    <div v-if="canAdd !== false" class="kanban-column-footer">
       <div v-if="showQuickAdd" class="quick-add-form">
         <input
           ref="quickAddInput"

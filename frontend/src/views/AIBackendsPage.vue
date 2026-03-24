@@ -359,10 +359,13 @@ function handleKeyDown(e: KeyboardEvent) {
 onMounted(async () => {
   await loadBackends();
   autoCheckBackends();
-  await ensureTestAgent();
-  // Auto-create a session so the chat input is enabled immediately
-  if (testAgentId.value) {
-    await createSession();
+  try {
+    await ensureTestAgent();
+    if (testAgentId.value) {
+      await createSession();
+    }
+  } catch (e) {
+    console.warn('[AIBackendsPage] Test agent setup failed:', e);
   }
 });
 </script>

@@ -105,6 +105,7 @@ function onPlanMoved(planId: string, newStatus: string) {
       :plans="columnPlans[col.id] || []"
       :phases="phases"
       :phase-lookup="phaseLookup"
+      :can-add="phases.length > 0"
       @plan-moved="onPlanMoved"
       @quick-add="(title: string, status: string) => emit('quickAdd', title, status)"
     />
