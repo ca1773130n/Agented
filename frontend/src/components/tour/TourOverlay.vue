@@ -243,7 +243,7 @@ watch(
       if (!targetEl.value) {
         startObserverWithTimeouts()
       }
-    }, selectorChanged ? 150 : 150)
+    }, 150)
   },
   { immediate: true },
 )

@@ -1103,10 +1103,10 @@ class BackendCLIService:
                     parsed.scheme, parsed.netloc, parsed.path,
                     parsed.params, new_query, parsed.fragment,
                 ))
-                logger.info("CLI %s: added login_hint=%s", session_id, session_email)
+                logger.info("CLI %s: added login_hint (email provided)", session_id)
 
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("CLI %s: failed to process OAuth URL: %s", session_id, exc)
         return oauth_url
 
     @classmethod

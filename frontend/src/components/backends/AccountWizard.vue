@@ -638,7 +638,7 @@ function addAnotherAccount() {
         <template v-else-if="loginStatus === 'streaming'">
           <div class="login-terminal">
             <div class="login-terminal-output">
-              <div v-for="(line, i) in loginLines" :key="i" class="terminal-line" v-html="line"></div>
+              <div v-for="(line, i) in loginLines" :key="i" class="terminal-line">{{ line }}</div>
             </div>
             <!-- Option buttons when CLI asks a multiple-choice question -->
             <div v-if="pendingOptions.length > 0" class="login-options">
