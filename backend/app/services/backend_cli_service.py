@@ -31,7 +31,7 @@ INPUT_TIMEOUT_SECONDS = 300
 BACKEND_CLI_COMMANDS = {
     "claude": {"login": ["claude", "/login"], "usage": ["claude", "/usage"]},
     "codex": {"login": ["codex", "login", "--device-auth"], "usage": ["codex", "usage"]},
-    "gemini": {"login": ["gemini", "auth", "login"]},
+    "gemini": {"login": ["gemini"]},
 }
 
 # OAuth URL detection patterns
@@ -122,6 +122,7 @@ class BackendCLIService:
         backend_type: str,
         action: str,
         config_path: Optional[str] = None,
+        email: Optional[str] = None,
     ) -> str:
         """Start a CLI session in a PTY (login or usage).
 
@@ -191,11 +192,30 @@ class BackendCLIService:
         # Capture the host URL from the Flask request context so the PTY
         # reader thread (which runs outside request context) can rewrite
         # OAuth redirect_uris to point back through our proxy.
+        # Prefer Origin/Referer/X-Forwarded-Host headers (set by the Vite
+        # dev proxy or reverse proxies) over flask_request.host_url, which
+        # returns the backend's own address (127.0.0.1:20000) instead of
+        # the user-facing URL (e.g. burningxoul.mooo.com:3000).
         host_url = None
         try:
             from flask import request as flask_request
 
-            host_url = flask_request.host_url.rstrip("/")
+            origin = flask_request.headers.get("Origin")
+            referer = flask_request.headers.get("Referer")
+            x_fwd_host = flask_request.headers.get("X-Forwarded-Host")
+            x_fwd_proto = flask_request.headers.get("X-Forwarded-Proto", "http")
+
+            if origin:
+                host_url = origin.rstrip("/")
+            elif x_fwd_host:
+                host_url = f"{x_fwd_proto}://{x_fwd_host}".rstrip("/")
+            elif referer:
+                from urllib.parse import urlparse as _urlparse
+
+                ref_parsed = _urlparse(referer)
+                host_url = f"{ref_parsed.scheme}://{ref_parsed.netloc}".rstrip("/")
+            else:
+                host_url = flask_request.host_url.rstrip("/")
         except RuntimeError:
             pass  # Outside request context — host_url stays None
 
@@ -209,6 +229,7 @@ class BackendCLIService:
                 "status": "running",
                 "started_at": started_at,
                 "host_url": host_url,
+                "email": email,
             }
             cls._subscribers[session_id] = []
 
@@ -884,6 +905,7 @@ class BackendCLIService:
         repl_commands = {
             "claude": {"login": "/login", "usage": "/usage"},
             "codex": {"login": "/login"},
+            "gemini": {"login": "/auth"},
         }
         return repl_commands.get(backend_type, {}).get(action)
 
@@ -1048,73 +1070,44 @@ class BackendCLIService:
 
     @classmethod
     def _rewrite_oauth_url(cls, session_id: str, oauth_url: str) -> str:
-        """Rewrite an OAuth URL's redirect_uri to route through our proxy.
+        """Process an OAuth URL: extract callback port, add login_hint.
 
-        Also extracts and stores the callback port from the original
-        redirect_uri so the proxy route knows where to forward.
+        The redirect_uri is NOT rewritten — it stays as the original
+        ``http://localhost:PORT/...`` that the CLI generated. This works
+        because users access the server's localhost via SSH port forwarding
+        (or are on the same machine).
 
-        Args:
-            session_id: The CLI session that produced this URL.
-            oauth_url: The raw OAuth URL from the CLI output.
-
-        Returns:
-            The rewritten OAuth URL (or the original if rewriting fails).
+        If the session has an email, ``login_hint=EMAIL`` is appended so
+        the OAuth provider pre-selects the correct Google account profile.
         """
-        with cls._lock:
-            session = cls._sessions.get(session_id)
-        if not session or not session.get("host_url"):
-            return oauth_url
-
-        host_url = session["host_url"]
-
         try:
             parsed = urlparse(oauth_url)
             qs = parse_qs(parsed.query, keep_blank_values=True)
+
+            # Extract callback port
             redirect_uri_list = qs.get("redirect_uri")
-            if not redirect_uri_list:
-                return oauth_url
+            if redirect_uri_list:
+                redirect_parsed = urlparse(redirect_uri_list[0])
+                callback_port = redirect_parsed.port or 54545
+                with cls._lock:
+                    if session_id in cls._sessions:
+                        cls._sessions[session_id]["callback_port"] = callback_port
 
-            original_redirect = redirect_uri_list[0]
-            redirect_parsed = urlparse(original_redirect)
-
-            # Extract and store the callback port
-            callback_port = redirect_parsed.port or 54545
+            # Add login_hint if email is known (helps with Google account selection)
             with cls._lock:
-                if session_id in cls._sessions:
-                    cls._sessions[session_id]["callback_port"] = callback_port
+                session_email = cls._sessions.get(session_id, {}).get("email")
+            if session_email and "login_hint" not in qs:
+                qs["login_hint"] = [session_email]
+                new_query = urlencode(qs, doseq=True)
+                oauth_url = urlunparse((
+                    parsed.scheme, parsed.netloc, parsed.path,
+                    parsed.params, new_query, parsed.fragment,
+                ))
+                logger.info("CLI %s: added login_hint=%s", session_id, session_email)
 
-            # Build the new redirect_uri through our proxy
-            # Original: http://localhost:54545/callback
-            # New:      {host_url}/api/oauth-callback/callback
-            redirect_path = redirect_parsed.path.lstrip("/")
-            new_redirect = f"{host_url}/api/oauth-callback/{redirect_path}"
-
-            # Replace redirect_uri in the query string
-            qs["redirect_uri"] = [new_redirect]
-
-            # Rebuild the URL — urlencode with doseq=True for list values
-            new_query = urlencode(qs, doseq=True)
-            new_url = urlunparse(
-                (
-                    parsed.scheme,
-                    parsed.netloc,
-                    parsed.path,
-                    parsed.params,
-                    new_query,
-                    parsed.fragment,
-                )
-            )
-
-            logger.info(
-                "CLI %s: rewrote redirect_uri: port=%d, new=%s",
-                session_id,
-                callback_port,
-                new_redirect,
-            )
-            return new_url
-        except Exception as exc:
-            logger.warning("CLI %s: failed to rewrite OAuth URL: %s", session_id, exc)
-            return oauth_url
+        except Exception:
+            pass
+        return oauth_url
 
     @classmethod
     def _broadcast(cls, session_id: str, event_type: str, data: dict) -> None:

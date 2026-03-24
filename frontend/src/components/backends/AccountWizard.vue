@@ -12,8 +12,11 @@
 import { ref, computed, watch, onMounted, onUnmounted, inject } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { backendApi, utilityApi, BACKEND_PLAN_OPTIONS } from '../../services/api';
+import { createAuthenticatedEventSource } from '../../services/api/client';
+import type { AuthenticatedEventSource } from '../../services/api/client';
 
 const setTourGuide = inject<(msg: string | null) => void>('setTourGuide', () => {});
+const setTourTarget = inject<(selector: string | null) => void>('setTourTarget', () => {});
 
 const props = defineProps<{
   backendId: string;
@@ -43,13 +46,13 @@ const currentStep = ref<WizardStep>('subscription');
 
 const currentStepIndex = computed(() => STEP_ORDER.indexOf(currentStep.value));
 
-const stepLabels: Record<WizardStep, string> = {
-  subscription: 'Subscription',
-  cli: 'CLI Setup',
-  login: 'Login',
-  plan: 'Plan & Save',
-  done: 'Done',
-};
+const stepLabels = computed<Record<WizardStep, string>>(() => ({
+  subscription: t('accountWizard.stepSubscription'),
+  cli: t('accountWizard.stepCliSetup'),
+  login: t('accountWizard.stepLogin'),
+  plan: t('accountWizard.stepPlanSave'),
+  done: t('accountWizard.stepDone'),
+}));
 
 function goNext() {
   const idx = currentStepIndex.value;
@@ -187,6 +190,8 @@ async function createConfigDir() {
 
 onMounted(() => {
   checkCli();
+  // Retarget the tour spotlight to the wizard container
+  setTourTarget('[data-tour="account-wizard"]');
 });
 
 // Reset dir state when config path changes
@@ -207,59 +212,71 @@ const loginError = ref('');
 // Tour guide — contextual messages for the bottom onboarding panel
 // ---------------------------------------------------------------------------
 const guideMessages: Record<WizardStep, () => string> = {
-  subscription: () => `Do you have a ${props.backendName} subscription? Select Yes and enter your account name to get started.`,
+  subscription: () => t('accountWizard.guide.subscription', { backend: props.backendName }),
   cli: () => cliInstalled.value
-    ? `${props.backendName} CLI is installed (${cliVersion.value || 'detected'}). Review the config directory and continue.`
-    : `${props.backendName} CLI is not installed. Click "Install CLI" to set it up automatically.`,
+    ? t('accountWizard.guide.cliInstalled', { backend: props.backendName, version: cliVersion.value || 'detected' })
+    : t('accountWizard.guide.cliNotInstalled', { backend: props.backendName }),
   login: () => loginStatus.value === 'completed'
-    ? 'Login successful! Click Continue to choose your plan.'
+    ? t('accountWizard.guide.loginCompleted')
     : loginStatus.value === 'streaming'
-    ? 'Complete the authentication in the terminal below. An OAuth page may open in your browser.'
-    : `Click "Start Login" to authenticate via ${props.backendName} OAuth. Skip if already logged in.`,
-  plan: () => `Choose your subscription plan for this ${props.backendName} account and save.`,
-  done: () => `Account saved! Add another ${props.backendName} account or click "Done — Next Backend" to continue.`,
+    ? t('accountWizard.guide.loginStreaming')
+    : t('accountWizard.guide.loginIdle', { backend: props.backendName }),
+  plan: () => t('accountWizard.guide.plan', { backend: props.backendName }),
+  done: () => t('accountWizard.guide.done', { backend: props.backendName }),
 };
 
 watch(currentStep, (step) => {
   setTourGuide(guideMessages[step]());
+  // Auto-start login when entering the login step
+  if (step === 'login' && loginStatus.value === 'idle') {
+    startCliLogin();
+  }
 }, { immediate: true });
 
 watch(() => loginStatus.value, () => {
   if (currentStep.value === 'login') setTourGuide(guideMessages.login());
 });
 
-onUnmounted(() => { setTourGuide(null); });
+onUnmounted(() => {
+  setTourGuide(null);
+  setTourTarget(null);
+});
 const pendingQuestion = ref('');
+const pendingOptions = ref<string[]>([]);
+const pendingInteractionId = ref('');
 const userResponse = ref('');
-let loginEventSource: EventSource | null = null;
+let loginEventSource: AuthenticatedEventSource | null = null;
 
 async function startCliLogin() {
   loginStatus.value = 'connecting';
   loginLines.value = [];
   loginError.value = '';
   pendingQuestion.value = '';
+  pendingOptions.value = [];
+  pendingInteractionId.value = '';
   try {
-    const result = await backendApi.startConnect(props.backendId, configPath.value || undefined);
+    const result = await backendApi.startConnect(props.backendId, configPath.value || undefined, email.value.trim() || undefined);
     loginSessionId.value = result.session_id;
     loginStatus.value = 'streaming';
-    // Open SSE stream
+    // Open authenticated SSE stream (sends X-API-Key header)
     const streamUrl = backendApi.streamConnectUrl(props.backendId, result.session_id);
-    loginEventSource = new EventSource(streamUrl);
-    loginEventSource.addEventListener('output', (e: MessageEvent) => {
+    loginEventSource = createAuthenticatedEventSource(streamUrl);
+    loginEventSource.addEventListener('log', (e: MessageEvent) => {
       const data = JSON.parse(e.data);
-      if (data.text) {
-        loginLines.value.push(data.text);
+      const text = data.content || data.text || '';
+      if (text) {
+        loginLines.value.push(text);
         scrollTerminal();
       }
     });
     loginEventSource.addEventListener('question', (e: MessageEvent) => {
       const data = JSON.parse(e.data);
-      pendingQuestion.value = data.text || data.question || '';
-      if (data.options) {
-        loginLines.value.push(data.text || '');
-        data.options.forEach((opt: string, i: number) => {
-          loginLines.value.push(`  ${i + 1}. ${opt}`);
-        });
+      pendingQuestion.value = data.prompt || data.text || data.question || '';
+      pendingInteractionId.value = data.interaction_id || '';
+      pendingOptions.value = data.options || [];
+      if (!data.options?.length) {
+        // Free-text question — show in terminal
+        loginLines.value.push(pendingQuestion.value);
       }
       scrollTerminal();
     });
@@ -274,22 +291,30 @@ async function startCliLogin() {
       loginEventSource?.close();
       loginEventSource = null;
     });
-    loginEventSource.addEventListener('error_event', (e: MessageEvent) => {
-      const data = JSON.parse(e.data);
-      loginError.value = data.message || 'Login failed';
-      loginStatus.value = 'error';
-      loginEventSource?.close();
-      loginEventSource = null;
+    loginEventSource.addEventListener('error', (e: MessageEvent) => {
+      try {
+        const data = JSON.parse(e.data);
+        loginError.value = data.message || 'Login failed';
+        loginStatus.value = 'error';
+        loginEventSource?.close();
+        loginEventSource = null;
+      } catch {
+        // Non-JSON error event (SSE connection error) — handled by onerror
+      }
     });
     loginEventSource.onerror = () => {
-      if (loginStatus.value === 'streaming') {
-        // SSE closed unexpectedly — treat as error, not success.
-        // Normal completions arrive via the 'complete' event above.
-        loginError.value = 'Connection lost — login may not have completed. Please retry.';
-        loginStatus.value = 'error';
-      }
-      loginEventSource?.close();
-      loginEventSource = null;
+      // SSE connections can drop during OAuth redirects. Give a short grace
+      // period so the 'complete' event can still arrive before we declare an
+      // error. If status already moved past 'streaming', do nothing.
+      const es = loginEventSource;
+      setTimeout(() => {
+        if (loginStatus.value === 'streaming') {
+          loginError.value = t('accountWizard.connectionLost');
+          loginStatus.value = 'error';
+        }
+        es?.close();
+        if (loginEventSource === es) loginEventSource = null;
+      }, 2000);
     };
   } catch (e: unknown) {
     loginError.value = e instanceof Error ? e.message : 'Failed to start login session';
@@ -299,11 +324,30 @@ async function startCliLogin() {
 
 async function sendResponse() {
   if (!userResponse.value.trim() || !loginSessionId.value) return;
+  const iid = pendingInteractionId.value || 'wizard';
   try {
-    await backendApi.respondConnect(props.backendId, loginSessionId.value, 'wizard', { text: userResponse.value.trim() });
+    await backendApi.respondConnect(props.backendId, loginSessionId.value, iid, { answer: userResponse.value.trim() });
     loginLines.value.push(`> ${userResponse.value.trim()}`);
     userResponse.value = '';
     pendingQuestion.value = '';
+    pendingOptions.value = [];
+    pendingInteractionId.value = '';
+    scrollTerminal();
+  } catch {
+    // Ignore — session may have ended
+  }
+}
+
+async function selectOption(option: string, _index: number) {
+  if (!loginSessionId.value) return;
+  const iid = pendingInteractionId.value || 'wizard';
+  try {
+    // Backend expects { answer: "option text" } — it resolves the index from the options list
+    await backendApi.respondConnect(props.backendId, loginSessionId.value, iid, { answer: option });
+    loginLines.value.push(`> ${option}`);
+    pendingQuestion.value = '';
+    pendingOptions.value = [];
+    pendingInteractionId.value = '';
     scrollTerminal();
   } catch {
     // Ignore — session may have ended
@@ -374,6 +418,8 @@ function addAnotherAccount() {
   loginLines.value = [];
   loginError.value = '';
   pendingQuestion.value = '';
+  pendingOptions.value = [];
+  pendingInteractionId.value = '';
   userResponse.value = '';
   dirCreated.value = false;
   currentStep.value = 'subscription';
@@ -382,7 +428,7 @@ function addAnotherAccount() {
 </script>
 
 <template>
-  <div class="wizard-container">
+  <div class="wizard-container" data-tour="account-wizard">
     <div class="wizard-header">
       <h3>{{ t('accountWizard.addAccount') }}</h3>
       <button class="wizard-close" @click="emit('close')">&times;</button>
@@ -423,14 +469,14 @@ function addAnotherAccount() {
             <input type="radio" v-model="hasSubscription" value="yes" />
             <div class="radio-card-content">
               <span class="radio-card-title">{{ t('accountWizard.yesHaveAccount') }}</span>
-              <span class="radio-card-desc">I have credentials and want to register this backend</span>
+              <span class="radio-card-desc">{{ t('accountWizard.yesHaveAccountDesc') }}</span>
             </div>
           </label>
           <label class="radio-card" :class="{ selected: hasSubscription === 'no' }">
             <input type="radio" v-model="hasSubscription" value="no" />
             <div class="radio-card-content">
               <span class="radio-card-title">{{ t('accountWizard.noSkip') }}</span>
-              <span class="radio-card-desc">I don't have a subscription or want to set it up later</span>
+              <span class="radio-card-desc">{{ t('accountWizard.noSkipDesc') }}</span>
             </div>
           </label>
         </div>
@@ -457,7 +503,7 @@ function addAnotherAccount() {
                 type="email"
                 :placeholder="t('accountWizard.emailPlaceholder')"
               />
-              <small>Login email for this account (optional)</small>
+              <small>{{ t('accountWizard.emailHelp') }}</small>
             </div>
           </div>
         </Transition>
@@ -580,25 +626,11 @@ function addAnotherAccount() {
     <!-- Step 3: Login -->
     <div v-if="currentStep === 'login'" class="wizard-step">
       <div class="step-body">
-        <!-- Idle — show start button -->
-        <template v-if="loginStatus === 'idle'">
-          <p class="step-description">Authenticate your {{ props.backendName }} account via CLI login.</p>
-          <button class="btn btn-primary login-start-btn" @click="startCliLogin">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
-              <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/>
-              <polyline points="10 17 15 12 10 7"/>
-              <line x1="15" y1="12" x2="3" y2="12"/>
-            </svg>
-            Start Login
-          </button>
-          <div class="skip-note">{{ t('accountWizard.loginOptional') }}</div>
-        </template>
-
-        <!-- Connecting -->
-        <template v-else-if="loginStatus === 'connecting'">
+        <!-- Idle / Connecting -->
+        <template v-if="loginStatus === 'idle' || loginStatus === 'connecting'">
           <div class="login-status login-connecting">
             <div class="spinner-sm"></div>
-            <span>Starting login session...</span>
+            <span>{{ t('accountWizard.startingLogin') }}</span>
           </div>
         </template>
 
@@ -608,7 +640,21 @@ function addAnotherAccount() {
             <div class="login-terminal-output">
               <div v-for="(line, i) in loginLines" :key="i" class="terminal-line" v-html="line"></div>
             </div>
-            <div v-if="pendingQuestion" class="login-terminal-input">
+            <!-- Option buttons when CLI asks a multiple-choice question -->
+            <div v-if="pendingOptions.length > 0" class="login-options">
+              <p v-if="pendingQuestion" class="login-question-text">{{ pendingQuestion }}</p>
+              <button
+                v-for="(opt, i) in pendingOptions"
+                :key="i"
+                class="login-option"
+                @click="selectOption(opt, i)"
+              >
+                <span class="login-option-number">{{ i + 1 }}</span>
+                <span class="login-option-label">{{ opt }}</span>
+              </button>
+            </div>
+            <!-- Free-text input when no options provided -->
+            <div v-else-if="pendingQuestion" class="login-terminal-input">
               <span class="terminal-prompt">&gt;</span>
               <input
                 v-model="userResponse"
@@ -617,7 +663,7 @@ function addAnotherAccount() {
                 @keydown.enter="sendResponse"
                 autofocus
               />
-              <button class="btn btn-sm btn-primary" @click="sendResponse">Send</button>
+              <button class="btn btn-sm btn-primary" @click="sendResponse">{{ t('accountWizard.send') }}</button>
             </div>
           </div>
         </template>
@@ -628,7 +674,7 @@ function addAnotherAccount() {
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
               <polyline points="20 6 9 17 4 12"/>
             </svg>
-            <span>Login completed successfully</span>
+            <span>{{ t('accountWizard.loginCompleted') }}</span>
           </div>
         </template>
 
@@ -642,7 +688,7 @@ function addAnotherAccount() {
             </svg>
             <span>{{ loginError }}</span>
           </div>
-          <button class="btn btn-secondary" style="margin-top: 12px;" @click="loginStatus = 'idle'">Try Again</button>
+          <button class="btn btn-secondary" style="margin-top: 12px;" @click="loginStatus = 'idle'">{{ t('accountWizard.tryAgain') }}</button>
         </template>
       </div>
       <div class="step-actions">
@@ -731,7 +777,7 @@ function addAnotherAccount() {
             {{ t('accountWizard.addAnother') }}
           </button>
           <button class="btn btn-primary" @click="emit('done')">
-            Done — Next Backend
+            {{ t('accountWizard.doneNextBackend') }}
           </button>
         </div>
       </div>
@@ -1255,63 +1301,59 @@ function addAnotherAccount() {
   color: var(--accent-cyan);
 }
 
-/* Login options (kept for potential future use) */
+/* Login interactive options — clickable buttons for CLI questions */
 .login-options {
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
-  margin-bottom: 1rem;
+  gap: 8px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--border-default);
+}
+
+.login-question-text {
+  margin: 0 0 8px 0;
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.4;
 }
 
 .login-option {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
-  padding: 1rem;
+  gap: 10px;
+  padding: 10px 14px;
   background: var(--bg-secondary);
   border: 1px solid var(--border-default);
   border-radius: 8px;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: border-color 0.15s ease, background 0.15s ease;
+  text-align: left;
+  font-family: inherit;
 }
 
-.login-option:hover:not(.disabled) {
-  border-color: var(--primary-color);
-  background: var(--bg-hover, var(--bg-secondary));
+.login-option:hover {
+  border-color: var(--accent-cyan);
+  background: rgba(0, 207, 253, 0.05);
 }
 
-.login-option.disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.login-option-icon {
+.login-option-number {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 40px;
-  height: 40px;
-  border-radius: 8px;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
   background: var(--bg-tertiary);
   color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
   flex-shrink: 0;
 }
 
-.login-option-content {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-}
-
-.login-option-title {
-  font-size: 0.875rem;
-  font-weight: 600;
+.login-option-label {
+  font-size: 13px;
+  font-weight: 500;
   color: var(--text-primary);
-}
-
-.login-option-desc {
-  font-size: 0.75rem;
-  color: var(--text-secondary);
 }
 
 .login-option-arrow {

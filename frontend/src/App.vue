@@ -47,8 +47,15 @@ const tourSubstepLabel = computed(() => TOUR_STEP_MAP[tour.currentStep.value]?.s
 const tourGuideOverride = ref<string | null>(null);
 provide('setTourGuide', (msg: string | null) => { tourGuideOverride.value = msg; });
 
-// Reset override when step changes
-watch(() => tour.currentStep.value, () => { tourGuideOverride.value = null; });
+// Dynamic target override — components (e.g. AccountWizard) can redirect the spotlight
+const tourTargetOverride = ref<string | null>(null);
+provide('setTourTarget', (selector: string | null) => { tourTargetOverride.value = selector; });
+
+// Reset overrides when step changes
+watch(() => tour.currentStep.value, () => {
+  tourGuideOverride.value = null;
+  tourTargetOverride.value = null;
+});
 
 const tourStepWithGuide = computed(() => {
   if (!tourStep.value) return null;
@@ -361,7 +368,7 @@ onUnmounted(() => {
     <TourOverlay
       :active="tourActive"
       :step="tourStepWithGuide"
-      :effective-target="null"
+      :effective-target="tourTargetOverride ? { target: tourTargetOverride } : null"
       :substep-label="tourSubstepLabel"
       :step-number="tourStepNumber"
       :total-steps="TOTAL_TOUR_STEPS"

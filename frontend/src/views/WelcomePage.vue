@@ -172,7 +172,10 @@ function continueToApp() {
           <div v-if="generatedKey" class="keygen-result">
             <div class="key-display">
               <code class="key-value">{{ generatedKey }}</code>
-              <button class="copy-btn" @click="copyKey">{{ copied ? t('welcome.copied') : t('welcome.copyKey') }}</button>
+              <button class="copy-btn" :class="{ 'copy-btn--copied': copied }" @click="copyKey">
+                <svg v-if="copied" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><polyline points="20 6 9 17 4 12"/></svg>
+                {{ copied ? t('welcome.copied') : t('welcome.copyKey') }}
+              </button>
             </div>
             <button data-test="continue-btn" class="continue-btn" @click="continueToApp">{{ t('welcome.continue') }}</button>
           </div>
@@ -593,6 +596,9 @@ function continueToApp() {
 }
 
 .copy-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   padding: 6px 14px;
   background: rgba(255, 255, 255, 0.08);
   color: #a1a1aa;
@@ -609,6 +615,21 @@ function continueToApp() {
 .copy-btn:hover {
   background: rgba(255, 255, 255, 0.12);
   color: #fafafa;
+}
+
+.copy-btn--copied {
+  background: rgba(34, 197, 94, 0.15);
+  color: #4ade80;
+  border-color: rgba(34, 197, 94, 0.3);
+}
+
+.copy-btn--copied svg {
+  flex-shrink: 0;
+}
+
+.copy-btn--copied:hover {
+  background: rgba(34, 197, 94, 0.2);
+  color: #4ade80;
 }
 
 .continue-btn {

@@ -288,7 +288,7 @@ class BackendService:
 
     @staticmethod
     def start_connect(
-        backend_id: str, config_path: Optional[str] = None
+        backend_id: str, config_path: Optional[str] = None, email: Optional[str] = None
     ) -> Tuple[dict, HTTPStatus]:
         """Start an OAuth login session for a backend CLI."""
         from ..services.backend_cli_service import BACKEND_CLI_COMMANDS, BackendCLIService
@@ -316,6 +316,7 @@ class BackendService:
                 backend_type=btype,
                 action="login",
                 config_path=config_path,
+                email=email,
             )
         except ValueError as e:
             return error_response("BAD_REQUEST", str(e), HTTPStatus.BAD_REQUEST)

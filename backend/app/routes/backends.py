@@ -94,7 +94,10 @@ def start_connect(path: BackendPath):
     """Start an OAuth login session for a backend CLI."""
     body = request.get_json(silent=True) or {}
     config_path = body.get("config_path")
-    result, status = BackendService.start_connect(path.backend_id, config_path=config_path)
+    user_email = body.get("email")
+    result, status = BackendService.start_connect(
+        path.backend_id, config_path=config_path, email=user_email
+    )
     return result, status
 
 
