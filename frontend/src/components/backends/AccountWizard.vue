@@ -149,8 +149,8 @@ async function checkCli() {
     const result = await backendApi.check(props.backendId);
     cliInstalled.value = result.installed;
     cliVersion.value = result.version || '';
-  } catch {
-    // Keep existing state
+  } catch (e: unknown) {
+    console.warn('[AccountWizard] CLI check failed, keeping existing state:', e);
   } finally {
     isCheckingCli.value = false;
   }
@@ -262,29 +262,34 @@ async function startCliLogin() {
     const streamUrl = backendApi.streamConnectUrl(props.backendId, result.session_id);
     loginEventSource = createAuthenticatedEventSource(streamUrl);
     loginEventSource.addEventListener('log', (e: MessageEvent) => {
-      const data = JSON.parse(e.data);
-      const text = data.content || data.text || '';
-      if (text) {
-        loginLines.value.push(text);
-        scrollTerminal();
-      }
+      try {
+        const data = JSON.parse(e.data);
+        const text = data.content || data.text || '';
+        if (text) {
+          loginLines.value.push(text);
+          scrollTerminal();
+        }
+      } catch { /* skip malformed SSE data */ }
     });
     loginEventSource.addEventListener('question', (e: MessageEvent) => {
-      const data = JSON.parse(e.data);
-      pendingQuestion.value = data.prompt || data.text || data.question || '';
-      pendingInteractionId.value = data.interaction_id || '';
-      pendingOptions.value = data.options || [];
-      if (!data.options?.length) {
-        // Free-text question — show in terminal
-        loginLines.value.push(pendingQuestion.value);
-      }
-      scrollTerminal();
+      try {
+        const data = JSON.parse(e.data);
+        pendingQuestion.value = data.prompt || data.text || data.question || '';
+        pendingInteractionId.value = data.interaction_id || '';
+        pendingOptions.value = data.options || [];
+        if (!data.options?.length) {
+          loginLines.value.push(pendingQuestion.value);
+        }
+        scrollTerminal();
+      } catch { /* skip malformed SSE data */ }
     });
     loginEventSource.addEventListener('oauth_url', (e: MessageEvent) => {
-      const data = JSON.parse(e.data);
-      if (data.url) window.open(data.url, '_blank');
-      loginLines.value.push(`Opening browser for authentication...`);
-      scrollTerminal();
+      try {
+        const data = JSON.parse(e.data);
+        if (data.url) window.open(data.url, '_blank');
+        loginLines.value.push(`Opening browser for authentication...`);
+        scrollTerminal();
+      } catch { /* skip malformed SSE data */ }
     });
     loginEventSource.addEventListener('complete', () => {
       loginStatus.value = 'completed';
@@ -299,7 +304,13 @@ async function startCliLogin() {
         loginEventSource?.close();
         loginEventSource = null;
       } catch {
-        // Non-JSON error event (SSE connection error) — handled by onerror
+        // Non-JSON: use raw data as error message if available
+        if (e.data) {
+          loginError.value = String(e.data);
+          loginStatus.value = 'error';
+          loginEventSource?.close();
+          loginEventSource = null;
+        }
       }
     });
     loginEventSource.onerror = () => {
@@ -333,8 +344,11 @@ async function sendResponse() {
     pendingOptions.value = [];
     pendingInteractionId.value = '';
     scrollTerminal();
-  } catch {
-    // Ignore — session may have ended
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : 'Failed to send response';
+    if (msg.includes('404') || msg.includes('not found')) return;
+    loginLines.value.push(`Error: ${msg}`);
+    scrollTerminal();
   }
 }
 
@@ -349,8 +363,11 @@ async function selectOption(option: string, _index: number) {
     pendingOptions.value = [];
     pendingInteractionId.value = '';
     scrollTerminal();
-  } catch {
-    // Ignore — session may have ended
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : 'Failed to send response';
+    if (msg.includes('404') || msg.includes('not found')) return;
+    loginLines.value.push(`Error: ${msg}`);
+    scrollTerminal();
   }
 }
 
@@ -367,7 +384,9 @@ function cleanupLogin() {
     loginEventSource = null;
   }
   if (loginSessionId.value) {
-    backendApi.cancelConnect(props.backendId, loginSessionId.value).catch(() => {});
+    backendApi.cancelConnect(props.backendId, loginSessionId.value).catch((e) => {
+      console.warn('[AccountWizard] Failed to cancel login session:', e);
+    });
   }
 }
 

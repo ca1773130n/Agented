@@ -666,7 +666,6 @@ class BackendCLIService:
                 # Numbered menu: navigate to the selected option using arrow keys + Enter
                 answer = response.get("answer", "")
                 options = interaction.get("options", [])
-                interaction["_option_numbers"]
                 try:
                     idx = options.index(answer)
                     logger.info(
