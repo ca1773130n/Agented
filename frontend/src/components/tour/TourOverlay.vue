@@ -191,24 +191,52 @@ function startObserverWithTimeouts() {
   }
 }
 
+// Derive the target selector so we only fully reset when it actually changes
+// (not on message-only guide updates, which would cause tooltip to jump from top-left).
+const currentTargetSelector = computed(() =>
+  props.effectiveTarget?.target || props.step?.target || null
+)
+
+// Track step identity to detect same-selector-different-step changes
+// (e.g. backends.claude → backends.gemini both use [data-tour="add-account-btn"])
+const stepIdentity = computed(() =>
+  `${currentTargetSelector.value}::${props.step?.title}::${props.step?.skippable}`
+)
+
 watch(
-  [() => props.active, () => props.step, () => props.effectiveTarget],
-  () => {
-    if (!props.active) {
+  [() => props.active, stepIdentity],
+  ([active, newId], [_prevActive, prevId] = [false, '']) => {
+    if (!active) {
       cleanup()
       return
     }
 
-    // Reset on step/target change — clear immediately to avoid stale rects
+    const selectorChanged = currentTargetSelector.value !==
+      (prevId ? prevId.split('::')[0] : null)
+    const stepChanged = newId !== prevId
+
+    if (!stepChanged) return // Only message changed — skip entirely
+
     loadingTimedOut.value = false
     elementNotFoundTimeout.value = false
     clearTimers()
-    stopTracking()
-    disconnectResizeObserver()
-    targetEl.value = null
-    targetRect.value = null
 
-    // Delay search to let route transition complete (avoids finding stale elements)
+    // Full reset only when the CSS selector itself changed
+    if (selectorChanged) {
+      stopTracking()
+      disconnectResizeObserver()
+      targetEl.value = null
+      targetRect.value = null
+    } else {
+      // Same selector, different step (e.g. route changed) —
+      // invalidate the element ref so findTarget re-queries the DOM,
+      // but keep targetRect so the tooltip doesn't jump to (0,0).
+      targetEl.value = null
+      stopTracking()
+      disconnectResizeObserver()
+    }
+
+    // Delay search to let route transition complete
     setTimeout(() => {
       if (!props.active) return
       findTarget()
@@ -264,7 +292,7 @@ onUnmounted(() => {
 
     <!-- Element-not-found fallback (OB-41) — takes precedence over loading timeout -->
     <div v-if="!targetEl && elementNotFoundTimeout" class="tour-element-fallback">
-      <p>We couldn't find <strong>{{ currentTargetName }}</strong>.</p>
+      <p v-html="t('tour.elementNotFound', { element: `<strong>${currentTargetName}</strong>` })"></p>
       <div class="fallback-actions">
         <button class="btn-fallback-skip" @click="$emit('skip')">{{ t('common.skip') }}</button>
         <button class="btn-fallback-retry" @click="handleElementRetry">{{ t('common.retry') }}</button>
@@ -273,7 +301,7 @@ onUnmounted(() => {
 
     <!-- Loading timeout fallback (OB-40) — shows when route is slow but element timeout hasn't fired yet -->
     <div v-else-if="!targetEl && loadingTimedOut" class="tour-timeout-fallback">
-      <p class="fallback-text">This page is taking longer than expected.</p>
+      <p class="fallback-text">{{ t('tour.pageSlow') }}</p>
       <div class="fallback-actions">
         <button class="btn-fallback-skip" @click="$emit('skip')">{{ t('common.skip') }}</button>
         <button class="btn-fallback-retry" @click="handleRetry">{{ t('common.retry') }}</button>

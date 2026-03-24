@@ -93,10 +93,15 @@ export const backendApi = {
     }),
 
   // Connect (OAuth login) operations
-  startConnect: (backendId: string, configPath?: string) =>
+  startConnect: (backendId: string, configPath?: string, email?: string) =>
     apiFetch<{ session_id: string; status: string }>(`/admin/backends/${backendId}/connect`, {
       method: 'POST',
-      body: configPath ? JSON.stringify({ config_path: configPath }) : undefined,
+      body: (configPath || email)
+        ? JSON.stringify({
+            ...(configPath ? { config_path: configPath } : {}),
+            ...(email ? { email } : {}),
+          })
+        : undefined,
     }),
 
   streamConnectUrl: (backendId: string, sessionId: string): string =>

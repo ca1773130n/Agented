@@ -58,11 +58,15 @@ watch(
   () => props.visible,
   (newVal) => {
     if (newVal) {
-      // Small delay to let Floating UI compute position before showing
+      // Wait for Floating UI to compute position before fading in.
+      // Two rAF frames ensures the position is resolved (one for layout,
+      // one for Floating UI middleware to run).
       isTransitioning.value = true
       requestAnimationFrame(() => {
-        isVisible.value = true
-        isTransitioning.value = false
+        requestAnimationFrame(() => {
+          isVisible.value = true
+          isTransitioning.value = false
+        })
       })
     } else {
       isVisible.value = false
@@ -141,15 +145,11 @@ useFocusTrap(floating, isTrapActive)
   box-shadow: 0 8px 32px var(--tour-overlay-dim);
   pointer-events: auto;
   opacity: 0;
-  transform: translateY(4px);
-  transition:
-    opacity var(--tour-transition-speed) ease,
-    transform var(--tour-transition-speed) ease;
+  transition: opacity var(--tour-transition-speed) ease;
 }
 
 .tour-tooltip--visible {
   opacity: 1;
-  transform: translateY(0);
 }
 
 .tour-tooltip-title {
