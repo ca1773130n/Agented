@@ -100,6 +100,19 @@ ERROR_ID_LENGTH = 6
 FIX_ATTEMPT_ID_PREFIX = "fix-"
 FIX_ATTEMPT_ID_LENGTH = 6
 
+THREAD_ID_PREFIX = "thrd-"
+THREAD_ID_LENGTH = 6
+
+MEMORY_MSG_ID_PREFIX = "mmsg-"
+MEMORY_MSG_ID_LENGTH = 8
+
+# Structured tracing IDs
+TRACE_ID_PREFIX = "trc-"
+TRACE_ID_LENGTH = 8
+
+SPAN_ID_PREFIX = "span-"
+SPAN_ID_LENGTH = 8
+
 # Project-scoped instance IDs
 PSA_ID_PREFIX = "psa-"
 PSA_ID_LENGTH = 6
@@ -601,6 +614,26 @@ def generate_psa_id() -> str:
 def generate_pti_id() -> str:
     """Generate a unique project team instance ID like 'pti-abc123'."""
     return generate_id(PTI_ID_PREFIX, PTI_ID_LENGTH)
+
+
+def generate_thread_id() -> str:
+    """Generate a unique thread ID like 'thrd-abc123'."""
+    return generate_id(THREAD_ID_PREFIX, THREAD_ID_LENGTH)
+
+
+def generate_memory_message_id() -> str:
+    """Generate a unique memory message ID like 'mmsg-abc12345'."""
+    return generate_id(MEMORY_MSG_ID_PREFIX, MEMORY_MSG_ID_LENGTH)
+
+
+def generate_trace_id() -> str:
+    """Generate a unique trace ID like 'trc-abc12345'."""
+    return generate_id(TRACE_ID_PREFIX, TRACE_ID_LENGTH)
+
+
+def generate_span_id() -> str:
+    """Generate a unique span ID like 'span-abc12345'."""
+    return generate_id(SPAN_ID_PREFIX, SPAN_ID_LENGTH)
 
 
 def _get_unique_psa_id(conn) -> str:
