@@ -63,15 +63,31 @@ function persistSnapshot(
   }
 }
 
+const INSTANCE_ID_RETRIES = 2
+const INSTANCE_ID_RETRY_MS = 800
+
 async function fetchInstanceId(): Promise<string | null> {
-  try {
-    const resp = await fetch(`${API_BASE}/health/instance-id`)
-    if (!resp.ok) return null
-    const json = await resp.json()
-    return json.instance_id ?? null
-  } catch {
-    return null
+  for (let attempt = 0; attempt <= INSTANCE_ID_RETRIES; attempt++) {
+    try {
+      const resp = await fetch(`${API_BASE}/health/instance-id`)
+      if (!resp.ok) {
+        if (attempt < INSTANCE_ID_RETRIES) {
+          await new Promise(r => setTimeout(r, INSTANCE_ID_RETRY_MS))
+          continue
+        }
+        return null
+      }
+      const json = await resp.json()
+      return json.instance_id ?? null
+    } catch {
+      if (attempt < INSTANCE_ID_RETRIES) {
+        await new Promise(r => setTimeout(r, INSTANCE_ID_RETRY_MS))
+        continue
+      }
+      return null
+    }
   }
+  return null
 }
 
 async function fetchWithAuth<T>(url: string): Promise<T | null> {
@@ -166,6 +182,11 @@ async function initActor(): Promise<void> {
       localStorage.removeItem(STORAGE_KEY)
     } else if (remoteInstanceId && persisted.instanceId && persisted.instanceId !== remoteInstanceId) {
       // Instance ID mismatch — DB was reset
+      localStorage.removeItem(STORAGE_KEY)
+    } else if (!remoteInstanceId && persisted.instanceId) {
+      // Backend unreachable but we have persisted state tied to an instance —
+      // cannot validate, so discard to avoid restoring stale tour from a
+      // previous DB that was wiped (e.g. `just reset && just deploy`).
       localStorage.removeItem(STORAGE_KEY)
     } else if (persisted.snapshot) {
       shouldRestore = true

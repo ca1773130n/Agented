@@ -36,7 +36,7 @@
     "generateFailed": "Failed to generate API key. Please try again.",
     "tryAgain": "Try again",
     "copyKey": "Copy",
-    "copied": "Copied",
+    "copied": "Copied!",
     "continue": "Continue →",
     "bento": {
       "vision": "Vision",
@@ -110,8 +110,8 @@
         "message": "Projects track work within a product. Click to add your first project."
       },
       "team": {
-        "title": "Set Up a Team",
-        "message": "Teams assign agents to projects. Set up a team to start running bots."
+        "title": "Assign Teams to Project",
+        "message": "Bundled teams with pre-configured super agents are ready to use — just assign them here. You can create custom teams and agents later."
       }
     }
   },
@@ -159,6 +159,7 @@
     "send": "Send",
     "loginCompleted": "Login completed successfully",
     "tryAgain": "Try Again",
+    "waitingForResponse": "Waiting for response...",
     "doneNextBackend": "Done — Next Backend",
     "connectionLost": "Connection lost — login may not have completed. Please retry.",
     "stepSubscription": "Subscription",

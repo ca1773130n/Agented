@@ -15,8 +15,10 @@ import { useListFilter } from '../composables/useListFilter';
 import { useFocusTrap } from '../composables/useFocusTrap';
 import { usePagination } from '../composables/usePagination';
 import { useWebMcpPageTools } from '../webmcp/useWebMcpPageTools';
+import { useTourMachine } from '../composables/useTourMachine';
 
 const router = useRouter();
+const tourMachine = useTourMachine();
 const showToast = useToast();
 
 const products = ref<Product[]>([]);
@@ -105,7 +107,7 @@ async function createProduct() {
     return;
   }
   try {
-    await productApi.create({
+    const result = await productApi.create({
       name: newProduct.value.name,
       description: newProduct.value.description || undefined,
       status: newProduct.value.status,
@@ -115,6 +117,14 @@ async function createProduct() {
     showCreateModal.value = false;
     newProduct.value = { name: '', description: '', status: 'active', owner_team_id: '' };
     await loadProducts();
+    // Advance tour past create_product step and navigate to product detail
+    if (tourMachine.isActive.value) {
+      const productId = result?.product?.id;
+      if (productId) {
+        await router.push(`/products/${productId}`);
+      }
+      tourMachine.nextStep();
+    }
   } catch (e) {
     if (e instanceof ApiError) {
       showToast(e.message, 'error');

@@ -288,9 +288,8 @@ describe('TourOverlay', () => {
       expect(wrapper.find('.tour-spinner').exists()).toBe(true)
       expect(wrapper.find('.tour-timeout-fallback').exists()).toBe(false)
 
-      // Advance past nextTick delay (100ms) + 5s timeout
-      await vi.advanceTimersByTimeAsync(200) // past nextTick + 100ms delay
-      await vi.advanceTimersByTimeAsync(5001)
+      // Advance past retry sequence (~7.3s) + observer timeouts (5s loading)
+      await vi.advanceTimersByTimeAsync(13000)
 
       expect(wrapper.find('.tour-spinner').exists()).toBe(false)
       // Element-not-found (3s) fires before loading timeout (5s), so element fallback shows
@@ -306,9 +305,8 @@ describe('TourOverlay', () => {
         props: { active: true, step: workspaceStep, effectiveTarget: workspaceStep, substepLabel: null, stepNumber: 2, totalSteps: 8 },
       })
 
-      // Advance past nextTick + 100ms + 3s element timeout
-      await vi.advanceTimersByTimeAsync(200)
-      await vi.advanceTimersByTimeAsync(3001)
+      // Advance past retry sequence (~7.3s) + 3s element-not-found timeout
+      await vi.advanceTimersByTimeAsync(11000)
 
       expect(wrapper.find('.tour-element-fallback').exists()).toBe(true)
       expect(wrapper.text()).toContain("We couldn't find")
@@ -324,8 +322,7 @@ describe('TourOverlay', () => {
         props: { active: true, step: workspaceStep, effectiveTarget: workspaceStep, substepLabel: null, stepNumber: 2, totalSteps: 8 },
       })
 
-      await vi.advanceTimersByTimeAsync(200)
-      await vi.advanceTimersByTimeAsync(3001)
+      await vi.advanceTimersByTimeAsync(11000)
 
       const skipBtn = wrapper.find('.btn-fallback-skip')
       expect(skipBtn.exists()).toBe(true)
@@ -342,8 +339,7 @@ describe('TourOverlay', () => {
         props: { active: true, step: workspaceStep, effectiveTarget: workspaceStep, substepLabel: null, stepNumber: 2, totalSteps: 8 },
       })
 
-      await vi.advanceTimersByTimeAsync(200)
-      await vi.advanceTimersByTimeAsync(3001)
+      await vi.advanceTimersByTimeAsync(11000)
 
       expect(wrapper.find('.tour-element-fallback').exists()).toBe(true)
 

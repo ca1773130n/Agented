@@ -92,19 +92,29 @@ class TestMemoryMessages:
 
     def test_count_messages(self, isolated_db):
         thread = create_thread("agent-test01", "agent", "Count Test")
-        save_messages(thread["id"], [
-            {"role": "user", "content": "Msg 1"},
-            {"role": "assistant", "content": "Msg 2"},
-            {"role": "user", "content": "Msg 3"},
-        ])
+        save_messages(
+            thread["id"],
+            [
+                {"role": "user", "content": "Msg 1"},
+                {"role": "assistant", "content": "Msg 2"},
+                {"role": "user", "content": "Msg 3"},
+            ],
+        )
         assert count_messages(thread["id"]) == 3
 
     def test_messages_with_metadata(self, isolated_db):
         thread = create_thread("agent-test01", "agent", "Meta Msg")
-        save_messages(thread["id"], [
-            {"role": "tool", "content": "result", "type": "tool_result",
-             "metadata": {"tool_name": "search"}},
-        ])
+        save_messages(
+            thread["id"],
+            [
+                {
+                    "role": "tool",
+                    "content": "result",
+                    "type": "tool_result",
+                    "metadata": {"tool_name": "search"},
+                },
+            ],
+        )
         fetched = get_messages(thread["id"])
         assert fetched[0]["type"] == "tool_result"
         assert fetched[0]["metadata"]["tool_name"] == "search"
@@ -157,12 +167,15 @@ class TestSemanticRecall:
 
     def test_recall_basic(self, isolated_db):
         thread = create_thread("agent-test01", "agent", "Recall Test")
-        save_messages(thread["id"], [
-            {"role": "user", "content": "The project deadline is next Friday"},
-            {"role": "assistant", "content": "I'll make sure to prioritize tasks"},
-            {"role": "user", "content": "We need to fix the login bug"},
-            {"role": "assistant", "content": "I'll look into the authentication issue"},
-        ])
+        save_messages(
+            thread["id"],
+            [
+                {"role": "user", "content": "The project deadline is next Friday"},
+                {"role": "assistant", "content": "I'll make sure to prioritize tasks"},
+                {"role": "user", "content": "We need to fix the login bug"},
+                {"role": "assistant", "content": "I'll look into the authentication issue"},
+            ],
+        )
 
         results = recall_messages(
             thread_id=thread["id"],

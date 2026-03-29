@@ -4169,8 +4169,7 @@ def _migrate_97_agent_memory_tables(conn):
         "ON memory_threads(resource_id, resource_type)"
     )
     conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_memory_threads_updated "
-        "ON memory_threads(updated_at DESC)"
+        "CREATE INDEX IF NOT EXISTS idx_memory_threads_updated ON memory_threads(updated_at DESC)"
     )
 
     # memory_messages
@@ -4250,9 +4249,7 @@ def _migrate_98_tracing_tables(conn):
     """Create structured tracing tables: traces and trace_spans."""
     tables_created = []
 
-    cursor = conn.execute(
-        "SELECT name FROM sqlite_master WHERE type='table' AND name='traces'"
-    )
+    cursor = conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='traces'")
     if cursor.fetchone() is None:
         conn.execute("""
             CREATE TABLE IF NOT EXISTS traces (
@@ -4305,15 +4302,12 @@ def _migrate_98_tracing_tables(conn):
             )
         """)
         conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_trace_spans_trace "
-            "ON trace_spans(trace_id, started_at)"
+            "CREATE INDEX IF NOT EXISTS idx_trace_spans_trace ON trace_spans(trace_id, started_at)"
         )
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_trace_spans_parent ON trace_spans(parent_span_id)"
         )
-        conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_trace_spans_type ON trace_spans(span_type)"
-        )
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_trace_spans_type ON trace_spans(span_type)")
         tables_created.append("trace_spans")
 
     if tables_created:

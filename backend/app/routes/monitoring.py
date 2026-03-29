@@ -1,6 +1,9 @@
 """Monitoring API endpoints for rate limit window tracking."""
 
+import logging
 from http import HTTPStatus
+
+logger = logging.getLogger(__name__)
 
 from flask import request
 from flask_openapi3 import APIBlueprint, Tag
@@ -84,9 +87,8 @@ def poll_now():
     try:
         MonitoringService._poll_usage()
     except Exception as e:
-        return error_response(
-            "INTERNAL_SERVER_ERROR", f"Poll failed: {e}", HTTPStatus.INTERNAL_SERVER_ERROR
-        )
+        # Log but don't fail — return whatever status we have
+        logger.warning("Monitoring poll had errors: %s", e)
 
     status = MonitoringService.get_monitoring_status()
     return status, HTTPStatus.OK

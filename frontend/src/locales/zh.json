@@ -36,7 +36,7 @@
     "generateFailed": "API 密钥生成失败，请重试。",
     "tryAgain": "重试",
     "copyKey": "复制",
-    "copied": "已复制",
+    "copied": "已复制!",
     "continue": "继续 →",
     "bento": {
       "vision": "愿景",
@@ -110,8 +110,8 @@
         "message": "项目用于追踪产品内的工作。点击添加你的第一个项目。"
       },
       "team": {
-        "title": "设置团队",
-        "message": "团队将智能体分配给项目。设置团队后即可开始运行机器人。"
+        "title": "为项目分配团队",
+        "message": "预配置超级智能体的捆绑团队已就绪 — 在此分配给项目即可使用。之后还可以创建自定义团队和智能体。"
       }
     }
   },
@@ -159,6 +159,7 @@
     "send": "发送",
     "loginCompleted": "登录成功",
     "tryAgain": "重试",
+    "waitingForResponse": "等待响应中...",
     "doneNextBackend": "完成 — 下一个后端",
     "connectionLost": "连接中断 — 登录可能未完成，请重试。",
     "stepSubscription": "订阅",

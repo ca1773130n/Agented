@@ -239,8 +239,12 @@ class CLIProxyManager:
 
         if backend_type == "codex":
             return cls._start_codex_login(config_path, env)
-        else:
+        elif backend_type == "claude":
             return cls._start_claude_login(config_path, env)
+        elif backend_type == "gemini":
+            return cls._start_gemini_login(config_path, env)
+        else:
+            raise ValueError(f"Proxy login not supported for backend type: {backend_type}")
 
     @classmethod
     def _start_claude_login(cls, config_path: str, env: dict) -> tuple[subprocess.Popen, dict]:
@@ -343,6 +347,81 @@ class CLIProxyManager:
 
         logger.info("CLIProxy claude login: oauth_url=%s", oauth_url)
         return proc, {"url": oauth_url}
+
+    @classmethod
+    def _start_gemini_login(cls, config_path: str, env: dict) -> tuple[subprocess.Popen, dict]:
+        """Import Gemini CLI tokens into CLIProxyAPI.
+
+        cliproxyapi's Google OAuth uses a localhost callback that can't work
+        for remote deployments. Instead, we import the refresh_token from
+        the Gemini CLI's oauth_creds.json (written after the user completes
+        CLI login) into CLIProxyAPI's credential format.
+        """
+        import json as _json
+
+        from ..db.backends import get_backend_accounts
+
+        # Find Gemini CLI creds from any registered account
+        gemini_creds = None
+        gemini_email = None
+        for acct in get_backend_accounts("backend-gemini"):
+            cp = acct.get("config_path")
+            if cp:
+                cred_path = Path(os.path.expanduser(cp)) / ".gemini" / "oauth_creds.json"
+            else:
+                cred_path = Path.home() / ".gemini" / "oauth_creds.json"
+            if cred_path.exists():
+                try:
+                    gemini_creds = _json.loads(cred_path.read_text())
+                    gemini_email = acct.get("email") or acct.get("account_name") or ""
+                    break
+                except Exception:
+                    pass
+
+        if not gemini_creds or not gemini_creds.get("refresh_token"):
+            raise ValueError(
+                "Gemini CLI credentials not found. Complete Gemini CLI login first."
+            )
+
+        # Read cliproxyapi's client_id/secret from existing cred file
+        proxy_dir = Path.home() / ".cli-proxy-api"
+        client_id = "681255809395-oo8ft2oprdrnp9e3aqf6av3hmdib135j.apps.googleusercontent.com"
+        client_secret = ""
+        for f in proxy_dir.glob("gemini-*.json"):
+            try:
+                existing = _json.loads(f.read_text())
+                cs = existing.get("token", {}).get("client_secret")
+                if cs:
+                    client_secret = cs
+                    client_id = existing["token"].get("client_id", client_id)
+                    break
+            except Exception:
+                pass
+
+        # Write CLIProxyAPI credential file
+        cred_file = proxy_dir / f"gemini-{gemini_email or 'default'}.json"
+        cred_file.write_text(_json.dumps({
+            "auto": False, "checked": True,
+            "email": gemini_email, "project_id": "", "type": "gemini",
+            "token": {
+                "access_token": gemini_creds.get("access_token", ""),
+                "client_id": client_id, "client_secret": client_secret,
+                "expires_in": 3599, "expiry": "",
+                "refresh_token": gemini_creds["refresh_token"],
+                "scopes": [
+                    "https://www.googleapis.com/auth/cloud-platform",
+                    "https://www.googleapis.com/auth/userinfo.email",
+                    "https://www.googleapis.com/auth/userinfo.profile",
+                ],
+                "token_type": "Bearer",
+                "token_uri": "https://oauth2.googleapis.com/token",
+                "universe_domain": "googleapis.com",
+            },
+        }, indent=2))
+        logger.info("Imported Gemini CLI creds to CLIProxyAPI: %s", cred_file)
+
+        proc = subprocess.Popen(["true"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        return proc, {"url": None, "imported": True, "email": gemini_email}
 
     @classmethod
     def _start_codex_login(cls, config_path: str, env: dict) -> tuple[subprocess.Popen, dict]:

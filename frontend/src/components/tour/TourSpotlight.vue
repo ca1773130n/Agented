@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 
 const props = withDefaults(defineProps<{
   targetRect: DOMRect | null
@@ -8,6 +8,11 @@ const props = withDefaults(defineProps<{
 }>(), {
   reduced: false,
 })
+
+// Suppress the CSS transition when the target rect jumps significantly
+// (e.g., step change navigating to a different page) to avoid the spotlight
+// sliding through the top-left corner on its way to the new position.
+const suppressTransition = ref(false)
 
 const spotlightStyle = computed(() => {
   if (!props.targetRect) return {}
@@ -18,11 +23,31 @@ const spotlightStyle = computed(() => {
       .trim() || '8',
     10,
   )
-  return {
+  const style: Record<string, string> = {
     top: `${r.top - pad}px`,
     left: `${r.left - pad}px`,
     width: `${r.width + pad * 2}px`,
     height: `${r.height + pad * 2}px`,
+  }
+  if (suppressTransition.value) {
+    style.transition = 'none'
+  }
+  return style
+})
+
+watch(() => props.targetRect, (newRect, oldRect) => {
+  if (!newRect || !oldRect) {
+    // Target appeared or disappeared — skip transition to avoid sliding from/to (0,0)
+    suppressTransition.value = true
+    requestAnimationFrame(() => { suppressTransition.value = false })
+    return
+  }
+  // Large position jump (>200px) = different element, not a scroll/resize — skip transition
+  const dx = Math.abs(newRect.x - oldRect.x)
+  const dy = Math.abs(newRect.y - oldRect.y)
+  if (dx > 200 || dy > 200) {
+    suppressTransition.value = true
+    requestAnimationFrame(() => { suppressTransition.value = false })
   }
 })
 </script>

@@ -52,11 +52,19 @@ async function generateKey() {
 async function copyKey() {
   try {
     await navigator.clipboard.writeText(generatedKey.value);
-    copied.value = true;
-    setTimeout(() => { copied.value = false; }, 2000);
   } catch {
-    // Fallback: select the text
+    // Clipboard API may fail (non-HTTPS, no focus, etc.) — use fallback
+    const el = document.querySelector('.key-value') as HTMLElement | null;
+    if (el) {
+      const range = document.createRange();
+      range.selectNodeContents(el);
+      const sel = window.getSelection();
+      sel?.removeAllRanges();
+      sel?.addRange(range);
+    }
   }
+  // Always show visual feedback — stays until user navigates away
+  copied.value = true;
 }
 
 function continueToApp() {

@@ -226,20 +226,23 @@ async function loadMonitoringStatus() {
         }
       }
     }
-    await Promise.all([collectSessionUsage(), loadSessionStats(), loadAllTimeSpend(), status.windows ? loadTrendHistories(status.windows) : Promise.resolve()]);
+    // Load trend histories (parallel per-window, fast)
+    if (status.windows) await loadTrendHistories(status.windows);
   } catch { monitoringStatus.value = null; }
   finally { monitoringLoading.value = false; monitoringRefreshing.value = false; }
 }
 
-async function pollNow() {
+async function pollNow(silent = false) {
   pollNowLoading.value = true;
   try {
-    const status = await monitoringApi.pollNow();
+    const status = await monitoringApi.pollNow({ timeout: 120000 });
     monitoringStatus.value = status;
     checkAndNotifyThresholds();
     if (status.windows) await loadTrendHistories(status.windows);
-    showToast('Monitoring data refreshed', 'success');
-  } catch { showToast('Failed to poll monitoring data', 'error'); }
+    if (!silent) showToast('Monitoring data refreshed', 'success');
+  } catch {
+    if (!silent) showToast('Failed to poll monitoring data', 'error');
+  }
   finally { pollNowLoading.value = false; }
 }
 
@@ -368,9 +371,14 @@ watch(activeEntityTab, loadEntityData);
 watch(() => monitoringStatus.value?.polling_minutes, () => startMonitoringPolling());
 
 onMounted(async () => {
-  await Promise.all([collectSessionUsage(), pollNow(), loadSessionStats(), loadAllTimeSpend(), loadAgentsTeamsAndTriggers(), fetchRotationStatus()]);
+  // Load chart data and quick stats first (fast)
+  await Promise.all([loadSessionStats(), loadAllTimeSpend(), loadAgentsTeamsAndTriggers()]);
   startMonitoringPolling();
   startRotationPolling();
+  // Run slow operations in background — don't block page render
+  collectSessionUsage().catch(() => {});
+  pollNow(true).catch(() => {});
+  fetchRotationStatus().catch(() => {});
 });
 onUnmounted(() => {
   stopMonitoringPolling();
@@ -413,14 +421,13 @@ onUnmounted(() => {
       </div>
     </div>
 
-    <LoadingState v-if="sessionCollecting" message="Scanning local CLI sessions..." />
-    <LoadingState v-else-if="isLoading" message="Loading usage data..." />
+    <LoadingState v-if="isLoading" message="Loading usage data..." />
 
     <TokenBreakdownCard v-show="!isLoading" :total-input-tokens="totalInputTokens" :total-output-tokens="totalOutputTokens" :total-cache-read-tokens="totalCacheReadTokens" :total-cache-creation-tokens="totalCacheCreationTokens" :total-all-tokens="totalAllTokens" :cache-hit-rate="cacheHitRate" :period-label="periodLabel" :total-spend="totalSpend" :total-sessions="totalSessions" :total-turns="totalTurns" :total-executions="totalExecutions" :session-stats="sessionStats" :all-time-spend="allTimeSpend" />
     <MonitoringSection v-show="!isLoading" :monitoring-status="monitoringStatus" :monitoring-loading="monitoringLoading" :poll-now-loading="pollNowLoading" :monitoring-refreshing="monitoringRefreshing" :trend-histories="trendHistories" :expanded-cards="expandedCards" :selected-rate-windows="selectedRateWindows" :selected-projection-window="selectedProjectionWindow" :chart-time-range-start="chartTimeRangeStart" :chart-time-range-end="chartTimeRangeEnd" :rotation-sessions="rotationStatus?.sessions ?? []" :rotation-evaluator="rotationStatus?.evaluator ?? undefined" @poll-now="pollNow" @toggle-card="toggleCard" @update:selected-rate-windows="Object.assign(selectedRateWindows, $event)" @update:selected-projection-window="Object.assign(selectedProjectionWindow, $event)" />
 
-    <!-- Cost Trend Chart -->
-    <div class="section" v-show="!isLoading">
+    <!-- Cost Trend Chart — use v-if so Chart.js mounts with real dimensions -->
+    <div class="section" v-if="!isLoading">
       <div class="section-header">
         <h2 class="section-title">Cost Trend</h2>
         <div class="chart-type-toggle">

@@ -113,7 +113,7 @@ function onHashChange() {
 
 watch(activeTab, (newTab) => {
   window.location.hash = newTab;
-  if (newTab === 'marketplaces') {
+  if (newTab === 'marketplaces' || newTab === 'harness') {
     loadMarketplaces();
   }
 });
@@ -128,7 +128,7 @@ watch(() => route.hash, (newHash) => {
 
 onMounted(() => {
   activeTab.value = getTabFromHash();
-  if (activeTab.value === 'marketplaces') {
+  if (activeTab.value === 'marketplaces' || activeTab.value === 'harness') {
     loadMarketplaces();
   }
   window.addEventListener('hashchange', onHashChange);

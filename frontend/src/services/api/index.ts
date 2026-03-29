@@ -96,6 +96,8 @@ export { agentMemoryApi } from './agent-memory';
 export type { MemoryThread, MemoryMessage, WorkingMemory, MemoryConfig, ThreadListResponse, MessageListResponse, RecallResponse, SaveMessagesRequest } from './agent-memory';
 export { tracingApi } from './tracing';
 export type { Trace, TraceSpan, TraceStats, SpanType, TraceStatus, EntityType as TraceEntityType, TraceListResponse as TracingListResponse, SpanListResponse, CreateTraceRequest, EndTraceRequest, CreateSpanRequest, EndSpanRequest } from './tracing';
+export { knowledgeGraphApi } from './knowledge-graph';
+export type { KGEntity, KGRelation, KGSubgraph, KGStats } from './knowledge-graph';
 
 // Constant exports from types
 export { CLAUDE_MODELS, OPENCODE_MODELS } from './types';

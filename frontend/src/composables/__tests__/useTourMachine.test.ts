@@ -87,11 +87,17 @@ describe('useTourMachine', () => {
     })
 
     it('handles fetch failure gracefully', async () => {
+      vi.useFakeTimers()
       globalThis.fetch = vi.fn().mockRejectedValue(
         new Error('Network error'),
       ) as unknown as typeof fetch
       const { useTourMachine } = await import('../useTourMachine')
       const tour = useTourMachine()
+      // Advance past retry delays (2 retries × 800ms)
+      for (let i = 0; i < 3; i++) {
+        await vi.advanceTimersByTimeAsync(1000)
+      }
+      vi.useRealTimers()
       await vi.waitFor(() => {
         expect(tour.state.value).not.toBeNull()
       })
@@ -99,12 +105,18 @@ describe('useTourMachine', () => {
     })
 
     it('handles non-ok fetch response gracefully', async () => {
+      vi.useFakeTimers()
       globalThis.fetch = vi.fn().mockResolvedValue({
         ok: false,
         json: () => Promise.resolve({}),
       }) as unknown as typeof fetch
       const { useTourMachine } = await import('../useTourMachine')
       const tour = useTourMachine()
+      // Advance past retry delays (2 retries × 800ms)
+      for (let i = 0; i < 3; i++) {
+        await vi.advanceTimersByTimeAsync(1000)
+      }
+      vi.useRealTimers()
       await vi.waitFor(() => {
         expect(tour.state.value).not.toBeNull()
       })
@@ -237,6 +249,38 @@ describe('useTourMachine', () => {
       await vi.waitFor(() => {
         expect(tour.state.value).not.toBeNull()
       })
+      expect(tour.state.value).toBe('idle')
+    })
+  })
+
+  // -----------------------------------------------------------------------
+  // Persistence — backend unreachable with stale state
+  // -----------------------------------------------------------------------
+
+  describe('persistence - backend unreachable with stale state', () => {
+    it('discards persisted state when backend is unreachable (DB may have been reset)', async () => {
+      vi.useFakeTimers()
+      const snapshot = getSnapshotAtState([{ type: 'START' }, { type: 'NEXT' }])
+      localStorage.setItem(
+        STORAGE_KEY,
+        makePersistedData(snapshot, 'old-instance-uuid', 1),
+      )
+      // Backend is down — fetch fails
+      globalThis.fetch = vi.fn().mockRejectedValue(
+        new Error('Connection refused'),
+      ) as unknown as typeof fetch
+
+      const { useTourMachine } = await import('../useTourMachine')
+      const tour = useTourMachine()
+      // Advance past retry delays
+      for (let i = 0; i < 3; i++) {
+        await vi.advanceTimersByTimeAsync(1000)
+      }
+      vi.useRealTimers()
+      await vi.waitFor(() => {
+        expect(tour.state.value).not.toBeNull()
+      })
+      // Should start fresh (idle), not restore to 'workspace'
       expect(tour.state.value).toBe('idle')
     })
   })
@@ -879,7 +923,7 @@ describe('useTourMachine', () => {
       expect(tour.state.value).toBe('welcome')
     })
 
-    it('restores when remote instanceId is null (no mismatch check)', async () => {
+    it('discards when remote instanceId is null but persisted has one (backend unreachable)', async () => {
       globalThis.fetch = vi.fn().mockResolvedValue({
         ok: true,
         json: () => Promise.resolve({}), // null remote instance id
@@ -895,8 +939,8 @@ describe('useTourMachine', () => {
       await vi.waitFor(() => {
         expect(tour.state.value).not.toBeNull()
       })
-      // remoteInstanceId is null, so mismatch check is skipped — restore
-      expect(tour.state.value).toBe('welcome')
+      // Cannot validate instance — discard to prevent stale tour after DB reset
+      expect(tour.state.value).toBe('idle')
     })
   })
 

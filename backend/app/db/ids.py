@@ -113,6 +113,18 @@ TRACE_ID_LENGTH = 8
 SPAN_ID_PREFIX = "span-"
 SPAN_ID_LENGTH = 8
 
+EMBEDDING_ID_PREFIX = "emb-"
+EMBEDDING_ID_LENGTH = 8
+
+KG_ENTITY_ID_PREFIX = "kge-"
+KG_ENTITY_ID_LENGTH = 8
+
+KG_RELATION_ID_PREFIX = "kgr-"
+KG_RELATION_ID_LENGTH = 8
+
+CONSOLIDATION_ID_PREFIX = "cons-"
+CONSOLIDATION_ID_LENGTH = 8
+
 # Project-scoped instance IDs
 PSA_ID_PREFIX = "psa-"
 PSA_ID_LENGTH = 6
@@ -407,6 +419,11 @@ def generate_bookmark_id() -> str:
     return generate_id(BOOKMARK_ID_PREFIX, BOOKMARK_ID_LENGTH)
 
 
+def generate_embedding_id() -> str:
+    """Generate a unique embedding ID like 'emb-abc12345'."""
+    return generate_id(EMBEDDING_ID_PREFIX, EMBEDDING_ID_LENGTH)
+
+
 def generate_comment_id() -> str:
     """Generate a unique comment ID like 'cmt-abc123'."""
     return generate_id(COMMENT_ID_PREFIX, COMMENT_ID_LENGTH)
@@ -634,6 +651,21 @@ def generate_trace_id() -> str:
 def generate_span_id() -> str:
     """Generate a unique span ID like 'span-abc12345'."""
     return generate_id(SPAN_ID_PREFIX, SPAN_ID_LENGTH)
+
+
+def generate_kg_entity_id() -> str:
+    """Generate a unique KG entity ID like 'kge-abc12345'."""
+    return generate_id(KG_ENTITY_ID_PREFIX, KG_ENTITY_ID_LENGTH)
+
+
+def generate_kg_relation_id() -> str:
+    """Generate a unique KG relation ID like 'kgr-abc12345'."""
+    return generate_id(KG_RELATION_ID_PREFIX, KG_RELATION_ID_LENGTH)
+
+
+def generate_consolidation_id() -> str:
+    """Generate a unique consolidation ID like 'cons-abc12345'."""
+    return generate_id(CONSOLIDATION_ID_PREFIX, CONSOLIDATION_ID_LENGTH)
 
 
 def _get_unique_psa_id(conn) -> str:

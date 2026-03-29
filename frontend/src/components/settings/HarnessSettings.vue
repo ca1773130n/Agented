@@ -152,29 +152,26 @@ onMounted(() => {
           </div>
 
           <div v-if="harnessMarketplaceId" class="form-group">
-            <label>Plugin Name</label>
+            <label>Plugin</label>
+            <select
+              v-if="harnessPluginsList.length > 0"
+              :value="harnessPluginName"
+              @change="harnessPluginName = ($event.target as HTMLSelectElement).value"
+            >
+              <option value="">Select a plugin...</option>
+              <option v-for="plugin in harnessPluginsList" :key="plugin.id" :value="plugin.remote_name">
+                {{ plugin.remote_name }}{{ plugin.version ? ` (v${plugin.version})` : '' }}
+              </option>
+            </select>
             <input
+              v-else
               v-model="harnessPluginName"
               type="text"
-              placeholder="e.g., multi-cli-harness"
+              placeholder="e.g., harness-sync"
             />
-            <span class="help-text">
-              Enter the plugin folder name from the marketplace repository (e.g., "multi-cli-harness")
+            <span v-if="harnessPluginsList.length === 0" class="help-text">
+              No plugins installed from this marketplace yet. Enter a plugin name manually.
             </span>
-          </div>
-
-          <div v-if="harnessPluginsList.length > 0" class="installed-plugins-hint">
-            <span class="hint-label">Installed plugins from this marketplace:</span>
-            <div class="plugin-chips">
-              <span
-                v-for="plugin in harnessPluginsList"
-                :key="plugin.id"
-                class="plugin-chip"
-                @click="harnessPluginName = plugin.remote_name"
-              >
-                {{ plugin.remote_name }}
-              </span>
-            </div>
           </div>
 
           <div class="form-actions">

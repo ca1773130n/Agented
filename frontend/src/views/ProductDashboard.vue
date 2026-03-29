@@ -12,6 +12,7 @@ import ProductActivityFeed from '../components/product/ProductActivityFeed.vue';
 import { useToast } from '../composables/useToast';
 import { useFocusTrap } from '../composables/useFocusTrap';
 import { useWebMcpTool } from '../composables/useWebMcpTool';
+import { useTourMachine } from '../composables/useTourMachine';
 
 const props = defineProps<{
   productId?: string;
@@ -19,6 +20,7 @@ const props = defineProps<{
 
 const route = useRoute();
 const router = useRouter();
+const tourMachine = useTourMachine();
 const productId = computed(() => (route.params.productId as string) || props.productId || '');
 
 const showToast = useToast();
@@ -112,7 +114,7 @@ async function createAndAssignProject() {
   if (!newProjectName.value.trim()) return;
   isCreatingProject.value = true;
   try {
-    await projectApi.create({
+    const result = await projectApi.create({
       name: newProjectName.value.trim(),
       description: newProjectDescription.value.trim() || undefined,
       product_id: productId.value,
@@ -121,6 +123,16 @@ async function createAndAssignProject() {
     showToast('Project created and assigned', 'success');
     showAddProjectModal.value = false;
     await loadData();
+    // Navigate to project settings FIRST, then advance tour
+    // (tour watcher auto-navigates based on step route, so we must be
+    // on the right page before the step changes)
+    if (tourMachine.isActive.value) {
+      const projId = result?.project?.id;
+      if (projId) {
+        await router.push(`/projects/${projId}/settings`);
+      }
+      tourMachine.nextStep();
+    }
   } catch (err) {
     const message = err instanceof ApiError ? err.message : 'Failed to create project';
     showToast(message, 'error');
@@ -138,6 +150,11 @@ async function addProjectToProduct() {
     showAddProjectModal.value = false;
     // Reload product data to show new project
     await loadData();
+    // Navigate to project settings FIRST, then advance tour
+    if (tourMachine.isActive.value) {
+      await router.push(`/projects/${selectedProjectId.value}/settings`);
+      tourMachine.nextStep();
+    }
   } catch (err) {
     const message = err instanceof ApiError ? err.message : 'Failed to add project';
     showToast(message, 'error');

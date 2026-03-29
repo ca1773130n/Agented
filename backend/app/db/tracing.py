@@ -230,8 +230,11 @@ def end_span(
                 merged_attrs = json.dumps(existing)
 
         update_exprs = [
-            "status = ?", "output = ?", "error_message = ?",
-            "duration_ms = ?", "finished_at = ?",
+            "status = ?",
+            "output = ?",
+            "error_message = ?",
+            "duration_ms = ?",
+            "finished_at = ?",
         ]
         params: list = [status, output_json, error_message, duration_ms, now]
         if merged_attrs:
@@ -255,9 +258,7 @@ def update_span(
         updates = []
         params: list = []
         if attributes:
-            cursor = conn.execute(
-                "SELECT attributes FROM trace_spans WHERE id = ?", (span_id,)
-            )
+            cursor = conn.execute("SELECT attributes FROM trace_spans WHERE id = ?", (span_id,))
             row = cursor.fetchone()
             existing = {}
             if row and row["attributes"]:
@@ -328,7 +329,9 @@ def _parse_json_field(value):
     try:
         return json.loads(value)
     except (json.JSONDecodeError, TypeError):
-        logger.warning("Failed to parse JSON field: %s", value[:100] if isinstance(value, str) else value)
+        logger.warning(
+            "Failed to parse JSON field: %s", value[:100] if isinstance(value, str) else value
+        )
         return None
 
 
