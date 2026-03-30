@@ -129,7 +129,9 @@ class TestSpans:
     def test_create_span_with_attributes(self, isolated_db):
         trace = create_trace("T", "agent", "agent-01")
         span = create_span(
-            trace["id"], "Tool", "TOOL_CALL",
+            trace["id"],
+            "Tool",
+            "TOOL_CALL",
             input_data={"tool": "search"},
             attributes={"tool_name": "web_search", "success": True},
             metadata={"version": "1.0"},

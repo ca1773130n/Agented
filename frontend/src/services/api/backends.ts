@@ -93,15 +93,14 @@ export const backendApi = {
     }),
 
   // Connect (OAuth login) operations
-  startConnect: (backendId: string, configPath?: string, email?: string) =>
+  startConnect: (backendId: string, configPath?: string, email?: string, accountName?: string) =>
     apiFetch<{ session_id: string; status: string }>(`/admin/backends/${backendId}/connect`, {
       method: 'POST',
-      body: (configPath || email)
-        ? JSON.stringify({
-            ...(configPath ? { config_path: configPath } : {}),
-            ...(email ? { email } : {}),
-          })
-        : undefined,
+      body: JSON.stringify({
+        ...(configPath ? { config_path: configPath } : {}),
+        ...(email ? { email } : {}),
+        ...(accountName ? { account_name: accountName } : {}),
+      }),
     }),
 
   streamConnectUrl: (backendId: string, sessionId: string): string =>
@@ -152,6 +151,19 @@ export const backendApi = {
         ...(backendType && { backend_type: backendType }),
         ...(configPath && { config_path: configPath }),
       }),
+    }),
+
+  // Gemini direct OAuth (bypasses CLI TUI)
+  geminiAuthStart: (configPath?: string, email?: string) =>
+    apiFetch<{ status: string; oauth_url: string; state: string }>('/admin/backends/gemini/auth-start', {
+      method: 'POST',
+      body: JSON.stringify({ config_path: configPath, email }),
+    }),
+
+  geminiAuthComplete: (code: string, state: string) =>
+    apiFetch<{ status: string; message: string }>('/admin/backends/gemini/auth-complete', {
+      method: 'POST',
+      body: JSON.stringify({ code, state }),
     }),
 
   proxyCallbackForward: (callbackUrl: string) =>

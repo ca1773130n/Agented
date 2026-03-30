@@ -2072,8 +2072,7 @@ def create_fresh_schema(conn):
         "ON memory_threads(resource_id, resource_type)"
     )
     conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_memory_threads_updated "
-        "ON memory_threads(updated_at DESC)"
+        "CREATE INDEX IF NOT EXISTS idx_memory_threads_updated ON memory_threads(updated_at DESC)"
     )
 
     conn.execute("""
@@ -2135,6 +2134,85 @@ def create_fresh_schema(conn):
         )
     """)
 
+    # --- Memory Embeddings table ---
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS memory_embeddings (
+            id TEXT PRIMARY KEY,
+            message_id TEXT NOT NULL,
+            embedding BLOB NOT NULL,
+            model TEXT NOT NULL DEFAULT 'all-MiniLM-L6-v2',
+            dimension INTEGER NOT NULL DEFAULT 384,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(message_id, model)
+        )
+    """)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_embeddings_message ON memory_embeddings(message_id)"
+    )
+
+    # --- Knowledge Graph tables ---
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS kg_entities (
+            id TEXT PRIMARY KEY,
+            agent_id TEXT NOT NULL,
+            name TEXT NOT NULL,
+            entity_type TEXT NOT NULL DEFAULT 'concept',
+            properties TEXT DEFAULT '{}',
+            mention_count INTEGER DEFAULT 1,
+            importance_score REAL DEFAULT 0.5,
+            first_seen TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            last_seen TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(agent_id, name, entity_type)
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_kg_entities_agent ON kg_entities(agent_id)")
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_kg_entities_agent_name ON kg_entities(agent_id, name)"
+    )
+
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS kg_relations (
+            id TEXT PRIMARY KEY,
+            agent_id TEXT NOT NULL,
+            source_id TEXT NOT NULL REFERENCES kg_entities(id) ON DELETE CASCADE,
+            target_id TEXT NOT NULL REFERENCES kg_entities(id) ON DELETE CASCADE,
+            relation_type TEXT NOT NULL,
+            properties TEXT DEFAULT '{}',
+            confidence REAL DEFAULT 0.5,
+            mention_count INTEGER DEFAULT 1,
+            first_seen TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            last_seen TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_kg_relations_source ON kg_relations(source_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_kg_relations_target ON kg_relations(target_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_kg_relations_agent ON kg_relations(agent_id)")
+
+    # --- Memory consolidation log ---
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS memory_consolidation_log (
+            id TEXT PRIMARY KEY,
+            agent_id TEXT NOT NULL,
+            thread_id TEXT,
+            consolidation_type TEXT NOT NULL DEFAULT 'summary',
+            summary TEXT,
+            entity_count INTEGER DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_consolidation_agent "
+        "ON memory_consolidation_log(agent_id, created_at DESC)"
+    )
+
+    # --- KG extraction tracking ---
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS kg_extraction_log (
+            message_id TEXT PRIMARY KEY,
+            processed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
     # --- Structured tracing tables ---
     conn.execute("""
         CREATE TABLE IF NOT EXISTS traces (
@@ -2180,12 +2258,9 @@ def create_fresh_schema(conn):
         )
     """)
     conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_trace_spans_trace "
-        "ON trace_spans(trace_id, started_at)"
+        "CREATE INDEX IF NOT EXISTS idx_trace_spans_trace ON trace_spans(trace_id, started_at)"
     )
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_trace_spans_parent ON trace_spans(parent_span_id)"
-    )
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_trace_spans_parent ON trace_spans(parent_span_id)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_trace_spans_type ON trace_spans(span_type)")
 
     # v0.5.0 onboarding — application metadata (instance tracking)

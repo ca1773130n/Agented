@@ -44,6 +44,7 @@ const targetRect = ref<DOMRect | null>(null)
 let observer: MutationObserver | null = null
 let resizeObserver: ResizeObserver | null = null
 let tracking = false
+let pollInterval: ReturnType<typeof setInterval> | null = null
 
 // Loading timeout state (OB-40): 5s spinner-to-fallback
 const loadingTimedOut = ref(false)
@@ -105,6 +106,10 @@ function clearTimers() {
     clearTimeout(elementFindTimeout)
     elementFindTimeout = null
   }
+  if (pollInterval !== null) {
+    clearInterval(pollInterval)
+    pollInterval = null
+  }
 }
 
 function findTarget() {
@@ -115,16 +120,36 @@ function findTarget() {
     return
   }
   const el = document.querySelector(sel) as HTMLElement | null
-  targetEl.value = el
   if (el) {
-    targetRect.value = el.getBoundingClientRect()
+    const rect = el.getBoundingClientRect()
+    // Reject elements not yet laid out: zero-size or parked at origin
+    if ((rect.width === 0 && rect.height === 0) ||
+        (rect.top === 0 && rect.left === 0 && rect.bottom < 50)) {
+      targetEl.value = null
+      targetRect.value = null
+      return
+    }
+    targetEl.value = el
+    targetRect.value = rect
     observer?.disconnect()
     clearTimers()
     loadingTimedOut.value = false
     elementNotFoundTimeout.value = false
     startTracking()
     observeTargetResize(el)
+    // Re-read rect after layout stabilizes — route transitions can move elements
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        if (targetEl.value === el) {
+          const stableRect = el.getBoundingClientRect()
+          if (stableRect.width > 0 && stableRect.height > 0) {
+            targetRect.value = stableRect
+          }
+        }
+      })
+    })
   } else {
+    targetEl.value = null
     targetRect.value = null
   }
 }
@@ -170,6 +195,19 @@ function startObserverWithTimeouts() {
   const scopeRoot = document.querySelector('#main-content') ?? document.body
   observer.observe(scopeRoot, { childList: true, subtree: true })
 
+  // Polling fallback — MutationObserver can miss Vue component mounts
+  // that render synchronously during route transitions
+  if (pollInterval === null) {
+    pollInterval = setInterval(() => {
+      if (targetEl.value) {
+        clearInterval(pollInterval!)
+        pollInterval = null
+        return
+      }
+      findTarget()
+    }, 300)
+  }
+
   // OB-40: 5s loading timeout — route may be slow to load
   if (routeLoadTimeout === null) {
     routeLoadTimeout = setTimeout(() => {
@@ -199,8 +237,9 @@ const currentTargetSelector = computed(() =>
 
 // Track step identity to detect same-selector-different-step changes
 // (e.g. backends.claude → backends.gemini both use [data-tour="add-account-btn"])
+// Include substepLabel + message to distinguish backend substeps with identical title/target.
 const stepIdentity = computed(() =>
-  `${currentTargetSelector.value}::${props.step?.title}::${props.step?.skippable}`
+  `${currentTargetSelector.value}::${props.step?.title}::${props.substepLabel}::${props.step?.message}`
 )
 
 watch(
@@ -211,11 +250,13 @@ watch(
       return
     }
 
+    const wasInactive = !_prevActive
     const selectorChanged = currentTargetSelector.value !==
       (prevId ? prevId.split('::')[0] : null)
     const stepChanged = newId !== prevId
 
-    if (!stepChanged) return // Only message changed — skip entirely
+    // Re-process when: step changed OR active just became true (e.g. route left /welcome)
+    if (!stepChanged && !wasInactive) return
 
     loadingTimedOut.value = false
     elementNotFoundTimeout.value = false
@@ -229,21 +270,35 @@ watch(
       targetRect.value = null
     } else {
       // Same selector, different step (e.g. route changed) —
-      // invalidate the element ref so findTarget re-queries the DOM,
-      // but keep targetRect so the tooltip doesn't jump to (0,0).
+      // invalidate the element ref so findTarget re-queries the DOM.
+      // Also clear targetRect — stale rect from previous page causes
+      // tooltip to flash at wrong position or jump to top-left.
       targetEl.value = null
+      targetRect.value = null
       stopTracking()
       disconnectResizeObserver()
     }
 
-    // Delay search to let route transition complete
-    setTimeout(() => {
-      if (!props.active) return
+    // Robust target search: wait for route transition, then retry with increasing delays.
+    // First delay must be long enough for Vue Router to unmount old page and mount new one.
+    // Starting at 0ms would find the OLD page's elements (being destroyed, rect at 0,0).
+    const delays = [400, 600, 800, 1000, 1500, 2000, 2500, 3000]
+    let attempt = 0
+    function tryFind() {
+      if (!props.active || targetEl.value) return
       findTarget()
-      if (!targetEl.value) {
+      if (!targetEl.value && attempt < delays.length) {
+        setTimeout(tryFind, delays[attempt])
+        attempt++
+      } else if (!targetEl.value) {
+        // All retries exhausted — fall back to observer + timeouts
         startObserverWithTimeouts()
       }
-    }, 150)
+    }
+    // Always start with a delay — never search immediately.
+    // Immediate search finds OLD page elements during route transitions.
+    setTimeout(tryFind, delays[attempt])
+    attempt++
   },
   { immediate: true },
 )

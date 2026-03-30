@@ -63,7 +63,7 @@ export const budgetApi = {
   collectSessions: () =>
     apiFetch<{ collected: { claude: { sessions: number; cost: number }; codex: { sessions: number; cost: number } } }>(
       '/admin/budgets/collect-sessions',
-      { method: 'POST' }
+      { method: 'POST', timeout: 120000 }
     ),
   getAllTimeSpend: () =>
     apiFetch<{ total_cost_usd: number }>('/admin/budgets/usage/all-time'),

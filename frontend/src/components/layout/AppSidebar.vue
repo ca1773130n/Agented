@@ -363,11 +363,6 @@ function handleSidebarKeydown(e: KeyboardEvent) {
     aria-label="Main navigation"
     @keydown="handleSidebarKeydown"
   >
-    <div v-if="sidebarLoading" class="sidebar-loading">
-      <div class="sidebar-loading-spinner" />
-      <span>Loading...</span>
-    </div>
-
     <div class="sidebar-nav">
       <div class="nav-section-label">
         Watch Tower

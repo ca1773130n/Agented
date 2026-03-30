@@ -149,10 +149,10 @@ export const TOUR_STEP_DEFINITIONS: TourStepDefinition[] = [
   {
     key: 'create_team',
     localeKey: 'team',
-    label: 'Team Setup',
+    label: 'Assign Teams',
     target: '[data-tour="assign-teams"]',
-    title: 'Set Up a Team',
-    message: 'Teams assign agents to projects. Set up a team to start running bots.',
+    title: 'Assign Teams to Project',
+    message: 'Bundled teams with pre-configured super agents are ready to use — just assign them here. You can create custom teams and agents later.',
     skippable: true,
     route: '/projects',
     stepNumber: 7,

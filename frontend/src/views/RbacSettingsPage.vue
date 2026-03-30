@@ -18,6 +18,7 @@ const newLabel = ref('');
 const newRole = ref('viewer');
 const isCreating = ref(false);
 const generatedKeyDisplay = ref<string | null>(null);
+const copied = ref(false);
 const deletingId = ref<string | null>(null);
 const editingId = ref<string | null>(null);
 const editRole = ref('');
@@ -76,7 +77,8 @@ async function copyKey() {
   if (generatedKeyDisplay.value) {
     try {
       await navigator.clipboard.writeText(generatedKeyDisplay.value);
-      showToast('Key copied to clipboard', 'success');
+      copied.value = true;
+      setTimeout(() => { copied.value = false; }, 2000);
     } catch {
       showToast('Failed to copy — select and copy manually', 'info');
     }
@@ -225,7 +227,10 @@ onMounted(loadData);
       <div v-if="generatedKeyDisplay" class="generated-key-notice">
         <strong>New API key created — copy it now:</strong>
         <code class="key-display">{{ generatedKeyDisplay }}</code>
-        <button class="copy-btn" @click="copyKey">Copy</button>
+        <button class="copy-btn" :class="{ 'copy-btn--copied': copied }" @click="copyKey">
+          <svg v-if="copied" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><polyline points="20 6 9 17 4 12"/></svg>
+          {{ copied ? 'Copied!' : 'Copy' }}
+        </button>
         <button class="dismiss-btn" @click="generatedKeyDisplay = null">Dismiss</button>
       </div>
 
@@ -639,5 +644,17 @@ onMounted(loadData);
 
 .copy-btn:hover, .dismiss-btn:hover {
   background: var(--surface-hover, rgba(255, 255, 255, 0.1));
+}
+
+.copy-btn--copied {
+  background: rgba(34, 197, 94, 0.15);
+  color: #4ade80;
+  border-color: rgba(34, 197, 94, 0.3);
+  gap: 4px;
+}
+
+.copy-btn--copied:hover {
+  background: rgba(34, 197, 94, 0.2);
+  color: #4ade80;
 }
 </style>

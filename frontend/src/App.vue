@@ -75,7 +75,9 @@ function handleTourDone() {
 function navigateToTourStep(step: string) {
   const meta = TOUR_STEP_MAP[step];
   if (!meta) return;
-  if (route.path === meta.route && (!meta.routeHash || route.hash === meta.routeHash)) return;
+  // Exact match or already on a sub-route (e.g. /products/prod-xxx matches /products)
+  const alreadyOnRoute = route.path === meta.route || route.path.startsWith(meta.route + '/');
+  if (alreadyOnRoute && (!meta.routeHash || route.hash === meta.routeHash)) return;
   const target = meta.routeHash ? { path: meta.route, hash: meta.routeHash } : { path: meta.route };
   router.push(target);
 }
@@ -132,6 +134,8 @@ provide('setTourModalOpen', (open: boolean) => {
 });
 watch(tourActive, (active) => {
   if (!active) modalOpenDuringTour.value = false;
+  // Toggle body class so teleported modals can be styled above tour overlay
+  document.body.classList.toggle('tour-active', active);
 });
 
 // Register WebMCP generic verification tools (app-lifetime, no-ops in non-Canary browsers)
@@ -256,9 +260,8 @@ onMounted(async () => {
   appReady.value = true;
   if (isReady) {
     loadSidebarData();
-    if (!beginTourIfRequested()) {
-      runBundleInstall();
-    }
+    beginTourIfRequested();
+    runBundleInstall();
   }
 });
 
@@ -1262,6 +1265,11 @@ body {
   align-items: center;
   justify-content: center;
   z-index: 1000;
+}
+
+/* When tour is active, modals must appear above the tour spotlight (z-index 10001) */
+body.tour-active .modal-overlay {
+  z-index: 10005;
 }
 
 .modal {

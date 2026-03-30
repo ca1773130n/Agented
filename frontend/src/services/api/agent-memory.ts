@@ -49,6 +49,18 @@ export interface MemoryConfig {
     scope: 'agent' | 'thread';
     template: string;
   };
+  vector_search?: {
+    enabled: boolean;
+  };
+  knowledge_graph?: {
+    enabled: boolean;
+  };
+  crag_evaluation?: {
+    enabled: boolean;
+  };
+  cross_thread?: {
+    enabled: boolean;
+  };
 }
 
 export interface ThreadListResponse {
@@ -65,6 +77,17 @@ export interface RecallResponse {
   results: MemoryMessage[];
   count: number;
   query: string;
+  search_mode?: string;
+  relevance_score?: number;
+  retrieval_evaluation?: 'correct' | 'ambiguous' | 'incorrect';
+  related_entities?: Array<{
+    id: string;
+    name: string;
+    entity_type: string;
+    importance_score: number;
+    mention_count: number;
+  }>;
+  graph_context?: string;
 }
 
 export interface SaveMessagesRequest {
@@ -115,9 +138,25 @@ export const agentMemoryApi = {
     ),
 
   // Semantic recall
-  recall: (agentId: string, query: string, threadId?: string, topK = 5, messageRange = 1) => {
-    const params = new URLSearchParams({ q: query, top_k: String(topK), message_range: String(messageRange) });
+  recall: (
+    agentId: string,
+    query: string,
+    threadId?: string,
+    topK = 5,
+    messageRange = 1,
+    searchMode: 'hybrid' | 'fts' | 'vector' = 'hybrid',
+    alpha = 0.4,
+    includeCrossThread = false,
+  ) => {
+    const params = new URLSearchParams({
+      q: query,
+      top_k: String(topK),
+      message_range: String(messageRange),
+      search_mode: searchMode,
+      alpha: String(alpha),
+    });
     if (threadId) params.set('thread_id', threadId);
+    if (includeCrossThread) params.set('include_cross_thread', 'true');
     return apiFetch<RecallResponse>(`/admin/agents/${agentId}/memory/recall?${params}`);
   },
 
@@ -136,6 +175,17 @@ export const agentMemoryApi = {
     apiFetch<{ message: string }>(`/admin/agents/${agentId}/memory/working`, {
       method: 'DELETE',
     }),
+
+  // Related threads via knowledge graph
+  getRelatedThreads: (agentId: string, threadId: string) =>
+    apiFetch<{
+      related_threads: Array<{
+        id: string;
+        title: string | null;
+        shared_entities: number;
+      }>;
+      count: number;
+    }>(`/admin/agents/${agentId}/memory/threads/${threadId}/related`),
 
   // Memory config
   getConfig: (agentId: string) =>

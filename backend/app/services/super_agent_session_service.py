@@ -34,7 +34,7 @@ class SessionLimitError(Exception):
 class SuperAgentSessionService:
     """Service for SuperAgent session lifecycle, token tracking, and prompt assembly."""
 
-    MAX_CONCURRENT_SESSIONS = 10
+    MAX_CONCURRENT_SESSIONS = 50
     TOKEN_COMPACTION_THRESHOLD = 80_000
     OUTPUT_RING_BUFFER_SIZE = app_config.OUTPUT_RING_BUFFER_SIZE
     CHARS_PER_TOKEN = 4  # Approximate: 4 chars ~ 1 token
@@ -487,6 +487,43 @@ class SuperAgentSessionService:
                 }
 
             logger.info("Restored %d active sessions from database", len(active_rows))
+
+    @classmethod
+    def cleanup_stale_sessions(cls, max_age_days: int = 7) -> int:
+        """End active sessions that haven't been used for more than max_age_days."""
+        from ..database import get_connection
+
+        cutoff = (
+            datetime.datetime.now(datetime.timezone.utc)
+            - datetime.timedelta(days=max_age_days)
+        ).strftime("%Y-%m-%d %H:%M:%S")
+
+        with get_connection() as conn:
+            cursor = conn.execute(
+                """UPDATE super_agent_sessions
+                   SET status = 'completed', ended_at = CURRENT_TIMESTAMP
+                   WHERE status = 'active'
+                   AND started_at < ?""",
+                (cutoff,),
+            )
+            conn.commit()
+            count = cursor.rowcount
+
+        if count > 0:
+            # Also remove from in-memory cache
+            with cls._lock:
+                stale_ids = [
+                    sid for sid, s in cls._active_sessions.items()
+                    if s["status"] == "active"
+                    and sid not in {
+                        r["id"] for r in get_active_sessions_list()
+                    }
+                ]
+                for sid in stale_ids:
+                    del cls._active_sessions[sid]
+
+            logger.info("Cleaned up %d stale sessions (older than %d days)", count, max_age_days)
+        return count
 
     @classmethod
     def get_output_lines(cls, session_id: str) -> List[str]:

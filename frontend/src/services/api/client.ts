@@ -45,7 +45,7 @@ export function clearApiKey(): void {
   }
 }
 
-const DEFAULT_TIMEOUT_MS = 30000;
+const DEFAULT_TIMEOUT_MS = 120000;
 const DEFAULT_MAX_RETRIES = 3;
 const DEFAULT_RETRY_STATUSES = [429, 502, 503, 504];
 const MAX_BACKOFF_MS = 10000;

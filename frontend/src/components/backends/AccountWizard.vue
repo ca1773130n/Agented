@@ -229,12 +229,73 @@ watch(currentStep, (step) => {
   setTourGuide(guideMessages[step]());
   // Auto-start login when entering the login step
   if (step === 'login' && loginStatus.value === 'idle') {
-    startCliLogin();
+    if (props.backendType === 'gemini') {
+      startGeminiDirectAuth();
+    } else {
+      startCliLogin();
+    }
   }
 }, { immediate: true });
 
-watch(() => loginStatus.value, () => {
+// Gemini direct OAuth state
+const geminiAuthState = ref('');
+const geminiAuthSubmitting = ref(false);
+const geminiAuthError = ref('');
+
+async function startGeminiDirectAuth() {
+  loginStatus.value = 'streaming';
+  loginLines.value = ['Starting Google sign-in...'];
+  geminiAuthError.value = '';
+  try {
+    const res = await backendApi.geminiAuthStart(
+      configPath.value.trim() || undefined,
+      email.value.trim() || undefined,
+    );
+    geminiAuthState.value = res.state;
+    loginLines.value.push('Opening Google sign-in page...');
+    loginLines.value.push('After signing in, copy the authorization code and paste it below.');
+    window.open(res.oauth_url, '_blank');
+    // Show the code paste UI via pendingQuestion
+    pendingQuestion.value = 'Paste the authorization code from Google';
+    pendingOptions.value = [];
+    pendingInteractionId.value = 'gemini-auth-code';
+  } catch (e: unknown) {
+    loginStatus.value = 'error';
+    loginError.value = e instanceof Error ? e.message : 'Failed to start Google sign-in';
+  }
+}
+
+async function submitGeminiAuthCode() {
+  const code = userResponse.value.trim();
+  if (!code) return;
+  geminiAuthSubmitting.value = true;
+  geminiAuthError.value = '';
+  try {
+    const res = await backendApi.geminiAuthComplete(code, geminiAuthState.value);
+    if (res.status === 'ok') {
+      loginLines.value.push(res.message || 'Google sign-in completed');
+      loginStatus.value = 'completed';
+      pendingQuestion.value = '';
+      userResponse.value = '';
+    } else {
+      geminiAuthError.value = res.message || 'Auth code exchange failed';
+      loginLines.value.push(`Error: ${geminiAuthError.value}`);
+    }
+  } catch (e: unknown) {
+    geminiAuthError.value = e instanceof Error ? e.message : 'Failed to exchange auth code';
+    loginLines.value.push(`Error: ${geminiAuthError.value}`);
+  } finally {
+    geminiAuthSubmitting.value = false;
+  }
+}
+
+watch(() => loginStatus.value, (status) => {
   if (currentStep.value === 'login') setTourGuide(guideMessages.login());
+  // When login completes, advance to the Plan & Save step
+  if (status === 'completed' && currentStep.value === 'login') {
+    console.log('[AccountWizard] Login completed, advancing to plan step');
+    goNext();
+  }
 });
 
 onUnmounted(() => {
@@ -245,6 +306,7 @@ const pendingQuestion = ref('');
 const pendingOptions = ref<string[]>([]);
 const pendingInteractionId = ref('');
 const userResponse = ref('');
+const sendingResponse = ref(false);
 let loginEventSource: AuthenticatedEventSource | null = null;
 
 async function startCliLogin() {
@@ -255,7 +317,7 @@ async function startCliLogin() {
   pendingOptions.value = [];
   pendingInteractionId.value = '';
   try {
-    const result = await backendApi.startConnect(props.backendId, configPath.value || undefined, email.value.trim() || undefined);
+    const result = await backendApi.startConnect(props.backendId, configPath.value || undefined, email.value.trim() || undefined, accountName.value.trim() || undefined);
     loginSessionId.value = result.session_id;
     loginStatus.value = 'streaming';
     // Open authenticated SSE stream (sends X-API-Key header)
@@ -334,8 +396,14 @@ async function startCliLogin() {
 }
 
 async function sendResponse() {
-  if (!userResponse.value.trim() || !loginSessionId.value) return;
+  // Gemini: use direct OAuth code exchange instead of PTY response
+  if (props.backendType === 'gemini' && pendingInteractionId.value === 'gemini-auth-code') {
+    await submitGeminiAuthCode();
+    return;
+  }
+  if (!userResponse.value.trim() || !loginSessionId.value || sendingResponse.value) return;
   const iid = pendingInteractionId.value || 'wizard';
+  sendingResponse.value = true;
   try {
     await backendApi.respondConnect(props.backendId, loginSessionId.value, iid, { answer: userResponse.value.trim() });
     loginLines.value.push(`> ${userResponse.value.trim()}`);
@@ -349,12 +417,15 @@ async function sendResponse() {
     if (msg.includes('404') || msg.includes('not found')) return;
     loginLines.value.push(`Error: ${msg}`);
     scrollTerminal();
+  } finally {
+    sendingResponse.value = false;
   }
 }
 
 async function selectOption(option: string, _index: number) {
-  if (!loginSessionId.value) return;
+  if (!loginSessionId.value || sendingResponse.value) return;
   const iid = pendingInteractionId.value || 'wizard';
+  sendingResponse.value = true;
   try {
     // Backend expects { answer: "option text" } — it resolves the index from the options list
     await backendApi.respondConnect(props.backendId, loginSessionId.value, iid, { answer: option });
@@ -368,6 +439,8 @@ async function selectOption(option: string, _index: number) {
     if (msg.includes('404') || msg.includes('not found')) return;
     loginLines.value.push(`Error: ${msg}`);
     scrollTerminal();
+  } finally {
+    sendingResponse.value = false;
   }
 }
 
@@ -401,6 +474,16 @@ const isDefault = ref(false);
 const isSaving = ref(false);
 const saveError = ref('');
 
+// ---------------------------------------------------------------------------
+// Proxy login status (shown in done step)
+// ---------------------------------------------------------------------------
+const proxyLoginStatus = ref<'idle' | 'running' | 'success' | 'device_auth' | 'skipped' | 'error'>('idle');
+const proxyLoginMessage = ref('');
+const proxyDeviceCode = ref('');
+const proxyOAuthUrl = ref('');
+const proxyCallbackUrl = ref('');
+const proxyForwarding = ref(false);
+
 async function saveAccount() {
   isSaving.value = true;
   saveError.value = '';
@@ -415,10 +498,85 @@ async function saveAccount() {
     });
     currentStep.value = 'done';
     emit('saved');
+    // Gemini: direct OAuth already handled both CLI + CLIProxyAPI in login step
+    if (props.backendType === 'gemini') {
+      proxyLoginStatus.value = 'success';
+      proxyLoginMessage.value = 'Google sign-in completed (CLI + API proxy)';
+    } else {
+    // Other backends: use CLIProxyAPI login
+    proxyLoginStatus.value = 'running';
+    proxyLoginMessage.value = `Registering ${props.backendName} account with API proxy...`;
+    try {
+      const res = await backendApi.proxyLogin(props.backendType, configPath.value.trim() || undefined);
+      if (res.status === 'ok') {
+        proxyLoginStatus.value = 'success';
+        proxyLoginMessage.value = res.message || `API proxy configured for ${accountName.value}`;
+      } else if (res.status === 'started') {
+        if (res.device_code) {
+          proxyLoginStatus.value = 'device_auth';
+          proxyDeviceCode.value = res.device_code;
+          proxyOAuthUrl.value = res.oauth_url || '';
+          proxyLoginMessage.value = 'Enter the code below to register with API proxy';
+        } else if (res.oauth_url) {
+          proxyLoginStatus.value = 'device_auth';
+          proxyDeviceCode.value = '';
+          proxyOAuthUrl.value = res.oauth_url;
+          proxyLoginMessage.value = 'Complete OAuth login, then paste the callback URL below';
+          window.open(res.oauth_url, '_blank');
+        } else {
+          proxyLoginStatus.value = 'skipped';
+          proxyLoginMessage.value = res.message || 'No auth URL received';
+        }
+      } else {
+        proxyLoginStatus.value = 'skipped';
+        proxyLoginMessage.value = res.message || 'Proxy login not available';
+      }
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (msg.includes('404') || msg.includes('not found')) {
+        proxyLoginStatus.value = 'skipped';
+        proxyLoginMessage.value = 'API proxy not available (cliproxyapi not installed)';
+      } else {
+        proxyLoginStatus.value = 'error';
+        proxyLoginMessage.value = `Proxy login failed: ${msg}`;
+      }
+    }
+    } // end else (non-gemini)
   } catch (e: unknown) {
     saveError.value = e instanceof Error ? e.message : 'Failed to save account';
   } finally {
     isSaving.value = false;
+  }
+}
+
+async function forwardCallback() {
+  if (!proxyCallbackUrl.value.trim()) return;
+  proxyForwarding.value = true;
+  try {
+    // Gemini: exchange auth code for tokens
+    if (props.backendType === 'gemini') {
+      const state = (window as unknown as Record<string, unknown>).__geminiAuthState as string || '';
+      const res = await backendApi.geminiAuthComplete(proxyCallbackUrl.value.trim(), state);
+      if (res.status === 'ok') {
+        proxyLoginStatus.value = 'success';
+        proxyLoginMessage.value = res.message || 'Google sign-in completed';
+      } else {
+        proxyLoginMessage.value = res.message || 'Auth code exchange failed';
+      }
+    } else {
+      // Other backends: forward callback URL
+      const res = await backendApi.proxyCallbackForward(proxyCallbackUrl.value.trim());
+      if (res.status === 'ok' || res.status === 'success' || res.status === 'completed') {
+        proxyLoginStatus.value = 'success';
+        proxyLoginMessage.value = 'API proxy login completed';
+      } else {
+        proxyLoginMessage.value = res.message || 'Callback forward failed';
+      }
+    }
+  } catch (e: unknown) {
+    proxyLoginMessage.value = `Failed: ${e instanceof Error ? e.message : String(e)}`;
+  } finally {
+    proxyForwarding.value = false;
   }
 }
 
@@ -440,7 +598,12 @@ function addAnotherAccount() {
   pendingOptions.value = [];
   pendingInteractionId.value = '';
   userResponse.value = '';
+  sendingResponse.value = false;
   dirCreated.value = false;
+  proxyLoginStatus.value = 'idle';
+  proxyLoginMessage.value = '';
+  proxyDeviceCode.value = '';
+  proxyOAuthUrl.value = '';
   currentStep.value = 'subscription';
   emit('addAnother');
 }
@@ -679,10 +842,19 @@ function addAnotherAccount() {
                 v-model="userResponse"
                 class="terminal-input"
                 :placeholder="pendingQuestion"
+                :disabled="sendingResponse"
                 @keydown.enter="sendResponse"
                 autofocus
               />
-              <button class="btn btn-sm btn-primary" @click="sendResponse">{{ t('accountWizard.send') }}</button>
+              <button class="btn btn-sm btn-primary" :disabled="sendingResponse" @click="sendResponse">
+                <span v-if="sendingResponse" class="spinner-sm"></span>
+                <span v-else>{{ t('accountWizard.send') }}</span>
+              </button>
+            </div>
+            <!-- Waiting indicator when response sent but no new question yet -->
+            <div v-else-if="sendingResponse || (!pendingQuestion && !pendingOptions.length && loginLines.length > 0)" class="login-terminal-waiting">
+              <div class="spinner-sm"></div>
+              <span>{{ t('accountWizard.waitingForResponse', 'Waiting for response...') }}</span>
             </div>
           </div>
         </template>
@@ -791,6 +963,71 @@ function addAnotherAccount() {
         </div>
         <h4>{{ t('accountWizard.accountCreated') }}</h4>
         <p>{{ t('accountWizard.accountCreatedDesc', { name: accountName, backend: backendName }) }}</p>
+
+        <!-- Proxy login status -->
+        <div v-if="proxyLoginStatus !== 'idle'" class="proxy-login-status" :class="`proxy-${proxyLoginStatus}`">
+          <div v-if="proxyLoginStatus === 'running'" class="proxy-status-row">
+            <div class="spinner-sm"></div>
+            <span>{{ proxyLoginMessage }}</span>
+          </div>
+          <div v-else-if="proxyLoginStatus === 'device_auth'" class="proxy-device-auth">
+            <p class="proxy-device-msg">{{ proxyLoginMessage }}</p>
+            <div v-if="proxyDeviceCode" class="proxy-device-code">
+              <code>{{ proxyDeviceCode }}</code>
+            </div>
+            <a v-if="proxyOAuthUrl" :href="proxyOAuthUrl" target="_blank" class="btn btn-sm btn-outline proxy-open-link">
+              {{ proxyDeviceCode ? 'Open Device Login Page' : 'Open OAuth Login Page' }}
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12">
+                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+                <polyline points="15 3 21 3 21 9"/>
+                <line x1="10" y1="14" x2="21" y2="3"/>
+              </svg>
+            </a>
+            <!-- Auth code / callback URL paste -->
+            <div v-if="proxyOAuthUrl && !proxyDeviceCode" class="proxy-callback-section">
+              <p v-if="backendType === 'gemini'" class="proxy-callback-hint">After signing in with Google, copy the authorization code shown on the page and paste it here:</p>
+              <p v-else class="proxy-callback-hint">After signing in, copy the redirect URL from your browser and paste it here:</p>
+              <div class="proxy-callback-input">
+                <input
+                  v-model="proxyCallbackUrl"
+                  type="text"
+                  :placeholder="backendType === 'gemini' ? 'Paste authorization code here...' : 'http://localhost:8085/oauth2callback?code=...'"
+                  :disabled="proxyForwarding"
+                />
+                <button
+                  class="btn btn-sm btn-primary"
+                  :disabled="!proxyCallbackUrl.trim() || proxyForwarding"
+                  @click="forwardCallback"
+                >
+                  {{ proxyForwarding ? 'Forwarding...' : 'Submit' }}
+                </button>
+              </div>
+            </div>
+          </div>
+          <div v-else-if="proxyLoginStatus === 'success'" class="proxy-status-row">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+              <polyline points="20 6 9 17 4 12"/>
+            </svg>
+            <span>{{ proxyLoginMessage }}</span>
+          </div>
+          <div v-else-if="proxyLoginStatus === 'skipped'" class="proxy-status-row">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+              <circle cx="12" cy="12" r="10"/>
+              <line x1="12" y1="8" x2="12" y2="12"/>
+              <line x1="12" y1="16" x2="12.01" y2="16"/>
+            </svg>
+            <span>{{ proxyLoginMessage }}</span>
+          </div>
+          <div v-else-if="proxyLoginStatus === 'error'" class="proxy-status-row">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+              <circle cx="12" cy="12" r="10"/>
+              <line x1="15" y1="9" x2="9" y2="15"/>
+              <line x1="9" y1="9" x2="15" y2="15"/>
+            </svg>
+            <span>{{ proxyLoginMessage }}</span>
+          </div>
+        </div>
+
         <div class="done-actions">
           <button class="btn btn-outline" @click="addAnotherAccount">
             {{ t('accountWizard.addAnother') }}
@@ -1276,6 +1513,7 @@ function addAnotherAccount() {
   font-size: 12px;
   line-height: 1.6;
   color: #a1a1aa;
+  min-height: 120px;
   max-height: 250px;
   overflow-y: auto;
   white-space: pre-wrap;
@@ -1318,6 +1556,16 @@ function addAnotherAccount() {
 
 .login-connecting {
   color: var(--accent-cyan);
+}
+
+.login-terminal-waiting {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border-top: 1px solid var(--border-default);
+  color: var(--text-tertiary);
+  font-size: 12px;
 }
 
 /* Login interactive options — clickable buttons for CLI questions */
@@ -1509,6 +1757,114 @@ code.review-value {
 .done-actions {
   display: flex;
   gap: 0.75rem;
+}
+
+/* Proxy login status */
+.proxy-login-status {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  border-radius: 8px;
+  margin-bottom: 1.25rem;
+  font-size: 0.8125rem;
+}
+
+.proxy-status-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.proxy-running {
+  background: rgba(59, 130, 246, 0.1);
+  border: 1px solid rgba(59, 130, 246, 0.2);
+  color: var(--text-secondary);
+}
+
+.proxy-success {
+  background: rgba(34, 197, 94, 0.1);
+  border: 1px solid rgba(34, 197, 94, 0.2);
+  color: var(--accent-emerald);
+}
+
+.proxy-device_auth {
+  background: rgba(59, 130, 246, 0.1);
+  border: 1px solid rgba(59, 130, 246, 0.2);
+  color: var(--text-secondary);
+}
+
+.proxy-device-auth {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.proxy-device-msg {
+  margin: 0;
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+}
+
+.proxy-device-code {
+  padding: 0.5rem 1.5rem;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+}
+
+.proxy-device-code code {
+  font-family: 'SF Mono', 'Monaco', 'Cascadia Code', monospace;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #e4e4e7;
+  letter-spacing: 2px;
+}
+
+.proxy-open-link {
+  font-size: 0.75rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+.proxy-callback-section {
+  width: 100%;
+  margin-top: 0.25rem;
+}
+
+.proxy-callback-hint {
+  margin: 0 0 0.5rem;
+  font-size: 0.75rem;
+  color: var(--text-tertiary);
+  line-height: 1.4;
+}
+
+.proxy-callback-input {
+  display: flex;
+  gap: 0.375rem;
+}
+
+.proxy-callback-input input {
+  flex: 1;
+  font-size: 0.75rem;
+  padding: 0.375rem 0.5rem;
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-family: 'SF Mono', monospace;
+}
+
+.proxy-skipped {
+  background: rgba(234, 179, 8, 0.08);
+  border: 1px solid rgba(234, 179, 8, 0.15);
+  color: var(--text-tertiary);
+}
+
+.proxy-error {
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.15);
+  color: var(--accent-red, #ef4444);
 }
 
 /* Error text */

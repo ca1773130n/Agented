@@ -250,9 +250,8 @@ class MonitoringService:
                     windows = ProviderUsageClient.fetch_usage(account, backend_type)
                     any_fetch_succeeded = True
                 except Exception as e:
-                    logger.error(
-                        f"Monitoring poll: provider API failed for account {account_id}: {e}",
-                        exc_info=True,
+                    logger.debug(
+                        f"Monitoring poll: provider API skipped for account {account_id}: {e}",
                     )
                     continue
 

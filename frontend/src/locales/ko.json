@@ -36,7 +36,7 @@
     "generateFailed": "API 키 생성에 실패했어요. 다시 시도해주세요.",
     "tryAgain": "다시 시도",
     "copyKey": "복사",
-    "copied": "복사됨",
+    "copied": "복사 완료!",
     "continue": "계속하기 →",
     "bento": {
       "vision": "비전",
@@ -110,8 +110,8 @@
         "message": "프로젝트는 제품 내 작업을 추적해요. 클릭해서 첫 번째 프로젝트를 추가해보세요."
       },
       "team": {
-        "title": "팀 구성하기",
-        "message": "팀은 에이전트를 프로젝트에 배정해요. 팀을 구성해서 봇을 실행해보세요."
+        "title": "프로젝트에 팀 배정하기",
+        "message": "슈퍼 에이전트가 미리 구성된 번들 팀을 바로 사용할 수 있어요 — 여기서 프로젝트에 배정하세요. 나중에 커스텀 팀과 에이전트도 만들 수 있어요."
       }
     }
   },
@@ -159,6 +159,7 @@
     "send": "전송",
     "loginCompleted": "로그인이 완료되었어요",
     "tryAgain": "다시 시도",
+    "waitingForResponse": "응답 대기 중...",
     "doneNextBackend": "완료 — 다음 백엔드",
     "connectionLost": "연결이 끊어졌어요 — 로그인이 완료되지 않았을 수 있어요. 다시 시도해주세요.",
     "stepSubscription": "구독",

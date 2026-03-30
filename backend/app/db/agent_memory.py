@@ -27,9 +27,7 @@ def create_thread(
             (thread_id, resource_id, resource_type, title, meta_json),
         )
         conn.commit()
-        cursor = conn.execute(
-            "SELECT * FROM memory_threads WHERE id = ?", (thread_id,)
-        )
+        cursor = conn.execute("SELECT * FROM memory_threads WHERE id = ?", (thread_id,))
         row = cursor.fetchone()
         return _thread_row_to_dict(row)
 
@@ -104,10 +102,16 @@ def save_messages(thread_id: str, messages: list[dict]) -> list[dict]:
     for msg in messages:
         msg_id = generate_memory_message_id()
         meta_json = json.dumps(msg.get("metadata")) if msg.get("metadata") else None
-        rows.append((
-            msg_id, thread_id, msg["role"], msg["content"],
-            msg.get("type", "text"), meta_json,
-        ))
+        rows.append(
+            (
+                msg_id,
+                thread_id,
+                msg["role"],
+                msg["content"],
+                msg.get("type", "text"),
+                meta_json,
+            )
+        )
         saved.append({"id": msg_id, **msg})
     with get_connection() as conn:
         conn.executemany(
@@ -160,9 +164,7 @@ def count_messages(thread_id: str) -> int:
 
 def delete_messages(thread_id: str) -> int:
     with get_connection() as conn:
-        cursor = conn.execute(
-            "DELETE FROM memory_messages WHERE thread_id = ?", (thread_id,)
-        )
+        cursor = conn.execute("DELETE FROM memory_messages WHERE thread_id = ?", (thread_id,))
         conn.commit()
         return cursor.rowcount
 
@@ -186,15 +188,17 @@ def recall_messages(
     with get_connection() as conn:
         # Build FTS5 query: split into alphanumeric words, join with OR
         import re
-        words = re.findall(r'\w+', query)
+
+        words = re.findall(r"\w+", query)
         if not words:
             return []
         # Quote each word for safe FTS5 matching
         fts_query = " OR ".join(f'"{w}"' for w in words)
 
         try:
-            return _execute_recall(conn, fts_query, thread_id, resource_id, resource_type,
-                                   top_k, message_range)
+            return _execute_recall(
+                conn, fts_query, thread_id, resource_id, resource_type, top_k, message_range
+            )
         except Exception:
             logger.warning("FTS5 recall query failed for: %s", query[:100])
             return []
@@ -261,6 +265,204 @@ def _execute_recall(
                 expanded.append(m)
 
         return expanded
+
+
+# --- Vector Embedding Operations ---
+
+
+def embed_and_store(message_id: str, content: str) -> str | None:
+    """Generate embedding for a message and store it."""
+    from ..services.embedding_service import embed_text, is_available, serialize_embedding
+
+    if not is_available():
+        return None
+    embedding = embed_text(content)
+    if embedding is None:
+        return None
+    from .ids import generate_embedding_id
+
+    emb_id = generate_embedding_id()
+    blob = serialize_embedding(embedding)
+    with get_connection() as conn:
+        conn.execute(
+            """INSERT OR REPLACE INTO memory_embeddings
+               (id, message_id, embedding, model, dimension)
+               VALUES (?, ?, ?, 'all-MiniLM-L6-v2', 384)""",
+            (emb_id, message_id, blob),
+        )
+        conn.commit()
+    return emb_id
+
+
+def vector_recall(
+    query: str,
+    resource_id: str | None = None,
+    thread_id: str | None = None,
+    resource_type: str = "agent",
+    top_k: int = 5,
+) -> list[tuple[dict, float]]:
+    """Search memory using vector similarity. Returns (message, score) pairs."""
+    from ..services.embedding_service import (
+        cosine_similarity_batch,
+        deserialize_embedding,
+        embed_text,
+        is_available,
+    )
+
+    if not is_available():
+        return []
+    query_embedding = embed_text(query)
+    if query_embedding is None:
+        return []
+
+    col_names = [
+        "id",
+        "thread_id",
+        "role",
+        "content",
+        "type",
+        "metadata",
+        "created_at",
+    ]
+
+    with get_connection() as conn:
+        if thread_id:
+            cursor = conn.execute(
+                """SELECT m.id, m.thread_id, m.role, m.content, m.type,
+                          m.metadata, m.created_at, e.embedding
+                   FROM memory_embeddings e
+                   JOIN memory_messages m ON m.id = e.message_id
+                   WHERE m.thread_id = ?""",
+                (thread_id,),
+            )
+        elif resource_id:
+            cursor = conn.execute(
+                """SELECT m.id, m.thread_id, m.role, m.content, m.type,
+                          m.metadata, m.created_at, e.embedding
+                   FROM memory_embeddings e
+                   JOIN memory_messages m ON m.id = e.message_id
+                   JOIN memory_threads t ON t.id = m.thread_id
+                   WHERE t.resource_id = ? AND t.resource_type = ?""",
+                (resource_id, resource_type),
+            )
+        else:
+            return []
+
+        rows = cursor.fetchall()
+        if not rows:
+            return []
+
+        messages = []
+        embeddings = []
+        for row in rows:
+            msg = dict(zip(col_names, row[:7]))
+            # Parse metadata JSON if present
+            if msg.get("metadata"):
+                try:
+                    msg["metadata"] = json.loads(msg["metadata"])
+                except (json.JSONDecodeError, TypeError):
+                    msg["metadata"] = None
+            messages.append(msg)
+            embeddings.append(deserialize_embedding(row[7]))
+
+        scores = cosine_similarity_batch(query_embedding, embeddings)
+        scored = list(zip(messages, scores))
+        scored.sort(key=lambda x: x[1], reverse=True)
+        return scored[:top_k]
+
+
+def hybrid_recall(
+    query: str,
+    resource_id: str | None = None,
+    thread_id: str | None = None,
+    resource_type: str = "agent",
+    top_k: int = 5,
+    message_range: int = 1,
+    alpha: float = 0.4,
+) -> list[dict]:
+    """Hybrid recall using Reciprocal Rank Fusion of FTS5 + Vector search.
+
+    RRF formula: score = alpha/(k + rank_fts) + (1-alpha)/(k + rank_vec)
+    """
+    K = 60  # RRF constant
+
+    # Get FTS results
+    fts_results = recall_messages(
+        thread_id=thread_id,
+        query=query,
+        resource_id=resource_id,
+        resource_type=resource_type,
+        top_k=top_k * 2,  # Over-fetch for better fusion
+        message_range=0,  # No expansion yet
+    )
+
+    # Get vector results
+    vec_results = vector_recall(
+        query=query,
+        resource_id=resource_id,
+        thread_id=thread_id,
+        resource_type=resource_type,
+        top_k=top_k * 2,
+    )
+
+    # Build rank maps
+    fts_ranks = {msg["id"]: rank for rank, msg in enumerate(fts_results)}
+    vec_ranks = {msg["id"]: rank for rank, (msg, _score) in enumerate(vec_results)}
+
+    # Merge all message IDs
+    all_msg_ids = set(fts_ranks.keys()) | set(vec_ranks.keys())
+    msg_map: dict[str, dict] = {}
+    for msg in fts_results:
+        msg_map[msg["id"]] = msg
+    for msg, _score in vec_results:
+        if msg["id"] not in msg_map:
+            msg_map[msg["id"]] = msg
+
+    # Compute RRF scores
+    scored = []
+    max_rank = top_k * 2 + 1  # Default rank for missing results
+    for msg_id in all_msg_ids:
+        fts_rank = fts_ranks.get(msg_id, max_rank)
+        vec_rank = vec_ranks.get(msg_id, max_rank)
+        rrf_score = alpha / (K + fts_rank) + (1 - alpha) / (K + vec_rank)
+        scored.append((msg_map[msg_id], rrf_score))
+
+    scored.sort(key=lambda x: x[1], reverse=True)
+    results = [msg for msg, _score in scored[:top_k]]
+
+    # Expand with context if needed
+    if message_range > 0 and results:
+        return _expand_with_context(results, message_range)
+    return results
+
+
+def _expand_with_context(matches: list[dict], message_range: int) -> list[dict]:
+    """Expand match results with surrounding context messages."""
+    expanded: list[dict] = []
+    seen_ids: set = set()
+    with get_connection() as conn:
+        for match in matches:
+            cursor = conn.execute(
+                """SELECT * FROM memory_messages
+                   WHERE thread_id = ? AND created_at <= ?
+                   ORDER BY created_at DESC LIMIT ?""",
+                (match["thread_id"], match["created_at"], message_range + 1),
+            )
+            before = [_msg_row_to_dict(r) for r in cursor.fetchall()]
+
+            cursor = conn.execute(
+                """SELECT * FROM memory_messages
+                   WHERE thread_id = ? AND created_at > ?
+                   ORDER BY created_at ASC LIMIT ?""",
+                (match["thread_id"], match["created_at"], message_range),
+            )
+            after = [_msg_row_to_dict(r) for r in cursor.fetchall()]
+
+            for m in list(reversed(before)) + after:
+                if m["id"] not in seen_ids:
+                    seen_ids.add(m["id"])
+                    expanded.append(m)
+    return expanded
 
 
 # --- Working Memory ---

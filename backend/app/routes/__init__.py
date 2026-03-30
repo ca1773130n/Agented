@@ -7,6 +7,7 @@ def register_blueprints(app):
     from .agent_conversations import agent_conversations_bp
     from .agent_memory import agent_memory_bp
     from .agents import agents_bp
+    from .knowledge_graph import knowledge_graph_bp
     from .analytics import analytics_bp
     from .cross_team_insights import cross_team_insights_bp
     from .audit import audit_bp
@@ -193,6 +194,7 @@ def register_blueprints(app):
             bot_pipes_bp,
             bot_memory_bp,
             agent_memory_bp,
+            knowledge_graph_bp,
             bot_sla_bp,
             report_digests_bp,
             retention_bp,
@@ -298,6 +300,7 @@ def register_blueprints(app):
     app.register_api(bot_pipes_bp)
     app.register_api(bot_memory_bp)
     app.register_api(agent_memory_bp)
+    app.register_api(knowledge_graph_bp)
     app.register_api(retention_bp)
     app.register_api(skill_sets_bp)
     app.register_api(onboarding_bp)

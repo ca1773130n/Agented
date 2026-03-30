@@ -18,7 +18,7 @@ export const monitoringApi = {
       body: JSON.stringify(config),
     }),
   getStatus: () => apiFetch<MonitoringStatus>('/admin/monitoring/status'),
-  pollNow: () => apiFetch<MonitoringStatus>('/admin/monitoring/poll', { method: 'POST' }),
+  pollNow: (opts?: { timeout?: number }) => apiFetch<MonitoringStatus>('/admin/monitoring/poll', { method: 'POST', timeout: opts?.timeout }),
   getHistory: (accountId: number, windowType: string, minutes?: number) =>
     apiFetch<SnapshotHistory>(
       `/admin/monitoring/history?account_id=${accountId}&window_type=${windowType}${minutes ? `&minutes=${minutes}` : ''}`

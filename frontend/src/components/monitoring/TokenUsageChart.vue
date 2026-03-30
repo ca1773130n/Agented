@@ -189,7 +189,6 @@ function renderChart() {
               family: "'Geist Mono', 'SF Mono', monospace",
               size: 10,
             },
-            stepSize: 1,
           },
           grid: {
             drawOnChartArea: false,

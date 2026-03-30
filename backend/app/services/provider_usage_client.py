@@ -519,13 +519,13 @@ def _http_get(url: str, headers: dict) -> Optional[dict]:
                 return None
             return json.loads(resp.read().decode("utf-8"))
     except urllib.error.HTTPError as e:
-        logger.error(f"HTTP GET {url} failed: {e.code} {e.reason}", exc_info=True)
+        logger.warning(f"HTTP GET {url} failed: {e.code} {e.reason}")
         return None
     except (urllib.error.URLError, TimeoutError, OSError) as e:
-        logger.error(f"HTTP GET {url} network error: {e}", exc_info=True)
+        logger.warning(f"HTTP GET {url} network error: {e}")
         return None
     except json.JSONDecodeError:
-        logger.error(f"HTTP GET {url} returned invalid JSON", exc_info=True)
+        logger.warning(f"HTTP GET {url} returned invalid JSON")
         return None
 
 

@@ -221,8 +221,6 @@ export const tourMachine = setup({
       },
     },
 
-    complete: {
-      type: 'final',
-    },
+    complete: {},
   },
 })

@@ -30,6 +30,12 @@ class MemoryEntityType(str, Enum):
     THREAD = "thread"
 
 
+class SearchMode(str, Enum):
+    HYBRID = "hybrid"
+    FTS = "fts"
+    VECTOR = "vector"
+
+
 # --- Path models ---
 
 
@@ -75,12 +81,19 @@ class UpdateMemoryConfigBody(BaseModel):
     last_messages: Optional[int] = Field(None, ge=1, le=100)
     semantic_recall: Optional[dict] = None
     working_memory: Optional[dict] = None
+    vector_search: Optional[dict] = None
+    knowledge_graph: Optional[dict] = None
+    crag_evaluation: Optional[dict] = None
+    cross_thread: Optional[dict] = None
 
 
 class RecallQuery(BaseModel):
     q: str = Field(..., description="Search query")
     thread_id: Optional[str] = Field(None, description="Limit to specific thread")
     top_k: int = Field(5, ge=1, le=50, description="Number of results")
-    message_range: int = Field(
-        1, ge=0, le=5, description="Context messages around each match"
-    )
+    message_range: int = Field(1, ge=0, le=5, description="Context messages around each match")
+    search_mode: SearchMode = Field(SearchMode.HYBRID, description="Search mode")
+    alpha: float = Field(0.4, ge=0.0, le=1.0, description="FTS vs vector weight for hybrid search")
+    include_cross_thread: bool = Field(False, description="Search across all agent threads")
+    use_crag: bool = Field(False, description="Enable CRAG self-correcting retrieval")
+    graph_hops: int = Field(1, ge=1, le=3, description="KG traversal depth for augmentation")

@@ -135,6 +135,7 @@ def _init_database(app) -> None:  # noqa: ARG001 — app reserved for future con
     auto_register_project_root()
     InstanceService.ensure_worktrees()
     SuperAgentSessionService.restore_active_sessions()
+    SuperAgentSessionService.cleanup_stale_sessions()
 
 
 def _seed_system_agent():
@@ -221,6 +222,13 @@ def _register_periodic_jobs(scheduler_service) -> None:
     from .services.project_workspace_service import ProjectWorkspaceService
     from .services.session_collection_service import SessionCollectionService
 
+    from .services.memory_evolution import (
+        process_pending_extractions,
+        run_consolidation_check,
+        run_decay_all,
+    )
+    from .services.super_agent_session_service import SuperAgentSessionService as _SASvc
+
     periodic_jobs = [
         (SessionCollectionService.collect_all, {"minutes": 10}, "session_usage_collection"),
         (ProjectWorkspaceService.sync_all_repos, {"minutes": 30}, "project_repo_sync"),
@@ -230,6 +238,10 @@ def _register_periodic_jobs(scheduler_service) -> None:
             "stale_conversation_cleanup",
         ),
         (cleanup_expired_keys, {"seconds": 60}, "webhook_dedup_cleanup"),
+        (process_pending_extractions, {"seconds": 30}, "kg_entity_extraction"),
+        (run_consolidation_check, {"minutes": 5}, "memory_consolidation_check"),
+        (run_decay_all, {"hours": 24}, "knowledge_decay"),
+        (_SASvc.cleanup_stale_sessions, {"hours": 6}, "stale_sa_session_cleanup"),
     ]
 
     for func, interval_kwargs, job_id in periodic_jobs:
