@@ -494,8 +494,7 @@ class SuperAgentSessionService:
         from ..database import get_connection
 
         cutoff = (
-            datetime.datetime.now(datetime.timezone.utc)
-            - datetime.timedelta(days=max_age_days)
+            datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=max_age_days)
         ).strftime("%Y-%m-%d %H:%M:%S")
 
         with get_connection() as conn:
@@ -513,11 +512,10 @@ class SuperAgentSessionService:
             # Also remove from in-memory cache
             with cls._lock:
                 stale_ids = [
-                    sid for sid, s in cls._active_sessions.items()
+                    sid
+                    for sid, s in cls._active_sessions.items()
                     if s["status"] == "active"
-                    and sid not in {
-                        r["id"] for r in get_active_sessions_list()
-                    }
+                    and sid not in {r["id"] for r in get_active_sessions_list()}
                 ]
                 for sid in stale_ids:
                     del cls._active_sessions[sid]

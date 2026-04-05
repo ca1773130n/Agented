@@ -379,9 +379,7 @@ class CLIProxyManager:
                     pass
 
         if not gemini_creds or not gemini_creds.get("refresh_token"):
-            raise ValueError(
-                "Gemini CLI credentials not found. Complete Gemini CLI login first."
-            )
+            raise ValueError("Gemini CLI credentials not found. Complete Gemini CLI login first.")
 
         # Read cliproxyapi's client_id/secret from existing cred file
         proxy_dir = Path.home() / ".cli-proxy-api"
@@ -400,24 +398,34 @@ class CLIProxyManager:
 
         # Write CLIProxyAPI credential file
         cred_file = proxy_dir / f"gemini-{gemini_email or 'default'}.json"
-        cred_file.write_text(_json.dumps({
-            "auto": False, "checked": True,
-            "email": gemini_email, "project_id": "", "type": "gemini",
-            "token": {
-                "access_token": gemini_creds.get("access_token", ""),
-                "client_id": client_id, "client_secret": client_secret,
-                "expires_in": 3599, "expiry": "",
-                "refresh_token": gemini_creds["refresh_token"],
-                "scopes": [
-                    "https://www.googleapis.com/auth/cloud-platform",
-                    "https://www.googleapis.com/auth/userinfo.email",
-                    "https://www.googleapis.com/auth/userinfo.profile",
-                ],
-                "token_type": "Bearer",
-                "token_uri": "https://oauth2.googleapis.com/token",
-                "universe_domain": "googleapis.com",
-            },
-        }, indent=2))
+        cred_file.write_text(
+            _json.dumps(
+                {
+                    "auto": False,
+                    "checked": True,
+                    "email": gemini_email,
+                    "project_id": "",
+                    "type": "gemini",
+                    "token": {
+                        "access_token": gemini_creds.get("access_token", ""),
+                        "client_id": client_id,
+                        "client_secret": client_secret,
+                        "expires_in": 3599,
+                        "expiry": "",
+                        "refresh_token": gemini_creds["refresh_token"],
+                        "scopes": [
+                            "https://www.googleapis.com/auth/cloud-platform",
+                            "https://www.googleapis.com/auth/userinfo.email",
+                            "https://www.googleapis.com/auth/userinfo.profile",
+                        ],
+                        "token_type": "Bearer",
+                        "token_uri": "https://oauth2.googleapis.com/token",
+                        "universe_domain": "googleapis.com",
+                    },
+                },
+                indent=2,
+            )
+        )
         logger.info("Imported Gemini CLI creds to CLIProxyAPI: %s", cred_file)
 
         proc = subprocess.Popen(["true"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)

@@ -65,9 +65,20 @@ def _get_secret_key() -> str:
 
 
 def _configure_cors(app) -> None:
-    """Configure CORS — fail-closed: empty list blocks all cross-origin when unset."""
+    """Configure CORS — fail-closed: empty list blocks all cross-origin when unset.
+
+    In development (DEBUG=true), localhost:3000 is always allowed so the Vite
+    dev server can talk to the backend even when Flask trailing-slash redirects
+    bypass the Vite proxy.
+    """
     allowed_origins = os.environ.get("CORS_ALLOWED_ORIGINS", "").split(",")
     allowed_origins = [o.strip() for o in allowed_origins if o.strip()]
+    # Always allow localhost origins — Agented is a local-only tool and the Vite
+    # dev server on :3000 needs direct access when Flask trailing-slash redirects
+    # bypass the Vite proxy.
+    for dev_origin in ("http://localhost:3000", "http://127.0.0.1:3000"):
+        if dev_origin not in allowed_origins:
+            allowed_origins.append(dev_origin)
     cors_config = {"origins": allowed_origins} if allowed_origins else {"origins": []}
     CORS(
         app,
@@ -130,12 +141,25 @@ def _init_database(app) -> None:  # noqa: ARG001 — app reserved for future con
     seed_preset_mcp_servers()
     seed_bot_templates()
     seed_bundled_teams_and_agents()
+    _seed_bundled_marketplace()
     _seed_system_agent()
     migrate_existing_paths()
     auto_register_project_root()
     InstanceService.ensure_worktrees()
     SuperAgentSessionService.restore_active_sessions()
     SuperAgentSessionService.cleanup_stale_sessions()
+
+
+def _seed_bundled_marketplace():
+    """Ensure the bundled marketplace row exists so the Settings dropdown is never empty."""
+    from .services.setup_service import BUNDLE_MARKETPLACE_NAME, BUNDLE_MARKETPLACE_URL
+    from .db.marketplace import create_marketplace, get_all_marketplaces
+
+    for mkt in get_all_marketplaces():
+        if mkt.get("url") == BUNDLE_MARKETPLACE_URL:
+            return  # already exists
+    create_marketplace(BUNDLE_MARKETPLACE_NAME, BUNDLE_MARKETPLACE_URL)
+    logger.info("Seeded bundled marketplace: %s", BUNDLE_MARKETPLACE_NAME)
 
 
 def _seed_system_agent():

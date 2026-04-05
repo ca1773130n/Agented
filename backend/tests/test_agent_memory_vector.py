@@ -116,9 +116,7 @@ class TestEmbedAndStore:
 
     @patch("app.services.embedding_service.is_available", return_value=True)
     @patch("app.services.embedding_service.embed_text", side_effect=_mock_embed_text)
-    def test_embed_and_store_creates_record(
-        self, mock_embed, mock_avail, isolated_db
-    ):
+    def test_embed_and_store_creates_record(self, mock_embed, mock_avail, isolated_db):
         thread = create_thread("agent-test01", "agent", "Embed Test")
         msgs = save_messages(
             thread["id"],
@@ -226,9 +224,7 @@ class TestHybridRecall:
 
     @patch("app.services.embedding_service.is_available", return_value=True)
     @patch("app.services.embedding_service.embed_text", side_effect=_mock_embed_text)
-    def test_hybrid_recall_with_context_expansion(
-        self, mock_embed, mock_avail, isolated_db
-    ):
+    def test_hybrid_recall_with_context_expansion(self, mock_embed, mock_avail, isolated_db):
         thread = create_thread("agent-hyb02", "agent", "Context Test")
         messages = save_messages(
             thread["id"],
@@ -263,9 +259,7 @@ class TestRecallEndpoint:
     def test_recall_fts_mode(self, client, isolated_db):
         agent_id = self._create_agent(client, "Recall FTS Agent")
 
-        resp = client.post(
-            f"/admin/agents/{agent_id}/memory/threads", json={}
-        )
+        resp = client.post(f"/admin/agents/{agent_id}/memory/threads", json={})
         thread_id = resp.get_json()["id"]
         client.post(
             f"/admin/agents/{agent_id}/memory/threads/{thread_id}/messages",
@@ -276,10 +270,7 @@ class TestRecallEndpoint:
             },
         )
 
-        resp = client.get(
-            f"/admin/agents/{agent_id}/memory/recall"
-            f"?q=deployment&search_mode=fts"
-        )
+        resp = client.get(f"/admin/agents/{agent_id}/memory/recall?q=deployment&search_mode=fts")
         assert resp.status_code == 200
         data = resp.get_json()
         assert data["search_mode"] == "fts"
@@ -288,13 +279,8 @@ class TestRecallEndpoint:
     def test_recall_vector_mode(self, client, isolated_db):
         agent_id = self._create_agent(client, "Vec Recall Agent")
 
-        with patch(
-            "app.db.agent_memory.vector_recall", return_value=[]
-        ):
-            resp = client.get(
-                f"/admin/agents/{agent_id}/memory/recall"
-                f"?q=test&search_mode=vector"
-            )
+        with patch("app.db.agent_memory.vector_recall", return_value=[]):
+            resp = client.get(f"/admin/agents/{agent_id}/memory/recall?q=test&search_mode=vector")
         assert resp.status_code == 200
         data = resp.get_json()
         assert data["search_mode"] == "vector"
@@ -303,12 +289,9 @@ class TestRecallEndpoint:
     def test_recall_hybrid_mode(self, client, isolated_db):
         agent_id = self._create_agent(client, "Hybrid Recall Agent")
 
-        with patch(
-            "app.db.agent_memory.hybrid_recall", return_value=[]
-        ):
+        with patch("app.db.agent_memory.hybrid_recall", return_value=[]):
             resp = client.get(
-                f"/admin/agents/{agent_id}/memory/recall"
-                f"?q=test&search_mode=hybrid&alpha=0.5"
+                f"/admin/agents/{agent_id}/memory/recall?q=test&search_mode=hybrid&alpha=0.5"
             )
         assert resp.status_code == 200
         data = resp.get_json()
@@ -317,12 +300,8 @@ class TestRecallEndpoint:
     def test_recall_default_is_hybrid(self, client, isolated_db):
         agent_id = self._create_agent(client, "Default Mode Agent")
 
-        with patch(
-            "app.db.agent_memory.hybrid_recall", return_value=[]
-        ):
-            resp = client.get(
-                f"/admin/agents/{agent_id}/memory/recall?q=test"
-            )
+        with patch("app.db.agent_memory.hybrid_recall", return_value=[]):
+            resp = client.get(f"/admin/agents/{agent_id}/memory/recall?q=test")
             assert resp.status_code == 200
             data = resp.get_json()
             assert data["search_mode"] == "hybrid"

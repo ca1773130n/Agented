@@ -97,7 +97,9 @@ def start_connect(path: BackendPath):
     user_email = body.get("email")
     account_name = body.get("account_name")
     result, status = BackendService.start_connect(
-        path.backend_id, config_path=config_path, email=user_email,
+        path.backend_id,
+        config_path=config_path,
+        email=user_email,
         account_name=account_name,
     )
     return result, status
@@ -300,6 +302,7 @@ def start_proxy_login():
         if redirect_uri and "localhost" in redirect_uri:
             callback_port = urlparse(redirect_uri).port or 8085
             from ..services.backend_cli_service import BackendCLIService
+
             BackendCLIService.set_callback_port(callback_port)
 
     result = {
@@ -393,6 +396,7 @@ def gemini_auth_start():
 
     # Store for later exchange
     from ..services.backend_cli_service import BackendCLIService
+
     with BackendCLIService._lock:
         if not hasattr(BackendCLIService, "_gemini_auth_pending"):
             BackendCLIService._gemini_auth_pending = {}
@@ -406,17 +410,20 @@ def gemini_auth_start():
     scopes = "https://www.googleapis.com/auth/cloud-platform https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile"
 
     from urllib.parse import urlencode
-    oauth_url = "https://accounts.google.com/o/oauth2/v2/auth?" + urlencode({
-        "client_id": client_id,
-        "redirect_uri": "https://codeassist.google.com/authcode",
-        "response_type": "code",
-        "scope": scopes,
-        "access_type": "offline",
-        "code_challenge_method": "S256",
-        "code_challenge": code_challenge,
-        "state": state,
-        "prompt": "consent",
-    })
+
+    oauth_url = "https://accounts.google.com/o/oauth2/v2/auth?" + urlencode(
+        {
+            "client_id": client_id,
+            "redirect_uri": "https://codeassist.google.com/authcode",
+            "response_type": "code",
+            "scope": scopes,
+            "access_type": "offline",
+            "code_challenge_method": "S256",
+            "code_challenge": code_challenge,
+            "state": state,
+            "prompt": "consent",
+        }
+    )
 
     return {
         "status": "started",
@@ -437,10 +444,13 @@ def gemini_auth_complete():
     state = body.get("state", "")
 
     if not auth_code:
-        return error_response("BAD_REQUEST", "Authorization code is required", HTTPStatus.BAD_REQUEST)
+        return error_response(
+            "BAD_REQUEST", "Authorization code is required", HTTPStatus.BAD_REQUEST
+        )
 
     # Retrieve stored PKCE verifier
     from ..services.backend_cli_service import BackendCLIService
+
     with BackendCLIService._lock:
         pending = getattr(BackendCLIService, "_gemini_auth_pending", {}).pop(state, None)
 
@@ -454,12 +464,16 @@ def gemini_auth_complete():
     client_id = "681255809395-oo8ft2oprdrnp9e3aqf6av3hmdib135j.apps.googleusercontent.com"
 
     # Exchange code for tokens
+    # This client_id is registered as a web app; Google requires client_secret
+    # even with PKCE. The secret is publicly embedded in Gemini CLI itself.
+    client_secret = "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"
     try:
         resp = httpx.post(
             "https://oauth2.googleapis.com/token",
             data={
                 "code": auth_code,
                 "client_id": client_id,
+                "client_secret": client_secret,
                 "redirect_uri": "https://codeassist.google.com/authcode",
                 "grant_type": "authorization_code",
                 "code_verifier": code_verifier,
@@ -467,16 +481,27 @@ def gemini_auth_complete():
             timeout=15,
         )
         if resp.status_code != 200:
-            err_data = resp.json() if resp.headers.get("content-type", "").startswith("application/json") else {}
+            err_data = (
+                resp.json()
+                if resp.headers.get("content-type", "").startswith("application/json")
+                else {}
+            )
             err_msg = err_data.get("error_description", err_data.get("error", resp.text[:200]))
-            return error_response("BAD_REQUEST", f"Token exchange failed: {err_msg}", HTTPStatus.BAD_REQUEST)
+            return error_response(
+                "BAD_REQUEST", f"Token exchange failed: {err_msg}", HTTPStatus.BAD_REQUEST
+            )
         tokens = resp.json()
     except Exception as exc:
-        return error_response("INTERNAL_SERVER_ERROR", f"Token exchange error: {exc}", HTTPStatus.INTERNAL_SERVER_ERROR)
+        return error_response(
+            "INTERNAL_SERVER_ERROR",
+            f"Token exchange error: {exc}",
+            HTTPStatus.INTERNAL_SERVER_ERROR,
+        )
 
     # Save to Gemini CLI config
     import os
     from pathlib import Path
+
     if config_path:
         gemini_dir = Path(os.path.expanduser(config_path)) / ".gemini"
     else:
@@ -484,14 +509,20 @@ def gemini_auth_complete():
     gemini_dir.mkdir(parents=True, exist_ok=True)
 
     creds_file = gemini_dir / "oauth_creds.json"
-    creds_file.write_text(_json.dumps({
-        "access_token": tokens.get("access_token", ""),
-        "refresh_token": tokens.get("refresh_token", ""),
-        "scope": tokens.get("scope", ""),
-        "token_type": tokens.get("token_type", "Bearer"),
-        "id_token": tokens.get("id_token", ""),
-        "expiry_date": int(__import__("time").time() * 1000) + tokens.get("expires_in", 3599) * 1000,
-    }, indent=2))
+    creds_file.write_text(
+        _json.dumps(
+            {
+                "access_token": tokens.get("access_token", ""),
+                "refresh_token": tokens.get("refresh_token", ""),
+                "scope": tokens.get("scope", ""),
+                "token_type": tokens.get("token_type", "Bearer"),
+                "id_token": tokens.get("id_token", ""),
+                "expiry_date": int(__import__("time").time() * 1000)
+                + tokens.get("expires_in", 3599) * 1000,
+            },
+            indent=2,
+        )
+    )
     logger.info("Gemini CLI creds saved to %s", creds_file)
 
     # Save to CLIProxyAPI
@@ -510,22 +541,30 @@ def gemini_auth_complete():
                 pass
 
         proxy_cred = proxy_dir / f"gemini-{email or 'default'}.json"
-        proxy_cred.write_text(_json.dumps({
-            "auto": False, "checked": True,
-            "email": email, "project_id": "", "type": "gemini",
-            "token": {
-                "access_token": tokens.get("access_token", ""),
-                "client_id": client_id,
-                "client_secret": client_secret,
-                "expires_in": tokens.get("expires_in", 3599),
-                "expiry": "",
-                "refresh_token": tokens.get("refresh_token", ""),
-                "scopes": tokens.get("scope", "").split(" "),
-                "token_type": "Bearer",
-                "token_uri": "https://oauth2.googleapis.com/token",
-                "universe_domain": "googleapis.com",
-            },
-        }, indent=2))
+        proxy_cred.write_text(
+            _json.dumps(
+                {
+                    "auto": False,
+                    "checked": True,
+                    "email": email,
+                    "project_id": "",
+                    "type": "gemini",
+                    "token": {
+                        "access_token": tokens.get("access_token", ""),
+                        "client_id": client_id,
+                        "client_secret": client_secret,
+                        "expires_in": tokens.get("expires_in", 3599),
+                        "expiry": "",
+                        "refresh_token": tokens.get("refresh_token", ""),
+                        "scopes": tokens.get("scope", "").split(" "),
+                        "token_type": "Bearer",
+                        "token_uri": "https://oauth2.googleapis.com/token",
+                        "universe_domain": "googleapis.com",
+                    },
+                },
+                indent=2,
+            )
+        )
         logger.info("CLIProxyAPI Gemini creds saved to %s", proxy_cred)
 
     return {

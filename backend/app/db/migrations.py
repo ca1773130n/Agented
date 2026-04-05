@@ -4315,6 +4315,16 @@ def _migrate_98_tracing_tables(conn):
         logger.info("Created tracing tables: %s", ", ".join(tables_created))
 
 
+def _migrate_99_kg_extraction_log(conn):
+    """Add kg_extraction_log table for memory evolution tracking."""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS kg_extraction_log (
+            message_id TEXT PRIMARY KEY,
+            processed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
+
 VERSIONED_MIGRATIONS = [
     (1, "add_github_columns", _migrate_add_github_columns),
     (2, "add_pr_reviews_table", _migrate_add_pr_reviews_table),
@@ -4437,4 +4447,6 @@ VERSIONED_MIGRATIONS = [
     (97, "agent_memory_tables", _migrate_97_agent_memory_tables),
     # Structured tracing system
     (98, "tracing_tables", _migrate_98_tracing_tables),
+    # KG extraction tracking for memory evolution
+    (99, "kg_extraction_log", _migrate_99_kg_extraction_log),
 ]

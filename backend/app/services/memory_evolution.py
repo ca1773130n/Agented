@@ -179,9 +179,7 @@ def apply_decay(agent_id: str) -> int:
             try:
                 # Parse last_seen timestamp
                 if "T" in last_seen_str:
-                    last_seen = datetime.fromisoformat(
-                        last_seen_str.replace("Z", "+00:00")
-                    )
+                    last_seen = datetime.fromisoformat(last_seen_str.replace("Z", "+00:00"))
                     last_seen = last_seen.replace(tzinfo=None)
                 else:
                     last_seen = datetime.strptime(last_seen_str, "%Y-%m-%d %H:%M:%S")
@@ -212,16 +210,12 @@ def apply_decay(agent_id: str) -> int:
 
         if count > 0:
             conn.commit()
-            logger.info(
-                "Applied decay to %d entities for agent %s", count, agent_id
-            )
+            logger.info("Applied decay to %d entities for agent %s", count, agent_id)
 
     return count
 
 
-def should_consolidate(
-    agent_id: str, thread_id: str, threshold: int = 50
-) -> bool:
+def should_consolidate(agent_id: str, thread_id: str, threshold: int = 50) -> bool:
     """Check if consolidation should run (AND logic: count + time floor)."""
     from ..db.agent_memory import count_messages
     from ..db.connection import get_connection
@@ -280,16 +274,11 @@ def consolidate_thread(agent_id: str, thread_id: str) -> dict | None:
     # Process entities from all messages
     total_entities = 0
     for msg in messages:
-        total_entities += process_message_entities(
-            agent_id, msg.get("content", "")
-        )
+        total_entities += process_message_entities(agent_id, msg.get("content", ""))
 
     # Create consolidation log entry
     consolidation_id = generate_consolidation_id()
-    summary = (
-        f"Consolidated {len(messages)} messages, "
-        f"extracted {total_entities} entities"
-    )
+    summary = f"Consolidated {len(messages)} messages, extracted {total_entities} entities"
 
     with get_connection() as conn:
         conn.execute(
@@ -385,8 +374,7 @@ def run_consolidation_check() -> int:
     total = 0
     with get_connection() as conn:
         cursor = conn.execute(
-            "SELECT DISTINCT resource_id FROM memory_threads "
-            "WHERE resource_type = 'agent'"
+            "SELECT DISTINCT resource_id FROM memory_threads WHERE resource_type = 'agent'"
         )
         agent_ids = [row["resource_id"] for row in cursor.fetchall()]
 

@@ -158,6 +158,7 @@ class BackendCLIService:
 
         # Create fake browser script BEFORE fork so parent knows the URL file path
         import tempfile as _tf
+
         _url_dir = _tf.mkdtemp(prefix="agented-oauth-")
         _url_file = os.path.join(_url_dir, "url.txt")
         _fake_browser = os.path.join(_url_dir, "browser")
@@ -170,6 +171,7 @@ class BackendCLIService:
         master_fd, slave_fd = pty.openpty()
         # Set very wide terminal so URLs don't get wrapped/corrupted
         import fcntl, struct, termios
+
         winsize = struct.pack("HHHH", 50, 500, 0, 0)  # rows=50, cols=500
         try:
             fcntl.ioctl(slave_fd, termios.TIOCSWINSZ, winsize)
@@ -306,7 +308,8 @@ class BackendCLIService:
                                 if _line.startswith("http"):
                                     logger.info(
                                         "CLI %s: OAuth URL (from file): %s…",
-                                        session_id, _line[:80],
+                                        session_id,
+                                        _line[:80],
                                     )
                                     cls._broadcast(
                                         session_id,
@@ -480,6 +483,28 @@ class BackendCLIService:
                         if _SPINNER_RE.match(stripped):
                             continue
 
+                        # Detect OAuth/auth URLs in PTY output and auto-open in browser
+                        if not _oauth_url_sent:
+                            url_match = OAUTH_URL_PATTERN.search(stripped)
+                            if url_match:
+                                detected_url = url_match.group(1).rstrip(".,;:)")
+                                detected_url = cls._rewrite_oauth_url(session_id, detected_url)
+                                logger.info(
+                                    "CLI %s: OAuth URL detected in output: %s",
+                                    session_id,
+                                    detected_url[:80],
+                                )
+                                cls._broadcast(
+                                    session_id,
+                                    "oauth_url",
+                                    {
+                                        "url": detected_url,
+                                        "content": detected_url,
+                                        "timestamp": datetime.datetime.now().isoformat(),
+                                    },
+                                )
+                                _oauth_url_sent = True
+
                         # Track recent lines for multi-line menu detection
                         recent_lines.append(stripped)
                         if len(recent_lines) > 15:
@@ -566,8 +591,7 @@ class BackendCLIService:
                             and "Type your message" in stripped
                         ):
                             logger.info(
-                                "CLI %s: Gemini signed in + REPL ready, "
-                                "force-completing",
+                                "CLI %s: Gemini signed in + REPL ready, force-completing",
                                 session_id,
                             )
                             try:
@@ -583,9 +607,7 @@ class BackendCLIService:
                             except ChildProcessError:
                                 pass
                             cls._auto_save_account(session_id)
-                            cls._finish_session(
-                                session_id, "completed", 0, None
-                            )
+                            cls._finish_session(session_id, "completed", 0, None)
                             return
 
                 # Auto-accept Gemini TUI dialogs — these use box-drawing chars
@@ -593,19 +615,21 @@ class BackendCLIService:
                 # The ● marker indicates an option is pre-selected; Enter accepts.
                 recent_text = " ".join(recent_lines[-8:])
                 session = cls._sessions.get(session_id, {})
-                if session.get("backend_type") == "gemini" and "●" in recent_text and (
-                    # Trust folder dialog
-                    "Trust folder" in recent_text
-                    # Auth method selection (Google login is default)
-                    or "Use Enter to select" in recent_text
-                    # Terms of service acceptance
-                    or "Terms of Service" in recent_text
-                    # "Do you want to continue?" browser open confirmation
-                    or "Do you want to continue" in recent_text
-                ):
-                    logger.info(
-                        "CLI %s: auto-accepting Gemini TUI dialog", session_id
+                if (
+                    session.get("backend_type") == "gemini"
+                    and "●" in recent_text
+                    and (
+                        # Trust folder dialog
+                        "Trust folder" in recent_text
+                        # Auth method selection (Google login is default)
+                        or "Use Enter to select" in recent_text
+                        # Terms of service acceptance
+                        or "Terms of Service" in recent_text
+                        # "Do you want to continue?" browser open confirmation
+                        or "Do you want to continue" in recent_text
                     )
+                ):
+                    logger.info("CLI %s: auto-accepting Gemini TUI dialog", session_id)
                     os.write(master_fd, b"\r")
                     recent_lines.clear()
                     idle_ticks = 0
@@ -812,7 +836,8 @@ class BackendCLIService:
             if any(a.get("account_name") == account_name for a in existing):
                 logger.info(
                     "CLI %s: account '%s' already exists, skipping auto-save",
-                    session_id, account_name,
+                    session_id,
+                    account_name,
                 )
                 return
 
@@ -828,7 +853,9 @@ class BackendCLIService:
             )
             logger.info(
                 "CLI %s: auto-saved account '%s' for backend '%s'",
-                session_id, account_name, backend_id,
+                session_id,
+                account_name,
+                backend_id,
             )
 
             # Trigger CLIProxyAPI login in background for this account
@@ -842,19 +869,25 @@ class BackendCLIService:
                         from ..services.cliproxy_manager import CLIProxyManager
 
                         proc, auth_info = CLIProxyManager.start_login(
-                            backend_type=backend_type, config_dir=config_path,
+                            backend_type=backend_type,
+                            config_dir=config_path,
                         )
                         url = auth_info.get("url", "")
                         if url:
                             logger.info(
                                 "CLI %s: CLIProxyAPI login started for '%s'",
-                                session_id, account_name,
+                                session_id,
+                                account_name,
                             )
                             # Broadcast the proxy OAuth URL so frontend can open it
-                            cls._broadcast(session_id, "proxy_oauth_url", {
-                                "url": url,
-                                "account_name": account_name,
-                            })
+                            cls._broadcast(
+                                session_id,
+                                "proxy_oauth_url",
+                                {
+                                    "url": url,
+                                    "account_name": account_name,
+                                },
+                            )
                         try:
                             proc.wait(timeout=60)
                         except subprocess.TimeoutExpired:
@@ -869,7 +902,9 @@ class BackendCLIService:
         except Exception as e:
             logger.warning(
                 "CLI %s: failed to auto-save account '%s': %s",
-                session_id, account_name, e,
+                session_id,
+                account_name,
+                e,
             )
 
     @classmethod
