@@ -262,13 +262,20 @@ class CompoundModeService:
         from .chat_state_service import ChatStateService
         from .conversation_streaming import stream_llm_response
 
-        # Wait for all backends (with total timeout)
+        # Wait for ALL backends with a shared deadline (not per-backend sequential timeout).
+        # This avoids synthesizing before slow backends finish when earlier ones used
+        # most of the time budget.
+        import time as _time
+
+        deadline = _time.monotonic() + timeout
+
         with cls._lock:
             events = cls._events.get(session_id, {})
 
         for backend in backends:
+            remaining = max(0, deadline - _time.monotonic())
             event = events.get(backend)
-            if event and not event.wait(timeout=timeout):
+            if event and not event.wait(timeout=remaining):
                 logger.warning(
                     "Backend %s timed out during compound wait for session %s",
                     backend,

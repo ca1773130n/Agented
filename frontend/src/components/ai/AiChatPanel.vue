@@ -401,6 +401,7 @@ const processGroupEntries = computed(() => {
   padding: 24px;
   display: flex;
   flex-direction: column;
+  align-items: stretch;
   gap: 16px;
   position: relative;
 }

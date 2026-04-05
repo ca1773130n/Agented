@@ -125,8 +125,9 @@ watch(
 .all-mode-responses {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  flex-shrink: 0;
+  gap: 10px;
+  align-self: stretch;
+  width: 100%;
 }
 
 /* Collapsible toggle header */
@@ -138,16 +139,17 @@ watch(
   padding: 10px 14px;
   background: var(--bg-tertiary);
   border: 1px solid var(--border-default);
-  border-radius: 8px;
+  border-radius: 10px;
   color: var(--text-secondary);
   cursor: pointer;
   font-family: inherit;
   font-size: 13px;
-  transition: background 0.15s;
+  transition: background 0.15s, border-color 0.15s;
 }
 
 .collapse-toggle:hover {
   background: rgba(255, 255, 255, 0.04);
+  border-color: var(--border-hover, var(--border-default));
 }
 
 .chevron {
@@ -167,6 +169,7 @@ watch(
 }
 
 .collapse-summary {
+  margin-left: auto;
   color: var(--text-tertiary);
   font-size: 12px;
 }
@@ -174,28 +177,34 @@ watch(
 /* Chat bubble per backend */
 .backend-bubble {
   display: flex;
-  gap: 10px;
-  align-self: flex-start;
-  max-width: 90%;
+  gap: 12px;
+  width: 100%;
+  padding: 12px 14px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  transition: border-color 0.15s;
+}
+
+.backend-bubble:hover {
+  border-color: var(--border-default);
 }
 
 .bubble-avatar {
-  width: 32px;
-  height: 32px;
+  width: 30px;
+  height: 30px;
   border-radius: 8px;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 700;
 }
 
 .bubble-content {
-  background: var(--bg-tertiary);
-  border-radius: 12px;
-  padding: 10px 14px;
-  min-width: 120px;
+  flex: 1;
+  min-width: 0;
 }
 
 .bubble-header {
@@ -246,7 +255,7 @@ watch(
   margin-top: 6px;
   padding: 6px 10px;
   border-radius: 6px;
-  background: rgba(239, 68, 68, 0.1);
+  background: rgba(239, 68, 68, 0.08);
   color: #ef4444;
   font-size: 12px;
 }
@@ -255,7 +264,7 @@ watch(
   margin-top: 6px;
   padding: 6px 10px;
   border-radius: 6px;
-  background: rgba(234, 179, 8, 0.1);
+  background: rgba(234, 179, 8, 0.08);
   color: #eab308;
   font-size: 12px;
 }

@@ -65,8 +65,15 @@ class ModelDiscoveryService:
                 models = cls._discover_gemini_models_api()
             if not models:
                 models = cls._discover_gemini_models_local()
-            if not models:
-                models = cls._discover_models_via_cliproxy("google")
+            # Merge CLIProxyAPI models — the proxy is the actual routing layer,
+            # so its model list is authoritative for what can be used.
+            proxy_models = cls._discover_models_via_cliproxy("google")
+            if proxy_models:
+                existing = set(models or [])
+                for m in proxy_models:
+                    if m not in existing:
+                        (models := models or []).append(m)
+                        existing.add(m)
             return models or []
         return []
 
@@ -103,7 +110,28 @@ class ModelDiscoveryService:
             free = [m for m in native if "free" in m.lower()]
             return free[0] if free else native[0]
 
+        if backend_type == "gemini":
+            # The proxy is the routing layer — prefer models it actually supports.
+            # Among those, pick the newest stable flash model as default.
+            proxy_models = cls._discover_models_via_cliproxy("google")
+            candidates = proxy_models if proxy_models else raw
+            return max(candidates, key=cls._gemini_sort_key)
+
         return raw[0]
+
+    @staticmethod
+    def _gemini_sort_key(m: str) -> tuple:
+        """Sort key for gemini models: prefer newest version, pro > flash."""
+        import re as _re
+
+        match = _re.match(r"gemini-(\d+)(?:\.(\d+))?-(\w+)", m)
+        if not match:
+            return (0, 0, 0)
+        major = int(match.group(1))
+        minor = int(match.group(2) or 0)
+        variant = match.group(3)
+        is_pro = 1 if variant.startswith("pro") else 0
+        return (major, minor, is_pro)
 
     @classmethod
     def discover_models(cls, backend_type: str) -> list[str]:

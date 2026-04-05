@@ -182,26 +182,58 @@ class CLIProxyManager:
 
     @classmethod
     def list_accounts(cls) -> List[dict]:
-        """List all credential files (claude-*.json, codex-*.json) from auth-dir."""
+        """List all credential JSON files from auth-dir."""
         accounts = []
-        for pattern in ("claude-*.json", "codex-*.json"):
-            for path in _GLOBAL_AUTH_DIR.glob(pattern):
-                try:
-                    data = json.loads(path.read_text())
-                    accounts.append(
-                        {
-                            "email": data.get("email", ""),
-                            "type": data.get("type", pattern.split("-")[0]),
-                            "disabled": data.get("disabled", False),
-                            "expired": data.get("expired", ""),
-                            "last_refresh": data.get("last_refresh", ""),
-                            "file": path.name,
-                        }
-                    )
-                except Exception as e:
-                    logger.debug("Account file parse: %s", e)
+        for path in _GLOBAL_AUTH_DIR.glob("*.json"):
+            if path.name == "config.yaml" or path.name.startswith("."):
+                continue
+            try:
+                data = json.loads(path.read_text())
+                acct_type = data.get("type", "")
+                if not acct_type:
+                    # Infer from filename prefix
+                    for prefix in ("claude", "codex", "gemini"):
+                        if path.name.startswith(prefix):
+                            acct_type = prefix
+                            break
+                if not acct_type:
                     continue
+                accounts.append(
+                    {
+                        "email": data.get("email", ""),
+                        "type": acct_type,
+                        "disabled": data.get("disabled", False),
+                        "expired": data.get("expired", ""),
+                        "last_refresh": data.get("last_refresh", ""),
+                        "file": path.name,
+                    }
+                )
+            except Exception as e:
+                logger.debug("Account file parse: %s", e)
+                continue
         return accounts
+
+    @classmethod
+    def _kill_stale_login_processes(cls) -> None:
+        """Kill any leftover cliproxyapi login processes to free the callback port."""
+        try:
+            import signal
+
+            result = subprocess.run(
+                ["pgrep", "-f", "cliproxyapi.*(-claude-login|-codex-login|-login)"],
+                capture_output=True,
+                text=True,
+            )
+            for pid_str in result.stdout.strip().split("\n"):
+                pid_str = pid_str.strip()
+                if pid_str:
+                    try:
+                        os.kill(int(pid_str), signal.SIGTERM)
+                        logger.info("Killed stale cliproxyapi login process: pid=%s", pid_str)
+                    except (ProcessLookupError, ValueError):
+                        pass
+        except Exception:
+            pass
 
     @classmethod
     def start_login(
@@ -247,279 +279,111 @@ class CLIProxyManager:
             raise ValueError(f"Proxy login not supported for backend type: {backend_type}")
 
     @classmethod
-    def _start_claude_login(cls, config_path: str, env: dict) -> tuple[subprocess.Popen, dict]:
-        """Start ``cliproxyapi --claude-login`` with fake open intercept."""
-        import tempfile
+    def _capture_oauth_url(
+        cls,
+        proc: subprocess.Popen,
+        url_keywords: list[str],
+        label: str,
+        timeout: int = 15,
+    ) -> str | None:
+        """Read proc stdout in a background thread and capture the first OAuth URL.
 
-        # Create a temp dir with a fake 'open' script and a URL capture file.
-        # Go's exec.Command discards child stdout, so we write to a file.
-        tmpdir = tempfile.mkdtemp(prefix="cliproxy-")
-        url_file = os.path.join(tmpdir, "oauth_url.txt")
-        fake_open = os.path.join(tmpdir, "open")
-        # Use >> (append) because cliproxyapi calls open multiple times
-        # (first about:blank, then the real OAuth URL).
-        # sleep in background (&) so the script returns quickly for each call
-        # but a child process stays alive to keep cliproxyapi happy.
-        with open(fake_open, "w") as f:
-            f.write(f'#!/bin/sh\necho "$1" >> {url_file}\nsleep 600 &\n')
-        os.chmod(fake_open, 0o755)
-        env["PATH"] = tmpdir + ":" + env.get("PATH", "")
-        env["BROWSER"] = fake_open
+        Using a thread avoids pipe-buffering issues with select() on macOS.
+        """
+        import queue
+
+        lines_q: queue.Queue[str] = queue.Queue()
+        found_url: list[str | None] = [None]
+
+        def _reader() -> None:
+            try:
+                for line in proc.stdout:
+                    stripped = line.rstrip()
+                    logger.info("CLIProxy %s line: %s", label, stripped)
+                    lines_q.put(stripped)
+                    if found_url[0]:
+                        continue
+                    url_match = re.search(r"(https?://\S+)", stripped)
+                    if url_match:
+                        candidate = url_match.group(1)
+                        if any(kw in candidate.lower() for kw in url_keywords):
+                            found_url[0] = candidate
+            except Exception:
+                pass
+
+        reader_thread = threading.Thread(target=_reader, daemon=True)
+        reader_thread.start()
+
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            if found_url[0]:
+                break
+            if proc.poll() is not None:
+                time.sleep(0.5)  # drain remaining output
+                break
+            time.sleep(0.3)
+
+        return found_url[0]
+
+    @classmethod
+    def _start_claude_login(cls, config_path: str, env: dict) -> tuple[subprocess.Popen, dict]:
+        """Start ``cliproxyapi --claude-login -no-browser`` and capture the OAuth URL."""
+        cls._kill_stale_login_processes()
 
         proc = subprocess.Popen(
-            ["cliproxyapi", "--config", config_path, "--claude-login"],
+            ["cliproxyapi", "--config", config_path, "--claude-login", "-no-browser"],
             stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
             text=True,
             env=env,
         )
+        logger.info("CLIProxy claude login started: pid=%s", proc.pid)
 
-        logger.info(
-            "CLIProxy claude login started: pid=%s tmpdir=%s url_file=%s",
-            proc.pid,
-            tmpdir,
-            url_file,
+        oauth_url = cls._capture_oauth_url(
+            proc, ["claude.ai", "anthropic", "oauth", "authorize"], "claude"
         )
-
-        # Poll for the URL file to appear (written by our fake open script).
-        # cliproxyapi calls open multiple times (about:blank first, then the
-        # real OAuth URL), so we look for a line containing 'claude.ai' or
-        # 'oauth'/'authorize'.
-        oauth_url = None
-        deadline = time.monotonic() + 15
-        while time.monotonic() < deadline:
-            if os.path.exists(url_file):
-                try:
-                    for line in Path(url_file).read_text().strip().split("\n"):
-                        line = line.strip()
-                        if line.startswith("http") and any(
-                            kw in line.lower()
-                            for kw in ("claude.ai", "oauth", "authorize", "anthropic")
-                        ):
-                            oauth_url = line
-                            break
-                except Exception:
-                    pass  # Intentionally silenced: failure is non-critical
-                if oauth_url:
-                    break
-            # Also check if process already exited (error)
-            rc = proc.poll()
-            if rc is not None:
-                stderr_out = ""
-                try:
-                    stderr_out = proc.stderr.read() if proc.stderr else ""
-                except Exception:
-                    pass  # Intentionally silenced: failure is non-critical
-                logger.warning(
-                    "CLIProxy login process exited early: rc=%s stderr=%s",
-                    rc,
-                    stderr_out[:500],
-                )
-                break
-            time.sleep(0.2)
-
-        # If file approach didn't work, try reading stdout/stderr as fallback
-        if not oauth_url:
-            try:
-                import select as sel
-
-                for fd in [proc.stdout, proc.stderr]:
-                    if fd is None:
-                        continue
-                    while sel.select([fd], [], [], 0)[0]:
-                        line = fd.readline()
-                        if not line:
-                            break
-                        logger.info("CLIProxy fallback line: %s", line.rstrip())
-                        url_match = re.search(r"(https?://\S+)", line)
-                        if url_match:
-                            candidate = url_match.group(1)
-                            if any(
-                                kw in candidate.lower()
-                                for kw in ("claude.ai", "anthropic", "oauth", "authorize")
-                            ):
-                                oauth_url = candidate
-                                break
-                    if oauth_url:
-                        break
-            except Exception as exc:
-                logger.warning("Fallback URL read: %s", exc)
-
         logger.info("CLIProxy claude login: oauth_url=%s", oauth_url)
         return proc, {"url": oauth_url}
 
     @classmethod
     def _start_gemini_login(cls, config_path: str, env: dict) -> tuple[subprocess.Popen, dict]:
-        """Import Gemini CLI tokens into CLIProxyAPI.
+        """Start ``cliproxyapi -login -no-browser`` (Google OAuth) and capture the URL."""
+        cls._kill_stale_login_processes()
 
-        cliproxyapi's Google OAuth uses a localhost callback that can't work
-        for remote deployments. Instead, we import the refresh_token from
-        the Gemini CLI's oauth_creds.json (written after the user completes
-        CLI login) into CLIProxyAPI's credential format.
-        """
-        import json as _json
-
-        from ..db.backends import get_backend_accounts
-
-        # Find Gemini CLI creds from any registered account
-        gemini_creds = None
-        gemini_email = None
-        for acct in get_backend_accounts("backend-gemini"):
-            cp = acct.get("config_path")
-            if cp:
-                cred_path = Path(os.path.expanduser(cp)) / ".gemini" / "oauth_creds.json"
-            else:
-                cred_path = Path.home() / ".gemini" / "oauth_creds.json"
-            if cred_path.exists():
-                try:
-                    gemini_creds = _json.loads(cred_path.read_text())
-                    gemini_email = acct.get("email") or acct.get("account_name") or ""
-                    break
-                except Exception:
-                    pass
-
-        if not gemini_creds or not gemini_creds.get("refresh_token"):
-            raise ValueError("Gemini CLI credentials not found. Complete Gemini CLI login first.")
-
-        # Read cliproxyapi's client_id/secret from existing cred file
-        proxy_dir = Path.home() / ".cli-proxy-api"
-        client_id = "681255809395-oo8ft2oprdrnp9e3aqf6av3hmdib135j.apps.googleusercontent.com"
-        client_secret = ""
-        for f in proxy_dir.glob("gemini-*.json"):
-            try:
-                existing = _json.loads(f.read_text())
-                cs = existing.get("token", {}).get("client_secret")
-                if cs:
-                    client_secret = cs
-                    client_id = existing["token"].get("client_id", client_id)
-                    break
-            except Exception:
-                pass
-
-        # Write CLIProxyAPI credential file
-        cred_file = proxy_dir / f"gemini-{gemini_email or 'default'}.json"
-        cred_file.write_text(
-            _json.dumps(
-                {
-                    "auto": False,
-                    "checked": True,
-                    "email": gemini_email,
-                    "project_id": "",
-                    "type": "gemini",
-                    "token": {
-                        "access_token": gemini_creds.get("access_token", ""),
-                        "client_id": client_id,
-                        "client_secret": client_secret,
-                        "expires_in": 3599,
-                        "expiry": "",
-                        "refresh_token": gemini_creds["refresh_token"],
-                        "scopes": [
-                            "https://www.googleapis.com/auth/cloud-platform",
-                            "https://www.googleapis.com/auth/userinfo.email",
-                            "https://www.googleapis.com/auth/userinfo.profile",
-                        ],
-                        "token_type": "Bearer",
-                        "token_uri": "https://oauth2.googleapis.com/token",
-                        "universe_domain": "googleapis.com",
-                    },
-                },
-                indent=2,
-            )
-        )
-        logger.info("Imported Gemini CLI creds to CLIProxyAPI: %s", cred_file)
-
-        proc = subprocess.Popen(["true"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        return proc, {"url": None, "imported": True, "email": gemini_email}
-
-    @classmethod
-    def _start_codex_login(cls, config_path: str, env: dict) -> tuple[subprocess.Popen, dict]:
-        """Start ``cliproxyapi -codex-device-login`` and capture device URL + code.
-
-        Device-code flow: cliproxyapi prints a URL and an 8-char device code
-        to stdout.  We read all initial output to capture both, then start a
-        background thread to drain stdout so the process doesn't block.
-        """
         proc = subprocess.Popen(
-            ["cliproxyapi", "--config", config_path, "-codex-device-login"],
+            ["cliproxyapi", "--config", config_path, "-login", "-no-browser"],
             stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
             text=True,
             env=env,
         )
+        logger.info("CLIProxy gemini login started: pid=%s", proc.pid)
 
-        logger.info("CLIProxy codex device login started: pid=%s", proc.pid)
-
-        # Read stdout lines to find the device URL and code.
-        # Device code is typically an 8-char alphanumeric code like "A8AZ-S5ZA3"
-        device_url = None
-        device_code = None
-        output_lines: list[str] = []
-        deadline = time.monotonic() + 15
-        device_code_pattern = re.compile(r"\b([A-Z0-9]{4}-[A-Z0-9]{4,6})\b")
-
-        try:
-            while time.monotonic() < deadline:
-                if proc.poll() is not None:
-                    break
-                import select as sel
-
-                ready, _, _ = sel.select([proc.stdout], [], [], 0.5)
-                if not ready:
-                    continue
-                line = proc.stdout.readline()
-                if not line:
-                    continue
-                stripped = line.rstrip()
-                logger.info("CLIProxy codex line: %s", stripped)
-                output_lines.append(stripped)
-
-                # Look for URL
-                if not device_url:
-                    url_match = re.search(r"(https?://\S+)", line)
-                    if url_match:
-                        candidate = url_match.group(1)
-                        if any(
-                            kw in candidate.lower() for kw in ("openai", "codex", "auth", "device")
-                        ):
-                            device_url = candidate
-
-                # Look for device code (e.g. "A8AZ-S5ZA3")
-                if not device_code:
-                    code_match = device_code_pattern.search(line)
-                    if code_match:
-                        device_code = code_match.group(1)
-
-                # Once we have both, stop reading initial output
-                if device_url and device_code:
-                    break
-        except Exception as exc:
-            logger.warning("CLIProxy codex output read: %s", exc)
-
-        logger.info(
-            "CLIProxy codex login: device_url=%s device_code=%s",
-            device_url,
-            device_code,
+        oauth_url = cls._capture_oauth_url(
+            proc, ["google", "accounts.google", "oauth2", "googleapis"], "gemini"
         )
+        logger.info("CLIProxy gemini login: oauth_url=%s", oauth_url)
+        return proc, {"url": oauth_url}
 
-        # Start background thread to drain stdout/stderr so the process
-        # doesn't block when its pipe buffer fills up.
-        def _drain() -> None:
-            try:
-                for fd in [proc.stdout, proc.stderr]:
-                    if fd is None:
-                        continue
-                    for line in fd:
-                        logger.debug("CLIProxy codex drain: %s", line.rstrip())
-            except Exception:
-                pass  # Intentionally silenced: failure is non-critical
+    @classmethod
+    def _start_codex_login(cls, config_path: str, env: dict) -> tuple[subprocess.Popen, dict]:
+        """Start ``cliproxyapi -codex-login -no-browser`` and capture the OAuth URL."""
+        cls._kill_stale_login_processes()
 
-        threading.Thread(target=_drain, daemon=True).start()
+        proc = subprocess.Popen(
+            ["cliproxyapi", "--config", config_path, "-codex-login", "-no-browser"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            env=env,
+        )
+        logger.info("CLIProxy codex login started: pid=%s", proc.pid)
 
-        return proc, {
-            "url": device_url,
-            "device_code": device_code,
-            "output": output_lines,
-        }
+        oauth_url = cls._capture_oauth_url(
+            proc, ["openai", "codex", "auth", "authorize"], "codex"
+        )
+        logger.info("CLIProxy codex login: oauth_url=%s", oauth_url)
+        return proc, {"url": oauth_url}
 
     # ------------------------------------------------------------------
     # Install

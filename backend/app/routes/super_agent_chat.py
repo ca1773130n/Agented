@@ -195,7 +195,7 @@ def _dispatch_by_mode(
             primary_backend=primary_backend,
             model=model,
             account_email=account_id,
-            timeout=30,
+            timeout=90,
         )
         return {
             "status": "streaming",

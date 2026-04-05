@@ -5,7 +5,7 @@
  * Uses the same /admin/backends/<id>/connect SSE endpoint as AccountWizard.
  * Shows real-time terminal output and handles interactive prompts.
  */
-import { ref, onUnmounted } from 'vue';
+import { ref, watch, onUnmounted } from 'vue';
 import { backendApi } from '../../services/api';
 import { createAuthenticatedEventSource } from '../../services/api/client';
 import type { AuthenticatedEventSource } from '../../services/api/client';
@@ -16,12 +16,22 @@ const props = defineProps<{
   backendType: string;
   backendName: string;
   configPath?: string;
+  /** Skip CLI login and go straight to CLIProxy API login. */
+  proxyOnly?: boolean;
 }>();
 
 const emit = defineEmits<{
   close: [];
   success: [];
 }>();
+
+// Auto-start proxy login when opened in proxyOnly mode
+watch(() => props.open, (isOpen) => {
+  if (isOpen && props.proxyOnly) {
+    loginStatus.value = 'completed';
+    runProxyLogin();
+  }
+});
 
 const loginStatus = ref<'idle' | 'connecting' | 'streaming' | 'completed' | 'error'>('idle');
 const loginLines = ref<string[]>([]);
@@ -39,7 +49,6 @@ const proxyMessage = ref('');
 const proxyDeviceCode = ref('');
 const proxyOAuthUrl = ref('');
 const proxyCallbackUrl = ref('');
-const proxyForwarding = ref(false);
 
 let loginEventSource: AuthenticatedEventSource | null = null;
 
@@ -144,9 +153,15 @@ function cleanup() {
 
 function handleClose() {
   cleanup();
+  if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
   loginStatus.value = 'idle';
   loginLines.value = [];
   loginError.value = '';
+  proxyStatus.value = 'idle';
+  proxyMessage.value = '';
+  proxyDeviceCode.value = '';
+  proxyOAuthUrl.value = '';
+  proxyCallbackUrl.value = '';
   emit('close');
 }
 
@@ -168,12 +183,21 @@ async function runProxyLogin() {
       proxyOAuthUrl.value = res.oauth_url || '';
       proxyMessage.value = 'Enter the code below to register with API proxy';
     } else if (res.status === 'started' && res.oauth_url) {
-      // Auto-open + callback paste for remote deployments
+      // Record initial account count, open OAuth URL, then poll for completion
+      const beforeCount = await getProxyAccountCount();
       proxyStatus.value = 'device_auth';
       proxyDeviceCode.value = '';
       proxyOAuthUrl.value = res.oauth_url;
       window.open(res.oauth_url, '_blank');
-      proxyMessage.value = 'Sign in with Google, then paste the redirect URL below';
+      const providerHint: Record<string, string> = {
+        claude: 'Anthropic',
+        codex: 'OpenAI',
+        gemini: 'Google',
+      };
+      const provider = providerHint[props.backendType] || 'the provider';
+      proxyMessage.value = `Sign in with ${provider} in the browser. Login will be detected automatically.`;
+      // Poll — the browser redirect completes the login on localhost directly
+      pollForNewAccount(beforeCount);
     } else {
       proxyStatus.value = 'skipped';
       proxyMessage.value = res.message || 'Proxy login skipped';
@@ -184,33 +208,54 @@ async function runProxyLogin() {
   }
 }
 
-async function forwardCallback() {
-  if (!proxyCallbackUrl.value.trim()) return;
-  proxyForwarding.value = true;
+let pollTimer: ReturnType<typeof setInterval> | null = null;
+
+async function getProxyAccountCount(): Promise<number> {
   try {
-    const res = await backendApi.proxyCallbackForward(proxyCallbackUrl.value.trim());
-    if (res.status === 'ok' || res.status === 'success') {
-      proxyStatus.value = 'success';
-      proxyMessage.value = 'API proxy login completed';
-    } else {
-      proxyMessage.value = res.message || 'Callback forward failed';
-    }
-  } catch (e: unknown) {
-    proxyMessage.value = `Forward failed: ${e instanceof Error ? e.message : String(e)}`;
-  } finally {
-    proxyForwarding.value = false;
+    const status = await backendApi.proxyStatus();
+    return status.account_count || 0;
+  } catch {
+    return 0;
   }
+}
+
+function pollForNewAccount(beforeCount: number) {
+  if (pollTimer) clearInterval(pollTimer);
+  let attempts = 0;
+  pollTimer = setInterval(async () => {
+    attempts++;
+    if (attempts > 60 || proxyStatus.value === 'success') {
+      if (pollTimer) clearInterval(pollTimer);
+      pollTimer = null;
+      return;
+    }
+    try {
+      const current = await getProxyAccountCount();
+      if (current > beforeCount) {
+        if (pollTimer) clearInterval(pollTimer);
+        pollTimer = null;
+        proxyStatus.value = 'success';
+        proxyMessage.value = 'API proxy login completed';
+      }
+    } catch {
+      // ignore polling errors
+    }
+  }, 3000);
 }
 
 function handleDone() {
   cleanup();
+  if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
   loginStatus.value = 'idle';
   loginLines.value = [];
   proxyStatus.value = 'idle';
   emit('success');
 }
 
-onUnmounted(cleanup);
+onUnmounted(() => {
+  cleanup();
+  if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+});
 </script>
 
 <template>
@@ -226,12 +271,12 @@ onUnmounted(cleanup);
     >
       <div class="modal login-modal">
         <div class="modal-header">
-          <h2 class="modal-title">Login to {{ backendName }}</h2>
+          <h2 class="modal-title">{{ proxyOnly ? 'Proxy Login' : 'Login' }} to {{ backendName }}</h2>
           <button class="modal-close" @click="handleClose">&times;</button>
         </div>
 
-        <!-- Idle — start button -->
-        <template v-if="loginStatus === 'idle'">
+        <!-- Idle — start button (hidden in proxyOnly mode since it auto-starts) -->
+        <template v-if="loginStatus === 'idle' && !proxyOnly">
           <p class="modal-message">Start a CLI login session for this {{ backendName }} account.</p>
           <div class="modal-actions">
             <button class="btn btn-secondary" @click="handleClose">Cancel</button>
@@ -277,7 +322,7 @@ onUnmounted(cleanup);
 
         <!-- Completed -->
         <template v-else-if="loginStatus === 'completed'">
-          <div class="login-success">
+          <div v-if="!proxyOnly" class="login-success">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="24" height="24">
               <polyline points="20 6 9 17 4 12"/>
             </svg>
@@ -291,7 +336,7 @@ onUnmounted(cleanup);
           </div>
           <div v-else-if="proxyStatus === 'device_auth'" class="proxy-section proxy-device">
             <p class="proxy-msg">{{ proxyMessage }}</p>
-            <div class="proxy-code"><code>{{ proxyDeviceCode }}</code></div>
+            <div v-if="proxyDeviceCode" class="proxy-code"><code>{{ proxyDeviceCode }}</code></div>
             <a v-if="proxyOAuthUrl" :href="proxyOAuthUrl" target="_blank" class="btn btn-sm btn-outline proxy-link">
               {{ proxyDeviceCode ? 'Open Device Login Page' : 'Open OAuth Login Page' }}
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12">
@@ -300,15 +345,9 @@ onUnmounted(cleanup);
                 <line x1="10" y1="14" x2="21" y2="3"/>
               </svg>
             </a>
-            <!-- Callback URL paste for remote deployments -->
-            <div v-if="proxyOAuthUrl && !proxyDeviceCode" class="proxy-callback">
-              <p class="proxy-hint">After signing in, browser redirects to localhost which fails remotely. Copy that URL and paste here:</p>
-              <div class="proxy-cb-row">
-                <input v-model="proxyCallbackUrl" type="text" placeholder="http://localhost:8085/oauth2callback?code=..." :disabled="proxyForwarding" class="proxy-cb-input" />
-                <button class="btn btn-sm btn-primary" :disabled="!proxyCallbackUrl.trim() || proxyForwarding" @click="forwardCallback">
-                  {{ proxyForwarding ? '...' : 'Submit' }}
-                </button>
-              </div>
+            <div class="proxy-waiting">
+              <div class="spinner-sm"></div>
+              <span>Waiting for sign-in to complete...</span>
             </div>
           </div>
           <div v-else-if="proxyStatus === 'success'" class="proxy-section proxy-ok">
@@ -510,6 +549,14 @@ onUnmounted(cleanup);
   display: inline-flex;
   align-items: center;
   gap: 0.25rem;
+}
+.proxy-waiting {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8125rem;
+  color: var(--text-tertiary);
+  margin-top: 0.25rem;
 }
 .proxy-ok {
   background: rgba(34, 197, 94, 0.08);

@@ -21,13 +21,19 @@
             <div v-if="isInstalling" class="spinner-sm"></div>
             {{ isInstalling ? 'Installing...' : 'Install CLI' }}
           </button>
-          <button v-if="supportsConnect && backend.is_installed" class="btn btn-primary" @click="loginConfigPath = undefined; showLoginModal = true">
+          <button v-if="supportsConnect && backend.is_installed" class="btn btn-primary" @click="loginConfigPath = undefined; proxyOnlyLogin = false; showLoginModal = true">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
               <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/>
               <polyline points="10 17 15 12 10 7"/>
               <line x1="15" y1="12" x2="3" y2="12"/>
             </svg>
             Login
+          </button>
+          <button v-if="supportsConnect" class="btn btn-outline" @click="loginConfigPath = undefined; proxyOnlyLogin = true; showLoginModal = true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+            </svg>
+            Proxy Login
           </button>
           <a v-if="backend.documentation_url" :href="backend.documentation_url" target="_blank" class="btn btn-outline">
             Documentation
@@ -403,9 +409,16 @@
               <button
                 v-if="supportsConnect && backend.is_installed"
                 class="btn btn-sm btn-outline"
-                @click="loginConfigPath = account.config_path; showLoginModal = true"
+                @click="loginConfigPath = account.config_path; proxyOnlyLogin = false; showLoginModal = true"
               >
                 Login
+              </button>
+              <button
+                v-if="supportsConnect"
+                class="btn btn-sm btn-outline"
+                @click="loginConfigPath = account.config_path; proxyOnlyLogin = true; showLoginModal = true"
+              >
+                Proxy Login
               </button>
               <button
                 v-if="backend.type !== 'opencode'"
@@ -463,6 +476,7 @@
       :backend-type="backend.type"
       :backend-name="backend.name"
       :config-path="loginConfigPath"
+      :proxy-only="proxyOnlyLogin"
       @close="showLoginModal = false"
       @success="onLoginModalSuccess"
     />
@@ -514,6 +528,7 @@ let clockTimer: ReturnType<typeof setInterval> | null = null;
 // Login modal state
 const showLoginModal = ref(false);
 const loginConfigPath = ref<string | undefined>(undefined);
+const proxyOnlyLogin = ref(false);
 
 // Install state
 const isInstalling = ref(false);

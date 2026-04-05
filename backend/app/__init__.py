@@ -153,7 +153,7 @@ def _init_database(app) -> None:  # noqa: ARG001 — app reserved for future con
 def _seed_bundled_marketplace():
     """Ensure the bundled marketplace row exists so the Settings dropdown is never empty."""
     from .services.setup_service import BUNDLE_MARKETPLACE_NAME, BUNDLE_MARKETPLACE_URL
-    from .db.marketplace import create_marketplace, get_all_marketplaces
+    from .db.plugins import create_marketplace, get_all_marketplaces
 
     for mkt in get_all_marketplaces():
         if mkt.get("url") == BUNDLE_MARKETPLACE_URL:
@@ -341,16 +341,9 @@ def _register_cleanup_handlers() -> None:
 
         CLIProxyManager.kill_orphans()
 
-        try:
-            refresh_result = CLIProxyManager.refresh_expired_tokens(timeout_per_account=45)
-            refreshed = refresh_result.get("refreshed", [])
-            failed = refresh_result.get("failed", [])
-            if refreshed:
-                _proxy_log.info("Refreshed %d expired token(s): %s", len(refreshed), refreshed)
-            if failed:
-                _proxy_log.warning("Failed to refresh %d token(s): %s", len(failed), failed)
-        except Exception as refresh_err:
-            _proxy_log.warning("Token auto-refresh skipped: %s", refresh_err)
+        # Token auto-refresh disabled: Playwright-based refresh opens a browser
+        # and gets blocked by Anthropic's bot verification (Cloudflare challenge).
+        # Users should use the Proxy Login button on each backend's detail page instead.
 
         if CLIProxyManager.install_if_needed():
             if CLIProxyManager.start():

@@ -18,41 +18,31 @@ vi.mock('dompurify', () => ({
   },
 }));
 
-// Mock highlight.js
-vi.mock('highlight.js/lib/core', () => ({
-  default: {
-    registerLanguage: vi.fn(),
-    getLanguage: vi.fn(),
-    highlight: vi.fn().mockReturnValue({ value: 'highlighted' }),
-    highlightAuto: vi.fn().mockReturnValue({ value: 'auto-highlighted' }),
-    highlightElement: vi.fn(),
-  },
+// Mock shiki
+vi.mock('shiki/core', () => ({
+  createHighlighterCoreSync: () => ({
+    codeToHtml: (_code: string) => '<pre class="shiki"><code>highlighted</code></pre>',
+    getLoadedLanguages: () => ['javascript', 'typescript', 'python'],
+  }),
 }));
 
-// Mock all language imports individually (vi.mock is hoisted, no loops allowed)
-vi.mock('highlight.js/lib/languages/javascript', () => ({ default: vi.fn() }));
-vi.mock('highlight.js/lib/languages/typescript', () => ({ default: vi.fn() }));
-vi.mock('highlight.js/lib/languages/python', () => ({ default: vi.fn() }));
-vi.mock('highlight.js/lib/languages/bash', () => ({ default: vi.fn() }));
-vi.mock('highlight.js/lib/languages/json', () => ({ default: vi.fn() }));
-vi.mock('highlight.js/lib/languages/css', () => ({ default: vi.fn() }));
-vi.mock('highlight.js/lib/languages/xml', () => ({ default: vi.fn() }));
-vi.mock('highlight.js/lib/languages/sql', () => ({ default: vi.fn() }));
-vi.mock('highlight.js/lib/languages/yaml', () => ({ default: vi.fn() }));
-vi.mock('highlight.js/lib/languages/markdown', () => ({ default: vi.fn() }));
-vi.mock('highlight.js/lib/languages/diff', () => ({ default: vi.fn() }));
-vi.mock('highlight.js/lib/languages/go', () => ({ default: vi.fn() }));
-vi.mock('highlight.js/lib/languages/rust', () => ({ default: vi.fn() }));
-vi.mock('highlight.js/lib/languages/java', () => ({ default: vi.fn() }));
-vi.mock('highlight.js/lib/languages/csharp', () => ({ default: vi.fn() }));
-vi.mock('highlight.js/lib/languages/ruby', () => ({ default: vi.fn() }));
-vi.mock('highlight.js/lib/languages/php', () => ({ default: vi.fn() }));
-vi.mock('highlight.js/lib/languages/shell', () => ({ default: vi.fn() }));
-vi.mock('highlight.js/lib/languages/plaintext', () => ({ default: vi.fn() }));
-vi.mock('highlight.js/styles/github-dark-dimmed.min.css', () => ({}));
+vi.mock('shiki/engine/javascript', () => ({
+  createJavaScriptRegExpEngine: () => ({}),
+}));
+
+vi.mock('shiki/themes/vitesse-dark.mjs', () => ({ default: {} }));
+
+// Mock all shiki language imports
+const langModules = [
+  'javascript', 'typescript', 'python', 'bash', 'json', 'css', 'html',
+  'sql', 'yaml', 'markdown', 'diff', 'go', 'rust', 'java', 'csharp',
+  'ruby', 'php', 'shellscript', 'toml', 'xml', 'jsx', 'tsx', 'vue', 'dockerfile',
+];
+for (const lang of langModules) {
+  vi.mock(`shiki/langs/${lang}.mjs`, () => ({ default: {} }));
+}
 
 import { renderMarkdown, highlightCodeBlocks, attachCodeCopyHandlers } from '../useMarkdown';
-import hljs from 'highlight.js/lib/core';
 
 describe('useMarkdown', () => {
   describe('renderMarkdown', () => {
@@ -68,7 +58,7 @@ describe('useMarkdown', () => {
   });
 
   describe('highlightCodeBlocks', () => {
-    it('calls highlightElement on un-highlighted code blocks', () => {
+    it('processes un-highlighted code blocks', () => {
       const container = document.createElement('div');
       const pre = document.createElement('pre');
       const code = document.createElement('code');
@@ -76,20 +66,20 @@ describe('useMarkdown', () => {
       container.appendChild(pre);
 
       highlightCodeBlocks(container);
-      expect(hljs.highlightElement).toHaveBeenCalledWith(code);
+      // Should mark as processed
+      expect(code.getAttribute('data-shiki')).toBe('plain');
     });
 
-    it('skips already-highlighted blocks (with .hljs class)', () => {
+    it('skips already-processed blocks', () => {
       const container = document.createElement('div');
       const pre = document.createElement('pre');
       const code = document.createElement('code');
-      code.classList.add('hljs');
+      code.setAttribute('data-shiki', 'done');
       pre.appendChild(code);
       container.appendChild(pre);
 
-      vi.mocked(hljs.highlightElement).mockClear();
       highlightCodeBlocks(container);
-      expect(hljs.highlightElement).not.toHaveBeenCalled();
+      expect(code.getAttribute('data-shiki')).toBe('done');
     });
   });
 
