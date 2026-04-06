@@ -110,6 +110,7 @@ def execute_sketch(
     # 2. Resolve backend — handle project SA instances (psa-) vs global SAs
     cwd: Optional[str] = None
     instance_id: Optional[str] = None
+    project_id: Optional[str] = None
     if super_agent_id.startswith("psa-"):
         from ..db.project_sa_instances import get_project_sa_instance
 
@@ -117,8 +118,8 @@ def execute_sketch(
         if instance:
             sa = get_super_agent(instance["template_sa_id"])
             backend = (sa.get("backend_type") if sa else None) or "claude"
-            cwd = instance.get("worktree_path")
             instance_id = super_agent_id
+            project_id = instance.get("project_id")
             # Use template SA ID for session management
             effective_sa_id = instance["template_sa_id"]
         else:
@@ -131,8 +132,25 @@ def execute_sketch(
         backend = (sa.get("backend_type") if sa else None) or "claude"
         effective_sa_id = super_agent_id
 
-    # 3. Get or create session
-    session_id = SuperAgentSessionService.get_or_create_session(effective_sa_id)
+    # 3. Create session — use session-per-worktree for project instances
+    if project_id and instance_id:
+        from .instance_service import InstanceService
+
+        title = content[:100] if content else "Sketch task"
+        result = InstanceService.create_session_worktree(
+            project_id=project_id,
+            super_agent_id=effective_sa_id,
+            instance_id=instance_id,
+            title=title,
+        )
+        if result:
+            session_id = result["session_id"]
+            cwd = result.get("worktree_path")
+        else:
+            session_id = SuperAgentSessionService.get_or_create_session(effective_sa_id)
+            cwd = instance.get("worktree_path") if instance else None
+    else:
+        session_id = SuperAgentSessionService.get_or_create_session(effective_sa_id)
 
     # 4. Build content — prepend team context if team_id provided
     team_context = None

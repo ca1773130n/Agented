@@ -850,6 +850,12 @@ def create_fresh_schema(conn):
             token_count INTEGER DEFAULT 0,
             last_compacted_at TIMESTAMP,
             instance_id TEXT REFERENCES project_sa_instances(id) ON DELETE SET NULL,
+            worktree_path TEXT,
+            branch_name TEXT,
+            project_id TEXT REFERENCES projects(id) ON DELETE SET NULL,
+            title TEXT,
+            pr_url TEXT,
+            session_type TEXT NOT NULL DEFAULT 'worker' CHECK(session_type IN ('leader', 'worker')),
             started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             ended_at TIMESTAMP,
             FOREIGN KEY (super_agent_id) REFERENCES super_agents(id) ON DELETE CASCADE
@@ -885,6 +891,12 @@ def create_fresh_schema(conn):
         "CREATE INDEX IF NOT EXISTS idx_super_agent_sessions_status ON super_agent_sessions(status)"
     )
     conn.execute("CREATE INDEX IF NOT EXISTS idx_sas_instance ON super_agent_sessions(instance_id)")
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_sas_project ON super_agent_sessions(project_id)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_sas_session_type ON super_agent_sessions(session_type)"
+    )
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_agent_messages_to ON agent_messages(to_agent_id, status)"
     )

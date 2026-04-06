@@ -13,6 +13,7 @@ import DocumentEditor from '../components/super-agents/DocumentEditor.vue';
 import SubagentComposition from '../components/super-agents/SubagentComposition.vue';
 import MessageInbox from '../components/super-agents/MessageInbox.vue';
 import MessageThread from '../components/super-agents/MessageThread.vue';
+import GitActionsToolbar from '../components/ai/GitActionsToolbar.vue';
 import { useWebMcpTool } from '../composables/useWebMcpTool';
 
 const props = defineProps<{
@@ -54,6 +55,10 @@ const {
   endSession,
   setOnStreamingChunk,
 } = useAiChat(superAgentId);
+
+const currentSession = computed(() =>
+  sessions.value.find(s => s.id === sessionId.value) || null
+);
 
 // Sync sessionId to URL so refresh preserves the selected session
 watch(sessionId, (newId) => {
@@ -250,6 +255,12 @@ async function loadData() {
     <div class="playground-content">
       <!-- Left panel: Chat UI -->
       <div class="left-panel">
+        <GitActionsToolbar
+          v-if="currentSession?.worktree_path"
+          :session="currentSession"
+          :superAgentId="superAgentId"
+          @action-complete="loadSessions"
+        />
         <AiChatPanel
           :messages="messages"
           :isProcessing="isProcessing"
@@ -353,12 +364,16 @@ async function loadData() {
                 @click="handleSelectSession(sess.id)"
               >
                 <div class="session-info">
-                  <span class="session-id">{{ sess.id }}</span>
+                  <span class="session-id">{{ sess.title || sess.id }}</span>
                   <span class="session-date">{{ formatSessionDate(sess.started_at) }}</span>
                 </div>
-                <span :class="['session-status', `status-${sess.status}`]">
-                  {{ sess.status }}
-                </span>
+                <div class="session-badges">
+                  <span v-if="sess.session_type === 'leader'" class="session-type-badge type-leader">leader</span>
+                  <span v-if="sess.worktree_path" class="session-type-badge type-worktree">worktree</span>
+                  <span :class="['session-status', `status-${sess.status}`]">
+                    {{ sess.status }}
+                  </span>
+                </div>
               </div>
             </div>
           </div>
@@ -764,5 +779,30 @@ async function loadData() {
 .status-terminated {
   background: var(--accent-crimson-dim);
   color: var(--accent-crimson);
+}
+
+.session-badges {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.session-type-badge {
+  font-size: 10px;
+  font-weight: 500;
+  padding: 1px 6px;
+  border-radius: 3px;
+  text-transform: lowercase;
+}
+
+.type-leader {
+  background: rgba(99, 102, 241, 0.15);
+  color: #818cf8;
+}
+
+.type-worktree {
+  background: rgba(59, 130, 246, 0.15);
+  color: #60a5fa;
 }
 </style>

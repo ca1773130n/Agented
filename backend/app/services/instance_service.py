@@ -24,7 +24,11 @@ from ..db.project_team_instances import (
     delete_project_team_instance,
 )
 from ..db.projects import get_project
-from ..db.super_agents import get_sessions_for_instance, get_super_agent
+from ..db.super_agents import (
+    get_sessions_for_instance,
+    get_super_agent,
+    update_super_agent_session,
+)
 from ..db.teams import get_team_members
 from .super_agent_session_service import SuperAgentSessionService
 
@@ -569,3 +573,188 @@ class InstanceService:
                 instance_id,
             )
             return None
+
+    # ------------------------------------------------------------------
+    # Session-per-worktree lifecycle
+    # ------------------------------------------------------------------
+
+    @classmethod
+    def create_session_worktree(
+        cls,
+        project_id: str,
+        super_agent_id: str,
+        instance_id: str,
+        title: str = None,
+        session_type: str = "worker",
+    ) -> Optional[Dict]:
+        """Create a new worker session with its own git worktree.
+
+        Returns dict with session_id, worktree_path, branch_name on success, None on failure.
+        """
+        with cls._lock:
+            project = get_project(project_id)
+            if not project or not project.get("local_path"):
+                logger.error("create_session_worktree: project %s has no local_path", project_id)
+                return None
+
+            project_local_path = project["local_path"]
+            if not os.path.isdir(project_local_path):
+                logger.error(
+                    "create_session_worktree: local_path %s does not exist", project_local_path
+                )
+                return None
+
+            # Create the session first to get the ID
+            session_id, error = SuperAgentSessionService.create_session(
+                super_agent_id,
+                instance_id=instance_id,
+                project_id=project_id,
+                title=title,
+                session_type=session_type,
+            )
+            if error or not session_id:
+                logger.error("create_session_worktree: session creation failed: %s", error)
+                return None
+
+            # Leader sessions don't get worktrees — they work on main
+            if session_type == "leader":
+                return {
+                    "session_id": session_id,
+                    "worktree_path": None,
+                    "branch_name": None,
+                }
+
+            # Create worktree for worker session
+            branch_name = f"session/{session_id}"
+            worktree_rel = os.path.join(".worktrees", session_id)
+            worktree_abs = os.path.join(project_local_path, worktree_rel)
+
+            try:
+                result = subprocess.run(
+                    [
+                        "git",
+                        "-C",
+                        project_local_path,
+                        "worktree",
+                        "add",
+                        worktree_rel,
+                        "-b",
+                        branch_name,
+                    ],
+                    capture_output=True,
+                    text=True,
+                    timeout=30,
+                )
+                if result.returncode != 0:
+                    logger.error(
+                        "create_session_worktree: git worktree add failed: %s",
+                        result.stderr.strip(),
+                    )
+                    # Clean up the session we just created
+                    SuperAgentSessionService.end_session(session_id)
+                    return None
+            except (subprocess.TimeoutExpired, Exception):
+                logger.exception("create_session_worktree: git worktree add error")
+                SuperAgentSessionService.end_session(session_id)
+                return None
+
+            # Update session with worktree info
+            update_super_agent_session(
+                session_id,
+                worktree_path=worktree_abs,
+                branch_name=branch_name,
+            )
+            # Also update in-memory session state
+            SuperAgentSessionService.update_session_worktree(session_id, worktree_abs, branch_name)
+
+            logger.info(
+                "create_session_worktree: session=%s worktree=%s branch=%s",
+                session_id,
+                worktree_abs,
+                branch_name,
+            )
+            return {
+                "session_id": session_id,
+                "worktree_path": worktree_abs,
+                "branch_name": branch_name,
+            }
+
+    @classmethod
+    def cleanup_session_worktree(cls, session_id: str, session: dict = None) -> bool:
+        """Remove a session's worktree and delete its local branch.
+
+        Returns True if cleanup succeeded (or no worktree to clean).
+        """
+        if session is None:
+            from ..db.super_agents import get_super_agent_session
+
+            session = get_super_agent_session(session_id)
+        if not session:
+            return True
+
+        worktree_path = session.get("worktree_path")
+        branch_name = session.get("branch_name")
+        if not worktree_path:
+            return True
+
+        success = True
+        # Remove worktree
+        if os.path.isdir(worktree_path):
+            if not cls._remove_worktree(worktree_path):
+                success = False
+
+        # Delete local branch if it exists
+        if branch_name:
+            project_id = session.get("project_id")
+            if project_id:
+                project = get_project(project_id)
+                if project and project.get("local_path"):
+                    try:
+                        subprocess.run(
+                            ["git", "-C", project["local_path"], "branch", "-D", branch_name],
+                            capture_output=True,
+                            text=True,
+                            timeout=10,
+                        )
+                    except Exception:
+                        logger.warning(
+                            "cleanup_session_worktree: failed to delete branch %s", branch_name
+                        )
+
+        # Clear worktree fields in DB
+        update_super_agent_session(session_id, worktree_path="", branch_name="")
+        return success
+
+    @classmethod
+    def cleanup_orphan_session_worktrees(cls) -> int:
+        """Remove worktrees that belong to ended sessions. Called at startup."""
+        from ..db.super_agents import get_active_sessions_list
+
+        active_sessions = get_active_sessions_list()
+        active_worktrees = {
+            s.get("worktree_path") for s in active_sessions if s.get("worktree_path")
+        }
+
+        cleaned = 0
+        # Scan all project directories for .worktrees/sess-* dirs
+        from ..db.projects import get_all_projects
+
+        for project in get_all_projects():
+            local_path = project.get("local_path")
+            if not local_path:
+                continue
+            worktrees_dir = os.path.join(local_path, ".worktrees")
+            if not os.path.isdir(worktrees_dir):
+                continue
+            for entry in os.listdir(worktrees_dir):
+                if not entry.startswith("sess-"):
+                    continue
+                full_path = os.path.join(worktrees_dir, entry)
+                if full_path not in active_worktrees:
+                    logger.info("cleanup_orphan_session_worktrees: removing %s", full_path)
+                    cls._remove_worktree(full_path)
+                    cleaned += 1
+
+        if cleaned:
+            logger.info("cleanup_orphan_session_worktrees: removed %d orphan worktrees", cleaned)
+        return cleaned

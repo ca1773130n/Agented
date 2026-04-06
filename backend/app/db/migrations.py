@@ -4325,6 +4325,31 @@ def _migrate_99_kg_extraction_log(conn):
     """)
 
 
+def _migrate_100_session_per_worktree(conn):
+    """Add session-per-worktree columns to super_agent_sessions."""
+    cursor = conn.execute("PRAGMA table_info(super_agent_sessions)")
+    existing = {row[1] for row in cursor.fetchall()}
+    new_cols = [
+        ("worktree_path", "TEXT"),
+        ("branch_name", "TEXT"),
+        ("project_id", "TEXT REFERENCES projects(id) ON DELETE SET NULL"),
+        ("title", "TEXT"),
+        ("pr_url", "TEXT"),
+        ("session_type", "TEXT NOT NULL DEFAULT 'worker'"),
+    ]
+    for col_name, col_type in new_cols:
+        if col_name not in existing:
+            conn.execute(
+                f"ALTER TABLE super_agent_sessions ADD COLUMN {col_name} {col_type}"
+            )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_sas_project ON super_agent_sessions(project_id)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_sas_session_type ON super_agent_sessions(session_type)"
+    )
+
+
 VERSIONED_MIGRATIONS = [
     (1, "add_github_columns", _migrate_add_github_columns),
     (2, "add_pr_reviews_table", _migrate_add_pr_reviews_table),
@@ -4449,4 +4474,6 @@ VERSIONED_MIGRATIONS = [
     (98, "tracing_tables", _migrate_98_tracing_tables),
     # KG extraction tracking for memory evolution
     (99, "kg_extraction_log", _migrate_99_kg_extraction_log),
+    # v0.5.0 session-per-worktree
+    (100, "session_per_worktree", _migrate_100_session_per_worktree),
 ]

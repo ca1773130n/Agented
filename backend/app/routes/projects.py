@@ -642,3 +642,13 @@ def get_or_create_manager(path: ProjectPath):
     update_project(path.project_id, manager_super_agent_id=sa_id)
 
     return {"super_agent_id": sa_id, "created": True}, HTTPStatus.CREATED
+
+
+@projects_bp.get("/<project_id>/sessions")
+def list_project_sessions(path: ProjectPath):
+    """List all sessions for a project (for kanban board)."""
+    from ..db.super_agents import get_sessions_for_project
+
+    status_filter = request.args.get("status")
+    sessions = get_sessions_for_project(path.project_id, status=status_filter)
+    return {"sessions": sessions}, HTTPStatus.OK
