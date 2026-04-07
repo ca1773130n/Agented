@@ -77,7 +77,8 @@ const email = ref('');
 
 const subscriptionValid = computed(() => {
   if (hasSubscription.value === 'no') return true;
-  if (hasSubscription.value === 'yes') return accountName.value.trim().length > 0;
+  // Allow blank account name — will use the default config directory
+  if (hasSubscription.value === 'yes') return true;
   return false;
 });
 
@@ -101,12 +102,6 @@ function generateSlug(name: string): string {
 
 function suggestConfigPath() {
   if (configPathManuallyEdited.value) return;
-  const name = accountName.value.trim();
-  if (!name) {
-    configPath.value = '';
-    return;
-  }
-  const slug = generateSlug(name);
   const dirMap: Record<string, string> = {
     claude: '.claude',
     codex: '.codex',
@@ -114,6 +109,13 @@ function suggestConfigPath() {
     opencode: '.opencode',
   };
   const base = dirMap[props.backendType] || `.${props.backendType}`;
+  const name = accountName.value.trim();
+  if (!name) {
+    // Blank account name → use default config directory (~/.claude, etc.)
+    configPath.value = `~/${base}`;
+    return;
+  }
+  const slug = generateSlug(name);
   configPath.value = `~/${base}-${slug}`;
 }
 
@@ -190,6 +192,9 @@ async function createConfigDir() {
 
 onMounted(() => {
   checkCli();
+  // Initialize config path to default (~/.claude, ~/.codex, etc.) so the
+  // wizard works with a blank account name out of the box.
+  suggestConfigPath();
   // Retarget the tour spotlight to the wizard container
   setTourTarget('[data-tour="account-wizard"]');
 });
@@ -312,6 +317,8 @@ const oauthCallbackPending = ref(false);
 const oauthCallbackUrl = ref('');
 const oauthCallbackForwarding = ref(false);
 const oauthBrowserOpened = ref(false);
+const pendingOAuthUrl = ref('');
+const urlCopied = ref(false);
 let loginEventSource: AuthenticatedEventSource | null = null;
 
 async function startCliLogin() {
@@ -324,8 +331,11 @@ async function startCliLogin() {
   oauthBrowserOpened.value = false;
   oauthCallbackPending.value = false;
   oauthCallbackUrl.value = '';
+  pendingOAuthUrl.value = '';
+  urlCopied.value = false;
   try {
-    const result = await backendApi.startConnect(props.backendId, configPath.value || undefined, email.value.trim() || undefined, accountName.value.trim() || undefined);
+    const effectiveName = accountName.value.trim() || 'default';
+    const result = await backendApi.startConnect(props.backendId, configPath.value || undefined, email.value.trim() || undefined, effectiveName);
     loginSessionId.value = result.session_id;
     loginStatus.value = 'streaming';
     // Open authenticated SSE stream (sends X-API-Key header)
@@ -341,17 +351,17 @@ async function startCliLogin() {
           if (!oauthBrowserOpened.value) {
             const urlMatch = text.match(/https:\/\/(?:claude\.com|accounts\.google\.com)\S+/);
             if (urlMatch) {
-              const url = urlMatch[0];
+              const openUrl = forceFreshAccountPrompt(urlMatch[0], email.value.trim());
               oauthBrowserOpened.value = true;
-              let openUrl = url;
-              const hint = email.value.trim();
-              if (hint && !url.includes('login_hint=')) {
-                const sep = url.includes('?') ? '&' : '?';
-                openUrl = `${url}${sep}login_hint=${encodeURIComponent(hint)}`;
+              pendingOAuthUrl.value = openUrl;
+              if (navigator.clipboard?.writeText) {
+                navigator.clipboard.writeText(openUrl).then(() => {
+                  urlCopied.value = true;
+                }).catch(() => {});
               }
               window.open(openUrl, '_blank');
               loginLines.value.push('Opening browser for sign-in...');
-              loginLines.value.push('After signing in, copy the authorization code and paste it below.');
+              loginLines.value.push('URL copied to clipboard. For a fresh sign-in, paste into Chrome Incognito (⌘⇧N).');
             }
           }
           scrollTerminal();
@@ -375,15 +385,20 @@ async function startCliLogin() {
         const data = JSON.parse(e.data);
         if (data.url && !oauthBrowserOpened.value) {
           const url = data.url as string;
-          let openUrl = url;
-          const hint = email.value.trim();
-          if (hint && !url.includes('login_hint=')) {
-            const sep = url.includes('?') ? '&' : '?';
-            openUrl = `${url}${sep}login_hint=${encodeURIComponent(hint)}`;
+          const openUrl = forceFreshAccountPrompt(url, email.value.trim());
+          // Store for UI display (copy button + manual paste instructions)
+          pendingOAuthUrl.value = openUrl;
+          // Auto-copy to clipboard so user can paste into incognito window
+          if (navigator.clipboard?.writeText) {
+            navigator.clipboard.writeText(openUrl).then(() => {
+              urlCopied.value = true;
+            }).catch(() => { /* clipboard may fail — user can click button */ });
           }
+          // Also open in default browser (user may close if they want incognito)
           const win = window.open(openUrl, '_blank');
-          loginLines.value.push(win ? 'Opening browser for sign-in...' : '[WARN] Popup blocked! Allow popups and retry.');
-          // Localhost redirect → show callback paste UI (user pastes failed localhost URL)
+          loginLines.value.push(win ? 'Opening browser for sign-in...' : '[WARN] Popup blocked.');
+          loginLines.value.push('URL copied to clipboard. For a fresh sign-in, open Chrome Incognito (⌘⇧N / Ctrl+Shift+N) and paste.');
+          // Localhost redirect → show callback paste UI
           const isLocalhost = url.includes('redirect_uri=http%3A%2F%2Flocalhost') ||
                               url.includes('redirect_uri=http%3A%2F%2F127.0.0.1');
           if (isLocalhost) {
@@ -532,10 +547,56 @@ async function forwardOAuthCallback() {
   }
 }
 
+// Force fresh account selection so user can pick a different Google/Claude
+// account even when already signed in (critical when adding a 2nd account).
+function forceFreshAccountPrompt(url: string, userEmail: string): string {
+  try {
+    const u = new URL(url);
+    const host = u.hostname;
+    // Google OAuth (Gemini, Google sign-in for Claude):
+    // prompt=select_account forces account picker even when signed in
+    if (host.includes('google.com') || host.includes('accounts.google')) {
+      const existing = u.searchParams.get('prompt') || '';
+      const parts = new Set(existing.split(/\s+/).filter(Boolean));
+      parts.add('select_account');
+      parts.add('consent');
+      u.searchParams.set('prompt', Array.from(parts).join(' '));
+      if (userEmail && !u.searchParams.has('login_hint')) {
+        u.searchParams.set('login_hint', userEmail);
+      }
+    }
+    // Claude OAuth — prompt=login forces re-authentication if supported
+    if (host.includes('claude.com') || host.includes('anthropic.com')) {
+      if (!u.searchParams.has('prompt')) {
+        u.searchParams.set('prompt', 'login');
+      }
+      if (userEmail && !u.searchParams.has('login_hint')) {
+        u.searchParams.set('login_hint', userEmail);
+      }
+    }
+    return u.toString();
+  } catch {
+    return url;
+  }
+}
+
+async function copyOAuthUrl() {
+  if (!pendingOAuthUrl.value) return;
+  try {
+    await navigator.clipboard.writeText(pendingOAuthUrl.value);
+    urlCopied.value = true;
+    setTimeout(() => { urlCopied.value = false; }, 2000);
+  } catch {
+    // Fallback: select text (handled by the user manually)
+  }
+}
+
 function cleanupLogin() {
   oauthCallbackPending.value = false;
   oauthCallbackUrl.value = '';
   oauthBrowserOpened.value = false;
+  pendingOAuthUrl.value = '';
+  urlCopied.value = false;
   if (loginEventSource) {
     loginEventSource.close();
     loginEventSource = null;
@@ -571,9 +632,11 @@ const proxyForwarding = ref(false);
 async function saveAccount() {
   isSaving.value = true;
   saveError.value = '';
+  // Blank account name → "default" (signals the default config dir ~/.claude etc.)
+  const effectiveName = accountName.value.trim() || 'default';
   try {
     await backendApi.addAccount(props.backendId, {
-      account_name: accountName.value.trim(),
+      account_name: effectiveName,
       email: email.value.trim() || undefined,
       config_path: configPath.value.trim() || undefined,
       api_key_env: apiKeyEnv.value || undefined,
@@ -669,8 +732,8 @@ function addAnotherAccount() {
   hasSubscription.value = '';
   accountName.value = '';
   email.value = '';
-  configPath.value = '';
   configPathManuallyEdited.value = false;
+  suggestConfigPath(); // defaults to ~/.claude etc. when name is blank
   selectedPlan.value = '';
   isDefault.value = false;
   cleanupLogin();
@@ -751,7 +814,7 @@ function addAnotherAccount() {
         <Transition name="slide-down">
           <div v-if="hasSubscription === 'yes'" class="account-fields">
             <div class="form-group">
-              <label for="wiz-name">{{ t('accountWizard.accountName') }} <span class="required">*</span></label>
+              <label for="wiz-name">{{ t('accountWizard.accountName') }} <span class="optional">(optional — leave blank to use default config dir)</span></label>
               <input
                 id="wiz-name"
                 v-model="accountName"
@@ -905,6 +968,19 @@ function addAnotherAccount() {
           <div class="login-terminal">
             <div class="login-terminal-output">
               <div v-for="(line, i) in loginLines" :key="i" class="terminal-line">{{ line }}</div>
+            </div>
+            <!-- Incognito hint + copy URL button when OAuth URL is available -->
+            <div v-if="pendingOAuthUrl" class="incognito-hint">
+              <p class="incognito-hint-text">
+                💡 For a clean sign-in (avoid wrong account), open <strong>Chrome Incognito</strong>
+                (<kbd>⌘⇧N</kbd> / <kbd>Ctrl+Shift+N</kbd>) and paste the URL:
+              </p>
+              <div class="incognito-url-row">
+                <code class="incognito-url" :title="pendingOAuthUrl">{{ pendingOAuthUrl }}</code>
+                <button class="btn btn-sm btn-outline" @click="copyOAuthUrl">
+                  {{ urlCopied ? '✓ Copied' : 'Copy URL' }}
+                </button>
+              </div>
             </div>
             <!-- Option buttons when CLI asks a multiple-choice question -->
             <div v-if="pendingOptions.length > 0" class="login-options">
@@ -1415,6 +1491,12 @@ function addAnotherAccount() {
   color: var(--accent-crimson);
 }
 
+.optional {
+  color: var(--text-tertiary);
+  font-size: 0.75rem;
+  font-weight: 400;
+}
+
 .form-group input[type="text"],
 .form-group input[type="email"] {
   width: 100%;
@@ -1660,6 +1742,48 @@ function addAnotherAccount() {
 
 .login-connecting {
   color: var(--accent-cyan);
+}
+
+.incognito-hint {
+  margin-top: 0.75rem;
+  padding: 0.75rem 0.875rem;
+  background: rgba(168, 85, 247, 0.08);
+  border: 1px solid rgba(168, 85, 247, 0.2);
+  border-radius: 8px;
+}
+.incognito-hint-text {
+  margin: 0 0 0.5rem;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+.incognito-hint-text kbd {
+  display: inline-block;
+  padding: 1px 6px;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--border-subtle);
+  border-radius: 4px;
+  font-family: 'SF Mono', monospace;
+  font-size: 0.7rem;
+  color: var(--text-primary);
+}
+.incognito-url-row {
+  display: flex;
+  gap: 0.375rem;
+  align-items: center;
+}
+.incognito-url {
+  flex: 1;
+  font-size: 0.6875rem;
+  padding: 0.375rem 0.5rem;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--border-subtle);
+  border-radius: 4px;
+  color: var(--text-tertiary);
+  font-family: 'SF Mono', monospace;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .login-terminal-waiting {

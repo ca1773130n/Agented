@@ -427,7 +427,9 @@ def gemini_auth_start():
             "code_challenge_method": "S256",
             "code_challenge": code_challenge,
             "state": state,
-            "prompt": "consent",
+            # select_account: force Google to show account picker (even if signed in)
+            # consent: force consent screen (ensures refresh_token is returned)
+            "prompt": "select_account consent",
         }
     )
 
