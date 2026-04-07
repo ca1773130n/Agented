@@ -346,28 +346,34 @@ def proxy_callback_forward():
             "BAD_REQUEST", "No 'code' parameter found in URL", HTTPStatus.BAD_REQUEST
         )
 
-    # Forward to cliproxyapi's local callback server on the server
-    try:
-        resp = httpx.get(
-            f"http://127.0.0.1:{port}{parsed.path}",
-            params={"code": code, "state": state},
-            timeout=15,
-            follow_redirects=True,
-        )
-        if resp.status_code < 400:
+    # Forward to the local callback server. Try IPv6 first (Claude CLI binds
+    # to ::1 on newer versions), then fall back to IPv4.
+    last_exc = None
+    for host in ("[::1]", "127.0.0.1", "localhost"):
+        try:
+            resp = httpx.get(
+                f"http://{host}:{port}{parsed.path}",
+                params={"code": code, "state": state},
+                timeout=15,
+                follow_redirects=True,
+            )
+            if resp.status_code < 400:
+                return {
+                    "status": "completed",
+                    "message": "Callback forwarded successfully",
+                }, HTTPStatus.OK
             return {
-                "status": "completed",
-                "message": "Callback forwarded successfully",
-            }, HTTPStatus.OK
-        return {
-            "status": "error",
-            "message": f"Callback server returned {resp.status_code}",
-        }, HTTPStatus.BAD_GATEWAY
-    except Exception as exc:
-        return {
-            "status": "error",
-            "message": f"Failed to reach callback server: {exc}",
-        }, HTTPStatus.BAD_GATEWAY
+                "status": "error",
+                "message": f"Callback server returned {resp.status_code}",
+            }, HTTPStatus.BAD_GATEWAY
+        except Exception as exc:
+            last_exc = exc
+            logger.debug("Callback forward to %s:%d failed: %s", host, port, exc)
+            continue
+    return {
+        "status": "error",
+        "message": f"Failed to reach callback server: {last_exc}",
+    }, HTTPStatus.BAD_GATEWAY
 
 
 @backends_bp.post("/gemini/auth-start")
@@ -451,8 +457,9 @@ def gemini_auth_complete():
     # Retrieve stored PKCE verifier
     from ..services.backend_cli_service import BackendCLIService
 
+    # Peek at pending state (don't pop yet — keep it for retries on failure)
     with BackendCLIService._lock:
-        pending = getattr(BackendCLIService, "_gemini_auth_pending", {}).pop(state, None)
+        pending = getattr(BackendCLIService, "_gemini_auth_pending", {}).get(state)
 
     if not pending:
         return error_response("BAD_REQUEST", "Invalid or expired state", HTTPStatus.BAD_REQUEST)
@@ -461,12 +468,12 @@ def gemini_auth_complete():
     config_path = pending.get("config_path")
     email = pending.get("email", "")
 
-    client_id = "681255809395-oo8ft2oprdrnp9e3aqf6av3hmdib135j.apps.googleusercontent.com"
-
-    # Exchange code for tokens
+    # Gemini CLI OAuth client credentials.
     # This client_id is registered as a web app; Google requires client_secret
     # even with PKCE. The secret is publicly embedded in Gemini CLI itself.
+    client_id = "681255809395-oo8ft2oprdrnp9e3aqf6av3hmdib135j.apps.googleusercontent.com"
     client_secret = "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"
+
     try:
         resp = httpx.post(
             "https://oauth2.googleapis.com/token",
@@ -497,6 +504,10 @@ def gemini_auth_complete():
             f"Token exchange error: {exc}",
             HTTPStatus.INTERNAL_SERVER_ERROR,
         )
+
+    # Success — remove pending state so it can't be reused
+    with BackendCLIService._lock:
+        getattr(BackendCLIService, "_gemini_auth_pending", {}).pop(state, None)
 
     # Save to Gemini CLI config
     import os

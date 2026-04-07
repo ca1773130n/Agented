@@ -166,12 +166,10 @@ dev:
 generate-key *ARGS: ensure-backend
     cd backend && uv run python scripts/generate_key.py {{ARGS}}
 
-# Kill any existing frontend/backend processes
+# Kill only processes listening on ports 3000 (frontend) and 20000 (backend)
 kill:
     -lsof -ti:3000 | xargs kill -9 2>/dev/null || true
     -lsof -ti:20000 | xargs kill -9 2>/dev/null || true
-    -pkill -f "npm run dev" 2>/dev/null || true
-    -pkill -f "vite" 2>/dev/null || true
 
 # Reset onboarding: wipe DB, restart fresh (localStorage auto-clears on welcome page)
 reset: kill

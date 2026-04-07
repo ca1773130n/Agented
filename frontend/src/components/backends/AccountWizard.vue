@@ -266,8 +266,9 @@ async function startGeminiDirectAuth() {
 }
 
 async function submitGeminiAuthCode() {
-  const code = userResponse.value.trim();
+  let code = userResponse.value.trim();
   if (!code) return;
+  if (code.includes('#')) code = code.split('#')[0];
   geminiAuthSubmitting.value = true;
   geminiAuthError.value = '';
   try {
@@ -307,6 +308,10 @@ const pendingOptions = ref<string[]>([]);
 const pendingInteractionId = ref('');
 const userResponse = ref('');
 const sendingResponse = ref(false);
+const oauthCallbackPending = ref(false);
+const oauthCallbackUrl = ref('');
+const oauthCallbackForwarding = ref(false);
+const oauthBrowserOpened = ref(false);
 let loginEventSource: AuthenticatedEventSource | null = null;
 
 async function startCliLogin() {
@@ -316,6 +321,9 @@ async function startCliLogin() {
   pendingQuestion.value = '';
   pendingOptions.value = [];
   pendingInteractionId.value = '';
+  oauthBrowserOpened.value = false;
+  oauthCallbackPending.value = false;
+  oauthCallbackUrl.value = '';
   try {
     const result = await backendApi.startConnect(props.backendId, configPath.value || undefined, email.value.trim() || undefined, accountName.value.trim() || undefined);
     loginSessionId.value = result.session_id;
@@ -329,6 +337,23 @@ async function startCliLogin() {
         const text = data.content || data.text || '';
         if (text) {
           loginLines.value.push(text);
+          // Auto-open sign-in URLs from log lines immediately
+          if (!oauthBrowserOpened.value) {
+            const urlMatch = text.match(/https:\/\/(?:claude\.com|accounts\.google\.com)\S+/);
+            if (urlMatch) {
+              const url = urlMatch[0];
+              oauthBrowserOpened.value = true;
+              let openUrl = url;
+              const hint = email.value.trim();
+              if (hint && !url.includes('login_hint=')) {
+                const sep = url.includes('?') ? '&' : '?';
+                openUrl = `${url}${sep}login_hint=${encodeURIComponent(hint)}`;
+              }
+              window.open(openUrl, '_blank');
+              loginLines.value.push('Opening browser for sign-in...');
+              loginLines.value.push('After signing in, copy the authorization code and paste it below.');
+            }
+          }
           scrollTerminal();
         }
       } catch { /* skip malformed SSE data */ }
@@ -348,9 +373,26 @@ async function startCliLogin() {
     loginEventSource.addEventListener('oauth_url', (e: MessageEvent) => {
       try {
         const data = JSON.parse(e.data);
-        if (data.url) window.open(data.url, '_blank');
-        loginLines.value.push(`Opening browser for authentication...`);
-        scrollTerminal();
+        if (data.url && !oauthBrowserOpened.value) {
+          const url = data.url as string;
+          let openUrl = url;
+          const hint = email.value.trim();
+          if (hint && !url.includes('login_hint=')) {
+            const sep = url.includes('?') ? '&' : '?';
+            openUrl = `${url}${sep}login_hint=${encodeURIComponent(hint)}`;
+          }
+          const win = window.open(openUrl, '_blank');
+          loginLines.value.push(win ? 'Opening browser for sign-in...' : '[WARN] Popup blocked! Allow popups and retry.');
+          // Localhost redirect → show callback paste UI (user pastes failed localhost URL)
+          const isLocalhost = url.includes('redirect_uri=http%3A%2F%2Flocalhost') ||
+                              url.includes('redirect_uri=http%3A%2F%2F127.0.0.1');
+          if (isLocalhost) {
+            loginLines.value.push('After signing in, copy the FULL redirect URL from the browser address bar and paste it below.');
+            oauthCallbackPending.value = true;
+          }
+          oauthBrowserOpened.value = true;
+          scrollTerminal();
+        }
       } catch { /* skip malformed SSE data */ }
     });
     loginEventSource.addEventListener('complete', () => {
@@ -402,10 +444,12 @@ async function sendResponse() {
     return;
   }
   if (!userResponse.value.trim() || !loginSessionId.value || sendingResponse.value) return;
+  // Claude Code expects the full code#state format (PKCE verification)
+  const answer = userResponse.value.trim();
   const iid = pendingInteractionId.value || 'wizard';
   sendingResponse.value = true;
   try {
-    await backendApi.respondConnect(props.backendId, loginSessionId.value, iid, { answer: userResponse.value.trim() });
+    await backendApi.respondConnect(props.backendId, loginSessionId.value, iid, { answer });
     loginLines.value.push(`> ${userResponse.value.trim()}`);
     userResponse.value = '';
     pendingQuestion.value = '';
@@ -414,8 +458,16 @@ async function sendResponse() {
     scrollTerminal();
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : 'Failed to send response';
-    if (msg.includes('404') || msg.includes('not found')) return;
-    loginLines.value.push(`Error: ${msg}`);
+    if (msg.includes('404') || msg.includes('not found')) {
+      loginLines.value.push('Error: Session expired. Please refresh the page and try again.');
+      loginError.value = 'Session expired';
+      loginStatus.value = 'error';
+      pendingQuestion.value = '';
+      pendingOptions.value = [];
+      pendingInteractionId.value = '';
+    } else {
+      loginLines.value.push(`Error: ${msg}`);
+    }
     scrollTerminal();
   } finally {
     sendingResponse.value = false;
@@ -436,8 +488,16 @@ async function selectOption(option: string, _index: number) {
     scrollTerminal();
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : 'Failed to send response';
-    if (msg.includes('404') || msg.includes('not found')) return;
-    loginLines.value.push(`Error: ${msg}`);
+    if (msg.includes('404') || msg.includes('not found')) {
+      loginLines.value.push('Error: Session expired. Please refresh the page and try again.');
+      loginError.value = 'Session expired';
+      loginStatus.value = 'error';
+      pendingQuestion.value = '';
+      pendingOptions.value = [];
+      pendingInteractionId.value = '';
+    } else {
+      loginLines.value.push(`Error: ${msg}`);
+    }
     scrollTerminal();
   } finally {
     sendingResponse.value = false;
@@ -451,7 +511,31 @@ function scrollTerminal() {
   }, 50);
 }
 
+async function forwardOAuthCallback() {
+  if (!oauthCallbackUrl.value.trim()) return;
+  oauthCallbackForwarding.value = true;
+  try {
+    const res = await backendApi.proxyCallbackForward(oauthCallbackUrl.value.trim());
+    if (res.status === 'completed' || res.status === 'ok') {
+      loginLines.value.push('OAuth callback forwarded — login completing...');
+      oauthCallbackPending.value = false;
+      oauthCallbackUrl.value = '';
+    } else {
+      loginLines.value.push(`Callback forward failed: ${res.message || 'unknown error'}`);
+    }
+    scrollTerminal();
+  } catch (e: unknown) {
+    loginLines.value.push(`Callback forward error: ${e instanceof Error ? e.message : String(e)}`);
+    scrollTerminal();
+  } finally {
+    oauthCallbackForwarding.value = false;
+  }
+}
+
 function cleanupLogin() {
+  oauthCallbackPending.value = false;
+  oauthCallbackUrl.value = '';
+  oauthBrowserOpened.value = false;
   if (loginEventSource) {
     loginEventSource.close();
     loginEventSource = null;
@@ -852,9 +936,29 @@ function addAnotherAccount() {
               </button>
             </div>
             <!-- Waiting indicator when response sent but no new question yet -->
-            <div v-else-if="sendingResponse || (!pendingQuestion && !pendingOptions.length && loginLines.length > 0)" class="login-terminal-waiting">
+            <div v-else-if="sendingResponse || (!pendingQuestion && !pendingOptions.length && loginLines.length > 0 && !oauthCallbackPending)" class="login-terminal-waiting">
               <div class="spinner-sm"></div>
               <span>{{ t('accountWizard.waitingForResponse', 'Waiting for response...') }}</span>
+            </div>
+          </div>
+          <!-- OAuth callback paste for localhost redirects (Claude v1 flow) -->
+          <div v-if="oauthCallbackPending" class="oauth-callback-paste">
+            <p class="oauth-cb-hint">After signing in, browser will show "connection refused" (localhost). Copy the FULL URL from the address bar and paste it here:</p>
+            <div class="oauth-cb-row">
+              <input
+                v-model="oauthCallbackUrl"
+                type="text"
+                placeholder="http://localhost:PORT/callback?code=...&state=..."
+                :disabled="oauthCallbackForwarding"
+                @keydown.enter="forwardOAuthCallback"
+              />
+              <button
+                class="btn btn-sm btn-primary"
+                :disabled="!oauthCallbackUrl.trim() || oauthCallbackForwarding"
+                @click="forwardOAuthCallback"
+              >
+                {{ oauthCallbackForwarding ? '...' : 'Submit' }}
+              </button>
             </div>
           </div>
         </template>
@@ -1566,6 +1670,34 @@ function addAnotherAccount() {
   border-top: 1px solid var(--border-default);
   color: var(--text-tertiary);
   font-size: 12px;
+}
+
+.oauth-callback-paste {
+  margin-top: 0.75rem;
+  padding: 0.75rem;
+  background: rgba(59, 130, 246, 0.06);
+  border: 1px solid rgba(59, 130, 246, 0.15);
+  border-radius: 8px;
+}
+.oauth-cb-hint {
+  margin: 0 0 0.5rem;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+.oauth-cb-row {
+  display: flex;
+  gap: 0.375rem;
+}
+.oauth-cb-row input {
+  flex: 1;
+  font-size: 0.75rem;
+  padding: 0.375rem 0.5rem;
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-family: 'SF Mono', monospace;
 }
 
 /* Login interactive options — clickable buttons for CLI questions */
