@@ -28,8 +28,8 @@ dependencies = [
     "unidiff>=0.7.5",
     "sentence-transformers>=3.0.0",
     "numpy>=1.24.0",
-    "ai-accounts-core",
-    "ai-accounts-litestar",
+    "ai-accounts-core==0.3.0a1",
+    "ai-accounts-litestar==0.3.0a1",
 ]
 
 [project.optional-dependencies]
@@ -62,10 +62,6 @@ quote-style = "double"
 indent-style = "space"
 skip-magic-trailing-comma = false
 line-ending = "auto"
-
-[tool.uv.sources]
-ai-accounts-core = { path = "../../ai-accounts/packages/core", editable = true }
-ai-accounts-litestar = { path = "../../ai-accounts/packages/litestar", editable = true }
 
 [dependency-groups]
 dev = [
