@@ -133,211 +133,12 @@
 
         <!-- Account Wizard (for adding new accounts) -->
         <AccountWizard
-          v-if="showAddModal && !editingAccount && backend"
+          v-if="showAddModal && backend"
           :client="aiAccountsClient"
           @done="onWizardDone"
           @cancel="closeModal"
         />
 
-        <!-- Advanced inline form link (when wizard is showing) -->
-        <div v-if="showAddModal && !editingAccount && !useAdvancedForm" class="advanced-toggle">
-          <button class="btn-link" @click="useAdvancedForm = true; showAddModal = false">
-            Prefer the advanced form?
-          </button>
-        </div>
-
-        <!-- Advanced Inline Add Form (power users) -->
-        <div v-if="useAdvancedForm && !editingAccount" class="inline-account-form">
-          <div class="inline-form-header">
-            <h3>Add Account (Advanced)</h3>
-            <button class="btn-close" @click="closeAdvancedForm">&times;</button>
-          </div>
-          <form @submit.prevent="saveAccount">
-            <div v-if="loginInfo" class="login-banner">
-              <span class="banner-icon">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
-                  <circle cx="12" cy="12" r="10"/>
-                  <line x1="12" y1="16" x2="12" y2="12"/>
-                  <line x1="12" y1="8" x2="12.01" y2="8"/>
-                </svg>
-              </span>
-              <span v-if="loginInfo.loginCommand">Need to authenticate? Use the Connect button or run <code>{{ loginInfo.loginCommand }}</code></span>
-              <span v-else>Need to set up? Visit <a :href="loginInfo.url" target="_blank">{{ loginInfo.label }}</a></span>
-            </div>
-            <div class="form-group">
-              <label for="account_name">Account Name *</label>
-              <input
-                id="account_name"
-                v-model="accountForm.account_name"
-                type="text"
-                required
-                placeholder="e.g., Personal, Work"
-                @input="suggestConfigPath"
-              />
-            </div>
-            <div class="form-group">
-              <label for="email">Email</label>
-              <input
-                id="email"
-                v-model="accountForm.email"
-                type="email"
-                placeholder="e.g., user@example.com"
-              />
-              <small>Login email for this account</small>
-            </div>
-            <div class="form-group">
-              <label for="config_path">Config Path</label>
-              <input
-                id="config_path"
-                v-model="accountForm.config_path"
-                type="text"
-                placeholder="e.g., ~/.claude-work"
-                @input="configPathManuallyEdited = true"
-              />
-              <small>Path to the backend's config directory for this account</small>
-            </div>
-            <div class="form-group">
-              <label for="api_key_env">API Key Environment Variable</label>
-              <input
-                id="api_key_env"
-                v-model="accountForm.api_key_env"
-                type="text"
-                placeholder="e.g., ANTHROPIC_API_KEY_WORK"
-              />
-              <small>Name of the environment variable containing the API key</small>
-            </div>
-            <div v-if="planOptions.length > 0" class="form-group">
-              <label for="plan">Plan</label>
-              <select id="plan" v-model="accountForm.plan">
-                <option value="">Select plan...</option>
-                <option v-for="opt in planOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
-              </select>
-            </div>
-            <template v-if="backend?.type === 'codex'">
-              <div class="form-group">
-                <label for="reasoning_level">Reasoning Level</label>
-                <select id="reasoning_level" v-model="codexSettings.reasoning_level">
-                  <option value="">Default</option>
-                  <option value="low">Low</option>
-                  <option value="medium">Medium</option>
-                  <option value="high">High</option>
-                </select>
-                <small>Controls how much reasoning the model performs</small>
-              </div>
-              <div class="form-group">
-                <label for="summary_level">Summary Level</label>
-                <select id="summary_level" v-model="codexSettings.summary_level">
-                  <option value="">Default</option>
-                  <option value="concise">Concise</option>
-                  <option value="detailed">Detailed</option>
-                </select>
-                <small>Controls output verbosity</small>
-              </div>
-            </template>
-            <div class="form-group checkbox">
-              <label>
-                <input type="checkbox" v-model="accountForm.is_default" />
-                Set as default account
-              </label>
-            </div>
-            <div class="inline-form-actions">
-              <button type="button" class="btn btn-secondary" @click="closeAdvancedForm">Cancel</button>
-              <button type="submit" class="btn btn-primary" :disabled="isSaving">
-                {{ isSaving ? 'Saving...' : 'Add Account' }}
-              </button>
-            </div>
-          </form>
-        </div>
-
-        <!-- Inline Edit Account Form (editing existing accounts) -->
-        <div v-if="editingAccount" class="inline-account-form">
-          <div class="inline-form-header">
-            <h3>Edit Account</h3>
-            <button class="btn-close" @click="closeModal">&times;</button>
-          </div>
-          <form @submit.prevent="saveAccount">
-            <div class="form-group">
-              <label for="edit_account_name">Account Name *</label>
-              <input
-                id="edit_account_name"
-                v-model="accountForm.account_name"
-                type="text"
-                required
-                placeholder="e.g., Personal, Work"
-              />
-            </div>
-            <div class="form-group">
-              <label for="edit_email">Email</label>
-              <input
-                id="edit_email"
-                v-model="accountForm.email"
-                type="email"
-                placeholder="e.g., user@example.com"
-              />
-              <small>Login email for this account</small>
-            </div>
-            <div class="form-group">
-              <label for="edit_config_path">Config Path</label>
-              <input
-                id="edit_config_path"
-                v-model="accountForm.config_path"
-                type="text"
-                placeholder="e.g., ~/.claude-work"
-              />
-              <small>Path to the backend's config directory for this account</small>
-            </div>
-            <div class="form-group">
-              <label for="edit_api_key_env">API Key Environment Variable</label>
-              <input
-                id="edit_api_key_env"
-                v-model="accountForm.api_key_env"
-                type="text"
-                placeholder="e.g., ANTHROPIC_API_KEY_WORK"
-              />
-              <small>Name of the environment variable containing the API key</small>
-            </div>
-            <div v-if="planOptions.length > 0" class="form-group">
-              <label for="edit_plan">Plan</label>
-              <select id="edit_plan" v-model="accountForm.plan">
-                <option value="">Select plan...</option>
-                <option v-for="opt in planOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
-              </select>
-            </div>
-            <template v-if="backend?.type === 'codex'">
-              <div class="form-group">
-                <label for="edit_reasoning_level">Reasoning Level</label>
-                <select id="edit_reasoning_level" v-model="codexSettings.reasoning_level">
-                  <option value="">Default</option>
-                  <option value="low">Low</option>
-                  <option value="medium">Medium</option>
-                  <option value="high">High</option>
-                </select>
-                <small>Controls how much reasoning the model performs</small>
-              </div>
-              <div class="form-group">
-                <label for="edit_summary_level">Summary Level</label>
-                <select id="edit_summary_level" v-model="codexSettings.summary_level">
-                  <option value="">Default</option>
-                  <option value="concise">Concise</option>
-                  <option value="detailed">Detailed</option>
-                </select>
-                <small>Controls output verbosity</small>
-              </div>
-            </template>
-            <div class="form-group checkbox">
-              <label>
-                <input type="checkbox" v-model="accountForm.is_default" />
-                Set as default account
-              </label>
-            </div>
-            <div class="inline-form-actions">
-              <button type="button" class="btn btn-secondary" @click="closeModal">Cancel</button>
-              <button type="submit" class="btn btn-primary" :disabled="isSaving">
-                {{ isSaving ? 'Saving...' : 'Update' }}
-              </button>
-            </div>
-          </form>
-        </div>
 
         <div v-if="backend.accounts?.length === 0" class="empty-state">
           <p v-if="isOpenCode">OpenCode uses other backends' accounts. No separate accounts needed.</p>
@@ -415,7 +216,7 @@
               >
                 Clear Rate Limit
               </button>
-              <button class="btn btn-sm btn-secondary" @click="editAccount(account)">Edit</button>
+
               <button class="btn btn-sm btn-danger" @click="deleteAccount(account.id)">Delete</button>
             </div>
             <!-- Rate limit results -->
@@ -467,7 +268,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch, inject } from 'vue';
 import { useRoute } from 'vue-router';
-import { backendApi, orchestrationApi, BACKEND_PLAN_OPTIONS, BACKEND_LOGIN_INFO, type AIBackendWithAccounts, type BackendAccount, type AccountHealth, type BackendCapabilities, type RateLimitWindow } from '../services/api';
+import { backendApi, orchestrationApi, BACKEND_LOGIN_INFO, type AIBackendWithAccounts, type BackendAccount, type AccountHealth, type BackendCapabilities, type RateLimitWindow } from '../services/api';
 import PageHeader from '../components/base/PageHeader.vue';
 import EntityLayout from '../layouts/EntityLayout.vue';
 import BackendConnect from '../components/monitoring/BackendConnect.vue';
@@ -489,22 +290,18 @@ const tourMachine = useTourMachine();
 const backend = ref<AIBackendWithAccounts | null>(null);
 
 const showAddModal = ref(false);
-const editingAccount = ref<BackendAccount | null>(null);
 const isSaving = ref(false);
 
-// Advanced form state (for power users who prefer the raw form)
-const useAdvancedForm = ref(false);
-
-// OB-44: Signal tour overlay when inline add/edit form is open
+// OB-44: Signal tour overlay when the add-account modal is open
 const setTourModalOpen = inject<(open: boolean) => void>('setTourModalOpen', () => {});
-watch([showAddModal, editingAccount, useAdvancedForm], ([addOpen, editing, advanced]) => {
-  setTourModalOpen(addOpen || editing !== null || advanced);
+watch(showAddModal, (addOpen) => {
+  setTourModalOpen(addOpen);
 });
 
 const showToast = useToast();
 
-// Account health state
-const healthMap = ref<Map<number, AccountHealth>>(new Map());
+// Account health state (keyed by ai-accounts bkd-* id)
+const healthMap = ref<Map<string, AccountHealth>>(new Map());
 const now = ref(Date.now());
 let clockTimer: ReturnType<typeof setInterval> | null = null;
 
@@ -533,16 +330,16 @@ async function installCli() {
 // Connect state
 const showConnect = ref(false);
 
-// Rate limit state per account
-const rateLimitState = ref<Record<number, { loading: boolean; windows: RateLimitWindow[]; error: string | null }>>({});
+// Rate limit state per account (keyed by ai-accounts bkd-* id)
+const rateLimitState = ref<Record<string, { loading: boolean; windows: RateLimitWindow[]; error: string | null }>>({});
 
 // Capabilities state
 const capabilities = ref<BackendCapabilities | null>(null);
 const cliPath = ref<string | null>(null);
 
-// Confirm delete account state
+// Confirm delete account state (account id is an ai-accounts bkd-* string)
 const showDeleteAccountConfirm = ref(false);
-const pendingDeleteAccountId = ref<number | null>(null);
+const pendingDeleteAccountId = ref<string | null>(null);
 
 const capabilityList = computed(() => {
   const caps = capabilities.value;
@@ -553,36 +350,6 @@ const capabilityList = computed(() => {
     { label: 'Streaming', supported: caps.supports_streaming, flag: null },
     { label: 'Non-Interactive', supported: caps.supports_non_interactive, flag: caps.non_interactive_flag || null },
   ];
-});
-
-const accountForm = ref({
-  account_name: '',
-  email: '',
-  config_path: '',
-  api_key_env: '',
-  plan: '',
-  is_default: false,
-});
-const configPathManuallyEdited = ref(false);
-
-// Auto-suggest config_path when account name changes (new accounts only)
-function suggestConfigPath() {
-  if (editingAccount.value || configPathManuallyEdited.value) return;
-  const btype = backend.value?.type;
-  const name = accountForm.value.account_name.trim();
-  if (!btype || !name) {
-    accountForm.value.config_path = '';
-    return;
-  }
-  const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/-+$/, '');
-  const defaultDirs: Record<string, string> = { claude: '.claude', codex: '.codex', gemini: '.gemini' };
-  const base = defaultDirs[btype] || `.${btype}`;
-  accountForm.value.config_path = `~/${base}-${slug}`;
-}
-
-const codexSettings = ref({
-  reasoning_level: '',
-  summary_level: '',
 });
 
 // OpenCode cross-backend accounts
@@ -618,10 +385,6 @@ const loginInfo = computed(() => {
   return BACKEND_LOGIN_INFO[backend.value.type] || null;
 });
 
-const planOptions = computed(() => {
-  if (!backend.value) return [];
-  return BACKEND_PLAN_OPTIONS[backend.value.type] || [];
-});
 
 async function loadBackend() {
   try {
@@ -640,51 +403,8 @@ async function loadBackend() {
 }
 
 
-function editAccount(account: BackendAccount) {
-  editingAccount.value = account;
-  accountForm.value = {
-    account_name: account.account_name,
-    email: account.email || '',
-    config_path: account.config_path || '',
-    api_key_env: account.api_key_env || '',
-    plan: account.plan || '',
-    is_default: !!account.is_default,
-  };
-  const ud = account.usage_data || {};
-  codexSettings.value = {
-    reasoning_level: (ud as Record<string, string>).reasoning_level || '',
-    summary_level: (ud as Record<string, string>).summary_level || '',
-  };
-}
-
 function closeModal() {
   showAddModal.value = false;
-  editingAccount.value = null;
-  useAdvancedForm.value = false;
-  accountForm.value = {
-    account_name: '',
-    email: '',
-    config_path: '',
-    api_key_env: '',
-    plan: '',
-    is_default: false,
-  };
-  configPathManuallyEdited.value = false;
-  codexSettings.value = { reasoning_level: '', summary_level: '' };
-}
-
-function closeAdvancedForm() {
-  useAdvancedForm.value = false;
-  accountForm.value = {
-    account_name: '',
-    email: '',
-    config_path: '',
-    api_key_env: '',
-    plan: '',
-    is_default: false,
-  };
-  configPathManuallyEdited.value = false;
-  codexSettings.value = { reasoning_level: '', summary_level: '' };
 }
 
 function onWizardDone(_backendId: string) {
@@ -695,24 +415,7 @@ function onWizardDone(_backendId: string) {
   loadBackend();
 }
 
-async function saveAccount() {
-  isSaving.value = true;
-  try {
-    // NOTE: account CRUD routes were removed in the ai-accounts migration (Task 33/34).
-    // The AccountWizard component handles new account creation. Editing is a regression concern.
-    throw new Error(
-      editingAccount.value
-        ? 'Account editing via inline form is not supported after ai-accounts migration'
-        : 'Account creation via inline form is not supported. Use the Add Account wizard instead.'
-    );
-  } catch (err) {
-    showToast?.('Failed to save account', 'error');
-  } finally {
-    isSaving.value = false;
-  }
-}
-
-function deleteAccount(accountId: number) {
+function deleteAccount(accountId: string) {
   pendingDeleteAccountId.value = accountId;
   showDeleteAccountConfirm.value = true;
 }
@@ -723,9 +426,7 @@ async function confirmDeleteAccount() {
   pendingDeleteAccountId.value = null;
   if (accountId === null) return;
   try {
-    // NOTE: deleteAccount route removed in ai-accounts migration (Task 33/34).
-    // Use aiAccountsClient.deleteBackend() if needed.
-    await aiAccountsClient.deleteBackend(accountId.toString());
+    await aiAccountsClient.deleteBackend(accountId);
     await loadBackend();
   } catch (err) {
     showToast?.('Failed to delete account', 'error');
@@ -735,7 +436,7 @@ async function confirmDeleteAccount() {
 async function loadHealth() {
   try {
     const data = await orchestrationApi.getHealth();
-    const map = new Map<number, AccountHealth>();
+    const map = new Map<string, AccountHealth>();
     for (const acct of (data.accounts || [])) {
       map.set(acct.account_id, acct);
     }
@@ -745,7 +446,7 @@ async function loadHealth() {
   }
 }
 
-function getAccountHealth(accountId: number): AccountHealth | undefined {
+function getAccountHealth(accountId: string): AccountHealth | undefined {
   return healthMap.value.get(accountId);
 }
 
@@ -770,7 +471,7 @@ function formatRelativeTime(dateStr: string | null): string {
   return `${Math.floor(diff / 86400)}d ago`;
 }
 
-async function clearRateLimit(accountId: number) {
+async function clearRateLimit(accountId: string) {
   try {
     await orchestrationApi.clearRateLimit(accountId);
     showToast?.('Rate limit cleared', 'success');
@@ -797,7 +498,7 @@ function onLoginModalSuccess() {
   loadBackend();
 }
 
-async function checkAccountRateLimits(accountId: number) {
+async function checkAccountRateLimits(accountId: string) {
   rateLimitState.value[accountId] = { loading: true, windows: [], error: null };
   try {
     const result = await backendApi.checkRateLimits(backendId.value, accountId);

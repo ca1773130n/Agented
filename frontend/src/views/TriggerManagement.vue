@@ -24,7 +24,7 @@ const showAddTriggerModal = ref(false);
 const projects = ref<Project[]>([]);
 const teams = ref<Team[]>([]);
 const availableBackends = ref<Array<{ id: string; name: string; type: string }>>([]);
-const availableAccounts = ref<Array<{ id: number; account_name: string; backend_id: string }>>([]);
+const availableAccounts = ref<Array<{ id: string; account_name: string; backend_id: string }>>([]);
 
 // Confirm delete state
 const showDeleteConfirm = ref(false);
@@ -163,7 +163,7 @@ async function loadBackendsAndAccounts() {
     const data = await backendApi.list();
     const backends = data.backends || [];
     availableBackends.value = backends.map(b => ({ id: b.id, name: b.name, type: b.type }));
-    const allAccounts: Array<{ id: number; account_name: string; backend_id: string }> = [];
+    const allAccounts: Array<{ id: string; account_name: string; backend_id: string }> = [];
     for (const b of backends) {
       try {
         const detail = await backendApi.get(b.id);

@@ -128,7 +128,7 @@ async function refresh() {
   }
 }
 
-async function handleClearRateLimit(accountId: number) {
+async function handleClearRateLimit(accountId: string) {
   try {
     await orchestrationApi.clearRateLimit(accountId);
     showToast?.('Rate limit cleared successfully', 'success');

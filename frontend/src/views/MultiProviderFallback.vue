@@ -132,7 +132,7 @@ function removeEntry(idx: number) {
 
 // Adding a new entry
 const addBackendType = ref('');
-const addAccountId = ref<number | null>(null);
+const addAccountId = ref<string | null>(null);
 
 function addEntry() {
   if (!addBackendType.value) return;
@@ -174,7 +174,7 @@ async function refreshHealth() {
   }
 }
 
-async function clearRateLimit(accountId: number) {
+async function clearRateLimit(accountId: string) {
   try {
     await orchestrationApi.clearRateLimit(accountId);
     showToast('Rate limit cleared', 'success');

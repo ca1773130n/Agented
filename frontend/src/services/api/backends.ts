@@ -13,6 +13,7 @@ import { AiAccountsClient } from '@ai-accounts/ts-core';
 import type {
   AIBackend,
   AIBackendWithAccounts,
+  BackendAccount,
   BackendCapabilities,
   RateLimitWindow,
 } from './types';
@@ -102,13 +103,13 @@ export const backendManagementApi = {
     }),
 
   // Usage check (CLI-based)
-  checkUsage: (backendId: string, accountId: number) =>
+  checkUsage: (backendId: string, accountId: string | number) =>
     apiFetch<{ success: boolean; output?: string; error?: string }>(`/admin/backends/${backendId}/accounts/${accountId}/usage`, {
       method: 'POST',
     }),
 
   // Rate limit check (provider API-based)
-  checkRateLimits: (backendId: string, accountId: number) =>
+  checkRateLimits: (backendId: string, accountId: string | number) =>
     apiFetch<{ windows: RateLimitWindow[]; message?: string; needs_login?: boolean; account_id?: number }>(`/admin/backends/${backendId}/accounts/${accountId}/rate-limits`, {
       method: 'POST',
     }),
@@ -174,47 +175,176 @@ export const backendManagementApi = {
 };
 
 /**
- * Adapter helpers — bridge the AiAccountsClient BackendDTO shape to the
- * Agented AIBackend shape expected by legacy components.
- *
- * Regression note: BackendDTO lacks description, is_installed, version, models,
- * account_count, etc. Those fields will be undefined until consuming components
- * are updated to use the new schema.
+ * Per-kind static metadata. Agented's UI displays one "backend" per kind
+ * (claude, codex, gemini, opencode) with a list of "accounts" under it.
+ * ai-accounts v0.2 is flat — each row is one account with a `kind` field.
+ * The shim groups ai-accounts rows by kind and synthesizes one AIBackend
+ * per kind with this metadata attached.
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const dtoToBackend = (dto: any): AIBackend => ({
-  id: dto.id,
-  name: dto.display_name ?? dto.id,
-  type: dto.kind ?? '',
-  is_installed: dto.status === 'active' ? 1 : 0,
-  description: undefined,
-});
+const BACKEND_METADATA: Record<string, {
+  name: string;
+  description: string;
+  icon?: string;
+  documentation_url: string;
+}> = {
+  claude: {
+    name: 'Claude',
+    description: 'Anthropic Claude via the claude CLI',
+    documentation_url: 'https://docs.anthropic.com/en/docs/claude-code/overview',
+  },
+  codex: {
+    name: 'Codex',
+    description: 'OpenAI Codex via the codex CLI',
+    documentation_url: 'https://platform.openai.com/docs',
+  },
+  gemini: {
+    name: 'Gemini',
+    description: 'Google Gemini via the gemini CLI',
+    documentation_url: 'https://ai.google.dev/gemini-api/docs',
+  },
+  opencode: {
+    name: 'OpenCode',
+    description: 'OpenCode open-source routing layer',
+    documentation_url: 'https://opencode.ai',
+  },
+};
+
+const KNOWN_KINDS: ReadonlyArray<string> = Object.keys(BACKEND_METADATA);
+
+/** Convert an Agented legacy backend-id (`backend-claude`) or a kind slug to a kind. */
+function legacyIdToKind(legacyIdOrKind: string): string {
+  return legacyIdOrKind.startsWith('backend-')
+    ? legacyIdOrKind.slice('backend-'.length)
+    : legacyIdOrKind;
+}
+
+/** Convert a kind to Agented's legacy backend-id. */
+function kindToLegacyId(kind: string): string {
+  return `backend-${kind}`;
+}
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const dtoToBackendWithAccounts = (dto: any): AIBackendWithAccounts => ({
-  ...dtoToBackend(dto),
-  accounts: [],
-});
+function dtoToAccount(dto: any): BackendAccount {
+  const config = (dto?.config as Record<string, unknown>) ?? {};
+  const pick = (key: string): string | undefined => {
+    const v = config[key];
+    return typeof v === 'string' ? v : undefined;
+  };
+  return {
+    id: dto.id,
+    backend_id: kindToLegacyId(dto.kind ?? ''),
+    account_name: dto.display_name ?? dto.id,
+    email: pick('email'),
+    config_path: pick('config_path'),
+    api_key_env: pick('api_key_env'),
+    is_default: config.is_default === true ? 1 : 0,
+    plan: pick('plan'),
+    usage_data: (config.usage_data as Record<string, unknown>) ?? {},
+  };
+}
+
+/** Enrich an AIBackend with detection data from Agented's legacy /admin/backends/<id>/check route. */
+async function tryCheck(legacyId: string): Promise<{
+  is_installed: number;
+  version?: string;
+  cli_path?: string;
+  capabilities?: BackendCapabilities;
+}> {
+  try {
+    const result = await backendManagementApi.check(legacyId);
+    return {
+      is_installed: result.installed ? 1 : 0,
+      version: result.version,
+      cli_path: result.cli_path,
+      capabilities: result.capabilities,
+    };
+  } catch {
+    return { is_installed: 0 };
+  }
+}
+
+function buildBackendForKind(
+  kind: string,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  dtos: any[],
+  detection: {
+    is_installed: number;
+    version?: string;
+    cli_path?: string;
+    capabilities?: BackendCapabilities;
+  },
+): AIBackend {
+  const meta = BACKEND_METADATA[kind] ?? {
+    name: kind,
+    description: '',
+    documentation_url: '',
+  };
+  return {
+    id: kindToLegacyId(kind),
+    name: meta.name,
+    type: kind,
+    description: meta.description,
+    documentation_url: meta.documentation_url,
+    is_installed: detection.is_installed,
+    version: detection.version,
+    cli_path: detection.cli_path,
+    capabilities: detection.capabilities,
+    models: [],
+    account_count: dtos.length,
+  };
+}
 
 /**
  * backendApi — legacy CRUD shim backed by AiAccountsClient.
  *
- * Only `list` and `get` are provided; they delegate to `aiAccountsClient`
- * and adapt the BackendDTO response into the AIBackend / AIBackendWithAccounts
- * shapes expected by existing components.
+ * Groups ai-accounts rows (flat `bkd-*` entities) into Agented's legacy
+ * "one backend per kind with N accounts" shape. Static per-kind metadata
+ * comes from BACKEND_METADATA; dynamic detection data comes from Agented's
+ * surviving `/admin/backends/<legacyId>/check` route.
  *
- * `addAccount`, `updateAccount`, `deleteAccount` are removed — the new
- * AccountWizard component handles account creation via aiAccountsClient.
+ * Account CRUD operations (create, edit) are no longer exposed through
+ * this shim — new accounts are added via `<AccountWizard>` /
+ * `<OnboardingFlow>` which call aiAccountsClient directly. Deletes go
+ * through `aiAccountsClient.deleteBackend(bkdId)`.
  */
 export const backendApi = {
   list: async (): Promise<{ backends: AIBackend[] }> => {
-    const result = await aiAccountsClient.listBackends();
-    return { backends: result.items.map(dtoToBackend) };
+    const { items } = await aiAccountsClient.listBackends();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const byKind: Record<string, any[]> = {};
+    for (const dto of items) {
+      const kind = (dto as { kind: string }).kind ?? '';
+      if (!byKind[kind]) byKind[kind] = [];
+      byKind[kind].push(dto);
+    }
+    const kinds = Array.from(new Set([...KNOWN_KINDS, ...Object.keys(byKind)]));
+    const detections = await Promise.all(kinds.map((k) => tryCheck(kindToLegacyId(k))));
+    const backends = kinds.map((kind, idx) =>
+      buildBackendForKind(kind, byKind[kind] ?? [], detections[idx] ?? { is_installed: 0 }),
+    );
+    return { backends };
   },
 
-  get: async (backendId: string): Promise<AIBackendWithAccounts> => {
-    const dto = await aiAccountsClient.getBackend(backendId);
-    return dtoToBackendWithAccounts(dto);
+  get: async (legacyIdOrKind: string): Promise<AIBackendWithAccounts> => {
+    const kind = legacyIdToKind(legacyIdOrKind);
+    const { items } = await aiAccountsClient.listBackends();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const kindDtos = items.filter((dto: any) => dto.kind === kind);
+    const detection = await tryCheck(kindToLegacyId(kind));
+    const base = buildBackendForKind(kind, kindDtos, detection);
+    // Try to enrich with models (best-effort)
+    let models: string[] = [];
+    try {
+      const result = await backendManagementApi.discoverModels(kindToLegacyId(kind));
+      models = result.models ?? [];
+    } catch {
+      // Model discovery is optional
+    }
+    return {
+      ...base,
+      models,
+      accounts: kindDtos.map(dtoToAccount),
+    };
   },
 
   // Forward all management operations to backendManagementApi for backwards compat.

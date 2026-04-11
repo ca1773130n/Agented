@@ -70,7 +70,7 @@ defineProps<{
 }>();
 
 defineEmits<{
-  (e: 'clear-rate-limit', accountId: number): void;
+  (e: 'clear-rate-limit', accountId: string): void;
 }>();
 
 // Reactive clock for countdown timers

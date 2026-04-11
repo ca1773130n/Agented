@@ -48,7 +48,7 @@ const monitoringConfig = ref<MonitoringConfig>({
   accounts: {},
 });
 const originalMonitoringConfig = ref<string>('');
-const backendAccounts = ref<Array<{ id: number; account_name: string; backend_type: string }>>([]);
+const backendAccounts = ref<Array<{ id: string; account_name: string; backend_type: string }>>([]);
 const loadingMonitoring = ref(false);
 const savingMonitoring = ref(false);
 
@@ -118,7 +118,7 @@ async function loadMonitoringSettings() {
     originalMonitoringConfig.value = JSON.stringify(monitoringConfig.value);
 
     // Load accounts for each backend
-    const allAccounts: Array<{ id: number; account_name: string; backend_type: string }> = [];
+    const allAccounts: Array<{ id: string; account_name: string; backend_type: string }> = [];
     for (const backend of (backendsData.backends || [])) {
       try {
         const detail = await backendApi.get(backend.id);
@@ -161,7 +161,7 @@ function isMonitoringDirty(): boolean {
   return JSON.stringify(monitoringConfig.value) !== originalMonitoringConfig.value;
 }
 
-function toggleAccountMonitoring(accountId: number) {
+function toggleAccountMonitoring(accountId: string) {
   const key = String(accountId);
   if (!monitoringConfig.value.accounts[key]) {
     monitoringConfig.value.accounts[key] = { enabled: true };
@@ -170,7 +170,7 @@ function toggleAccountMonitoring(accountId: number) {
   }
 }
 
-function isAccountEnabled(accountId: number): boolean {
+function isAccountEnabled(accountId: string): boolean {
   const key = String(accountId);
   return monitoringConfig.value.accounts[key]?.enabled ?? false;
 }
