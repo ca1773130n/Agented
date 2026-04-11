@@ -70,6 +70,7 @@ ai-accounts-litestar = { path = "../../ai-accounts/packages/litestar", editable 
 [dependency-groups]
 dev = [
     "pytest>=9.0.2",
+    "pytest-asyncio>=1.3.0",
     "pytest-cov>=7.0.0",
     "ruff>=0.9.7",
 ]
