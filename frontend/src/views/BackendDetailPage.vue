@@ -133,12 +133,101 @@
 
         <!-- Account Wizard (for adding new accounts) -->
         <AccountWizard
-          v-if="showAddModal && backend"
+          v-if="showAddModal && !editingAccount && backend"
           :client="aiAccountsClient"
           @done="onWizardDone"
           @cancel="closeModal"
         />
 
+        <!-- Inline Edit Account Form (editing existing accounts) -->
+        <div v-if="editingAccount" class="inline-account-form">
+          <div class="inline-form-header">
+            <h3>Edit Account</h3>
+            <button class="btn-close" @click="closeModal">&times;</button>
+          </div>
+          <form @submit.prevent="saveAccount">
+            <div class="form-group">
+              <label for="edit_account_name">Account Name *</label>
+              <input
+                id="edit_account_name"
+                v-model="accountForm.account_name"
+                type="text"
+                required
+                placeholder="e.g., Personal, Work"
+              />
+            </div>
+            <div class="form-group">
+              <label for="edit_email">Email</label>
+              <input
+                id="edit_email"
+                v-model="accountForm.email"
+                type="email"
+                placeholder="e.g., user@example.com"
+              />
+              <small>Login email for this account</small>
+            </div>
+            <div class="form-group">
+              <label for="edit_config_path">Config Path</label>
+              <input
+                id="edit_config_path"
+                v-model="accountForm.config_path"
+                type="text"
+                placeholder="e.g., ~/.claude-work"
+              />
+              <small>Path to the backend's config directory for this account</small>
+            </div>
+            <div class="form-group">
+              <label for="edit_api_key_env">API Key Environment Variable</label>
+              <input
+                id="edit_api_key_env"
+                v-model="accountForm.api_key_env"
+                type="text"
+                placeholder="e.g., ANTHROPIC_API_KEY_WORK"
+              />
+              <small>Name of the environment variable containing the API key</small>
+            </div>
+            <div v-if="planOptions.length > 0" class="form-group">
+              <label for="edit_plan">Plan</label>
+              <select id="edit_plan" v-model="accountForm.plan">
+                <option value="">Select plan...</option>
+                <option v-for="opt in planOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+              </select>
+            </div>
+            <template v-if="backend?.type === 'codex'">
+              <div class="form-group">
+                <label for="edit_reasoning_level">Reasoning Level</label>
+                <select id="edit_reasoning_level" v-model="codexSettings.reasoning_level">
+                  <option value="">Default</option>
+                  <option value="low">Low</option>
+                  <option value="medium">Medium</option>
+                  <option value="high">High</option>
+                </select>
+                <small>Controls how much reasoning the model performs</small>
+              </div>
+              <div class="form-group">
+                <label for="edit_summary_level">Summary Level</label>
+                <select id="edit_summary_level" v-model="codexSettings.summary_level">
+                  <option value="">Default</option>
+                  <option value="concise">Concise</option>
+                  <option value="detailed">Detailed</option>
+                </select>
+                <small>Controls output verbosity</small>
+              </div>
+            </template>
+            <div class="form-group checkbox">
+              <label>
+                <input type="checkbox" v-model="accountForm.is_default" />
+                Set as default account
+              </label>
+            </div>
+            <div class="inline-form-actions">
+              <button type="button" class="btn btn-secondary" @click="closeModal">Cancel</button>
+              <button type="submit" class="btn btn-primary" :disabled="isSaving">
+                {{ isSaving ? 'Saving...' : 'Update' }}
+              </button>
+            </div>
+          </form>
+        </div>
 
         <div v-if="backend.accounts?.length === 0" class="empty-state">
           <p v-if="isOpenCode">OpenCode uses other backends' accounts. No separate accounts needed.</p>
@@ -217,6 +306,7 @@
                 Clear Rate Limit
               </button>
 
+              <button class="btn btn-sm btn-secondary" @click="editAccount(account)">Edit</button>
               <button class="btn btn-sm btn-danger" @click="deleteAccount(account.id)">Delete</button>
             </div>
             <!-- Rate limit results -->
@@ -268,7 +358,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch, inject } from 'vue';
 import { useRoute } from 'vue-router';
-import { backendApi, orchestrationApi, BACKEND_LOGIN_INFO, type AIBackendWithAccounts, type BackendAccount, type AccountHealth, type BackendCapabilities, type RateLimitWindow } from '../services/api';
+import { backendApi, orchestrationApi, BACKEND_LOGIN_INFO, BACKEND_PLAN_OPTIONS, type AIBackendWithAccounts, type BackendAccount, type AccountHealth, type BackendCapabilities, type RateLimitWindow } from '../services/api';
 import PageHeader from '../components/base/PageHeader.vue';
 import EntityLayout from '../layouts/EntityLayout.vue';
 import BackendConnect from '../components/monitoring/BackendConnect.vue';
@@ -290,12 +380,32 @@ const tourMachine = useTourMachine();
 const backend = ref<AIBackendWithAccounts | null>(null);
 
 const showAddModal = ref(false);
+const editingAccount = ref<BackendAccount | null>(null);
 const isSaving = ref(false);
 
-// OB-44: Signal tour overlay when the add-account modal is open
+// OB-44: Signal tour overlay when the add-account or edit modal is open
 const setTourModalOpen = inject<(open: boolean) => void>('setTourModalOpen', () => {});
-watch(showAddModal, (addOpen) => {
-  setTourModalOpen(addOpen);
+watch([showAddModal, editingAccount], ([addOpen, editing]) => {
+  setTourModalOpen(addOpen || editing !== null);
+});
+
+// Account edit form state
+const accountForm = ref({
+  account_name: '',
+  email: '',
+  config_path: '',
+  api_key_env: '',
+  plan: '',
+  is_default: false,
+});
+const codexSettings = ref({
+  reasoning_level: '',
+  summary_level: '',
+});
+
+const planOptions = computed(() => {
+  if (!backend.value) return [];
+  return BACKEND_PLAN_OPTIONS[backend.value.type] || [];
 });
 
 const showToast = useToast();
@@ -403,8 +513,35 @@ async function loadBackend() {
 }
 
 
+function editAccount(account: BackendAccount) {
+  editingAccount.value = account;
+  const ud = (account.usage_data || {}) as Record<string, string>;
+  accountForm.value = {
+    account_name: account.account_name,
+    email: account.email || '',
+    config_path: account.config_path || '',
+    api_key_env: account.api_key_env || '',
+    plan: account.plan || '',
+    is_default: !!account.is_default,
+  };
+  codexSettings.value = {
+    reasoning_level: ud.reasoning_level || '',
+    summary_level: ud.summary_level || '',
+  };
+}
+
 function closeModal() {
   showAddModal.value = false;
+  editingAccount.value = null;
+  accountForm.value = {
+    account_name: '',
+    email: '',
+    config_path: '',
+    api_key_env: '',
+    plan: '',
+    is_default: false,
+  };
+  codexSettings.value = { reasoning_level: '', summary_level: '' };
 }
 
 function onWizardDone(_backendId: string) {
@@ -413,6 +550,36 @@ function onWizardDone(_backendId: string) {
   tourMachine.nextStep();
   // Reload backend data to reflect the newly added account
   loadBackend();
+}
+
+async function saveAccount() {
+  if (!editingAccount.value) return;
+  isSaving.value = true;
+  try {
+    const config: Record<string, unknown> = {};
+    if (accountForm.value.email) config.email = accountForm.value.email;
+    if (accountForm.value.config_path) config.config_path = accountForm.value.config_path;
+    if (accountForm.value.api_key_env) config.api_key_env = accountForm.value.api_key_env;
+    if (accountForm.value.plan) config.plan = accountForm.value.plan;
+    config.is_default = !!accountForm.value.is_default;
+    if (backend.value?.type === 'codex') {
+      const usage: Record<string, string> = {};
+      if (codexSettings.value.reasoning_level) usage.reasoning_level = codexSettings.value.reasoning_level;
+      if (codexSettings.value.summary_level) usage.summary_level = codexSettings.value.summary_level;
+      if (Object.keys(usage).length > 0) config.usage_data = usage;
+    }
+    await aiAccountsClient.updateBackend(editingAccount.value.id, {
+      display_name: accountForm.value.account_name,
+      config,
+    });
+    showToast?.('Account updated', 'success');
+    closeModal();
+    await loadBackend();
+  } catch (err) {
+    showToast?.(err instanceof Error ? err.message : 'Failed to save account', 'error');
+  } finally {
+    isSaving.value = false;
+  }
 }
 
 function deleteAccount(accountId: string) {

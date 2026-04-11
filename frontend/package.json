@@ -12,9 +12,9 @@
     "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
-    "@ai-accounts/ts-core": "file:../../../../../../tmp/ai-accounts-pkgs/ai-accounts-ts-core-0.2.0.tgz",
-    "@ai-accounts/vue-headless": "file:../../../../../../tmp/ai-accounts-pkgs/ai-accounts-vue-headless-0.2.0.tgz",
-    "@ai-accounts/vue-styled": "file:../../../../../../tmp/ai-accounts-pkgs/ai-accounts-vue-styled-0.2.0.tgz",
+    "@ai-accounts/ts-core": "file:../../../../../../tmp/ai-accounts-pkgs/ai-accounts-ts-core-0.2.1.tgz",
+    "@ai-accounts/vue-headless": "file:../../../../../../tmp/ai-accounts-pkgs/ai-accounts-vue-headless-0.2.1.tgz",
+    "@ai-accounts/vue-styled": "file:../../../../../../tmp/ai-accounts-pkgs/ai-accounts-vue-styled-0.2.1.tgz",
     "@dagrejs/dagre": "^2.0.4",
     "@floating-ui/vue": "^1.1.11",
     "@intlify/unplugin-vue-i18n": "^11.0.7",
