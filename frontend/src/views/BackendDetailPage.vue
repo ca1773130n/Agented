@@ -132,13 +132,11 @@
         </div>
 
         <!-- Account Wizard (for adding new accounts) -->
+        <!-- Sourced from @ai-accounts/vue-styled 0.3.0-alpha.1. -->
         <AccountWizard
           v-if="showAddModal && !editingAccount && backend"
-          :backend-id="backend.id"
-          :backend-type="backend.type"
+          :initial-backend-kind="backend.type"
           :backend-name="backend.name"
-          :is-installed="!!backend.is_installed"
-          :version="backend.version"
           @close="closeModal"
           @saved="onWizardSaved"
           @skip="onWizardSkip"
@@ -370,7 +368,7 @@ import PageHeader from '../components/base/PageHeader.vue';
 import EntityLayout from '../layouts/EntityLayout.vue';
 import BackendConnect from '../components/monitoring/BackendConnect.vue';
 import AccountLoginModal from '../components/monitoring/AccountLoginModal.vue';
-import AccountWizard from '../components/backends/AccountWizard.vue';
+import { AccountWizard } from '@ai-accounts/vue-styled';
 import { AiAccountsClient } from '@ai-accounts/ts-core';
 import { useTourMachine } from '../composables/useTourMachine';
 import ConfirmModal from '../components/base/ConfirmModal.vue';
