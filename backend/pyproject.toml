@@ -2,7 +2,7 @@
 name = "agented-backend"
 version = "0.1.0"
 description = "Agented - Bot management and security audit API for webhook automation"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 dependencies = [
     "Flask>=2.2.3,<3.0",
     "flask-openapi3[swagger,redoc,rapidoc,scalar]>=3.0.0",
@@ -28,6 +28,8 @@ dependencies = [
     "unidiff>=0.7.5",
     "sentence-transformers>=3.0.0",
     "numpy>=1.24.0",
+    "ai-accounts-core",
+    "ai-accounts-litestar",
 ]
 
 [project.optional-dependencies]
@@ -60,6 +62,10 @@ quote-style = "double"
 indent-style = "space"
 skip-magic-trailing-comma = false
 line-ending = "auto"
+
+[tool.uv.sources]
+ai-accounts-core = { path = "../../ai-accounts/packages/core", editable = true }
+ai-accounts-litestar = { path = "../../ai-accounts/packages/litestar", editable = true }
 
 [dependency-groups]
 dev = [
