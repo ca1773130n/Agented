@@ -1,6 +1,7 @@
 import '@mcp-b/global'
 import { createApp } from 'vue'
 import './style.css'
+import '@ai-accounts/vue-styled/styles.css'
 import App from './App.vue'
 import { router } from './router'
 import { i18n, loadInitialLocale } from './i18n'
