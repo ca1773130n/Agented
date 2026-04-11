@@ -698,37 +698,13 @@ function onWizardDone(_backendId: string) {
 async function saveAccount() {
   isSaving.value = true;
   try {
-    const usageData: Record<string, string> = {};
-    if (backend.value?.type === 'codex') {
-      if (codexSettings.value.reasoning_level) usageData.reasoning_level = codexSettings.value.reasoning_level;
-      if (codexSettings.value.summary_level) usageData.summary_level = codexSettings.value.summary_level;
-    }
-    const data = {
-      account_name: accountForm.value.account_name,
-      email: accountForm.value.email || undefined,
-      config_path: accountForm.value.config_path || undefined,
-      api_key_env: accountForm.value.api_key_env || undefined,
-      plan: accountForm.value.plan || undefined,
-      is_default: accountForm.value.is_default ? 1 : 0,
-      usage_data: Object.keys(usageData).length > 0 ? usageData : undefined,
-    };
-
-    const isNew = !editingAccount.value;
-    if (editingAccount.value) {
-      await backendApi.updateAccount(backendId.value, editingAccount.value.id, data);
-    } else {
-      await backendApi.addAccount(backendId.value, data);
-    }
-
-    closeModal();
-    showToast?.('Account saved successfully', 'success');
-    await loadBackend();
-
-    // Auto-show login modal after creating a new account (not editing)
-    if (isNew && supportsConnect.value && backend.value?.is_installed) {
-      loginConfigPath.value = accountForm.value.config_path || undefined;
-      showLoginModal.value = true;
-    }
+    // NOTE: account CRUD routes were removed in the ai-accounts migration (Task 33/34).
+    // The AccountWizard component handles new account creation. Editing is a regression concern.
+    throw new Error(
+      editingAccount.value
+        ? 'Account editing via inline form is not supported after ai-accounts migration'
+        : 'Account creation via inline form is not supported. Use the Add Account wizard instead.'
+    );
   } catch (err) {
     showToast?.('Failed to save account', 'error');
   } finally {
@@ -747,7 +723,9 @@ async function confirmDeleteAccount() {
   pendingDeleteAccountId.value = null;
   if (accountId === null) return;
   try {
-    await backendApi.deleteAccount(backendId.value, accountId);
+    // NOTE: deleteAccount route removed in ai-accounts migration (Task 33/34).
+    // Use aiAccountsClient.deleteBackend() if needed.
+    await aiAccountsClient.deleteBackend(accountId.toString());
     await loadBackend();
   } catch (err) {
     showToast?.('Failed to delete account', 'error');

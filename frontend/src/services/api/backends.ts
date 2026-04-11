@@ -1,7 +1,15 @@
 /**
- * AI Backends API module with login info and plan option constants.
+ * AI Backends API module.
+ *
+ * CRUD operations (list, get, create, delete) are now served by the
+ * @ai-accounts/ts-core AiAccountsClient via /api/v1/backends.
+ *
+ * Agented-specific management operations (install CLI, connect sessions,
+ * rate-limit checks, proxy login, Gemini auth, etc.) are served by the
+ * Flask admin API at /admin/backends and remain here as `backendManagementApi`.
  */
 import { API_BASE, apiFetch } from './client';
+import { AiAccountsClient } from '@ai-accounts/ts-core';
 import type {
   AIBackend,
   AIBackendWithAccounts,
@@ -39,12 +47,18 @@ export const BACKEND_PLAN_OPTIONS: Record<string, { value: string; label: string
   // opencode has no plans — it's a free open-source tool
 };
 
-// AI Backends API
-export const backendApi = {
-  list: () => apiFetch<{ backends: AIBackend[] }>('/admin/backends'),
+/**
+ * Shared AiAccountsClient singleton for the Litestar /api/v1/backends API.
+ * Replaces the old backendApi CRUD methods (list, get, create, delete).
+ */
+export const aiAccountsClient = new AiAccountsClient({ baseUrl: '' });
 
-  get: (backendId: string) => apiFetch<AIBackendWithAccounts>(`/admin/backends/${backendId}`),
-
+/**
+ * Agented-specific backend management operations that are NOT part of the
+ * @ai-accounts/litestar CRUD surface. These call Flask /admin/backends/* routes
+ * for CLI install, OAuth connect sessions, rate-limit checks, proxy auth, etc.
+ */
+export const backendManagementApi = {
   installCli: (backendId: string) => apiFetch<{
     message: string;
     version?: string;
@@ -61,36 +75,6 @@ export const backendApi = {
   }>(`/admin/backends/${backendId}/check`, {
     method: 'POST',
   }),
-
-  // Account management
-  addAccount: (backendId: string, data: {
-    account_name: string;
-    email?: string;
-    config_path?: string;
-    api_key_env?: string;
-    is_default?: number;
-    plan?: string;
-  }) => apiFetch<{ message: string; account_id: number }>(`/admin/backends/${backendId}/accounts`, {
-    method: 'POST',
-    body: JSON.stringify(data),
-  }),
-
-  updateAccount: (backendId: string, accountId: number, data: Partial<{
-    account_name: string;
-    email: string;
-    config_path: string;
-    api_key_env: string;
-    is_default: number;
-    plan: string;
-  }>) => apiFetch<{ message: string }>(`/admin/backends/${backendId}/accounts/${accountId}`, {
-    method: 'PUT',
-    body: JSON.stringify(data),
-  }),
-
-  deleteAccount: (backendId: string, accountId: number) =>
-    apiFetch<{ message: string }>(`/admin/backends/${backendId}/accounts/${accountId}`, {
-      method: 'DELETE',
-    }),
 
   // Connect (OAuth login) operations
   startConnect: (backendId: string, configPath?: string, email?: string, accountName?: string) =>
@@ -187,4 +171,69 @@ export const backendApi = {
 
   streamTestUrl: (testId: string): string =>
     `${API_BASE}/admin/backends/test/${testId}/stream`,
+};
+
+/**
+ * Adapter helpers — bridge the AiAccountsClient BackendDTO shape to the
+ * Agented AIBackend shape expected by legacy components.
+ *
+ * Regression note: BackendDTO lacks description, is_installed, version, models,
+ * account_count, etc. Those fields will be undefined until consuming components
+ * are updated to use the new schema.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const dtoToBackend = (dto: any): AIBackend => ({
+  id: dto.id,
+  name: dto.display_name ?? dto.id,
+  type: dto.kind ?? '',
+  is_installed: dto.status === 'active' ? 1 : 0,
+  description: undefined,
+});
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const dtoToBackendWithAccounts = (dto: any): AIBackendWithAccounts => ({
+  ...dtoToBackend(dto),
+  accounts: [],
+});
+
+/**
+ * backendApi — legacy CRUD shim backed by AiAccountsClient.
+ *
+ * Only `list` and `get` are provided; they delegate to `aiAccountsClient`
+ * and adapt the BackendDTO response into the AIBackend / AIBackendWithAccounts
+ * shapes expected by existing components.
+ *
+ * `addAccount`, `updateAccount`, `deleteAccount` are removed — the new
+ * AccountWizard component handles account creation via aiAccountsClient.
+ */
+export const backendApi = {
+  list: async (): Promise<{ backends: AIBackend[] }> => {
+    const result = await aiAccountsClient.listBackends();
+    return { backends: result.items.map(dtoToBackend) };
+  },
+
+  get: async (backendId: string): Promise<AIBackendWithAccounts> => {
+    const dto = await aiAccountsClient.getBackend(backendId);
+    return dtoToBackendWithAccounts(dto);
+  },
+
+  // Forward all management operations to backendManagementApi for backwards compat.
+  installCli: backendManagementApi.installCli,
+  check: backendManagementApi.check,
+  startConnect: backendManagementApi.startConnect,
+  streamConnectUrl: backendManagementApi.streamConnectUrl,
+  respondConnect: backendManagementApi.respondConnect,
+  cancelConnect: backendManagementApi.cancelConnect,
+  checkUsage: backendManagementApi.checkUsage,
+  checkRateLimits: backendManagementApi.checkRateLimits,
+  checkAuthStatus: backendManagementApi.checkAuthStatus,
+  discoverModels: backendManagementApi.discoverModels,
+  proxyLogin: backendManagementApi.proxyLogin,
+  geminiAuthStart: backendManagementApi.geminiAuthStart,
+  geminiAuthComplete: backendManagementApi.geminiAuthComplete,
+  proxyCallbackForward: backendManagementApi.proxyCallbackForward,
+  proxyStatus: backendManagementApi.proxyStatus,
+  listProxyAccounts: backendManagementApi.listProxyAccounts,
+  testPrompt: backendManagementApi.testPrompt,
+  streamTestUrl: backendManagementApi.streamTestUrl,
 };
