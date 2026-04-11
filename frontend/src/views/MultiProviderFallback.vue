@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue';
-import { orchestrationApi, triggerApi, backendApi } from '../services/api';
+import { orchestrationApi, triggerApi, listGroupedBackends } from '../services/api';
 import type { AccountHealth, FallbackChainEntry, Trigger, AIBackend } from '../services/api';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
@@ -66,7 +66,7 @@ async function loadData() {
   try {
     const [triggersRes, backendsRes, healthRes] = await Promise.allSettled([
       triggerApi.list(),
-      backendApi.list(),
+      listGroupedBackends(),
       orchestrationApi.getHealth(),
     ]);
 

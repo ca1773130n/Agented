@@ -363,7 +363,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch, inject } from 'vue';
 import { useRoute } from 'vue-router';
-import { backendApi, orchestrationApi, BACKEND_LOGIN_INFO, BACKEND_PLAN_OPTIONS, type AIBackendWithAccounts, type BackendAccount, type AccountHealth, type BackendCapabilities, type RateLimitWindow } from '../services/api';
+import { backendManagementApi, listGroupedBackends, getGroupedBackend, orchestrationApi, BACKEND_LOGIN_INFO, BACKEND_PLAN_OPTIONS, type AIBackendWithAccounts, type BackendAccount, type AccountHealth, type BackendCapabilities, type RateLimitWindow } from '../services/api';
 import PageHeader from '../components/base/PageHeader.vue';
 import EntityLayout from '../layouts/EntityLayout.vue';
 import BackendConnect from '../components/monitoring/BackendConnect.vue';
@@ -433,7 +433,7 @@ async function installCli() {
   isInstalling.value = true;
   showToast?.(`Installing ${backend.value.name} CLI...`, 'info');
   try {
-    const result = await backendApi.installCli(backendId.value);
+    const result = await backendManagementApi.installCli(backendId.value);
     showToast?.(result.message || 'CLI installed', 'success');
     await loadBackend();
   } catch (e: unknown) {
@@ -504,7 +504,7 @@ const loginInfo = computed(() => {
 
 async function loadBackend() {
   try {
-    const data = await backendApi.get(backendId.value);
+    const data = await getGroupedBackend(backendId.value);
     backend.value = data;
     // Fire-and-forget: load supplementary data
     loadHealth();
@@ -687,7 +687,7 @@ function onLoginModalSuccess() {
 async function checkAccountRateLimits(accountId: string) {
   rateLimitState.value[accountId] = { loading: true, windows: [], error: null };
   try {
-    const result = await backendApi.checkRateLimits(backendId.value, accountId);
+    const result = await backendManagementApi.checkRateLimits(backendId.value, accountId);
     if (result.needs_login && supportsConnect.value && backend.value?.is_installed) {
       // Auto-trigger login for this account
       const account = backend.value?.accounts?.find((a: BackendAccount) => a.id === accountId);
@@ -721,11 +721,11 @@ function getRateLimitColor(pct: number): string {
 
 async function loadOtherBackendAccounts() {
   try {
-    const { backends } = await backendApi.list();
+    const { backends } = await listGroupedBackends();
     const results: typeof otherBackendAccounts.value = [];
     for (const b of backends) {
       if (b.type === 'opencode') continue;
-      const detail = await backendApi.get(b.id);
+      const detail = await getGroupedBackend(b.id);
       if (detail.accounts?.length) {
         results.push({
           backend_name: b.name,

@@ -159,7 +159,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router';
-import { backendApi, superAgentApi, type AIBackend, type BackendCapabilities } from '../services/api';
+import { backendManagementApi, listGroupedBackends, superAgentApi, type AIBackend, type BackendCapabilities } from '../services/api';
 import { useAiChat } from '../composables/useAiChat';
 import { useStreamingParser } from '../composables/useStreamingParser';
 import PageLayout from '../components/base/PageLayout.vue';
@@ -206,7 +206,7 @@ async function installBackendCli(backend: AIBackend) {
   installingBackend.value = backend.id;
   showToast(`Installing ${backend.name} CLI...`, 'info');
   try {
-    const result = await backendApi.installCli(backend.id);
+    const result = await backendManagementApi.installCli(backend.id);
     showToast(result.message || `${backend.name} installed`, 'success');
     await loadBackends(true);
   } catch (e: unknown) {
@@ -221,7 +221,7 @@ async function addProxyAccount() {
   isAddingAccount.value = true;
   showToast('Opening browser for Claude OAuth login...', 'info');
   try {
-    const result = await backendApi.proxyLogin();
+    const result = await backendManagementApi.proxyLogin();
     if (result.status === 'completed') {
       showToast('Account added successfully', 'success');
       await loadBackends(true);
@@ -241,7 +241,7 @@ async function loadBackends(silent = false) {
     error.value = null;
   }
   try {
-    const response = await backendApi.list();
+    const response = await listGroupedBackends();
     backends.value = response.backends;
   } catch (err) {
     if (!silent) {
@@ -258,7 +258,7 @@ async function autoCheckBackends() {
   if (backends.value.length === 0) return;
   await Promise.allSettled(
     backends.value.map(async (b) => {
-      const result = await backendApi.check(b.id);
+      const result = await backendManagementApi.check(b.id);
       if (result.capabilities) {
         backendCapabilities.value.set(b.id, result.capabilities);
       }

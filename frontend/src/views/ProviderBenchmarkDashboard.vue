@@ -2,7 +2,7 @@
 import { ref, computed, onMounted } from 'vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
-import { orchestrationApi, backendApi, ApiError } from '../services/api';
+import { orchestrationApi, listGroupedBackends, ApiError } from '../services/api';
 import type { AccountHealth, AIBackend } from '../services/api';
 const showToast = useToast();
 
@@ -40,7 +40,7 @@ async function loadData() {
   try {
     const [healthResp, backendsResp] = await Promise.all([
       orchestrationApi.getHealth(),
-      backendApi.list(),
+      listGroupedBackends(),
     ]);
     accounts.value = healthResp.accounts ?? [];
     backends.value = backendsResp.backends ?? [];

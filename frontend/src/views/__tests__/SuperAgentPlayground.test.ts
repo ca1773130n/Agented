@@ -73,9 +73,7 @@ vi.mock('../../services/api', () => ({
   teamApi: {
     listMembers: vi.fn(),
   },
-  backendApi: {
-    list: vi.fn(),
-  },
+  listGroupedBackends: vi.fn(),
   API_BASE: '',
   ApiError: class extends Error {
     status: number
@@ -187,7 +185,7 @@ describe('SuperAgentPlayground', () => {
     )
     vi.mocked(api.superAgentDocumentApi.list).mockResolvedValue({ documents: [] })
     vi.mocked(api.teamApi.listMembers).mockResolvedValue({ members: [] })
-    vi.mocked(api.backendApi.list).mockResolvedValue({ backends: [] })
+    vi.mocked(api.listGroupedBackends).mockResolvedValue({ backends: [] })
     vi.mocked(api.agentMessageApi.listInbox).mockResolvedValue({ messages: [] })
     vi.mocked(api.agentMessageApi.listOutbox).mockResolvedValue({ messages: [] })
   })

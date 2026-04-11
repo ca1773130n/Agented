@@ -2,7 +2,7 @@
 import { ref, onMounted, inject, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import type { MonitoringConfig } from '../../services/api';
-import { settingsApi, monitoringApi, backendApi, ApiError } from '../../services/api';
+import { settingsApi, monitoringApi, listGroupedBackends, getGroupedBackend, ApiError } from '../../services/api';
 import { useToast } from '../../composables/useToast';
 import { useTourMachine } from '../../composables/useTourMachine';
 import DirectoryBrowser from '../base/DirectoryBrowser.vue';
@@ -108,7 +108,7 @@ async function loadMonitoringSettings() {
   try {
     const [configData, backendsData] = await Promise.all([
       monitoringApi.getConfig(),
-      backendApi.list(),
+      listGroupedBackends(),
     ]);
     monitoringConfig.value = {
       enabled: configData.enabled ?? false,
@@ -121,7 +121,7 @@ async function loadMonitoringSettings() {
     const allAccounts: Array<{ id: string; account_name: string; backend_type: string }> = [];
     for (const backend of (backendsData.backends || [])) {
       try {
-        const detail = await backendApi.get(backend.id);
+        const detail = await getGroupedBackend(backend.id);
         for (const acct of (detail.accounts || [])) {
           allAccounts.push({
             id: acct.id,

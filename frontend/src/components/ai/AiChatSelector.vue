@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue';
-import { backendApi } from '../../services/api';
+import { listGroupedBackends } from '../../services/api';
 import type { AIBackend } from '../../services/api';
 import type { ChatMode } from '../../composables/useAllMode';
 
@@ -34,7 +34,7 @@ const loading = ref(true);
 
 onMounted(async () => {
   try {
-    const result = await backendApi.list();
+    const result = await listGroupedBackends();
     backends.value = (result.backends || []).filter((b) => b.is_installed === 1);
   } catch {
     // Silently fail -- selector will just show "Auto"
