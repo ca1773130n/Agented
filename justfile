@@ -68,6 +68,15 @@ dev-backend: ensure-backend
 dev-frontend: ensure-frontend
     cd frontend && npm run dev
 
+# Run ai-accounts Litestar API server (development mode, port 20001)
+dev-ai-accounts: ensure-backend
+    cd backend && uv run python scripts/run_ai_accounts.py
+
+# Run all three dev servers in parallel (Flask :20000, Litestar :20001, Vite :3000)
+dev-all:
+    just kill
+    just dev-backend & just dev-ai-accounts & just dev-frontend & wait
+
 # Deploy: build frontend, then start both servers via Gunicorn
 # Frontend: http://localhost:3000 | Backend API: http://localhost:20000
 deploy: kill ensure-backend build
@@ -91,8 +100,7 @@ generate-key *ARGS: ensure-backend
 
 # Kill any existing frontend/backend processes
 kill:
-    -lsof -ti:3000 | xargs kill -9 2>/dev/null || true
-    -lsof -ti:20000 | xargs kill -9 2>/dev/null || true
+    -lsof -ti:3000,20000,20001 | xargs kill -9 2>/dev/null || true
     -pkill -f "npm run dev" 2>/dev/null || true
     -pkill -f "vite" 2>/dev/null || true
 

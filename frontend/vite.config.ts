@@ -24,6 +24,10 @@ export default defineConfig(({ mode }) => {
       strictPort: true,
       allowedHosts: allowedHosts.length ? allowedHosts : true,
       proxy: {
+        '/api/v1': {
+          target: 'http://127.0.0.1:20001',
+          changeOrigin: true
+        },
         '/api': {
           target: 'http://127.0.0.1:20000',
           changeOrigin: true
@@ -49,6 +53,10 @@ export default defineConfig(({ mode }) => {
     preview: {
       port: 3000,
       proxy: {
+        '/api/v1': {
+          target: 'http://127.0.0.1:20001',
+          changeOrigin: true
+        },
         '/api': {
           target: 'http://127.0.0.1:20000',
           changeOrigin: true
