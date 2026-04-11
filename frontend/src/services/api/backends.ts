@@ -347,6 +347,84 @@ export const backendApi = {
     };
   },
 
+  /**
+   * Create a new account under a backend kind.
+   *
+   * The original Agented flow persisted an account row after the wizard's
+   * CLI-based login completed via the /admin/backends/<kind>/connect SSE
+   * stream. In the ai-accounts world we just create a Backend row pointing
+   * at the user-chosen config_path; the actual credential state lives in
+   * that isolation dir (owned by the CLI itself) or in the env var named
+   * by api_key_env.
+   */
+  addAccount: async (
+    legacyBackendId: string,
+    data: {
+      account_name: string;
+      email?: string;
+      config_path?: string;
+      api_key_env?: string;
+      plan?: string;
+      is_default?: number;
+      usage_data?: Record<string, unknown>;
+    },
+  ): Promise<{ id: string; message: string }> => {
+    const kind = legacyIdToKind(legacyBackendId);
+    const config: Record<string, unknown> = {};
+    if (data.email) config.email = data.email;
+    if (data.config_path) config.config_path = data.config_path;
+    if (data.api_key_env) config.api_key_env = data.api_key_env;
+    if (data.plan) config.plan = data.plan;
+    config.is_default = data.is_default === 1;
+    if (data.usage_data && Object.keys(data.usage_data).length > 0) {
+      config.usage_data = data.usage_data;
+    }
+    const created = await aiAccountsClient.createBackend({
+      kind,
+      display_name: data.account_name,
+      config,
+    });
+    return { id: created.id, message: 'Account created' };
+  },
+
+  /**
+   * Update an existing account's display name and config.
+   * accountId is the ai-accounts bkd-* id.
+   */
+  updateAccount: async (
+    _legacyBackendId: string,
+    accountId: string,
+    data: {
+      account_name?: string;
+      email?: string;
+      config_path?: string;
+      api_key_env?: string;
+      plan?: string;
+      is_default?: number;
+      usage_data?: Record<string, unknown>;
+    },
+  ): Promise<{ message: string }> => {
+    const patch: { display_name?: string; config?: Record<string, unknown> } = {};
+    if (data.account_name !== undefined) patch.display_name = data.account_name;
+    const config: Record<string, unknown> = {};
+    if (data.email !== undefined) config.email = data.email;
+    if (data.config_path !== undefined) config.config_path = data.config_path;
+    if (data.api_key_env !== undefined) config.api_key_env = data.api_key_env;
+    if (data.plan !== undefined) config.plan = data.plan;
+    if (data.is_default !== undefined) config.is_default = data.is_default === 1;
+    if (data.usage_data !== undefined) config.usage_data = data.usage_data;
+    if (Object.keys(config).length > 0) patch.config = config;
+    await aiAccountsClient.updateBackend(accountId, patch);
+    return { message: 'Account updated' };
+  },
+
+  deleteAccount: async (
+    _legacyBackendId: string,
+    accountId: string,
+  ): Promise<void> => {
+    await aiAccountsClient.deleteBackend(accountId);
+  },
+
   // Forward all management operations to backendManagementApi for backwards compat.
   installCli: backendManagementApi.installCli,
   check: backendManagementApi.check,

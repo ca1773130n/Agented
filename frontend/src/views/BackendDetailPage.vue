@@ -123,112 +123,28 @@
       <div class="accounts-section">
         <div class="section-header">
           <h2>{{ isOpenCode ? 'OpenCode Accounts' : 'Accounts' }}</h2>
-          <div v-if="!isOpenCode" class="accounts-section__actions">
-            <button
-              v-if="supportsConnect && backend.is_installed"
-              class="btn btn-primary"
-              data-tour="add-account-btn"
-              @click="loginConfigPath = undefined; showLoginModal = true"
-            >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M12 5v14M5 12h14"/>
-              </svg>
-              Add Account
-            </button>
-            <button
-              class="btn btn-outline"
-              @click="openAdvancedAddForm"
-              title="Provide an API key manually instead of logging in via browser"
-            >
-              Advanced: API key
-            </button>
-          </div>
+          <button v-if="!isOpenCode" class="btn btn-primary" data-tour="add-account-btn" @click="showAddModal = true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 5v14M5 12h14"/>
+            </svg>
+            Add Account
+          </button>
         </div>
 
-        <!-- Advanced Inline Add Form (manual API key entry) -->
-        <div v-if="showAdvancedAdd" class="inline-account-form">
-          <div class="inline-form-header">
-            <h3>Add Account (manual API key)</h3>
-            <button class="btn-close" @click="closeAdvancedAdd">&times;</button>
-          </div>
-          <form @submit.prevent="saveNewAccount">
-            <div v-if="loginInfo" class="login-banner">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
-                <circle cx="12" cy="12" r="10"/>
-                <line x1="12" y1="16" x2="12" y2="12"/>
-                <line x1="12" y1="8" x2="12.01" y2="8"/>
-              </svg>
-              <span v-if="loginInfo.loginCommand">
-                Prefer the built-in browser login? Close this form and click "Add Account".
-                This form stores a raw API key from <a :href="loginInfo.url" target="_blank">{{ loginInfo.label }}</a>.
-              </span>
-              <span v-else>
-                Get your key at <a :href="loginInfo.url" target="_blank">{{ loginInfo.label }}</a>.
-              </span>
-            </div>
-            <div class="form-group">
-              <label for="new_account_name">Account Name *</label>
-              <input
-                id="new_account_name"
-                v-model="accountForm.account_name"
-                type="text"
-                required
-                placeholder="e.g., Personal, Work"
-                @input="suggestConfigPath"
-              />
-            </div>
-            <div class="form-group">
-              <label for="new_api_key">API Key *</label>
-              <input
-                id="new_api_key"
-                v-model="newApiKey"
-                type="password"
-                required
-                autocomplete="off"
-                :placeholder="backend.type === 'claude' ? 'sk-ant-...' : backend.type === 'codex' ? 'sk-...' : 'API key'"
-              />
-              <small>Stored encrypted by ai-accounts. Never logged.</small>
-            </div>
-            <div class="form-group">
-              <label for="new_email">Email (optional)</label>
-              <input
-                id="new_email"
-                v-model="accountForm.email"
-                type="email"
-                placeholder="e.g., user@example.com"
-              />
-            </div>
-            <div class="form-group">
-              <label for="new_config_path">Config Path (optional)</label>
-              <input
-                id="new_config_path"
-                v-model="accountForm.config_path"
-                type="text"
-                placeholder="e.g., ~/.claude-work"
-                @input="configPathManuallyEdited = true"
-              />
-            </div>
-            <div v-if="planOptions.length > 0" class="form-group">
-              <label for="new_plan">Plan (optional)</label>
-              <select id="new_plan" v-model="accountForm.plan">
-                <option value="">Select plan...</option>
-                <option v-for="opt in planOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
-              </select>
-            </div>
-            <div class="form-group checkbox">
-              <label>
-                <input type="checkbox" v-model="accountForm.is_default" />
-                Set as default account
-              </label>
-            </div>
-            <div class="inline-form-actions">
-              <button type="button" class="btn btn-secondary" @click="closeAdvancedAdd">Cancel</button>
-              <button type="submit" class="btn btn-primary" :disabled="isSaving">
-                {{ isSaving ? 'Creating...' : 'Create Account' }}
-              </button>
-            </div>
-          </form>
-        </div>
+        <!-- Account Wizard (for adding new accounts) -->
+        <AccountWizard
+          v-if="showAddModal && !editingAccount && backend"
+          :backend-id="backend.id"
+          :backend-type="backend.type"
+          :backend-name="backend.name"
+          :is-installed="!!backend.is_installed"
+          :version="backend.version"
+          @close="closeModal"
+          @saved="onWizardSaved"
+          @skip="onWizardSkip"
+          @done="onWizardDone"
+          @add-another="onWizardAddAnother"
+        />
 
         <!-- Inline Edit Account Form (editing existing accounts) -->
         <div v-if="editingAccount" class="inline-account-form">
@@ -454,7 +370,9 @@ import PageHeader from '../components/base/PageHeader.vue';
 import EntityLayout from '../layouts/EntityLayout.vue';
 import BackendConnect from '../components/monitoring/BackendConnect.vue';
 import AccountLoginModal from '../components/monitoring/AccountLoginModal.vue';
+import AccountWizard from '../components/backends/AccountWizard.vue';
 import { AiAccountsClient } from '@ai-accounts/ts-core';
+import { useTourMachine } from '../composables/useTourMachine';
 import ConfirmModal from '../components/base/ConfirmModal.vue';
 import { useToast } from '../composables/useToast';
 import { handleApiError } from '../services/api/error-handler';
@@ -467,17 +385,16 @@ const backendId = computed(() => route.params.backendId as string);
 
 const backend = ref<AIBackendWithAccounts | null>(null);
 
+const tourMachine = useTourMachine();
+
 const showAddModal = ref(false);
-const showAdvancedAdd = ref(false);
 const editingAccount = ref<BackendAccount | null>(null);
 const isSaving = ref(false);
-const newApiKey = ref('');
-const configPathManuallyEdited = ref(false);
 
 // OB-44: Signal tour overlay when any account form/modal is open
 const setTourModalOpen = inject<(open: boolean) => void>('setTourModalOpen', () => {});
-watch([showAddModal, showAdvancedAdd, editingAccount], ([addOpen, advanced, editing]) => {
-  setTourModalOpen(addOpen || advanced || editing !== null);
+watch([showAddModal, editingAccount], ([addOpen, editing]) => {
+  setTourModalOpen(addOpen || editing !== null);
 });
 
 // Account edit form state
@@ -635,93 +552,25 @@ function closeModal() {
   codexSettings.value = { reasoning_level: '', summary_level: '' };
 }
 
-function openAdvancedAddForm() {
-  editingAccount.value = null;
-  accountForm.value = {
-    account_name: '',
-    email: '',
-    config_path: '',
-    api_key_env: '',
-    plan: '',
-    is_default: false,
-  };
-  codexSettings.value = { reasoning_level: '', summary_level: '' };
-  configPathManuallyEdited.value = false;
-  newApiKey.value = '';
-  showAdvancedAdd.value = true;
+async function onWizardSaved() {
+  showToast?.('Account saved successfully', 'success');
+  await loadBackend();
 }
 
-function closeAdvancedAdd() {
-  showAdvancedAdd.value = false;
-  newApiKey.value = '';
-  configPathManuallyEdited.value = false;
+function onWizardSkip() {
+  showAddModal.value = false;
+  showToast?.('Backend skipped', 'info');
+  tourMachine.nextStep();
 }
 
-// Auto-suggest config_path when the account name changes (only for new accounts)
-function suggestConfigPath() {
-  if (configPathManuallyEdited.value) return;
-  const btype = backend.value?.type;
-  const name = accountForm.value.account_name.trim();
-  if (!btype || !name) {
-    accountForm.value.config_path = '';
-    return;
-  }
-  const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/-+$/, '');
-  const defaults: Record<string, string> = {
-    claude: '.claude',
-    codex: '.codex',
-    gemini: '.gemini',
-  };
-  const base = defaults[btype] || `.${btype}`;
-  accountForm.value.config_path = `~/${base}-${slug}`;
+function onWizardDone() {
+  closeModal();
+  tourMachine.nextStep();
 }
 
-async function saveNewAccount() {
-  if (!backend.value) return;
-  if (!accountForm.value.account_name.trim()) {
-    showToast?.('Account name is required', 'error');
-    return;
-  }
-  if (!newApiKey.value.trim()) {
-    showToast?.('API key is required', 'error');
-    return;
-  }
-  isSaving.value = true;
-  try {
-    const config: Record<string, unknown> = {};
-    if (accountForm.value.email) config.email = accountForm.value.email;
-    if (accountForm.value.config_path) config.config_path = accountForm.value.config_path;
-    if (accountForm.value.plan) config.plan = accountForm.value.plan;
-    config.is_default = !!accountForm.value.is_default;
-    if (backend.value.type === 'codex') {
-      const usage: Record<string, string> = {};
-      if (codexSettings.value.reasoning_level) usage.reasoning_level = codexSettings.value.reasoning_level;
-      if (codexSettings.value.summary_level) usage.summary_level = codexSettings.value.summary_level;
-      if (Object.keys(usage).length > 0) config.usage_data = usage;
-    }
-
-    const created = await aiAccountsClient.createBackend({
-      kind: backend.value.type,
-      display_name: accountForm.value.account_name,
-      config,
-    });
-    await aiAccountsClient.loginBackend(created.id, 'api_key', {
-      api_key: newApiKey.value.trim(),
-    });
-    try {
-      await aiAccountsClient.validateBackend(created.id);
-    } catch {
-      // Validation may fail for a variety of reasons — we still keep the
-      // row so the user can retry via the inline edit form.
-    }
-    showToast?.('Account created', 'success');
-    closeAdvancedAdd();
-    await loadBackend();
-  } catch (err) {
-    showToast?.(err instanceof Error ? err.message : 'Failed to create account', 'error');
-  } finally {
-    isSaving.value = false;
-  }
+function onWizardAddAnother() {
+  // Wizard handles its own reset; just reload backend data
+  loadBackend();
 }
 
 async function saveAccount() {
