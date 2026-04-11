@@ -104,3 +104,43 @@ async def test_missing_backend_returns_404(client: AsyncTestClient):
     response = await client.get("/api/v1/backends/bkd-nope")
     assert response.status_code == 404
     assert response.json()["error"]["code"] == "backend_not_found"
+
+
+@pytest.mark.asyncio
+async def test_onboarding_full_flow(fake_client: AsyncTestClient):
+    """Smoke test: start → detect → pick → login → finalize via FakeBackend."""
+    # Start a new onboarding session
+    started = await fake_client.post("/api/v1/onboarding/")
+    assert started.status_code == 201
+    body = started.json()
+    onb_id = body["id"]
+    assert onb_id.startswith("onb-")
+    assert body["current_step"] == "welcome"
+
+    # Run detection — FakeBackend.detect() always returns installed=True
+    detect = await fake_client.post(f"/api/v1/onboarding/{onb_id}/detect")
+    assert detect.status_code == 201
+    results = detect.json()["results"]
+    assert "fake" in results
+    assert results["fake"]["installed"] is True
+
+    # Pick the fake backend
+    pick = await fake_client.post(
+        f"/api/v1/onboarding/{onb_id}/pick",
+        json={"kind": "fake", "display_name": "Integration Test"},
+    )
+    assert pick.status_code == 201
+    assert pick.json()["kind"] == "fake"
+
+    # Login with api_key flow — FakeBackend returns a CredentialLogin immediately
+    login = await fake_client.post(
+        f"/api/v1/onboarding/{onb_id}/login",
+        json={"flow_kind": "api_key", "inputs": {}},
+    )
+    assert login.status_code == 201
+    assert login.json()["kind"] == "complete"
+
+    # Finalize the onboarding session
+    final = await fake_client.post(f"/api/v1/onboarding/{onb_id}/finalize")
+    assert final.status_code == 201
+    assert final.json()["current_step"] == "done"
