@@ -82,13 +82,13 @@ dev-all:
     just kill
     just dev-backend & just dev-ai-accounts & just dev-frontend & wait
 
-# Deploy: build frontend, then start both servers via Gunicorn
-# Frontend: http://localhost:3000 | Backend API: http://localhost:20000
+# Deploy: build frontend, then start sidecar + backend + frontend dev server
+# Frontend: http://localhost:3000 | Backend API: http://localhost:20000 | Sidecar: http://localhost:20001
 deploy: kill ensure-backend build
+    @echo "Starting ai-accounts sidecar on port 20001..."
+    cd backend && uv run python scripts/run_ai_accounts.py &
+    @while ! curl -sf http://127.0.0.1:20001/health >/dev/null 2>&1; do sleep 0.5; done; echo "Sidecar ready."
     @echo "Starting backend via Gunicorn on port 20000..."
-    @echo "Frontend: http://localhost:3000"
-    @echo "Backend API: http://localhost:20000"
-    @echo ""
     cd backend && OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES uv run gunicorn -c gunicorn.conf.py &
     @while ! curl -sf http://127.0.0.1:20000/health/readiness >/dev/null 2>&1; do sleep 1; done; echo "Backend ready."
     cd frontend && npm run dev
