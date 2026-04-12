@@ -32,7 +32,8 @@ const aiAccountsClient = new AiAccountsClient({
   token: getApiKey() ?? undefined,
 })
 
-app.use(aiAccountsPlugin, {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+app.use(aiAccountsPlugin as any, {
   client: aiAccountsClient,
   onEvent: (event: AiAccountsEvent) => {
     try {
