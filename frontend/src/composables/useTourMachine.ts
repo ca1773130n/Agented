@@ -217,7 +217,11 @@ async function initActor(): Promise<void> {
 export function useTourMachine() {
   // Ensure actor is initialized (idempotent)
   if (!initPromise) {
-    initPromise = initActor()
+    initPromise = initActor().catch((err) => {
+      console.error('[tour] init failed:', err);
+      initPromise = null;  // allow retry on next useTourMachine() call
+      throw err;
+    })
   }
 
   // Reactive snapshot reference
@@ -439,7 +443,13 @@ type AiAccountsEventLike =
  */
 export function notifyAiAccountsEvent(event: AiAccountsEventLike): void {
   // Ensure actor init has kicked off (idempotent; resolves async).
-  if (!initPromise) initPromise = initActor()
+  if (!initPromise) {
+    initPromise = initActor().catch((err) => {
+      console.error('[tour] init failed:', err);
+      initPromise = null;
+      throw err;
+    })
+  }
 
   switch (event.type) {
     case 'wizard.account.created':
