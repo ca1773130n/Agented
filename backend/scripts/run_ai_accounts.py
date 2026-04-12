@@ -11,8 +11,10 @@ collapse to one ASGI process or keep the split.
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
+from ai_accounts_core.adapters.auth_apikey import ApiKeyAuth
 from ai_accounts_core.adapters.auth_noauth import NoAuth
 from ai_accounts_core.adapters.storage_sqlite import SqliteStorage
 from ai_accounts_core.adapters.vault_envkey import EnvKeyVault
@@ -25,12 +27,31 @@ from ai_accounts_core.backends import (
 from ai_accounts_litestar.app import create_app
 from ai_accounts_litestar.config import AiAccountsConfig
 
+# Use ApiKeyAuth if AI_ACCOUNTS_API_KEY is set; fall back to NoAuth in dev
+_api_key = os.environ.get("AI_ACCOUNTS_API_KEY")
+if not _api_key:
+    # In dev, try to read the same key Flask uses from agented.db settings
+    try:
+        import sqlite3
+
+        db_path = os.path.join(os.path.dirname(__file__), "..", "agented.db")
+        if os.path.exists(db_path):
+            conn = sqlite3.connect(db_path)
+            row = conn.execute("SELECT value FROM settings WHERE key = 'api_key'").fetchone()
+            conn.close()
+            if row:
+                _api_key = row[0]
+    except Exception:
+        pass
+
+auth = ApiKeyAuth(token=_api_key) if _api_key else NoAuth()
+
 app = create_app(
     AiAccountsConfig(
         env="development",
         storage=SqliteStorage("./ai_accounts.db"),
         vault=EnvKeyVault.from_env(env="development"),
-        auth=NoAuth(),
+        auth=auth,
         backends=(
             ClaudeBackend(),
             OpenCodeBackend(),

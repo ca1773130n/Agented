@@ -8,6 +8,7 @@ import { i18n, loadInitialLocale } from './i18n'
 import { AiAccountsClient, type AiAccountsEvent } from '@ai-accounts/ts-core'
 import { aiAccountsPlugin } from '@ai-accounts/vue-headless'
 import { notifyAiAccountsEvent } from './composables/useTourMachine'
+import { getApiKey } from './services/api/client'
 
 const app = createApp(App)
 app.use(router)
@@ -22,9 +23,14 @@ app.use(i18n)
  * `notifyAiAccountsEvent` so that advancing past the "add a Claude account"
  * tour step no longer requires a full page reload.
  *
- * NOTE: `token` is not wired yet — Agented's auth story is a follow-up.
+ * The `token` is sourced from localStorage via `getApiKey()`. On first load
+ * (before the welcome page generates a key) it will be undefined and the
+ * sidecar's NoAuth fallback handles unauthenticated requests.
  */
-const aiAccountsClient = new AiAccountsClient({ baseUrl: '' })
+const aiAccountsClient = new AiAccountsClient({
+  baseUrl: '',
+  token: getApiKey() ?? undefined,
+})
 
 app.use(aiAccountsPlugin, {
   client: aiAccountsClient,
