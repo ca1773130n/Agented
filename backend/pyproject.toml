@@ -28,8 +28,8 @@ dependencies = [
     "unidiff>=0.7.5",
     "sentence-transformers>=3.0.0",
     "numpy>=1.24.0",
-    "ai-accounts-core==0.3.0a1",
-    "ai-accounts-litestar==0.3.0a1",
+    "ai-accounts-core==0.3.0a2",
+    "ai-accounts-litestar==0.3.0a2",
 ]
 
 [project.optional-dependencies]

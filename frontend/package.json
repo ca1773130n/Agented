@@ -12,9 +12,9 @@
     "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
-    "@ai-accounts/ts-core": "^0.3.0-alpha.1",
-    "@ai-accounts/vue-headless": "^0.3.0-alpha.1",
-    "@ai-accounts/vue-styled": "^0.3.0-alpha.1",
+    "@ai-accounts/ts-core": "^0.3.0-alpha.2",
+    "@ai-accounts/vue-headless": "^0.3.0-alpha.2",
+    "@ai-accounts/vue-styled": "^0.3.0-alpha.2",
     "@dagrejs/dagre": "^2.0.4",
     "@floating-ui/vue": "^1.1.11",
     "@intlify/unplugin-vue-i18n": "^11.0.7",
