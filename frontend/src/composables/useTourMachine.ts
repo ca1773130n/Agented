@@ -130,23 +130,15 @@ async function runGuardChecks(): Promise<GuardCheckResults> {
     results.workspaceConfigured = true
   }
 
-  // Check backends — account data is included in the list response
-  const backends = await fetchWithAuth<{ backends: Array<{ id: string; accounts?: unknown[] }> }>(
-    '/admin/backends',
+  // Check accounts via the ai-accounts sidecar — it's a flat model (one row per account).
+  // Legacy /admin/backends returned a nested shape keyed by kind; 0.3.0-alpha.1 returns
+  // {items: [{id, kind, display_name, ...}]} where each item IS an account.
+  const backends = await fetchWithAuth<{ items: Array<{ id: string; kind: string }> }>(
+    '/api/v1/backends/',
   )
-  if (backends?.backends) {
-    results.hasAnyBackend = backends.backends.some(
-      (b) => Array.isArray((b as Record<string, unknown>).accounts) &&
-        ((b as Record<string, unknown>).accounts as unknown[]).length > 0,
-    )
-    const claudeBackend = backends.backends.find((b) => b.id === 'backend-claude')
-    if (
-      claudeBackend &&
-      Array.isArray((claudeBackend as Record<string, unknown>).accounts) &&
-      ((claudeBackend as Record<string, unknown>).accounts as unknown[]).length > 0
-    ) {
-      results.hasClaudeAccount = true
-    }
+  if (backends?.items) {
+    results.hasAnyBackend = backends.items.length > 0
+    results.hasClaudeAccount = backends.items.some((b) => b.kind === 'claude')
   }
 
   // Check monitoring configuration

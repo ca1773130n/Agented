@@ -98,11 +98,9 @@ dev:
 generate-key *ARGS: ensure-backend
     cd backend && uv run python scripts/generate_key.py {{ARGS}}
 
-# Kill any existing frontend/backend processes
+# Kill only this project's dev processes (port-scoped; will NOT touch other vite/node projects)
 kill:
-    -lsof -ti:3000,20000,20001 | xargs kill -9 2>/dev/null || true
-    -pkill -f "npm run dev" 2>/dev/null || true
-    -pkill -f "vite" 2>/dev/null || true
+    -lsof -ti:3000,20000,20001 2>/dev/null | xargs -r kill -9 2>/dev/null || true
 
 # Reset onboarding: wipe DB, restart fresh (localStorage auto-clears on welcome page)
 reset: kill
