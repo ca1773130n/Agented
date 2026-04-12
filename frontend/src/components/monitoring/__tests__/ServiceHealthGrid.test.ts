@@ -4,7 +4,7 @@ import ServiceHealthGrid from '../ServiceHealthGrid.vue';
 import type { AccountHealth } from '../../../services/api';
 
 const healthyAccount: AccountHealth = {
-  account_id: 1,
+  account_id: '1',
   account_name: 'Primary Account',
   backend_id: 'bk-001',
   backend_type: 'claude',
@@ -20,7 +20,7 @@ const healthyAccount: AccountHealth = {
 };
 
 const rateLimitedAccount: AccountHealth = {
-  account_id: 2,
+  account_id: '2',
   account_name: 'Secondary Account',
   backend_id: 'bk-002',
   backend_type: 'opencode',
@@ -83,7 +83,7 @@ describe('ServiceHealthGrid', () => {
     const wrapper = mountGrid({ accounts: [rateLimitedAccount] });
     await wrapper.find('.clear-rate-limit-btn').trigger('click');
     expect(wrapper.emitted('clear-rate-limit')).toBeTruthy();
-    expect(wrapper.emitted('clear-rate-limit')![0]).toEqual([2]);
+    expect(wrapper.emitted('clear-rate-limit')![0]).toEqual(['2']);
   });
 
   it('displays default badge for default accounts', () => {

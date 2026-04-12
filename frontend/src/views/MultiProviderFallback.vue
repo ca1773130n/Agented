@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue';
-import { orchestrationApi, triggerApi, backendApi } from '../services/api';
+import { orchestrationApi, triggerApi, listGroupedBackends } from '../services/api';
 import type { AccountHealth, FallbackChainEntry, Trigger, AIBackend } from '../services/api';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
@@ -66,7 +66,7 @@ async function loadData() {
   try {
     const [triggersRes, backendsRes, healthRes] = await Promise.allSettled([
       triggerApi.list(),
-      backendApi.list(),
+      listGroupedBackends(),
       orchestrationApi.getHealth(),
     ]);
 
@@ -132,7 +132,7 @@ function removeEntry(idx: number) {
 
 // Adding a new entry
 const addBackendType = ref('');
-const addAccountId = ref<number | null>(null);
+const addAccountId = ref<string | null>(null);
 
 function addEntry() {
   if (!addBackendType.value) return;
@@ -174,7 +174,7 @@ async function refreshHealth() {
   }
 }
 
-async function clearRateLimit(accountId: number) {
+async function clearRateLimit(accountId: string) {
   try {
     await orchestrationApi.clearRateLimit(accountId);
     showToast('Rate limit cleared', 'success');

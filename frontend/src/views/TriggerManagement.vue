@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, inject } from 'vue';
 import type { Trigger, BackendCheck, ProjectPath, Project, Team } from '../services/api';
-import { triggerApi, utilityApi, projectApi, teamApi, backendApi, ApiError } from '../services/api';
+import { triggerApi, utilityApi, projectApi, teamApi, listGroupedBackends, getGroupedBackend, ApiError } from '../services/api';
 import AddTriggerModal from '../components/triggers/AddTriggerModal.vue';
 import ConfirmModal from '../components/base/ConfirmModal.vue';
 import BackendStatusCard from '../components/triggers/BackendStatusCard.vue';
@@ -24,7 +24,7 @@ const showAddTriggerModal = ref(false);
 const projects = ref<Project[]>([]);
 const teams = ref<Team[]>([]);
 const availableBackends = ref<Array<{ id: string; name: string; type: string }>>([]);
-const availableAccounts = ref<Array<{ id: number; account_name: string; backend_id: string }>>([]);
+const availableAccounts = ref<Array<{ id: string; account_name: string; backend_id: string }>>([]);
 
 // Confirm delete state
 const showDeleteConfirm = ref(false);
@@ -160,13 +160,13 @@ async function loadTeams() {
 
 async function loadBackendsAndAccounts() {
   try {
-    const data = await backendApi.list();
+    const data = await listGroupedBackends();
     const backends = data.backends || [];
     availableBackends.value = backends.map(b => ({ id: b.id, name: b.name, type: b.type }));
-    const allAccounts: Array<{ id: number; account_name: string; backend_id: string }> = [];
+    const allAccounts: Array<{ id: string; account_name: string; backend_id: string }> = [];
     for (const b of backends) {
       try {
-        const detail = await backendApi.get(b.id);
+        const detail = await getGroupedBackend(b.id);
         if (detail.accounts) {
           allAccounts.push(...detail.accounts.map(a => ({ id: a.id, account_name: a.account_name, backend_id: b.id })));
         }

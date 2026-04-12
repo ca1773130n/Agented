@@ -6,7 +6,7 @@ import {
   productApi,
   teamApi,
   pluginApi,
-  backendApi,
+  listGroupedBackends,
   versionApi,
   isAbortError,
   ApiError,
@@ -98,7 +98,7 @@ export function useSidebarData(showToast: ShowToastFn) {
 
   async function loadSidebarBackends() {
     try {
-      const data = await backendApi.list();
+      const data = await listGroupedBackends();
       sidebarBackends.value = data.backends || [];
     } catch (err) {
       if (!isAuthError(err)) handleApiError(err, showToast, 'Failed to load backends');

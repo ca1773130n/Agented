@@ -365,110 +365,15 @@ class TestSpecializedBotRoutes:
 
 
 class TestBackendRoutes:
-    """Scenario tests for AI backend management endpoints."""
+    """Scenario tests for AI backend management endpoints.
 
-    def test_list_backends(self, client):
-        """GET /admin/backends/ returns a list of backends."""
-        resp = client.get("/admin/backends/")
-        assert resp.status_code == 200
-        body = resp.get_json()
-        assert "backends" in body
-        assert isinstance(body["backends"], list)
-        assert "total_count" in body
-
-    def test_list_backends_with_pagination(self, client):
-        """GET /admin/backends/ supports limit and offset."""
-        resp = client.get("/admin/backends/?limit=2&offset=0")
-        assert resp.status_code == 200
-        body = resp.get_json()
-        assert isinstance(body["backends"], list)
-
-    def test_get_backend_not_found(self, client):
-        """GET /admin/backends/<id> returns 404 for unknown backend."""
-        resp = client.get("/admin/backends/backend-nonexistent")
-        assert resp.status_code == 404
-
-    def test_get_backend_seeded(self, client):
-        """GET /admin/backends/<id> returns a seeded backend."""
-        # First list to find a valid backend ID
-        list_resp = client.get("/admin/backends/")
-        backends = list_resp.get_json()["backends"]
-        if backends:
-            backend_id = backends[0]["id"]
-            resp = client.get(f"/admin/backends/{backend_id}")
-            assert resp.status_code == 200
-            body = resp.get_json()
-            assert body["id"] == backend_id
-            assert "name" in body
-
-    def test_create_account_backend_not_found(self, client):
-        """POST /admin/backends/<id>/accounts returns 404 for unknown backend."""
-        resp = client.post(
-            "/admin/backends/backend-nonexistent/accounts",
-            json={"account_name": "test-account"},
-        )
-        assert resp.status_code == 404
-
-    def test_create_and_delete_account(self, client):
-        """Create and delete a backend account."""
-        # Get a real backend
-        list_resp = client.get("/admin/backends/")
-        backends = list_resp.get_json()["backends"]
-        if not backends:
-            pytest.skip("No backends seeded")
-        backend_id = backends[0]["id"]
-
-        # Create account
-        create_resp = client.post(
-            f"/admin/backends/{backend_id}/accounts",
-            json={"account_name": "test-acct", "email": "test@example.com"},
-        )
-        assert create_resp.status_code == 201
-        account_id = create_resp.get_json()["account_id"]
-
-        # Delete account
-        del_resp = client.delete(f"/admin/backends/{backend_id}/accounts/{account_id}")
-        assert del_resp.status_code == 200
-
-    def test_update_account(self, client):
-        """Update a backend account's name."""
-        list_resp = client.get("/admin/backends/")
-        backends = list_resp.get_json()["backends"]
-        if not backends:
-            pytest.skip("No backends seeded")
-        backend_id = backends[0]["id"]
-
-        create_resp = client.post(
-            f"/admin/backends/{backend_id}/accounts",
-            json={"account_name": "old-name"},
-        )
-        assert create_resp.status_code == 201
-        account_id = create_resp.get_json()["account_id"]
-
-        update_resp = client.put(
-            f"/admin/backends/{backend_id}/accounts/{account_id}",
-            json={"account_name": "new-name"},
-        )
-        assert update_resp.status_code == 200
-
-    def test_delete_account_not_found(self, client):
-        """DELETE /admin/backends/<id>/accounts/<aid> returns 404 for unknown."""
-        list_resp = client.get("/admin/backends/")
-        backends = list_resp.get_json()["backends"]
-        if not backends:
-            pytest.skip("No backends seeded")
-        backend_id = backends[0]["id"]
-        resp = client.delete(f"/admin/backends/{backend_id}/accounts/99999")
-        assert resp.status_code == 404
+    Note: list/get/create/update/delete backend account routes were removed in
+    the ai-accounts migration (Task 33). Those are now served by /api/v1/backends.
+    """
 
     def test_check_backend_endpoint(self, client):
         """POST /admin/backends/<id>/check returns capabilities."""
-        list_resp = client.get("/admin/backends/")
-        backends = list_resp.get_json()["backends"]
-        if not backends:
-            pytest.skip("No backends seeded")
-        backend_id = backends[0]["id"]
-        resp = client.post(f"/admin/backends/{backend_id}/check")
+        resp = client.post("/admin/backends/backend-claude/check")
         assert resp.status_code in (200, 404)
 
     def test_connect_session_not_found(self, client):
@@ -491,22 +396,12 @@ class TestBackendRoutes:
 
     def test_discover_models(self, client):
         """POST /admin/backends/<id>/discover-models returns model list."""
-        list_resp = client.get("/admin/backends/")
-        backends = list_resp.get_json()["backends"]
-        if not backends:
-            pytest.skip("No backends seeded")
-        backend_id = backends[0]["id"]
-        resp = client.post(f"/admin/backends/{backend_id}/discover-models")
+        resp = client.post("/admin/backends/backend-claude/discover-models")
         assert resp.status_code in (200, 404)
 
     def test_auth_status(self, client):
         """GET /admin/backends/<id>/auth-status checks auth for a backend."""
-        list_resp = client.get("/admin/backends/")
-        backends = list_resp.get_json()["backends"]
-        if not backends:
-            pytest.skip("No backends seeded")
-        backend_id = backends[0]["id"]
-        resp = client.get(f"/admin/backends/{backend_id}/auth-status")
+        resp = client.get("/admin/backends/backend-claude/auth-status")
         assert resp.status_code in (200, 404)
 
     def test_proxy_status(self, client):

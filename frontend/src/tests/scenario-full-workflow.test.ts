@@ -144,9 +144,7 @@ vi.mock('../services/api', () => ({
     list: vi.fn().mockResolvedValue({ servers: [] }),
     create: vi.fn(),
   },
-  backendApi: {
-    list: (...args: unknown[]) => mockBackendList(...args),
-  },
+  listGroupedBackends: (...args: unknown[]) => mockBackendList(...args),
   orchestrationApi: {
     getHealth: (...args: unknown[]) => mockOrchestrationGetHealth(...args),
     getFallbackChain: (...args: unknown[]) => mockOrchestrationGetFallbackChain(...args),

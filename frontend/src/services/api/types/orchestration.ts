@@ -3,7 +3,7 @@
  */
 
 export interface AccountHealth {
-  account_id: number;
+  account_id: string;
   account_name: string;
   backend_id: string;
   backend_type: string;
@@ -20,7 +20,7 @@ export interface AccountHealth {
 
 export interface FallbackChainEntry {
   backend_type: string;
-  account_id: number | null;
+  account_id: string | null;
 }
 
 export interface FallbackChain {
@@ -29,6 +29,6 @@ export interface FallbackChain {
   entries: Array<{
     chain_order: number;
     backend_type: string;
-    account_id: number | null;
+    account_id: string | null;
   }>;
 }

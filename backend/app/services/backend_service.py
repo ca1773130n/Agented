@@ -8,21 +8,14 @@ from typing import Optional, Tuple
 from app.models.common import error_response
 
 from ..db.backends import (
-    auto_enable_monitoring_for_account,
     check_and_update_backend_installed,
-    create_backend_account,
-    delete_backend_account,
     get_account_with_backend,
-    get_all_backends,
-    get_backend_accounts,
     get_backend_accounts_for_auth,
     get_backend_by_id,
     get_backend_type,
-    update_backend_account,
     update_backend_models,
     verify_account_exists,
 )
-from ..services.audit_log_service import AuditLogService
 from ..services.backend_detection_service import detect_backend, get_capabilities, install_cli
 
 logger = logging.getLogger(__name__)
@@ -40,61 +33,6 @@ def _resolve_backend_id(backend_id: str) -> str:
 
 class BackendService:
     """Service for backend management and account operations."""
-
-    @staticmethod
-    def list_backends(limit=None, offset=0) -> Tuple[dict, HTTPStatus]:
-        """List all backends with live-discovered model lists.
-
-        Runs model discovery for all backends concurrently on every request.
-        No caching — always returns fresh models from CLI introspection.
-        """
-        from concurrent.futures import ThreadPoolExecutor, as_completed
-
-        from ..db.backends import count_all_backends
-        from ..services.model_discovery_service import ModelDiscoveryService
-
-        backends = get_all_backends(limit=limit, offset=offset)
-        total_count = count_all_backends()
-
-        # Build map of backend_type -> backend dict(s) for overlay
-        type_to_backends: dict[str, list[dict]] = {}
-        for backend in backends:
-            btype = backend.get("type")
-            if btype:
-                type_to_backends.setdefault(btype, []).append(backend)
-
-        # Discover models for all backend types concurrently
-        def _discover(btype: str) -> tuple[str, list[str]]:
-            try:
-                return btype, ModelDiscoveryService.discover_models(btype)
-            except Exception as e:
-                logger.warning("Model discovery for %s failed: %s", btype, e)
-                return btype, []
-
-        if type_to_backends:
-            with ThreadPoolExecutor(max_workers=len(type_to_backends)) as pool:
-                futures = {pool.submit(_discover, bt): bt for bt in type_to_backends}
-                for future in as_completed(futures):
-                    btype, models = future.result()
-                    for backend in type_to_backends.get(btype, []):
-                        if models:
-                            backend["models"] = models
-                            update_backend_models(backend["id"], models)
-
-        return {"backends": backends, "total_count": total_count}, HTTPStatus.OK
-
-    @staticmethod
-    def get_backend(backend_id: str) -> Tuple[dict, HTTPStatus]:
-        """Get a backend with its accounts."""
-        backend_id = _resolve_backend_id(backend_id)
-        backend = get_backend_by_id(backend_id)
-        if not backend:
-            return error_response("NOT_FOUND", "Backend not found", HTTPStatus.NOT_FOUND)
-
-        accounts = get_backend_accounts(backend_id)
-        backend["accounts"] = accounts
-
-        return backend, HTTPStatus.OK
 
     @staticmethod
     def check_backend(backend_id: str) -> Tuple[dict, HTTPStatus]:
@@ -119,145 +57,6 @@ class BackendService:
             "cli_path": cli_path,
             "capabilities": caps_dict,
         }, HTTPStatus.OK
-
-    @staticmethod
-    def create_account(backend_id: str, body) -> Tuple[dict, HTTPStatus]:
-        """Add an account to a backend."""
-        backend_id = _resolve_backend_id(backend_id)
-        # Check backend exists
-        backend = get_backend_by_id(backend_id)
-        if not backend:
-            return error_response("NOT_FOUND", "Backend not found", HTTPStatus.NOT_FOUND)
-
-        account_id = create_backend_account(
-            backend_id=backend_id,
-            account_name=body.account_name,
-            email=body.email,
-            config_path=body.config_path,
-            api_key_env=body.api_key_env,
-            is_default=body.is_default,
-            plan=body.plan,
-            usage_data=body.usage_data,
-        )
-
-        # Auto-enable monitoring if global monitoring is on
-        auto_enable_monitoring_for_account(account_id)
-
-        AuditLogService.log(
-            action="backend_account.create",
-            entity_type="backend_account",
-            entity_id=str(account_id),
-            outcome="created",
-            details={"backend_id": backend_id, "email": body.email, "plan": body.plan},
-        )
-
-        # Ensure global CLIProxyAPI is running for Claude Code accounts
-        backend_type = get_backend_type(backend_id)
-        if backend_type == "claude":
-            try:
-                from ..services.cliproxy_manager import CLIProxyManager
-
-                if CLIProxyManager.install_if_needed():
-                    CLIProxyManager.start()
-            except Exception as e:
-                logger.warning("CLIProxy start failed: %s", e)  # Non-fatal — proxy is optional
-
-        # Install harness plugins into the Claude account's config directory
-        if backend_type == "claude" and body.config_path:
-            try:
-                from .harness_plugin_installer import HarnessPluginInstaller
-
-                HarnessPluginInstaller.ensure_plugins_installed(body.config_path)
-            except Exception as e:
-                logger.warning("Harness plugin install failed: %s", e)
-
-        return {"message": "Account created", "account_id": account_id}, HTTPStatus.CREATED
-
-    @staticmethod
-    def update_account(backend_id: str, account_id: int, body) -> Tuple[dict, HTTPStatus]:
-        """Update an account."""
-        found = update_backend_account(
-            account_id=account_id,
-            backend_id=backend_id,
-            account_name=body.account_name,
-            email=body.email,
-            config_path=body.config_path,
-            api_key_env=body.api_key_env,
-            is_default=body.is_default,
-            plan=body.plan,
-            usage_data=body.usage_data,
-        )
-        if not found:
-            return error_response("NOT_FOUND", "Account not found", HTTPStatus.NOT_FOUND)
-
-        # Check if any fields were actually provided
-        has_updates = any(
-            getattr(body, f) is not None
-            for f in [
-                "account_name",
-                "email",
-                "config_path",
-                "api_key_env",
-                "is_default",
-                "plan",
-                "usage_data",
-            ]
-        )
-        if not has_updates:
-            return {"message": "No updates provided"}, HTTPStatus.OK
-
-        AuditLogService.log(
-            action="backend_account.update",
-            entity_type="backend_account",
-            entity_id=str(account_id),
-            outcome="updated",
-            details={
-                "backend_id": backend_id,
-                "changed_fields": [
-                    f
-                    for f in [
-                        "account_name",
-                        "email",
-                        "config_path",
-                        "api_key_env",
-                        "is_default",
-                        "plan",
-                        "usage_data",
-                    ]
-                    if getattr(body, f) is not None
-                ],
-            },
-        )
-
-        # Install harness plugins if config_path was updated on a Claude backend
-        if body.config_path is not None:
-            btype = get_backend_type(backend_id)
-            if btype == "claude":
-                try:
-                    from .harness_plugin_installer import HarnessPluginInstaller
-
-                    HarnessPluginInstaller.ensure_plugins_installed(body.config_path)
-                except Exception as e:
-                    logger.warning("Harness plugin install failed: %s", e)
-
-        return {"message": "Account updated"}, HTTPStatus.OK
-
-    @staticmethod
-    def delete_account(backend_id: str, account_id: int) -> Tuple[dict, HTTPStatus]:
-        """Delete an account."""
-        deleted = delete_backend_account(account_id, backend_id)
-        if not deleted:
-            return error_response("NOT_FOUND", "Account not found", HTTPStatus.NOT_FOUND)
-
-        AuditLogService.log(
-            action="backend_account.delete",
-            entity_type="backend_account",
-            entity_id=str(account_id),
-            outcome="deleted",
-            details={"backend_id": backend_id},
-        )
-
-        return {"message": "Account deleted"}, HTTPStatus.OK
 
     @staticmethod
     def install_backend_cli(backend_id: str) -> Tuple[dict, HTTPStatus]:

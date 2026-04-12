@@ -27,7 +27,7 @@ export const orchestrationApi = {
       method: 'DELETE',
     });
   },
-  clearRateLimit: async (accountId: number): Promise<void> => {
+  clearRateLimit: async (accountId: string | number): Promise<void> => {
     await apiFetch<void>(`/admin/orchestration/accounts/${accountId}/clear-rate-limit`, {
       method: 'POST',
     });

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
 import PageHeader from '../components/base/PageHeader.vue';
-import { triggerApi, backendApi } from '../services/api';
+import { triggerApi, listGroupedBackends } from '../services/api';
 import type { Trigger } from '../services/api';
 
 const promptTemplate = ref(`You are a security expert. Analyze the following files:
@@ -59,7 +59,7 @@ async function loadTriggers() {
 
 async function loadBackends() {
   try {
-    const res = await backendApi.list();
+    const res = await listGroupedBackends();
     if (res.backends && res.backends.length > 0) {
       const derived: ModelConfig[] = [];
       for (const backend of res.backends) {

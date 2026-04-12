@@ -1,13 +1,42 @@
 import '@mcp-b/global'
 import { createApp } from 'vue'
 import './style.css'
+import '@ai-accounts/vue-styled/styles.css'
 import App from './App.vue'
 import { router } from './router'
 import { i18n, loadInitialLocale } from './i18n'
+import { AiAccountsClient, type AiAccountsEvent } from '@ai-accounts/ts-core'
+import { aiAccountsPlugin } from '@ai-accounts/vue-headless'
+import { notifyAiAccountsEvent } from './composables/useTourMachine'
 
 const app = createApp(App)
 app.use(router)
 app.use(i18n)
+
+/**
+ * ai-accounts shared client + Vue plugin.
+ *
+ * The Litestar sidecar listens on :20001; Vite proxies /api/v1/* to it so
+ * relative URLs work in both dev and production. The plugin's `onEvent`
+ * forwards every event to the Agented tour state machine via
+ * `notifyAiAccountsEvent` so that advancing past the "add a Claude account"
+ * tour step no longer requires a full page reload.
+ *
+ * NOTE: `token` is not wired yet — Agented's auth story is a follow-up.
+ */
+const aiAccountsClient = new AiAccountsClient({ baseUrl: '' })
+
+app.use(aiAccountsPlugin, {
+  client: aiAccountsClient,
+  onEvent: (event: AiAccountsEvent) => {
+    try {
+      notifyAiAccountsEvent(event)
+    } catch (err) {
+      // Tour bridging is best-effort; never let it break the wizard.
+      console.warn('[ai-accounts] tour bridge error', err)
+    }
+  },
+})
 
 /**
  * Global Vue error handler.
