@@ -1,10 +1,8 @@
 <script setup lang="ts">
-import { ref, computed, onUnmounted, watch } from 'vue';
+import { ref, computed } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
-import { superAgentApi, projectInstanceApi } from '../services/api';
-import type { ChatMode } from '../services/api';
-import { useStreamingParser } from '../composables/useStreamingParser';
-import { useAiChat } from '../composables/useAiChat';
+import { superAgentApi, superAgentSessionApi, projectInstanceApi } from '../services/api';
+import type { ChatMode, SuperAgent, SuperAgentSession } from '../services/api';
 import EntityLayout from '../layouts/EntityLayout.vue';
 import AiChatPanel from '../components/ai/AiChatPanel.vue';
 import { useToast } from '../composables/useToast';
@@ -38,52 +36,26 @@ const superAgentId = computed(() =>
 // Default to work mode on playground (management mode is for dashboards/config pages)
 const chatMode = ref<ChatMode>('work');
 
-const {
-  sessionId,
-  sessions,
-  messages,
-  isProcessing,
-  streamingContent,
-  superAgent,
-  error,
-  processGroups,
-  loadSessions,
-  createSession,
-  selectSession,
-  sendMessage,
-  endSession,
-  setOnStreamingChunk,
-} = useAiChat(superAgentId);
+// SuperAgent metadata + historical SuperAgent sessions (read-only sidebar list).
+// NOTE: These are legacy psa-* SuperAgent sessions. The new AiChatPanel runs against
+// the ai-accounts sidecar with its own session IDs — clicking a historical session
+// below cannot currently load it into the chat panel. Bridging the two session systems
+// is tracked for follow-up task T21 (backend proxy).
+const superAgent = ref<SuperAgent | null>(null);
+const sessions = ref<SuperAgentSession[]>([]);
 
-// Sync sessionId to URL so refresh preserves the selected session
-watch(sessionId, (newId) => {
-  if (newId && newId !== route.query.session) {
-    router.replace({ query: { ...route.query, session: newId } });
-  }
-});
-
-// ---------------------------------------------------------------------------
-// smd.js streaming markdown parser (shared composable)
-// ---------------------------------------------------------------------------
-const streamingParser = useStreamingParser();
-
-// Connect the composable's streaming callback to the smd parser
-setOnStreamingChunk((text: string) => {
-  streamingParser.write(text);
-});
-
-onUnmounted(() => {
-  streamingParser.destroy();
-});
-
-// Local input state for AiChatPanel
-const inputMessage = ref('');
-
-const selectedBackend = ref('auto');
-const selectedAccountId = ref<string | null>(null);
-const selectedModel = ref<string | null>(null);
 const rightTab = ref<'identity' | 'team' | 'sessions' | 'messages'>('identity');
 const selectedThreadPeer = ref<string | null>(null);
+
+async function loadSessions() {
+  if (!superAgentId.value) return;
+  try {
+    const result = await superAgentSessionApi.list(superAgentId.value);
+    sessions.value = result.sessions;
+  } catch (err) {
+    console.warn('[SuperAgentPlayground] Failed to load sessions:', err);
+  }
+}
 
 useWebMcpTool({
   name: 'agented_super_agent_playground_get_state',
@@ -96,18 +68,16 @@ useWebMcpTool({
         page: 'SuperAgentPlayground',
         superAgentId: superAgentId.value,
         superAgentName: superAgent.value?.name ?? null,
-        sessionId: sessionId.value,
-        messageCount: messages.value.length,
-        isProcessing: isProcessing.value,
         rightTab: rightTab.value,
         isInstanceMode: isInstanceMode.value,
         instanceId: instanceIdFromRoute.value || null,
         projectId: projectIdComputed.value || null,
         chatMode: chatMode.value,
+        historicalSessionCount: sessions.value.length,
       }),
     }],
   }),
-  deps: [superAgent, sessionId, messages, isProcessing, rightTab],
+  deps: [superAgent, sessions, rightTab],
 });
 
 function handleSelectThread(fromAgentId: string, toAgentId: string) {
@@ -119,39 +89,10 @@ function handleThreadBack() {
   selectedThreadPeer.value = null;
 }
 
-// Brain icon paths for the assistant avatar
-const assistantIconPaths = [
-  'M12 2a8 8 0 018 8v1a3 3 0 01-3 3h-1.5',
-  'M2 10a8 8 0 018-8',
-  'M9.5 14H8a3 3 0 01-3-3v-1',
-  'M12 22v-8',
-  'M8 22h8',
-];
-
-function handleSelectSession(sessId: string) {
-  selectSession(sessId);
-  rightTab.value = 'identity';
-  // Update URL so refresh preserves the selected session
-  router.replace({ query: { ...route.query, session: sessId } });
-}
-
-function handleSend() {
-  if (!inputMessage.value.trim()) return;
-  const msg = inputMessage.value.trim();
-  inputMessage.value = '';
-  sendMessage(msg, {
-    backend: selectedBackend.value !== 'auto' ? selectedBackend.value : undefined,
-    account_id: selectedAccountId.value || undefined,
-    model: selectedModel.value || undefined,
-    chat_mode: chatMode.value,
-  });
-}
-
-function handleKeyDown(e: KeyboardEvent) {
-  if (e.key === 'Enter' && !e.shiftKey) {
-    e.preventDefault();
-    handleSend();
-  }
+function handleSelectSession(_sessId: string) {
+  // Historical psa-* SuperAgent sessions cannot be loaded into the new ai-accounts
+  // chat panel (different session ID namespace). See T21 (backend proxy) for the bridge.
+  showToast('Historical sessions cannot be loaded in the new chat panel yet', 'info');
 }
 
 function formatSessionDate(dateStr?: string): string {
@@ -170,12 +111,6 @@ async function loadData() {
     const data = await superAgentApi.get(saId);
     superAgent.value = data;
     await loadSessions();
-    // Auto-select session from query param (e.g. linked from sketch panel)
-    const targetSession = route.query.session as string | undefined;
-    if (targetSession) {
-      await selectSession(targetSession);
-      rightTab.value = 'identity';
-    }
     return data;
   } catch (err) {
     handleApiError(err, showToast, 'Failed to load super agent');
@@ -210,91 +145,19 @@ async function loadData() {
           @click="chatMode = 'work'"
         >Work</button>
       </div>
-      <div class="header-actions">
-        <button
-          v-if="!sessionId"
-          class="btn btn-primary"
-          @click="createSession"
-        >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M12 5v14M5 12h14"/>
-          </svg>
-          New Session
-        </button>
-        <button
-          v-if="sessionId"
-          class="btn btn-secondary"
-          @click="endSession"
-        >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <rect x="3" y="3" width="18" height="18" rx="2"/>
-          </svg>
-          End Session
-        </button>
-      </div>
-    </div>
-
-    <!-- Error banner with retry -->
-    <div v-if="error" class="error-banner">
-      <span>{{ error }}</span>
-      <button class="btn-retry" @click="createSession">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
-          <polyline points="23 4 23 10 17 10"/>
-          <path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/>
-        </svg>
-        Retry
-      </button>
     </div>
 
     <!-- Main content: two-column layout -->
     <div class="playground-content">
-      <!-- Left panel: Chat UI -->
+      <!-- Left panel: Chat UI (now backed by ai-accounts sidecar) -->
       <div class="left-panel">
         <AiChatPanel
-          :messages="messages"
-          :isProcessing="isProcessing"
-          :streamingContent="streamingContent"
-          :inputMessage="inputMessage"
-          :conversationId="sessionId"
-          :canFinalize="false"
-          :isFinalizing="false"
-          :initStreamingParser="streamingParser.init"
-          :assistantIconPaths="assistantIconPaths"
-          inputPlaceholder="Send a message to your SuperAgent..."
-          entityLabel="SuperAgent"
-          bannerTitle=""
-          bannerButtonLabel=""
-          :showBackendSelector="true"
-          :selected-backend="selectedBackend"
-          :selected-account-id="selectedAccountId"
-          :selected-model="selectedModel"
-          :useSmartScroll="true"
-          :processGroups="processGroups"
-          @update:inputMessage="inputMessage = $event"
-          @update:selected-backend="selectedBackend = $event"
-          @update:selected-account-id="selectedAccountId = $event"
-          @update:selected-model="selectedModel = $event"
-          @send="handleSend"
-          @keydown="handleKeyDown"
-        >
-          <template #welcome>
-            <div class="sa-welcome">
-              <div class="welcome-icon">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                  <circle cx="12" cy="8" r="4"/>
-                  <path d="M6 21v-2a4 4 0 014-4h4a4 4 0 014 4v2"/>
-                  <path d="M17 3l2 2-2 2M7 3l-2 2 2 2"/>
-                </svg>
-              </div>
-              <h2 v-if="!sessionId">Start a new session</h2>
-              <h2 v-else>Session active</h2>
-              <p v-if="!sessionId">
-                Click "New Session" to begin chatting with {{ superAgent?.name || 'this SuperAgent' }}.
-              </p>
-              <p v-else>Send a message to begin the conversation.</p>
-            </div>
-          </template>
-        </AiChatPanel>
+          density="detailed"
+          entity-label="SuperAgent"
+          :placeholder="`Send a message to ${superAgent?.name || 'your SuperAgent'}...`"
+          welcome-title="Chat with your SuperAgent"
+          welcome-subtitle="Type a message to begin."
+        />
       </div>
 
       <!-- Right panel: Tabs -->
@@ -340,16 +203,21 @@ async function loadData() {
             />
           </div>
 
-          <!-- Sessions tab: Session list -->
+          <!-- Sessions tab: Historical SuperAgent sessions (read-only) -->
           <div v-if="rightTab === 'sessions'" class="tab-panel">
+            <div class="sessions-notice">
+              Historical SuperAgent sessions are shown here for reference.
+              The new chat panel uses the ai-accounts sidecar and runs its own sessions;
+              clicking a legacy session cannot reload its transcript yet.
+            </div>
             <div v-if="sessions.length === 0" class="empty-sessions">
-              <p>No sessions yet. Start a new session to begin.</p>
+              <p>No historical sessions.</p>
             </div>
             <div v-else class="session-list">
               <div
                 v-for="sess in sessions"
                 :key="sess.id"
-                :class="['session-card', { active: sess.id === sessionId }]"
+                class="session-card"
                 @click="handleSelectSession(sess.id)"
               >
                 <div class="session-info">
@@ -675,6 +543,17 @@ async function loadData() {
 }
 
 /* Sessions list */
+.sessions-notice {
+  padding: 10px 12px;
+  margin-bottom: 12px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-default);
+  border-radius: 6px;
+  color: var(--text-tertiary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
 .empty-sessions {
   display: flex;
   align-items: center;
