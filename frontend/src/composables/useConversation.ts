@@ -1,7 +1,7 @@
 import { ref, shallowRef, nextTick } from 'vue';
 import type { ConversationMessage } from '../services/api';
 import { ApiError } from '../services/api';
-import { useStreamingParser } from './useStreamingParser';
+import { useStreamingParser } from './useAiChat';
 import { useEventSource, safeParseSSE } from './useEventSource';
 import { useToast } from './useToast';
 
