@@ -108,60 +108,19 @@
       </div>
       <div class="test-chat-container">
         <AiChatPanel
-          :messages="chatMessages"
-          :is-processing="chatIsProcessing"
-          :streaming-content="chatStreamingContent"
-          :input-message="inputMessage"
-          :conversation-id="chatSessionId"
-          :can-finalize="false"
-          :is-finalizing="false"
-          :init-streaming-parser="streamingParser.init"
-          show-backend-selector
-          :selected-backend="selectedBackend"
-          :selected-account-id="selectedAccountId"
-          :selected-model="selectedModel"
-          :chat-mode="chatMode"
-          :backend-responses="backendResponses"
-          :synthesis-state="synthesisState"
-          :is-all-mode-active="isAllModeActive"
-          :assistant-icon-paths="['M12 2L9.5 9.5 2 12l7.5 2.5L12 22l2.5-7.5L22 12l-7.5-2.5z']"
-          input-placeholder="Send a prompt — Enter to send, Shift+Enter for new line"
-          entity-label="backend"
-          banner-title=""
-          banner-button-label=""
-          :use-smart-scroll="true"
-          :process-groups="chatProcessGroups"
-          @update:input-message="inputMessage = $event"
-          @update:selected-backend="selectedBackend = $event"
-          @update:selected-account-id="selectedAccountId = $event"
-          @update:selected-model="selectedModel = $event"
-          @update:chat-mode="chatMode = $event"
-          @send="handleSend"
-          @keydown="handleKeyDown"
-        >
-          <template #welcome>
-            <div v-if="chatMessages.length === 0 && !chatIsProcessing" class="chat-welcome">
-              <div class="welcome-icon">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                  <path d="M12 2L9.5 9.5 2 12l7.5 2.5L12 22l2.5-7.5L22 12l-7.5-2.5z"/>
-                </svg>
-              </div>
-              <h2>Test Your Backends</h2>
-              <p>Select a backend and send a test prompt to verify it works correctly</p>
-            </div>
-          </template>
-        </AiChatPanel>
+          density="detailed"
+          welcome-title="Test a backend"
+          placeholder="Ask any backend..."
+        />
       </div>
     </div>
   </PageLayout>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue';
+import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
-import { backendManagementApi, listGroupedBackends, superAgentApi, type AIBackend, type BackendCapabilities } from '../services/api';
-import { useAiChat } from '../composables/useAiChat';
-import { useStreamingParser } from '../composables/useStreamingParser';
+import { backendManagementApi, listGroupedBackends, type AIBackend, type BackendCapabilities } from '../services/api';
 import PageLayout from '../components/base/PageLayout.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import LoadingState from '../components/base/LoadingState.vue';
@@ -279,94 +238,12 @@ function getCapabilityTags(backendId: string): string[] {
 }
 
 // =============================================================================
-// Test Chat — uses useAiChat (single source of truth for all AI chat panels)
-// =============================================================================
-
-const SYSTEM_TEST_AGENT_NAME = 'Backend Test Agent';
-
-const testAgentId = ref('');
-const {
-  sessionId: chatSessionId,
-  messages: chatMessages,
-  isProcessing: chatIsProcessing,
-  streamingContent: chatStreamingContent,
-  processGroups: chatProcessGroups,
-  sendMessage,
-  createSession,
-  setOnStreamingChunk,
-  chatMode,
-  backendResponses,
-  synthesisState,
-  isAllModeActive,
-} = useAiChat(testAgentId);
-
-const streamingParser = useStreamingParser();
-setOnStreamingChunk((text: string) => {
-  streamingParser.write(text);
-});
-onUnmounted(() => {
-  streamingParser.destroy();
-});
-
-const inputMessage = ref('');
-const selectedBackend = ref('auto');
-const selectedAccountId = ref<string | null>(null);
-const selectedModel = ref<string | null>(null);
-
-async function ensureTestAgent() {
-  try {
-    const result = await superAgentApi.list();
-    const existing = result.super_agents.find(
-      (sa) => sa.name === SYSTEM_TEST_AGENT_NAME,
-    );
-    if (existing) {
-      testAgentId.value = existing.id;
-      return;
-    }
-    // Create the system test agent
-    const created = await superAgentApi.create({
-      name: SYSTEM_TEST_AGENT_NAME,
-      description: 'System agent for testing AI backends',
-    });
-    testAgentId.value = created.super_agent_id;
-  } catch (e: unknown) {
-    console.error('Failed to ensure test agent:', e);
-  }
-}
-
-function handleSend() {
-  if (!inputMessage.value.trim()) return;
-  const msg = inputMessage.value.trim();
-  inputMessage.value = '';
-  sendMessage(msg, {
-    backend: selectedBackend.value !== 'auto' ? selectedBackend.value : undefined,
-    account_id: selectedAccountId.value || undefined,
-    model: selectedModel.value || undefined,
-  });
-}
-
-function handleKeyDown(e: KeyboardEvent) {
-  if (e.key === 'Enter' && !e.shiftKey) {
-    e.preventDefault();
-    handleSend();
-  }
-}
-
-// =============================================================================
 // Lifecycle
 // =============================================================================
 
 onMounted(async () => {
   await loadBackends();
   autoCheckBackends();
-  try {
-    await ensureTestAgent();
-    if (testAgentId.value) {
-      await createSession();
-    }
-  } catch (e) {
-    console.warn('[AIBackendsPage] Test agent setup failed:', e);
-  }
 });
 </script>
 
