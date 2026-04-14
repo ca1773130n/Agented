@@ -1,6 +1,5 @@
 """SuperAgent chat API endpoints."""
 
-import logging
 from http import HTTPStatus
 from typing import Optional
 
@@ -15,8 +14,6 @@ from ..database import (
     get_super_agent_session,
 )
 from ..services.super_agent_session_service import SuperAgentSessionService
-
-logger = logging.getLogger(__name__)
 
 tag = Tag(name="super-agent-chat", description="SuperAgent chat operations")
 super_agent_chat_bp = APIBlueprint(
@@ -36,7 +33,6 @@ class ChatSendRequest(BaseModel):
     backend: str = Field("auto", description="Backend to use (auto, claude, opencode)")
     account_id: Optional[str] = Field(None, description="Account ID for proxy routing")
     model: Optional[str] = Field(None, description="Model override")
-    mode: str = Field("single", description="Chat mode: single, all, compound")
     chat_mode: Optional[str] = Field(None, description="Chat mode: management or work")
 
 
@@ -112,7 +108,6 @@ def _resolve_session(data: dict, super_agent_id: str, session_id: str) -> dict:
         "backend": backend,
         "account_id": data.get("account_id"),
         "model": data.get("model"),
-        "mode": data.get("mode", "single"),
         "instance": instance,
         "chat_mode": chat_mode,
         "cwd": cwd,
@@ -207,21 +202,9 @@ def send_chat_message(path: SessionPath):
     effective_backend = resolved["effective_backend"]
     account_id = resolved["account_id"]
     model = resolved["model"]
-    mode = resolved["mode"]
     cwd = resolved.get("cwd")
     chat_mode = resolved.get("chat_mode")
     instance = resolved.get("instance")
-
-    # Fan-out modes ('all', 'compound') are deprecated after the ai-accounts
-    # sidecar migration. Chat now runs via ai-accounts at :20001. Any legacy
-    # caller requesting these modes falls back to single-backend streaming.
-    if mode in ("all", "compound"):
-        logger.info(
-            "Chat mode '%s' is deprecated; falling back to single-backend streaming "
-            "(session=%s). Use the ai-accounts sidecar for multi-backend chat.",
-            mode,
-            path.session_id,
-        )
 
     # Add user message to session via SuperAgentSessionService
     success, error = SuperAgentSessionService.send_message(
