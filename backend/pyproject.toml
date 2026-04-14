@@ -28,8 +28,8 @@ dependencies = [
     "unidiff>=0.7.5",
     "sentence-transformers>=3.0.0",
     "numpy>=1.24.0",
-    "ai-accounts-core==0.3.0a2",
-    "ai-accounts-litestar==0.3.0a2",
+    "ai-accounts-core==0.3.0a3",
+    "ai-accounts-litestar==0.3.0a3",
 ]
 
 [project.optional-dependencies]
@@ -44,6 +44,10 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 where = ["."]
+
+[tool.uv.sources]
+ai-accounts-core = { path = "../../ai-accounts/packages/core", editable = true }
+ai-accounts-litestar = { path = "../../ai-accounts/packages/litestar", editable = true }
 
 [tool.ruff]
 line-length = 100
