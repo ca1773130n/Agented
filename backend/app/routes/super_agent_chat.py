@@ -119,92 +119,6 @@ def _resolve_session(data: dict, super_agent_id: str, session_id: str) -> dict:
     }
 
 
-def _dispatch_by_mode(
-    mode: str,
-    session_id: str,
-    super_agent_id: str,
-    effective_backend: str,
-    account_id: Optional[str],
-    model: Optional[str],
-    message_id: str,
-) -> dict:
-    """Fan-out dispatch for 'all' or 'compound' mode. Returns response body dict."""
-    from ..db.backends import get_all_backends
-    from ..services.chat_state_service import ChatStateService
-
-    all_backends = get_all_backends()
-    unavailable_backends = (
-        [b["type"] for b in all_backends if not b.get("is_installed")] if all_backends else []
-    )
-    backend_names = (
-        [b["type"] for b in all_backends if b.get("is_installed")] if all_backends else []
-    )
-    if not backend_names:
-        logger.warning(
-            "No installed backends found for '%s' mode; falling back to ['claude']. "
-            "Unavailable backends: %s",
-            mode,
-            unavailable_backends or "none detected",
-        )
-        backend_names = ["claude"]
-    elif unavailable_backends:
-        logger.info(
-            "Some backends unavailable for '%s' mode (not installed): %s",
-            mode,
-            unavailable_backends,
-        )
-
-    system_prompt = SuperAgentSessionService.assemble_system_prompt(super_agent_id, session_id)
-    state = SuperAgentSessionService.get_session_state(session_id)
-    llm_messages = []
-    if system_prompt:
-        llm_messages.append({"role": "system", "content": system_prompt})
-    if state and state.get("conversation_log"):
-        for msg in state["conversation_log"]:
-            llm_messages.append(
-                {"role": msg.get("role", "user"), "content": msg.get("content", "")}
-            )
-
-    ChatStateService.push_status(session_id, "streaming")
-
-    if mode == "all":
-        from ..services.all_mode_service import AllModeService
-
-        execution_map = AllModeService.fan_out(
-            session_id=session_id,
-            messages=llm_messages,
-            backends=backend_names,
-            model=model,
-            account_email=account_id,
-            timeout=30,
-        )
-        return {
-            "status": "streaming",
-            "mode": "all",
-            "message_id": message_id,
-            "backends": execution_map,
-        }
-    else:  # compound
-        from ..services.all_mode_service import CompoundModeService
-
-        primary_backend = effective_backend if effective_backend else backend_names[0]
-        execution_map = CompoundModeService.start(
-            session_id=session_id,
-            messages=llm_messages,
-            backends=backend_names,
-            primary_backend=primary_backend,
-            model=model,
-            account_email=account_id,
-            timeout=30,
-        )
-        return {
-            "status": "streaming",
-            "mode": "compound",
-            "message_id": message_id,
-            "backends": execution_map,
-        }
-
-
 def _launch_background_thread(
     session_id: str,
     super_agent_id: str,
@@ -298,6 +212,17 @@ def send_chat_message(path: SessionPath):
     chat_mode = resolved.get("chat_mode")
     instance = resolved.get("instance")
 
+    # Fan-out modes ('all', 'compound') are deprecated after the ai-accounts
+    # sidecar migration. Chat now runs via ai-accounts at :20001. Any legacy
+    # caller requesting these modes falls back to single-backend streaming.
+    if mode in ("all", "compound"):
+        logger.info(
+            "Chat mode '%s' is deprecated; falling back to single-backend streaming "
+            "(session=%s). Use the ai-accounts sidecar for multi-backend chat.",
+            mode,
+            path.session_id,
+        )
+
     # Add user message to session via SuperAgentSessionService
     success, error = SuperAgentSessionService.send_message(
         path.session_id, content, backend=effective_backend
@@ -312,18 +237,6 @@ def send_chat_message(path: SessionPath):
         "message",
         {"role": "user", "content": content, "message_id": message_id},
     )
-
-    if mode in ("all", "compound"):
-        result = _dispatch_by_mode(
-            mode,
-            path.session_id,
-            path.super_agent_id,
-            effective_backend,
-            account_id,
-            model,
-            message_id,
-        )
-        return result, HTTPStatus.OK
 
     _launch_background_thread(
         path.session_id,
