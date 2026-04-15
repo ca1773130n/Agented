@@ -5,6 +5,7 @@ import { superAgentApi, superAgentSessionApi, projectInstanceApi } from '../serv
 import type { ChatMode, SuperAgent, SuperAgentSession } from '../services/api';
 import EntityLayout from '../layouts/EntityLayout.vue';
 import AiChatPanel from '../components/ai/AiChatPanel.vue';
+import HistoricalSessionViewer from '../components/monitoring/HistoricalSessionViewer.vue';
 import { useToast } from '../composables/useToast';
 import { handleApiError } from '../services/api/error-handler';
 import DocumentEditor from '../components/super-agents/DocumentEditor.vue';
@@ -46,6 +47,9 @@ const sessions = ref<SuperAgentSession[]>([]);
 
 const rightTab = ref<'identity' | 'team' | 'sessions' | 'messages'>('identity');
 const selectedThreadPeer = ref<string | null>(null);
+// When set, the left pane shows a read-only viewer of a historical psa-* session
+// instead of the live ai-accounts-backed AiChatPanel.
+const viewingHistoricalSessionId = ref<string | null>(null);
 
 async function loadSessions() {
   if (!superAgentId.value) return;
@@ -89,10 +93,15 @@ function handleThreadBack() {
   selectedThreadPeer.value = null;
 }
 
-function handleSelectSession(_sessId: string) {
-  // Historical psa-* SuperAgent sessions cannot be loaded into the new ai-accounts
-  // chat panel (different session ID namespace). See T21 (backend proxy) for the bridge.
-  showToast('Historical sessions cannot be loaded in the new chat panel yet', 'info');
+function handleSelectSession(sessId: string) {
+  // Historical psa-* SuperAgent sessions live in Agented's own SQLite, not in the
+  // ai-accounts sidecar, so we open them in a read-only viewer beside the live chat
+  // panel. A future task may import them into the sidecar for seamless continuation.
+  viewingHistoricalSessionId.value = sessId;
+}
+
+function handleCloseHistorical() {
+  viewingHistoricalSessionId.value = null;
 }
 
 function formatSessionDate(dateStr?: string): string {
@@ -150,8 +159,16 @@ async function loadData() {
     <!-- Main content: two-column layout -->
     <div class="playground-content">
       <!-- Left panel: Chat UI (now backed by ai-accounts sidecar) -->
+      <!-- When viewing a historical psa-* session, swap the live chat panel for a read-only viewer. -->
       <div class="left-panel">
+        <HistoricalSessionViewer
+          v-if="viewingHistoricalSessionId"
+          :super-agent-id="superAgentId"
+          :session-id="viewingHistoricalSessionId"
+          @close="handleCloseHistorical"
+        />
         <AiChatPanel
+          v-else
           density="detailed"
           entity-label="SuperAgent"
           :placeholder="`Send a message to ${superAgent?.name || 'your SuperAgent'}...`"
@@ -206,9 +223,9 @@ async function loadData() {
           <!-- Sessions tab: Historical SuperAgent sessions (read-only) -->
           <div v-if="rightTab === 'sessions'" class="tab-panel">
             <div class="sessions-notice">
-              Historical SuperAgent sessions are shown here for reference.
-              The new chat panel uses the ai-accounts sidecar and runs its own sessions;
-              clicking a legacy session cannot reload its transcript yet.
+              Historical SuperAgent sessions are stored separately from the new
+              ai-accounts-backed chat. Click one to open a read-only transcript
+              in the left panel; close it to return to the live chat.
             </div>
             <div v-if="sessions.length === 0" class="empty-sessions">
               <p>No historical sessions.</p>
@@ -218,6 +235,7 @@ async function loadData() {
                 v-for="sess in sessions"
                 :key="sess.id"
                 class="session-card"
+                :class="{ active: viewingHistoricalSessionId === sess.id }"
                 @click="handleSelectSession(sess.id)"
               >
                 <div class="session-info">
