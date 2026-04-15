@@ -288,8 +288,8 @@ describe('TourOverlay', () => {
       expect(wrapper.find('.tour-spinner').exists()).toBe(true)
       expect(wrapper.find('.tour-timeout-fallback').exists()).toBe(false)
 
-      // Advance past retry sequence (~7.3s) + observer timeouts (5s loading)
-      await vi.advanceTimersByTimeAsync(13000)
+      // Advance past retry sequence (~11.8s) + observer timeouts (3s element-not-found)
+      await vi.advanceTimersByTimeAsync(17000)
 
       expect(wrapper.find('.tour-spinner').exists()).toBe(false)
       // Element-not-found (3s) fires before loading timeout (5s), so element fallback shows
@@ -306,7 +306,7 @@ describe('TourOverlay', () => {
       })
 
       // Advance past retry sequence (~7.3s) + 3s element-not-found timeout
-      await vi.advanceTimersByTimeAsync(11000)
+      await vi.advanceTimersByTimeAsync(15000)
 
       expect(wrapper.find('.tour-element-fallback').exists()).toBe(true)
       expect(wrapper.text()).toContain("We couldn't find")
@@ -322,7 +322,7 @@ describe('TourOverlay', () => {
         props: { active: true, step: workspaceStep, effectiveTarget: workspaceStep, substepLabel: null, stepNumber: 2, totalSteps: 8 },
       })
 
-      await vi.advanceTimersByTimeAsync(11000)
+      await vi.advanceTimersByTimeAsync(15000)
 
       const skipBtn = wrapper.find('.btn-fallback-skip')
       expect(skipBtn.exists()).toBe(true)
@@ -339,7 +339,7 @@ describe('TourOverlay', () => {
         props: { active: true, step: workspaceStep, effectiveTarget: workspaceStep, substepLabel: null, stepNumber: 2, totalSteps: 8 },
       })
 
-      await vi.advanceTimersByTimeAsync(11000)
+      await vi.advanceTimersByTimeAsync(15000)
 
       expect(wrapper.find('.tour-element-fallback').exists()).toBe(true)
 

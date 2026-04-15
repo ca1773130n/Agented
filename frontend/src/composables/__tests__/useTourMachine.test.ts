@@ -638,26 +638,12 @@ describe('useTourMachine', () => {
             json: () => Promise.resolve({ settings: {} }),
           })
         }
-        if (url.includes('/admin/backends/backend-claude')) {
+        if (url.includes('/api/v1/backends')) {
           return Promise.resolve({
             ok: true,
             json: () =>
               Promise.resolve({
-                accounts: [{ id: 'acc-1', name: 'My Claude' }],
-              }),
-          })
-        }
-        if (url.includes('/admin/backends')) {
-          return Promise.resolve({
-            ok: true,
-            json: () =>
-              Promise.resolve({
-                backends: [
-                  {
-                    id: 'backend-claude',
-                    accounts: [{ id: 'acc-1' }],
-                  },
-                ],
+                items: [{ id: 'acc-1', kind: 'claude', display_name: 'My Claude' }],
               }),
           })
         }
