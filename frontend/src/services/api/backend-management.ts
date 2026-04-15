@@ -26,7 +26,7 @@
  *     new code should read flat `BackendDTO`s directly.
  */
 import { AiAccountsClient, type BackendDTO } from '@ai-accounts/ts-core';
-import { API_BASE, apiFetch } from './client';
+import { API_BASE, apiFetch, getApiKey } from './client';
 import type {
   AIBackend,
   AIBackendWithAccounts,
@@ -66,11 +66,30 @@ export const BACKEND_PLAN_OPTIONS: Record<string, { value: string; label: string
 };
 
 /**
- * Shared `AiAccountsClient` singleton for callers that cannot use the
- * `useAiAccounts()` composable (module-scope code, tests, router guards).
- * Components should prefer `useAiAccounts().client` inside `setup()`.
+ * Shared `AiAccountsClient` for callers that cannot use the `useAiAccounts()`
+ * composable (module-scope code, tests, router guards). Components should
+ * prefer `useAiAccounts().client` inside `setup()`.
+ *
+ * Returns a fresh client each call so the current API token (which may be
+ * generated/rotated after first load) is always picked up. This keeps
+ * parity with the token wiring in `main.ts`.
  */
-export const aiAccountsClient = new AiAccountsClient({ baseUrl: '' });
+export function getAiAccountsClient(): AiAccountsClient {
+  return new AiAccountsClient({ baseUrl: '', token: getApiKey() ?? undefined });
+}
+
+/**
+ * Back-compat export: many callers import `aiAccountsClient` directly.
+ * Proxy through a getter so each property access returns a token-aware
+ * client, without forcing call-site refactors.
+ */
+export const aiAccountsClient: AiAccountsClient = new Proxy({} as AiAccountsClient, {
+  get(_target, prop, receiver) {
+    const client = getAiAccountsClient();
+    const value = Reflect.get(client as object, prop, receiver);
+    return typeof value === 'function' ? value.bind(client) : value;
+  },
+}) as AiAccountsClient;
 
 /**
  * Agented-specific backend management operations backed by the Flask
@@ -296,18 +315,41 @@ function dtoToAccount(dto: BackendDTO): BackendAccount {
   };
 }
 
-async function tryDetect(_kind: string, dtos: BackendDTO[]): Promise<{
+async function tryDetect(kind: string, dtos: BackendDTO[]): Promise<{
   is_installed: number;
   version?: string;
   cli_path?: string;
 }> {
-  if (dtos.length === 0) return { is_installed: 0 };
+  // Prefer detection via an existing backend row on the sidecar.
+  if (dtos.length > 0) {
+    try {
+      const det = await aiAccountsClient.detectBackend(dtos[0].id);
+      return {
+        is_installed: det.installed ? 1 : 0,
+        version: det.version ?? undefined,
+        cli_path: det.path ?? undefined,
+      };
+    } catch {
+      // fall through to Flask-based check below
+    }
+  }
+  // Fallback: even without an account, Agented's Flask `/admin/backends/{id}/check`
+  // endpoint probes the CLI on disk. This keeps newly installed CLIs visible
+  // as "Installed" before the user adds their first account.
   try {
-    const det = await aiAccountsClient.detectBackend(dtos[0].id);
+    const res = await apiFetch<{
+      installed?: boolean;
+      is_installed?: boolean | number;
+      version?: string;
+      cli_path?: string;
+    }>(`/admin/backends/${kindToLegacyId(kind)}/check`, { method: 'POST' });
+    const installed = Boolean(
+      (res as { installed?: boolean }).installed ?? (res as { is_installed?: unknown }).is_installed,
+    );
     return {
-      is_installed: det.installed ? 1 : 0,
-      version: det.version ?? undefined,
-      cli_path: det.path ?? undefined,
+      is_installed: installed ? 1 : 0,
+      version: res.version ?? undefined,
+      cli_path: res.cli_path ?? undefined,
     };
   } catch {
     return { is_installed: 0 };

@@ -369,14 +369,17 @@ import EntityLayout from '../layouts/EntityLayout.vue';
 import BackendConnect from '../components/monitoring/BackendConnect.vue';
 import AccountLoginModal from '../components/monitoring/AccountLoginModal.vue';
 import { AccountWizard } from '@ai-accounts/vue-styled';
-import { AiAccountsClient } from '@ai-accounts/ts-core';
+import { useAiAccounts } from '@ai-accounts/vue-headless';
 import { useTourMachine } from '../composables/useTourMachine';
 import ConfirmModal from '../components/base/ConfirmModal.vue';
 import { useToast } from '../composables/useToast';
 import { handleApiError } from '../services/api/error-handler';
 import { useWebMcpTool } from '../composables/useWebMcpTool';
 
-const aiAccountsClient = new AiAccountsClient({ baseUrl: '' });
+// Use the plugin-provided client (wired with the API token in main.ts) so
+// inline updateBackend / deleteBackend calls don't 401 against the sidecar's
+// ApiKeyAuth guard.
+const aiAccountsClient = useAiAccounts().client;
 
 const route = useRoute();
 const backendId = computed(() => route.params.backendId as string);
