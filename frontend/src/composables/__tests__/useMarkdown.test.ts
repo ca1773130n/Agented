@@ -27,20 +27,37 @@ vi.mock('shiki/core', () => ({
 }));
 
 vi.mock('shiki/engine/javascript', () => ({
-  createJavaScriptRegExpEngine: () => ({}),
+  createJavaScriptRegexEngine: () => ({}),
 }));
 
 vi.mock('shiki/themes/vitesse-dark.mjs', () => ({ default: {} }));
 
-// Mock all shiki language imports
-const langModules = [
-  'javascript', 'typescript', 'python', 'bash', 'json', 'css', 'html',
-  'sql', 'yaml', 'markdown', 'diff', 'go', 'rust', 'java', 'csharp',
-  'ruby', 'php', 'shellscript', 'toml', 'xml', 'jsx', 'tsx', 'vue', 'dockerfile',
-];
-for (const lang of langModules) {
-  vi.mock(`shiki/langs/${lang}.mjs`, () => ({ default: {} }));
-}
+// Mock all shiki language imports (cannot loop — vi.mock is hoisted and
+// captures the loop variable out of scope).
+vi.mock('shiki/langs/javascript.mjs', () => ({ default: {} }));
+vi.mock('shiki/langs/typescript.mjs', () => ({ default: {} }));
+vi.mock('shiki/langs/python.mjs', () => ({ default: {} }));
+vi.mock('shiki/langs/bash.mjs', () => ({ default: {} }));
+vi.mock('shiki/langs/json.mjs', () => ({ default: {} }));
+vi.mock('shiki/langs/css.mjs', () => ({ default: {} }));
+vi.mock('shiki/langs/html.mjs', () => ({ default: {} }));
+vi.mock('shiki/langs/sql.mjs', () => ({ default: {} }));
+vi.mock('shiki/langs/yaml.mjs', () => ({ default: {} }));
+vi.mock('shiki/langs/markdown.mjs', () => ({ default: {} }));
+vi.mock('shiki/langs/diff.mjs', () => ({ default: {} }));
+vi.mock('shiki/langs/go.mjs', () => ({ default: {} }));
+vi.mock('shiki/langs/rust.mjs', () => ({ default: {} }));
+vi.mock('shiki/langs/java.mjs', () => ({ default: {} }));
+vi.mock('shiki/langs/csharp.mjs', () => ({ default: {} }));
+vi.mock('shiki/langs/ruby.mjs', () => ({ default: {} }));
+vi.mock('shiki/langs/php.mjs', () => ({ default: {} }));
+vi.mock('shiki/langs/shellscript.mjs', () => ({ default: {} }));
+vi.mock('shiki/langs/toml.mjs', () => ({ default: {} }));
+vi.mock('shiki/langs/xml.mjs', () => ({ default: {} }));
+vi.mock('shiki/langs/jsx.mjs', () => ({ default: {} }));
+vi.mock('shiki/langs/tsx.mjs', () => ({ default: {} }));
+vi.mock('shiki/langs/vue.mjs', () => ({ default: {} }));
+vi.mock('shiki/langs/dockerfile.mjs', () => ({ default: {} }));
 
 import { renderMarkdown, highlightCodeBlocks, attachCodeCopyHandlers } from '../useMarkdown';
 

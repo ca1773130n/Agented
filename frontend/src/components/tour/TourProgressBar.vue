@@ -97,7 +97,7 @@ watch([() => props.skippable, () => props.stepTitle], () => {
 .tour-bar-separator {
   width: 1px;
   align-self: stretch;
-  background: rgba(255, 255, 255, 0.12);
+  background: var(--border-subtle);
   flex-shrink: 0;
 }
 

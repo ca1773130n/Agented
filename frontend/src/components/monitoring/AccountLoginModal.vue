@@ -6,7 +6,7 @@
  * Shows real-time terminal output and handles interactive prompts.
  */
 import { ref, watch, onUnmounted } from 'vue';
-import { backendApi } from '../../services/api';
+import { backendManagementApi } from '../../services/api';
 import { createAuthenticatedEventSource } from '../../services/api/client';
 import type { AuthenticatedEventSource } from '../../services/api/client';
 
@@ -57,7 +57,7 @@ async function startLogin() {
   loginLines.value = [];
   loginError.value = '';
   try {
-    const result = await backendApi.startConnect(props.backendId, props.configPath);
+    const result = await backendManagementApi.startConnect(props.backendId, props.configPath);
     loginSessionId.value = result.session_id;
     const es = createAuthenticatedEventSource(
       `/admin/backends/${props.backendId}/connect/${result.session_id}/stream`
@@ -112,7 +112,7 @@ async function sendResponse() {
   if (!userResponse.value.trim() && !pendingOptions.value.length) return;
   sendingResponse.value = true;
   try {
-    await backendApi.respondConnect(
+    await backendManagementApi.respondConnect(
       props.backendId,
       loginSessionId.value,
       pendingInteractionId.value,
@@ -147,7 +147,7 @@ function cleanup() {
     loginEventSource = null;
   }
   if (loginSessionId.value) {
-    backendApi.cancelConnect(props.backendId, loginSessionId.value).catch(() => {});
+    backendManagementApi.cancelConnect(props.backendId, loginSessionId.value).catch(() => {});
   }
 }
 
@@ -173,7 +173,7 @@ async function runProxyLogin() {
   proxyStatus.value = 'running';
   proxyMessage.value = `Registering with API proxy...`;
   try {
-    const res = await backendApi.proxyLogin(props.backendType, props.configPath);
+    const res = await backendManagementApi.proxyLogin(props.backendType, props.configPath);
     if (res.status === 'ok') {
       proxyStatus.value = 'success';
       proxyMessage.value = res.message || 'API proxy configured';
@@ -212,7 +212,7 @@ let pollTimer: ReturnType<typeof setInterval> | null = null;
 
 async function getProxyAccountCount(): Promise<number> {
   try {
-    const status = await backendApi.proxyStatus();
+    const status = await backendManagementApi.proxyStatus();
     return status.account_count || 0;
   } catch {
     return 0;

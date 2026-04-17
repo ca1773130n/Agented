@@ -304,14 +304,9 @@ class TestListAccounts:
             }
         )
 
-        # list_accounts calls glob twice (claude-*.json, codex-*.json)
-        # Return the file only for the claude pattern
-        def _glob(pattern):
-            if pattern.startswith("claude"):
-                return [mock_path]
-            return []
-
-        mock_auth_dir.glob.side_effect = _glob
+        # list_accounts now uses a single glob("*.json") and filters by
+        # filename prefix / type field. Return the file for any pattern.
+        mock_auth_dir.glob.return_value = [mock_path]
 
         accounts = CLIProxyManager.list_accounts()
         assert len(accounts) == 1

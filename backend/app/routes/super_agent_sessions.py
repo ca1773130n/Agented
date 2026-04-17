@@ -50,7 +50,7 @@ def create_session(path: SuperAgentPath):
     If project_id is provided and the SA has an instance for that project,
     a worker session with its own git worktree is created.
     """
-    data = request.get_json() or {}
+    data = request.get_json(silent=True) or {}
     project_id = data.get("project_id")
     title = data.get("title")
     session_type = data.get("session_type", "worker")

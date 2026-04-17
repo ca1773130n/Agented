@@ -1,6 +1,5 @@
 """SuperAgent chat API endpoints."""
 
-import logging
 from http import HTTPStatus
 from typing import Optional
 
@@ -15,8 +14,6 @@ from ..database import (
     get_super_agent_session,
 )
 from ..services.super_agent_session_service import SuperAgentSessionService
-
-logger = logging.getLogger(__name__)
 
 tag = Tag(name="super-agent-chat", description="SuperAgent chat operations")
 super_agent_chat_bp = APIBlueprint(
@@ -36,7 +33,6 @@ class ChatSendRequest(BaseModel):
     backend: str = Field("auto", description="Backend to use (auto, claude, opencode)")
     account_id: Optional[str] = Field(None, description="Account ID for proxy routing")
     model: Optional[str] = Field(None, description="Model override")
-    mode: str = Field("single", description="Chat mode: single, all, compound")
     chat_mode: Optional[str] = Field(None, description="Chat mode: management or work")
 
 
@@ -123,97 +119,10 @@ def _resolve_session(data: dict, super_agent_id: str, session_id: str) -> dict:
         "backend": backend,
         "account_id": data.get("account_id"),
         "model": data.get("model"),
-        "mode": data.get("mode", "single"),
         "instance": instance,
         "chat_mode": chat_mode,
         "cwd": cwd,
     }
-
-
-def _dispatch_by_mode(
-    mode: str,
-    session_id: str,
-    super_agent_id: str,
-    effective_backend: str,
-    account_id: Optional[str],
-    model: Optional[str],
-    message_id: str,
-) -> dict:
-    """Fan-out dispatch for 'all' or 'compound' mode. Returns response body dict."""
-    from ..db.backends import get_all_backends
-    from ..services.chat_state_service import ChatStateService
-
-    all_backends = get_all_backends()
-    unavailable_backends = (
-        [b["type"] for b in all_backends if not b.get("is_installed")] if all_backends else []
-    )
-    backend_names = (
-        [b["type"] for b in all_backends if b.get("is_installed")] if all_backends else []
-    )
-    if not backend_names:
-        logger.warning(
-            "No installed backends found for '%s' mode; falling back to ['claude']. "
-            "Unavailable backends: %s",
-            mode,
-            unavailable_backends or "none detected",
-        )
-        backend_names = ["claude"]
-    elif unavailable_backends:
-        logger.info(
-            "Some backends unavailable for '%s' mode (not installed): %s",
-            mode,
-            unavailable_backends,
-        )
-
-    system_prompt = SuperAgentSessionService.assemble_system_prompt(super_agent_id, session_id)
-    state = SuperAgentSessionService.get_session_state(session_id)
-    llm_messages = []
-    if system_prompt:
-        llm_messages.append({"role": "system", "content": system_prompt})
-    if state and state.get("conversation_log"):
-        for msg in state["conversation_log"]:
-            llm_messages.append(
-                {"role": msg.get("role", "user"), "content": msg.get("content", "")}
-            )
-
-    ChatStateService.push_status(session_id, "streaming")
-
-    if mode == "all":
-        from ..services.all_mode_service import AllModeService
-
-        execution_map = AllModeService.fan_out(
-            session_id=session_id,
-            messages=llm_messages,
-            backends=backend_names,
-            model=model,
-            account_email=account_id,
-            timeout=30,
-        )
-        return {
-            "status": "streaming",
-            "mode": "all",
-            "message_id": message_id,
-            "backends": execution_map,
-        }
-    else:  # compound
-        from ..services.all_mode_service import CompoundModeService
-
-        primary_backend = effective_backend if effective_backend else backend_names[0]
-        execution_map = CompoundModeService.start(
-            session_id=session_id,
-            messages=llm_messages,
-            backends=backend_names,
-            primary_backend=primary_backend,
-            model=model,
-            account_email=account_id,
-            timeout=90,
-        )
-        return {
-            "status": "streaming",
-            "mode": "compound",
-            "message_id": message_id,
-            "backends": execution_map,
-        }
 
 
 def _launch_background_thread(
@@ -304,7 +213,6 @@ def send_chat_message(path: SessionPath):
     effective_backend = resolved["effective_backend"]
     account_id = resolved["account_id"]
     model = resolved["model"]
-    mode = resolved["mode"]
     cwd = resolved.get("cwd")
     chat_mode = resolved.get("chat_mode")
     instance = resolved.get("instance")
@@ -323,18 +231,6 @@ def send_chat_message(path: SessionPath):
         "message",
         {"role": "user", "content": content, "message_id": message_id},
     )
-
-    if mode in ("all", "compound"):
-        result = _dispatch_by_mode(
-            mode,
-            path.session_id,
-            path.super_agent_id,
-            effective_backend,
-            account_id,
-            model,
-            message_id,
-        )
-        return result, HTTPStatus.OK
 
     _launch_background_thread(
         path.session_id,

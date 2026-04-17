@@ -130,23 +130,15 @@ async function runGuardChecks(): Promise<GuardCheckResults> {
     results.workspaceConfigured = true
   }
 
-  // Check backends — account data is included in the list response
-  const backends = await fetchWithAuth<{ backends: Array<{ id: string; accounts?: unknown[] }> }>(
-    '/admin/backends',
+  // Check accounts via the ai-accounts sidecar — it's a flat model (one row per account).
+  // Legacy /admin/backends returned a nested shape keyed by kind; 0.3.0-alpha.1 returns
+  // {items: [{id, kind, display_name, ...}]} where each item IS an account.
+  const backends = await fetchWithAuth<{ items: Array<{ id: string; kind: string }> }>(
+    '/api/v1/backends/',
   )
-  if (backends?.backends) {
-    results.hasAnyBackend = backends.backends.some(
-      (b) => Array.isArray((b as Record<string, unknown>).accounts) &&
-        ((b as Record<string, unknown>).accounts as unknown[]).length > 0,
-    )
-    const claudeBackend = backends.backends.find((b) => b.id === 'backend-claude')
-    if (
-      claudeBackend &&
-      Array.isArray((claudeBackend as Record<string, unknown>).accounts) &&
-      ((claudeBackend as Record<string, unknown>).accounts as unknown[]).length > 0
-    ) {
-      results.hasClaudeAccount = true
-    }
+  if (backends?.items) {
+    results.hasAnyBackend = backends.items.length > 0
+    results.hasClaudeAccount = backends.items.some((b) => b.kind === 'claude')
   }
 
   // Check monitoring configuration
@@ -225,7 +217,11 @@ async function initActor(): Promise<void> {
 export function useTourMachine() {
   // Ensure actor is initialized (idempotent)
   if (!initPromise) {
-    initPromise = initActor()
+    initPromise = initActor().catch((err) => {
+      console.error('[tour] init failed:', err);
+      initPromise = null;  // allow retry on next useTourMachine() call
+      throw err;
+    })
   }
 
   // Reactive snapshot reference
@@ -411,4 +407,84 @@ export async function prefetchTourRoutes(): Promise<void> {
     import('../views/SettingsPage.vue'),
     import('../views/BackendDetailPage.vue'),
   ])
+}
+
+// ---------------------------------------------------------------------------
+// ai-accounts plugin event bridge
+// ---------------------------------------------------------------------------
+
+/**
+ * Minimal shape of a @ai-accounts/ts-core AiAccountsEvent.
+ * Kept local to avoid forcing a hard import of @ai-accounts/ts-core into
+ * this file; the real type lives in `@ai-accounts/ts-core`.
+ */
+type AiAccountsEventLike =
+  | { type: 'wizard.opened'; backendKind: string }
+  | { type: 'wizard.step'; backendKind: string; step: string }
+  | { type: 'wizard.account.created'; backendKind: string; accountId: string }
+  | { type: 'wizard.closed'; backendKind: string; reason: 'done' | 'skip' | 'cancel' }
+  | { type: 'login.started'; sessionId: string; backendKind: string; flow: string }
+  | { type: 'login.prompt'; sessionId: string; promptKind: 'url' | 'text' | 'menu' }
+  | { type: 'login.completed'; sessionId: string; accountId: string }
+  | { type: 'login.failed'; sessionId: string; code: string; message: string }
+  | { type: 'internal.handler_error'; error: string; original: unknown }
+
+/**
+ * Bridge an AiAccountsEvent from the @ai-accounts/vue-headless plugin into
+ * the Agented tour state machine.
+ *
+ * Call this from the plugin's `onEvent` hook in `main.ts`. Drives the shared
+ * actor directly rather than going through `useTourMachine()` so that it is
+ * safe to invoke outside of a Vue `setup()` context.
+ *
+ * Auto-advance is handled by the existing guard-check path
+ * (`checkAndAutoAdvance`) that polls backend state; the event bridge only
+ * kicks that check so we don't have to wait for the next route change.
+ */
+export function notifyAiAccountsEvent(event: AiAccountsEventLike): void {
+  // Ensure actor init has kicked off (idempotent; resolves async).
+  if (!initPromise) {
+    initPromise = initActor().catch((err) => {
+      console.error('[tour] init failed:', err);
+      initPromise = null;
+      throw err;
+    })
+  }
+
+  switch (event.type) {
+    case 'wizard.account.created':
+    case 'login.completed': {
+      // An account was added — re-run guard checks to advance the tour past
+      // the `backends.<kind>` step if it is now satisfied.
+      initPromise
+        .then(() => {
+          if (!sharedActor) return
+          const snap = sharedActor.getSnapshot()
+          const val = snap.value
+          if (val === 'idle' || val === 'complete') return
+          // Kick the async guard check path directly.
+          void runGuardChecks().then((checks) => {
+            if (!sharedActor) return
+            const snap2 = sharedActor.getSnapshot()
+            const val2 = snap2.value
+            if (
+              typeof val2 === 'object' &&
+              val2 !== null &&
+              (val2 as Record<string, string>).backends === 'claude' &&
+              checks.hasClaudeAccount
+            ) {
+              sharedActor.send({ type: 'NEXT' })
+            }
+          })
+        })
+        .catch(() => {
+          /* actor init failed — tour is best-effort */
+        })
+      break
+    }
+    // Other event types are observational; left unhandled on purpose so
+    // analytics hooks can layer on top without fighting the tour.
+    default:
+      break
+  }
 }

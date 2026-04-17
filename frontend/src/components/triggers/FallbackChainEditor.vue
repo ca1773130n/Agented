@@ -114,7 +114,7 @@ import { useToast } from '../../composables/useToast';
 const props = defineProps<{
   triggerId: string;
   availableBackends: Array<{ id: string; name: string; type: string }>;
-  availableAccounts: Array<{ id: number; account_name: string; backend_id: string }>;
+  availableAccounts: Array<{ id: string; account_name: string; backend_id: string }>;
 }>();
 
 const emit = defineEmits<{
@@ -126,7 +126,7 @@ const showToast = useToast();
 
 interface ChainEntry {
   backend_type: string;
-  account_id: number | null;
+  account_id: string | null;
 }
 
 const chain = ref<ChainEntry[]>([]);
@@ -174,7 +174,7 @@ function updateEntryBackend(index: number, backendType: string) {
 }
 
 function updateEntryAccount(index: number, value: string) {
-  chain.value[index].account_id = value ? Number(value) : null;
+  chain.value[index].account_id = value || null;
 }
 
 // Drag and drop handlers

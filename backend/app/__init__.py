@@ -155,11 +155,15 @@ def _seed_bundled_marketplace():
     from .services.setup_service import BUNDLE_MARKETPLACE_NAME, BUNDLE_MARKETPLACE_URL
     from .db.plugins import create_marketplace, get_all_marketplaces
 
+    import logging as _mkt_log
+
     for mkt in get_all_marketplaces():
         if mkt.get("url") == BUNDLE_MARKETPLACE_URL:
             return  # already exists
     create_marketplace(BUNDLE_MARKETPLACE_NAME, BUNDLE_MARKETPLACE_URL)
-    logger.info("Seeded bundled marketplace: %s", BUNDLE_MARKETPLACE_NAME)
+    _mkt_log.getLogger(__name__).info(
+        "Seeded bundled marketplace: %s", BUNDLE_MARKETPLACE_NAME
+    )
 
 
 def _seed_system_agent():

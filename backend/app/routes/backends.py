@@ -14,8 +14,6 @@ from app.models.common import error_response
 from ..models.backend import (
     BackendAccountPath,
     BackendPath,
-    CreateAccountRequest,
-    UpdateAccountRequest,
 )
 from ..models.backend_cli import (
     BackendConnectSessionPath,
@@ -23,7 +21,6 @@ from ..models.backend_cli import (
     TestPromptRequest,
     TestStreamPath,
 )
-from ..models.common import PaginationQuery
 from ..services.backend_cli_service import BackendCLIService
 from ..services.backend_service import BackendService
 
@@ -31,22 +28,8 @@ backends_bp = APIBlueprint("backends", __name__, url_prefix="/admin/backends")
 
 
 # =============================================================================
-# Backend CRUD Routes
+# Backend Management Routes (non-CRUD; CRUD is served by /api/v1/backends)
 # =============================================================================
-
-
-@backends_bp.get("/")
-def list_backends(query: PaginationQuery):
-    """List all AI backends, auto-refreshing model lists via discovery."""
-    result, status = BackendService.list_backends(limit=query.limit, offset=query.offset or 0)
-    return result, status
-
-
-@backends_bp.get("/<backend_id>")
-def get_backend(path: BackendPath):
-    """Get a backend with its accounts."""
-    result, status = BackendService.get_backend(path.backend_id)
-    return result, status
 
 
 @backends_bp.post("/<backend_id>/install")
@@ -60,27 +43,6 @@ def install_backend_cli(path: BackendPath):
 def check_backend(path: BackendPath):
     """Check if a backend is installed and return capabilities."""
     result, status = BackendService.check_backend(path.backend_id)
-    return result, status
-
-
-@backends_bp.post("/<backend_id>/accounts")
-def create_account(path: BackendPath, body: CreateAccountRequest):
-    """Add an account to a backend."""
-    result, status = BackendService.create_account(path.backend_id, body)
-    return result, status
-
-
-@backends_bp.put("/<backend_id>/accounts/<int:account_id>")
-def update_account(path: BackendAccountPath, body: UpdateAccountRequest):
-    """Update an account."""
-    result, status = BackendService.update_account(path.backend_id, path.account_id, body)
-    return result, status
-
-
-@backends_bp.delete("/<backend_id>/accounts/<int:account_id>")
-def delete_account(path: BackendAccountPath):
-    """Delete an account."""
-    result, status = BackendService.delete_account(path.backend_id, path.account_id)
     return result, status
 
 

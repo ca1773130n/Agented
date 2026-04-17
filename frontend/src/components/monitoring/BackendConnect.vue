@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
-import { backendApi, ApiError } from '../../services/api';
+import { backendManagementApi, ApiError } from '../../services/api';
 
 const props = defineProps<{
   backendId: string;
@@ -21,7 +21,7 @@ const errorMessage = ref('');
 async function checkAuth() {
   status.value = 'loading';
   try {
-    const result = await backendApi.checkAuthStatus(props.backendId);
+    const result = await backendManagementApi.checkAuthStatus(props.backendId);
     accounts.value = result.accounts;
     loginInstruction.value = result.login_instruction;
 

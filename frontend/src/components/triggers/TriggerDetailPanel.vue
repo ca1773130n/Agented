@@ -12,7 +12,7 @@ const props = defineProps<{
   projects: Project[];
   teams: Team[];
   availableBackends: Array<{ id: string; name: string; type: string }>;
-  availableAccounts: Array<{ id: number; account_name: string; backend_id: string }>;
+  availableAccounts: Array<{ id: string; account_name: string; backend_id: string }>;
 }>();
 
 const emit = defineEmits<{

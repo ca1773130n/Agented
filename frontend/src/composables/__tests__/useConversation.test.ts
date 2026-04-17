@@ -24,6 +24,16 @@ vi.mock('../useStreamingParser', () => ({
   }),
 }));
 
+// useConversation now imports useStreamingParser via useAiChat re-export
+vi.mock('../useAiChat', () => ({
+  useStreamingParser: () => ({
+    init: mockStreamingInit,
+    write: mockStreamingWrite,
+    finalize: mockStreamingFinalize,
+    destroy: vi.fn(),
+  }),
+}));
+
 // Mock useEventSource -- capture SSE event handlers
 let capturedEvents: Record<string, (event: MessageEvent) => void> = {};
 const mockSseConnect = vi.fn();

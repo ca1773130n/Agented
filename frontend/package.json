@@ -12,6 +12,9 @@
     "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
+    "@ai-accounts/ts-core": "file:../../ai-accounts/packages/ts-core",
+    "@ai-accounts/vue-headless": "file:../../ai-accounts/packages/vue-headless",
+    "@ai-accounts/vue-styled": "file:../../ai-accounts/packages/vue-styled",
     "@dagrejs/dagre": "^2.0.4",
     "@floating-ui/vue": "^1.1.11",
     "@intlify/unplugin-vue-i18n": "^11.0.7",
@@ -36,9 +39,9 @@
     "streaming-markdown": "^0.2.15",
     "vue": "^3.5.24",
     "vue-draggable-plus": "^0.6.1",
-    "vue-i18n": "^11.3.0",
+    "vue-i18n": "^11.3.2",
     "vue-router": "^4.6.4",
-    "xstate": "^5.28.0",
+    "xstate": "^5.30.0",
     "zod-to-json-schema": "^3.25.1"
   },
   "devDependencies": {

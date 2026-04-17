@@ -21,7 +21,16 @@ export { hookApi, hookConversationApi } from './hooks';
 export { commandApi, commandConversationApi } from './commands';
 export { ruleApi, ruleConversationApi } from './rules';
 export { marketplaceApi } from './marketplace';
-export { backendApi, BACKEND_LOGIN_INFO, BACKEND_PLAN_OPTIONS } from './backends';
+export {
+  backendManagementApi,
+  aiAccountsClient,
+  BACKEND_LOGIN_INFO,
+  BACKEND_PLAN_OPTIONS,
+  listGroupedBackends,
+  getGroupedBackend,
+  legacyIdToKind,
+  kindToLegacyId,
+} from './backend-management';
 export { orchestrationApi } from './orchestration';
 export { budgetApi } from './budgets';
 export { analyticsApi } from './analytics';

@@ -21,6 +21,26 @@ config.global.provide = {
   refreshTriggers: mockRefreshTriggers
 }
 
+// Global stub for AiChatPanel -- the real component requires the aiAccountsPlugin
+// (provided at app level) which isn't installed in test mounts. Stub it with a
+// simple placeholder that preserves the component name for findComponent lookups.
+config.global.stubs = {
+  ...(config.global.stubs || {}),
+  AiChatPanel: {
+    name: 'AiChatPanel',
+    // Render all named slots so tests can assert on content passed via
+    // #header-extra, #welcome, etc. Default slot last.
+    template: `
+      <div class="stub-ai-chat-panel">
+        <slot name="header-extra" />
+        <slot name="welcome" />
+        <slot name="footer" />
+        <slot />
+      </div>
+    `,
+  },
+}
+
 // Reset mocks before each test
 beforeEach(() => {
   vi.clearAllMocks()

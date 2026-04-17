@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, watch, onBeforeUnmount } from 'vue';
-import { useStreamingParser } from '../../composables/useStreamingParser';
+import { useStreamingParser } from '../../composables/useAiChat';
 
 const outputContainer = ref<HTMLElement | null>(null);
 const isNearBottom = ref(true);

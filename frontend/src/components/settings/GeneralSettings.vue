@@ -2,7 +2,7 @@
 import { ref, onMounted, inject, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import type { MonitoringConfig } from '../../services/api';
-import { settingsApi, monitoringApi, backendApi, ApiError } from '../../services/api';
+import { settingsApi, monitoringApi, listGroupedBackends, getGroupedBackend, ApiError } from '../../services/api';
 import { useToast } from '../../composables/useToast';
 import { useTourMachine } from '../../composables/useTourMachine';
 import DirectoryBrowser from '../base/DirectoryBrowser.vue';
@@ -48,7 +48,7 @@ const monitoringConfig = ref<MonitoringConfig>({
   accounts: {},
 });
 const originalMonitoringConfig = ref<string>('');
-const backendAccounts = ref<Array<{ id: number; account_name: string; backend_type: string }>>([]);
+const backendAccounts = ref<Array<{ id: string; account_name: string; backend_type: string }>>([]);
 const loadingMonitoring = ref(false);
 const savingMonitoring = ref(false);
 
@@ -108,7 +108,7 @@ async function loadMonitoringSettings() {
   try {
     const [configData, backendsData] = await Promise.all([
       monitoringApi.getConfig(),
-      backendApi.list(),
+      listGroupedBackends(),
     ]);
     monitoringConfig.value = {
       enabled: configData.enabled ?? false,
@@ -117,22 +117,22 @@ async function loadMonitoringSettings() {
     };
     originalMonitoringConfig.value = JSON.stringify(monitoringConfig.value);
 
-    // Load accounts for each backend
-    const allAccounts: Array<{ id: number; account_name: string; backend_type: string }> = [];
-    for (const backend of (backendsData.backends || [])) {
-      try {
-        const detail = await backendApi.get(backend.id);
-        for (const acct of (detail.accounts || [])) {
-          allAccounts.push({
-            id: acct.id,
-            account_name: acct.account_name,
-            backend_type: backend.type,
-          });
-        }
-      } catch {
-        // Skip backends that fail to load
+    // Load accounts for each backend in parallel
+    const backendList = backendsData.backends || [];
+    const detailResults = await Promise.all(
+      backendList.map((b) => getGroupedBackend(b.id).catch(() => null)),
+    );
+    const allAccounts: Array<{ id: string; account_name: string; backend_type: string }> = [];
+    detailResults.forEach((detail, idx) => {
+      if (!detail) return;
+      for (const acct of (detail.accounts || [])) {
+        allAccounts.push({
+          id: acct.id,
+          account_name: acct.account_name,
+          backend_type: backendList[idx].type,
+        });
       }
-    }
+    });
     backendAccounts.value = allAccounts;
   } catch {
     // Config not set yet, use defaults
@@ -161,7 +161,7 @@ function isMonitoringDirty(): boolean {
   return JSON.stringify(monitoringConfig.value) !== originalMonitoringConfig.value;
 }
 
-function toggleAccountMonitoring(accountId: number) {
+function toggleAccountMonitoring(accountId: string) {
   const key = String(accountId);
   if (!monitoringConfig.value.accounts[key]) {
     monitoringConfig.value.accounts[key] = { enabled: true };
@@ -170,7 +170,7 @@ function toggleAccountMonitoring(accountId: number) {
   }
 }
 
-function isAccountEnabled(accountId: number): boolean {
+function isAccountEnabled(accountId: string): boolean {
   const key = String(accountId);
   return monitoringConfig.value.accounts[key]?.enabled ?? false;
 }

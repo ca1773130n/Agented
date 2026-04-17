@@ -108,7 +108,7 @@ export interface RateLimitWindow {
 }
 
 export interface BackendAccount {
-  id: number;
+  id: string;
   backend_id: string;
   account_name: string;
   email?: string;
