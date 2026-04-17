@@ -411,16 +411,12 @@ export async function getGroupedBackend(legacyIdOrKind: string): Promise<AIBacke
   const kindDtos = items.filter((dto) => dto.kind === kind);
   const detection = await tryDetect(kind, kindDtos);
   const base = buildGroupedBackend(kind, kindDtos, detection);
-  let models: string[] = [];
-  try {
-    const result = await backendManagementApi.discoverModels(kindToLegacyId(kind));
-    models = result.models ?? [];
-  } catch {
-    // Model discovery is optional
-  }
+  // Note: discoverModels spawns a CLI subprocess and can take several seconds.
+  // We return immediately with an empty `models` list; consumers that need
+  // model metadata can call `backendManagementApi.discoverModels` separately.
   return {
     ...base,
-    models,
+    models: [],
     accounts: kindDtos.map(dtoToAccount),
   };
 }

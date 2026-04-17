@@ -117,22 +117,22 @@ async function loadMonitoringSettings() {
     };
     originalMonitoringConfig.value = JSON.stringify(monitoringConfig.value);
 
-    // Load accounts for each backend
+    // Load accounts for each backend in parallel
+    const backendList = backendsData.backends || [];
+    const detailResults = await Promise.all(
+      backendList.map((b) => getGroupedBackend(b.id).catch(() => null)),
+    );
     const allAccounts: Array<{ id: string; account_name: string; backend_type: string }> = [];
-    for (const backend of (backendsData.backends || [])) {
-      try {
-        const detail = await getGroupedBackend(backend.id);
-        for (const acct of (detail.accounts || [])) {
-          allAccounts.push({
-            id: acct.id,
-            account_name: acct.account_name,
-            backend_type: backend.type,
-          });
-        }
-      } catch {
-        // Skip backends that fail to load
+    detailResults.forEach((detail, idx) => {
+      if (!detail) return;
+      for (const acct of (detail.accounts || [])) {
+        allAccounts.push({
+          id: acct.id,
+          account_name: acct.account_name,
+          backend_type: backendList[idx].type,
+        });
       }
-    }
+    });
     backendAccounts.value = allAccounts;
   } catch {
     // Config not set yet, use defaults

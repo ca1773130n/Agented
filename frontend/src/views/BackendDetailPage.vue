@@ -509,10 +509,23 @@ async function loadBackend() {
   try {
     const data = await getGroupedBackend(backendId.value);
     backend.value = data;
-    // Fire-and-forget: load supplementary data
+    // Fire-and-forget: load supplementary data (models, health, cross-backend accounts)
     loadHealth();
     if (data?.type === 'opencode') {
       loadOtherBackendAccounts();
+    }
+    // getGroupedBackend now skips model discovery (spawns CLI subprocess).
+    // Fetch models in the background so the page renders without blocking
+    // on a potentially slow CLI call — matters for onboarding tour timing.
+    if (data && data.type !== 'opencode') {
+      backendManagementApi
+        .discoverModels(backendId.value)
+        .then((result) => {
+          if (backend.value && result.models?.length) {
+            backend.value = { ...backend.value, models: result.models };
+          }
+        })
+        .catch(() => { /* model discovery is optional */ });
     }
     return data;
   } catch (err) {
