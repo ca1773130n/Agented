@@ -137,6 +137,7 @@
           v-if="showAddModal && !editingAccount && backend"
           :initial-backend-kind="backend.type"
           :backend-name="backend.name"
+          :translate="wizardTranslate"
           @close="closeModal"
           @saved="onWizardSaved"
           @skip="onWizardSkip"
@@ -370,6 +371,7 @@ import BackendConnect from '../components/monitoring/BackendConnect.vue';
 import AccountLoginModal from '../components/monitoring/AccountLoginModal.vue';
 import { AccountWizard } from '@ai-accounts/vue-styled';
 import { useAiAccounts } from '@ai-accounts/vue-headless';
+import { useI18n } from 'vue-i18n';
 import { useTourMachine } from '../composables/useTourMachine';
 import ConfirmModal from '../components/base/ConfirmModal.vue';
 import { useToast } from '../composables/useToast';
@@ -380,6 +382,14 @@ import { useWebMcpTool } from '../composables/useWebMcpTool';
 // inline updateBackend / deleteBackend calls don't 401 against the sidecar's
 // ApiKeyAuth guard.
 const aiAccountsClient = useAiAccounts().client;
+
+// Bridge ai-accounts AccountWizard's translator to vue-i18n. Falls back to
+// the English stub baked into the wizard when a key is missing.
+const { t: i18nT, te } = useI18n();
+function wizardTranslate(key: string, params?: Record<string, unknown>): string {
+  if (te(key)) return i18nT(key, params ?? {});
+  return '';
+}
 
 const route = useRoute();
 const backendId = computed(() => route.params.backendId as string);
