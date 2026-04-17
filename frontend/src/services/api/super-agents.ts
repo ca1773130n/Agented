@@ -11,6 +11,9 @@ import type {
   DocumentType,
   AgentMessageType,
   AgentMessagePriority,
+  GitActionRequest,
+  GitActionResponse,
+  SessionType,
 } from './types';
 
 export const superAgentApi = {
@@ -54,10 +57,11 @@ export const superAgentSessionApi = {
     apiFetch<{ sessions: SuperAgentSession[] }>(`/admin/super-agents/${superAgentId}/sessions`),
   get: (superAgentId: string, sessionId: string) =>
     apiFetch<SuperAgentSession>(`/admin/super-agents/${superAgentId}/sessions/${sessionId}`),
-  create: (superAgentId: string) =>
-    apiFetch<{ message: string; session_id: string }>(`/admin/super-agents/${superAgentId}/sessions`, {
-      method: 'POST',
-    }),
+  create: (superAgentId: string, data?: { project_id?: string; title?: string; session_type?: SessionType }) =>
+    apiFetch<{ message: string; session_id: string; worktree_path?: string; branch_name?: string; session_type?: SessionType }>(
+      `/admin/super-agents/${superAgentId}/sessions`,
+      { method: 'POST', body: data ? JSON.stringify(data) : undefined },
+    ),
   /** Legacy stream endpoint (session-level events). */
   stream: (superAgentId: string, sessionId: string): AuthenticatedEventSource =>
     createAuthenticatedEventSource(`${API_BASE}/admin/super-agents/${superAgentId}/sessions/${sessionId}/stream`),
@@ -87,6 +91,11 @@ export const superAgentSessionApi = {
   end: (superAgentId: string, sessionId: string) =>
     apiFetch<{ message: string }>(`/admin/super-agents/${superAgentId}/sessions/${sessionId}/end`, {
       method: 'POST',
+    }),
+  gitAction: (superAgentId: string, sessionId: string, data: GitActionRequest) =>
+    apiFetch<GitActionResponse>(`/admin/super-agents/${superAgentId}/sessions/${sessionId}/git-action`, {
+      method: 'POST',
+      body: JSON.stringify(data),
     }),
 };
 

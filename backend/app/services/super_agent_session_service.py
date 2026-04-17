@@ -44,13 +44,14 @@ class SuperAgentSessionService:
 
     @classmethod
     def create_session(
-        cls, super_agent_id: str, instance_id: str = None
+        cls,
+        super_agent_id: str,
+        instance_id: str = None,
+        project_id: str = None,
+        title: str = None,
+        session_type: str = "worker",
     ) -> Tuple[Optional[str], Optional[str]]:
         """Create a new session for a super agent.
-
-        Args:
-            super_agent_id: The super agent to create a session for.
-            instance_id: Optional project SA instance ID to associate with this session.
 
         Returns (session_id, None) on success or (None, error_message) on failure.
         """
@@ -71,7 +72,13 @@ class SuperAgentSessionService:
                 return None, f"Maximum concurrent sessions ({sa_limit}) reached for this agent"
 
             # Persist to DB
-            session_id = add_super_agent_session(super_agent_id, instance_id=instance_id)
+            session_id = add_super_agent_session(
+                super_agent_id,
+                instance_id=instance_id,
+                project_id=project_id,
+                title=title,
+                session_type=session_type,
+            )
             if not session_id:
                 return None, "Failed to create session"
 
@@ -85,9 +92,23 @@ class SuperAgentSessionService:
                 "token_count": 0,
                 "output_buffer": collections.deque(maxlen=cls.OUTPUT_RING_BUFFER_SIZE),
                 "instance_id": instance_id,
+                "project_id": project_id,
+                "title": title,
+                "session_type": session_type,
+                "worktree_path": None,
+                "branch_name": None,
             }
 
             return session_id, None
+
+    @classmethod
+    def update_session_worktree(cls, session_id: str, worktree_path: str, branch_name: str) -> None:
+        """Update in-memory session state with worktree info."""
+        with cls._lock:
+            session = cls._active_sessions.get(session_id)
+            if session:
+                session["worktree_path"] = worktree_path
+                session["branch_name"] = branch_name
 
     @classmethod
     def get_or_create_session(cls, super_agent_id: str) -> str:
@@ -494,8 +515,7 @@ class SuperAgentSessionService:
         from ..database import get_connection
 
         cutoff = (
-            datetime.datetime.now(datetime.timezone.utc)
-            - datetime.timedelta(days=max_age_days)
+            datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=max_age_days)
         ).strftime("%Y-%m-%d %H:%M:%S")
 
         with get_connection() as conn:
@@ -513,11 +533,10 @@ class SuperAgentSessionService:
             # Also remove from in-memory cache
             with cls._lock:
                 stale_ids = [
-                    sid for sid, s in cls._active_sessions.items()
+                    sid
+                    for sid, s in cls._active_sessions.items()
                     if s["status"] == "active"
-                    and sid not in {
-                        r["id"] for r in get_active_sessions_list()
-                    }
+                    and sid not in {r["id"] for r in get_active_sessions_list()}
                 ]
                 for sid in stale_ids:
                     del cls._active_sessions[sid]

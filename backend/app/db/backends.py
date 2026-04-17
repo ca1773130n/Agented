@@ -307,15 +307,53 @@ def create_backend_account(
     plan: Optional[str],
     usage_data: Optional[dict],
 ) -> Optional[int]:
-    """Create a new backend account. Handles default-unsetting logic. Returns lastrowid."""
+    """Create or replace a backend account. If an account with the same name
+    (ignoring whitespace) or same config_path exists under this backend,
+    it is updated in place. Returns the account id."""
     usage_data_json = json.dumps(usage_data) if usage_data else None
     with get_connection() as conn:
+        # Check for existing account with same name (whitespace-insensitive) or same config_path
+        normalized = account_name.replace(" ", "").lower()
+        rows = conn.execute(
+            "SELECT id, account_name, config_path FROM backend_accounts WHERE backend_id = ?",
+            (backend_id,),
+        ).fetchall()
+        existing = None
+        for row in rows:
+            if row["account_name"].replace(" ", "").lower() == normalized:
+                existing = row
+                break
+            if config_path and row["config_path"] and row["config_path"] == config_path:
+                existing = row
+                break
+
         # If marked as default, unset other defaults
         if is_default:
             conn.execute(
                 "UPDATE backend_accounts SET is_default = 0 WHERE backend_id = ?",
                 (backend_id,),
             )
+
+        if existing:
+            # Replace existing account (update name to latest value too)
+            conn.execute(
+                """UPDATE backend_accounts
+                   SET account_name = ?, email = ?, config_path = ?, api_key_env = ?,
+                       is_default = ?, plan = ?, usage_data = ?
+                   WHERE id = ?""",
+                (
+                    account_name,
+                    email,
+                    config_path,
+                    api_key_env,
+                    is_default or 0,
+                    plan,
+                    usage_data_json,
+                    existing["id"],
+                ),
+            )
+            conn.commit()
+            return existing["id"]
 
         cursor = conn.execute(
             """

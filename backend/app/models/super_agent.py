@@ -90,6 +90,11 @@ class SuperAgentDocument(BaseModel):
     updated_at: Optional[str] = None
 
 
+class SessionType(str, Enum):
+    LEADER = "leader"
+    WORKER = "worker"
+
+
 class SuperAgentSession(BaseModel):
     """A session for a super agent."""
 
@@ -100,6 +105,13 @@ class SuperAgentSession(BaseModel):
     summary: Optional[str] = None
     token_count: int = 0
     last_compacted_at: Optional[str] = None
+    instance_id: Optional[str] = None
+    worktree_path: Optional[str] = None
+    branch_name: Optional[str] = None
+    project_id: Optional[str] = None
+    title: Optional[str] = None
+    pr_url: Optional[str] = None
+    session_type: SessionType = SessionType.WORKER
     started_at: Optional[str] = None
     ended_at: Optional[str] = None
 
@@ -190,7 +202,9 @@ class UpdateDocumentRequest(BaseModel):
 class CreateSessionRequest(BaseModel):
     """Request body for creating a super agent session."""
 
-    pass  # No required fields - session created with defaults
+    project_id: Optional[str] = None
+    title: Optional[str] = None
+    session_type: SessionType = SessionType.WORKER
 
 
 class SendAgentMessageRequest(BaseModel):
@@ -202,6 +216,23 @@ class SendAgentMessageRequest(BaseModel):
     subject: Optional[str] = None
     content: str = Field(..., min_length=1)
     ttl_seconds: Optional[int] = Field(None, ge=1)
+
+
+class GitActionType(str, Enum):
+    COMMIT = "commit"
+    PUSH = "push"
+    CREATE_PR = "create_pr"
+    REBASE = "rebase"
+    DIFF = "diff"
+
+
+class GitActionRequest(BaseModel):
+    """Request body for executing a git action on a session's worktree."""
+
+    action: GitActionType
+    message: Optional[str] = None  # Commit message (for commit action)
+    pr_title: Optional[str] = None  # PR title (for create_pr action)
+    pr_body: Optional[str] = None  # PR body (for create_pr action)
 
 
 # --- Update requests ---

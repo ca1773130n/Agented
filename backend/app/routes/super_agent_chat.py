@@ -99,8 +99,19 @@ def _resolve_session(data: dict, super_agent_id: str, session_id: str) -> dict:
     if not chat_mode and instance:
         chat_mode = instance.get("default_chat_mode", "management")
 
-    # Resolve cwd for work mode
-    cwd = instance["worktree_path"] if instance and chat_mode == "work" else None
+    # Resolve cwd: session worktree > leader project path > instance worktree
+    cwd = None
+    session_wt = session.get("worktree_path")
+    if session_wt:
+        cwd = session_wt  # Worker session with own worktree
+    elif session.get("session_type") == "leader" and session.get("project_id"):
+        from ..db.projects import get_project as _get_project
+
+        proj = _get_project(session["project_id"])
+        if proj:
+            cwd = proj.get("local_path")
+    elif instance and chat_mode == "work":
+        cwd = instance.get("worktree_path")  # Legacy fallback
 
     return {
         "session": session,

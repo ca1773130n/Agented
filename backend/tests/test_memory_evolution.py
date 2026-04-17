@@ -157,8 +157,7 @@ class TestShouldConsolidate:
         thread = create_thread(resource_id=agent_id, resource_type="agent")
         # Add enough messages
         messages = [
-            {"role": "user", "content": f"Message {i} about Python and Flask"}
-            for i in range(50)
+            {"role": "user", "content": f"Message {i} about Python and Flask"} for i in range(50)
         ]
         save_messages(thread["id"], messages)
         # First time: no previous consolidation, so should return True
@@ -222,8 +221,7 @@ class TestRelatedThreadsEndpoint:
 
     def test_get_related_threads(self, client, agent_id, thread_with_messages):
         resp = client.get(
-            f"/admin/agents/{agent_id}/memory/threads/"
-            f"{thread_with_messages['id']}/related"
+            f"/admin/agents/{agent_id}/memory/threads/{thread_with_messages['id']}/related"
         )
         assert resp.status_code == 200
         data = resp.get_json()

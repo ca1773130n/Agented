@@ -188,24 +188,29 @@ class SetupBundleService:
                         installed.append(plugin_name)
                         logger.info(
                             "Installed CLI plugin '%s' for account '%s'",
-                            plugin_name, account_name,
+                            plugin_name,
+                            account_name,
                         )
                     else:
                         stderr = result.stderr.strip()
                         if "already installed" in stderr.lower():
                             logger.debug(
                                 "CLI plugin '%s' already installed for '%s'",
-                                plugin_name, account_name,
+                                plugin_name,
+                                account_name,
                             )
                         else:
                             logger.warning(
                                 "Failed to install CLI plugin '%s' for '%s': %s",
-                                plugin_name, account_name, stderr[:200],
+                                plugin_name,
+                                account_name,
+                                stderr[:200],
                             )
                 except subprocess.TimeoutExpired:
                     logger.warning(
                         "Timeout installing CLI plugin '%s' for '%s'",
-                        plugin_name, account_name,
+                        plugin_name,
+                        account_name,
                     )
                 except FileNotFoundError:
                     logger.warning("claude CLI not found — cannot install CLI plugins")
@@ -213,15 +218,19 @@ class SetupBundleService:
                 except Exception as e:
                     logger.warning(
                         "Error installing CLI plugin '%s' for '%s': %s",
-                        plugin_name, account_name, e,
+                        plugin_name,
+                        account_name,
+                        e,
                     )
 
-            results.append({
-                "account": account_name,
-                "config_dir": config_dir,
-                "installed": installed,
-                "total": len(BUNDLE_CLI_PLUGINS),
-            })
+            results.append(
+                {
+                    "account": account_name,
+                    "config_dir": config_dir,
+                    "installed": installed,
+                    "total": len(BUNDLE_CLI_PLUGINS),
+                }
+            )
 
         return {"accounts": len(results), "results": results}
 
@@ -255,7 +264,8 @@ class SetupBundleService:
                     if url:
                         logger.info(
                             "CLIProxyAPI login started for '%s' — approve at: %s",
-                            account.get("account_name"), url[:80],
+                            account.get("account_name"),
+                            url[:80],
                         )
                     # Wait briefly for completion (auto-completes if cookies valid)
                     try:
@@ -268,7 +278,8 @@ class SetupBundleService:
                 except Exception as e:
                     logger.warning(
                         "CLIProxyAPI login failed for '%s': %s",
-                        account.get("account_name"), e,
+                        account.get("account_name"),
+                        e,
                     )
 
             # Then try the bulk refresh for any expired tokens

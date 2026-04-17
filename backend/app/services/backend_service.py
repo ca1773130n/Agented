@@ -87,7 +87,9 @@ class BackendService:
 
     @staticmethod
     def start_connect(
-        backend_id: str, config_path: Optional[str] = None, email: Optional[str] = None,
+        backend_id: str,
+        config_path: Optional[str] = None,
+        email: Optional[str] = None,
         account_name: Optional[str] = None,
     ) -> Tuple[dict, HTTPStatus]:
         """Start an OAuth login session for a backend CLI."""

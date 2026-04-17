@@ -236,23 +236,36 @@ def delete_super_agent_document(doc_id: int) -> bool:
 # =============================================================================
 
 
-def add_super_agent_session(super_agent_id: str, instance_id: str = None) -> Optional[str]:
-    """Add a new session for a super agent. Returns session ID on success, None on failure.
-
-    Args:
-        super_agent_id: The super agent this session belongs to.
-        instance_id: Optional project SA instance ID to associate with this session.
-    """
+def add_super_agent_session(
+    super_agent_id: str,
+    instance_id: str = None,
+    worktree_path: str = None,
+    branch_name: str = None,
+    project_id: str = None,
+    title: str = None,
+    session_type: str = "worker",
+) -> Optional[str]:
+    """Add a new session for a super agent. Returns session ID on success, None on failure."""
     with get_connection() as conn:
         try:
             sess_id = _get_unique_session_id(conn)
             conn.execute(
                 """
                 INSERT INTO super_agent_sessions
-                (id, super_agent_id, status, conversation_log, token_count, instance_id)
-                VALUES (?, ?, 'active', '[]', 0, ?)
+                (id, super_agent_id, status, conversation_log, token_count,
+                 instance_id, worktree_path, branch_name, project_id, title, session_type)
+                VALUES (?, ?, 'active', '[]', 0, ?, ?, ?, ?, ?, ?)
             """,
-                (sess_id, super_agent_id, instance_id),
+                (
+                    sess_id,
+                    super_agent_id,
+                    instance_id,
+                    worktree_path,
+                    branch_name,
+                    project_id,
+                    title,
+                    session_type,
+                ),
             )
             conn.commit()
             return sess_id
@@ -286,29 +299,34 @@ def update_super_agent_session(
     token_count: int = None,
     last_compacted_at: str = None,
     ended_at: str = None,
+    worktree_path: str = None,
+    branch_name: str = None,
+    project_id: str = None,
+    title: str = None,
+    pr_url: str = None,
+    session_type: str = None,
 ) -> bool:
     """Update session fields. Returns True on success."""
+    field_map = {
+        "status": status,
+        "conversation_log": conversation_log,
+        "summary": summary,
+        "token_count": token_count,
+        "last_compacted_at": last_compacted_at,
+        "ended_at": ended_at,
+        "worktree_path": worktree_path,
+        "branch_name": branch_name,
+        "project_id": project_id,
+        "title": title,
+        "pr_url": pr_url,
+        "session_type": session_type,
+    }
     updates = []
     values = []
-
-    if status is not None:
-        updates.append("status = ?")
-        values.append(status)
-    if conversation_log is not None:
-        updates.append("conversation_log = ?")
-        values.append(conversation_log)
-    if summary is not None:
-        updates.append("summary = ?")
-        values.append(summary)
-    if token_count is not None:
-        updates.append("token_count = ?")
-        values.append(token_count)
-    if last_compacted_at is not None:
-        updates.append("last_compacted_at = ?")
-        values.append(last_compacted_at)
-    if ended_at is not None:
-        updates.append("ended_at = ?")
-        values.append(ended_at)
+    for field, value in field_map.items():
+        if value is not None:
+            updates.append(f"{field} = ?")
+            values.append(value)
 
     if not updates:
         return False
@@ -355,3 +373,34 @@ def get_sessions_for_instance(instance_id: str) -> List[dict]:
             (instance_id,),
         )
         return [dict(row) for row in cursor.fetchall()]
+
+
+def get_sessions_for_project(project_id: str, status: str = None) -> List[dict]:
+    """Get all sessions for a project, optionally filtered by status."""
+    with get_connection() as conn:
+        if status:
+            cursor = conn.execute(
+                "SELECT * FROM super_agent_sessions WHERE project_id = ? AND status = ? "
+                "ORDER BY started_at DESC",
+                (project_id, status),
+            )
+        else:
+            cursor = conn.execute(
+                "SELECT * FROM super_agent_sessions WHERE project_id = ? ORDER BY started_at DESC",
+                (project_id,),
+            )
+        return [dict(row) for row in cursor.fetchall()]
+
+
+def get_leader_session(project_id: str, super_agent_id: str) -> Optional[dict]:
+    """Get the leader session for a project+SA combo, if any."""
+    with get_connection() as conn:
+        cursor = conn.execute(
+            "SELECT * FROM super_agent_sessions "
+            "WHERE project_id = ? AND super_agent_id = ? AND session_type = 'leader' "
+            "AND status IN ('active', 'paused') "
+            "ORDER BY started_at DESC LIMIT 1",
+            (project_id, super_agent_id),
+        )
+        row = cursor.fetchone()
+        return dict(row) if row else None

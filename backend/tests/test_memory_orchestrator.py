@@ -72,9 +72,7 @@ def _setup_agent_memory(agent_id: str = "agent-test01"):
     # Add KG entities
     upsert_entity(agent_id, "python", "concept", {"domain": "programming"})
     upsert_entity(agent_id, "flask", "concept", {"domain": "web"})
-    upsert_relation(
-        agent_id, "flask", "concept", "python", "concept", "built_with", confidence=0.8
-    )
+    upsert_relation(agent_id, "flask", "concept", "python", "concept", "built_with", confidence=0.8)
     return thread, messages
 
 

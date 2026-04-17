@@ -27,6 +27,19 @@ logger = logging.getLogger(__name__)
 
 SUBPROCESS_TIMEOUT = 120
 
+
+class ProxyAccountError(Exception):
+    """Raised when the proxy returns an error that can be resolved by switching accounts.
+
+    Covers 429 rate limits, 401 auth errors (expired tokens), and 403 forbidden.
+    """
+
+    def __init__(self, detail: str, status_code: int, account_email: str | None = None):
+        self.detail = detail
+        self.status_code = status_code
+        self.account_email = account_email
+        super().__init__(detail)
+
 # CLIProxyAPI config location
 _CLIPROXY_CONFIG = Path.home() / ".cli-proxy-api" / "config.yaml"
 
@@ -238,15 +251,10 @@ def stream_llm_response(
     proxy_result = _find_cliproxy()
     if proxy_result:
         proxy_base, proxy_key = proxy_result
-        logger.info(
-            "Streaming via CLIProxyAPI at %s (backend=%s, account=%s, msg_count=%d, roles=%s)",
-            proxy_base,
-            effective_backend,
-            account_email,
-            len(messages),
-            [m.get("role") for m in messages],
+        yield from _stream_via_proxy_with_fallback(
+            messages, resolved_model, proxy_base, proxy_key,
+            account_email, effective_backend,
         )
-        yield from _stream_via_proxy(messages, resolved_model, proxy_base, proxy_key, account_email)
         return
 
     # Codex/Gemini require CLIProxyAPI — no fallback
@@ -341,6 +349,110 @@ def _is_readable(text: str) -> bool:
     return bad / len(sample) < 0.1
 
 
+def _select_streaming_account(
+    backend_type: str,
+    account_email: str | None,
+    tried_ids: set[int] | None = None,
+) -> Optional[dict]:
+    """Select the best account for streaming, using the existing scheduler/rate-limit infra.
+
+    Mirrors OrchestrationService._select_account logic:
+    - If account_email specified, find that account and check eligibility
+    - Otherwise, pick_best_account excluding already-tried IDs
+    Returns account dict or None.
+    """
+    from ..db.backends import get_accounts_for_backend_type
+    from .agent_scheduler_service import AgentSchedulerService
+    from .rate_limit_service import RateLimitService
+
+    tried = tried_ids or set()
+
+    if account_email:
+        accounts = get_accounts_for_backend_type(backend_type)
+        account = next((a for a in accounts if a.get("email") == account_email), None)
+        if not account or account["id"] in tried:
+            return None
+        eligibility = AgentSchedulerService.check_eligibility(account["id"])
+        if not eligibility["eligible"]:
+            return None
+        if RateLimitService.is_rate_limited(account["id"]):
+            return None
+        return account
+
+    # Auto-select: pick_best_account already filters rate-limited, but also skip tried
+    accounts = get_accounts_for_backend_type(backend_type)
+    for acct in accounts:
+        if acct["id"] in tried:
+            continue
+        if RateLimitService.is_rate_limited(acct["id"]):
+            continue
+        eligibility = AgentSchedulerService.check_eligibility(acct["id"])
+        if not eligibility["eligible"]:
+            continue
+        return acct
+    return None
+
+
+def _stream_via_proxy_with_fallback(
+    messages: List[dict],
+    model: str,
+    proxy_base: str,
+    proxy_key: str,
+    account_email: str | None,
+    backend_type: str,
+) -> Generator[str, None, None]:
+    """Stream via proxy with automatic account fallback on rate limit or auth error.
+
+    Uses RateLimitService + AgentSchedulerService (same infra as OrchestrationService)
+    to select accounts and mark rate-limited ones. On 429/401/403, marks the account
+    and retries with the next eligible account.
+    """
+    from .rate_limit_service import RateLimitService
+
+    tried_ids: set[int] = set()
+
+    # Initial account selection
+    account = _select_streaming_account(backend_type, account_email)
+    current_email = account["email"] if account else account_email
+
+    while True:
+        if account:
+            tried_ids.add(account["id"])
+
+        logger.info(
+            "Streaming via CLIProxyAPI at %s (backend=%s, account=%s)",
+            proxy_base, backend_type, current_email,
+        )
+
+        try:
+            yield from _stream_via_proxy(
+                messages, model, proxy_base, proxy_key, current_email
+            )
+            return
+        except ProxyAccountError as e:
+            logger.warning(
+                "Account %s failed (HTTP %d): %s — trying fallback",
+                current_email, e.status_code, e.detail,
+            )
+            if account:
+                # 429 = rate limit cooldown; 401/403 = longer cooldown (expired token)
+                cooldown = 300 if e.status_code == 429 else 3600
+                RateLimitService.mark_rate_limited(account["id"], cooldown)
+
+            # Try next eligible account
+            account = _select_streaming_account(backend_type, None, tried_ids)
+            if account:
+                current_email = account["email"]
+                logger.info("Falling back to account %s", current_email)
+                continue
+
+            yield (
+                f"\n\n[All {backend_type} accounts are unavailable "
+                f"(rate-limited or auth expired). Please try again later.]"
+            )
+            return
+
+
 def _stream_via_proxy(
     messages: List[dict],
     model: str,
@@ -378,6 +490,12 @@ def _stream_via_proxy(
                 raw = response.read()
                 error_detail = _extract_proxy_error(raw, response.status_code)
                 logger.error("Proxy error %d: %s", response.status_code, error_detail)
+
+                # Account-level errors — raise so caller can try another account
+                if response.status_code in (429, 401, 403) or "rate" in error_detail.lower():
+                    raise ProxyAccountError(
+                        error_detail, response.status_code, account_email
+                    )
 
                 # Detect "unknown provider" and guide the user to register the backend
                 if "unknown provider" in error_detail.lower():

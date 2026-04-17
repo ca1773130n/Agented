@@ -18,7 +18,7 @@ import time
 import uuid
 from queue import Empty, Queue
 from typing import Dict, Generator, List, Optional
-from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
+from urllib.parse import parse_qs, quote, urlencode, urlparse, urlunparse
 
 from .pty_service import strip_ansi
 
@@ -29,7 +29,7 @@ INPUT_TIMEOUT_SECONDS = 300
 
 # CLI command configuration per backend type
 BACKEND_CLI_COMMANDS = {
-    "claude": {"login": ["claude", "/login"], "usage": ["claude", "/usage"]},
+    "claude": {"login": ["claude", "auth", "login", "--claudeai"], "usage": ["claude", "/usage"]},
     "codex": {"login": ["codex", "login", "--device-auth"], "usage": ["codex", "usage"]},
     "gemini": {"login": ["gemini"]},
 }
@@ -104,6 +104,8 @@ class BackendCLIService:
     _subscribers: Dict[str, List[Queue]] = {}
     # Current pending question per session_id (for reconnect)
     _current_question: Dict[str, dict] = {}
+    # Last captured OAuth URL per session_id (for reconnect)
+    _last_oauth_url: Dict[str, str] = {}
     # Lock for thread-safe operations
     _lock = threading.Lock()
     # Cleanup timers: {session_id: Timer}
@@ -147,6 +149,10 @@ class BackendCLIService:
         if not cmd_list:
             raise ValueError(f"Unsupported action '{action}' for backend '{backend_type}'")
 
+        # Pre-fill email for correct account selection on Claude sign-in page
+        if backend_type == "claude" and action == "login" and email:
+            cmd_list = list(cmd_list) + ["--email", email]
+
         session_id = f"cli-{uuid.uuid4().hex[:8]}"
         logger.info(
             "Starting CLI session %s: type=%s action=%s config_path=%r",
@@ -158,11 +164,14 @@ class BackendCLIService:
 
         # Create fake browser script BEFORE fork so parent knows the URL file path
         import tempfile as _tf
+
         _url_dir = _tf.mkdtemp(prefix="agented-oauth-")
         _url_file = os.path.join(_url_dir, "url.txt")
         _fake_browser = os.path.join(_url_dir, "browser")
         with open(_fake_browser, "w") as _fb:
-            _fb.write(f'#!/bin/sh\necho "$1" >> {_url_file}\nsleep 300 &\n')
+            # Echo URL to stdout (flows through PTY, keeps idle timer reset)
+            # AND write to file (clean URL for file-based capture)
+            _fb.write(f'#!/bin/sh\necho "$1" >> {_url_file}\necho "$1"\nsleep 300 &\n')
         os.chmod(_fake_browser, 0o755)
 
         # Open a pseudo-terminal so the CLI sees a real TTY
@@ -170,6 +179,7 @@ class BackendCLIService:
         master_fd, slave_fd = pty.openpty()
         # Set very wide terminal so URLs don't get wrapped/corrupted
         import fcntl, struct, termios
+
         winsize = struct.pack("HHHH", 50, 500, 0, 0)  # rows=50, cols=500
         try:
             fcntl.ioctl(slave_fd, termios.TIOCSWINSZ, winsize)
@@ -306,14 +316,18 @@ class BackendCLIService:
                                 if _line.startswith("http"):
                                     logger.info(
                                         "CLI %s: OAuth URL (from file): %s…",
-                                        session_id, _line[:80],
+                                        session_id,
+                                        _line[:80],
                                     )
+                                    rewritten = cls._rewrite_oauth_url(session_id, _line)
+                                    with cls._lock:
+                                        cls._last_oauth_url[session_id] = rewritten
                                     cls._broadcast(
                                         session_id,
                                         "oauth_url",
                                         {
-                                            "url": _line,
-                                            "content": _line,
+                                            "url": rewritten,
+                                            "content": rewritten,
                                             "timestamp": datetime.datetime.now().isoformat(),
                                         },
                                     )
@@ -329,6 +343,16 @@ class BackendCLIService:
 
                 if not ready:
                     idle_ticks += 1
+                    # Flush pending OAuth URL after 2s idle
+                    if pending_oauth_url is not None and idle_ticks >= 2:
+                        rewritten_url = cls._rewrite_oauth_url(session_id, pending_oauth_url)
+                        logger.info("CLI %s: OAuth URL (flushed): %s…", session_id, rewritten_url[:80])
+                        cls._broadcast(
+                            session_id, "oauth_url",
+                            {"url": rewritten_url, "content": rewritten_url,
+                             "timestamp": datetime.datetime.now().isoformat()},
+                        )
+                        pending_oauth_url = None
                     # After 2s of idle with accumulated lines, check for multi-line menus
                     if idle_ticks >= 2 and recent_lines:
                         interaction = cls._try_parse_menu(recent_lines)
@@ -380,13 +404,18 @@ class BackendCLIService:
                     # Force-complete login sessions when:
                     # (a) explicit success pattern detected + 2s idle, or
                     # (b) at least 1 interaction handled + 10s idle (CLI returned to REPL)
+                    # When OAuth URL was sent, only complete on login_completed
+                    # (not on idle timeout — CLI needs to stay alive for callback).
                     if action_started and not has_pending_options:
                         with cls._lock:
                             session = cls._sessions.get(session_id, {})
                         if session.get("action") == "login":
-                            if (login_completed and idle_ticks >= 2) or (
-                                interaction_count >= 1 and idle_ticks >= 10
-                            ):
+                            can_complete = False
+                            if login_completed and idle_ticks >= 2:
+                                can_complete = True  # Auth succeeded
+                            elif not _oauth_url_sent and interaction_count >= 1 and idle_ticks >= 10:
+                                can_complete = True  # No OAuth, just idle
+                            if can_complete:
                                 logger.info(
                                     "CLI %s: login done (success_detected=%s, "
                                     "interactions=%d, idle=%ds), terminating",
@@ -480,6 +509,28 @@ class BackendCLIService:
                         if _SPINNER_RE.match(stripped):
                             continue
 
+                        # Detect OAuth/auth URLs in PTY output and auto-open in browser
+                        if not _oauth_url_sent:
+                            url_match = OAUTH_URL_PATTERN.search(stripped)
+                            if url_match:
+                                detected_url = url_match.group(1).rstrip(".,;:)")
+                                detected_url = cls._rewrite_oauth_url(session_id, detected_url)
+                                logger.info(
+                                    "CLI %s: OAuth URL detected in output: %s",
+                                    session_id,
+                                    detected_url[:80],
+                                )
+                                cls._broadcast(
+                                    session_id,
+                                    "oauth_url",
+                                    {
+                                        "url": detected_url,
+                                        "content": detected_url,
+                                        "timestamp": datetime.datetime.now().isoformat(),
+                                    },
+                                )
+                                _oauth_url_sent = True
+
                         # Track recent lines for multi-line menu detection
                         recent_lines.append(stripped)
                         if len(recent_lines) > 15:
@@ -507,6 +558,52 @@ class BackendCLIService:
 
                         # OAuth URLs are captured via the fake browser file
                         # (not PTY output) to avoid TUI corruption.
+
+                        # Detect "paste code" prompts explicitly — the CLI
+                        # outputs this as a line without trailing >, so the
+                        # generic > pattern doesn't match.
+                        # Also detect Claude v2 CLI "browser didn't open" — it
+                        # silently waits for stdin after this line, no prompt.
+                        is_paste_prompt = (
+                            "paste code" in stripped.lower()
+                            or "paste the" in stripped.lower()
+                            or "browser didn't open" in stripped.lower()
+                            or "if the browser didn" in stripped.lower()
+                        )
+                        if is_paste_prompt:
+                            # Extract OAuth URL from the same line and broadcast
+                            # it BEFORE blocking the reader (so frontend can
+                            # auto-open the browser).
+                            url_match = re.search(r"https://\S+", stripped)
+                            logger.info(
+                                "CLI %s: paste prompt line=%r url_found=%s",
+                                session_id, stripped[:200], bool(url_match),
+                            )
+                            if url_match:
+                                url = url_match.group(0)
+                                logger.info("CLI %s: OAuth URL (inline): %s", session_id, url[:200])
+                                with cls._lock:
+                                    cls._last_oauth_url[session_id] = url
+                                cls._broadcast(
+                                    session_id, "oauth_url",
+                                    {
+                                        "url": url,
+                                        "content": url,
+                                        "timestamp": datetime.datetime.now().isoformat(),
+                                    },
+                                )
+                                _oauth_url_sent = True
+                            interaction = {
+                                "question_type": "text",
+                                "prompt": "Paste the authorization code from the sign-in page",
+                                "options": None,
+                                "is_json_tool_use": False,
+                            }
+                            logger.info("CLI %s: detected paste-code prompt: %r", session_id, stripped[:80])
+                            recent_lines.clear()
+                            cls._handle_interaction(session_id, master_fd, interaction)
+                            interaction_count += 1
+                            continue
 
                         # Try to parse as single-line interaction
                         interaction = cls._try_parse_interaction(stripped)
@@ -541,10 +638,36 @@ class BackendCLIService:
                             },
                         )
 
-                        # Check for login success patterns
-                        # (Gemini auth code handling removed — TUI input
-                        # doesn't work through PTY for auth code entry)
+                        # OAuth URL accumulation (restored from original code)
+                        if pending_oauth_url is not None:
+                            if _URL_CONTINUATION_RE.match(stripped):
+                                pending_oauth_url += stripped
+                                continue
+                            else:
+                                rewritten_url = cls._rewrite_oauth_url(
+                                    session_id, pending_oauth_url
+                                )
+                                logger.info(
+                                    "CLI %s: OAuth URL (assembled): %s…",
+                                    session_id, rewritten_url[:80],
+                                )
+                                cls._broadcast(
+                                    session_id, "oauth_url",
+                                    {
+                                        "url": rewritten_url,
+                                        "content": rewritten_url,
+                                        "timestamp": datetime.datetime.now().isoformat(),
+                                    },
+                                )
+                                pending_oauth_url = None
 
+                        # Check for OAuth URLs (start of a new URL)
+                        url_match = OAUTH_URL_PATTERN.search(stripped)
+                        if url_match:
+                            pending_oauth_url = url_match.group(1)
+                            continue
+
+                        # Check for login success patterns
                         if not login_completed and _LOGIN_SUCCESS_RE.search(stripped):
                             logger.info(
                                 "CLI %s: login success detected: %s",
@@ -566,8 +689,7 @@ class BackendCLIService:
                             and "Type your message" in stripped
                         ):
                             logger.info(
-                                "CLI %s: Gemini signed in + REPL ready, "
-                                "force-completing",
+                                "CLI %s: Gemini signed in + REPL ready, force-completing",
                                 session_id,
                             )
                             try:
@@ -583,9 +705,7 @@ class BackendCLIService:
                             except ChildProcessError:
                                 pass
                             cls._auto_save_account(session_id)
-                            cls._finish_session(
-                                session_id, "completed", 0, None
-                            )
+                            cls._finish_session(session_id, "completed", 0, None)
                             return
 
                 # Auto-accept Gemini TUI dialogs — these use box-drawing chars
@@ -593,19 +713,21 @@ class BackendCLIService:
                 # The ● marker indicates an option is pre-selected; Enter accepts.
                 recent_text = " ".join(recent_lines[-8:])
                 session = cls._sessions.get(session_id, {})
-                if session.get("backend_type") == "gemini" and "●" in recent_text and (
-                    # Trust folder dialog
-                    "Trust folder" in recent_text
-                    # Auth method selection (Google login is default)
-                    or "Use Enter to select" in recent_text
-                    # Terms of service acceptance
-                    or "Terms of Service" in recent_text
-                    # "Do you want to continue?" browser open confirmation
-                    or "Do you want to continue" in recent_text
-                ):
-                    logger.info(
-                        "CLI %s: auto-accepting Gemini TUI dialog", session_id
+                if (
+                    session.get("backend_type") == "gemini"
+                    and "●" in recent_text
+                    and (
+                        # Trust folder dialog
+                        "Trust folder" in recent_text
+                        # Auth method selection (Google login is default)
+                        or "Use Enter to select" in recent_text
+                        # Terms of service acceptance
+                        or "Terms of Service" in recent_text
+                        # "Do you want to continue?" browser open confirmation
+                        or "Do you want to continue" in recent_text
                     )
+                ):
+                    logger.info("CLI %s: auto-accepting Gemini TUI dialog", session_id)
                     os.write(master_fd, b"\r")
                     recent_lines.clear()
                     idle_ticks = 0
@@ -812,7 +934,8 @@ class BackendCLIService:
             if any(a.get("account_name") == account_name for a in existing):
                 logger.info(
                     "CLI %s: account '%s' already exists, skipping auto-save",
-                    session_id, account_name,
+                    session_id,
+                    account_name,
                 )
                 return
 
@@ -828,7 +951,9 @@ class BackendCLIService:
             )
             logger.info(
                 "CLI %s: auto-saved account '%s' for backend '%s'",
-                session_id, account_name, backend_id,
+                session_id,
+                account_name,
+                backend_id,
             )
 
             # Trigger CLIProxyAPI login in background for this account
@@ -842,19 +967,25 @@ class BackendCLIService:
                         from ..services.cliproxy_manager import CLIProxyManager
 
                         proc, auth_info = CLIProxyManager.start_login(
-                            backend_type=backend_type, config_dir=config_path,
+                            backend_type=backend_type,
+                            config_dir=config_path,
                         )
                         url = auth_info.get("url", "")
                         if url:
                             logger.info(
                                 "CLI %s: CLIProxyAPI login started for '%s'",
-                                session_id, account_name,
+                                session_id,
+                                account_name,
                             )
                             # Broadcast the proxy OAuth URL so frontend can open it
-                            cls._broadcast(session_id, "proxy_oauth_url", {
-                                "url": url,
-                                "account_name": account_name,
-                            })
+                            cls._broadcast(
+                                session_id,
+                                "proxy_oauth_url",
+                                {
+                                    "url": url,
+                                    "account_name": account_name,
+                                },
+                            )
                         try:
                             proc.wait(timeout=60)
                         except subprocess.TimeoutExpired:
@@ -869,7 +1000,9 @@ class BackendCLIService:
         except Exception as e:
             logger.warning(
                 "CLI %s: failed to auto-save account '%s': %s",
-                session_id, account_name, e,
+                session_id,
+                account_name,
+                e,
             )
 
     @classmethod
@@ -899,6 +1032,7 @@ class BackendCLIService:
         with cls._lock:
             session_info = cls._sessions.pop(session_id, {})
             cls._current_question.pop(session_id, None)
+            cls._last_oauth_url.pop(session_id, None)
 
             cls._completed[session_id] = {
                 "session_id": session_id,
@@ -1120,9 +1254,19 @@ class BackendCLIService:
                 cls._subscribers[session_id] = []
             cls._subscribers[session_id].append(queue)
 
+            # Replay last OAuth URL (handles late subscriber)
+            last_url = cls._last_oauth_url.get(session_id)
             # If there's a current question pending, re-send it (handles reconnect)
-            if session_id in cls._current_question:
-                yield cls._format_sse("question", cls._current_question[session_id])
+            pending_question = cls._current_question.get(session_id)
+
+        if last_url:
+            yield cls._format_sse("oauth_url", {
+                "url": last_url,
+                "content": last_url,
+                "timestamp": datetime.datetime.now().isoformat(),
+            })
+        if pending_question:
+            yield cls._format_sse("question", pending_question)
 
         # Check if session is already complete
         with cls._lock:
@@ -1253,21 +1397,20 @@ class BackendCLIService:
 
     @classmethod
     def _rewrite_oauth_url(cls, session_id: str, oauth_url: str) -> str:
-        """Extract callback port from OAuth URL. Returns the URL unchanged.
+        """Extract callback port from OAuth URL for the proxy forwarder.
 
-        We do NOT modify the URL (no login_hint, no re-encoding) because
-        re-encoding query params corrupts scope values and causes 400 errors.
+        Does NOT rewrite the redirect_uri — providers (Anthropic, Google)
+        reject non-localhost redirects. The URL is returned unchanged.
         """
         try:
-            parsed = urlparse(oauth_url)
-            qs = parse_qs(parsed.query, keep_blank_values=True)
+            qs = parse_qs(urlparse(oauth_url).query, keep_blank_values=True)
             redirect_uri_list = qs.get("redirect_uri")
             if redirect_uri_list:
-                redirect_parsed = urlparse(redirect_uri_list[0])
-                callback_port = redirect_parsed.port or 54545
+                callback_port = urlparse(redirect_uri_list[0]).port or 54545
                 with cls._lock:
                     if session_id in cls._sessions:
                         cls._sessions[session_id]["callback_port"] = callback_port
+                cls.set_callback_port(callback_port)
         except Exception as exc:
             logger.warning("CLI %s: failed to parse OAuth URL: %s", session_id, exc)
         return oauth_url
@@ -1277,9 +1420,14 @@ class BackendCLIService:
         """Broadcast an SSE event to all subscribers."""
         message = cls._format_sse(event_type, data)
         with cls._lock:
-            if session_id in cls._subscribers:
-                for q in cls._subscribers[session_id]:
-                    q.put(message)
+            subs = cls._subscribers.get(session_id, [])
+            if event_type == "oauth_url":
+                logger.info(
+                    "CLI %s: BROADCAST oauth_url to %d subscribers",
+                    session_id, len(subs),
+                )
+            for q in subs:
+                q.put(message)
 
     @staticmethod
     def _format_sse(event_type: str, data: dict) -> str:
