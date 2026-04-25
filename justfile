@@ -157,6 +157,10 @@ deploy: kill ensure-backend build
     #!/usr/bin/env bash
     set -euo pipefail
     [ -f .node-path ] && source .node-path
+    # Clear Vite's dep cache so locally-linked @ai-accounts/* packages
+    # (file:../../ai-accounts/packages/*) are re-bundled on every deploy.
+    # Vite treats file: deps as library code and caches them aggressively.
+    rm -rf frontend/node_modules/.vite
     echo "Frontend: http://localhost:3000"
     echo "Backend API: http://localhost:20000"
     echo "Sidecar: http://localhost:20001"
@@ -186,9 +190,14 @@ generate-key *ARGS: ensure-backend
 kill:
     -lsof -ti:3000,20000,20001 2>/dev/null | xargs -r kill -9 2>/dev/null || true
 
-# Reset onboarding: wipe DB, restart fresh (localStorage auto-clears on welcome page)
+# Reset onboarding: wipe DBs + per-account isolation dirs, restart fresh
+# (localStorage auto-clears on welcome page). The sidecar owns
+# ai_accounts.db and backend_dirs/bkd-*; wiping only agented.db left the
+# wizard "already has accounts" state intact and CLI auth still valid.
 reset: kill
     rm -f backend/agented.db backend/agented.db-wal backend/agented.db-shm
+    rm -f backend/ai_accounts.db backend/ai_accounts.db-wal backend/ai_accounts.db-shm
+    rm -rf backend/backend_dirs
     @echo "Reset complete. Run: just deploy"
 
 # Clean build artifacts
