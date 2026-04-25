@@ -1178,14 +1178,20 @@ onUnmounted(() => {
 }
 
 .btn-outline {
-  background: transparent;
-  color: var(--text-secondary);
-  border: 1px solid var(--border-default);
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  border: 1px solid var(--border-strong);
+  font-weight: 500;
 }
 
 .btn-outline:hover {
-  background: var(--bg-tertiary);
+  background: var(--bg-elevated);
+  border-color: var(--accent-cyan);
   color: var(--text-primary);
+}
+
+.btn-outline:active {
+  transform: translateY(1px);
 }
 
 .btn-danger {
