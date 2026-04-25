@@ -140,32 +140,24 @@ def _migrate_legacy_backends(legacy_db: str, target_db: str) -> None:
     finally:
         target.close()
 
-# Use ApiKeyAuth if AI_ACCOUNTS_API_KEY is set; fall back to Flask's admin key
-# from agented.db; only fall back to NoAuth when the operator explicitly opts
-# in via AI_ACCOUNTS_ALLOW_NOAUTH=1.  The previous fallback queried
-# ``settings`` for an ``api_key`` row that has never existed in this codebase,
-# so the sidecar silently ran with NoAuth even when Flask was properly keyed.
-_api_key = os.environ.get("AI_ACCOUNTS_API_KEY")
+# Pick an auth strategy.
+#
+# Priority:
+#   1. ``AI_ACCOUNTS_API_KEY`` env — explicit static token, always authed.
+#   2. Static snapshot from agented.db's ``user_roles`` table (legacy:
+#      previous fallback queried ``settings.api_key`` which never existed,
+#      so the sidecar silently ran with NoAuth even when Flask was
+#      properly keyed — H3 in code review).
+#   3. ``LazyFlaskKeyAuth`` — re-reads ``user_roles`` on each request.
+#      This makes the sidecar bootable BEFORE Flask has been keyed: it
+#      refuses every request until the welcome page inserts a row, and
+#      auto-picks up the new key on the very next request without needing
+#      a restart.  Without this, ``just deploy`` on a fresh DB would race
+#      and the user would see "no API key available" exits.
+#   4. ``NoAuth`` only when the operator explicitly opts in via
+#      ``AI_ACCOUNTS_ALLOW_NOAUTH=1`` (localhost-only dev mode).
 _legacy_db_path = os.path.join(os.path.dirname(__file__), "..", "agented.db")
-if not _api_key:
-    try:
-        if os.path.exists(_legacy_db_path):
-            conn = sqlite3.connect(_legacy_db_path)
-            try:
-                # Prefer the admin role's key; fall back to any key.
-                row = conn.execute(
-                    "SELECT api_key FROM user_roles "
-                    "WHERE api_key IS NOT NULL "
-                    "ORDER BY CASE role WHEN 'admin' THEN 0 ELSE 1 END "
-                    "LIMIT 1"
-                ).fetchone()
-            except sqlite3.Error:
-                row = None
-            conn.close()
-            if row and row[0]:
-                _api_key = row[0]
-    except Exception:
-        pass
+_env_api_key = os.environ.get("AI_ACCOUNTS_API_KEY")
 
 # Best-effort migration from the pre-split schema. Safe to call on every
 # boot: no-ops once the target table has any rows.
@@ -174,8 +166,59 @@ try:
 except Exception as exc:  # pragma: no cover — migration must never crash boot
     logger.warning("legacy backend migration failed: %s", exc)
 
-if _api_key:
-    auth = ApiKeyAuth(token=_api_key)
+
+class LazyFlaskKeyAuth:
+    """Auth strategy that mirrors Flask's ``user_roles`` admin keys on
+    every request.  Lets the sidecar boot before Flask has been keyed
+    (returns 401 until a row appears) and auto-picks up new keys without
+    a restart.  Bearer-token only, like :class:`ApiKeyAuth`.
+    """
+
+    _PREFIX = "bearer "
+
+    def __init__(self, db_path: str) -> None:
+        self._db_path = db_path
+        from ai_accounts_core.domain.principal import Principal
+
+        self._principal = Principal(
+            id="api_key", display_name="API Key", scopes=frozenset({"*"})
+        )
+
+    def _allowed_keys(self) -> set[str]:
+        if not os.path.exists(self._db_path):
+            return set()
+        try:
+            conn = sqlite3.connect(self._db_path)
+        except sqlite3.Error:
+            return set()
+        try:
+            try:
+                rows = conn.execute(
+                    "SELECT api_key FROM user_roles WHERE api_key IS NOT NULL"
+                ).fetchall()
+            except sqlite3.Error:
+                return set()
+        finally:
+            conn.close()
+        return {r[0] for r in rows if r and r[0]}
+
+    async def authenticate(self, request):
+        import hmac
+
+        header = request.headers.get("authorization") or request.headers.get(
+            "Authorization"
+        )
+        if not header or not header.lower().startswith(self._PREFIX):
+            return None
+        presented = header[len(self._PREFIX) :]
+        for stored in self._allowed_keys():
+            if hmac.compare_digest(presented, stored):
+                return self._principal
+        return None
+
+
+if _env_api_key:
+    auth = ApiKeyAuth(token=_env_api_key)
 elif os.environ.get("AI_ACCOUNTS_ALLOW_NOAUTH") == "1":
     logger.warning(
         "ai-accounts: AI_ACCOUNTS_ALLOW_NOAUTH=1 — running with NoAuth. "
@@ -184,11 +227,12 @@ elif os.environ.get("AI_ACCOUNTS_ALLOW_NOAUTH") == "1":
     )
     auth = NoAuth()
 else:
-    raise SystemExit(
-        "ai-accounts: no API key available. Set AI_ACCOUNTS_API_KEY in the "
-        "environment, generate an admin key via the Welcome page "
-        "(http://localhost:3000/welcome), or opt in to unauthenticated dev "
-        "mode with AI_ACCOUNTS_ALLOW_NOAUTH=1 (localhost-only)."
+    auth = LazyFlaskKeyAuth(_legacy_db_path)
+    logger.info(
+        "ai-accounts: using LazyFlaskKeyAuth — every request validates "
+        "against agented.db's user_roles. Sidecar will refuse traffic "
+        "until the welcome page generates an admin key (or until "
+        "AI_ACCOUNTS_API_KEY is set in the environment)."
     )
 
 app = create_app(
