@@ -9,6 +9,13 @@ import { fileURLToPath } from 'node:url'
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd())
   const allowedHosts = env.VITE_ALLOWED_HOSTS?.split(',').filter(Boolean) || []
+  // Dev server binds to localhost by default — the Vite proxy forwards
+  // /api/v1 to the ai-accounts sidecar (which manages CLI credentials and
+  // auth tokens). Binding to 0.0.0.0 would expose those endpoints to the
+  // LAN. Opt in explicitly with VITE_HOST=0.0.0.0 when you really need
+  // LAN access (demos, headless VMs); also set VITE_ALLOWED_HOSTS and
+  // AI_ACCOUNTS_API_KEY in that mode so the proxy isn't unauthenticated.
+  const host = env.VITE_HOST || '127.0.0.1'
 
   return {
     plugins: [
@@ -19,7 +26,7 @@ export default defineConfig(({ mode }) => {
       }),
     ],
     server: {
-      host: '0.0.0.0',
+      host,
       port: 3000,
       strictPort: true,
       allowedHosts: allowedHosts.length ? allowedHosts : true,

@@ -140,17 +140,29 @@ def _migrate_legacy_backends(legacy_db: str, target_db: str) -> None:
     finally:
         target.close()
 
-# Use ApiKeyAuth if AI_ACCOUNTS_API_KEY is set; fall back to NoAuth in dev
+# Use ApiKeyAuth if AI_ACCOUNTS_API_KEY is set; fall back to Flask's admin key
+# from agented.db; only fall back to NoAuth when the operator explicitly opts
+# in via AI_ACCOUNTS_ALLOW_NOAUTH=1.  The previous fallback queried
+# ``settings`` for an ``api_key`` row that has never existed in this codebase,
+# so the sidecar silently ran with NoAuth even when Flask was properly keyed.
 _api_key = os.environ.get("AI_ACCOUNTS_API_KEY")
 _legacy_db_path = os.path.join(os.path.dirname(__file__), "..", "agented.db")
 if not _api_key:
-    # In dev, try to read the same key Flask uses from agented.db settings
     try:
         if os.path.exists(_legacy_db_path):
             conn = sqlite3.connect(_legacy_db_path)
-            row = conn.execute("SELECT value FROM settings WHERE key = 'api_key'").fetchone()
+            try:
+                # Prefer the admin role's key; fall back to any key.
+                row = conn.execute(
+                    "SELECT api_key FROM user_roles "
+                    "WHERE api_key IS NOT NULL "
+                    "ORDER BY CASE role WHEN 'admin' THEN 0 ELSE 1 END "
+                    "LIMIT 1"
+                ).fetchone()
+            except sqlite3.Error:
+                row = None
             conn.close()
-            if row:
+            if row and row[0]:
                 _api_key = row[0]
     except Exception:
         pass
@@ -162,7 +174,22 @@ try:
 except Exception as exc:  # pragma: no cover — migration must never crash boot
     logger.warning("legacy backend migration failed: %s", exc)
 
-auth = ApiKeyAuth(token=_api_key) if _api_key else NoAuth()
+if _api_key:
+    auth = ApiKeyAuth(token=_api_key)
+elif os.environ.get("AI_ACCOUNTS_ALLOW_NOAUTH") == "1":
+    logger.warning(
+        "ai-accounts: AI_ACCOUNTS_ALLOW_NOAUTH=1 — running with NoAuth. "
+        "ALL requests authenticated as 'local'. Never expose port 20001 "
+        "or its Vite /api/v1 proxy outside localhost in this mode."
+    )
+    auth = NoAuth()
+else:
+    raise SystemExit(
+        "ai-accounts: no API key available. Set AI_ACCOUNTS_API_KEY in the "
+        "environment, generate an admin key via the Welcome page "
+        "(http://localhost:3000/welcome), or opt in to unauthenticated dev "
+        "mode with AI_ACCOUNTS_ALLOW_NOAUTH=1 (localhost-only)."
+    )
 
 app = create_app(
     AiAccountsConfig(
