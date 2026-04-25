@@ -47,6 +47,13 @@ const tourSubstepLabel = computed(() => TOUR_STEP_MAP[tour.currentStep.value]?.s
 const tourGuideOverride = ref<string | null>(null);
 provide('setTourGuide', (msg: string | null) => { tourGuideOverride.value = msg; });
 
+// Dynamic title override — sub-step components (e.g. AccountWizard) can
+// replace the static tour-step title (e.g. "AI backend account") with a
+// per-substep title ("Pick subscription", "Sign in", "Save the account")
+// so the tooltip header reflects what the user is actually doing.
+const tourTitleOverride = ref<string | null>(null);
+provide('setTourTitle', (title: string | null) => { tourTitleOverride.value = title; });
+
 // Dynamic target override — components (e.g. AccountWizard) can redirect the spotlight
 const tourTargetOverride = ref<string | null>(null);
 provide('setTourTarget', (selector: string | null) => { tourTargetOverride.value = selector; });
@@ -54,13 +61,18 @@ provide('setTourTarget', (selector: string | null) => { tourTargetOverride.value
 // Reset overrides when step changes
 watch(() => tour.currentStep.value, () => {
   tourGuideOverride.value = null;
+  tourTitleOverride.value = null;
   tourTargetOverride.value = null;
 });
 
 const tourStepWithGuide = computed(() => {
   if (!tourStep.value) return null;
-  if (!tourGuideOverride.value) return tourStep.value;
-  return { ...tourStep.value, message: tourGuideOverride.value };
+  if (!tourGuideOverride.value && !tourTitleOverride.value) return tourStep.value;
+  return {
+    ...tourStep.value,
+    message: tourGuideOverride.value ?? tourStep.value.message,
+    title: tourTitleOverride.value ?? tourStep.value.title,
+  };
 });
 
 // Tour completion screen
