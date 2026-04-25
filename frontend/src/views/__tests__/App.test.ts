@@ -43,7 +43,6 @@ vi.mock('../../composables/useTourMachine', () => ({
     completeTour: vi.fn(),
     restartTour: vi.fn(),
     clearTourState: vi.fn(),
-    checkAndAutoAdvance: vi.fn(),
   }),
 }));
 

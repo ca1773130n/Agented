@@ -20,12 +20,17 @@ app.use(i18n)
  * The Litestar sidecar listens on :20001; Vite proxies /api/v1/* to it so
  * relative URLs work in both dev and production. The plugin's `onEvent`
  * forwards every event to the Agented tour state machine via
- * `notifyAiAccountsEvent` so that advancing past the "add a Claude account"
- * tour step no longer requires a full page reload.
+ * `notifyAiAccountsEvent`, which currently treats events as observational
+ * only — tour advancement past a backend step happens exclusively via
+ * the wizard's "다음 백엔드" button (`onWizardDone → tourMachine.nextStep()`).
+ * Earlier versions auto-advanced on `login.completed` / `wizard.account.created`
+ * and that is exactly what caused the "skips to next backend after paste
+ * code" bug, so do NOT reintroduce auto-advance in that bridge.
  *
  * The `token` is sourced from localStorage via `getApiKey()`. On first load
- * (before the welcome page generates a key) it will be undefined and the
- * sidecar's NoAuth fallback handles unauthenticated requests.
+ * (before the welcome page generates a key) it is undefined; the sidecar
+ * refuses unauthenticated requests unless `AI_ACCOUNTS_ALLOW_NOAUTH=1` is
+ * set in the environment (localhost-only dev mode).
  */
 const aiAccountsClient = new AiAccountsClient({
   baseUrl: '',
