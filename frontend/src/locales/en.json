@@ -201,13 +201,17 @@
         }
       },
       "login": {
-        "preparing": {
-          "title": "Preparing sign-in",
-          "message": "The CLI is booting in the background. Wait ~5 seconds for the OAuth URL to appear here; your browser opens automatically."
+        "booting": {
+          "title": "Starting the CLI — pick your account type",
+          "message": "The CLI is booting in the background. While it starts, decide which login type fits your account: Pro / Max / Team subscription → \"subscription\". API usage billing (sk-ant-… / sk-… key) → \"API key\". 3rd-party platform (Bedrock / Foundry / Vertex AI) → \"3rd-party\". A menu appears in a moment with these options."
+        },
+        "pickMethod": {
+          "title": "Pick how you sign in",
+          "message": "Click the option that matches your account: option 1 = subscription (Pro / Max / Team), option 2 = API key billing, option 3 = 3rd-party platform. The browser will open right after."
         },
         "authorize": {
           "title": "Authorize in your browser",
-          "message": "If your browser didn't open, click this URL. Sign in with the email from step 1 and click Authorize."
+          "message": "A browser tab has opened. Sign in with the email from step 1 and click Authorize. If the tab didn't open, click this URL."
         },
         "paste": {
           "title": "Paste the authorization code",
