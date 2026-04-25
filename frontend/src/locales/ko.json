@@ -167,6 +167,100 @@
     "stepLogin": "로그인",
     "stepPlanSave": "플랜 & 저장",
     "stepDone": "완료",
+    "tour": {
+      "sub": {
+        "yesno": {
+          "title": "계정이 있으신가요?",
+          "message": "이 백엔드의 Claude / Codex / Gemini 계정이 이미 있는지 선택하세요."
+        },
+        "name": {
+          "title": "계정 이름 정하기",
+          "message": "나중에 계정을 구분할 수 있도록 이름을 입력하세요 (예: \"개인\", \"회사\"). 비워두면 기본값을 사용해요."
+        },
+        "email": {
+          "title": "계정 이메일",
+          "message": "이 계정에 사용하는 이메일을 입력하세요. 로그인 페이지에 login_hint로 전달돼요."
+        },
+        "next": {
+          "title": "CLI 확인 단계로",
+          "message": "계속하기를 클릭하세요 — CLI 설치 여부를 확인하고 2단계로 넘어가요."
+        }
+      },
+      "cli": {
+        "status": {
+          "title": "CLI 설치 확인",
+          "message": "CLI가 설치되어 있는지 확인하세요. 설치되어 있지 않으면 옆의 \"설치\" 버튼이 자동으로 받아줘요."
+        },
+        "path": {
+          "title": "설정 디렉토리 확인",
+          "message": "이 계정 전용 설정 폴더예요. 다음 단계에서 자동으로 만들어요. 다른 경로를 쓰려면 \"경로 직접 입력\"을 클릭하세요."
+        },
+        "next": {
+          "title": "CLI 실행",
+          "message": "계속하기를 클릭하세요 — 백그라운드에서 CLI를 실행하고 3단계(로그인)로 넘어가요."
+        }
+      },
+      "login": {
+        "preparing": {
+          "title": "로그인 준비 중",
+          "message": "백그라운드에서 CLI가 부팅 중이에요. 약 5초 후 OAuth URL이 여기 나타나고 브라우저가 자동으로 열려요."
+        },
+        "authorize": {
+          "title": "브라우저에서 승인",
+          "message": "브라우저가 자동으로 열리지 않았다면 이 URL을 클릭하세요. 1단계의 이메일로 로그인한 뒤 \"승인\"을 클릭하세요."
+        },
+        "paste": {
+          "title": "인증 코드 붙여넣기",
+          "message": "리디렉션 페이지의 코드를 복사해 여기에 붙여넣고 Send를 클릭하세요. 약 5–10초 동안 검증해요."
+        }
+      },
+      "proxy": {
+        "install": {
+          "title": "CLIProxyAPI 설치",
+          "message": "프록시가 설치되어 있지 않으면 Install을 클릭하고 기다리세요. 다른 도구가 OpenAI 호환 엔드포인트로 이 계정에 접근할 수 있게 해줘요."
+        },
+        "start": {
+          "title": "프록시에 등록",
+          "message": "\"Start proxy registration\"을 클릭해서 시작하세요. 프록시 OAuth용 브라우저 탭이 열려요."
+        },
+        "callback": {
+          "title": "콜백 URL 붙여넣기",
+          "message": "브라우저 주소창의 전체 localhost 콜백 URL을 복사해 여기에 붙여넣고 Submit을 클릭하세요. 리디렉션 페이지에 \"connection refused\"가 떠도 정상이에요."
+        },
+        "skip": {
+          "title": "프록시 건너뛰기",
+          "message": "프록시가 필요 없다면 Skip을 클릭해 5단계로 바로 가세요."
+        }
+      },
+      "plan": {
+        "review": {
+          "title": "검토",
+          "message": "입력한 값을 확인하세요. 잘못된 부분이 있으면 이전 버튼으로 돌아가서 수정하세요."
+        },
+        "pick": {
+          "title": "플랜 선택",
+          "message": "Pro / Max / API 중에서 고르세요. CLI가 3단계에서 감지한 구독을 알려주지만 여기서 직접 바꿀 수도 있어요."
+        },
+        "default": {
+          "title": "기본 계정으로 설정 (선택)",
+          "message": "이 계정을 백엔드의 기본 계정으로 표시하려면 체크하세요."
+        },
+        "save": {
+          "title": "계정 저장",
+          "message": "계정 저장을 클릭하세요 — 계정이 저장되고 완료 화면으로 넘어가요."
+        }
+      },
+      "done": {
+        "add": {
+          "title": "다른 계정 추가?",
+          "message": "같은 백엔드에 다른 계정을 추가하려면 클릭하세요 (예: 두 번째 Claude 계정)."
+        },
+        "nextBackend": {
+          "title": "다음 백엔드로",
+          "message": "다음 백엔드(Codex / Gemini / OpenCode)로 투어를 진행하려면 클릭하세요."
+        }
+      }
+    },
     "guide": {
       "subscription": "{backend} 구독이 있으신가요? '예'를 선택하고 계정 이름을 입력해서 시작하세요.",
       "cliInstalled": "{backend} CLI가 설치되어 있어요 ({version}). 설정 디렉토리를 확인하고 계속하세요.",

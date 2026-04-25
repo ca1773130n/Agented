@@ -167,6 +167,100 @@
     "stepLogin": "Login",
     "stepPlanSave": "Plan & Save",
     "stepDone": "Done",
+    "tour": {
+      "sub": {
+        "yesno": {
+          "title": "Do you have an account?",
+          "message": "Pick whether you already have an account on this backend."
+        },
+        "name": {
+          "title": "Name this account",
+          "message": "Type a label so you can tell accounts apart later (e.g. \"Personal\", \"Work\"). Optional — leave blank to use a default."
+        },
+        "email": {
+          "title": "Account email",
+          "message": "Type the email tied to the account. We pass it as a login_hint on the sign-in page."
+        },
+        "next": {
+          "title": "Continue to CLI check",
+          "message": "Click Continue — we verify the CLI is installed and move to step 2."
+        }
+      },
+      "cli": {
+        "status": {
+          "title": "CLI install check",
+          "message": "Confirm the CLI is installed. If it isn't, the \"Install\" button will fetch it for you."
+        },
+        "path": {
+          "title": "Confirm the config directory",
+          "message": "This is the per-account config dir. We auto-create it on the next step. Click \"Customize\" if you need a different path."
+        },
+        "next": {
+          "title": "Launch the CLI",
+          "message": "Click Continue — we launch the CLI behind the scenes and move to step 3 (Sign in)."
+        }
+      },
+      "login": {
+        "preparing": {
+          "title": "Preparing sign-in",
+          "message": "The CLI is booting in the background. Wait ~5 seconds for the OAuth URL to appear here; your browser opens automatically."
+        },
+        "authorize": {
+          "title": "Authorize in your browser",
+          "message": "If your browser didn't open, click this URL. Sign in with the email from step 1 and click Authorize."
+        },
+        "paste": {
+          "title": "Paste the authorization code",
+          "message": "Copy the code from the redirect page and paste it here, then click Send. We verify it for ~5–10 s."
+        }
+      },
+      "proxy": {
+        "install": {
+          "title": "Install CLIProxyAPI",
+          "message": "If the proxy isn't installed yet, click Install and wait. The proxy lets other tools reach this account through an OpenAI-compatible endpoint."
+        },
+        "start": {
+          "title": "Register with the proxy",
+          "message": "Click Start proxy registration to begin. A browser tab opens for the proxy OAuth."
+        },
+        "callback": {
+          "title": "Paste the callback URL",
+          "message": "Copy the full localhost callback URL from your browser's address bar and paste it here, then click Submit. The redirect page may show \"connection refused\" — that's expected."
+        },
+        "skip": {
+          "title": "Skip the proxy",
+          "message": "If you don't need the proxy, click Skip to jump to step 5."
+        }
+      },
+      "plan": {
+        "review": {
+          "title": "Review",
+          "message": "Check the values you entered. If anything looks wrong, click Back to fix it."
+        },
+        "pick": {
+          "title": "Pick a plan",
+          "message": "Pro, Max, or API. The CLI told us which subscription it found in step 3 — override here if needed."
+        },
+        "default": {
+          "title": "Make it the default? (optional)",
+          "message": "Tick to mark this account as the backend's default."
+        },
+        "save": {
+          "title": "Save the account",
+          "message": "Click Save — the account is persisted and we move to the Done screen."
+        }
+      },
+      "done": {
+        "add": {
+          "title": "Add another account?",
+          "message": "Click here to add another account on the same backend (e.g. a second Claude account)."
+        },
+        "nextBackend": {
+          "title": "Move to the next backend",
+          "message": "Click here to advance the tour to the next backend (Codex / Gemini / OpenCode)."
+        }
+      }
+    },
     "guide": {
       "subscription": "Do you have a {backend} subscription? Select Yes and enter your account name to get started.",
       "cliInstalled": "{backend} CLI is installed ({version}). Review the config directory and continue.",
