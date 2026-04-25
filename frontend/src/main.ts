@@ -27,14 +27,16 @@ app.use(i18n)
  * and that is exactly what caused the "skips to next backend after paste
  * code" bug, so do NOT reintroduce auto-advance in that bridge.
  *
- * The `token` is sourced from localStorage via `getApiKey()`. On first load
- * (before the welcome page generates a key) it is undefined; the sidecar
- * refuses unauthenticated requests unless `AI_ACCOUNTS_ALLOW_NOAUTH=1` is
- * set in the environment (localhost-only dev mode).
+ * The `token` is sourced from localStorage via `getApiKey()`.  Pass the
+ * function (not its result) so the client re-reads localStorage on every
+ * request — capturing at construction time leaves the client permanently
+ * unauthenticated when boot races the welcome-page key generation, which
+ * surfaced as a single ``GET /api/v1/backends/_meta 401`` immediately
+ * after onboarding.
  */
 const aiAccountsClient = new AiAccountsClient({
   baseUrl: '',
-  token: getApiKey() ?? undefined,
+  token: () => getApiKey() ?? undefined,
 })
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
