@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { mount, flushPromises } from '@vue/test-utils';
-import { defineComponent, h, reactive } from 'vue';
+import { defineComponent, reactive } from 'vue';
 import EntityLayout from '../EntityLayout.vue';
 
 const route = reactive<{ params: Record<string, string> }>({ params: { backendId: 'backend-claude' } });

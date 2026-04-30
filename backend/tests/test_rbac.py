@@ -15,6 +15,7 @@ from app.db.rbac import (
     get_role_for_api_key,
     get_user_role,
     list_user_roles,
+    rotate_user_role,
     update_user_role,
 )
 from app.services.audit_log_service import AuditLogService
@@ -127,6 +128,41 @@ class TestUserRoleCRUD:
         assert count_user_roles() == 2
 
 
+class TestRotateUserRole:
+    """rotate_user_role: replace api_key while preserving label/role."""
+
+    def test_rotate_returns_new_record_with_fresh_key(self, isolated_db):
+        old_id = create_user_role("key-old", "Admin Key", "admin")
+        result = rotate_user_role(old_id)
+        assert result is not None
+        assert result["id"] != old_id
+        assert result["api_key"] != "key-old"
+        assert len(result["api_key"]) == 64  # secrets.token_hex(32)
+        assert result["label"] == "Admin Key"
+        assert result["role"] == "admin"
+
+    def test_rotate_deletes_old_record(self, isolated_db):
+        old_id = create_user_role("key-old", "Editor", "editor")
+        rotate_user_role(old_id)
+        assert get_user_role(old_id) is None
+        assert get_role_for_api_key("key-old") is None
+
+    def test_rotate_unknown_id_returns_none(self, isolated_db):
+        assert rotate_user_role("role-doesnotexist") is None
+
+    def test_rotate_preserves_count(self, isolated_db):
+        create_user_role("key-keep", "Keep", "viewer")
+        rotate_id = create_user_role("key-rotate", "Rotate", "admin")
+        assert count_user_roles() == 2
+        rotate_user_role(rotate_id)
+        assert count_user_roles() == 2  # one in, one out
+
+    def test_rotate_authenticates_via_new_key(self, isolated_db):
+        old_id = create_user_role("key-stale", "Op", "operator")
+        result = rotate_user_role(old_id)
+        assert get_role_for_api_key(result["api_key"]) == "operator"
+
+
 # =============================================================================
 # has_permission tests
 # =============================================================================
@@ -222,6 +258,49 @@ class TestRequireRoleDecorator:
         rbac_events = [e for e in events if e.get("action") == "rbac.denied"]
         assert len(rbac_events) > 0
         assert rbac_events[0]["outcome"] == "denied"
+
+
+class TestRotateRoute:
+    """POST /admin/rbac/roles/{role_id}/rotate."""
+
+    def test_admin_can_rotate(self, client, isolated_db):
+        admin_id = create_user_role("key-admin-rot", "Admin", "admin")
+        target_id = create_user_role("key-stale", "Edit Key", "editor")
+        resp = client.post(
+            f"/admin/rbac/roles/{target_id}/rotate",
+            headers={"X-API-Key": "key-admin-rot"},
+        )
+        assert resp.status_code == 200
+        body = resp.get_json()
+        assert body["role"]["label"] == "Edit Key"
+        assert body["role"]["role"] == "editor"
+        assert body["role"]["api_key"] != "key-stale"
+        assert len(body["role"]["api_key"]) == 64
+        assert body["role"]["id"] != target_id
+        # Old record gone, new record discoverable
+        assert get_user_role(target_id) is None
+        assert get_user_role(body["role"]["id"]) is not None
+        # Don't accidentally delete the admin we authed as
+        assert get_user_role(admin_id) is not None
+
+    def test_rotate_unknown_id_returns_404(self, client, isolated_db):
+        create_user_role("key-admin-r2", "Admin", "admin")
+        resp = client.post(
+            "/admin/rbac/roles/role-doesnotexist/rotate",
+            headers={"X-API-Key": "key-admin-r2"},
+        )
+        assert resp.status_code == 404
+
+    def test_non_admin_blocked(self, client, isolated_db):
+        create_user_role("key-editor-r", "Editor", "editor")
+        target_id = create_user_role("key-tgt", "Target", "viewer")
+        resp = client.post(
+            f"/admin/rbac/roles/{target_id}/rotate",
+            headers={"X-API-Key": "key-editor-r"},
+        )
+        assert resp.status_code == 403
+        # Original key/record untouched
+        assert get_user_role(target_id) is not None
 
 
 # =============================================================================

@@ -11,6 +11,7 @@ from ..db.rbac import (
     delete_user_role,
     get_user_role,
     list_user_roles,
+    rotate_user_role,
     update_user_role,
 )
 from ..models.rbac import RolePath, UserRoleCreate, UserRoleUpdate
@@ -72,6 +73,21 @@ def delete_role(path: RolePath):
     if not delete_user_role(path.role_id):
         return error_response("NOT_FOUND", "Role not found", HTTPStatus.NOT_FOUND)
     return {"message": "Role deleted"}, HTTPStatus.OK
+
+
+@rbac_bp.post("/roles/<role_id>/rotate")
+@require_role("admin")
+def rotate_role(path: RolePath):
+    """Rotate the API key for a user role.
+
+    Generates a fresh key, atomically replaces the existing record (same
+    label + role, new id + api_key), and returns the new record. The old
+    key stops authenticating immediately.
+    """
+    new_role = rotate_user_role(path.role_id)
+    if not new_role:
+        return error_response("NOT_FOUND", "Role not found", HTTPStatus.NOT_FOUND)
+    return {"message": "Key rotated", "role": new_role}, HTTPStatus.OK
 
 
 @rbac_bp.get("/permissions")

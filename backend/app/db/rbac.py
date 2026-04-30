@@ -161,6 +161,45 @@ def update_user_role(role_id: str, label: Optional[str] = None, role: Optional[s
         return cursor.rowcount > 0
 
 
+def rotate_user_role(role_id: str) -> Optional[dict]:
+    """Atomically rotate the API key for an existing role record.
+
+    Generates a fresh ``secrets.token_hex(32)`` key and inserts a new
+    user_roles row with the same label and role, then deletes the old row.
+    Both writes happen inside a single transaction so a partial-rotate
+    can never leave the caller holding two valid keys (or none).
+
+    Returns the new role record dict, or ``None`` if ``role_id`` doesn't
+    exist.
+    """
+    with get_connection() as conn:
+        conn.row_factory = _dict_factory
+        existing = conn.execute(
+            "SELECT id, label, role FROM user_roles WHERE id = ?", (role_id,)
+        ).fetchone()
+        if not existing:
+            conn.row_factory = None
+            return None
+
+        new_id = _get_unique_role_id(conn)
+        new_key = generate_api_key()
+        conn.execute(
+            """INSERT INTO user_roles (id, api_key, label, role)
+               VALUES (?, ?, ?, ?)""",
+            (new_id, new_key, existing["label"], existing["role"]),
+        )
+        conn.execute("DELETE FROM user_roles WHERE id = ?", (role_id,))
+        conn.commit()
+
+        new_row = conn.execute(
+            "SELECT * FROM user_roles WHERE id = ?", (new_id,)
+        ).fetchone()
+        conn.row_factory = None
+
+    invalidate_key_cache()
+    return new_row
+
+
 def delete_user_role(role_id: str) -> bool:
     """Delete a user role record.
 
