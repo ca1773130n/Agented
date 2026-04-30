@@ -359,6 +359,7 @@ function handleSidebarKeydown(e: KeyboardEvent) {
 
 <template>
   <nav
+    id="app-sidebar-nav"
     :class="['sidebar', { collapsed: isCollapsedDesktop(), 'mobile-open': props.isMobile && props.mobileOpen }]"
     aria-label="Main navigation"
     @keydown="handleSidebarKeydown"

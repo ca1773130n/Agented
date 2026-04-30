@@ -34,16 +34,24 @@ export function useSidebarCollapse() {
     isMobileOpen.value = false;
   }
 
+  function handleKeydown(e: KeyboardEvent) {
+    if (e.key === 'Escape' && isMobileOpen.value) {
+      isMobileOpen.value = false;
+    }
+  }
+
   onMounted(() => {
     mediaQuery = window.matchMedia(MOBILE_QUERY);
     isMobileRaw.value = mediaQuery.matches;
     mediaQuery.addEventListener('change', handleMediaChange);
+    document.addEventListener('keydown', handleKeydown);
   });
 
   onUnmounted(() => {
     if (mediaQuery) {
       mediaQuery.removeEventListener('change', handleMediaChange);
     }
+    document.removeEventListener('keydown', handleKeydown);
   });
 
   return {
@@ -53,5 +61,6 @@ export function useSidebarCollapse() {
     toggleCollapse,
     toggleMobile,
     closeMobile,
+    handleKeydown,
   };
 }

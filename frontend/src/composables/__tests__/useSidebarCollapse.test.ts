@@ -71,4 +71,31 @@ describe('useSidebarCollapse', () => {
     const { isMobile } = useSidebarCollapse();
     expect(isMobile.value).toBe(false);
   });
+
+  describe('keyboard nav', () => {
+    it('Escape closes the mobile overlay when open', () => {
+      const { isMobileOpen, toggleMobile, handleKeydown } = useSidebarCollapse();
+      toggleMobile();
+      expect(isMobileOpen.value).toBe(true);
+
+      handleKeydown(new KeyboardEvent('keydown', { key: 'Escape' }));
+      expect(isMobileOpen.value).toBe(false);
+    });
+
+    it('Escape is a no-op when the mobile overlay is closed', () => {
+      const { isMobileOpen, handleKeydown } = useSidebarCollapse();
+      expect(isMobileOpen.value).toBe(false);
+
+      handleKeydown(new KeyboardEvent('keydown', { key: 'Escape' }));
+      expect(isMobileOpen.value).toBe(false);
+    });
+
+    it('non-Escape keys are ignored', () => {
+      const { isMobileOpen, toggleMobile, handleKeydown } = useSidebarCollapse();
+      toggleMobile();
+
+      handleKeydown(new KeyboardEvent('keydown', { key: 'Enter' }));
+      expect(isMobileOpen.value).toBe(true);
+    });
+  });
 });

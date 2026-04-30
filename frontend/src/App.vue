@@ -319,7 +319,14 @@ onUnmounted(() => {
       <div v-if="isMobile && isMobileOpen" class="sidebar-backdrop" @click="closeMobile"></div>
 
       <!-- Desktop collapse toggle -->
-      <button v-if="!isMobile" class="collapse-toggle" :aria-label="isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'" @click="toggleCollapse">
+      <button
+        v-if="!isMobile"
+        class="collapse-toggle"
+        :aria-label="isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'"
+        :aria-expanded="!isCollapsed"
+        aria-controls="app-sidebar-nav"
+        @click="toggleCollapse"
+      >
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <polyline v-if="isCollapsed" points="9,18 15,12 9,6"/>
           <polyline v-else points="15,18 9,12 15,6"/>
