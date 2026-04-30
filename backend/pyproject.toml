@@ -30,6 +30,7 @@ dependencies = [
     "numpy>=1.24.0",
     "ai-accounts-core",
     "ai-accounts-litestar",
+    "bcrypt>=5.0.0",
 ]
 
 [project.optional-dependencies]

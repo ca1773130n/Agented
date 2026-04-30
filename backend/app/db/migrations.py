@@ -4325,6 +4325,19 @@ def _migrate_99_kg_extraction_log(conn):
     """)
 
 
+def _migrate_103_users_password_hash(conn):
+    """Add password_hash column to users (track B, wave 31).
+
+    Nullable so the legacy@local user (and any pre-existing users) keep
+    working; password-required entry points (login flow, wave 32+) will
+    reject users with NULL hashes.
+    """
+    cursor = conn.execute("PRAGMA table_info(users)")
+    existing = {row[1] for row in cursor.fetchall()}
+    if "password_hash" not in existing:
+        conn.execute("ALTER TABLE users ADD COLUMN password_hash TEXT")
+
+
 def _migrate_102_user_roles_user_id(conn):
     """Add user_id column to user_roles and backfill existing rows.
 
@@ -4538,4 +4551,5 @@ VERSIONED_MIGRATIONS = [
     # multi-user foundation (track B)
     (101, "users_table", _migrate_101_users_table),
     (102, "user_roles_user_id", _migrate_102_user_roles_user_id),
+    (103, "users_password_hash", _migrate_103_users_password_hash),
 ]

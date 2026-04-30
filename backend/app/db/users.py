@@ -10,10 +10,58 @@ from __future__ import annotations
 import logging
 from typing import Optional
 
+import bcrypt
+
 from .connection import get_connection
 from .ids import _get_unique_user_id
 
 logger = logging.getLogger(__name__)
+
+
+def hash_password(plaintext: str) -> str:
+    """Return a bcrypt hash for *plaintext* (UTF-8). Default cost 12."""
+    return bcrypt.hashpw(plaintext.encode("utf-8"), bcrypt.gensalt(rounds=12)).decode("utf-8")
+
+
+def verify_password(plaintext: str, password_hash: Optional[str]) -> bool:
+    """Constant-time check; returns False on null/empty hashes."""
+    if not password_hash:
+        return False
+    try:
+        return bcrypt.checkpw(plaintext.encode("utf-8"), password_hash.encode("utf-8"))
+    except (ValueError, TypeError):
+        return False
+
+
+def set_password(user_id: str, plaintext: str) -> bool:
+    """Hash and persist a password for *user_id*. Returns True on success."""
+    if not plaintext:
+        return False
+    digest = hash_password(plaintext)
+    with get_connection() as conn:
+        cursor = conn.execute(
+            "UPDATE users SET password_hash = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+            (digest, user_id),
+        )
+        conn.commit()
+        return cursor.rowcount > 0
+
+
+def authenticate(email: str, plaintext: str) -> Optional[dict]:
+    """Look up the user by email and verify their password.
+
+    Returns the user record (without password_hash) on success, None
+    otherwise. Same response shape for "user not found" and "wrong
+    password" — protects against email enumeration.
+    """
+    user = get_user_by_email(email)
+    if user is None:
+        return None
+    if not user.get("is_active"):
+        return None
+    if not verify_password(plaintext, user.get("password_hash")):
+        return None
+    return {k: v for k, v in user.items() if k != "password_hash"}
 
 
 def _row_to_dict(cursor, row):
