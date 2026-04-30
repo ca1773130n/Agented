@@ -15,8 +15,17 @@ const isLoading = ref(true);
 const loadError = ref<string | null>(null);
 const entityData = ref<unknown>(null);
 
-async function load() {
-  isLoading.value = true;
+async function load(opts: { keepStale?: boolean } = {}) {
+  // Show the loading spinner only on the FIRST load. On subsequent route-param
+  // changes (e.g. /backends/backend-claude → /backends/backend-codex during
+  // the onboarding tour), keep the previous slot content rendered while
+  // re-fetching so the user sees a smooth transition instead of a 500ms
+  // spinner flash. The tour overlay no longer depends on this — its bus
+  // (useTourTargetBus, wave 13) re-emits when the new target mounts —
+  // but the UX nicety still matters for navigation in general.
+  if (!opts.keepStale) {
+    isLoading.value = true;
+  }
   loadError.value = null;
   try {
     entityData.value = await props.loadEntity();
@@ -32,10 +41,11 @@ async function load() {
   }
 }
 
-onMounted(load);
+onMounted(() => load());
 
-// Re-fetch when the route params change (e.g., navigating between two teams)
-watch(() => route.params, load, { deep: true });
+// Re-fetch when the route params change. Pass keepStale so we don't blank
+// the slot — the new entity data slots in once the request resolves.
+watch(() => route.params, () => load({ keepStale: true }), { deep: true });
 </script>
 
 <template>
@@ -53,7 +63,7 @@ watch(() => route.params, load, { deep: true });
       </svg>
       <p class="entity-layout__error-message">{{ loadError }}</p>
       <div class="entity-layout__error-actions">
-        <button class="btn" @click="load">Retry</button>
+        <button class="btn" @click="() => load()">Retry</button>
         <button class="btn" @click="router.back()">Go Back</button>
       </div>
     </div>
