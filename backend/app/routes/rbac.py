@@ -11,11 +11,10 @@ from ..db.rbac import (
     delete_user_role,
     get_user_role,
     list_user_roles,
-    rotate_user_role,
     update_user_role,
 )
 from ..models.rbac import RolePath, UserRoleCreate, UserRoleUpdate
-from ..services.rbac_service import ROLE_PERMISSIONS, require_role
+from ..services.rbac_service import require_role
 
 tag = Tag(name="rbac", description="Role-Based Access Control management")
 rbac_bp = APIBlueprint("rbac", __name__, url_prefix="/admin/rbac", abp_tags=[tag])
@@ -75,25 +74,6 @@ def delete_role(path: RolePath):
     return {"message": "Role deleted"}, HTTPStatus.OK
 
 
-@rbac_bp.post("/roles/<role_id>/rotate")
-@require_role("admin")
-def rotate_role(path: RolePath):
-    """Rotate the API key for a user role.
-
-    Generates a fresh key, atomically replaces the existing record (same
-    label + role, new id + api_key), and returns the new record. The old
-    key stops authenticating immediately.
-    """
-    new_role = rotate_user_role(path.role_id)
-    if not new_role:
-        return error_response("NOT_FOUND", "Role not found", HTTPStatus.NOT_FOUND)
-    return {"message": "Key rotated", "role": new_role}, HTTPStatus.OK
-
-
-@rbac_bp.get("/permissions")
-@require_role("viewer", "operator", "editor", "admin")
-def get_permissions():
-    """Return the RBAC permission matrix."""
-    # Convert sets to lists for JSON serialization
-    matrix = {role: sorted(perms) for role, perms in ROLE_PERMISSIONS.items()}
-    return {"permissions": matrix}, HTTPStatus.OK
+# GET /permissions and POST /roles/<id>/rotate moved to Litestar :20002 in
+# waves 23-24. The vite dev proxy routes /admin/rbac/* to the Litestar app
+# so the frontend remains unchanged.

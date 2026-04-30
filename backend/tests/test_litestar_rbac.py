@@ -85,23 +85,6 @@ class TestRotateRoleLitestar:
         assert resp.status_code == 403
 
 
-def test_litestar_body_matches_flask_version(client, isolated_db):
-    """Side-by-side: Flask and Litestar must return identical permission matrices."""
-    create_user_role("matched-key", "Matched", "admin")
-
-    flask_resp = client.get(
-        "/admin/rbac/permissions",
-        headers={"X-API-Key": "matched-key"},
-    )
-    assert flask_resp.status_code == 200
-    flask_body = flask_resp.get_json()
-
-    with _client(isolated_db) as ls_client:
-        ls_resp = ls_client.get(
-            "/admin/rbac/permissions",
-            headers={"X-API-Key": "matched-key"},
-        )
-    assert ls_resp.status_code == 200
-    ls_body = ls_resp.json()
-
-    assert flask_body == ls_body
+# Wave 25: side-by-side parity test deleted — the Flask version of these
+# routes was retired this wave, so there's nothing left to compare against.
+# The remaining tests in this file are the canonical RBAC API contract.

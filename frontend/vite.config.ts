@@ -39,6 +39,14 @@ export default defineConfig(({ mode }) => {
           target: 'http://127.0.0.1:20000',
           changeOrigin: true
         },
+        // /admin/rbac was migrated to the Litestar app on :20002 in waves
+        // 23-25. More-specific keys take precedence over /admin so the
+        // catch-all routes the rest to Flask. As more routes migrate, add
+        // their prefixes ABOVE the /admin entry.
+        '/admin/rbac': {
+          target: 'http://127.0.0.1:20002',
+          changeOrigin: true
+        },
         '/admin': {
           target: 'http://127.0.0.1:20000',
           changeOrigin: true
@@ -66,6 +74,14 @@ export default defineConfig(({ mode }) => {
         },
         '/api': {
           target: 'http://127.0.0.1:20000',
+          changeOrigin: true
+        },
+        // /admin/rbac was migrated to the Litestar app on :20002 in waves
+        // 23-25. More-specific keys take precedence over /admin so the
+        // catch-all routes the rest to Flask. As more routes migrate, add
+        // their prefixes ABOVE the /admin entry.
+        '/admin/rbac': {
+          target: 'http://127.0.0.1:20002',
           changeOrigin: true
         },
         '/admin': {

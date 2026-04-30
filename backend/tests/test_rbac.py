@@ -299,47 +299,8 @@ class TestRequireRoleDecorator:
         assert rbac_events[0]["outcome"] == "denied"
 
 
-class TestRotateRoute:
-    """POST /admin/rbac/roles/{role_id}/rotate."""
-
-    def test_admin_can_rotate(self, client, isolated_db):
-        admin_id = create_user_role("key-admin-rot", "Admin", "admin")
-        target_id = create_user_role("key-stale", "Edit Key", "editor")
-        resp = client.post(
-            f"/admin/rbac/roles/{target_id}/rotate",
-            headers={"X-API-Key": "key-admin-rot"},
-        )
-        assert resp.status_code == 200
-        body = resp.get_json()
-        assert body["role"]["label"] == "Edit Key"
-        assert body["role"]["role"] == "editor"
-        assert body["role"]["api_key"] != "key-stale"
-        assert len(body["role"]["api_key"]) == 64
-        assert body["role"]["id"] != target_id
-        # Old record gone, new record discoverable
-        assert get_user_role(target_id) is None
-        assert get_user_role(body["role"]["id"]) is not None
-        # Don't accidentally delete the admin we authed as
-        assert get_user_role(admin_id) is not None
-
-    def test_rotate_unknown_id_returns_404(self, client, isolated_db):
-        create_user_role("key-admin-r2", "Admin", "admin")
-        resp = client.post(
-            "/admin/rbac/roles/role-doesnotexist/rotate",
-            headers={"X-API-Key": "key-admin-r2"},
-        )
-        assert resp.status_code == 404
-
-    def test_non_admin_blocked(self, client, isolated_db):
-        create_user_role("key-editor-r", "Editor", "editor")
-        target_id = create_user_role("key-tgt", "Target", "viewer")
-        resp = client.post(
-            f"/admin/rbac/roles/{target_id}/rotate",
-            headers={"X-API-Key": "key-editor-r"},
-        )
-        assert resp.status_code == 403
-        # Original key/record untouched
-        assert get_user_role(target_id) is not None
+# Wave 25: TestRotateRoute deleted along with the Flask rotate route.
+# The Litestar replacement lives in tests/test_litestar_rbac.py.
 
 
 # =============================================================================
