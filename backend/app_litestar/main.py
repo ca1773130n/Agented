@@ -8,6 +8,9 @@ from __future__ import annotations
 
 from litestar import Litestar, get
 
+from .auth import provide_caller
+from .routes.rbac import rbac_router
+
 
 @get("/health/liveness", sync_to_thread=False)
 def liveness() -> dict:
@@ -16,4 +19,7 @@ def liveness() -> dict:
 
 def create_app() -> Litestar:
     """Build the Litestar application instance."""
-    return Litestar(route_handlers=[liveness])
+    return Litestar(
+        route_handlers=[liveness, rbac_router],
+        dependencies={"caller": provide_caller},
+    )
