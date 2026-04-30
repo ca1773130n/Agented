@@ -236,23 +236,28 @@ class TestHasPermission:
 
 
 class TestRequireRoleDecorator:
-    """Test the @require_role() decorator with Flask test client."""
+    """Test the @require_role() decorator against a Flask-served route.
+
+    Wave 30 retired the entire /admin/rbac/* namespace to Litestar, so
+    these tests now exercise the decorator via /admin/triggers (which
+    still uses @require_role). Behaviour assertions are unchanged.
+    """
 
     def test_decorator_blocks_unauthorized_role(self, client, isolated_db):
-        """Viewer cannot access admin-only endpoint."""
+        """Viewer cannot create a trigger."""
         create_user_role("key-viewer-dec", "Viewer", "viewer")
-        # RBAC routes require admin -- try to list roles as viewer
-        resp = client.get(
-            "/admin/rbac/roles",
+        resp = client.post(
+            "/admin/triggers/",
             headers={"X-API-Key": "key-viewer-dec"},
+            json={"name": "x"},
         )
         assert resp.status_code == 403
 
     def test_decorator_allows_authorized_role(self, client, isolated_db):
-        """Admin can access admin-only endpoint."""
+        """Admin can list triggers."""
         create_user_role("key-admin-dec", "Admin", "admin")
         resp = client.get(
-            "/admin/rbac/roles",
+            "/admin/triggers/",
             headers={"X-API-Key": "key-admin-dec"},
         )
         assert resp.status_code == 200
@@ -260,14 +265,14 @@ class TestRequireRoleDecorator:
     def test_decorator_missing_api_key_returns_401(self, client, isolated_db):
         """Missing API key returns 401 from the auth gate when RBAC is active."""
         create_user_role("key-active", "Active", "admin")
-        resp = client.get("/admin/rbac/roles")
+        resp = client.get("/admin/triggers/")
         assert resp.status_code == 401
 
     def test_decorator_invalid_api_key_returns_401(self, client, isolated_db):
         """Unknown API key returns 401 from the auth gate."""
         create_user_role("key-known", "Known", "admin")
         resp = client.get(
-            "/admin/rbac/roles",
+            "/admin/triggers/",
             headers={"X-API-Key": "key-unknown-xyz"},
         )
         assert resp.status_code == 401
@@ -275,24 +280,19 @@ class TestRequireRoleDecorator:
     def test_graceful_bootstrap_no_roles(self, client, isolated_db):
         """When no roles exist in DB, all requests pass through (bootstrap mode)."""
         assert count_user_roles() == 0
-        resp = client.get("/admin/rbac/roles")
+        resp = client.get("/admin/triggers/")
         assert resp.status_code == 200
 
     def test_audit_log_on_denial(self, client, isolated_db):
         """RBAC denial creates an audit log entry."""
         create_user_role("key-audit-test", "Viewer", "viewer")
 
-        # Record count before denial
-        from app.services.audit_log_service import _recent_events
-
-        len(_recent_events)
-
-        client.get(
-            "/admin/rbac/roles",
+        client.post(
+            "/admin/triggers/",
             headers={"X-API-Key": "key-audit-test"},
+            json={"name": "x"},
         )
 
-        # Check that a new audit event was logged
         events = AuditLogService.get_recent_events(limit=50)
         rbac_events = [e for e in events if e.get("action") == "rbac.denied"]
         assert len(rbac_events) > 0
