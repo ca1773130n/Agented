@@ -10,8 +10,10 @@ from __future__ import annotations
 
 from typing import Any
 
-from litestar import Router, get
+from litestar import Router, get, post
+from litestar.exceptions import NotFoundException
 
+from app.db.rbac import rotate_user_role
 from app.services.rbac_service import ROLE_PERMISSIONS
 
 from ..auth import Caller, require_role
@@ -29,4 +31,24 @@ def get_permissions(authorized: Caller) -> dict[str, Any]:
     return {"permissions": matrix}
 
 
-rbac_router = Router(path="/admin/rbac", route_handlers=[get_permissions])
+@post(
+    "/roles/{role_id:str}/rotate",
+    dependencies={"authorized": require_role("admin")},
+    sync_to_thread=False,
+)
+def rotate_role(role_id: str, authorized: Caller) -> dict[str, Any]:
+    """Rotate the API key for a role — admin-only.
+
+    Mirrors the Flask version (wave 8): atomic swap, returns the new
+    record. 404 when role_id is unknown; 403 when caller is not admin
+    (handled by require_role); 401 when no/invalid key (handled by
+    provide_caller).
+    """
+    del authorized
+    new_role = rotate_user_role(role_id)
+    if not new_role:
+        raise NotFoundException(detail="Role not found")
+    return {"message": "Key rotated", "role": new_role}
+
+
+rbac_router = Router(path="/admin/rbac", route_handlers=[get_permissions, rotate_role])
