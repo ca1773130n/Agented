@@ -80,6 +80,92 @@ class TestLogin:
             )
         assert resp.status_code == 201
 
+    def test_token_authenticates_protected_route(self, isolated_db):
+        """Wave 33 — /api/auth/me accepts session-token bearer auth."""
+        from app.db.rbac import create_user_role
+        # Need at least one role row so we're past bootstrap mode.
+        create_user_role("gate-key", "Gate", "admin")
+
+        uid = create_user("bearer@example.com", "Bearer")
+        set_password(uid, "x")
+        with _client(isolated_db) as ls:
+            login_resp = ls.post(
+                "/api/auth/login",
+                json={"email": "bearer@example.com", "password": "x"},
+            )
+            token = login_resp.json()["token"]
+            me_resp = ls.get(
+                "/api/auth/me",
+                headers={"Authorization": f"Bearer {token}"},
+            )
+        assert me_resp.status_code == 200
+        body = me_resp.json()
+        assert body["id"] == uid
+        assert body["email"] == "bearer@example.com"
+        assert body["auth_method"] == "session"
+
+    def test_me_with_api_key_returns_user(self, isolated_db):
+        from app.db.rbac import create_user_role
+        uid = create_user("apikey-me@example.com", "ApiKey")
+        create_user_role("ak-me-key", "Lbl", "admin", user_id=uid)
+        with _client(isolated_db) as ls:
+            resp = ls.get(
+                "/api/auth/me",
+                headers={"X-API-Key": "ak-me-key"},
+            )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["id"] == uid
+        assert body["auth_method"] == "api_key"
+
+    def test_me_unauthenticated_returns_401(self, isolated_db):
+        from app.db.rbac import create_user_role
+        create_user_role("gate-2", "Gate", "admin")  # past bootstrap
+        with _client(isolated_db) as ls:
+            resp = ls.get("/api/auth/me")
+        assert resp.status_code == 401
+
+    def test_logout_revokes_session(self, isolated_db):
+        from app.db.rbac import create_user_role
+        from app.db.sessions import get_session_by_token
+        create_user_role("gate-3", "Gate", "admin")
+
+        uid = create_user("logout@example.com")
+        set_password(uid, "x")
+        with _client(isolated_db) as ls:
+            login_resp = ls.post(
+                "/api/auth/login",
+                json={"email": "logout@example.com", "password": "x"},
+            )
+            token = login_resp.json()["token"]
+            assert get_session_by_token(token) is not None
+
+            logout_resp = ls.post(
+                "/api/auth/logout",
+                headers={"Authorization": f"Bearer {token}"},
+            )
+        assert logout_resp.status_code == 204
+        assert get_session_by_token(token) is None
+
+    def test_logout_without_token_still_204(self, isolated_db):
+        with _client(isolated_db) as ls:
+            resp = ls.post("/api/auth/logout")
+        assert resp.status_code == 204
+
+    def test_garbage_authorization_header_falls_through_to_api_key(self, isolated_db):
+        from app.db.rbac import create_user_role
+        create_user_role("ak-fall", "Lbl", "admin")
+        with _client(isolated_db) as ls:
+            # Malformed header — wrong scheme, non-bearer.
+            resp = ls.get(
+                "/api/auth/me",
+                headers={
+                    "Authorization": "Basic dXNlcjpwYXNz",
+                    "X-API-Key": "ak-fall",
+                },
+            )
+        assert resp.status_code == 200
+
     def test_token_authenticates_subsequent_session_lookup(self, isolated_db):
         from app.db.sessions import get_session_by_token
         uid = create_user("session@example.com")

@@ -10,12 +10,15 @@ from __future__ import annotations
 
 from typing import Any
 
-from litestar import Router, post
+from litestar import Request, Router, get, post
 from litestar.exceptions import NotAuthorizedException
+from litestar.status_codes import HTTP_204_NO_CONTENT
 from msgspec import Struct
 
-from app.db.sessions import create_session
-from app.db.users import authenticate
+from app.db.sessions import create_session, revoke_session
+from app.db.users import authenticate, get_user
+
+from ..auth import Caller, _resolve_session_token
 
 
 class LoginBody(Struct):
@@ -49,4 +52,39 @@ def login(data: LoginBody) -> dict[str, Any]:
     }
 
 
-auth_router = Router(path="/api/auth", route_handlers=[login])
+@get("/me", sync_to_thread=False)
+def me(caller: Caller) -> dict[str, Any]:
+    """Return the authenticated user's profile.
+
+    Works with either auth method (session token or API key). For api-key
+    callers without an associated user_id (legacy single-user setups),
+    returns a sentinel id so the frontend can still render something.
+    """
+    if caller.user_id is None:
+        return {
+            "id": None,
+            "email": None,
+            "display_name": None,
+            "auth_method": caller.auth_method,
+        }
+    user = get_user(caller.user_id)
+    if user is None:
+        raise NotAuthorizedException(detail="User no longer exists")
+    return {
+        "id": user["id"],
+        "email": user["email"],
+        "display_name": user.get("display_name"),
+        "auth_method": caller.auth_method,
+    }
+
+
+@post("/logout", status_code=HTTP_204_NO_CONTENT, sync_to_thread=False)
+def logout(request: Request) -> None:
+    """Revoke the current session token if present. Always 204."""
+    token = _resolve_session_token(request)
+    if token:
+        revoke_session(token)
+    return None
+
+
+auth_router = Router(path="/api/auth", route_handlers=[login, me, logout])
