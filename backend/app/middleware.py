@@ -21,7 +21,8 @@ import uuid
 
 from flask import g, request
 
-from .logging_config import request_id_var
+from .db.rbac import get_role_and_user_for_api_key
+from .logging_config import current_user_var, request_id_var
 
 _request_logger = logging.getLogger("app.request")
 
@@ -30,10 +31,25 @@ def init_request_middleware(app):
     """Register before/after/teardown hooks on *app* for request ID lifecycle."""
 
     @app.before_request
-    def set_request_id():
+    def set_request_context():
         rid = request.headers.get("X-Request-ID") or str(uuid.uuid4())
         request_id_var.set(rid)
         g.request_id = rid
+
+        # Resolve the authenticated user from the API key (track B, wave 21).
+        # Background tasks and unauthenticated bootstrap routes leave
+        # current_user_var as None.
+        user_id: str | None = None
+        api_key = request.headers.get("X-API-Key")
+        if api_key:
+            try:
+                resolved = get_role_and_user_for_api_key(api_key)
+                if resolved is not None:
+                    _, user_id = resolved
+            except Exception as exc:  # noqa: BLE001
+                _request_logger.debug("user lookup failed: %s", exc)
+        current_user_var.set(user_id)
+        g.current_user_id = user_id
 
     @app.after_request
     def log_request(response):
@@ -48,7 +64,8 @@ def init_request_middleware(app):
         return response
 
     @app.teardown_request
-    def clear_request_id(exc):  # noqa: ARG001
+    def clear_request_context(exc):  # noqa: ARG001
         # Defense-in-depth: prevent context leakage across greenlets
         # (see 05-RESEARCH.md Pitfall 1).
         request_id_var.set(None)
+        current_user_var.set(None)

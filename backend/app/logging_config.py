@@ -27,9 +27,14 @@ from contextvars import ContextVar
 # Background tasks (APScheduler) leave this as None.
 request_id_var: ContextVar[str | None] = ContextVar("request_id", default=None)
 
+# Authenticated user for the current request (track B, wave 21).
+# Set by middleware after API-key lookup, None for unauthenticated calls
+# (graceful-bootstrap, /health/setup, etc.).
+current_user_var: ContextVar[str | None] = ContextVar("current_user", default=None)
+
 
 class RequestIdFilter(logging.Filter):
-    """Inject ``request_id`` from the context variable into every log record.
+    """Inject ``request_id`` and ``user_id`` from the context variables.
 
     CRITICAL: This filter must NEVER call any logging function.
     Doing so would cause infinite recursion because this filter is
@@ -38,6 +43,7 @@ class RequestIdFilter(logging.Filter):
 
     def filter(self, record: logging.LogRecord) -> bool:
         record.request_id = request_id_var.get()  # type: ignore[attr-defined]
+        record.user_id = current_user_var.get()  # type: ignore[attr-defined]
         return True
 
 
@@ -119,7 +125,7 @@ def configure_logging(
         from pythonjsonlogger.json import JsonFormatter  # v3 import path
 
         formatter = JsonFormatter(
-            fmt="%(asctime)s %(levelname)s %(name)s %(message)s %(request_id)s",
+            fmt="%(asctime)s %(levelname)s %(name)s %(message)s %(request_id)s %(user_id)s",
             datefmt="%Y-%m-%dT%H:%M:%S",
         )
     else:
