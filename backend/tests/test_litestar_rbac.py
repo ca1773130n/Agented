@@ -4,13 +4,13 @@ from litestar.testing import create_test_client
 
 from app.db.rbac import create_user_role
 from app_litestar.auth import provide_caller
-from app_litestar.main import liveness
+from app_litestar.routes.health import health_router
 from app_litestar.routes.rbac import rbac_router
 
 
 def _client(isolated_db):
     return create_test_client(
-        route_handlers=[liveness, rbac_router],
+        route_handlers=[health_router, rbac_router],
         dependencies={"caller": provide_caller},
     )
 

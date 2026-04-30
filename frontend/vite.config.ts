@@ -51,8 +51,9 @@ export default defineConfig(({ mode }) => {
           target: 'http://127.0.0.1:20000',
           changeOrigin: true
         },
+        // /health/* migrated to Litestar in wave 37.
         '/health': {
-          target: 'http://127.0.0.1:20000',
+          target: 'http://127.0.0.1:20002',
           changeOrigin: true
         },
         '/docs': {
@@ -88,8 +89,9 @@ export default defineConfig(({ mode }) => {
           target: 'http://127.0.0.1:20000',
           changeOrigin: true
         },
+        // /health/* migrated to Litestar in wave 37.
         '/health': {
-          target: 'http://127.0.0.1:20000',
+          target: 'http://127.0.0.1:20002',
           changeOrigin: true
         },
         '/docs': {

@@ -11,9 +11,9 @@ from app_litestar.main import create_app
 
 
 def test_liveness_returns_200(isolated_db):
-    from app_litestar.main import liveness
+    from app_litestar.routes.health import liveness
     with create_test_client(route_handlers=[liveness]) as client:
-        resp = client.get("/health/liveness")
+        resp = client.get("/liveness")
     assert resp.status_code == 200
     assert resp.json() == {"status": "ok"}
 

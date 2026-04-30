@@ -1163,19 +1163,12 @@ class TestIntegratedEntityLinking:
 
 
 class TestHealthAndMonitoring:
-    """Test health check and monitoring endpoints."""
+    """Test health check and monitoring endpoints.
 
-    def test_health_liveness(self, client):
-        """GET /health/liveness returns 200."""
-        resp = client.get("/health/liveness")
-        assert resp.status_code == 200
-
-    def test_health_readiness(self, client):
-        """GET /health/readiness returns 200 with status ok."""
-        resp = client.get("/health/readiness")
-        assert resp.status_code == 200
-        body = resp.get_json()
-        assert body["status"] == "ok"
+    /health/* migrated to Litestar in wave 37; the dedicated test file
+    is tests/test_litestar_health.py. Keeping this class for the
+    monitoring endpoints which remain on Flask.
+    """
 
     def test_execution_retries_endpoint(self, client):
         """GET /admin/executions/retries returns retry info."""

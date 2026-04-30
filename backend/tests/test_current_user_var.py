@@ -51,6 +51,6 @@ class TestCurrentUserVar:
         uid = create_user("teardown@example.com", "Teardown")
         create_user_role("td-key", "Td Key", "admin", user_id=uid)
         with app.test_client() as c:
-            c.get("/health/liveness", headers={"X-API-Key": "td-key"})
+            c.get("/admin/triggers/", headers={"X-API-Key": "td-key"})
         # Outside the request lifecycle, the var must reset to None.
         assert current_user_var.get() is None
