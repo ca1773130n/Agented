@@ -5,20 +5,20 @@ import type { Agent } from '../services/api';
 import { agentApi } from '../services/api';
 import PageHeader from '../components/base/PageHeader.vue';
 import LoadingState from '../components/base/LoadingState.vue';
+import ErrorState from '../components/base/ErrorState.vue';
 import StatCard from '../components/base/StatCard.vue';
 import DataTable from '../components/base/DataTable.vue';
 import type { DataTableColumn } from '../components/base/DataTable.vue';
 import StatusBadge from '../components/base/StatusBadge.vue';
 import EmptyState from '../components/base/EmptyState.vue';
-import { useToast } from '../composables/useToast';
+import { ApiError } from '../services/api';
 import { useWebMcpTool } from '../composables/useWebMcpTool';
 
 const router = useRouter();
 
-const showToast = useToast();
-
 const agents = ref<Agent[]>([]);
 const isLoading = ref(true);
+const loadError = ref<string | null>(null);
 
 const totalAgents = computed(() => agents.value.length);
 const enabledCount = computed(() => agents.value.filter(a => a.enabled === 1).length);
@@ -67,11 +67,12 @@ function getStatusVariant(status: string): 'success' | 'warning' | 'neutral' {
 
 async function loadData() {
   isLoading.value = true;
+  loadError.value = null;
   try {
     const res = await agentApi.list();
     agents.value = res.agents || [];
-  } catch {
-    showToast('Failed to load agents data', 'error');
+  } catch (err) {
+    loadError.value = err instanceof ApiError ? err.message : 'Failed to load agents';
   } finally {
     isLoading.value = false;
   }
@@ -92,6 +93,8 @@ onMounted(loadData);
     </PageHeader>
 
     <LoadingState v-if="isLoading" message="Loading agents data..." />
+
+    <ErrorState v-else-if="loadError" :message="loadError" @retry="loadData" />
 
     <template v-else>
       <div class="stats-grid">

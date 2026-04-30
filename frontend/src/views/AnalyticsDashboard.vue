@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue';
-import { analyticsApi } from '../services/api';
+import { analyticsApi, ApiError } from '../services/api';
 import type {
   CostDataPoint,
   ExecutionDataPoint,
@@ -12,8 +12,7 @@ import SuccessRateChart from '../components/analytics/SuccessRateChart.vue';
 import BotEffectivenessChart from '../components/analytics/BotEffectivenessChart.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import LoadingState from '../components/base/LoadingState.vue';
-import { useToast } from '../composables/useToast';
-const showToast = useToast();
+import ErrorState from '../components/base/ErrorState.vue';
 
 // Filter state
 type DateRange = '7d' | '30d' | '90d';
@@ -36,6 +35,7 @@ const groupByOptions: { key: GroupBy; label: string }[] = [
 
 // Data state
 const isLoading = ref(false);
+const loadError = ref<string | null>(null);
 const costData = ref<CostDataPoint[]>([]);
 const executionData = ref<ExecutionDataPoint[]>([]);
 const effectivenessSummary = ref<{
@@ -71,6 +71,7 @@ const isEmpty = computed(() => {
 
 async function loadData() {
   isLoading.value = true;
+  loadError.value = null;
   const params = {
     group_by: selectedGroupBy.value,
     start_date: dateRange.value.start_date,
@@ -96,8 +97,8 @@ async function loadData() {
       };
       effectivenessOverTime.value = effRes.over_time || [];
     }
-  } catch {
-    showToast('Failed to load analytics data', 'error');
+  } catch (err) {
+    loadError.value = err instanceof ApiError ? err.message : 'Failed to load analytics data';
     costData.value = [];
     executionData.value = [];
     effectivenessSummary.value = { accepted: 0, ignored: 0, pending: 0, acceptance_rate: 0 };
@@ -140,6 +141,8 @@ onMounted(loadData);
     </PageHeader>
 
     <LoadingState v-if="isLoading" message="Loading analytics..." />
+
+    <ErrorState v-else-if="loadError" :message="loadError" @retry="loadData" />
 
     <div v-else-if="isEmpty" class="empty-state">
       <p class="empty-title">No execution data yet</p>
