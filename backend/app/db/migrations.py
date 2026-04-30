@@ -4325,6 +4325,25 @@ def _migrate_99_kg_extraction_log(conn):
     """)
 
 
+def _migrate_104_sessions_table(conn):
+    """Sessions table for the login endpoint (track B, wave 32)."""
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS sessions (
+            id TEXT PRIMARY KEY,
+            token TEXT UNIQUE NOT NULL,
+            user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            expires_at TIMESTAMP NOT NULL,
+            last_used_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+    )
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions(token)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON sessions(expires_at)")
+
+
 def _migrate_103_users_password_hash(conn):
     """Add password_hash column to users (track B, wave 31).
 
@@ -4552,4 +4571,5 @@ VERSIONED_MIGRATIONS = [
     (101, "users_table", _migrate_101_users_table),
     (102, "user_roles_user_id", _migrate_102_user_roles_user_id),
     (103, "users_password_hash", _migrate_103_users_password_hash),
+    (104, "sessions_table", _migrate_104_sessions_table),
 ]

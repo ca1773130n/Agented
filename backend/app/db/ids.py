@@ -76,6 +76,9 @@ ROLE_ID_LENGTH = 6
 USER_ID_PREFIX = "user-"
 USER_ID_LENGTH = 6
 
+SESSION_ID_PREFIX = "sess-"
+SESSION_ID_LENGTH = 6
+
 SECRET_ID_PREFIX = "sec-"
 SECRET_ID_LENGTH = 6
 
@@ -538,6 +541,20 @@ def _get_unique_user_id(conn) -> str:
         cursor = conn.execute("SELECT id FROM users WHERE id = ?", (uid,))
         if cursor.fetchone() is None:
             return uid
+
+
+def generate_session_id() -> str:
+    """Generate a unique session row ID like 'sess-abc123'."""
+    return generate_id(SESSION_ID_PREFIX, SESSION_ID_LENGTH)
+
+
+def _get_unique_session_id(conn) -> str:
+    """Generate a session row ID that doesn't exist in the database."""
+    while True:
+        sid = generate_session_id()
+        cursor = conn.execute("SELECT id FROM sessions WHERE id = ?", (sid,))
+        if cursor.fetchone() is None:
+            return sid
 
 
 def generate_secret_id() -> str:
