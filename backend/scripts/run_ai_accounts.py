@@ -14,10 +14,23 @@ from __future__ import annotations
 import json
 import logging
 import os
+import resource
 import sqlite3
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
+
+# Bump soft file-descriptor limit early. macOS defaults to 256, which the
+# bundle plugin install + concurrent SQLite + subprocess CLI orchestrators
+# can blow past, surfacing as "Too many open files" + "unable to open
+# database file" warnings. Cap at the hard limit so we never request more
+# than the system allows.
+try:
+    _soft, _hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+    if _soft < 8192:
+        resource.setrlimit(resource.RLIMIT_NOFILE, (min(8192, _hard), _hard))
+except (ValueError, OSError):
+    pass
 
 from ai_accounts_core.adapters.auth_apikey import ApiKeyAuth
 from ai_accounts_core.adapters.auth_noauth import NoAuth
@@ -175,6 +188,12 @@ class LazyFlaskKeyAuth:
     """
 
     _PREFIX = "bearer "
+    # Cache the allowed-keys set in-memory for this many seconds. Bypasses
+    # the per-request SQLite read (which can stall when Flask's writer is
+    # mid-transaction) AND survives Flask DB rotations within the TTL.
+    # Picked 5s — short enough that key rotation is felt in <1 redirect,
+    # long enough to absorb hot bursts (one fetch per 5s under steady load).
+    _CACHE_TTL_SECONDS = 5.0
 
     def __init__(self, db_path: str) -> None:
         self._db_path = db_path
@@ -183,8 +202,10 @@ class LazyFlaskKeyAuth:
         self._principal = Principal(
             id="api_key", display_name="API Key", scopes=frozenset({"*"})
         )
+        self._cache: set[str] | None = None
+        self._cache_at: float = 0.0
 
-    def _allowed_keys(self) -> set[str]:
+    def _read_keys_from_db(self) -> set[str]:
         if not os.path.exists(self._db_path):
             return set()
         try:
@@ -201,6 +222,20 @@ class LazyFlaskKeyAuth:
         finally:
             conn.close()
         return {r[0] for r in rows if r and r[0]}
+
+    def _allowed_keys(self) -> set[str]:
+        import time
+
+        now = time.monotonic()
+        if (
+            self._cache is not None
+            and (now - self._cache_at) < self._CACHE_TTL_SECONDS
+        ):
+            return self._cache
+        keys = self._read_keys_from_db()
+        self._cache = keys
+        self._cache_at = now
+        return keys
 
     async def authenticate(self, request):
         import hmac
@@ -235,11 +270,20 @@ else:
         "AI_ACCOUNTS_API_KEY is set in the environment)."
     )
 
+# Read the runtime environment from AGENTED_ENV ("development" | "production").
+# Default is "development". Production refuses to start without an explicit
+# AI_ACCOUNTS_VAULT_KEY (no silent dev-fallback).
+_AGENTED_ENV = os.environ.get("AGENTED_ENV", "development")
+if _AGENTED_ENV not in ("development", "production"):
+    raise RuntimeError(
+        f"AGENTED_ENV must be 'development' or 'production', got {_AGENTED_ENV!r}"
+    )
+
 app = create_app(
     AiAccountsConfig(
-        env="development",
+        env=_AGENTED_ENV,
         storage=SqliteStorage("./ai_accounts.db"),
-        vault=EnvKeyVault.from_env(env="development"),
+        vault=EnvKeyVault.from_env(env=_AGENTED_ENV),
         auth=auth,
         backends=(
             ClaudeBackend(),
