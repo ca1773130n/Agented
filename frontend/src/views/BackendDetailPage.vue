@@ -9,8 +9,8 @@
           <div class="backend-badges">
             <span class="type-badge">{{ backend.type }}</span>
             <span v-if="backend.version" class="version-badge">v{{ backend.version }}</span>
-            <span v-if="backend.is_installed" class="status-badge installed">Installed</span>
-            <span v-else class="status-badge not-installed">Not Installed</span>
+            <span v-if="backend.is_installed" class="status-badge installed">{{ t('common.installed') }}</span>
+            <span v-else class="status-badge not-installed">{{ t('common.notInstalled') }}</span>
           </div>
           <button
             v-if="!backend.is_installed"
@@ -19,7 +19,7 @@
             @click="installCli"
           >
             <div v-if="isInstalling" class="spinner-sm"></div>
-            {{ isInstalling ? 'Installing...' : 'Install CLI' }}
+            {{ isInstalling ? t('accountWizard.installing') : t('accountWizard.installCli') }}
           </button>
           <button v-if="supportsConnect && backend.is_installed" class="btn btn-primary" @click="loginConfigPath = undefined; proxyOnlyLogin = false; showLoginModal = true">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
@@ -27,16 +27,16 @@
               <polyline points="10 17 15 12 10 7"/>
               <line x1="15" y1="12" x2="3" y2="12"/>
             </svg>
-            Login
+            {{ t('backendDetail.login') }}
           </button>
           <button v-if="supportsConnect" class="btn btn-outline" @click="loginConfigPath = undefined; proxyOnlyLogin = true; showLoginModal = true">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
               <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
             </svg>
-            Proxy Login
+            {{ t('backendDetail.proxyLogin') }}
           </button>
           <a v-if="backend.documentation_url" :href="backend.documentation_url" target="_blank" class="btn btn-outline">
-            Documentation
+            {{ t('backendDetail.documentation') }}
           </a>
           <a v-if="loginInfo" :href="loginInfo.url" target="_blank" class="btn btn-outline">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
@@ -52,7 +52,7 @@
       <div class="backend-info-section">
         <div class="info-grid">
           <div class="info-card">
-            <h3>Available Models</h3>
+            <h3>{{ t('backendDetail.availableModels') }}</h3>
             <div class="model-tags">
               <span v-for="model in backend.models" :key="model" class="model-tag">
                 {{ model }}
@@ -60,7 +60,7 @@
             </div>
           </div>
           <div class="info-card capabilities-card" v-if="capabilityList.length > 0">
-            <h3>Capabilities</h3>
+            <h3>{{ t('backendDetail.capabilities') }}</h3>
             <div class="capabilities-list">
               <div v-for="cap in capabilityList" :key="cap.label" class="capability-item">
                 <span class="capability-dot" :class="{ active: cap.supported }"></span>
@@ -70,7 +70,7 @@
             </div>
           </div>
           <div class="info-card" v-if="cliPath">
-            <h3>CLI Path</h3>
+            <h3>{{ t('backendDetail.cliPath') }}</h3>
             <code class="cli-path-value">{{ cliPath }}</code>
           </div>
         </div>
@@ -90,13 +90,13 @@
       <div v-if="isOpenCode" class="opencode-section">
         <div class="opencode-note" data-tour="opencode-info">
           <span class="note-icon">i</span>
-          <span>OpenCode routes through other AI backends. Register accounts on those backends.</span>
+          <span>{{ t('backendDetail.openCodeNote') }}</span>
         </div>
         <div class="section-header">
-          <h2>Available Backend Accounts</h2>
+          <h2>{{ t('backendDetail.availableBackendAccounts') }}</h2>
         </div>
         <div v-if="otherBackendAccounts.length === 0" class="empty-state">
-          <p>No accounts found on other backends. Add accounts to Claude, Codex, or Gemini backends first.</p>
+          <p>{{ t('backendDetail.noOtherBackendAccounts') }}</p>
         </div>
         <div v-else class="accounts-list">
           <div v-for="group in otherBackendAccounts" :key="group.backend_type" class="cross-backend-group">
@@ -108,15 +108,15 @@
               <div class="account-info">
                 <div class="account-header">
                   <h3>{{ account.account_name }}</h3>
-                  <span v-if="account.is_default" class="default-badge">Default</span>
+                  <span v-if="account.is_default" class="default-badge">{{ t('backendDetail.default') }}</span>
                 </div>
                 <div class="account-meta">
                   <div v-if="account.email" class="meta-item">
-                    <span class="meta-label">Email:</span>
+                    <span class="meta-label">{{ t('backendDetail.emailLabel') }}</span>
                     <span>{{ account.email }}</span>
                   </div>
                   <div v-if="account.plan" class="meta-item">
-                    <span class="meta-label">Plan:</span>
+                    <span class="meta-label">{{ t('backendDetail.planLabel') }}</span>
                     <span class="plan-badge">{{ account.plan }}</span>
                   </div>
                 </div>
@@ -128,12 +128,12 @@
 
       <div class="accounts-section">
         <div class="section-header">
-          <h2>{{ isOpenCode ? 'OpenCode Accounts' : 'Accounts' }}</h2>
+          <h2>{{ isOpenCode ? t('backendDetail.openCodeAccounts') : t('backendDetail.accounts') }}</h2>
           <button v-if="!isOpenCode" class="btn btn-primary" data-tour="add-account-btn" @click="showAddModal = true">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M12 5v14M5 12h14"/>
             </svg>
-            Add Account
+            {{ t('backendDetail.addAccount') }}
           </button>
         </div>
 
@@ -242,8 +242,8 @@
         </div>
 
         <div v-if="backend.accounts?.length === 0" class="empty-state">
-          <p v-if="isOpenCode">OpenCode uses other backends' accounts. No separate accounts needed.</p>
-          <p v-else>No accounts configured. Add an account to use this backend.</p>
+          <p v-if="isOpenCode">{{ t('backendDetail.emptyOpenCode') }}</p>
+          <p v-else>{{ t('backendDetail.emptyAccounts') }}</p>
         </div>
 
         <div v-else class="accounts-list">
@@ -251,44 +251,44 @@
             <div class="account-info">
               <div class="account-header">
                 <h3>{{ account.account_name }}</h3>
-                <span v-if="account.is_default" class="default-badge">Default</span>
+                <span v-if="account.is_default" class="default-badge">{{ t('backendDetail.default') }}</span>
                 <!-- Health status badge -->
                 <template v-if="getAccountHealth(account.id)">
                   <span v-if="getAccountHealth(account.id)!.is_rate_limited" class="health-badge rate-limited">
                     <span class="health-dot red"></span>
-                    Rate Limited ({{ formatCooldown(getAccountHealth(account.id)!) }})
+                    {{ t('backendDetail.rateLimited') }} ({{ formatCooldown(getAccountHealth(account.id)!) }})
                   </span>
                   <span v-else class="health-badge healthy">
                     <span class="health-dot green"></span>
-                    Healthy
+                    {{ t('backendDetail.healthy') }}
                   </span>
                 </template>
               </div>
               <div class="account-meta">
                 <div v-if="account.email" class="meta-item">
-                  <span class="meta-label">Email:</span>
+                  <span class="meta-label">{{ t('backendDetail.emailLabel') }}</span>
                   <span>{{ account.email }}</span>
                 </div>
                 <div v-if="account.config_path" class="meta-item">
-                  <span class="meta-label">Config Path:</span>
+                  <span class="meta-label">{{ t('backendDetail.configPathLabel') }}</span>
                   <code>{{ account.config_path }}</code>
                 </div>
                 <div v-if="account.api_key_env" class="meta-item">
-                  <span class="meta-label">API Key Env:</span>
+                  <span class="meta-label">{{ t('backendDetail.apiKeyEnvLabel') }}</span>
                   <code>{{ account.api_key_env }}</code>
                 </div>
                 <div v-if="account.plan" class="meta-item">
-                  <span class="meta-label">Plan:</span>
+                  <span class="meta-label">{{ t('backendDetail.planLabel') }}</span>
                   <span class="plan-badge">{{ account.plan }}</span>
                 </div>
                 <!-- Health stats -->
                 <template v-if="getAccountHealth(account.id)">
                   <div class="meta-item">
-                    <span class="meta-label">Executions:</span>
+                    <span class="meta-label">{{ t('backendDetail.executionsLabel') }}</span>
                     <span>{{ getAccountHealth(account.id)!.total_executions }}</span>
                   </div>
                   <div class="meta-item">
-                    <span class="meta-label">Last Used:</span>
+                    <span class="meta-label">{{ t('backendDetail.lastUsedLabel') }}</span>
                     <span>{{ formatRelativeTime(getAccountHealth(account.id)!.last_used_at) }}</span>
                   </div>
                 </template>
@@ -300,14 +300,14 @@
                 class="btn btn-sm btn-outline"
                 @click="loginConfigPath = account.config_path; proxyOnlyLogin = false; showLoginModal = true"
               >
-                Login
+                {{ t('backendDetail.login') }}
               </button>
               <button
                 v-if="supportsConnect"
                 class="btn btn-sm btn-outline"
                 @click="loginConfigPath = account.config_path; proxyOnlyLogin = true; showLoginModal = true"
               >
-                Proxy Login
+                {{ t('backendDetail.proxyLogin') }}
               </button>
               <button
                 v-if="backend.type !== 'opencode'"
@@ -315,18 +315,18 @@
                 :disabled="rateLimitState[account.id]?.loading"
                 @click="checkAccountRateLimits(account.id)"
               >
-                {{ rateLimitState[account.id]?.loading ? 'Checking...' : 'Check Rate Limits' }}
+                {{ rateLimitState[account.id]?.loading ? t('backendDetail.checking') : t('backendDetail.checkRateLimits') }}
               </button>
               <button
                 v-if="getAccountHealth(account.id)?.is_rate_limited"
                 class="btn btn-sm btn-clear-rl"
                 @click="clearRateLimit(account.id)"
               >
-                Clear Rate Limit
+                {{ t('backendDetail.clearRateLimit') }}
               </button>
 
-              <button class="btn btn-sm btn-secondary" @click="editAccount(account)">Edit</button>
-              <button class="btn btn-sm btn-danger" @click="deleteAccount(account.id)">Delete</button>
+              <button class="btn btn-sm btn-secondary" @click="editAccount(account)">{{ t('common.edit') }}</button>
+              <button class="btn btn-sm btn-danger" @click="deleteAccount(account.id)">{{ t('common.delete') }}</button>
             </div>
             <!-- Rate limit results -->
             <div v-if="rateLimitState[account.id]?.windows?.length" class="rate-limit-results">
@@ -338,7 +338,7 @@
                 <div class="rl-mini-bar">
                   <div class="rl-mini-fill" :style="{ width: Math.min(w.percentage, 100) + '%', background: getRateLimitColor(w.percentage) }"></div>
                 </div>
-                <div v-if="w.resets_at" class="rl-mini-reset">Resets: {{ new Date(w.resets_at).toLocaleString() }}</div>
+                <div v-if="w.resets_at" class="rl-mini-reset">{{ t('backendDetail.resets') }}: {{ new Date(w.resets_at).toLocaleString() }}</div>
               </div>
             </div>
             <div v-else-if="rateLimitState[account.id]?.error" class="rate-limit-error">
@@ -351,9 +351,9 @@
 
     <ConfirmModal
       :open="showDeleteAccountConfirm"
-      title="Delete Account"
-      message="Are you sure you want to delete this account?"
-      confirm-label="Delete"
+      :title="t('backendDetail.deleteAccount')"
+      :message="t('backendDetail.confirmDeleteAccount')"
+      :confirm-label="t('common.delete')"
       variant="danger"
       @confirm="confirmDeleteAccount"
       @cancel="showDeleteAccountConfirm = false"
@@ -399,9 +399,9 @@ const aiAccountsClient = useAiAccounts().client;
 
 // Bridge ai-accounts AccountWizard's translator to vue-i18n. Falls back to
 // the English stub baked into the wizard when a key is missing.
-const { t: i18nT, te } = useI18n();
+const { t, te } = useI18n();
 function wizardTranslate(key: string, params?: Record<string, unknown>): string {
-  if (te(key)) return i18nT(key, params ?? {});
+  if (te(key)) return t(key, params ?? {});
   return '';
 }
 

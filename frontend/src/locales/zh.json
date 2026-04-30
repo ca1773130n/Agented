@@ -64,6 +64,8 @@
     "skipAnyway": "直接跳过",
     "keepGoing": "继续",
     "elementNotFound": "找不到 {element}。",
+    "dismissTooltip": "退出设置引导",
+    "dismissAria": "关闭引导",
     "pageSlow": "此页面加载时间超出预期。",
     "restartSetupGuide": "重新开始设置引导",
     "restartDesc": "重新启动引导流程，重新完成工作区设置和账号配置。现有配置不会受到影响。",
@@ -167,6 +169,104 @@
     "stepLogin": "登录",
     "stepPlanSave": "套餐与保存",
     "stepDone": "完成",
+    "tour": {
+      "sub": {
+        "yesno": {
+          "title": "你是否已有账号？",
+          "message": "选择你是否在此后端已有账号。"
+        },
+        "name": {
+          "title": "为账号命名",
+          "message": "输入一个标签，方便日后区分账号（例如「个人」「工作」）。可选 — 留空使用默认值。"
+        },
+        "email": {
+          "title": "账号邮箱",
+          "message": "输入与此账号关联的邮箱。我们会在登录页将其作为 login_hint 传入。"
+        },
+        "next": {
+          "title": "进入 CLI 检查",
+          "message": "点击「继续」— 我们会确认 CLI 是否安装，然后进入第 2 步。"
+        }
+      },
+      "cli": {
+        "status": {
+          "title": "CLI 安装检查",
+          "message": "确认 CLI 是否已安装。如果未安装,「安装」按钮会自动帮你下载。"
+        },
+        "path": {
+          "title": "确认配置目录",
+          "message": "这是该账号专用的配置目录。我们会在下一步自动创建。如需使用其他路径,点击「自定义」。"
+        },
+        "next": {
+          "title": "启动 CLI",
+          "message": "点击「继续」— 我们会在后台启动 CLI 并进入第 3 步（登录）。"
+        }
+      },
+      "login": {
+        "booting": {
+          "title": "正在启动 CLI — 选择账号类型",
+          "message": "CLI 正在后台启动。在此期间,请决定哪种登录方式适合你的账号: Pro / Max / Team 订阅 → 选「subscription」; API 用量计费（sk-ant-… / sk-… 密钥）→ 选「API key」; 第三方平台（Bedrock / Foundry / Vertex AI）→ 选「3rd-party」。稍后会出现包含这些选项的菜单。"
+        },
+        "pickMethod": {
+          "title": "选择登录方式",
+          "message": "点击与你账号匹配的选项: 选项 1 = 订阅（Pro / Max / Team）,选项 2 = API 密钥计费,选项 3 = 第三方平台。浏览器会随后打开。"
+        },
+        "authorize": {
+          "title": "在浏览器中授权",
+          "message": "已打开浏览器标签页。请使用第 1 步的邮箱登录并点击「Authorize」。如果标签页未打开,请点击此 URL。"
+        },
+        "paste": {
+          "title": "粘贴授权码",
+          "message": "从重定向页面复制授权码并粘贴到此处,然后点击 Send。我们会在约 5–10 秒内完成验证。"
+        }
+      },
+      "proxy": {
+        "install": {
+          "title": "安装 CLIProxyAPI",
+          "message": "点击 Install 安装 CLIProxyAPI。它让其他工具通过 OpenAI 兼容端点访问此账号。如不需要,点击下方 Skip。"
+        },
+        "start": {
+          "title": "向代理注册",
+          "message": "点击「Start proxy registration」开始 — 浏览器会打开代理 OAuth 页面。不需要代理?点击下方 Skip 直接跳到第 5 步。"
+        },
+        "callback": {
+          "title": "粘贴回调 URL",
+          "message": "从浏览器地址栏复制完整的 localhost 回调 URL 粘贴到此处,然后点击 Submit。重定向页面可能显示「connection refused」— 这是正常现象。"
+        },
+        "continue": {
+          "title": "代理已注册",
+          "message": "注册成功。点击下方 Continue 进入第 5 步。"
+        }
+      },
+      "plan": {
+        "review": {
+          "title": "检查",
+          "message": "确认你输入的内容。如有错误,点击「返回」修改。"
+        },
+        "pick": {
+          "title": "选择套餐",
+          "message": "Pro、Max 或 API。CLI 已在第 3 步告诉我们检测到的订阅 — 如需调整可在此覆盖。"
+        },
+        "default": {
+          "title": "设为默认?（可选）",
+          "message": "勾选可将此账号设为该后端的默认账号。"
+        },
+        "save": {
+          "title": "保存账号",
+          "message": "点击 Save 保存账号并进入完成页。提示: 如希望此账号作为该后端的默认账号,请先勾选上方「设为默认」。"
+        }
+      },
+      "done": {
+        "add": {
+          "title": "再添加一个账号?",
+          "message": "点击此处可在同一后端添加另一个账号（例如第二个 Claude 账号）。"
+        },
+        "nextBackend": {
+          "title": "前往下一个后端",
+          "message": "点击此处将引导推进到下一个后端（Codex / Gemini / OpenCode）。"
+        }
+      }
+    },
     "guide": {
       "subscription": "你是否有 {backend} 订阅？选择「是」并输入账号名称以开始。",
       "cliInstalled": "{backend} CLI 已安装（{version}）。检查配置目录后继续。",
@@ -177,6 +277,37 @@
       "plan": "为此 {backend} 账号选择订阅套餐并保存。",
       "done": "账号已保存！添加其他 {backend} 账号或点击「完成 — 下一个后端」继续。"
     }
+  },
+  "backendDetail": {
+    "documentation": "文档",
+    "login": "登录",
+    "proxyLogin": "代理登录",
+    "availableModels": "可用模型",
+    "capabilities": "能力",
+    "cliPath": "CLI 路径",
+    "openCodeNote": "OpenCode 通过其他 AI 后端运行。请在对应后端注册账号。",
+    "availableBackendAccounts": "可用后端账号",
+    "noOtherBackendAccounts": "未在其他后端找到账号。请先为 Claude、Codex 或 Gemini 后端添加账号。",
+    "openCodeAccounts": "OpenCode 账号",
+    "accounts": "账号",
+    "addAccount": "添加账号",
+    "default": "默认",
+    "emailLabel": "邮箱：",
+    "planLabel": "套餐：",
+    "configPathLabel": "配置路径：",
+    "apiKeyEnvLabel": "API 密钥环境变量：",
+    "executionsLabel": "执行次数：",
+    "lastUsedLabel": "最近使用：",
+    "rateLimited": "已限流",
+    "healthy": "正常",
+    "checkRateLimits": "检查限流",
+    "checking": "检查中...",
+    "clearRateLimit": "清除限流",
+    "resets": "重置",
+    "emptyOpenCode": "OpenCode 使用其他后端的账号,无需单独账号。",
+    "emptyAccounts": "尚未配置账号。请添加账号以使用此后端。",
+    "deleteAccount": "删除账号",
+    "confirmDeleteAccount": "确定要删除此账号吗？"
   },
   "directoryBrowser": {
     "title": "选择目录",
