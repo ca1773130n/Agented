@@ -4325,6 +4325,30 @@ def _migrate_99_kg_extraction_log(conn):
     """)
 
 
+def _migrate_101_users_table(conn):
+    """Add the users table — foundation for multi-user mode (track B).
+
+    Schema-only: no application code consumes the table yet (waves 20-21
+    will wire the FK from user_roles + the ContextVar plumbing). Existing
+    deployments stay in single-user mode through an optional FK that
+    defaults to NULL.
+    """
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS users (
+            id TEXT PRIMARY KEY,
+            email TEXT UNIQUE NOT NULL,
+            display_name TEXT,
+            is_active INTEGER NOT NULL DEFAULT 1,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+    )
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_users_is_active ON users(is_active)")
+
+
 def _migrate_100_session_per_worktree(conn):
     """Add session-per-worktree columns to super_agent_sessions."""
     cursor = conn.execute("PRAGMA table_info(super_agent_sessions)")
@@ -4476,4 +4500,6 @@ VERSIONED_MIGRATIONS = [
     (99, "kg_extraction_log", _migrate_99_kg_extraction_log),
     # v0.5.0 session-per-worktree
     (100, "session_per_worktree", _migrate_100_session_per_worktree),
+    # multi-user foundation (track B)
+    (101, "users_table", _migrate_101_users_table),
 ]

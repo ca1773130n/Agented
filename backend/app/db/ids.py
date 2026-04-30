@@ -73,6 +73,9 @@ MCP_SERVER_ID_LENGTH = 6
 ROLE_ID_PREFIX = "role-"
 ROLE_ID_LENGTH = 6
 
+USER_ID_PREFIX = "user-"
+USER_ID_LENGTH = 6
+
 SECRET_ID_PREFIX = "sec-"
 SECRET_ID_LENGTH = 6
 
@@ -521,6 +524,20 @@ def _get_unique_role_id(conn) -> str:
         cursor = conn.execute("SELECT id FROM user_roles WHERE id = ?", (rid,))
         if cursor.fetchone() is None:
             return rid
+
+
+def generate_user_id() -> str:
+    """Generate a unique user ID like 'user-abc123'."""
+    return generate_id(USER_ID_PREFIX, USER_ID_LENGTH)
+
+
+def _get_unique_user_id(conn) -> str:
+    """Generate a user ID that doesn't exist in the database."""
+    while True:
+        uid = generate_user_id()
+        cursor = conn.execute("SELECT id FROM users WHERE id = ?", (uid,))
+        if cursor.fetchone() is None:
+            return uid
 
 
 def generate_secret_id() -> str:
