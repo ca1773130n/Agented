@@ -16,6 +16,7 @@ const props = defineProps<{
 defineEmits<{
   next: []
   skip: []
+  dismiss: []
 }>()
 
 const { t } = useI18n()
@@ -58,6 +59,14 @@ watch([() => props.skippable, () => props.stepTitle], () => {
       <button class="tour-cancel-skip-btn" @click="confirmingSkip = false">{{ t('tour.keepGoing') }}</button>
     </div>
     <div v-else class="tour-actions">
+      <button
+        class="tour-dismiss-btn"
+        :title="t('tour.dismissTooltip')"
+        :aria-label="t('tour.dismissAria')"
+        @click="$emit('dismiss')"
+      >
+        ✕
+      </button>
       <button v-if="skippable" class="tour-skip-btn" @click="onSkipClick($emit)">
         {{ t('common.skip') }}
       </button>
@@ -144,6 +153,29 @@ watch([() => props.skippable, () => props.stepTitle], () => {
   align-items: center;
   gap: 8px;
   flex-shrink: 0;
+}
+
+.tour-dismiss-btn {
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: var(--text-tertiary);
+  font-size: 13px;
+  cursor: pointer;
+  transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
+  font-family: inherit;
+}
+
+.tour-dismiss-btn:hover {
+  background: var(--bg-secondary);
+  border-color: var(--border-default);
+  color: var(--text-primary);
 }
 
 .tour-skip-btn {

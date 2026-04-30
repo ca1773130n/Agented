@@ -64,6 +64,8 @@
     "skipAnyway": "Skip anyway",
     "keepGoing": "Keep going",
     "elementNotFound": "We couldn't find {element}.",
+    "dismissTooltip": "Exit the setup tour",
+    "dismissAria": "Dismiss tour",
     "pageSlow": "This page is taking longer than expected.",
     "restartSetupGuide": "Restart Setup Guide",
     "restartDesc": "Restart the onboarding tour to re-run through workspace setup and account configuration. Your existing configuration will not be affected.",
@@ -221,19 +223,19 @@
       "proxy": {
         "install": {
           "title": "Install CLIProxyAPI",
-          "message": "If the proxy isn't installed yet, click Install and wait. The proxy lets other tools reach this account through an OpenAI-compatible endpoint."
+          "message": "Click Install to set up CLIProxyAPI. It lets other tools reach this account through an OpenAI-compatible endpoint. Or click Skip below if you don't need it."
         },
         "start": {
           "title": "Register with the proxy",
-          "message": "Click Start proxy registration to begin. A browser tab opens for the proxy OAuth."
+          "message": "Click Start proxy registration to begin — a browser tab opens for the proxy OAuth. Don't need the proxy? Click Skip below to jump to step 5."
         },
         "callback": {
           "title": "Paste the callback URL",
           "message": "Copy the full localhost callback URL from your browser's address bar and paste it here, then click Submit. The redirect page may show \"connection refused\" — that's expected."
         },
-        "skip": {
-          "title": "Skip the proxy",
-          "message": "If you don't need the proxy, click Skip to jump to step 5."
+        "continue": {
+          "title": "Proxy registered",
+          "message": "Registration succeeded. Click Continue below to move to step 5."
         }
       },
       "plan": {
@@ -251,7 +253,7 @@
         },
         "save": {
           "title": "Save the account",
-          "message": "Click Save — the account is persisted and we move to the Done screen."
+          "message": "Click Save to persist the account and move to the Done screen. Tip: tick \"Set as default\" above first if this should be the backend's default account."
         }
       },
       "done": {

@@ -83,6 +83,19 @@ function handleTourDone() {
   router.push('/');
 }
 
+/** User clicked the X on the tour bar — exit the tour without resuming.
+ *  Same effect as completing it (clears state + lands on home). The tour
+ *  can be re-launched from Settings → Setup Guide → Restart Setup Guide. */
+function handleTourDismiss() {
+  if (typeof window !== 'undefined') {
+    const ok = window.confirm(
+      'Exit the setup tour? You can restart it from Settings → Setup Guide.',
+    );
+    if (!ok) return;
+  }
+  tour.restartTour();
+}
+
 /** Navigate to the route for a given tour step (deduplicates against current route) */
 function navigateToTourStep(step: string) {
   const meta = TOUR_STEP_MAP[step];
@@ -391,6 +404,7 @@ onUnmounted(() => {
       @next="tour.nextStep"
       @skip="tour.skipStep"
       @retry="handleTourRetry"
+      @dismiss="handleTourDismiss"
     />
 
     <Teleport to="body">

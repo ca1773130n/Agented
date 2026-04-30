@@ -330,41 +330,21 @@ export async function prefetchTourRoutes(): Promise<void> {
 // ---------------------------------------------------------------------------
 
 /**
- * Minimal shape of a @ai-accounts/ts-core AiAccountsEvent.
- * Kept local to avoid forcing a hard import of @ai-accounts/ts-core into
- * this file; the real type lives in `@ai-accounts/ts-core`.
- */
-type AiAccountsEventLike =
-  | { type: 'wizard.opened'; backendKind: string }
-  | { type: 'wizard.step'; backendKind: string; step: string }
-  | { type: 'wizard.account.created'; backendKind: string; accountId: string }
-  | { type: 'wizard.closed'; backendKind: string; reason: 'done' | 'skip' | 'cancel' }
-  | { type: 'login.started'; sessionId: string; backendKind: string; flow: string }
-  | { type: 'login.prompt'; sessionId: string; promptKind: 'url' | 'text' | 'menu' }
-  | { type: 'login.completed'; sessionId: string; accountId: string }
-  | { type: 'login.failed'; sessionId: string; code: string; message: string }
-  | { type: 'internal.handler_error'; error: string; original: unknown }
-
-/**
- * Bridge an AiAccountsEvent from the @ai-accounts/vue-headless plugin into
- * the Agented tour state machine.  Call this from the plugin's `onEvent`
- * hook in `main.ts`.
+ * Bridge from the @ai-accounts/vue-headless plugin's onEvent hook to the
+ * Agented tour actor's lifecycle. Called from main.ts's plugin install.
  *
- * Currently observational only — no event advances the tour.  Earlier
- * versions auto-NEXTed on `login.completed` / `wizard.account.created`,
- * but both fire *before* the user has walked through the full wizard
- * (proxy + plan + Save + explicit "다음 백엔드" click), which
- * short-circuited the wizard and bounced the user to the next backend as
- * soon as the OAuth code was accepted.  Tour advancement now only
- * happens when the user clicks the wizard's "다음 백엔드" button →
- * `BackendDetailPage.onWizardDone` → `tourMachine.nextStep()`.
+ * Tour advancement is NOT driven by these events — earlier versions
+ * auto-NEXTed on login.completed / wizard.account.created, but both fire
+ * before the user finishes the proxy + plan + Save + explicit "Next
+ * Backend" click, so the wizard short-circuited. Advancement is wired
+ * directly: BackendDetailPage.onWizardDone → tourMachine.nextStep().
  *
- * The function still initializes the shared actor so that analytics
- * consumers layered on top see a live actor, and so the "no-op" contract
- * is stable for plugin callers even if the tour itself was never started.
+ * This function is kept solely for its side effect: lazy-initializing the
+ * shared actor so analytics consumers layered on top see a live one. The
+ * full discriminated-union AiAccountsEvent type was removed because no
+ * branch was ever inspected; argument is `unknown` to make that explicit.
  */
-export function notifyAiAccountsEvent(event: AiAccountsEventLike): void {
-  // Ensure actor init has kicked off (idempotent; resolves async).
+export function notifyAiAccountsEvent(_event: unknown): void {
   if (!initPromise) {
     initPromise = initActor().catch((err) => {
       console.error('[tour] init failed:', err);
@@ -372,5 +352,4 @@ export function notifyAiAccountsEvent(event: AiAccountsEventLike): void {
       throw err;
     })
   }
-  void event;
 }

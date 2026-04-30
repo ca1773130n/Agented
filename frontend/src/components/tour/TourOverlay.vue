@@ -35,6 +35,7 @@ const emit = defineEmits<{
   next: []
   skip: []
   retry: []
+  dismiss: []
 }>()
 
 const { t } = useI18n()
@@ -66,10 +67,36 @@ const announcement = computed(() => {
   return `${stepOf}: ${props.step.title}. ${props.step.message}`
 })
 
+function isValidRect(rect: DOMRect): boolean {
+  // Reject zero-dim rects (display:none / not yet laid out) and rects parked at origin
+  // (Vue can transiently expose elements with rect at 0,0 during route transitions).
+  if (rect.width === 0 || rect.height === 0) return false
+  if (rect.top === 0 && rect.left === 0 && rect.bottom < 50) return false
+  return true
+}
+
 function updateRect() {
-  if (targetEl.value) {
-    targetRect.value = targetEl.value.getBoundingClientRect()
+  if (!targetEl.value) return
+  // If the element became disconnected or lost its layout (display:none parent,
+  // route transition mid-flight, conditional v-if flipped), drop both refs and
+  // restart the search. Never let the tooltip anchor to (0,0).
+  if (!targetEl.value.isConnected) {
+    targetEl.value = null
+    targetRect.value = null
+    return
   }
+  const rect = targetEl.value.getBoundingClientRect()
+  if (!isValidRect(rect)) {
+    targetEl.value = null
+    targetRect.value = null
+    disconnectResizeObserver()
+    stopTracking()
+    // Restart the discovery loop so we can re-acquire the element when it
+    // re-enters the layout (or fall back to the not-found UI after timeouts).
+    if (props.active) startObserverWithTimeouts()
+    return
+  }
+  targetRect.value = rect
 }
 
 function startTracking() {
@@ -122,9 +149,7 @@ function findTarget() {
   const el = document.querySelector(sel) as HTMLElement | null
   if (el) {
     const rect = el.getBoundingClientRect()
-    // Reject elements not yet laid out: zero-size or parked at origin
-    if ((rect.width === 0 && rect.height === 0) ||
-        (rect.top === 0 && rect.left === 0 && rect.bottom < 50)) {
+    if (!isValidRect(rect)) {
       targetEl.value = null
       targetRect.value = null
       return
@@ -142,8 +167,13 @@ function findTarget() {
       requestAnimationFrame(() => {
         if (targetEl.value === el) {
           const stableRect = el.getBoundingClientRect()
-          if (stableRect.width > 0 && stableRect.height > 0) {
+          if (isValidRect(stableRect)) {
             targetRect.value = stableRect
+          } else {
+            // Element went invalid between acquisition and stabilization —
+            // drop it so the tooltip never anchors to (0,0).
+            targetEl.value = null
+            targetRect.value = null
           }
         }
       })
@@ -279,19 +309,29 @@ watch(
       disconnectResizeObserver()
     }
 
-    // Robust target search: wait for route transition, then retry with increasing delays.
-    // First delay must be long enough for Vue Router to unmount old page and mount new one.
-    // Starting at 0ms would find the OLD page's elements (being destroyed, rect at 0,0).
-    const delays = [400, 600, 800, 1000, 1500, 2000, 2500, 3000]
+    // Robust target search: wait briefly for route transition, then retry with
+    // increasing delays. First delay long enough for Vue Router to swap pages
+    // (immediate would catch OLD page's elements mid-unmount), but short enough
+    // that the user doesn't perceive a blank window between backend tour steps.
+    const delays = [100, 200, 300, 500, 800, 1200, 1800, 2500]
     let attempt = 0
     function tryFind() {
-      if (!props.active || targetEl.value) return
+      if (!props.active) return
+      // If we currently hold a target but it has been disconnected from the
+      // DOM (route transition unmounted the old page), drop it so findTarget
+      // can re-acquire on the new page.
+      if (targetEl.value && !targetEl.value.isConnected) {
+        targetEl.value = null
+        targetRect.value = null
+        disconnectResizeObserver()
+        stopTracking()
+      }
+      if (targetEl.value) return
       findTarget()
       if (!targetEl.value && attempt < delays.length) {
         setTimeout(tryFind, delays[attempt])
         attempt++
       } else if (!targetEl.value) {
-        // All retries exhausted — fall back to observer + timeouts
         startObserverWithTimeouts()
       }
     }
@@ -339,8 +379,12 @@ onUnmounted(() => {
       class="sr-only"
     >{{ announcement }}</div>
 
-    <!-- Spotlight highlight -->
-    <TourSpotlight :target-rect="targetRect" :visible="!!targetRect" :reduced="isModalOpen" />
+    <!-- Spotlight highlight (rect must have non-zero size — never anchor to 0,0) -->
+    <TourSpotlight
+      :target-rect="targetRect"
+      :visible="!!targetRect && targetRect.width > 0 && targetRect.height > 0"
+      :reduced="isModalOpen"
+    />
 
     <!-- Fullscreen dim when no target found yet -->
     <div v-if="!targetEl" :class="['tour-dim-fallback', { 'modal-open': isModalOpen }]" />
@@ -371,12 +415,13 @@ onUnmounted(() => {
       <span class="spinner-text">{{ t('common.loading') }}</span>
     </div>
 
-    <!-- Tooltip anchored to spotlight target -->
+    <!-- Tooltip anchored to spotlight target — gate on rect validity so it
+         never flashes at (0,0) when the host element is mid-transition. -->
     <TourTooltip
       :target-rect="targetRect"
       :title="step.title"
       :message="effectiveTarget?.message || step.message"
-      :visible="!!targetRect"
+      :visible="!!targetRect && targetRect.width > 0 && targetRect.height > 0"
     />
 
     <!-- Bottom progress bar -->
@@ -391,6 +436,7 @@ onUnmounted(() => {
       :skip-needs-confirm="step.skippable && isSignificantStep(step)"
       @next="$emit('next')"
       @skip="$emit('skip')"
+      @dismiss="$emit('dismiss')"
     />
   </div>
 </template>
