@@ -27,6 +27,16 @@ export const authApi = {
       body: JSON.stringify({ email, password }),
     }),
 
+  signup: (email: string, password: string, displayName?: string) =>
+    apiFetch<LoginResponse>('/api/auth/signup', {
+      method: 'POST',
+      body: JSON.stringify({
+        email,
+        password,
+        display_name: displayName ?? '',
+      }),
+    }),
+
   me: (token?: string) => {
     const headers: Record<string, string> = {};
     if (token) headers.Authorization = `Bearer ${token}`;

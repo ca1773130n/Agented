@@ -634,6 +634,13 @@ export const miscRoutes: RouteRecordRaw[] = [
     component: () => import('../../views/LoginPage.vue'),
     meta: { title: 'Sign in', fullBleed: true, public: true },
   },
+  // Signup (track B, wave 38)
+  {
+    path: '/signup',
+    name: 'signup',
+    component: () => import('../../views/SignupPage.vue'),
+    meta: { title: 'Create account', fullBleed: true, public: true },
+  },
   // Execution Timeline — Gantt-style view (item 22)
   {
     path: '/executions/timeline',

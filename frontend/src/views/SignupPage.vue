@@ -5,15 +5,19 @@ import { useAuth } from '../composables/useAuth';
 
 const route = useRoute();
 const router = useRouter();
-const { login } = useAuth();
+const { signup } = useAuth();
 
 const email = ref('');
 const password = ref('');
+const displayName = ref('');
 const submitting = ref(false);
 const error = ref<string | null>(null);
 
 const canSubmit = computed(
-  () => !submitting.value && email.value.trim().length > 0 && password.value.length > 0,
+  () =>
+    !submitting.value &&
+    email.value.trim().length > 0 &&
+    password.value.length >= 8,
 );
 
 async function onSubmit() {
@@ -21,14 +25,12 @@ async function onSubmit() {
   submitting.value = true;
   error.value = null;
   try {
-    await login(email.value.trim(), password.value);
+    await signup(email.value.trim(), password.value, displayName.value.trim());
     const next = (route.query.next as string) || '/';
     router.push(next);
   } catch (err) {
     error.value =
-      err instanceof Error && err.message
-        ? err.message
-        : 'Invalid email or password';
+      err instanceof Error && err.message ? err.message : 'Signup failed';
   } finally {
     submitting.value = false;
   }
@@ -36,54 +38,68 @@ async function onSubmit() {
 </script>
 
 <template>
-  <div class="login-page">
-    <div class="login-card">
-      <h1 class="login-title">Sign in</h1>
-      <p class="login-subtitle">Use your Agented account.</p>
+  <div class="signup-page">
+    <div class="signup-card">
+      <h1 class="signup-title">Create an account</h1>
+      <p class="signup-subtitle">Sign up for Agented.</p>
 
-      <form class="login-form" @submit.prevent="onSubmit">
-        <label class="login-field">
-          <span class="login-label">Email</span>
+      <form class="signup-form" @submit.prevent="onSubmit">
+        <label class="signup-field">
+          <span class="signup-label">Email</span>
           <input
             v-model="email"
             type="email"
             required
             autocomplete="email"
-            class="login-input"
-            data-test="login-email"
+            class="signup-input"
+            data-test="signup-email"
             :disabled="submitting"
           />
         </label>
 
-        <label class="login-field">
-          <span class="login-label">Password</span>
+        <label class="signup-field">
+          <span class="signup-label">Display name <em class="signup-optional">(optional)</em></span>
+          <input
+            v-model="displayName"
+            type="text"
+            autocomplete="name"
+            class="signup-input"
+            data-test="signup-display-name"
+            :disabled="submitting"
+          />
+        </label>
+
+        <label class="signup-field">
+          <span class="signup-label">Password</span>
           <input
             v-model="password"
             type="password"
             required
-            autocomplete="current-password"
-            class="login-input"
-            data-test="login-password"
+            minlength="8"
+            autocomplete="new-password"
+            class="signup-input"
+            data-test="signup-password"
             :disabled="submitting"
           />
+          <span class="signup-help">At least 8 characters.</span>
         </label>
 
-        <p v-if="error" class="login-error" role="alert" data-test="login-error">
+        <p v-if="error" class="signup-error" role="alert" data-test="signup-error">
           {{ error }}
         </p>
 
         <button
           type="submit"
-          class="login-submit"
-          data-test="login-submit"
+          class="signup-submit"
+          data-test="signup-submit"
           :disabled="!canSubmit"
         >
-          {{ submitting ? 'Signing in…' : 'Sign in' }}
+          {{ submitting ? 'Creating account…' : 'Create account' }}
         </button>
 
-        <p class="login-switch">
-          New here?
-          <router-link :to="{ name: 'signup' }" class="login-link">Create an account</router-link>
+        <p class="signup-switch">
+          Already have an account?
+          <router-link :to="{ name: 'login' }" class="signup-link">Sign in</router-link>
         </p>
       </form>
     </div>
@@ -91,7 +107,7 @@ async function onSubmit() {
 </template>
 
 <style scoped>
-.login-page {
+.signup-page {
   min-height: 100vh;
   display: flex;
   align-items: center;
@@ -100,7 +116,7 @@ async function onSubmit() {
   padding: 24px;
 }
 
-.login-card {
+.signup-card {
   width: 100%;
   max-width: 380px;
   background: var(--bg-secondary);
@@ -110,37 +126,43 @@ async function onSubmit() {
   box-shadow: 0 16px 48px rgba(0, 0, 0, 0.35);
 }
 
-.login-title {
+.signup-title {
   margin: 0 0 4px;
   font-size: 1.5rem;
   font-weight: 600;
   color: var(--text-primary);
 }
 
-.login-subtitle {
+.signup-subtitle {
   margin: 0 0 24px;
   font-size: 0.875rem;
   color: var(--text-secondary);
 }
 
-.login-form {
+.signup-form {
   display: flex;
   flex-direction: column;
   gap: 16px;
 }
 
-.login-field {
+.signup-field {
   display: flex;
   flex-direction: column;
   gap: 6px;
 }
 
-.login-label {
+.signup-label {
   font-size: 0.8125rem;
   color: var(--text-secondary);
 }
 
-.login-input {
+.signup-optional {
+  font-style: normal;
+  color: var(--text-tertiary);
+  font-size: 0.75rem;
+}
+
+.signup-input {
   padding: 10px 12px;
   background: var(--bg-tertiary);
   border: 1px solid var(--border-default);
@@ -150,12 +172,17 @@ async function onSubmit() {
   transition: border-color 0.15s;
 }
 
-.login-input:focus {
+.signup-input:focus {
   outline: none;
   border-color: var(--accent-cyan);
 }
 
-.login-error {
+.signup-help {
+  font-size: 0.75rem;
+  color: var(--text-tertiary);
+}
+
+.signup-error {
   margin: 0;
   padding: 8px 12px;
   font-size: 0.8125rem;
@@ -165,7 +192,7 @@ async function onSubmit() {
   border-radius: 6px;
 }
 
-.login-submit {
+.signup-submit {
   margin-top: 4px;
   padding: 10px 16px;
   background: var(--accent-cyan);
@@ -178,29 +205,29 @@ async function onSubmit() {
   transition: filter 0.15s;
 }
 
-.login-submit:hover:not(:disabled) {
+.signup-submit:hover:not(:disabled) {
   filter: brightness(1.1);
 }
 
-.login-submit:disabled {
+.signup-submit:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
 
-.login-switch {
+.signup-switch {
   margin: 8px 0 0;
   font-size: 0.8125rem;
   color: var(--text-secondary);
   text-align: center;
 }
 
-.login-link {
+.signup-link {
   color: var(--accent-cyan);
   text-decoration: none;
   font-weight: 500;
 }
 
-.login-link:hover {
+.signup-link:hover {
   text-decoration: underline;
 }
 </style>

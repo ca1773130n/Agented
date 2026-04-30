@@ -166,6 +166,71 @@ class TestLogin:
             )
         assert resp.status_code == 200
 
+    def test_signup_creates_user_and_returns_token(self, isolated_db):
+        from app.db.sessions import get_session_by_token
+        from app.db.users import get_user_by_email
+        with _client(isolated_db) as ls:
+            resp = ls.post(
+                "/api/auth/signup",
+                json={
+                    "email": "newcomer@example.com",
+                    "password": "supersecret",
+                    "display_name": "Newcomer",
+                },
+            )
+        assert resp.status_code == 201
+        body = resp.json()
+        assert body["user"]["email"] == "newcomer@example.com"
+        assert body["user"]["display_name"] == "Newcomer"
+        assert isinstance(body["token"], str) and len(body["token"]) >= 40
+
+        # Persisted in DB and the token authenticates against the new user.
+        user = get_user_by_email("newcomer@example.com")
+        assert user is not None
+        sess = get_session_by_token(body["token"])
+        assert sess is not None and sess["user_id"] == user["id"]
+
+    def test_signup_rejects_short_password(self, isolated_db):
+        with _client(isolated_db) as ls:
+            resp = ls.post(
+                "/api/auth/signup",
+                json={"email": "short@example.com", "password": "abc", "display_name": ""},
+            )
+        assert resp.status_code == 400
+
+    def test_signup_rejects_invalid_email(self, isolated_db):
+        with _client(isolated_db) as ls:
+            resp = ls.post(
+                "/api/auth/signup",
+                json={"email": "notanemail", "password": "supersecret", "display_name": ""},
+            )
+        assert resp.status_code == 400
+
+    def test_signup_rejects_duplicate_email(self, isolated_db):
+        with _client(isolated_db) as ls:
+            ls.post(
+                "/api/auth/signup",
+                json={"email": "dup@example.com", "password": "supersecret", "display_name": ""},
+            )
+            resp = ls.post(
+                "/api/auth/signup",
+                json={"email": "dup@example.com", "password": "anothersecret", "display_name": ""},
+            )
+        assert resp.status_code == 400
+
+    def test_signup_then_login_with_same_credentials(self, isolated_db):
+        with _client(isolated_db) as ls:
+            ls.post(
+                "/api/auth/signup",
+                json={"email": "loop@example.com", "password": "loopypass1", "display_name": ""},
+            )
+            resp = ls.post(
+                "/api/auth/login",
+                json={"email": "loop@example.com", "password": "loopypass1"},
+            )
+        assert resp.status_code == 201
+        assert resp.json()["user"]["email"] == "loop@example.com"
+
     def test_session_caller_inherits_admin_role(self, isolated_db):
         """Wave 36 — a logged-in user who owns an admin api_key can hit
         admin-only routes via just the session bearer."""

@@ -33,6 +33,23 @@ async function login(email: string, password: string): Promise<AuthUser> {
   }
 }
 
+async function signup(
+  email: string,
+  password: string,
+  displayName?: string,
+): Promise<AuthUser> {
+  lastError.value = null;
+  try {
+    const result = await authApi.signup(email, password, displayName);
+    setSessionToken(result.token);
+    currentUser.value = result.user;
+    return result.user;
+  } catch (err) {
+    lastError.value = err instanceof Error ? err.message : 'Signup failed';
+    throw err;
+  }
+}
+
 async function logout(): Promise<void> {
   const token = getSessionToken();
   // Best-effort revoke; clear local state regardless of server response.
@@ -83,6 +100,7 @@ export function useAuth() {
     isRestoring: readonly(isRestoring),
     lastError: readonly(lastError),
     login,
+    signup,
     logout,
     restore,
   };
