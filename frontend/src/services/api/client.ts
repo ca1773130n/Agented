@@ -45,6 +45,38 @@ export function clearApiKey(): void {
   }
 }
 
+const SESSION_TOKEN_STORAGE_KEY = 'agented-session-token';
+
+/** Read the session token (Authorization: Bearer) from localStorage. */
+export function getSessionToken(): string | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    return localStorage.getItem(SESSION_TOKEN_STORAGE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+/** Store a session token for subsequent requests (set after login). */
+export function setSessionToken(token: string): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(SESSION_TOKEN_STORAGE_KEY, token);
+  } catch {
+    // ignore
+  }
+}
+
+/** Remove the stored session token (call on logout). */
+export function clearSessionToken(): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.removeItem(SESSION_TOKEN_STORAGE_KEY);
+  } catch {
+    // ignore
+  }
+}
+
 const DEFAULT_TIMEOUT_MS = 120000;
 const DEFAULT_MAX_RETRIES = 3;
 const DEFAULT_RETRY_STATUSES = [429, 502, 503, 504];
@@ -102,8 +134,10 @@ async function apiFetchSingle<T>(url: string, options?: ApiFetchOptions): Promis
 
   try {
     const apiKey = getApiKey();
+    const sessionToken = getSessionToken();
     const authHeaders: Record<string, string> = {};
     if (apiKey) authHeaders['X-API-Key'] = apiKey;
+    if (sessionToken) authHeaders['Authorization'] = `Bearer ${sessionToken}`;
 
     const response = await fetch(`${API_BASE}${url}`, {
       ...fetchOptions,
