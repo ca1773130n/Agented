@@ -13,6 +13,7 @@ import ApiKeyBanner from './components/layout/ApiKeyBanner.vue';
 import ErrorBoundary from './components/base/ErrorBoundary.vue';
 import { registerGenericTools } from './webmcp/generic-tools';
 import { useSidebarCollapse } from './composables/useSidebarCollapse';
+import { useAuth } from './composables/useAuth';
 import { useSidebarData } from './composables/useSidebarData';
 import { useHealthPolling } from './composables/useHealthPolling';
 
@@ -281,6 +282,9 @@ watch(() => route.query.tour, (tourQuery) => {
 
 onMounted(async () => {
   startPolling(10000);
+  // Wave 35: rehydrate session from localStorage before the auth-status
+  // check so the app boots into "logged in" without a flash of /login.
+  await useAuth().restore();
   const isReady = await checkAuthStatus();
   appReady.value = true;
   if (isReady) {
