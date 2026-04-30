@@ -139,7 +139,35 @@ dev-backend: ensure-backend
     cd backend && uv run python run.py --debug
 
 # Run frontend dev server (port 3000)
-dev-frontend: ensure-frontend
+# Rebuild ai-accounts/* dist before starting Vite. Without this, edits to
+# ai-accounts/packages/*/src/ are invisible until each package's `npm run
+# build` regenerates dist/ — Vite consumes the file: pinned packages via
+# their compiled `module` entry. If `just deploy` already rebuilt and the
+# dist mtime is newer than the most-recent src mtime, the rebuild is a no-op.
+ai-accounts-dist-fresh:
+    #!/usr/bin/env bash
+    set -uo pipefail
+    if [ ! -d "{{ai_accounts_path}}/packages" ]; then
+        echo "[dist-fresh] ai-accounts not found at {{ai_accounts_path}} — skipping"
+        exit 0
+    fi
+    for pkg in ts-core vue-headless vue-styled; do
+        pkg_dir="{{ai_accounts_path}}/packages/$pkg"
+        [ -d "$pkg_dir" ] || continue
+        # Compare newest src/* mtime to oldest dist/* mtime.
+        latest_src=$(find "$pkg_dir/src" -type f -newer "$pkg_dir/dist" -print 2>/dev/null | head -n1)
+        if [ -z "$latest_src" ]; then
+            echo "[dist-fresh] $pkg dist is up to date"
+            continue
+        fi
+        echo "[dist-fresh] rebuilding @ai-accounts/$pkg (src newer than dist)..."
+        (cd "$pkg_dir" && npm run build) || { echo "[dist-fresh] $pkg build failed" >&2; exit 1; }
+    done
+    # Vite caches bundled file: deps in .vite/deps; clear so the rebuilt
+    # output is picked up on next page load.
+    rm -rf frontend/node_modules/.vite
+
+dev-frontend: ensure-frontend ai-accounts-dist-fresh
     {{use-node}} cd frontend && npm run dev
 
 # Run ai-accounts Litestar API server (development mode, port 20001)
@@ -157,7 +185,19 @@ deploy: kill ensure-backend build
     #!/usr/bin/env bash
     set -euo pipefail
     [ -f .node-path ] && source .node-path
-    # Clear Vite's dep cache so locally-linked @ai-accounts/* packages
+    # Rebuild locally-linked @ai-accounts/* packages — they are consumed via
+    # `dist/` (per their package.json `main`/`module`/`exports`), so source
+    # edits to ai-accounts are invisible until each package's `npm run build`
+    # regenerates dist/. Skip the rebuild and you ship stale wizard code.
+    if [ -d "{{ai_accounts_path}}/packages" ]; then
+      for pkg in ts-core vue-headless vue-styled; do
+        if [ -d "{{ai_accounts_path}}/packages/$pkg" ]; then
+          echo "Rebuilding @ai-accounts/$pkg..."
+          (cd "{{ai_accounts_path}}/packages/$pkg" && npm run build)
+        fi
+      done
+    fi
+    # Clear Vite's dep cache so the freshly-rebuilt @ai-accounts/* packages
     # (file:../../ai-accounts/packages/*) are re-bundled on every deploy.
     # Vite treats file: deps as library code and caches them aggressively.
     rm -rf frontend/node_modules/.vite
@@ -208,6 +248,43 @@ clean:
 # View API docs URL
 docs:
     @echo "API docs: http://localhost:20000/docs"
+
+# Verify all required CLIs are installed at supported versions
+# Run before reporting bugs; if any line says "MISSING" or "OLD" the wizard
+# will fail at that backend's login step.
+doctor:
+    #!/usr/bin/env bash
+    set -uo pipefail
+    fail=0
+    check() {
+        local name="$1" min="$2" cmd="$3"
+        local ver
+        if ! command -v "$name" >/dev/null 2>&1; then
+            printf "  %-15s %s\n" "$name" "MISSING (need ≥ $min)"
+            fail=1
+            return
+        fi
+        ver="$(eval "$cmd" 2>&1 | head -n1 | tr -d '\r')"
+        printf "  %-15s %s (need ≥ %s)\n" "$name" "${ver:-?}" "$min"
+    }
+    echo "== AI backend CLIs =="
+    check claude       "2.1.0"   'claude --version 2>&1'
+    check codex        "0.121.0" 'codex --version 2>&1'
+    check gemini       "0.35.0"  'gemini --version 2>&1'
+    check opencode     "0.4.0"   'opencode --version 2>&1'
+    check cliproxyapi  "0.16.0"  'cliproxyapi --version 2>&1 || echo "(install: see https://github.com/cliproxyapi)"'
+    echo
+    echo "== Toolchain =="
+    check node         "v22"     'node --version'
+    check npm          "10"      'npm --version'
+    check uv           "0.5"     'uv --version 2>&1'
+    check just         "1.30"    'just --version'
+    echo
+    echo "== Ports =="
+    if lsof -ti:20000 >/dev/null 2>&1; then echo "  20000 (Flask)   — IN USE"; else echo "  20000 (Flask)   — free"; fi
+    if lsof -ti:20001 >/dev/null 2>&1; then echo "  20001 (sidecar) — IN USE"; else echo "  20001 (sidecar) — free"; fi
+    if lsof -ti:3000  >/dev/null 2>&1; then echo "  3000  (Vite)    — IN USE"; else echo "  3000  (Vite)    — free"; fi
+    exit "$fail"
 
 # -----------------------------------------------------------------------------
 # ai-accounts dev-link: point frontend + backend at a local ai-accounts clone
