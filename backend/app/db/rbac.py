@@ -51,13 +51,21 @@ def invalidate_key_cache():
         _has_any_keys_cache.clear()
 
 
-def create_user_role(api_key: str, label: str, role: str = "viewer") -> Optional[str]:
+def create_user_role(
+    api_key: str,
+    label: str,
+    role: str = "viewer",
+    user_id: Optional[str] = None,
+) -> Optional[str]:
     """Create a new user role mapping for an API key.
 
     Args:
         api_key: The API key to associate with the role.
         label: Human-readable label for this key/role assignment.
         role: One of viewer, operator, editor, admin.
+        user_id: Owning user's id. When omitted, falls back to the
+            ``legacy@local`` user provisioned by migration v102 — this
+            preserves single-user behaviour for existing call sites.
 
     Returns:
         The generated role ID, or None on failure.
@@ -69,10 +77,16 @@ def create_user_role(api_key: str, label: str, role: str = "viewer") -> Optional
     try:
         with get_connection() as conn:
             role_id = _get_unique_role_id(conn)
+            owner_id = user_id
+            if owner_id is None:
+                row = conn.execute(
+                    "SELECT id FROM users WHERE email = ?", ("legacy@local",)
+                ).fetchone()
+                owner_id = row[0] if row else None
             conn.execute(
-                """INSERT INTO user_roles (id, api_key, label, role)
-                   VALUES (?, ?, ?, ?)""",
-                (role_id, api_key, label, role),
+                """INSERT INTO user_roles (id, api_key, label, role, user_id)
+                   VALUES (?, ?, ?, ?, ?)""",
+                (role_id, api_key, label, role, owner_id),
             )
             conn.commit()
             invalidate_key_cache()
@@ -88,11 +102,23 @@ def get_role_for_api_key(api_key: str) -> Optional[str]:
     Returns:
         The role string (e.g. 'admin'), or None if not found.
     """
+    result = get_role_and_user_for_api_key(api_key)
+    return result[0] if result else None
+
+
+def get_role_and_user_for_api_key(api_key: str) -> Optional[tuple[str, Optional[str]]]:
+    """Look up (role, user_id) for an API key using constant-time comparison.
+
+    Returns:
+        A (role, user_id) tuple, or None if the key isn't recognized.
+        ``user_id`` is None on legacy rows that haven't been backfilled
+        (shouldn't happen in practice — migration v102 backfills them).
+    """
     with get_connection() as conn:
-        rows = conn.execute("SELECT api_key, role FROM user_roles").fetchall()
-        for row_key, role in rows:
+        rows = conn.execute("SELECT api_key, role, user_id FROM user_roles").fetchall()
+        for row_key, role, user_id in rows:
             if hmac.compare_digest(api_key, row_key):
-                return role
+                return (role, user_id)
         return None
 
 
@@ -175,7 +201,7 @@ def rotate_user_role(role_id: str) -> Optional[dict]:
     with get_connection() as conn:
         conn.row_factory = _dict_factory
         existing = conn.execute(
-            "SELECT id, label, role FROM user_roles WHERE id = ?", (role_id,)
+            "SELECT id, label, role, user_id FROM user_roles WHERE id = ?", (role_id,)
         ).fetchone()
         if not existing:
             conn.row_factory = None
@@ -184,9 +210,9 @@ def rotate_user_role(role_id: str) -> Optional[dict]:
         new_id = _get_unique_role_id(conn)
         new_key = generate_api_key()
         conn.execute(
-            """INSERT INTO user_roles (id, api_key, label, role)
-               VALUES (?, ?, ?, ?)""",
-            (new_id, new_key, existing["label"], existing["role"]),
+            """INSERT INTO user_roles (id, api_key, label, role, user_id)
+               VALUES (?, ?, ?, ?, ?)""",
+            (new_id, new_key, existing["label"], existing["role"], existing.get("user_id")),
         )
         conn.execute("DELETE FROM user_roles WHERE id = ?", (role_id,))
         conn.commit()

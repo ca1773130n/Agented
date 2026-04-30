@@ -24,16 +24,18 @@ class TestCreateUser:
         assert row["email"] == "alice@example.com"
 
     def test_create_rejects_invalid_email(self, isolated_db):
+        baseline = count_users()  # includes legacy@local from migration v102
         assert create_user("notanemail", "X") is None
         assert create_user("", "X") is None
-        assert count_users() == 0
+        assert count_users() == baseline
 
     def test_create_unique_email_constraint(self, isolated_db):
+        baseline = count_users()
         first = create_user("dup@example.com", "First")
         assert first is not None
         second = create_user("dup@example.com", "Second")
         assert second is None
-        assert count_users() == 1
+        assert count_users() == baseline + 1
 
 
 class TestGetUser:
@@ -47,18 +49,20 @@ class TestGetUser:
 
 class TestListUsers:
     def test_list_returns_all_by_default(self, isolated_db):
+        baseline = len(list_users())  # legacy@local
         create_user("a@x.com")
         create_user("b@x.com")
         rows = list_users()
-        assert len(rows) == 2
+        assert len(rows) == baseline + 2
 
     def test_list_active_only_filters_deactivated(self, isolated_db):
         active_id = create_user("a@x.com")
         inactive_id = create_user("b@x.com")
         deactivate_user(inactive_id)
         rows = list_users(active_only=True)
-        assert len(rows) == 1
-        assert rows[0]["id"] == active_id
+        ids = [r["id"] for r in rows]
+        assert active_id in ids
+        assert inactive_id not in ids
 
 
 class TestUpdateUser:
@@ -79,8 +83,10 @@ class TestDeactivate:
         assert get_user(uid)["is_active"] == 0
 
     def test_count_active_only(self, isolated_db):
+        baseline_total = count_users()
+        baseline_active = count_users(active_only=True)
         create_user("e@x.com")
         deact = create_user("f@x.com")
         deactivate_user(deact)
-        assert count_users() == 2
-        assert count_users(active_only=True) == 1
+        assert count_users() == baseline_total + 2
+        assert count_users(active_only=True) == baseline_active + 1

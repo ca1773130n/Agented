@@ -4325,6 +4325,41 @@ def _migrate_99_kg_extraction_log(conn):
     """)
 
 
+def _migrate_102_user_roles_user_id(conn):
+    """Add user_id column to user_roles and backfill existing rows.
+
+    Track B, wave 20. Schema becomes multi-user-ready while preserving
+    single-user behaviour: every existing user_roles row is reassigned
+    to a synthetic "legacy@local" user so authorization keeps working.
+    """
+    cursor = conn.execute("PRAGMA table_info(user_roles)")
+    existing = {row[1] for row in cursor.fetchall()}
+    if "user_id" in existing:
+        return  # idempotent
+
+    legacy_row = conn.execute(
+        "SELECT id FROM users WHERE email = ?", ("legacy@local",)
+    ).fetchone()
+    if legacy_row:
+        legacy_id = legacy_row[0]
+    else:
+        legacy_id = "user-legacy"
+        conn.execute(
+            """INSERT INTO users (id, email, display_name, is_active)
+               VALUES (?, ?, ?, 1)""",
+            (legacy_id, "legacy@local", "Legacy single-user"),
+        )
+
+    conn.execute("ALTER TABLE user_roles ADD COLUMN user_id TEXT REFERENCES users(id)")
+    conn.execute(
+        "UPDATE user_roles SET user_id = ? WHERE user_id IS NULL",
+        (legacy_id,),
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_user_roles_user_id ON user_roles(user_id)"
+    )
+
+
 def _migrate_101_users_table(conn):
     """Add the users table — foundation for multi-user mode (track B).
 
@@ -4502,4 +4537,5 @@ VERSIONED_MIGRATIONS = [
     (100, "session_per_worktree", _migrate_100_session_per_worktree),
     # multi-user foundation (track B)
     (101, "users_table", _migrate_101_users_table),
+    (102, "user_roles_user_id", _migrate_102_user_roles_user_id),
 ]

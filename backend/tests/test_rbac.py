@@ -12,12 +12,14 @@ from app.db.rbac import (
     count_user_roles,
     create_user_role,
     delete_user_role,
+    get_role_and_user_for_api_key,
     get_role_for_api_key,
     get_user_role,
     list_user_roles,
     rotate_user_role,
     update_user_role,
 )
+from app.db.users import create_user
 from app.services.audit_log_service import AuditLogService
 from app.services.rbac_service import (
     ROLE_PERMISSIONS,
@@ -126,6 +128,43 @@ class TestUserRoleCRUD:
         assert count_user_roles() == 1
         create_user_role("key-c2", "C2", "admin")
         assert count_user_roles() == 2
+
+
+class TestUserIdAttribution:
+    """Wave 20: user_roles.user_id FK + legacy backfill."""
+
+    def test_legacy_user_provisioned_by_migration(self, isolated_db):
+        # Migration v102 inserts legacy@local. Existing role rows backfill
+        # to that user. New rows without an explicit user_id also fall back.
+        rid = create_user_role("k1", "L1", "admin")
+        from app.db.connection import get_connection
+        with get_connection() as conn:
+            row = conn.execute("SELECT user_id FROM user_roles WHERE id = ?", (rid,)).fetchone()
+        assert row[0] == "user-legacy"
+
+    def test_create_with_explicit_user_id(self, isolated_db):
+        uid = create_user("real@example.com", "Real")
+        rid = create_user_role("k2", "L2", "editor", user_id=uid)
+        from app.db.connection import get_connection
+        with get_connection() as conn:
+            row = conn.execute("SELECT user_id FROM user_roles WHERE id = ?", (rid,)).fetchone()
+        assert row[0] == uid
+
+    def test_get_role_and_user_for_api_key(self, isolated_db):
+        uid = create_user("auth@example.com", "Auth")
+        create_user_role("k3", "L3", "admin", user_id=uid)
+        result = get_role_and_user_for_api_key("k3")
+        assert result == ("admin", uid)
+
+    def test_get_role_and_user_unknown_returns_none(self, isolated_db):
+        assert get_role_and_user_for_api_key("not-a-key") is None
+
+    def test_rotate_preserves_user_id(self, isolated_db):
+        uid = create_user("rot@example.com", "Rot")
+        rid = create_user_role("k4", "L4", "operator", user_id=uid)
+        new_role = rotate_user_role(rid)
+        assert new_role is not None
+        assert new_role["user_id"] == uid
 
 
 class TestRotateUserRole:
