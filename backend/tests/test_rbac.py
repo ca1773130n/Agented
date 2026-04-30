@@ -12,6 +12,7 @@ from app.db.rbac import (
     count_user_roles,
     create_user_role,
     delete_user_role,
+    get_highest_role_for_user,
     get_role_and_user_for_api_key,
     get_role_for_api_key,
     get_user_role,
@@ -165,6 +166,38 @@ class TestUserIdAttribution:
         new_role = rotate_user_role(rid)
         assert new_role is not None
         assert new_role["user_id"] == uid
+
+
+class TestHighestRoleForUser:
+    """Wave 36 — strongest role across all of a user's api_keys."""
+
+    def test_returns_none_for_empty_user_id(self, isolated_db):
+        assert get_highest_role_for_user("") is None
+        assert get_highest_role_for_user(None) is None  # type: ignore[arg-type]
+
+    def test_returns_none_when_user_has_no_roles(self, isolated_db):
+        uid = create_user("noroles@example.com", "NoRoles")
+        assert get_highest_role_for_user(uid) is None
+
+    def test_returns_single_role(self, isolated_db):
+        uid = create_user("single@example.com", "Single")
+        create_user_role("single-key", "Lbl", "editor", user_id=uid)
+        assert get_highest_role_for_user(uid) == "editor"
+
+    def test_returns_strongest_when_multiple_roles(self, isolated_db):
+        uid = create_user("multi@example.com", "Multi")
+        create_user_role("ed-key", "Editor key", "editor", user_id=uid)
+        create_user_role("vw-key", "Viewer key", "viewer", user_id=uid)
+        create_user_role("ad-key", "Admin key", "admin", user_id=uid)
+        assert get_highest_role_for_user(uid) == "admin"
+
+    def test_ranks_editor_above_operator_above_viewer(self, isolated_db):
+        uid = create_user("rank@example.com", "Rank")
+        create_user_role("op-key", "Op", "operator", user_id=uid)
+        create_user_role("vw2-key", "Vw", "viewer", user_id=uid)
+        assert get_highest_role_for_user(uid) == "operator"
+        create_user_role("ed2-key", "Ed", "editor", user_id=uid)
+        assert get_highest_role_for_user(uid) == "editor"
 
 
 class TestRotateUserRole:

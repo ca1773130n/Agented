@@ -13,7 +13,11 @@ from typing import Optional
 from litestar.connection import Request
 from litestar.exceptions import NotAuthorizedException, PermissionDeniedException
 
-from app.db.rbac import count_user_roles, get_role_and_user_for_api_key
+from app.db.rbac import (
+    count_user_roles,
+    get_highest_role_for_user,
+    get_role_and_user_for_api_key,
+)
 from app.db.sessions import get_session_by_token
 
 
@@ -47,17 +51,19 @@ def _resolve_session_token(request: Request) -> Optional[str]:
 def _caller_from_session(token: str) -> Optional[Caller]:
     """Resolve a session token to a Caller. Returns None on miss/expired.
 
-    Default role for session-authenticated users is "viewer" — admin
-    operations still need an api-key-with-admin-role mapping. Future
-    waves will associate roles directly with users.
+    The caller inherits the user's strongest role across all of their
+    api-key rows (wave 36). A user with no role rows at all defaults to
+    "viewer" so they can read most surfaces but can't administrate.
     """
     sess = get_session_by_token(token)
     if sess is None:
         return None
+    user_id = sess["user_id"]
+    role = get_highest_role_for_user(user_id) or "viewer"
     return Caller(
         api_key="session",
-        role="viewer",
-        user_id=sess["user_id"],
+        role=role,
+        user_id=user_id,
         auth_method="session",
     )
 

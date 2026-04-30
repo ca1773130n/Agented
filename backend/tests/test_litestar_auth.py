@@ -166,6 +166,45 @@ class TestLogin:
             )
         assert resp.status_code == 200
 
+    def test_session_caller_inherits_admin_role(self, isolated_db):
+        """Wave 36 — a logged-in user who owns an admin api_key can hit
+        admin-only routes via just the session bearer."""
+        uid = create_user("admin-user@example.com", "AdminUser")
+        set_password(uid, "x")
+        # Associate an admin role row with this user.
+        from app.db.rbac import create_user_role
+        create_user_role("ignored-key", "Owned by admin user", "admin", user_id=uid)
+        with _client(isolated_db) as ls:
+            login_resp = ls.post(
+                "/api/auth/login",
+                json={"email": "admin-user@example.com", "password": "x"},
+            )
+            token = login_resp.json()["token"]
+            resp = ls.get(
+                "/admin/rbac/roles",
+                headers={"Authorization": f"Bearer {token}"},
+            )
+        assert resp.status_code == 200, resp.text
+
+    def test_session_caller_without_admin_role_blocked(self, isolated_db):
+        """Inverse — a logged-in user who only owns viewer rows is 403'd
+        from admin endpoints."""
+        from app.db.rbac import create_user_role
+        uid = create_user("viewer-user@example.com", "ViewerUser")
+        set_password(uid, "x")
+        create_user_role("vw-only-key", "Viewer only", "viewer", user_id=uid)
+        with _client(isolated_db) as ls:
+            login_resp = ls.post(
+                "/api/auth/login",
+                json={"email": "viewer-user@example.com", "password": "x"},
+            )
+            token = login_resp.json()["token"]
+            resp = ls.get(
+                "/admin/rbac/roles",
+                headers={"Authorization": f"Bearer {token}"},
+            )
+        assert resp.status_code == 403
+
     def test_token_authenticates_subsequent_session_lookup(self, isolated_db):
         from app.db.sessions import get_session_by_token
         uid = create_user("session@example.com")

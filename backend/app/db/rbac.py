@@ -122,6 +122,29 @@ def get_role_and_user_for_api_key(api_key: str) -> Optional[tuple[str, Optional[
         return None
 
 
+_ROLE_RANK = {"viewer": 0, "operator": 1, "editor": 2, "admin": 3}
+
+
+def get_highest_role_for_user(user_id: str) -> Optional[str]:
+    """Return the strongest role the user holds across any of their api_keys.
+
+    If the user owns multiple user_roles rows with different roles
+    (e.g. admin + editor), the strongest one wins under the standard
+    ordering: admin > editor > operator > viewer. Returns None when
+    the user has no role rows.
+    """
+    if not user_id:
+        return None
+    with get_connection() as conn:
+        rows = conn.execute(
+            "SELECT role FROM user_roles WHERE user_id = ?", (user_id,)
+        ).fetchall()
+    if not rows:
+        return None
+    best = max(rows, key=lambda r: _ROLE_RANK.get(r[0], -1))
+    return best[0] if _ROLE_RANK.get(best[0], -1) >= 0 else None
+
+
 def get_user_role(role_id: str) -> Optional[dict]:
     """Get a single user role record by ID.
 
