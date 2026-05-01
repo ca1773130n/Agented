@@ -15,6 +15,9 @@ from litestar.exceptions import ClientException, NotAuthorizedException
 from litestar.status_codes import HTTP_204_NO_CONTENT
 from msgspec import Struct
 
+import logging
+
+from app.db.password_resets import consume_token, request_reset
 from app.db.sessions import create_session, revoke_session
 from app.db.users import (
     authenticate,
@@ -23,6 +26,8 @@ from app.db.users import (
     get_user_by_email,
     set_password,
 )
+
+_auth_logger = logging.getLogger("app.auth")
 
 from ..auth import Caller, _resolve_session_token
 
@@ -146,4 +151,49 @@ def logout(request: Request) -> None:
     return None
 
 
-auth_router = Router(path="/api/auth", route_handlers=[login, signup, me, logout])
+class ForgotPasswordBody(Struct):
+    email: str
+
+
+class ResetPasswordBody(Struct):
+    token: str
+    password: str
+
+
+@post("/forgot-password", status_code=HTTP_204_NO_CONTENT, sync_to_thread=False)
+def forgot_password(data: ForgotPasswordBody) -> None:
+    """Issue a password-reset token for *email* if it exists.
+
+    Always returns 204, regardless of whether the email is in the DB.
+    Defends against email enumeration. The reset link is logged to
+    stderr (no SMTP in this codebase yet — operators read the log).
+    """
+    user = get_user_by_email(data.email)
+    if user is not None and user.get("is_active"):
+        token = request_reset(user["id"])
+        if token:
+            _auth_logger.info(
+                "Password reset requested for %s — link: /reset-password?token=%s",
+                user["email"],
+                token,
+            )
+    return None
+
+
+@post("/reset-password", status_code=HTTP_204_NO_CONTENT, sync_to_thread=False)
+def reset_password(data: ResetPasswordBody) -> None:
+    """Consume a reset token and set the new password."""
+    if len(data.password) < 8:
+        raise ClientException(detail="Password must be at least 8 characters")
+    user_id = consume_token(data.token)
+    if user_id is None:
+        raise NotAuthorizedException(detail="Invalid or expired token")
+    if not set_password(user_id, data.password):
+        raise ClientException(detail="Could not update password")
+    return None
+
+
+auth_router = Router(
+    path="/api/auth",
+    route_handlers=[login, signup, me, logout, forgot_password, reset_password],
+)

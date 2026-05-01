@@ -4357,6 +4357,30 @@ def _migrate_106_owned_entities_batch1_user_id(conn):
         _add_user_id_column(conn, table)
 
 
+def _migrate_108_password_reset_tokens(conn):
+    """Forgot-password support — single-use tokens (track B, wave 43).
+
+    The reset email side is intentionally NOT wired (no SMTP infra in
+    this codebase yet). The endpoint logs the reset link to stderr,
+    which is enough for local dev / single-operator setups.
+    """
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS password_reset_tokens (
+            id TEXT PRIMARY KEY,
+            token TEXT UNIQUE NOT NULL,
+            user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            expires_at TIMESTAMP NOT NULL,
+            consumed_at TIMESTAMP
+        )
+        """
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_prt_token ON password_reset_tokens(token)"
+    )
+
+
 def _migrate_107_owned_entities_batch2_user_id(conn):
     """Multi-tenancy — remaining owned-entity tables (track B, wave 42).
 
@@ -4661,4 +4685,5 @@ VERSIONED_MIGRATIONS = [
     (105, "products_user_id", _migrate_105_products_user_id),
     (106, "owned_entities_batch1", _migrate_106_owned_entities_batch1_user_id),
     (107, "owned_entities_batch2", _migrate_107_owned_entities_batch2_user_id),
+    (108, "password_reset_tokens", _migrate_108_password_reset_tokens),
 ]
