@@ -35,14 +35,19 @@ export default defineConfig(({ mode }) => {
           target: 'http://127.0.0.1:20001',
           changeOrigin: true
         },
+        // /api/version, /api/check-backend, /api/validate-path migrated
+        // in wave 45. /api/auth/* migrated in waves 32-33+38+43.
+        '/api/version': { target: 'http://127.0.0.1:20002', changeOrigin: true },
+        '/api/check-backend': { target: 'http://127.0.0.1:20002', changeOrigin: true },
+        '/api/validate-path': { target: 'http://127.0.0.1:20002', changeOrigin: true },
+        '/api/auth': { target: 'http://127.0.0.1:20002', changeOrigin: true },
         '/api': {
           target: 'http://127.0.0.1:20000',
           changeOrigin: true
         },
         // /admin/rbac was migrated to the Litestar app on :20002 in waves
         // 23-25. More-specific keys take precedence over /admin so the
-        // catch-all routes the rest to Flask. As more routes migrate, add
-        // their prefixes ABOVE the /admin entry.
+        // catch-all routes the rest to Flask.
         '/admin/rbac': {
           target: 'http://127.0.0.1:20002',
           changeOrigin: true
@@ -73,14 +78,19 @@ export default defineConfig(({ mode }) => {
           target: 'http://127.0.0.1:20001',
           changeOrigin: true
         },
+        // /api/version, /api/check-backend, /api/validate-path migrated
+        // in wave 45. /api/auth/* migrated in waves 32-33+38+43.
+        '/api/version': { target: 'http://127.0.0.1:20002', changeOrigin: true },
+        '/api/check-backend': { target: 'http://127.0.0.1:20002', changeOrigin: true },
+        '/api/validate-path': { target: 'http://127.0.0.1:20002', changeOrigin: true },
+        '/api/auth': { target: 'http://127.0.0.1:20002', changeOrigin: true },
         '/api': {
           target: 'http://127.0.0.1:20000',
           changeOrigin: true
         },
         // /admin/rbac was migrated to the Litestar app on :20002 in waves
         // 23-25. More-specific keys take precedence over /admin so the
-        // catch-all routes the rest to Flask. As more routes migrate, add
-        // their prefixes ABOVE the /admin entry.
+        // catch-all routes the rest to Flask.
         '/admin/rbac': {
           target: 'http://127.0.0.1:20002',
           changeOrigin: true
