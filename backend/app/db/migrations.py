@@ -4325,6 +4325,38 @@ def _migrate_99_kg_extraction_log(conn):
     """)
 
 
+def _add_user_id_column(conn, table: str) -> None:
+    """Idempotent helper: add user_id column + backfill + index for *table*.
+
+    Used by every owned-entity multi-tenancy migration from wave 41 onward.
+    Walking the table list explicitly (rather than a single mega-migration)
+    keeps each migration version atomic — if a future schema change breaks
+    one table, only that one's migration needs a fix.
+    """
+    table = _validate_sql_identifier(table, "table")
+    cursor = conn.execute(f"PRAGMA table_info({table})")
+    existing = {row[1] for row in cursor.fetchall()}
+    if "user_id" in existing:
+        return
+    conn.execute(
+        f"ALTER TABLE {table} ADD COLUMN user_id TEXT REFERENCES users(id)"
+    )
+    conn.execute(
+        f"UPDATE {table} SET user_id = (SELECT id FROM users WHERE email = ?) "
+        f"WHERE user_id IS NULL",
+        ("legacy@local",),
+    )
+    conn.execute(
+        f"CREATE INDEX IF NOT EXISTS idx_{table}_user_id ON {table}(user_id)"
+    )
+
+
+def _migrate_106_owned_entities_batch1_user_id(conn):
+    """Multi-tenancy starter — 5 tables (track B, wave 41)."""
+    for table in ("projects", "teams", "agents", "plugins", "super_agents"):
+        _add_user_id_column(conn, table)
+
+
 def _migrate_105_products_user_id(conn):
     """Per-entity multi-tenancy starter (track B, wave 39).
 
@@ -4604,4 +4636,5 @@ VERSIONED_MIGRATIONS = [
     (103, "users_password_hash", _migrate_103_users_password_hash),
     (104, "sessions_table", _migrate_104_sessions_table),
     (105, "products_user_id", _migrate_105_products_user_id),
+    (106, "owned_entities_batch1", _migrate_106_owned_entities_batch1_user_id),
 ]
