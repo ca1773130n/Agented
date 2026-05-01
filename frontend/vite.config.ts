@@ -57,6 +57,9 @@ export default defineConfig(({ mode }) => {
         '/admin/bots/sla': { target: 'http://127.0.0.1:20002', changeOrigin: true },
         '/admin/analytics/cross-team-insights': { target: 'http://127.0.0.1:20002', changeOrigin: true },
         '/admin/analytics/scheduling-suggestions': { target: 'http://127.0.0.1:20002', changeOrigin: true },
+        '/admin/execution-search': { target: 'http://127.0.0.1:20002', changeOrigin: true },
+        '/admin/rotation': { target: 'http://127.0.0.1:20002', changeOrigin: true },
+        '/admin/specialized-bots': { target: 'http://127.0.0.1:20002', changeOrigin: true },
         '/admin': {
           target: 'http://127.0.0.1:20000',
           changeOrigin: true
@@ -105,6 +108,9 @@ export default defineConfig(({ mode }) => {
         '/admin/bots/sla': { target: 'http://127.0.0.1:20002', changeOrigin: true },
         '/admin/analytics/cross-team-insights': { target: 'http://127.0.0.1:20002', changeOrigin: true },
         '/admin/analytics/scheduling-suggestions': { target: 'http://127.0.0.1:20002', changeOrigin: true },
+        '/admin/execution-search': { target: 'http://127.0.0.1:20002', changeOrigin: true },
+        '/admin/rotation': { target: 'http://127.0.0.1:20002', changeOrigin: true },
+        '/admin/specialized-bots': { target: 'http://127.0.0.1:20002', changeOrigin: true },
         '/admin': {
           target: 'http://127.0.0.1:20000',
           changeOrigin: true
