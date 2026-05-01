@@ -4325,6 +4325,37 @@ def _migrate_99_kg_extraction_log(conn):
     """)
 
 
+def _migrate_105_products_user_id(conn):
+    """Per-entity multi-tenancy starter (track B, wave 39).
+
+    Adds an optional user_id column to ``products`` and backfills every
+    existing row to the synthetic legacy@local user. The column stays
+    nullable so existing schema-level INSERTs continue to work — the DB
+    layer (``app/db/products.py``) handles the default.
+
+    This is the *pattern* for the remaining 24 owned-entity tables.
+    Subsequent migrations will repeat it for projects, teams, agents,
+    plugins, and so on. Each table gets:
+      1. ALTER TABLE ... ADD COLUMN user_id TEXT REFERENCES users(id)
+      2. UPDATE ... SET user_id = legacy_user WHERE user_id IS NULL
+      3. CREATE INDEX idx_<table>_user_id ON <table>(user_id)
+    """
+    cursor = conn.execute("PRAGMA table_info(products)")
+    existing = {row[1] for row in cursor.fetchall()}
+    if "user_id" in existing:
+        return  # idempotent
+
+    conn.execute("ALTER TABLE products ADD COLUMN user_id TEXT REFERENCES users(id)")
+    conn.execute(
+        "UPDATE products SET user_id = (SELECT id FROM users WHERE email = ?) "
+        "WHERE user_id IS NULL",
+        ("legacy@local",),
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_products_user_id ON products(user_id)"
+    )
+
+
 def _migrate_104_sessions_table(conn):
     """Sessions table for the login endpoint (track B, wave 32)."""
     conn.execute(
@@ -4572,4 +4603,5 @@ VERSIONED_MIGRATIONS = [
     (102, "user_roles_user_id", _migrate_102_user_roles_user_id),
     (103, "users_password_hash", _migrate_103_users_password_hash),
     (104, "sessions_table", _migrate_104_sessions_table),
+    (105, "products_user_id", _migrate_105_products_user_id),
 ]
