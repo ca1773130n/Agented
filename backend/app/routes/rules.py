@@ -49,6 +49,14 @@ class RuleTypePath(BaseModel):
 @rules_bp.get("/")
 def list_rules(query: PaginationQuery):
     """List all rules (global + per-project) with optional pagination."""
+    # Wave 47: scope by current_user when present.
+    from ..db.owned_entities import get_for_user as _g4u
+    from ..logging_config import current_user_var as _cuv
+    _uid = _cuv.get()
+    if _uid:
+        _rows = _g4u("rules", _uid, limit=query.limit, offset=query.offset or 0)
+        return {"rules": _rows, "total_count": len(_rows)}, 200
+
     project_id = request.args.get("project_id")
     total_count = count_rules(project_id)
     rules = get_all_rules(project_id, limit=query.limit, offset=query.offset or 0)

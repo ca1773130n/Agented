@@ -27,6 +27,14 @@ class TriggerPath(BaseModel):
 @require_role("viewer", "operator", "editor", "admin")
 def list_triggers(query: PaginationQuery):
     """List all triggers with path counts and execution status."""
+    # Wave 47: scope by current_user when present.
+    from ..db.owned_entities import get_for_user as _g4u
+    from ..logging_config import current_user_var as _cuv
+    _uid = _cuv.get()
+    if _uid:
+        _rows = _g4u("triggers", _uid, limit=query.limit, offset=query.offset or 0)
+        return {"triggers": _rows, "total_count": len(_rows)}, 200
+
     result, status = TriggerService.list_triggers(limit=query.limit, offset=query.offset or 0)
     return result, status
 

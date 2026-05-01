@@ -37,6 +37,14 @@ class ProjectCommandsPath(BaseModel):
 @commands_bp.get("/")
 def list_commands(query: PaginationQuery):
     """List all commands (global + per-project) with optional pagination."""
+    # Wave 47: scope by current_user when present.
+    from ..db.owned_entities import get_for_user as _g4u
+    from ..logging_config import current_user_var as _cuv
+    _uid = _cuv.get()
+    if _uid:
+        _rows = _g4u("commands", _uid, limit=query.limit, offset=query.offset or 0)
+        return {"commands": _rows, "total_count": len(_rows)}, 200
+
     project_id = request.args.get("project_id")
     total_count = count_commands(project_id)
     commands = get_all_commands(project_id, limit=query.limit, offset=query.offset or 0)

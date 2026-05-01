@@ -47,6 +47,14 @@ class ComponentPath(BaseModel):
 @plugins_bp.get("/")
 def list_plugins(query: PaginationQuery):
     """List all plugins with component counts and optional pagination."""
+    # Wave 47: scope by current_user when present.
+    from ..db.owned_entities import get_for_user as _g4u
+    from ..logging_config import current_user_var as _cuv
+    _uid = _cuv.get()
+    if _uid:
+        _rows = _g4u("plugins", _uid, limit=query.limit, offset=query.offset or 0)
+        return {"plugins": _rows, "total_count": len(_rows)}, 200
+
     total_count = count_plugins()
     plugins = get_all_plugins(limit=query.limit, offset=query.offset or 0)
     return {"plugins": plugins, "total_count": total_count}, HTTPStatus.OK

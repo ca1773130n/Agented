@@ -41,6 +41,14 @@ class SuperAgentPath(BaseModel):
 @super_agents_bp.get("/")
 def list_super_agents(query: PaginationQuery):
     """List all super agents."""
+    # Wave 47: scope by current_user when present.
+    from ..db.owned_entities import get_for_user as _g4u
+    from ..logging_config import current_user_var as _cuv
+    _uid = _cuv.get()
+    if _uid:
+        _rows = _g4u("super_agents", _uid, limit=query.limit, offset=query.offset or 0)
+        return {"super_agents": _rows, "total_count": len(_rows)}, 200
+
     from ..db.super_agents import count_all_super_agents
 
     super_agents = get_all_super_agents(limit=query.limit, offset=query.offset or 0)

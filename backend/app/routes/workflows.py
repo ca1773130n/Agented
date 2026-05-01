@@ -65,7 +65,14 @@ class ApprovalNodePath(BaseModel):
 
 @workflows_bp.get("/")
 def list_workflows():
-    """List all workflows with latest version numbers."""
+    """List workflows owned by the authenticated caller (wave 47)."""
+    from ..db.owned_entities import get_for_user
+    from ..logging_config import current_user_var
+
+    user_id = current_user_var.get()
+    if user_id:
+        rows = get_for_user("workflows", user_id)
+        return {"workflows": rows}, HTTPStatus.OK
     workflows = get_all_workflows()
     return {"workflows": workflows}, HTTPStatus.OK
 

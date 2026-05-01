@@ -57,6 +57,14 @@ project_mcp_bp = APIBlueprint(
 @mcp_servers_bp.get("/")
 def list_mcp_servers(query: PaginationQuery):
     """List all MCP servers (presets + custom) with optional pagination."""
+    # Wave 47: scope by current_user when present.
+    from ..db.owned_entities import get_for_user as _g4u
+    from ..logging_config import current_user_var as _cuv
+    _uid = _cuv.get()
+    if _uid:
+        _rows = _g4u("mcp_servers", _uid, limit=query.limit, offset=query.offset or 0)
+        return {"servers": _rows, "total_count": len(_rows)}, 200
+
     total_count = count_mcp_servers()
     servers = get_all_mcp_servers(limit=query.limit, offset=query.offset or 0)
     return {"servers": servers, "total_count": total_count}, HTTPStatus.OK

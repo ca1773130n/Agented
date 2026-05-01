@@ -34,6 +34,14 @@ class SketchPath(BaseModel):
 @sketches_bp.get("/")
 def list_sketches(query: PaginationQuery):
     """List all sketches with optional filters."""
+    # Wave 47: scope by current_user when present.
+    from ..db.owned_entities import get_for_user as _g4u
+    from ..logging_config import current_user_var as _cuv
+    _uid = _cuv.get()
+    if _uid:
+        _rows = _g4u("sketches", _uid, limit=query.limit, offset=query.offset or 0)
+        return {"sketches": _rows, "total_count": len(_rows)}, 200
+
     status = request.args.get("status")
     project_id = request.args.get("project_id")
     sketches = get_all_sketches(

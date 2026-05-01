@@ -42,6 +42,14 @@ class EventPath(BaseModel):
 @hooks_bp.get("/")
 def list_hooks(query: PaginationQuery):
     """List all hooks (global + per-project) with optional pagination."""
+    # Wave 47: scope by current_user when present.
+    from ..db.owned_entities import get_for_user as _g4u
+    from ..logging_config import current_user_var as _cuv
+    _uid = _cuv.get()
+    if _uid:
+        _rows = _g4u("hooks", _uid, limit=query.limit, offset=query.offset or 0)
+        return {"hooks": _rows, "total_count": len(_rows)}, 200
+
     project_id = request.args.get("project_id")
     total_count = count_hooks(project_id)
     hooks = get_all_hooks(project_id, limit=query.limit, offset=query.offset or 0)
