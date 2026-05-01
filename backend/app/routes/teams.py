@@ -132,7 +132,16 @@ def _auto_generate_topology_edges(team_id: str, topology: str, topology_config=N
 @teams_bp.get("/")
 @require_role("viewer", "operator", "editor", "admin")
 def list_teams(query: PaginationQuery):
-    """List all teams with member counts and optional pagination."""
+    """List teams owned by the authenticated caller (wave 46)."""
+    from ..db.owned_entities import get_for_user
+    from ..logging_config import current_user_var
+
+    user_id = current_user_var.get()
+    if user_id:
+        teams = get_for_user(
+            "teams", user_id, limit=query.limit, offset=query.offset or 0
+        )
+        return {"teams": teams, "total_count": len(teams)}, HTTPStatus.OK
     total_count = count_teams()
     teams = get_all_teams(limit=query.limit, offset=query.offset or 0)
     return {"teams": teams, "total_count": total_count}, HTTPStatus.OK

@@ -63,7 +63,19 @@ class TeamEdgePath(BaseModel):
 
 @projects_bp.get("/")
 def list_projects(query: PaginationQuery):
-    """List all projects with team counts and optional pagination."""
+    """List projects owned by the authenticated caller (wave 46).
+
+    Falls back to the unscoped admin view when no user_id is associated.
+    """
+    from ..db.owned_entities import get_for_user
+    from ..logging_config import current_user_var
+
+    user_id = current_user_var.get()
+    if user_id:
+        projects = get_for_user(
+            "projects", user_id, limit=query.limit, offset=query.offset or 0
+        )
+        return {"projects": projects, "total_count": len(projects)}, HTTPStatus.OK
     total_count = count_projects()
     projects = get_all_projects(limit=query.limit, offset=query.offset or 0)
     return {"projects": projects, "total_count": total_count}, HTTPStatus.OK

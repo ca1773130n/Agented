@@ -22,7 +22,18 @@ class AgentPath(BaseModel):
 
 @agents_bp.get("/")
 def list_agents(query: PaginationQuery):
-    """List all agents with optional pagination."""
+    """List agents owned by the authenticated caller (wave 46)."""
+    from http import HTTPStatus
+
+    from ..db.owned_entities import get_for_user
+    from ..logging_config import current_user_var
+
+    user_id = current_user_var.get()
+    if user_id:
+        agents = get_for_user(
+            "agents", user_id, limit=query.limit, offset=query.offset or 0
+        )
+        return {"agents": agents, "total_count": len(agents)}, HTTPStatus.OK
     result, status = AgentService.list_agents(limit=query.limit, offset=query.offset or 0)
     return result, status
 
