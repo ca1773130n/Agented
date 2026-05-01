@@ -7,18 +7,30 @@ from app.db.connection import get_connection
 from app.db.owned_entities import _VALID_TABLES, count_for_user, get_for_user
 from app.db.users import create_user
 
-# Tables migrated in wave 41.
 BATCH_1 = ["projects", "teams", "agents", "plugins", "super_agents"]
+BATCH_2 = [
+    "hooks",
+    "commands",
+    "rules",
+    "triggers",
+    "mcp_servers",
+    "sketches",
+    "workflows",
+    "user_skills",
+    "agent_conversations",
+    "design_conversations",
+]
+ALL_TABLES = BATCH_1 + BATCH_2
 
 
-@pytest.mark.parametrize("table", BATCH_1)
+@pytest.mark.parametrize("table", ALL_TABLES)
 def test_table_has_user_id_column(table, isolated_db):
     with get_connection() as conn:
         cols = {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}
-    assert "user_id" in cols, f"{table} missing user_id column after wave 41"
+    assert "user_id" in cols, f"{table} missing user_id column"
 
 
-@pytest.mark.parametrize("table", BATCH_1)
+@pytest.mark.parametrize("table", ALL_TABLES)
 def test_user_id_index_present(table, isolated_db):
     with get_connection() as conn:
         idx_names = {row[1] for row in conn.execute("PRAGMA index_list(" + table + ")")}

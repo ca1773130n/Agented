@@ -16,19 +16,23 @@ from typing import List, Optional
 from .connection import get_connection
 
 _VALID_TABLES = {
+    # batch 1 (wave 41)
     "projects",
     "teams",
     "agents",
     "plugins",
     "super_agents",
-    "skills",
+    # batch 2 (wave 42)
     "hooks",
     "commands",
     "rules",
     "triggers",
-    "workflows",
-    "sketches",
     "mcp_servers",
+    "sketches",
+    "workflows",
+    "user_skills",
+    "agent_conversations",
+    "design_conversations",
 }
 
 

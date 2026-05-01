@@ -4357,6 +4357,29 @@ def _migrate_106_owned_entities_batch1_user_id(conn):
         _add_user_id_column(conn, table)
 
 
+def _migrate_107_owned_entities_batch2_user_id(conn):
+    """Multi-tenancy — remaining owned-entity tables (track B, wave 42).
+
+    Covers hooks, commands, rules, triggers, mcp_servers, sketches,
+    workflows, user_skills, agent_conversations, design_conversations.
+    audit_events intentionally excluded — those are immutable system
+    events without an owning user.
+    """
+    for table in (
+        "hooks",
+        "commands",
+        "rules",
+        "triggers",
+        "mcp_servers",
+        "sketches",
+        "workflows",
+        "user_skills",
+        "agent_conversations",
+        "design_conversations",
+    ):
+        _add_user_id_column(conn, table)
+
+
 def _migrate_105_products_user_id(conn):
     """Per-entity multi-tenancy starter (track B, wave 39).
 
@@ -4637,4 +4660,5 @@ VERSIONED_MIGRATIONS = [
     (104, "sessions_table", _migrate_104_sessions_table),
     (105, "products_user_id", _migrate_105_products_user_id),
     (106, "owned_entities_batch1", _migrate_106_owned_entities_batch1_user_id),
+    (107, "owned_entities_batch2", _migrate_107_owned_entities_batch2_user_id),
 ]
