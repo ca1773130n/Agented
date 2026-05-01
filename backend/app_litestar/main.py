@@ -16,6 +16,7 @@ from .routes.admin_misc import admin_misc_router
 from .routes.bot_templates import bot_templates_router
 from .routes.misc import misc_router
 from .routes.payload_transformers import payload_transformers_router
+from .routes.projects import projects_router
 from .routes.quality_ratings import quality_ratings_router
 from .routes.scheduler import scheduler_router
 from .routes.teams import teams_router
@@ -39,6 +40,7 @@ def create_app() -> Litestar:
             triggers_router,
             payload_transformers_router,
             teams_router,
+            projects_router,
         ],
         dependencies={"caller": provide_caller},
     )
