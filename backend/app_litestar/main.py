@@ -15,6 +15,7 @@ from .routes.rbac import rbac_router
 from .routes.admin_misc import admin_misc_router
 from .routes.bot_templates import bot_templates_router
 from .routes.misc import misc_router
+from .routes.mcp_servers import mcp_servers_router, project_mcp_router
 from .routes.payload_transformers import payload_transformers_router
 from .routes.projects import projects_router
 from .routes.quality_ratings import quality_ratings_router
@@ -41,6 +42,8 @@ def create_app() -> Litestar:
             payload_transformers_router,
             teams_router,
             projects_router,
+            mcp_servers_router,
+            project_mcp_router,
         ],
         dependencies={"caller": provide_caller},
     )
