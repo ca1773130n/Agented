@@ -48,4 +48,16 @@ export const authApi = {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}` },
     }),
+
+  forgotPassword: (email: string) =>
+    apiFetch<void>('/api/auth/forgot-password', {
+      method: 'POST',
+      body: JSON.stringify({ email }),
+    }),
+
+  resetPassword: (token: string, password: string) =>
+    apiFetch<void>('/api/auth/reset-password', {
+      method: 'POST',
+      body: JSON.stringify({ token, password }),
+    }),
 };

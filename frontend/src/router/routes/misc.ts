@@ -641,6 +641,19 @@ export const miscRoutes: RouteRecordRaw[] = [
     component: () => import('../../views/SignupPage.vue'),
     meta: { title: 'Create account', fullBleed: true, public: true },
   },
+  // Forgot/reset password (track B, wave 44)
+  {
+    path: '/forgot-password',
+    name: 'forgot-password',
+    component: () => import('../../views/ForgotPasswordPage.vue'),
+    meta: { title: 'Forgot password', fullBleed: true, public: true },
+  },
+  {
+    path: '/reset-password',
+    name: 'reset-password',
+    component: () => import('../../views/ResetPasswordPage.vue'),
+    meta: { title: 'Reset password', fullBleed: true, public: true },
+  },
   // Execution Timeline — Gantt-style view (item 22)
   {
     path: '/executions/timeline',

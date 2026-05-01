@@ -84,6 +84,8 @@ async function onSubmit() {
         <p class="login-switch">
           New here?
           <router-link :to="{ name: 'signup' }" class="login-link">Create an account</router-link>
+          ·
+          <router-link :to="{ name: 'forgot-password' }" class="login-link">Forgot password?</router-link>
         </p>
       </form>
     </div>
