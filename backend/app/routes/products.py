@@ -18,6 +18,8 @@ from ..database import (
 from ..database import (
     create_product as db_create_product,
 )
+from ..db.products import get_products_for_user
+from ..logging_config import current_user_var
 from ..models.common import PaginationQuery
 from ..models.product import CreateProductRequest, UpdateProductRequest
 
@@ -31,7 +33,17 @@ class ProductPath(BaseModel):
 
 @products_bp.get("/")
 def list_products(query: PaginationQuery):
-    """List all products with project counts and optional pagination."""
+    """List products owned by the authenticated caller (wave 40).
+
+    Falls back to the unscoped admin view when the request has no
+    associated user_id (legacy api-key-only setups, system tools, etc.).
+    """
+    user_id = current_user_var.get()
+    if user_id:
+        products = get_products_for_user(
+            user_id, limit=query.limit, offset=query.offset or 0
+        )
+        return {"products": products, "total_count": len(products)}, HTTPStatus.OK
     total_count = count_products()
     products = get_all_products(limit=query.limit, offset=query.offset or 0)
     return {"products": products, "total_count": total_count}, HTTPStatus.OK
@@ -39,12 +51,14 @@ def list_products(query: PaginationQuery):
 
 @products_bp.post("/")
 def create_product(body: CreateProductRequest):
-    """Create a new product."""
+    """Create a new product owned by the authenticated caller (wave 40)."""
+    user_id = current_user_var.get()
     product_id = db_create_product(
         name=body.name,
         description=body.description,
         status=body.status or "active",
         owner_team_id=body.owner_team_id,
+        user_id=user_id,
     )
     if not product_id:
         return error_response(
