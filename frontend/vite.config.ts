@@ -65,6 +65,8 @@ export default defineConfig(({ mode }) => {
         '/admin/scheduler': { target: 'http://127.0.0.1:20002', changeOrigin: true },
         // /admin/triggers/* (and nested /payload-transformer) — wave 52.
         '/admin/triggers': { target: 'http://127.0.0.1:20002', changeOrigin: true },
+        // /admin/teams/* + nested members/assignments/connections/edges — wave 53.
+        '/admin/teams': { target: 'http://127.0.0.1:20002', changeOrigin: true },
         '/admin': {
           target: 'http://127.0.0.1:20000',
           changeOrigin: true
@@ -121,6 +123,8 @@ export default defineConfig(({ mode }) => {
         '/admin/scheduler': { target: 'http://127.0.0.1:20002', changeOrigin: true },
         // /admin/triggers/* (and nested /payload-transformer) — wave 52.
         '/admin/triggers': { target: 'http://127.0.0.1:20002', changeOrigin: true },
+        // /admin/teams/* + nested members/assignments/connections/edges — wave 53.
+        '/admin/teams': { target: 'http://127.0.0.1:20002', changeOrigin: true },
         '/admin': {
           target: 'http://127.0.0.1:20000',
           changeOrigin: true
