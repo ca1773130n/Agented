@@ -13,7 +13,9 @@ from .routes.auth import auth_router
 from .routes.health import health_router
 from .routes.rbac import rbac_router
 from .routes.admin_misc import admin_misc_router
+from .routes.bot_templates import bot_templates_router
 from .routes.misc import misc_router
+from .routes.quality_ratings import quality_ratings_router
 from .routes.utility import utility_router
 
 
@@ -27,6 +29,8 @@ def create_app() -> Litestar:
             utility_router,
             misc_router,
             admin_misc_router,
+            bot_templates_router,
+            quality_ratings_router,
         ],
         dependencies={"caller": provide_caller},
     )
