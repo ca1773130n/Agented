@@ -16,6 +16,7 @@ from .routes.admin_misc import admin_misc_router
 from .routes.bot_templates import bot_templates_router
 from .routes.misc import misc_router
 from .routes.quality_ratings import quality_ratings_router
+from .routes.scheduler import scheduler_router
 from .routes.utility import utility_router
 
 
@@ -31,6 +32,7 @@ def create_app() -> Litestar:
             admin_misc_router,
             bot_templates_router,
             quality_ratings_router,
+            scheduler_router,
         ],
         dependencies={"caller": provide_caller},
     )
