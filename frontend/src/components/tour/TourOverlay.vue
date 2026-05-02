@@ -241,6 +241,7 @@ onUnmounted(() => {
     <!-- Spotlight highlight (rect must have non-zero size — never anchor to 0,0) -->
     <TourSpotlight
       :target-rect="targetRect"
+      :target-el="targetEl"
       :visible="!!targetRect && targetRect.width > 0 && targetRect.height > 0"
       :reduced="isModalOpen"
     />

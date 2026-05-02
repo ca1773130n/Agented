@@ -1,11 +1,22 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 
+import { computeSpotlightGeometry } from './spotlightGeometry'
+
 const props = withDefaults(defineProps<{
   targetRect: DOMRect | null
+  /**
+   * The actual DOM element the rect was measured from. Plan 02-01 (OB-11):
+   * the spotlight reads its computed border-radius and adapts padding
+   * by element type (input=4, button=6, card=12) when this is provided.
+   * Optional so legacy callers still work; falls back to the default
+   * geometry from `computeSpotlightGeometry(null)`.
+   */
+  targetEl?: HTMLElement | null
   visible: boolean
   reduced?: boolean
 }>(), {
+  targetEl: null,
   reduced: false,
 })
 
@@ -17,17 +28,15 @@ const suppressTransition = ref(false)
 const spotlightStyle = computed(() => {
   if (!props.targetRect) return {}
   const r = props.targetRect
-  const pad = parseInt(
-    getComputedStyle(document.documentElement)
-      .getPropertyValue('--tour-spotlight-padding')
-      .trim() || '8',
-    10,
+  const { padding, borderRadius } = computeSpotlightGeometry(
+    props.targetEl ?? null,
   )
   const style: Record<string, string> = {
-    top: `${r.top - pad}px`,
-    left: `${r.left - pad}px`,
-    width: `${r.width + pad * 2}px`,
-    height: `${r.height + pad * 2}px`,
+    top: `${r.top - padding}px`,
+    left: `${r.left - padding}px`,
+    width: `${r.width + padding * 2}px`,
+    height: `${r.height + padding * 2}px`,
+    borderRadius,
   }
   if (suppressTransition.value) {
     style.transition = 'none'
