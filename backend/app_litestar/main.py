@@ -17,8 +17,10 @@ from .exception_handlers import EXCEPTION_HANDLERS
 from .lifecycle import on_shutdown, on_startup
 from .middleware import (
     ApiKeyMiddleware,
+    RateLimitMiddleware,
     RequestContextMiddleware,
     RequestLoggingMiddleware,
+    SecurityHeadersMiddleware,
 )
 from .routes.auth import auth_router
 from .routes.health import health_router
@@ -170,6 +172,8 @@ def create_app() -> Litestar:
     return Litestar(
         cors_config=_cors_config(),
         middleware=[
+            SecurityHeadersMiddleware,
+            RateLimitMiddleware,
             RequestContextMiddleware,
             ApiKeyMiddleware,
             RequestLoggingMiddleware,

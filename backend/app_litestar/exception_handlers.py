@@ -7,9 +7,11 @@ consistent and 500s feed into the same error_capture sink.
 from __future__ import annotations
 
 import logging
+import os
 import sqlite3
 import traceback
 from http import HTTPStatus
+from pathlib import Path
 from typing import Any
 
 from litestar import Request, Response
@@ -22,6 +24,12 @@ from litestar.exceptions import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+# SPA fallback — serves backend/static/index.html for non-API 404s so the
+# Vue frontend can deep-link in production. Mirrors the wave-79 spa.py.
+_SPA_INDEX = Path(__file__).resolve().parent.parent / "static" / "index.html"
+_API_PREFIXES = ("/api/", "/admin/", "/health/", "/docs/", "/openapi/", "/schema/")
 
 
 def _error_body(code: str, message: str) -> dict[str, Any]:
@@ -58,7 +66,19 @@ def permission_denied_handler(_: Request, exc: PermissionDeniedException) -> Res
     return _json_response("FORBIDDEN", exc.detail or "Permission denied", HTTPStatus.FORBIDDEN)
 
 
-def not_found_handler(_: Request, exc: NotFoundException) -> Response:
+def not_found_handler(request: Request, exc: NotFoundException) -> Response:
+    """Serve SPA index.html for non-API 404s; JSON for API 404s."""
+    path = request.url.path
+    is_api = any(path == p.rstrip("/") or path.startswith(p) for p in _API_PREFIXES)
+    if not is_api and _SPA_INDEX.exists():
+        try:
+            return Response(
+                content=_SPA_INDEX.read_bytes(),
+                status_code=HTTPStatus.OK,
+                media_type="text/html",
+            )
+        except OSError:
+            pass
     return _json_response("NOT_FOUND", exc.detail or "Not found", HTTPStatus.NOT_FOUND)
 
 
