@@ -64,6 +64,7 @@ from .routes.leaf_crud_g import (
     plugin_exports_router,
     sketches_router,
 )
+from .routes.grd_routes import grd_router
 from .routes.leaf_crud_h import (
     backends_router,
     utility_leftover_router,
@@ -187,6 +188,7 @@ def create_app() -> Litestar:
             rule_conversations_router,
             utility_leftover_router,
             backends_router,
+            grd_router,
         ],
         dependencies={"caller": provide_caller},
     )

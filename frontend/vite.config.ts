@@ -147,6 +147,19 @@ export default defineConfig(({ mode }) => {
           target: 'http://127.0.0.1:20002',
           changeOrigin: true,
         },
+        // wave 74 — /api/projects/* GRD; chat/stream and sessions/{id}/stream stay on Flask.
+        '^/api/projects/[^/]+/(sync|milestones|phases|plans|chat$|planning|sessions$|sessions/(ralph|team)$)': {
+          target: 'http://127.0.0.1:20002',
+          changeOrigin: true,
+        },
+        '^/api/projects/[^/]+/plans/[^/]+(/status)?$': {
+          target: 'http://127.0.0.1:20002',
+          changeOrigin: true,
+        },
+        '^/api/projects/[^/]+/sessions/[^/]+/(output|stop|pause|resume|input|monitor)$': {
+          target: 'http://127.0.0.1:20002',
+          changeOrigin: true,
+        },
         '/admin/analytics/cross-team-insights': { target: 'http://127.0.0.1:20002', changeOrigin: true },
         '/admin/analytics/scheduling-suggestions': { target: 'http://127.0.0.1:20002', changeOrigin: true },
         '/admin/execution-search': { target: 'http://127.0.0.1:20002', changeOrigin: true },
@@ -313,6 +326,19 @@ export default defineConfig(({ mode }) => {
         },
         // /admin/backends/{id}/connect/{sess}/respond + DELETE /connect/{sess}.
         '^/admin/backends/[^/]+/connect/[^/]+(/respond)?$': {
+          target: 'http://127.0.0.1:20002',
+          changeOrigin: true,
+        },
+        // wave 74 — /api/projects/* GRD; chat/stream and sessions/{id}/stream stay on Flask.
+        '^/api/projects/[^/]+/(sync|milestones|phases|plans|chat$|planning|sessions$|sessions/(ralph|team)$)': {
+          target: 'http://127.0.0.1:20002',
+          changeOrigin: true,
+        },
+        '^/api/projects/[^/]+/plans/[^/]+(/status)?$': {
+          target: 'http://127.0.0.1:20002',
+          changeOrigin: true,
+        },
+        '^/api/projects/[^/]+/sessions/[^/]+/(output|stop|pause|resume|input|monitor)$': {
           target: 'http://127.0.0.1:20002',
           changeOrigin: true,
         },
