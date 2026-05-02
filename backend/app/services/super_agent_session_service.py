@@ -12,7 +12,7 @@ import logging
 import threading
 from typing import Dict, List, Optional, Tuple
 
-from app import config as app_config
+from app.config import OUTPUT_RING_BUFFER_SIZE as _OUTPUT_RING_BUFFER_SIZE
 
 from ..db.super_agents import (
     add_super_agent_session,
@@ -36,7 +36,7 @@ class SuperAgentSessionService:
 
     MAX_CONCURRENT_SESSIONS = 50
     TOKEN_COMPACTION_THRESHOLD = 80_000
-    OUTPUT_RING_BUFFER_SIZE = app_config.OUTPUT_RING_BUFFER_SIZE
+    OUTPUT_RING_BUFFER_SIZE = _OUTPUT_RING_BUFFER_SIZE
     CHARS_PER_TOKEN = 4  # Approximate: 4 chars ~ 1 token
 
     _active_sessions: Dict[str, dict] = {}
