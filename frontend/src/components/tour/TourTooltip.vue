@@ -120,7 +120,7 @@ useFocusTrap(floating, isTrapActive)
 
 <template>
   <div
-    v-if="visible && targetRect"
+    v-if="visible && targetRect && targetRect.width > 0 && targetRect.height > 0"
     ref="floating"
     class="tour-tooltip"
     :class="{ 'tour-tooltip--visible': isVisible && !isTransitioning }"

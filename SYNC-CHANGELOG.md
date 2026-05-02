@@ -158,3 +158,59 @@
 - **zed** ✓  synced=1 skipped=5 failed=0
   - `/Users/neo/Developer/Projects/Agented/.rules`
 
+## 2026-04-28T07:11:05   scope=all
+
+<!-- attribution: author: Cameleon X <ca1773130n@gmail.com> | commit: 20c890a — feat(i18n): split login.preparing into booting + pickMethod -->
+
+- **aider** ✓  synced=2 skipped=2 failed=0
+  - `/Users/neo/Developer/Projects/Agented/CONVENTIONS.md`
+  - `.aider.conf.yml`
+- **cline** ✓  synced=2 skipped=4 failed=0
+- **codex** ✓  synced=2 skipped=0 failed=0
+  - `/Users/neo/Developer/Projects/Agented/AGENTS.md`
+  - `/Users/neo/Developer/Projects/Agented/.codex/config.toml`
+- **continue** ✓  synced=1 skipped=5 failed=0
+  - `/Users/neo/Developer/Projects/Agented/.continue/rules/harnesssync.md`
+- **cursor** ✓  synced=1 skipped=5 failed=0
+- **gemini** ✓  synced=2 skipped=0 failed=0
+  - `/Users/neo/Developer/Projects/Agented/GEMINI.md`
+  - `/Users/neo/Developer/Projects/Agented/.gemini/settings.json`
+- **neovim** ✓  synced=2 skipped=5 failed=0
+- **opencode** ✓  synced=2 skipped=0 failed=0
+  - `/Users/neo/Developer/Projects/Agented/AGENTS.md`
+  - `/Users/neo/Developer/Projects/Agented/opencode.json`
+- **vscode** ✓  synced=2 skipped=5 failed=0
+  - `.github/copilot-instructions.md`
+  - `.codeium/instructions.md`
+- **windsurf** ✓  synced=0 skipped=1 failed=0
+- **zed** ✓  synced=1 skipped=5 failed=0
+  - `/Users/neo/Developer/Projects/Agented/.rules`
+
+## 2026-05-02T21:31:25   scope=all
+
+<!-- attribution: author: Cameleon X <ca1773130n@gmail.com> | commit: 7a9902c — chore(litestar): wave 82 — finish up follow-ups -->
+
+- **aider** ✓  synced=2 skipped=2 failed=0
+  - `/Users/neo/Developer/Projects/Agented/CONVENTIONS.md`
+  - `.aider.conf.yml`
+- **cline** ✓  synced=2 skipped=4 failed=0
+- **codex** ✓  synced=2 skipped=0 failed=0
+  - `/Users/neo/Developer/Projects/Agented/AGENTS.md`
+  - `/Users/neo/Developer/Projects/Agented/.codex/config.toml`
+- **continue** ✓  synced=1 skipped=5 failed=0
+  - `/Users/neo/Developer/Projects/Agented/.continue/rules/harnesssync.md`
+- **cursor** ✓  synced=1 skipped=5 failed=0
+- **gemini** ✓  synced=2 skipped=0 failed=0
+  - `/Users/neo/Developer/Projects/Agented/GEMINI.md`
+  - `/Users/neo/Developer/Projects/Agented/.gemini/settings.json`
+- **neovim** ✓  synced=2 skipped=5 failed=0
+- **opencode** ✓  synced=2 skipped=0 failed=0
+  - `/Users/neo/Developer/Projects/Agented/AGENTS.md`
+  - `/Users/neo/Developer/Projects/Agented/opencode.json`
+- **vscode** ✓  synced=2 skipped=5 failed=0
+  - `.github/copilot-instructions.md`
+  - `.codeium/instructions.md`
+- **windsurf** ✓  synced=0 skipped=1 failed=0
+- **zed** ✓  synced=1 skipped=5 failed=0
+  - `/Users/neo/Developer/Projects/Agented/.rules`
+
