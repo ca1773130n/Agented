@@ -37,6 +37,7 @@ from .routes.skills import (
 from .routes.teams import teams_router
 from .routes.triggers import triggers_router
 from .routes.utility import utility_router
+from .routes.workflows import workflows_router
 
 
 def create_app() -> Litestar:
@@ -69,6 +70,7 @@ def create_app() -> Litestar:
             plugins_router,
             hooks_router,
             commands_router,
+            workflows_router,
         ],
         dependencies={"caller": provide_caller},
     )
