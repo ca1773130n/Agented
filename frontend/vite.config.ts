@@ -43,6 +43,9 @@ export default defineConfig(({ mode }) => {
         '/api/auth': { target: 'http://127.0.0.1:20002', changeOrigin: true },
         '/api/activity-feed': { target: 'http://127.0.0.1:20002', changeOrigin: true },
         '/api/models/pricing': { target: 'http://127.0.0.1:20002', changeOrigin: true },
+        // /api/skills/* (incl. /conversations) + /api/skill-sets/* — wave 57.
+        '/api/skills': { target: 'http://127.0.0.1:20002', changeOrigin: true },
+        '/api/skill-sets': { target: 'http://127.0.0.1:20002', changeOrigin: true },
         '/api': {
           target: 'http://127.0.0.1:20000',
           changeOrigin: true
@@ -105,6 +108,9 @@ export default defineConfig(({ mode }) => {
         '/api/auth': { target: 'http://127.0.0.1:20002', changeOrigin: true },
         '/api/activity-feed': { target: 'http://127.0.0.1:20002', changeOrigin: true },
         '/api/models/pricing': { target: 'http://127.0.0.1:20002', changeOrigin: true },
+        // /api/skills/* (incl. /conversations) + /api/skill-sets/* — wave 57.
+        '/api/skills': { target: 'http://127.0.0.1:20002', changeOrigin: true },
+        '/api/skill-sets': { target: 'http://127.0.0.1:20002', changeOrigin: true },
         '/api': {
           target: 'http://127.0.0.1:20000',
           changeOrigin: true

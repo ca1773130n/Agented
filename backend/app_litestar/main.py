@@ -20,6 +20,11 @@ from .routes.payload_transformers import payload_transformers_router
 from .routes.projects import projects_router
 from .routes.quality_ratings import quality_ratings_router
 from .routes.scheduler import scheduler_router
+from .routes.skills import (
+    skill_conversations_router,
+    skill_sets_router,
+    skills_router,
+)
 from .routes.teams import teams_router
 from .routes.triggers import triggers_router
 from .routes.utility import utility_router
@@ -44,6 +49,9 @@ def create_app() -> Litestar:
             projects_router,
             mcp_servers_router,
             project_mcp_router,
+            skill_conversations_router,
+            skills_router,
+            skill_sets_router,
         ],
         dependencies={"caller": provide_caller},
     )
