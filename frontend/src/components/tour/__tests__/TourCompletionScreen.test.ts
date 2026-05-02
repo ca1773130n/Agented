@@ -1,5 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
+import { readFileSync } from 'fs'
+import { resolve } from 'path'
 import TourCompletionScreen from '../TourCompletionScreen.vue'
 
 vi.mock('vue-router', () => ({
@@ -77,5 +79,20 @@ describe('TourCompletionScreen', () => {
     // Also verify section-divider-label "Skipped" is not shown
     expect(wrapper.find('.section-divider-label').exists()).toBe(false)
     wrapper.unmount()
+  })
+
+  // OB-36: completion icon animation is no-op under prefers-reduced-motion.
+  it('disables completion icon animation under prefers-reduced-motion (OB-36)', () => {
+    const source = readFileSync(
+      resolve(__dirname, '../TourCompletionScreen.vue'),
+      'utf-8',
+    )
+    const styleMatch = source.match(/<style[^>]*>([\s\S]*?)<\/style>/)!
+    const styleBlock = styleMatch[1]
+    const reducedBlock = styleBlock.match(
+      /@media\s*\(prefers-reduced-motion:\s*reduce\)\s*\{[\s\S]*?\}\s*\}/,
+    )
+    expect(reducedBlock).not.toBeNull()
+    expect(reducedBlock![0]).toMatch(/\.completion-icon\s*\{[^}]*animation:\s*none/)
   })
 })

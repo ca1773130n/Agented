@@ -5,21 +5,34 @@
 See: .planning/PROJECT.md (updated 2026-03-21)
 
 **Core value:** Enable engineering teams to orchestrate AI-powered automation through a unified dashboard
-**Current focus:** Phase 8 — Accessibility
+**Current focus:** Phase 9 — Post-Tour Experience
 **Primary hypothesis:** A guided onboarding tour can bring new users from zero to first bot execution in under 3 minutes
 
 ## Current Position
 
-Phase: 7 of 10 (Loading + Error Resilience) — **COMPLETE**
+Phase: 8 of 10 (Accessibility) — **COMPLETE**
 Phase 1: COMPLETE
 Phase 2: COMPLETE
 Phase 3: COMPLETE
 Phase 4: COMPLETE
 Phase 5: COMPLETE
 Phase 6: COMPLETE
-Plan: phase-7/07-01 shipped
-Status: Phase 8 ready to plan
-Last activity: 2026-05-03 — Phase 7 plan 07-01 loading + error resilience
+Phase 7: COMPLETE
+Plan: phase-8/08-01 shipped
+Status: Phase 9 ready to plan
+Last activity: 2026-05-03 — Phase 8 plan 08-01 accessibility
+
+Phase 8 deliverables (plan 08-01):
+- OB-36 ✓ (reduced motion — closed gap by adding @media block to
+  TourOverlay disabling `.spinner-icon` animation + `.tour-dim-fallback`
+  transition; added presence tests across all 4 tour components)
+- OB-37 ✓ (focus trap — already wired via useFocusTrap; added a
+  source-import regression guard in TourTooltip.test.ts)
+- OB-38 ✓ (ARIA live — pre-satisfied + tested by earlier waves)
+- OB-39 ✓ (keyboard-only completion — added tabindex sanity test for
+  action-row + confirm-row buttons; full E2E deferred to Phase 10)
+- 7 new frontend tests (4 reduced-motion presence + 1 OB-37 wiring +
+  2 OB-39 reachability)
 
 Phase 7 deliverables (plan 07-01):
 - OB-40 ✓ (5s "page is slow" fallback with Skip/Retry — pre-existing,

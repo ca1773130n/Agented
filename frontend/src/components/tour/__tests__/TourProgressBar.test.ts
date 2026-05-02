@@ -172,4 +172,33 @@ describe('TourProgressBar', () => {
       expect(dismissBtn.attributes('title')).toBeTruthy()
     })
   })
+
+  // OB-39: keyboard-only completion. The criterion's full check is an
+  // E2E test (Phase 10), but we can guard the unit foundation here:
+  // none of the interactive controls may carry tabindex="-1" (the
+  // only way to make a <button> keyboard-unreachable).
+  describe('OB-39 — interactive controls are keyboard-reachable', () => {
+    const skippableProps = { ...baseProps, skippable: true, skipNeedsConfirm: true }
+
+    it('action-row buttons have no tabindex="-1"', () => {
+      const wrapper = mount(TourProgressBar, { props: skippableProps })
+      for (const sel of ['.tour-next-btn', '.tour-skip-btn', '.tour-dismiss-btn']) {
+        const btn = wrapper.find(sel)
+        expect(btn.exists(), `expected ${sel} to mount`).toBe(true)
+        expect(btn.attributes('tabindex')).not.toBe('-1')
+      }
+    })
+
+    it('confirm-row buttons have no tabindex="-1"', async () => {
+      // Action row hides under `v-else` once `confirmingSkip` flips,
+      // so the confirm/cancel buttons need their own assertion pass.
+      const wrapper = mount(TourProgressBar, { props: skippableProps })
+      await wrapper.find('.tour-skip-btn').trigger('click')
+      for (const sel of ['.tour-confirm-skip-btn', '.tour-cancel-skip-btn']) {
+        const btn = wrapper.find(sel)
+        expect(btn.exists(), `expected ${sel} to mount`).toBe(true)
+        expect(btn.attributes('tabindex')).not.toBe('-1')
+      }
+    })
+  })
 })

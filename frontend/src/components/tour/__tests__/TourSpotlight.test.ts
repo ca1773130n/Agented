@@ -169,4 +169,22 @@ describe('TourSpotlight', () => {
     const hardcodedZIndex = styleBlock.match(/z-index:\s*\d+/g) || []
     expect(hardcodedZIndex).toEqual([])
   })
+
+  // OB-36: tour animations disabled under prefers-reduced-motion.
+  // Criterion calls out "spotlight movement, pulsing glow" — both
+  // must be no-op.
+  it('disables spotlight glow + transition under prefers-reduced-motion (OB-36)', () => {
+    const source = readFileSync(
+      resolve(__dirname, '../TourSpotlight.vue'),
+      'utf-8',
+    )
+    const styleMatch = source.match(/<style[^>]*>([\s\S]*?)<\/style>/)!
+    const styleBlock = styleMatch[1]
+    const reducedBlock = styleBlock.match(
+      /@media\s*\(prefers-reduced-motion:\s*reduce\)\s*\{[\s\S]*?\}\s*\}/,
+    )
+    expect(reducedBlock).not.toBeNull()
+    expect(reducedBlock![0]).toMatch(/\.tour-spotlight-glow\s*\{[^}]*animation:\s*none/)
+    expect(reducedBlock![0]).toMatch(/\.tour-spotlight\s*\{[^}]*transition:\s*none/)
+  })
 })

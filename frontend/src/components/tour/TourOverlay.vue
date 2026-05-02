@@ -436,4 +436,9 @@ onUnmounted(() => {
   white-space: nowrap;
   border: 0;
 }
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner-icon { animation: none; }
+  .tour-dim-fallback { transition: none; }
+}
 </style>
