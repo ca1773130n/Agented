@@ -101,8 +101,17 @@ export default defineConfig(({ mode }) => {
         '/admin/diff-context': { target: 'http://127.0.0.1:20002', changeOrigin: true },
         '/admin/branches': { target: 'http://127.0.0.1:20002', changeOrigin: true },
         '/admin/conversations': { target: 'http://127.0.0.1:20002', changeOrigin: true },
-        // /admin/executions/{id}/replay + /comparisons go to Litestar; other /admin/executions stay on Flask.
-        '^/admin/executions/[^/]+/(replay|comparisons)': {
+        // wave 75 — /admin/executions/* CRUD on Litestar; /executions/{id}/stream stays on Flask.
+        // Order: stream pattern first (more specific) routes to Flask :20000.
+        '^/admin/executions/[^/]+/stream(\\?.*)?$': {
+          target: 'http://127.0.0.1:20000',
+          changeOrigin: true,
+        },
+        '/admin/executions': {
+          target: 'http://127.0.0.1:20002',
+          changeOrigin: true,
+        },
+        '^/admin/triggers/[^/]+/executions': {
           target: 'http://127.0.0.1:20002',
           changeOrigin: true,
         },
@@ -283,8 +292,17 @@ export default defineConfig(({ mode }) => {
         '/admin/diff-context': { target: 'http://127.0.0.1:20002', changeOrigin: true },
         '/admin/branches': { target: 'http://127.0.0.1:20002', changeOrigin: true },
         '/admin/conversations': { target: 'http://127.0.0.1:20002', changeOrigin: true },
-        // /admin/executions/{id}/replay + /comparisons go to Litestar; other /admin/executions stay on Flask.
-        '^/admin/executions/[^/]+/(replay|comparisons)': {
+        // wave 75 — /admin/executions/* CRUD on Litestar; /executions/{id}/stream stays on Flask.
+        // Order: stream pattern first (more specific) routes to Flask :20000.
+        '^/admin/executions/[^/]+/stream(\\?.*)?$': {
+          target: 'http://127.0.0.1:20000',
+          changeOrigin: true,
+        },
+        '/admin/executions': {
+          target: 'http://127.0.0.1:20002',
+          changeOrigin: true,
+        },
+        '^/admin/triggers/[^/]+/executions': {
           target: 'http://127.0.0.1:20002',
           changeOrigin: true,
         },
