@@ -22,6 +22,22 @@ from app.logging_config import current_user_var, request_id_var
 logger = logging.getLogger("app.request")
 
 
+def _json_error_body(code: str, message: str) -> bytes:
+    """Build a short-circuit JSON error body that includes the request_id when set.
+
+    The deleted Flask `test_request_id::test_rate_limit_response_has_request_id`
+    asserted both `X-Request-ID` header and `request_id` field on the body for
+    429s. Mirror that here so 401/429 short-circuits stay traceable.
+    """
+    import json as _json
+
+    rid = request_id_var.get()
+    payload: dict[str, Any] = {"error": {"code": code, "message": message}}
+    if rid:
+        payload["request_id"] = rid
+    return _json.dumps(payload, separators=(",", ":")).encode("utf-8")
+
+
 _AUTH_BYPASS_PREFIXES = (
     "/health",
     "/docs",
@@ -159,7 +175,7 @@ class ApiKeyMiddleware(ASGIMiddleware):
 
     @staticmethod
     async def _unauthorized(send: Send) -> None:
-        body = b'{"error":"Unauthorized"}'
+        body = _json_error_body("UNAUTHORIZED", "Unauthorized")
         await send(
             {
                 "type": "http.response.start",
@@ -350,7 +366,7 @@ class RateLimitMiddleware(ASGIMiddleware):
 
         prefix, limit, window = limit_match
         if not _limiter.hit((_client_ip(scope), prefix), limit, window):
-            body = b'{"error":{"code":"RATE_LIMITED","message":"Rate limit exceeded"}}'
+            body = _json_error_body("RATE_LIMITED", "Rate limit exceeded")
             await send(
                 {
                     "type": "http.response.start",

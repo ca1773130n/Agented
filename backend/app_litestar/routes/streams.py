@@ -51,7 +51,7 @@ def _sse_response(generator) -> Stream:
 # ===========================================================================
 
 
-@get("/{execution_id:str}/stream", media_type=MediaType.TEXT, sync_to_thread=False)
+@get("/{execution_id:str}/stream", media_type="text/event-stream", sync_to_thread=False)
 def stream_execution(execution_id: str) -> Stream:
     if not ExecutionLogService.get_execution(execution_id):
         raise NotFoundException(detail="Execution not found")
@@ -79,7 +79,7 @@ def _make_conversation_stream(name: str, service: Any) -> Router:
 
     @get(
         "/{conv_id:str}/stream",
-        media_type=MediaType.TEXT,
+        media_type="text/event-stream",
         sync_to_thread=False,
         name=f"{name}_stream",
     )
@@ -109,7 +109,7 @@ agent_conversation_stream_router = _make_conversation_stream("agents", AgentConv
 
 @get(
     "/{project_id:str}/chat/stream",
-    media_type=MediaType.TEXT,
+    media_type="text/event-stream",
     sync_to_thread=False,
 )
 def stream_project_chat(project_id: str, request: Request) -> Stream:
@@ -140,7 +140,7 @@ def stream_project_chat(project_id: str, request: Request) -> Stream:
 
 @get(
     "/{project_id:str}/sessions/{session_id:str}/stream",
-    media_type=MediaType.TEXT,
+    media_type="text/event-stream",
     sync_to_thread=False,
 )
 def stream_project_session(project_id: str, session_id: str) -> Stream:
@@ -166,7 +166,7 @@ project_stream_router = Router(
 
 @get(
     "/{backend_id:str}/connect/{session_id:str}/stream",
-    media_type=MediaType.TEXT,
+    media_type="text/event-stream",
     sync_to_thread=False,
 )
 def stream_backend_connect(backend_id: str, session_id: str) -> Stream:
@@ -183,7 +183,7 @@ def stream_backend_connect(backend_id: str, session_id: str) -> Stream:
 
 @get(
     "/test/{test_id:str}/stream",
-    media_type=MediaType.TEXT,
+    media_type="text/event-stream",
     sync_to_thread=False,
 )
 def stream_backend_test(test_id: str) -> Stream:
@@ -209,7 +209,7 @@ backends_stream_router = Router(
 
 @get(
     "/{execution_id:str}/stream",
-    media_type=MediaType.TEXT,
+    media_type="text/event-stream",
     sync_to_thread=False,
 )
 def stream_setup(execution_id: str) -> Stream:
@@ -236,7 +236,7 @@ setup_stream_router = Router(
 
 @get(
     "/{super_agent_id:str}/messages/stream",
-    media_type=MediaType.TEXT,
+    media_type="text/event-stream",
     sync_to_thread=False,
 )
 def stream_super_agent_messages(super_agent_id: str) -> Stream:
@@ -248,7 +248,7 @@ def stream_super_agent_messages(super_agent_id: str) -> Stream:
 
 @get(
     "/{super_agent_id:str}/sessions/{session_id:str}/chat/stream",
-    media_type=MediaType.TEXT,
+    media_type="text/event-stream",
     sync_to_thread=False,
 )
 def stream_super_agent_chat(
@@ -278,7 +278,7 @@ super_agents_stream_router = Router(
 # ===========================================================================
 
 
-@post("/generate/stream", media_type=MediaType.TEXT)
+@post("/generate/stream", media_type="text/event-stream")
 async def stream_team_generation(data: dict) -> Stream:
     body = data or {}
     description = body.get("description", "")

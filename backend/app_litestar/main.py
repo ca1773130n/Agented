@@ -172,12 +172,22 @@ def create_app() -> Litestar:
     """Build the Litestar application instance."""
     return Litestar(
         cors_config=_cors_config(),
+        # Middleware order matters — outermost runs first on ingress and
+        # last on egress. The choice below ensures:
+        #   - RequestContext sets request_id BEFORE RateLimit/ApiKey can
+        #     short-circuit, so 401/429 responses still carry an X-Request-ID
+        #     header (and the helper body field).
+        #   - RequestLogging wraps the inner middleware so 401/429 still get
+        #     logged.
+        #   - SecurityHeaders is innermost-of-the-cross-cutting layer so its
+        #     header injection runs on every response (incl. handler 200s,
+        #     401s, 429s) on the way back out.
         middleware=[
+            RequestContextMiddleware(),
+            RequestLoggingMiddleware(),
             SecurityHeadersMiddleware(),
             RateLimitMiddleware(),
-            RequestContextMiddleware(),
             ApiKeyMiddleware(),
-            RequestLoggingMiddleware(),
         ],
         exception_handlers=EXCEPTION_HANDLERS,
         on_startup=[on_startup],

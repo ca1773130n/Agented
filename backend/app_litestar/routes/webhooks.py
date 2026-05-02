@@ -106,12 +106,23 @@ async def github_webhook(request: Request) -> Any:
             status_code=HTTPStatus.REQUEST_ENTITY_TOO_LARGE, detail="Payload too large"
         )
 
-    is_valid, error_reason = WebhookValidationService.validate_github(
-        request, GITHUB_WEBHOOK_SECRET
-    )
-    if not is_valid:
-        logger.warning("GitHub webhook signature verification failed: %s", error_reason)
-        raise HTTPException(status_code=HTTPStatus.FORBIDDEN, detail=error_reason)
+    # `WebhookValidationService.validate_github` expects a Flask request; call
+    # the underlying signature check directly with the body + header we already
+    # have. Mirrors the same secret-required + sha256 contract.
+    if not GITHUB_WEBHOOK_SECRET:
+        logger.warning("GitHub webhook signature verification failed: secret not configured")
+        raise HTTPException(
+            status_code=HTTPStatus.FORBIDDEN,
+            detail="GitHub webhook secret not configured",
+        )
+    signature = request.headers.get("X-Hub-Signature-256", "")
+    if not WebhookValidationService.validate_signature(
+        payload, signature, GITHUB_WEBHOOK_SECRET, "sha256"
+    ):
+        logger.warning("GitHub webhook signature verification failed: invalid signature")
+        raise HTTPException(
+            status_code=HTTPStatus.FORBIDDEN, detail="Invalid GitHub webhook signature"
+        )
 
     event_type = request.headers.get("X-GitHub-Event", "")
     if event_type == "ping":

@@ -26,6 +26,17 @@ def liveness_handler() -> dict[str, str]:
     return {"status": "alive"}
 
 
+# `RateLimitMiddleware._RATE_LIMITS` is module-level and triggers on POST /
+# (the generic webhook receiver, 20/10s). Provide a matching handler so
+# the rate-limit smoke tests can drive a real 429.
+from litestar import post  # noqa: E402
+
+
+@post("/", sync_to_thread=False)
+def ratelimited_handler() -> dict[str, str]:
+    return {"status": "ok"}
+
+
 def _client(force_https: bool = False):
     if force_https:
         os.environ["FORCE_HTTPS"] = "true"
@@ -40,13 +51,13 @@ def _client(force_https: bool = False):
     importlib.reload(mw)
 
     return create_test_client(
-        route_handlers=[echo_handler, liveness_handler],
+        route_handlers=[echo_handler, liveness_handler, ratelimited_handler],
         middleware=[
+            mw.RequestContextMiddleware(),
+            mw.RequestLoggingMiddleware(),
             mw.SecurityHeadersMiddleware(),
             mw.RateLimitMiddleware(),
-            mw.RequestContextMiddleware(),
             mw.ApiKeyMiddleware(),
-            mw.RequestLoggingMiddleware(),
         ],
         exception_handlers=EXCEPTION_HANDLERS,
         cors_config=CORSConfig(allow_origins=["*"]),
@@ -101,3 +112,56 @@ def test_api_path_in_bootstrap_mode_passes(isolated_db):
     with _client() as c:
         resp = c.get("/api/test/echo")
     assert resp.status_code == 200
+
+
+def test_429_carries_request_id_header_and_body(isolated_db):
+    """Regression: rate-limited responses must include X-Request-ID and the
+    body's `request_id` field. Pre-migration `test_request_id::test_rate_limit_response_has_request_id`
+    asserted both. Wave 80 lost it because RateLimit ran before RequestContext."""
+    import importlib
+
+    import app_litestar.middleware as mw
+
+    # Drain the limiter so we reliably trigger 429 within the 10s window.
+    importlib.reload(mw)
+    with _client() as c:
+        for _ in range(20):
+            r = c.post("/", json={"hello": "world"})
+            assert r.status_code in (200, 201)
+        r = c.post(
+            "/",
+            json={"hello": "world"},
+            headers={"X-Request-ID": "rate-rid-test"},
+        )
+    assert r.status_code == 429
+    assert r.headers.get("x-request-id") == "rate-rid-test"
+    body = r.json()
+    assert body["error"]["code"] == "RATE_LIMITED"
+    assert body["request_id"] == "rate-rid-test"
+    # Security headers still attached on 429.
+    assert r.headers["x-frame-options"] == "DENY"
+
+
+def test_401_carries_request_id(isolated_db):
+    """Regression: unauthorized responses include X-Request-ID + body field."""
+    from app.db.rbac import create_user_role, invalidate_key_cache
+
+    invalidate_key_cache()
+    # Populate user_roles so we leave bootstrap mode and ApiKeyMiddleware
+    # actually checks the X-API-Key header.
+    create_user_role(api_key="seed-key", label="seed", role="admin")
+
+    try:
+        with _client() as c:
+            r = c.get(
+                "/api/test/echo",
+                headers={"X-Request-ID": "auth-rid-test"},
+            )
+        assert r.status_code == 401
+        assert r.headers.get("x-request-id") == "auth-rid-test"
+        body = r.json()
+        assert body["error"]["code"] == "UNAUTHORIZED"
+        assert body["request_id"] == "auth-rid-test"
+        assert r.headers["x-frame-options"] == "DENY"
+    finally:
+        invalidate_key_cache()
