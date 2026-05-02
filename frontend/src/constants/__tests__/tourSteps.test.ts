@@ -24,10 +24,18 @@ describe('tour step targets exist in production source (OB-22, OB-23, OB-24)', (
     expect(viewSource('ProductDashboard.vue')).toContain('data-tour="create-project"')
   })
 
-  it('OB-24 — [data-tour="assign-teams"] exists in ProjectSettingsPage.vue', () => {
+  // OB-24 (v0.5.1 fix): the tour step navigates to `/projects` (the
+  // list page). The anchor lives on ProjectsPage.vue so the spotlight
+  // resolves immediately rather than relying on the 3s element-not-
+  // found fallback. The previous anchor on ProjectSettingsPage.vue
+  // (project-detail page) is gone — the second assertion guards
+  // against accidental double-anchoring during a refactor.
+  it('OB-24 — [data-tour="assign-teams"] is on ProjectsPage.vue and not ProjectSettingsPage.vue', () => {
     const step = TOUR_STEP_MAP['create_team']
     expect(step?.target).toBe('[data-tour="assign-teams"]')
-    expect(viewSource('ProjectSettingsPage.vue')).toContain('data-tour="assign-teams"')
+    expect(step?.route).toBe('/projects')
+    expect(viewSource('ProjectsPage.vue')).toContain('data-tour="assign-teams"')
+    expect(viewSource('ProjectSettingsPage.vue')).not.toContain('data-tour="assign-teams"')
   })
 
   it('all step keys are unique', () => {

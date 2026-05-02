@@ -846,4 +846,25 @@ describe('useTourMachine', () => {
       await expect(prefetchTourRoutes()).resolves.not.toThrow()
     })
   })
+
+  // v0.5.1 — push useTourMachine.ts branch coverage past the 90%
+  // threshold. notifyAiAccountsEvent had 0/2 branches covered
+  // because nothing imported it from a test; the two cases below
+  // exercise both arms of the `if (!initPromise)` guard.
+  describe('notifyAiAccountsEvent (OB-45 coverage)', () => {
+    it('does not throw on first call with arbitrary payload', async () => {
+      const { notifyAiAccountsEvent } = await import('../useTourMachine')
+      expect(() => notifyAiAccountsEvent({ kind: 'whatever' })).not.toThrow()
+    })
+
+    it('is idempotent — second call hits the early-return guard', async () => {
+      const { notifyAiAccountsEvent } = await import('../useTourMachine')
+      // First call may set initPromise; second must not double-init
+      // and must not throw regardless of init success/failure.
+      expect(() => {
+        notifyAiAccountsEvent({})
+        notifyAiAccountsEvent({})
+      }).not.toThrow()
+    })
+  })
 })

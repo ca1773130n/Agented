@@ -189,7 +189,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="projects-page">
+  <div class="projects-page" data-tour="assign-teams">
     <PageHeader title="Projects" subtitle="Manage your projects and their team assignments">
       <template #actions>
         <button class="btn btn-primary" @click="showCreateModal = true">

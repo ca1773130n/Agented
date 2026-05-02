@@ -40,12 +40,14 @@ Phase 10 deliverables (plan 10-01):
   via grep over `components/tour/`, `composables/useTour*.ts`,
   `useFocusTrap.ts`, `useFormGuide.ts`, `machines/`)
 
+Deferred to v0.5.1 (shipped):
+- ✓ OB-24 UX polish — anchor relocated to ProjectsPage.vue
+- ✓ Formal vitest branch-coverage — useTourMachine ≥ 90%
+
 Deferred to v0.6.0:
-- Modal-interaction E2E during the backends step
-- Formal vitest branch-coverage report (`npm run test:coverage`)
-- OB-24 UX polish (assign-teams target lives on project-detail page,
-  step navigates to /projects list — element-not-found fallback
-  carries the criterion gracefully)
+- Modal-interaction E2E during the backends step (blocker:
+  AccountWizard test fixtures require @ai-accounts wizard state
+  machine stubs + OAuth mocks)
 
 Phase 9 deliverables (plan 09-01):
 - OB-22, OB-23, OB-24 ✓ (product/project/team data-tour targets in
