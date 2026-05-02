@@ -1,0 +1,174 @@
+/**
+ * Tests for the Phase 4 plan 04-01 setup-status integration.
+ *
+ * Three concerns under test:
+ *   - fetchSetupStatus: parses the API response, returns null on failure.
+ *   - setupStatusToCompleted: maps API booleans to tour state keys.
+ *   - autoSkipCompletedSteps: walks the actor past completed steps via
+ *     synthetic SKIP events. Uses the real machine — no mocks.
+ */
+import { describe, expect, it, vi } from 'vitest'
+import { createActor } from 'xstate'
+
+import { tourMachine } from '../../machines/tourMachine'
+import {
+  autoSkipCompletedSteps,
+  fetchSetupStatus,
+  setupStatusToCompleted,
+} from '../useTourMachine'
+
+const FRESH_PAYLOAD = {
+  instance_id: 'inst-1',
+  has_workspace: false,
+  has_claude_account: false,
+  has_codex_account: false,
+  has_gemini_account: false,
+  has_opencode_account: false,
+  has_harness_synced: false,
+  has_first_product: false,
+}
+
+describe('fetchSetupStatus', () => {
+  it('returns the parsed payload on a 200', async () => {
+    const fetchFn = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ ...FRESH_PAYLOAD, has_workspace: true }),
+    } as Response)
+    const got = await fetchSetupStatus(fetchFn as unknown as typeof fetch)
+    expect(got?.has_workspace).toBe(true)
+    expect(got?.instance_id).toBe('inst-1')
+  })
+
+  it('returns null on non-OK', async () => {
+    const fetchFn = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 500,
+      json: () => Promise.resolve({}),
+    } as Response)
+    expect(
+      await fetchSetupStatus(fetchFn as unknown as typeof fetch),
+    ).toBeNull()
+  })
+
+  it('returns null on network error', async () => {
+    const fetchFn = vi.fn().mockRejectedValue(new TypeError('offline'))
+    expect(
+      await fetchSetupStatus(fetchFn as unknown as typeof fetch),
+    ).toBeNull()
+  })
+})
+
+describe('setupStatusToCompleted', () => {
+  it('maps each has_* field to the corresponding tour state key', () => {
+    const completed = setupStatusToCompleted({
+      ...FRESH_PAYLOAD,
+      has_workspace: true,
+      has_claude_account: true,
+      has_codex_account: true,
+      has_first_product: true,
+      has_harness_synced: true,
+    })
+    expect(completed.workspace).toBe(true)
+    expect(completed['backends.claude']).toBe(true)
+    expect(completed['backends.codex']).toBe(true)
+    expect(completed['backends.gemini']).toBe(false)
+    expect(completed['backends.opencode']).toBe(false)
+    expect(completed.verification).toBe(true)
+    expect(completed.create_product).toBe(true)
+  })
+
+  it('always reports monitoring as not-complete (read-only step)', () => {
+    const completed = setupStatusToCompleted({ ...FRESH_PAYLOAD })
+    expect(completed.monitoring).toBe(false)
+  })
+})
+
+describe('autoSkipCompletedSteps — real machine walker', () => {
+  function freshActor() {
+    const actor = createActor(tourMachine)
+    actor.start()
+    actor.send({ type: 'START' })
+    actor.send({ type: 'NEXT' }) // welcome → workspace
+    return actor
+  }
+
+  it('skips workspace when has_workspace=true', () => {
+    const actor = freshActor()
+    expect(actor.getSnapshot().value).toBe('workspace')
+    autoSkipCompletedSteps(
+      actor,
+      setupStatusToCompleted({ ...FRESH_PAYLOAD, has_workspace: true }),
+    )
+    expect(actor.getSnapshot().value).toEqual({ backends: 'claude' })
+    actor.stop()
+  })
+
+  it('walks past every backend substep when all have accounts', () => {
+    // Start on workspace=done so the walker enters the backends compound
+    // first, then continues skipping each substep.
+    const actor = freshActor()
+    autoSkipCompletedSteps(
+      actor,
+      setupStatusToCompleted({
+        ...FRESH_PAYLOAD,
+        has_workspace: true,
+        has_claude_account: true,
+        has_codex_account: true,
+        has_gemini_account: true,
+        has_opencode_account: true,
+      }),
+    )
+    expect(actor.getSnapshot().value).toBe('monitoring')
+    actor.stop()
+  })
+
+  it('only skips the substeps whose backend has an account (granular)', () => {
+    const actor = freshActor()
+    autoSkipCompletedSteps(
+      actor,
+      setupStatusToCompleted({
+        ...FRESH_PAYLOAD,
+        has_workspace: true,
+        has_claude_account: true,
+      }),
+    )
+    // Stops on backends.codex (claude is done, codex is not).
+    expect(actor.getSnapshot().value).toEqual({ backends: 'codex' })
+    actor.stop()
+  })
+
+  it('is a no-op when nothing is completed', () => {
+    const actor = freshActor()
+    autoSkipCompletedSteps(actor, setupStatusToCompleted(FRESH_PAYLOAD))
+    expect(actor.getSnapshot().value).toBe('workspace')
+    actor.stop()
+  })
+
+  it('walks all the way to complete when every step is done', () => {
+    const actor = freshActor()
+    autoSkipCompletedSteps(actor, {
+      workspace: true,
+      'backends.claude': true,
+      'backends.codex': true,
+      'backends.gemini': true,
+      'backends.opencode': true,
+      monitoring: true,
+      verification: true,
+      create_product: true,
+      create_project: true,
+      create_team: true,
+    })
+    expect(actor.getSnapshot().status).toBe('done')
+    actor.stop()
+  })
+
+  it('stops at idle / welcome / complete (no key to look up)', () => {
+    const actor = createActor(tourMachine)
+    actor.start()
+    expect(actor.getSnapshot().value).toBe('idle')
+    autoSkipCompletedSteps(actor, { workspace: true })
+    // idle has no completion key, so the walker exits immediately.
+    expect(actor.getSnapshot().value).toBe('idle')
+    actor.stop()
+  })
+})

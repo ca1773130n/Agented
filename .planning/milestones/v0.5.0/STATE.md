@@ -5,17 +5,36 @@
 See: .planning/PROJECT.md (updated 2026-03-21)
 
 **Core value:** Enable engineering teams to orchestrate AI-powered automation through a unified dashboard
-**Current focus:** Phase 4 — Core Step Content
+**Current focus:** Phase 5 — Form Field Guidance
 **Primary hypothesis:** A guided onboarding tour can bring new users from zero to first bot execution in under 3 minutes
 
 ## Current Position
 
-Phase: 3 of 10 (Welcome Flow + Tour Entry) — **COMPLETE**
+Phase: 4 of 10 (Core Step Content) — **COMPLETE**
 Phase 1: COMPLETE
 Phase 2: COMPLETE
-Plan: phase-3/03-01 shipped
-Status: Phase 4 ready to plan
-Last activity: 2026-05-03 — Phase 3 plan 03-01 welcome polish
+Phase 3: COMPLETE
+Plan: phase-4/04-01 shipped
+Status: Phase 5 ready to plan
+Last activity: 2026-05-03 — Phase 4 plan 04-01 setup-status guards
+
+Phase 4 deliverables (plan 04-01):
+- OB-17 ✓ (workspace step) — `[data-tour="workspace-root"]` already in
+  GeneralSettings.vue:187, route + target wired in tourSteps.ts; verified.
+- OB-18 ✓ (4 backend substeps with auto-skip-completed) — wired
+  `useTourMachine.initActor()` to GET /health/setup-status and walk past
+  completed steps via synthetic SKIP events (`autoSkipCompletedSteps`).
+  Closes the deferred Phase 1 followup.
+- OB-19 (form field guidance) — Phase 4's job is to leave the user on the
+  backend page with the Add Account button highlighted. Auto-discovery
+  is Phase 5.
+- OB-20 ✓ (token monitoring) — `[data-tour="token-monitoring"]` in
+  GeneralSettings.vue:247.
+- OB-21 ✓ (harness verification) — `[data-tour="harness-plugins"]` in
+  HarnessSettings.vue:122.
+- 11 new frontend tests covering fetchSetupStatus + setupStatusToCompleted +
+  autoSkipCompletedSteps walker (granular per-backend + full walk +
+  no-op cases).
 
 Phase 1 status (verified during Phase 2 discovery):
 - The XState machine + composable shipped in earlier "tour wave" commits

@@ -66,6 +66,93 @@ function persistSnapshot(
 const INSTANCE_ID_RETRIES = 2
 const INSTANCE_ID_RETRY_MS = 800
 
+/** Aggregate guard prefetch (OB-07, OB-18). Mirrors GET /health/setup-status. */
+export interface SetupStatus {
+  instance_id: string | null
+  has_workspace: boolean
+  has_claude_account: boolean
+  has_codex_account: boolean
+  has_gemini_account: boolean
+  has_opencode_account: boolean
+  has_harness_synced: boolean
+  has_first_product: boolean
+}
+
+export async function fetchSetupStatus(
+  fetchFn: typeof fetch = fetch,
+): Promise<SetupStatus | null> {
+  try {
+    const resp = await fetchFn(`${API_BASE}/health/setup-status`, {
+      headers: { Accept: 'application/json' },
+    })
+    if (!resp.ok) return null
+    return (await resp.json()) as SetupStatus
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Map the API response to the tour state keys the machine uses. Used by the
+ * post-init walker to drive synthetic SKIP events past states the user has
+ * already finished.
+ */
+export function setupStatusToCompleted(
+  status: SetupStatus,
+): Record<string, boolean> {
+  return {
+    workspace: status.has_workspace,
+    'backends.claude': status.has_claude_account,
+    'backends.codex': status.has_codex_account,
+    'backends.gemini': status.has_gemini_account,
+    'backends.opencode': status.has_opencode_account,
+    monitoring: false, // read-only step, never auto-skipped
+    verification: status.has_harness_synced,
+    create_product: status.has_first_product,
+    create_project: false,
+    create_team: false,
+  }
+}
+
+/**
+ * Drive the actor past completed states via synthetic SKIP events. Walks at
+ * most 12 hops (one per state) so a misbehaving guard map can't infinite
+ * loop. Designed to be called after `actor.start()` once the user-visible
+ * state is `idle` or whatever was restored from persistence.
+ *
+ * Implements OB-08 ("Resume from last incomplete step") and OB-18's
+ * "completing one substep advances past it".
+ */
+export function autoSkipCompletedSteps(
+  actor: Actor<typeof tourMachine>,
+  completed: Record<string, boolean>,
+): void {
+  for (let safety = 0; safety < 12; safety++) {
+    const snapshot = actor.getSnapshot()
+    if (snapshot.status === 'done') return
+    const stateKey = stateValueToKey(snapshot.value)
+    if (!stateKey || !completed[stateKey]) return
+    actor.send({ type: 'SKIP' })
+  }
+}
+
+function stateValueToKey(value: unknown): string | null {
+  if (typeof value === 'string') {
+    return value === 'idle' || value === 'welcome' || value === 'complete'
+      ? null
+      : value
+  }
+  if (value && typeof value === 'object') {
+    const keys = Object.keys(value as Record<string, unknown>)
+    if (keys.length > 0) {
+      const parent = keys[0]
+      const child = (value as Record<string, string>)[parent]
+      return `${parent}.${child}`
+    }
+  }
+  return null
+}
+
 async function fetchInstanceId(): Promise<string | null> {
   for (let attempt = 0; attempt <= INSTANCE_ID_RETRIES; attempt++) {
     try {
@@ -103,7 +190,17 @@ async function initActor(): Promise<void> {
   if (sharedActor) return
 
   const persisted = loadPersistedData()
-  const remoteInstanceId = await fetchInstanceId()
+  // Fetch instance-id and setup-status in parallel — both are public,
+  // both are read-only, and the user is going to wait on the slower of
+  // the two anyway. The aggregate setup-status payload itself contains
+  // the instance_id; we only call /instance-id separately as a fallback
+  // because /setup-status was added later and may be missing on older
+  // backends. Once a release deprecates that fallback, this can collapse
+  // to a single call.
+  const [remoteInstanceId, setupStatus] = await Promise.all([
+    fetchInstanceId(),
+    fetchSetupStatus(),
+  ])
 
   let shouldRestore = false
 
@@ -148,6 +245,13 @@ async function initActor(): Promise<void> {
   })
 
   sharedActor.start()
+
+  // OB-08 + OB-18: walk past steps the user has already finished, using
+  // the aggregate /health/setup-status response. Done after .start() so
+  // the SKIP transitions emit normally and persist via the subscription.
+  if (setupStatus) {
+    autoSkipCompletedSteps(sharedActor, setupStatusToCompleted(setupStatus))
+  }
 }
 
 // ---------------------------------------------------------------------------
