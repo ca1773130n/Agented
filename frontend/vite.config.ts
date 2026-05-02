@@ -72,6 +72,11 @@ export default defineConfig(({ mode }) => {
         '/admin/integrations': { target: 'http://127.0.0.1:20002', changeOrigin: true },
         '/api/audit': { target: 'http://127.0.0.1:20002', changeOrigin: true },
         '/api/pr-reviews': { target: 'http://127.0.0.1:20002', changeOrigin: true },
+        // wave 67 — products + analytics + findings + reports/digests + config_export.
+        '/admin/products': { target: 'http://127.0.0.1:20002', changeOrigin: true },
+        '/admin/analytics': { target: 'http://127.0.0.1:20002', changeOrigin: true },
+        '/admin/reports': { target: 'http://127.0.0.1:20002', changeOrigin: true },
+        '/api/findings': { target: 'http://127.0.0.1:20002', changeOrigin: true },
         '/admin/analytics/cross-team-insights': { target: 'http://127.0.0.1:20002', changeOrigin: true },
         '/admin/analytics/scheduling-suggestions': { target: 'http://127.0.0.1:20002', changeOrigin: true },
         '/admin/execution-search': { target: 'http://127.0.0.1:20002', changeOrigin: true },
@@ -166,6 +171,11 @@ export default defineConfig(({ mode }) => {
         '/admin/integrations': { target: 'http://127.0.0.1:20002', changeOrigin: true },
         '/api/audit': { target: 'http://127.0.0.1:20002', changeOrigin: true },
         '/api/pr-reviews': { target: 'http://127.0.0.1:20002', changeOrigin: true },
+        // wave 67 — products + analytics + findings + reports/digests + config_export.
+        '/admin/products': { target: 'http://127.0.0.1:20002', changeOrigin: true },
+        '/admin/analytics': { target: 'http://127.0.0.1:20002', changeOrigin: true },
+        '/admin/reports': { target: 'http://127.0.0.1:20002', changeOrigin: true },
+        '/api/findings': { target: 'http://127.0.0.1:20002', changeOrigin: true },
         '/admin/analytics/cross-team-insights': { target: 'http://127.0.0.1:20002', changeOrigin: true },
         '/admin/analytics/scheduling-suggestions': { target: 'http://127.0.0.1:20002', changeOrigin: true },
         '/admin/execution-search': { target: 'http://127.0.0.1:20002', changeOrigin: true },
