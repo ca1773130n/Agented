@@ -145,4 +145,31 @@ describe('TourProgressBar', () => {
     expect(wrapper.find('.tour-skip-confirm').exists()).toBe(false)
     expect(wrapper.emitted('skip')).toBeFalsy()
   })
+
+  // OB-32: no iconographic X/close button. The exit affordance is still
+  // present (labelled "Exit Tour") so the user can always leave, but the
+  // glyph form is forbidden.
+  describe('OB-32 — labelled exit affordance', () => {
+    it('renders the dismiss button with the "Exit Tour" label, not an X glyph', () => {
+      const wrapper = mount(TourProgressBar, { props: baseProps })
+      const dismissBtn = wrapper.find('.tour-dismiss-btn')
+      expect(dismissBtn.exists()).toBe(true)
+      // Trim whitespace; the label might be wrapped by mustache spaces.
+      expect(dismissBtn.text().trim()).toBe('Exit Tour')
+      expect(dismissBtn.text()).not.toContain('✕')
+    })
+
+    it('dismiss button still emits dismiss on click', async () => {
+      const wrapper = mount(TourProgressBar, { props: baseProps })
+      await wrapper.find('.tour-dismiss-btn').trigger('click')
+      expect(wrapper.emitted('dismiss')).toBeTruthy()
+    })
+
+    it('aria + title attributes describe the action explicitly', () => {
+      const wrapper = mount(TourProgressBar, { props: baseProps })
+      const dismissBtn = wrapper.find('.tour-dismiss-btn')
+      expect(dismissBtn.attributes('aria-label')).toBeTruthy()
+      expect(dismissBtn.attributes('title')).toBeTruthy()
+    })
+  })
 })

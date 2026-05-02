@@ -59,13 +59,16 @@ watch([() => props.skippable, () => props.stepTitle], () => {
       <button class="tour-cancel-skip-btn" @click="confirmingSkip = false">{{ t('tour.keepGoing') }}</button>
     </div>
     <div v-else class="tour-actions">
+      <!-- OB-32: no iconographic X/close button. The exit affordance stays so
+           the user can always leave the tour, but it's labelled "Exit Tour"
+           rather than a glyph — the criterion forbids the latter. -->
       <button
         class="tour-dismiss-btn"
         :title="t('tour.dismissTooltip')"
         :aria-label="t('tour.dismissAria')"
         @click="$emit('dismiss')"
       >
-        ✕
+        {{ t('tour.exitTour') }}
       </button>
       <button v-if="skippable" class="tour-skip-btn" @click="onSkipClick($emit)">
         {{ t('common.skip') }}
