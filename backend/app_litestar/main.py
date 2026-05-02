@@ -64,6 +64,10 @@ from .routes.leaf_crud_g import (
     plugin_exports_router,
     sketches_router,
 )
+from .routes.leaf_crud_h import (
+    backends_router,
+    utility_leftover_router,
+)
 from .routes.rbac import rbac_router
 from .routes.admin_misc import admin_misc_router
 from .routes.admin_tooling import (
@@ -181,6 +185,8 @@ def create_app() -> Litestar:
             command_conversations_router,
             hook_conversations_router,
             rule_conversations_router,
+            utility_leftover_router,
+            backends_router,
         ],
         dependencies={"caller": provide_caller},
     )

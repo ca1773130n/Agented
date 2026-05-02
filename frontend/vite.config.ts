@@ -131,6 +131,22 @@ export default defineConfig(({ mode }) => {
           target: 'http://127.0.0.1:20002',
           changeOrigin: true,
         },
+        // wave 73 — utility leftover + /admin/backends/* (CRUD; /stream + test stream stay on Flask).
+        '/api/validate-github-url': { target: 'http://127.0.0.1:20002', changeOrigin: true },
+        '/api/resolve-issues': { target: 'http://127.0.0.1:20002', changeOrigin: true },
+        '/api/discover-skills': { target: 'http://127.0.0.1:20002', changeOrigin: true },
+        '/api/browse-directory': { target: 'http://127.0.0.1:20002', changeOrigin: true },
+        '/api/create-directory': { target: 'http://127.0.0.1:20002', changeOrigin: true },
+        // /admin/backends/test (POST), /proxy/*, /gemini/*, /{id}/install|check|connect|auth-status|discover-models|accounts/* go to Litestar; /stream entries stay on Flask.
+        '^/admin/backends/(test$|proxy/|gemini/|[^/]+/(install|check|connect$|auth-status|discover-models|accounts/[0-9]+/(rate-limits|usage)))': {
+          target: 'http://127.0.0.1:20002',
+          changeOrigin: true,
+        },
+        // /admin/backends/{id}/connect/{sess}/respond + DELETE /connect/{sess}.
+        '^/admin/backends/[^/]+/connect/[^/]+(/respond)?$': {
+          target: 'http://127.0.0.1:20002',
+          changeOrigin: true,
+        },
         '/admin/analytics/cross-team-insights': { target: 'http://127.0.0.1:20002', changeOrigin: true },
         '/admin/analytics/scheduling-suggestions': { target: 'http://127.0.0.1:20002', changeOrigin: true },
         '/admin/execution-search': { target: 'http://127.0.0.1:20002', changeOrigin: true },
@@ -281,6 +297,22 @@ export default defineConfig(({ mode }) => {
           changeOrigin: true,
         },
         '^/api/(plugins|commands|hooks|rules)/conversations/[^/]+$': {
+          target: 'http://127.0.0.1:20002',
+          changeOrigin: true,
+        },
+        // wave 73 — utility leftover + /admin/backends/* (CRUD; /stream + test stream stay on Flask).
+        '/api/validate-github-url': { target: 'http://127.0.0.1:20002', changeOrigin: true },
+        '/api/resolve-issues': { target: 'http://127.0.0.1:20002', changeOrigin: true },
+        '/api/discover-skills': { target: 'http://127.0.0.1:20002', changeOrigin: true },
+        '/api/browse-directory': { target: 'http://127.0.0.1:20002', changeOrigin: true },
+        '/api/create-directory': { target: 'http://127.0.0.1:20002', changeOrigin: true },
+        // /admin/backends/test (POST), /proxy/*, /gemini/*, /{id}/install|check|connect|auth-status|discover-models|accounts/* go to Litestar; /stream entries stay on Flask.
+        '^/admin/backends/(test$|proxy/|gemini/|[^/]+/(install|check|connect$|auth-status|discover-models|accounts/[0-9]+/(rate-limits|usage)))': {
+          target: 'http://127.0.0.1:20002',
+          changeOrigin: true,
+        },
+        // /admin/backends/{id}/connect/{sess}/respond + DELETE /connect/{sess}.
+        '^/admin/backends/[^/]+/connect/[^/]+(/respond)?$': {
           target: 'http://127.0.0.1:20002',
           changeOrigin: true,
         },
