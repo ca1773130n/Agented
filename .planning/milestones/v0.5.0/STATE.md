@@ -5,18 +5,27 @@
 See: .planning/PROJECT.md (updated 2026-03-21)
 
 **Core value:** Enable engineering teams to orchestrate AI-powered automation through a unified dashboard
-**Current focus:** Phase 5 — Form Field Guidance
+**Current focus:** Phase 6 — Navigation Controls
 **Primary hypothesis:** A guided onboarding tour can bring new users from zero to first bot execution in under 3 minutes
 
 ## Current Position
 
-Phase: 4 of 10 (Core Step Content) — **COMPLETE**
+Phase: 5 of 10 (Form Field Guidance) — **COMPLETE**
 Phase 1: COMPLETE
 Phase 2: COMPLETE
 Phase 3: COMPLETE
-Plan: phase-4/04-01 shipped
-Status: Phase 5 ready to plan
-Last activity: 2026-05-03 — Phase 4 plan 04-01 setup-status guards
+Phase 4: COMPLETE
+Plan: phase-5/05-01 shipped
+Status: Phase 6 ready to plan
+Last activity: 2026-05-03 — Phase 5 plan 05-01 form-guide tests
+
+Phase 5 deliverables (plan 05-01):
+- OB-25 ✓ (auto-discovery via `.form-group` walk — pre-existing, now tested)
+- OB-26 ✓ (sequential nav with nextField/prevField — pre-existing, now tested)
+- OB-27 ✓ (help text priority chain: data-tour-help → .form-help → .form-description → small → fallback — pre-existing, now tested)
+- OB-28 ✓ (submit button last via button[type=submit] → .inline-form-actions .btn-primary → [data-tour=submit-btn] — pre-existing, now tested)
+- 33 new frontend tests covering useFormGuide (28) + TourFormGuide (5)
+- Followup captured in plan doc: wire TourFormGuide into the tour flow when AccountWizard opens (a Phase 5 → Phase 4 integration that needs the `@ai-accounts/vue-styled` open/close lifecycle)
 
 Phase 4 deliverables (plan 04-01):
 - OB-17 ✓ (workspace step) — `[data-tour="workspace-root"]` already in
