@@ -95,4 +95,30 @@ describe('TourTooltip', () => {
     const hardcodedZIndex = styleBlock.match(/z-index:\s*\d+/g) || []
     expect(hardcodedZIndex).toEqual([])
   })
+
+  // OB-36: tooltip transitions are no-op under prefers-reduced-motion.
+  it('disables tooltip transition under prefers-reduced-motion (OB-36)', () => {
+    const source = readFileSync(
+      resolve(__dirname, '../TourTooltip.vue'),
+      'utf-8',
+    )
+    const styleMatch = source.match(/<style[^>]*>([\s\S]*?)<\/style>/)!
+    const styleBlock = styleMatch[1]
+    const reducedBlock = styleBlock.match(
+      /@media\s*\(prefers-reduced-motion:\s*reduce\)\s*\{[\s\S]*?\}\s*\}/,
+    )
+    expect(reducedBlock).not.toBeNull()
+    expect(reducedBlock![0]).toMatch(/\.tour-tooltip\s*\{[^}]*transition:\s*none/)
+  })
+
+  // OB-37: focus trap is wired via useFocusTrap. A regression that
+  // drops the import or the call would break focus containment.
+  it('TourTooltip source wires useFocusTrap (OB-37)', () => {
+    const source = readFileSync(
+      resolve(__dirname, '../TourTooltip.vue'),
+      'utf-8',
+    )
+    expect(source).toMatch(/import\s*\{\s*useFocusTrap\s*\}\s*from\s*['"][^'"]+['"]/)
+    expect(source).toMatch(/useFocusTrap\s*\(/)
+  })
 })

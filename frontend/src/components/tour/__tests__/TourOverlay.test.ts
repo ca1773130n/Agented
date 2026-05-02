@@ -1,6 +1,8 @@
 import { describe, it, expect, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { ref } from 'vue'
+import { readFileSync } from 'fs'
+import { resolve } from 'path'
 import TourOverlay from '../TourOverlay.vue'
 
 vi.mock('vue-router', () => ({
@@ -510,6 +512,27 @@ describe('TourOverlay', () => {
       wrapper.unmount()
       document.body.removeChild(el)
       vi.useRealTimers()
+    })
+  })
+
+  // OB-36: tour spinner + dim transition are no-op under
+  // prefers-reduced-motion. The other tour components (Spotlight,
+  // Tooltip, CompletionScreen) have their own coverage; this asserts
+  // TourOverlay's two unguarded animations are now guarded.
+  describe('OB-36 — reduced motion', () => {
+    it('disables spinner animation + dim transition under prefers-reduced-motion', () => {
+      const source = readFileSync(
+        resolve(__dirname, '../TourOverlay.vue'),
+        'utf-8',
+      )
+      const styleMatch = source.match(/<style[^>]*>([\s\S]*?)<\/style>/)!
+      const styleBlock = styleMatch[1]
+      const reducedBlock = styleBlock.match(
+        /@media\s*\(prefers-reduced-motion:\s*reduce\)\s*\{[\s\S]*?\}\s*\}/,
+      )
+      expect(reducedBlock).not.toBeNull()
+      expect(reducedBlock![0]).toMatch(/\.spinner-icon\s*\{[^}]*animation:\s*none/)
+      expect(reducedBlock![0]).toMatch(/\.tour-dim-fallback\s*\{[^}]*transition:\s*none/)
     })
   })
 })
