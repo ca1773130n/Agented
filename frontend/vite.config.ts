@@ -47,8 +47,9 @@ export default defineConfig(({ mode }) => {
         '/api/skills': { target: 'http://127.0.0.1:20002', changeOrigin: true },
         '/api/skill-sets': { target: 'http://127.0.0.1:20002', changeOrigin: true },
         '/api/settings': { target: 'http://127.0.0.1:20002', changeOrigin: true },
+        // Wave 79: every /api/* route is on Litestar — Flask has no /api handlers left.
         '/api': {
-          target: 'http://127.0.0.1:20000',
+          target: 'http://127.0.0.1:20002',
           changeOrigin: true
         },
         // /admin/rbac was migrated to the Litestar app on :20002 in waves
@@ -193,8 +194,9 @@ export default defineConfig(({ mode }) => {
         '/admin/projects': { target: 'http://127.0.0.1:20002', changeOrigin: true },
         // /admin/mcp-servers/* — wave 56.
         '/admin/mcp-servers': { target: 'http://127.0.0.1:20002', changeOrigin: true },
+        // Wave 79: every /admin/* route is on Litestar — Flask has no /admin handlers left.
         '/admin': {
-          target: 'http://127.0.0.1:20000',
+          target: 'http://127.0.0.1:20002',
           changeOrigin: true
         },
         // /health/* migrated to Litestar in wave 37.
@@ -231,8 +233,9 @@ export default defineConfig(({ mode }) => {
         '/api/skills': { target: 'http://127.0.0.1:20002', changeOrigin: true },
         '/api/skill-sets': { target: 'http://127.0.0.1:20002', changeOrigin: true },
         '/api/settings': { target: 'http://127.0.0.1:20002', changeOrigin: true },
+        // Wave 79: every /api/* route is on Litestar — Flask has no /api handlers left.
         '/api': {
-          target: 'http://127.0.0.1:20000',
+          target: 'http://127.0.0.1:20002',
           changeOrigin: true
         },
         // /admin/rbac was migrated to the Litestar app on :20002 in waves
@@ -377,8 +380,9 @@ export default defineConfig(({ mode }) => {
         '/admin/projects': { target: 'http://127.0.0.1:20002', changeOrigin: true },
         // /admin/mcp-servers/* — wave 56.
         '/admin/mcp-servers': { target: 'http://127.0.0.1:20002', changeOrigin: true },
+        // Wave 79: every /admin/* route is on Litestar — Flask has no /admin handlers left.
         '/admin': {
-          target: 'http://127.0.0.1:20000',
+          target: 'http://127.0.0.1:20002',
           changeOrigin: true
         },
         // /health/* migrated to Litestar in wave 37.

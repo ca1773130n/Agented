@@ -106,6 +106,56 @@
 - Once everything is on Litestar, `backend/app/__init__.py:create_app` is just a stub that exists for blueprint registration of zero blueprints. Drop it. Run scripts collapse — Flask process retires, Litestar serves :20000 directly, sidecar still on :20001.
 - This is the actual "Flask → Litestar collapse" the original critique called for.
 
+## 2026-05-02 status — route migration complete (629/629)
+
+The branch `feat/wave2-build-workflow` reached **100% Flask→Litestar route
+migration** in waves 65–78. Branch SHAs (most recent last):
+
+- 65 `59318c1` leaf CRUD A — bookmarks/snippets/scope/conditions/bot-memory (28)
+- 66 `9d7f92e` marketplace + integrations admin + audit + pr_reviews (35)
+- 67 `f8e87c5` products + analytics + findings + reports/digests + config_export (20)
+- 68 `3ab01c2` knowledge_graph + collaborative + campaigns + tagging + pr_assignment (32)
+- 69 `3f06a5a` monitoring/health/orchestration/onboarding/instances/repo-defaults/bot-pipes (30)
+- 70 `9b4f8f1` agent_memory + bulk + replay + conversation_branches (27)
+- 71 `e058fff` sketches + agent_conversations CRUD + plugin_exports (23)
+- 72 `15236c4` plugin/command/hook/rule conversation cluster CRUD (24)
+- 73 `68711ae` utility leftover + backends CRUD (21)
+- 74 `a08c261` GRD project management (23)
+- 75 `398dbad` executions CRUD (20)
+- 76 `9887af0` setup + super_agent_messages/chat + team_gen + chunks (15)
+- 77 `93dd00d` github_webhook + oauth_callback + generic webhook (3)
+- 78 `2750485` final SSE wave — 14 streams via Litestar Stream
+- 79 *(this commit)* vite proxy fall-through flip — `/api` and `/admin`
+  catch-alls now point at Litestar :20002 since Flask has zero handlers
+  left to serve. Flask process keeps running for the scheduler +
+  background services until a dedicated wave migrates those to
+  Litestar's lifecycle hooks.
+
+**487 Litestar smoke tests pass.** Only one pre-existing failure
+(`tests/test_litestar_utility.py::TestValidatePath::test_home_dir_resolves`)
+remains, unrelated to this migration.
+
+### Followup: full Flask process retirement
+
+Not done in this milestone. Concrete remaining work, scoped as a
+separate phase whenever scheduler ergonomics on Litestar are vetted:
+
+- Move scheduler init + periodic jobs (`_register_periodic_jobs`,
+  `_init_monitoring_services`, `_init_auxiliary_schedulers`) from
+  `app/__init__.py:create_app` into Litestar `on_startup` hooks in
+  `app_litestar/main.py:create_app`.
+- Migrate CORS/Talisman/limiter equivalents (Litestar has built-in
+  CORS + cors_config dataclass; rate-limiting is an extension).
+- Replace `gunicorn -c gunicorn.conf.py` with `uvicorn` for the
+  Litestar app and have Litestar bind on :20000 directly.
+- Drop `app/__init__.py`, `app/routes/__init__.py`, all stub
+  blueprints under `app/routes/*.py`. Remove `run.py` and the
+  Flask-only entries in `gunicorn.conf.py`.
+- Update `justfile` recipes (`dev-backend`, `deploy`, `kill`) and any
+  scripts that reference Flask :20000 or gunicorn.
+- Update `vite.config.ts` to remove the now-unused :20000 proxy entries
+  for `/docs`, `/openapi` (or repoint to Litestar `/schema`).
+
 ## What stays on Flask "permanently" (TBD whether to migrate)
 
 - `app/__init__.py` — flask app factory itself, not a route.
