@@ -13,6 +13,14 @@ from .routes.auth import auth_router
 from .routes.health import health_router
 from .routes.rbac import rbac_router
 from .routes.admin_misc import admin_misc_router
+from .routes.admin_tooling import (
+    gitops_router,
+    retention_router,
+    secrets_router,
+    settings_router,
+    system_router,
+    version_pins_router,
+)
 from .routes.agents_and_tracing import agents_router, tracing_router
 from .routes.bot_templates import bot_templates_router
 from .routes.budgets import budgets_router
@@ -77,6 +85,12 @@ def create_app() -> Litestar:
             workflows_router,
             super_agents_router,
             super_agent_exports_router,
+            settings_router,
+            system_router,
+            secrets_router,
+            gitops_router,
+            version_pins_router,
+            retention_router,
         ],
         dependencies={"caller": provide_caller},
     )

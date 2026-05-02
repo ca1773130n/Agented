@@ -46,6 +46,7 @@ export default defineConfig(({ mode }) => {
         // /api/skills/* (incl. /conversations) + /api/skill-sets/* — wave 57.
         '/api/skills': { target: 'http://127.0.0.1:20002', changeOrigin: true },
         '/api/skill-sets': { target: 'http://127.0.0.1:20002', changeOrigin: true },
+        '/api/settings': { target: 'http://127.0.0.1:20002', changeOrigin: true },
         '/api': {
           target: 'http://127.0.0.1:20000',
           changeOrigin: true
@@ -76,6 +77,11 @@ export default defineConfig(({ mode }) => {
         '/admin/workflows': { target: 'http://127.0.0.1:20002', changeOrigin: true },
         '/admin/super-agents': { target: 'http://127.0.0.1:20002', changeOrigin: true },
         '/admin/super-agent-exports': { target: 'http://127.0.0.1:20002', changeOrigin: true },
+        '/admin/system': { target: 'http://127.0.0.1:20002', changeOrigin: true },
+        '/admin/secrets': { target: 'http://127.0.0.1:20002', changeOrigin: true },
+        '/admin/gitops': { target: 'http://127.0.0.1:20002', changeOrigin: true },
+        '/admin/version-pins': { target: 'http://127.0.0.1:20002', changeOrigin: true },
+        '/admin/retention-policies': { target: 'http://127.0.0.1:20002', changeOrigin: true },
         // /admin/triggers/* (and nested /payload-transformer) — wave 52.
         '/admin/triggers': { target: 'http://127.0.0.1:20002', changeOrigin: true },
         // /admin/teams/* + nested members/assignments/connections/edges — wave 53.
@@ -121,6 +127,7 @@ export default defineConfig(({ mode }) => {
         // /api/skills/* (incl. /conversations) + /api/skill-sets/* — wave 57.
         '/api/skills': { target: 'http://127.0.0.1:20002', changeOrigin: true },
         '/api/skill-sets': { target: 'http://127.0.0.1:20002', changeOrigin: true },
+        '/api/settings': { target: 'http://127.0.0.1:20002', changeOrigin: true },
         '/api': {
           target: 'http://127.0.0.1:20000',
           changeOrigin: true
@@ -151,6 +158,11 @@ export default defineConfig(({ mode }) => {
         '/admin/workflows': { target: 'http://127.0.0.1:20002', changeOrigin: true },
         '/admin/super-agents': { target: 'http://127.0.0.1:20002', changeOrigin: true },
         '/admin/super-agent-exports': { target: 'http://127.0.0.1:20002', changeOrigin: true },
+        '/admin/system': { target: 'http://127.0.0.1:20002', changeOrigin: true },
+        '/admin/secrets': { target: 'http://127.0.0.1:20002', changeOrigin: true },
+        '/admin/gitops': { target: 'http://127.0.0.1:20002', changeOrigin: true },
+        '/admin/version-pins': { target: 'http://127.0.0.1:20002', changeOrigin: true },
+        '/admin/retention-policies': { target: 'http://127.0.0.1:20002', changeOrigin: true },
         // /admin/triggers/* (and nested /payload-transformer) — wave 52.
         '/admin/triggers': { target: 'http://127.0.0.1:20002', changeOrigin: true },
         // /admin/teams/* + nested members/assignments/connections/edges — wave 53.
