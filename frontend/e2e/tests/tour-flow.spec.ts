@@ -137,4 +137,59 @@ test.describe('Tour flow — complete navigation', () => {
     await page.keyboard.press('Enter');
     await tourPage.expectStepText('STEP 5 OF 8');
   });
+
+  // OB-47: tour state persists across page reload — the user can
+  // navigate away (or accidentally reload) and pick up where they
+  // left off without losing progress.
+  test('persists across reload', async ({ tourPage, page }) => {
+    await tourPage.startTour();
+    await tourPage.expectStepText('STEP 2 OF 8');
+
+    // Advance two steps so the persisted state is non-trivial.
+    await tourPage.clickNext();
+    await tourPage.expectStepText('STEP 3 OF 8');
+
+    await page.reload();
+    await tourPage.expectVisible();
+    await tourPage.expectStepText('STEP 3 OF 8');
+  });
+
+  // OB-36 + OB-47: prefers-reduced-motion disables tour animations.
+  // The CSS @media block lives in TourSpotlight.vue; this verifies
+  // it actually reaches the rendered element.
+  test('reduced motion disables spotlight glow animation', async ({ tourPage, page }) => {
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await tourPage.startTour();
+    await tourPage.expectVisible();
+
+    // Some pages may not paint the glow until the spotlight has a
+    // resolved target rect; wait for it.
+    const glow = page.locator('.tour-spotlight-glow').first();
+    await glow.waitFor({ state: 'attached' });
+    const animationName = await glow.evaluate(
+      (el) => getComputedStyle(el).animationName,
+    );
+    expect(animationName).toBe('none');
+  });
+
+  // OB-37 + OB-47: focus is trapped within the tooltip + the
+  // highlighted target. The strictest unit-level check would assert
+  // focus stays inside `.tour-overlay`, but the criterion explicitly
+  // includes the target element — which lives in the page, not the
+  // overlay. Instead we assert the negation: focus must NEVER land
+  // on the global chrome (header/nav/aside) while a tour is active.
+  test('focus stays out of header/sidebar while tour is active', async ({ tourPage, page }) => {
+    await tourPage.startTour();
+    await tourPage.expectVisible();
+
+    for (let i = 0; i < 6; i++) {
+      await page.keyboard.press('Tab');
+    }
+    const inChrome = await page.evaluate(() => {
+      const el = document.activeElement as HTMLElement | null;
+      if (!el) return false;
+      return el.closest('header, nav, aside') !== null;
+    });
+    expect(inChrome).toBe(false);
+  });
 });
