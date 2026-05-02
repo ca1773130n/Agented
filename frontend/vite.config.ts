@@ -95,6 +95,17 @@ export default defineConfig(({ mode }) => {
         '/admin/onboarding': { target: 'http://127.0.0.1:20002', changeOrigin: true },
         '/admin/repo-bot-defaults': { target: 'http://127.0.0.1:20002', changeOrigin: true },
         '/admin/bot-pipes': { target: 'http://127.0.0.1:20002', changeOrigin: true },
+        // wave 70 — agent_memory + bulk + replay + conversation_branches.
+        '/admin/bulk': { target: 'http://127.0.0.1:20002', changeOrigin: true },
+        '/admin/replay-comparisons': { target: 'http://127.0.0.1:20002', changeOrigin: true },
+        '/admin/diff-context': { target: 'http://127.0.0.1:20002', changeOrigin: true },
+        '/admin/branches': { target: 'http://127.0.0.1:20002', changeOrigin: true },
+        '/admin/conversations': { target: 'http://127.0.0.1:20002', changeOrigin: true },
+        // /admin/executions/{id}/replay + /comparisons go to Litestar; other /admin/executions stay on Flask.
+        '^/admin/executions/[^/]+/(replay|comparisons)': {
+          target: 'http://127.0.0.1:20002',
+          changeOrigin: true,
+        },
         '/admin/analytics/cross-team-insights': { target: 'http://127.0.0.1:20002', changeOrigin: true },
         '/admin/analytics/scheduling-suggestions': { target: 'http://127.0.0.1:20002', changeOrigin: true },
         '/admin/execution-search': { target: 'http://127.0.0.1:20002', changeOrigin: true },
@@ -212,6 +223,17 @@ export default defineConfig(({ mode }) => {
         '/admin/onboarding': { target: 'http://127.0.0.1:20002', changeOrigin: true },
         '/admin/repo-bot-defaults': { target: 'http://127.0.0.1:20002', changeOrigin: true },
         '/admin/bot-pipes': { target: 'http://127.0.0.1:20002', changeOrigin: true },
+        // wave 70 — agent_memory + bulk + replay + conversation_branches.
+        '/admin/bulk': { target: 'http://127.0.0.1:20002', changeOrigin: true },
+        '/admin/replay-comparisons': { target: 'http://127.0.0.1:20002', changeOrigin: true },
+        '/admin/diff-context': { target: 'http://127.0.0.1:20002', changeOrigin: true },
+        '/admin/branches': { target: 'http://127.0.0.1:20002', changeOrigin: true },
+        '/admin/conversations': { target: 'http://127.0.0.1:20002', changeOrigin: true },
+        // /admin/executions/{id}/replay + /comparisons go to Litestar; other /admin/executions stay on Flask.
+        '^/admin/executions/[^/]+/(replay|comparisons)': {
+          target: 'http://127.0.0.1:20002',
+          changeOrigin: true,
+        },
         '/admin/analytics/cross-team-insights': { target: 'http://127.0.0.1:20002', changeOrigin: true },
         '/admin/analytics/scheduling-suggestions': { target: 'http://127.0.0.1:20002', changeOrigin: true },
         '/admin/execution-search': { target: 'http://127.0.0.1:20002', changeOrigin: true },
