@@ -66,6 +66,7 @@ export default defineConfig(({ mode }) => {
         '/admin/bot-templates': { target: 'http://127.0.0.1:20002', changeOrigin: true },
         '/admin/quality': { target: 'http://127.0.0.1:20002', changeOrigin: true },
         '/admin/scheduler': { target: 'http://127.0.0.1:20002', changeOrigin: true },
+        '/admin/budgets': { target: 'http://127.0.0.1:20002', changeOrigin: true },
         // /admin/triggers/* (and nested /payload-transformer) — wave 52.
         '/admin/triggers': { target: 'http://127.0.0.1:20002', changeOrigin: true },
         // /admin/teams/* + nested members/assignments/connections/edges — wave 53.
@@ -131,6 +132,7 @@ export default defineConfig(({ mode }) => {
         '/admin/bot-templates': { target: 'http://127.0.0.1:20002', changeOrigin: true },
         '/admin/quality': { target: 'http://127.0.0.1:20002', changeOrigin: true },
         '/admin/scheduler': { target: 'http://127.0.0.1:20002', changeOrigin: true },
+        '/admin/budgets': { target: 'http://127.0.0.1:20002', changeOrigin: true },
         // /admin/triggers/* (and nested /payload-transformer) — wave 52.
         '/admin/triggers': { target: 'http://127.0.0.1:20002', changeOrigin: true },
         // /admin/teams/* + nested members/assignments/connections/edges — wave 53.
