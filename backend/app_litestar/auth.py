@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from typing import Optional
 
 from litestar.connection import Request
+from litestar.di import Provide
 from litestar.exceptions import NotAuthorizedException, PermissionDeniedException
 
 from app.db.rbac import (
@@ -103,12 +104,17 @@ def provide_caller(request: Request) -> Caller:
     raise NotAuthorizedException(detail="Authentication required")
 
 
-def require_role(*allowed: str):
-    """Factory that returns a dependency enforcing one of *allowed* roles."""
+def require_role(*allowed: str) -> Provide:
+    """Factory that returns a Litestar dependency enforcing one of *allowed* roles.
+
+    Wraps the underlying check in `Provide(..., sync_to_thread=False)` so the
+    role lookup (a single dict membership check on the already-resolved Caller)
+    runs on the event loop rather than the threadpool.
+    """
 
     def _dependency(caller: Caller) -> Caller:
         if caller.role not in allowed:
             raise PermissionDeniedException(detail="Insufficient permissions")
         return caller
 
-    return _dependency
+    return Provide(_dependency, sync_to_thread=False)

@@ -8,7 +8,7 @@ import os
 import uuid
 from typing import Any
 
-from litestar.middleware import AbstractMiddleware
+from litestar.middleware import ASGIMiddleware
 from litestar.types import ASGIApp, Receive, Scope, Send
 
 from app.db.rbac import (
@@ -54,12 +54,14 @@ def _resolve_session_user(authorization: str | None) -> str | None:
     return sess["user_id"] if sess else None
 
 
-class RequestContextMiddleware(AbstractMiddleware):
+class RequestContextMiddleware(ASGIMiddleware):
     """Set request_id + current_user contextvars; emit X-Request-ID header."""
 
-    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+    async def handle(
+        self, scope: Scope, receive: Receive, send: Send, next_app: ASGIApp
+    ) -> None:
         if scope["type"] != "http":
-            await self.app(scope, receive, send)
+            await next_app(scope, receive, send)
             return
 
         headers = {
@@ -90,13 +92,13 @@ class RequestContextMiddleware(AbstractMiddleware):
             await send(message)
 
         try:
-            await self.app(scope, receive, send_with_request_id)
+            await next_app(scope, receive, send_with_request_id)
         finally:
             request_id_var.set(None)
             current_user_var.set(None)
 
 
-class ApiKeyMiddleware(AbstractMiddleware):
+class ApiKeyMiddleware(ASGIMiddleware):
     """Reject /admin/* and /api/* requests without a valid API key.
 
     Bypass paths (`/health`, `/docs`, `/schema`, webhook callbacks) are
@@ -104,26 +106,28 @@ class ApiKeyMiddleware(AbstractMiddleware):
     request through so first-run UX works.
     """
 
-    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+    async def handle(
+        self, scope: Scope, receive: Receive, send: Send, next_app: ASGIApp
+    ) -> None:
         if scope["type"] != "http":
-            await self.app(scope, receive, send)
+            await next_app(scope, receive, send)
             return
 
         method = scope.get("method", "GET")
         if method == "OPTIONS":
-            await self.app(scope, receive, send)
+            await next_app(scope, receive, send)
             return
 
         path = scope.get("path", "")
         if not _path_requires_auth(path):
-            await self.app(scope, receive, send)
+            await next_app(scope, receive, send)
             return
 
         db_has_keys = has_any_keys()
         env_key = os.environ.get("AGENTED_API_KEY", "")
 
         if not db_has_keys and not env_key:
-            await self.app(scope, receive, send)
+            await next_app(scope, receive, send)
             return
 
         headers = {
@@ -136,7 +140,7 @@ class ApiKeyMiddleware(AbstractMiddleware):
         if not provided and headers.get("authorization"):
             session_user = _resolve_session_user(headers["authorization"])
             if session_user:
-                await self.app(scope, receive, send)
+                await next_app(scope, receive, send)
                 return
 
         if not provided:
@@ -144,11 +148,11 @@ class ApiKeyMiddleware(AbstractMiddleware):
             return
 
         if db_has_keys and get_role_for_api_key(provided):
-            await self.app(scope, receive, send)
+            await next_app(scope, receive, send)
             return
 
         if env_key and hmac.compare_digest(provided, env_key):
-            await self.app(scope, receive, send)
+            await next_app(scope, receive, send)
             return
 
         await self._unauthorized(send)
@@ -169,12 +173,14 @@ class ApiKeyMiddleware(AbstractMiddleware):
         await send({"type": "http.response.body", "body": body, "more_body": False})
 
 
-class RequestLoggingMiddleware(AbstractMiddleware):
+class RequestLoggingMiddleware(ASGIMiddleware):
     """Log method/path/status after each HTTP response."""
 
-    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+    async def handle(
+        self, scope: Scope, receive: Receive, send: Send, next_app: ASGIApp
+    ) -> None:
         if scope["type"] != "http":
-            await self.app(scope, receive, send)
+            await next_app(scope, receive, send)
             return
         status_code = 0
         content_length: str | None = None
@@ -190,7 +196,7 @@ class RequestLoggingMiddleware(AbstractMiddleware):
             await send(message)
 
         try:
-            await self.app(scope, receive, capture)
+            await next_app(scope, receive, capture)
         finally:
             logger.info(
                 "%s %s %s %s",
@@ -216,7 +222,7 @@ _CSP = "; ".join(
 )
 
 
-class SecurityHeadersMiddleware(AbstractMiddleware):
+class SecurityHeadersMiddleware(ASGIMiddleware):
     """Apply CSP / HSTS / X-Frame-Options / Referrer-Policy on every HTTP response.
 
     Mirrors the flask_talisman defaults from the wave 79 Flask app:
@@ -227,9 +233,11 @@ class SecurityHeadersMiddleware(AbstractMiddleware):
       - Content-Security-Policy: locked-down with Swagger inline allowance
     """
 
-    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+    async def handle(
+        self, scope: Scope, receive: Receive, send: Send, next_app: ASGIApp
+    ) -> None:
         if scope["type"] != "http":
-            await self.app(scope, receive, send)
+            await next_app(scope, receive, send)
             return
 
         async def add_headers(message: Any) -> None:
@@ -251,7 +259,7 @@ class SecurityHeadersMiddleware(AbstractMiddleware):
                 message = {**message, "headers": headers}
             await send(message)
 
-        await self.app(scope, receive, add_headers)
+        await next_app(scope, receive, add_headers)
 
 
 # ---------------------------------------------------------------------------
@@ -314,12 +322,14 @@ def _client_ip(scope: Scope) -> str:
     return client[0] if client else "unknown"
 
 
-class RateLimitMiddleware(AbstractMiddleware):
+class RateLimitMiddleware(ASGIMiddleware):
     """Apply per-IP rate limits on the webhook receivers."""
 
-    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+    async def handle(
+        self, scope: Scope, receive: Receive, send: Send, next_app: ASGIApp
+    ) -> None:
         if scope["type"] != "http":
-            await self.app(scope, receive, send)
+            await next_app(scope, receive, send)
             return
 
         path = scope.get("path", "")
@@ -335,7 +345,7 @@ class RateLimitMiddleware(AbstractMiddleware):
             )
 
         if limit_match is None:
-            await self.app(scope, receive, send)
+            await next_app(scope, receive, send)
             return
 
         prefix, limit, window = limit_match
@@ -355,4 +365,4 @@ class RateLimitMiddleware(AbstractMiddleware):
             await send({"type": "http.response.body", "body": body, "more_body": False})
             return
 
-        await self.app(scope, receive, send)
+        await next_app(scope, receive, send)

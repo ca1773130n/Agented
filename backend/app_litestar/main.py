@@ -11,6 +11,7 @@ import os
 
 from litestar import Litestar
 from litestar.config.cors import CORSConfig
+from litestar.di import Provide
 
 from .auth import provide_caller
 from .exception_handlers import EXCEPTION_HANDLERS
@@ -172,11 +173,11 @@ def create_app() -> Litestar:
     return Litestar(
         cors_config=_cors_config(),
         middleware=[
-            SecurityHeadersMiddleware,
-            RateLimitMiddleware,
-            RequestContextMiddleware,
-            ApiKeyMiddleware,
-            RequestLoggingMiddleware,
+            SecurityHeadersMiddleware(),
+            RateLimitMiddleware(),
+            RequestContextMiddleware(),
+            ApiKeyMiddleware(),
+            RequestLoggingMiddleware(),
         ],
         exception_handlers=EXCEPTION_HANDLERS,
         on_startup=[on_startup],
@@ -278,5 +279,7 @@ def create_app() -> Litestar:
             super_agents_stream_router,
             teams_stream_router,
         ],
-        dependencies={"caller": provide_caller},
+        # provide_caller hits SQLite synchronously; tag it as non-blocking so
+        # Litestar doesn't push it onto a thread pool every request.
+        dependencies={"caller": Provide(provide_caller, sync_to_thread=False)},
     )

@@ -64,12 +64,13 @@ def test_provide_caller_resolves_user_id(isolated_db):
 
 def test_require_role_passes_authorized(isolated_db):
     caller = Caller(api_key="x", role="admin", user_id=None)
-    dep = require_role("admin", "editor")
-    assert dep(caller) is caller
+    # require_role returns a Provide(...); unwrap to the underlying check.
+    fn = require_role("admin", "editor").dependency
+    assert fn(caller) is caller
 
 
 def test_require_role_rejects_unauthorized(isolated_db):
     caller = Caller(api_key="x", role="viewer", user_id=None)
-    dep = require_role("admin", "editor")
+    fn = require_role("admin", "editor").dependency
     with pytest.raises(PermissionDeniedException):
-        dep(caller)
+        fn(caller)

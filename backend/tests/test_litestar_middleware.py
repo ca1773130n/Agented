@@ -42,11 +42,11 @@ def _client(force_https: bool = False):
     return create_test_client(
         route_handlers=[echo_handler, liveness_handler],
         middleware=[
-            mw.SecurityHeadersMiddleware,
-            mw.RateLimitMiddleware,
-            mw.RequestContextMiddleware,
-            mw.ApiKeyMiddleware,
-            mw.RequestLoggingMiddleware,
+            mw.SecurityHeadersMiddleware(),
+            mw.RateLimitMiddleware(),
+            mw.RequestContextMiddleware(),
+            mw.ApiKeyMiddleware(),
+            mw.RequestLoggingMiddleware(),
         ],
         exception_handlers=EXCEPTION_HANDLERS,
         cors_config=CORSConfig(allow_origins=["*"]),
