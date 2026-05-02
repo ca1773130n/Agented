@@ -5,12 +5,12 @@
 See: .planning/PROJECT.md (updated 2026-03-21)
 
 **Core value:** Enable engineering teams to orchestrate AI-powered automation through a unified dashboard
-**Current focus:** Phase 10 — Integration Testing
+**Current focus:** v0.5.0 milestone — **COMPLETE**, ready for tag/release
 **Primary hypothesis:** A guided onboarding tour can bring new users from zero to first bot execution in under 3 minutes
 
 ## Current Position
 
-Phase: 9 of 10 (Post-Tour Experience) — **COMPLETE**
+Phase: 10 of 10 (Integration Testing) — **COMPLETE**
 Phase 1: COMPLETE
 Phase 2: COMPLETE
 Phase 3: COMPLETE
@@ -19,9 +19,33 @@ Phase 5: COMPLETE
 Phase 6: COMPLETE
 Phase 7: COMPLETE
 Phase 8: COMPLETE
-Plan: phase-9/09-01 shipped
-Status: Phase 10 ready to plan
-Last activity: 2026-05-03 — Phase 9 plan 09-01 post-tour experience
+Phase 9: COMPLETE
+Plan: phase-10/10-01 shipped
+Status: **v0.5.0 milestone complete** — ready for release
+Last activity: 2026-05-03 — Phase 10 plan 10-01 integration testing
+
+Phase 10 deliverables (plan 10-01):
+- OB-45 ✓ (state machine unit tests — 47+ tests across
+  useTourMachine.test.ts, useTourMachine.setup-status.test.ts,
+  tour-route-change.test.ts; covers transitions, substeps,
+  persistence, guards, instance-id mismatch, edge cases. Formal
+  branch-coverage measurement deferred to v0.6.0 hardening)
+- OB-46 ✓ (visual component unit tests — all 5 components have
+  test files: TourOverlay 50+, TourTooltip 15+, TourProgressBar 22,
+  TourFormGuide 5, TourSpotlight 7)
+- OB-47 ✓ (Playwright E2E — 6 flows: complete-via-Next, skip-all,
+  keyboard nav, **persistence-across-reload**, **reduced motion**,
+  **focus stays out of chrome** — the latter 3 added in this plan)
+- OB-48 ✓ (build clean + zero `any` types in tour code, verified
+  via grep over `components/tour/`, `composables/useTour*.ts`,
+  `useFocusTrap.ts`, `useFormGuide.ts`, `machines/`)
+
+Deferred to v0.6.0:
+- Modal-interaction E2E during the backends step
+- Formal vitest branch-coverage report (`npm run test:coverage`)
+- OB-24 UX polish (assign-teams target lives on project-detail page,
+  step navigates to /projects list — element-not-found fallback
+  carries the criterion gracefully)
 
 Phase 9 deliverables (plan 09-01):
 - OB-22, OB-23, OB-24 ✓ (product/project/team data-tour targets in
