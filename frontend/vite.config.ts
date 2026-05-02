@@ -77,6 +77,17 @@ export default defineConfig(({ mode }) => {
         '/admin/analytics': { target: 'http://127.0.0.1:20002', changeOrigin: true },
         '/admin/reports': { target: 'http://127.0.0.1:20002', changeOrigin: true },
         '/api/findings': { target: 'http://127.0.0.1:20002', changeOrigin: true },
+        // wave 68 — knowledge_graph + collaborative + campaigns + execution_tagging + pr_assignment.
+        '/admin/campaigns': { target: 'http://127.0.0.1:20002', changeOrigin: true },
+        '/admin/execution-tags': { target: 'http://127.0.0.1:20002', changeOrigin: true },
+        '/admin/execution-tagging': { target: 'http://127.0.0.1:20002', changeOrigin: true },
+        '/admin/comments': { target: 'http://127.0.0.1:20002', changeOrigin: true },
+        '/api/pr-assignment': { target: 'http://127.0.0.1:20002', changeOrigin: true },
+        // /admin/executions/{id}/viewers + /comments — collaborative subroutes (executions still on Flask).
+        '^/admin/executions/[^/]+/(viewers|comments)': {
+          target: 'http://127.0.0.1:20002',
+          changeOrigin: true,
+        },
         '/admin/analytics/cross-team-insights': { target: 'http://127.0.0.1:20002', changeOrigin: true },
         '/admin/analytics/scheduling-suggestions': { target: 'http://127.0.0.1:20002', changeOrigin: true },
         '/admin/execution-search': { target: 'http://127.0.0.1:20002', changeOrigin: true },
@@ -176,6 +187,17 @@ export default defineConfig(({ mode }) => {
         '/admin/analytics': { target: 'http://127.0.0.1:20002', changeOrigin: true },
         '/admin/reports': { target: 'http://127.0.0.1:20002', changeOrigin: true },
         '/api/findings': { target: 'http://127.0.0.1:20002', changeOrigin: true },
+        // wave 68 — knowledge_graph + collaborative + campaigns + execution_tagging + pr_assignment.
+        '/admin/campaigns': { target: 'http://127.0.0.1:20002', changeOrigin: true },
+        '/admin/execution-tags': { target: 'http://127.0.0.1:20002', changeOrigin: true },
+        '/admin/execution-tagging': { target: 'http://127.0.0.1:20002', changeOrigin: true },
+        '/admin/comments': { target: 'http://127.0.0.1:20002', changeOrigin: true },
+        '/api/pr-assignment': { target: 'http://127.0.0.1:20002', changeOrigin: true },
+        // /admin/executions/{id}/viewers + /comments — collaborative subroutes (executions still on Flask).
+        '^/admin/executions/[^/]+/(viewers|comments)': {
+          target: 'http://127.0.0.1:20002',
+          changeOrigin: true,
+        },
         '/admin/analytics/cross-team-insights': { target: 'http://127.0.0.1:20002', changeOrigin: true },
         '/admin/analytics/scheduling-suggestions': { target: 'http://127.0.0.1:20002', changeOrigin: true },
         '/admin/execution-search': { target: 'http://127.0.0.1:20002', changeOrigin: true },
