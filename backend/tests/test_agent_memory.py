@@ -205,3 +205,63 @@ class TestSemanticRecall:
     def test_recall_empty_query(self, isolated_db):
         results = recall_messages(thread_id=None, query="test", resource_id=None)
         assert results == []
+
+
+class TestCorruptJSON:
+    """v0.5.2: corrupt JSON in agent_memory tables used to fall through
+    to a silent `None` substitution with no operator-visible warning,
+    masking DB corruption or encoding bugs. These tests verify each
+    site now logs a WARNING with enough context to find the bad row.
+    """
+
+    def test_get_messages_logs_corrupt_row_metadata(self, isolated_db, caplog):
+        """Regression guard for the pre-existing `_row_with_json_metadata`
+        warning. The fix (see git blame on agent_memory.py) replaced a
+        silent `pass` with a `logger.warning(...)`; this test ensures
+        nothing reverts that.
+        """
+        from app.database import get_connection
+
+        thread = create_thread("agent-test01", "agent", "T")
+        save_messages(
+            thread["id"],
+            [{"role": "user", "content": "hello", "metadata": {"k": "v"}}],
+        )
+        with get_connection() as conn:
+            conn.execute(
+                "UPDATE memory_messages SET metadata = ? WHERE thread_id = ?",
+                ("{not valid", thread["id"]),
+            )
+            conn.commit()
+
+        with caplog.at_level("WARNING", logger="app.db.agent_memory"):
+            messages = get_messages(thread["id"])
+
+        assert len(messages) == 1
+        assert messages[0]["metadata"] is None
+        assert any("Failed to parse metadata JSON" in r.message for r in caplog.records)
+
+    def test_get_working_memory_logs_corrupt_content(self, isolated_db, caplog):
+        from app.database import get_connection
+
+        upsert_working_memory("agent-test01", "agent", '{"valid": "json"}')
+        # Stomp the content with a non-JSON blob.
+        with get_connection() as conn:
+            conn.execute(
+                "UPDATE agent_working_memory SET content = ? "
+                "WHERE entity_id = ? AND entity_type = ?",
+                ("not_json_at_all", "agent-test01", "agent"),
+            )
+            conn.commit()
+
+        with caplog.at_level("WARNING", logger="app.db.agent_memory"):
+            wm = get_working_memory("agent-test01", "agent")
+
+        assert wm is not None
+        assert wm["content"] == "not_json_at_all"
+        assert wm["content_parsed"] is None
+        assert any(
+            "content is not valid JSON" in r.message
+            and "agent-test01" in r.message
+            for r in caplog.records
+        )

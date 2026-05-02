@@ -361,6 +361,12 @@ def vector_recall(
                 try:
                     msg["metadata"] = json.loads(msg["metadata"])
                 except (json.JSONDecodeError, TypeError):
+                    logger.warning(
+                        "recall_messages: corrupt metadata JSON on message %s; "
+                        "returning metadata=None. raw=%r",
+                        msg.get("id"),
+                        str(msg["metadata"])[:200],
+                    )
                     msg["metadata"] = None
             messages.append(msg)
             embeddings.append(deserialize_embedding(row[7]))
@@ -482,6 +488,13 @@ def get_working_memory(entity_id: str, entity_type: str = "agent") -> dict | Non
         try:
             d["content_parsed"] = json.loads(d["content"])
         except (json.JSONDecodeError, TypeError):
+            logger.warning(
+                "get_working_memory: content is not valid JSON for "
+                "entity_id=%s entity_type=%s; returning content_parsed=None. raw=%r",
+                entity_id,
+                entity_type,
+                str(d["content"])[:200],
+            )
             d["content_parsed"] = None
         return d
 
