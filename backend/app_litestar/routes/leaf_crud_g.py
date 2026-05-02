@@ -1,0 +1,457 @@
+"""Wave 71 — leaf CRUD batch G (~23 routes).
+
+sketches + agent_conversations (sans SSE) + plugin_exports.
+
+The /api/agents/conversations/{id}/stream SSE endpoint stays on Flask until
+the dedicated streaming wave so we can lift the Litestar `Stream` pattern
+across all conversation endpoints in one pass.
+"""
+
+from __future__ import annotations
+
+import json
+import tempfile
+from typing import Any, Optional
+
+from litestar import Router, delete, get, post, put
+from litestar.exceptions import (
+    ClientException,
+    HTTPException,
+    NotFoundException,
+)
+
+from app.database import get_plugin_exports_for_plugin
+from app.db.owned_entities import get_for_user
+from app.db.plugins import count_plugin_exports_for_plugin
+from app.db.sketches import (
+    count_sketches,
+    delete_sketch,
+    get_all_sketches,
+    get_sketch,
+    update_sketch,
+)
+from app.db.sketches import create_sketch as db_create_sketch
+from app.logging_config import current_user_var
+from app.services.agent_conversation_service import AgentConversationService
+from app.services.sketch_execution_service import execute_sketch, find_team_super_agent
+
+from ..auth import Caller
+
+
+def _result_or_raise(payload: tuple[Any, int]) -> Any:
+    body, status = payload
+    if status >= 400:
+        if status == 404:
+            raise NotFoundException(detail=str(body.get("error") if isinstance(body, dict) else body))
+        raise HTTPException(
+            status_code=status,
+            detail=str(body.get("error") if isinstance(body, dict) else body),
+        )
+    return body
+
+
+# ===========================================================================
+# /admin/sketches/* (8)
+# ===========================================================================
+
+
+@get("/", sync_to_thread=False)
+def list_sketches(
+    caller: Caller,
+    limit: int = 50,
+    offset: int = 0,
+    status: Optional[str] = None,
+    project_id: Optional[str] = None,
+) -> dict[str, Any]:
+    user_id = caller.user_id or current_user_var.get()
+    if user_id:
+        rows = get_for_user("sketches", user_id, limit=limit, offset=offset)
+        return {"sketches": rows, "total_count": len(rows)}
+    sketches = get_all_sketches(
+        status=status, project_id=project_id, limit=limit, offset=offset
+    )
+    total_count = count_sketches(status=status, project_id=project_id)
+    return {"sketches": sketches, "total_count": total_count}
+
+
+@post("/", status_code=201, sync_to_thread=False)
+def create_sketch(data: dict) -> dict[str, Any]:
+    if not data:
+        raise ClientException(detail="JSON body required")
+    title = (data.get("title") or "").strip()
+    if not title:
+        raise ClientException(detail="title is required")
+    sketch_id = db_create_sketch(
+        title=title,
+        content=data.get("content", "") or "",
+        project_id=data.get("project_id"),
+    )
+    if not sketch_id:
+        raise HTTPException(status_code=500, detail="Failed to create sketch")
+    return {"message": "Sketch created", "sketch_id": sketch_id}
+
+
+@get("/{sketch_id:str}", sync_to_thread=False)
+def get_sketch_endpoint(sketch_id: str) -> Any:
+    sketch = get_sketch(sketch_id)
+    if not sketch:
+        raise NotFoundException(detail="Sketch not found")
+    return sketch
+
+
+@put("/{sketch_id:str}", sync_to_thread=False)
+def update_sketch_endpoint(sketch_id: str, data: dict) -> dict[str, Any]:
+    body = {k: v for k, v in (data or {}).items() if v is not None}
+    if not update_sketch(sketch_id, **body):
+        raise NotFoundException(detail="Sketch not found or no changes made")
+    return {"message": "Sketch updated"}
+
+
+@delete("/{sketch_id:str}", status_code=200, sync_to_thread=False)
+def delete_sketch_endpoint(sketch_id: str) -> dict[str, Any]:
+    if not delete_sketch(sketch_id):
+        raise NotFoundException(detail="Sketch not found")
+    return {"message": "Sketch deleted"}
+
+
+@post("/{sketch_id:str}/classify", sync_to_thread=False)
+def classify_sketch(sketch_id: str) -> dict[str, Any]:
+    sketch = get_sketch(sketch_id)
+    if not sketch:
+        raise NotFoundException(detail="Sketch not found")
+    from app.services.sketch_routing_service import SketchRoutingService
+
+    classification = SketchRoutingService.classify(sketch)
+    update_sketch(sketch_id, classification_json=json.dumps(classification), status="classified")
+    return {"message": "Sketch classified", "classification": classification}
+
+
+@post("/{sketch_id:str}/route", sync_to_thread=False)
+def route_sketch(sketch_id: str) -> dict[str, Any]:
+    sketch = get_sketch(sketch_id)
+    if not sketch:
+        raise NotFoundException(detail="Sketch not found")
+    classification_raw = sketch.get("classification_json")
+    if not classification_raw:
+        raise ClientException(detail="Sketch must be classified first")
+    classification = (
+        json.loads(classification_raw)
+        if isinstance(classification_raw, str)
+        else classification_raw
+    )
+
+    from app.services.sketch_routing_service import SketchRoutingService
+
+    routing = SketchRoutingService.route(classification, project_id=sketch.get("project_id"))
+    super_agent_id = None
+    if routing["target_type"] == "super_agent":
+        super_agent_id = routing["target_id"]
+    elif routing["target_type"] == "team":
+        super_agent_id = find_team_super_agent(routing["target_id"])
+
+    if not super_agent_id:
+        update_sketch(sketch_id, status="routed", routing_json=json.dumps(routing))
+        return {"routing": routing}
+
+    team_id = routing["target_id"] if routing["target_type"] == "team" else None
+    session_id = execute_sketch(sketch_id, super_agent_id, sketch["content"], team_id=team_id)
+    routing["session_id"] = session_id
+    routing["super_agent_id"] = super_agent_id
+    update_sketch(sketch_id, routing_json=json.dumps(routing))
+    return {"routing": routing, "session_id": session_id, "super_agent_id": super_agent_id}
+
+
+@get("/{sketch_id:str}/delegations", sync_to_thread=False)
+def sketch_delegations(sketch_id: str) -> dict[str, Any]:
+    sketch = get_sketch(sketch_id)
+    if not sketch:
+        raise NotFoundException(detail="Sketch not found")
+    routing = json.loads(sketch.get("routing_json") or "{}")
+    return {"delegations": routing.get("delegations", [])}
+
+
+sketches_router = Router(
+    path="/admin/sketches",
+    route_handlers=[
+        list_sketches,
+        create_sketch,
+        get_sketch_endpoint,
+        update_sketch_endpoint,
+        delete_sketch_endpoint,
+        classify_sketch,
+        route_sketch,
+        sketch_delegations,
+    ],
+)
+
+
+# ===========================================================================
+# /api/agents/conversations/* (5; SSE deferred)
+# ===========================================================================
+
+
+@post("/start", sync_to_thread=False)
+def start_conversation() -> Any:
+    return _result_or_raise(AgentConversationService.start_conversation())
+
+
+@get("/{conv_id:str}", sync_to_thread=False)
+def get_conversation(conv_id: str) -> Any:
+    return _result_or_raise(AgentConversationService.get_conversation(conv_id))
+
+
+@post("/{conv_id:str}/message", sync_to_thread=False)
+def send_message(conv_id: str, data: dict) -> Any:
+    body = data or {}
+    if not body.get("message"):
+        raise ClientException(detail="message is required")
+    return _result_or_raise(
+        AgentConversationService.send_message(
+            conv_id,
+            body["message"],
+            backend=body.get("backend"),
+            account_id=body.get("account_id"),
+            model=body.get("model"),
+        )
+    )
+
+
+@post("/{conv_id:str}/finalize", sync_to_thread=False)
+def finalize_agent(conv_id: str) -> Any:
+    return _result_or_raise(AgentConversationService.finalize_agent(conv_id))
+
+
+@post("/{conv_id:str}/abandon", sync_to_thread=False)
+def abandon_conversation(conv_id: str) -> Any:
+    return _result_or_raise(AgentConversationService.abandon_conversation(conv_id))
+
+
+agent_conversations_router = Router(
+    path="/api/agents/conversations",
+    route_handlers=[
+        start_conversation,
+        get_conversation,
+        send_message,
+        finalize_agent,
+        abandon_conversation,
+    ],
+)
+
+
+# ===========================================================================
+# /admin/plugin-exports/* (10)
+# ===========================================================================
+
+
+@post("/export", sync_to_thread=False)
+def export_plugin(data: dict) -> dict[str, Any]:
+    from app.services.plugin_export_service import ExportService
+
+    if not data:
+        raise ClientException(detail="JSON body required")
+    team_id = data.get("team_id")
+    if not team_id:
+        raise ClientException(detail="team_id is required")
+    export_format = data.get("export_format")
+    if export_format not in ("claude", "agented"):
+        raise ClientException(detail="export_format must be 'claude' or 'agented'")
+    output_dir = data.get("output_dir") or tempfile.mkdtemp(prefix="agented-export-")
+    try:
+        if export_format == "claude":
+            result = ExportService.export_as_claude_plugin(team_id=team_id, output_dir=output_dir)
+        else:
+            result = ExportService.export_as_agented_package(
+                team_id=team_id, output_dir=output_dir
+            )
+    except ValueError as e:
+        raise NotFoundException(detail=str(e)) from e
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Export failed: {e}") from e
+    result["format"] = export_format
+    return result
+
+
+@post("/import", status_code=201, sync_to_thread=False)
+def import_plugin(data: dict) -> dict[str, Any]:
+    from app.services.plugin_import_service import ImportService
+
+    if not data:
+        raise ClientException(detail="JSON body required")
+    source_path = data.get("source_path")
+    if not source_path:
+        raise ClientException(detail="source_path is required")
+    try:
+        return ImportService.import_plugin_directory(
+            plugin_dir=source_path,
+            plugin_name=data.get("plugin_name"),
+        )
+    except FileNotFoundError as e:
+        raise NotFoundException(detail=str(e)) from e
+    except NotADirectoryError as e:
+        raise ClientException(detail=str(e)) from e
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Import failed: {e}") from e
+
+
+@post("/import-from-marketplace", status_code=201, sync_to_thread=False)
+def import_from_marketplace(data: dict) -> dict[str, Any]:
+    from app.services.plugin_deploy_service import DeployService
+
+    if not data:
+        raise ClientException(detail="JSON body required")
+    marketplace_id = data.get("marketplace_id")
+    remote_plugin_name = data.get("remote_plugin_name")
+    if not marketplace_id:
+        raise ClientException(detail="marketplace_id is required")
+    if not remote_plugin_name:
+        raise ClientException(detail="remote_plugin_name is required")
+    try:
+        return DeployService.load_from_marketplace(
+            marketplace_id=marketplace_id, remote_plugin_name=remote_plugin_name
+        )
+    except ValueError as e:
+        raise NotFoundException(detail=str(e)) from e
+    except RuntimeError as e:
+        raise HTTPException(status_code=500, detail=str(e)) from e
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Marketplace import failed: {e}") from e
+
+
+@post("/deploy", sync_to_thread=False)
+def deploy_plugin(data: dict) -> dict[str, Any]:
+    from app.services.plugin_deploy_service import DeployService
+
+    if not data:
+        raise ClientException(detail="JSON body required")
+    plugin_id = data.get("plugin_id")
+    marketplace_id = data.get("marketplace_id")
+    if not plugin_id:
+        raise ClientException(detail="plugin_id is required")
+    if not marketplace_id:
+        raise ClientException(detail="marketplace_id is required")
+    version = data.get("version", "1.0.0")
+    try:
+        return DeployService.deploy_to_marketplace(
+            plugin_id=plugin_id, marketplace_id=marketplace_id, version=version
+        )
+    except ValueError as e:
+        raise NotFoundException(detail=str(e)) from e
+    except RuntimeError as e:
+        raise HTTPException(status_code=500, detail=str(e)) from e
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Deploy failed: {e}") from e
+
+
+@post("/test-connection", sync_to_thread=False)
+def test_marketplace_connection(data: dict) -> dict[str, Any]:
+    from app.services.plugin_deploy_service import DeployService
+
+    if not data:
+        raise ClientException(detail="JSON body required")
+    marketplace_id = data.get("marketplace_id")
+    if not marketplace_id:
+        raise ClientException(detail="marketplace_id is required")
+    return DeployService.test_connection(marketplace_id=marketplace_id)
+
+
+@get("/{plugin_id:str}/exports", sync_to_thread=False)
+def list_plugin_exports(plugin_id: str, limit: int = 50, offset: int = 0) -> dict[str, Any]:
+    exports = get_plugin_exports_for_plugin(plugin_id, limit=limit, offset=offset)
+    return {
+        "exports": exports,
+        "total_count": count_plugin_exports_for_plugin(plugin_id),
+    }
+
+
+@post("/sync", sync_to_thread=False)
+def sync_to_disk(data: dict) -> dict[str, Any]:
+    from app.services.plugin_sync_service import SyncService
+
+    if not data:
+        raise ClientException(detail="JSON body required")
+    plugin_id = data.get("plugin_id")
+    plugin_dir = data.get("plugin_dir")
+    if not plugin_id or not plugin_dir:
+        raise ClientException(detail="plugin_id and plugin_dir are required")
+    try:
+        summary = SyncService.sync_all_to_disk(plugin_id, plugin_dir)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Sync failed: {e}") from e
+    return {"message": "Sync complete", **summary}
+
+
+@post("/sync/entity", sync_to_thread=False)
+def sync_entity(data: dict) -> dict[str, Any]:
+    from app.services.plugin_sync_service import SyncService
+
+    if not data:
+        raise ClientException(detail="JSON body required")
+    entity_type = data.get("entity_type")
+    entity_id = data.get("entity_id")
+    plugin_id = data.get("plugin_id")
+    plugin_dir = data.get("plugin_dir")
+    if not all([entity_type, entity_id, plugin_id, plugin_dir]):
+        raise ClientException(
+            detail="entity_type, entity_id, plugin_id, and plugin_dir are required"
+        )
+    try:
+        synced = SyncService.sync_entity_to_disk(entity_type, entity_id, plugin_id, plugin_dir)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Sync failed: {e}") from e
+    return {"synced": synced}
+
+
+@post("/watch", sync_to_thread=False)
+def toggle_watcher(data: dict) -> dict[str, Any]:
+    from app.services.plugin_sync_service import SyncService
+
+    if not data:
+        raise ClientException(detail="JSON body required")
+    plugin_id = data.get("plugin_id")
+    plugin_dir = data.get("plugin_dir")
+    enabled = data.get("enabled", True)
+    if not plugin_id:
+        raise ClientException(detail="plugin_id is required")
+    try:
+        if enabled:
+            if not plugin_dir:
+                raise ClientException(detail="plugin_dir is required when enabling watch")
+            SyncService.start_watching(plugin_id, plugin_dir)
+        else:
+            SyncService.stop_watching(plugin_id)
+    except ClientException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Watch toggle failed: {e}") from e
+    return {"watching": enabled, "plugin_id": plugin_id}
+
+
+@get("/{plugin_id:str}/sync-status", sync_to_thread=False)
+def get_plugin_sync_status(plugin_id: str) -> dict[str, Any]:
+    from app.services.plugin_sync_service import SyncService
+
+    try:
+        status = SyncService.get_sync_status(plugin_id)
+        status["watching"] = SyncService.is_watching(plugin_id)
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=f"Failed to get sync status: {e}"
+        ) from e
+    return status
+
+
+plugin_exports_router = Router(
+    path="/admin/plugin-exports",
+    route_handlers=[
+        export_plugin,
+        import_plugin,
+        import_from_marketplace,
+        deploy_plugin,
+        test_marketplace_connection,
+        list_plugin_exports,
+        sync_to_disk,
+        sync_entity,
+        toggle_watcher,
+        get_plugin_sync_status,
+    ],
+)

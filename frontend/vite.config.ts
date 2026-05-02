@@ -106,6 +106,18 @@ export default defineConfig(({ mode }) => {
           target: 'http://127.0.0.1:20002',
           changeOrigin: true,
         },
+        // wave 71 — sketches + agent_conversations CRUD + plugin_exports.
+        '/admin/sketches': { target: 'http://127.0.0.1:20002', changeOrigin: true },
+        '/admin/plugin-exports': { target: 'http://127.0.0.1:20002', changeOrigin: true },
+        // /api/agents/conversations/{id}/stream stays on Flask — others to Litestar.
+        '^/api/agents/conversations/(start|[^/]+/(message|finalize|abandon))': {
+          target: 'http://127.0.0.1:20002',
+          changeOrigin: true,
+        },
+        '^/api/agents/conversations/[^/]+$': {
+          target: 'http://127.0.0.1:20002',
+          changeOrigin: true,
+        },
         '/admin/analytics/cross-team-insights': { target: 'http://127.0.0.1:20002', changeOrigin: true },
         '/admin/analytics/scheduling-suggestions': { target: 'http://127.0.0.1:20002', changeOrigin: true },
         '/admin/execution-search': { target: 'http://127.0.0.1:20002', changeOrigin: true },
@@ -231,6 +243,18 @@ export default defineConfig(({ mode }) => {
         '/admin/conversations': { target: 'http://127.0.0.1:20002', changeOrigin: true },
         // /admin/executions/{id}/replay + /comparisons go to Litestar; other /admin/executions stay on Flask.
         '^/admin/executions/[^/]+/(replay|comparisons)': {
+          target: 'http://127.0.0.1:20002',
+          changeOrigin: true,
+        },
+        // wave 71 — sketches + agent_conversations CRUD + plugin_exports.
+        '/admin/sketches': { target: 'http://127.0.0.1:20002', changeOrigin: true },
+        '/admin/plugin-exports': { target: 'http://127.0.0.1:20002', changeOrigin: true },
+        // /api/agents/conversations/{id}/stream stays on Flask — others to Litestar.
+        '^/api/agents/conversations/(start|[^/]+/(message|finalize|abandon))': {
+          target: 'http://127.0.0.1:20002',
+          changeOrigin: true,
+        },
+        '^/api/agents/conversations/[^/]+$': {
           target: 'http://127.0.0.1:20002',
           changeOrigin: true,
         },

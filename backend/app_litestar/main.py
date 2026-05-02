@@ -53,6 +53,11 @@ from .routes.leaf_crud_f import (
     conversation_branches_router,
     replay_router,
 )
+from .routes.leaf_crud_g import (
+    agent_conversations_router,
+    plugin_exports_router,
+    sketches_router,
+)
 from .routes.rbac import rbac_router
 from .routes.admin_misc import admin_misc_router
 from .routes.admin_tooling import (
@@ -163,6 +168,9 @@ def create_app() -> Litestar:
             bulk_router,
             replay_router,
             conversation_branches_router,
+            sketches_router,
+            agent_conversations_router,
+            plugin_exports_router,
         ],
         dependencies={"caller": provide_caller},
     )
