@@ -118,6 +118,19 @@ export default defineConfig(({ mode }) => {
           target: 'http://127.0.0.1:20002',
           changeOrigin: true,
         },
+        // wave 72 — plugin/command/hook/rule conversations CRUD; /stream stays on Flask.
+        '^/api/(plugins|commands|hooks|rules)/conversations/?$': {
+          target: 'http://127.0.0.1:20002',
+          changeOrigin: true,
+        },
+        '^/api/(plugins|commands|hooks|rules)/conversations/(start|[^/]+/(message|finalize|resume|abandon))': {
+          target: 'http://127.0.0.1:20002',
+          changeOrigin: true,
+        },
+        '^/api/(plugins|commands|hooks|rules)/conversations/[^/]+$': {
+          target: 'http://127.0.0.1:20002',
+          changeOrigin: true,
+        },
         '/admin/analytics/cross-team-insights': { target: 'http://127.0.0.1:20002', changeOrigin: true },
         '/admin/analytics/scheduling-suggestions': { target: 'http://127.0.0.1:20002', changeOrigin: true },
         '/admin/execution-search': { target: 'http://127.0.0.1:20002', changeOrigin: true },
@@ -255,6 +268,19 @@ export default defineConfig(({ mode }) => {
           changeOrigin: true,
         },
         '^/api/agents/conversations/[^/]+$': {
+          target: 'http://127.0.0.1:20002',
+          changeOrigin: true,
+        },
+        // wave 72 — plugin/command/hook/rule conversations CRUD; /stream stays on Flask.
+        '^/api/(plugins|commands|hooks|rules)/conversations/?$': {
+          target: 'http://127.0.0.1:20002',
+          changeOrigin: true,
+        },
+        '^/api/(plugins|commands|hooks|rules)/conversations/(start|[^/]+/(message|finalize|resume|abandon))': {
+          target: 'http://127.0.0.1:20002',
+          changeOrigin: true,
+        },
+        '^/api/(plugins|commands|hooks|rules)/conversations/[^/]+$': {
           target: 'http://127.0.0.1:20002',
           changeOrigin: true,
         },
