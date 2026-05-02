@@ -29,6 +29,10 @@ from .routes.rules_plugins_hooks_commands import (
     rules_router,
 )
 from .routes.scheduler import scheduler_router
+from .routes.super_agents_cluster import (
+    super_agent_exports_router,
+    super_agents_router,
+)
 from .routes.skills import (
     skill_conversations_router,
     skill_sets_router,
@@ -71,6 +75,8 @@ def create_app() -> Litestar:
             hooks_router,
             commands_router,
             workflows_router,
+            super_agents_router,
+            super_agent_exports_router,
         ],
         dependencies={"caller": provide_caller},
     )
