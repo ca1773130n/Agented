@@ -5,12 +5,12 @@
 See: .planning/PROJECT.md (updated 2026-03-21)
 
 **Core value:** Enable engineering teams to orchestrate AI-powered automation through a unified dashboard
-**Current focus:** Phase 9 — Post-Tour Experience
+**Current focus:** Phase 10 — Integration Testing
 **Primary hypothesis:** A guided onboarding tour can bring new users from zero to first bot execution in under 3 minutes
 
 ## Current Position
 
-Phase: 8 of 10 (Accessibility) — **COMPLETE**
+Phase: 9 of 10 (Post-Tour Experience) — **COMPLETE**
 Phase 1: COMPLETE
 Phase 2: COMPLETE
 Phase 3: COMPLETE
@@ -18,9 +18,28 @@ Phase 4: COMPLETE
 Phase 5: COMPLETE
 Phase 6: COMPLETE
 Phase 7: COMPLETE
-Plan: phase-8/08-01 shipped
-Status: Phase 9 ready to plan
-Last activity: 2026-05-03 — Phase 8 plan 08-01 accessibility
+Phase 8: COMPLETE
+Plan: phase-9/09-01 shipped
+Status: Phase 10 ready to plan
+Last activity: 2026-05-03 — Phase 9 plan 09-01 post-tour experience
+
+Phase 9 deliverables (plan 09-01):
+- OB-22, OB-23, OB-24 ✓ (product/project/team data-tour targets in
+  ProductsPage.vue, ProductDashboard.vue, ProjectSettingsPage.vue —
+  pre-existing; added presence regression tests)
+- OB-34 ✓ (TourCompletionScreen — pre-existing + tested)
+- OB-35 ✓ (sidebar setup checklist via useTourChecklist —
+  pre-existing; added composable tests for checklistItems shape +
+  completedCount math + showChecklist flag)
+- OB-35a ✓ (Restart Setup Guide button in GeneralSettings.vue —
+  pre-existing; added source-string regression guard)
+- 12 new frontend tests (5 useTourChecklist + 4 tourSteps + 3
+  GeneralSettings)
+- Known limitation deferred: OB-24's `assign-teams` target lives on
+  `/projects/:projectId/settings`, but the tour step's route is
+  `/projects` (list). The element-not-found fallback handles this
+  gracefully; future v0.6.0 should either move the target to the
+  list page or change the step's route.
 
 Phase 8 deliverables (plan 08-01):
 - OB-36 ✓ (reduced motion — closed gap by adding @media block to
