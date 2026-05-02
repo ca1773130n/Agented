@@ -20,10 +20,12 @@ const isCreating = ref(false);
 const generatedKeyDisplay = ref<string | null>(null);
 const copied = ref(false);
 const deletingId = ref<string | null>(null);
+const rotatingId = ref<string | null>(null);
 const editingId = ref<string | null>(null);
 const editRole = ref('');
 const editLabel = ref('');
 const isSavingEdit = ref(false);
+const rotateConfirmRole = ref<UserRole | null>(null);
 
 const ROLE_OPTIONS = ['viewer', 'operator', 'editor', 'admin'];
 
@@ -138,6 +140,27 @@ async function saveEdit(roleId: string) {
     showToast(message, 'error');
   } finally {
     isSavingEdit.value = false;
+  }
+}
+
+async function confirmRotate() {
+  const role = rotateConfirmRole.value;
+  if (!role) return;
+  rotatingId.value = role.id;
+  rotateConfirmRole.value = null;
+  try {
+    const result = await rbacApi.rotateRole(role.id);
+    const idx = roles.value.findIndex(r => r.id === role.id);
+    if (idx !== -1 && result.role) {
+      roles.value[idx] = result.role;
+    }
+    generatedKeyDisplay.value = result.role.api_key;
+    showToast('Key rotated — copy the new key now', 'success');
+  } catch (err) {
+    const message = err instanceof ApiError ? err.message : 'Failed to rotate key';
+    showToast(message, 'error');
+  } finally {
+    rotatingId.value = null;
   }
 }
 
@@ -304,6 +327,13 @@ onMounted(loadData);
                 </template>
                 <template v-else>
                   <button class="btn btn-sm btn-edit" @click="startEdit(role)">Edit</button>
+                  <button
+                    class="btn btn-sm btn-rotate"
+                    :disabled="rotatingId === role.id"
+                    @click="rotateConfirmRole = role"
+                  >
+                    {{ rotatingId === role.id ? '...' : 'Rotate' }}
+                  </button>
                   <button class="btn btn-sm btn-delete" :disabled="deletingId === role.id" @click="handleDelete(role)">
                     {{ deletingId === role.id ? '...' : 'Delete' }}
                   </button>
@@ -314,6 +344,23 @@ onMounted(loadData);
         </table>
       </div>
     </template>
+
+    <!-- Rotate confirmation -->
+    <div v-if="rotateConfirmRole" class="rotate-modal-backdrop" @click.self="rotateConfirmRole = null">
+      <div class="rotate-modal">
+        <h3>Rotate API key?</h3>
+        <p>
+          The current key for
+          <strong>{{ rotateConfirmRole.label }}</strong>
+          ({{ rotateConfirmRole.role }}) will stop working immediately. Any
+          tools or CI jobs using it will need the new key.
+        </p>
+        <div class="rotate-modal-actions">
+          <button class="btn btn-ghost" @click="rotateConfirmRole = null">Cancel</button>
+          <button class="btn btn-primary" @click="confirmRotate">Rotate now</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -600,6 +647,49 @@ onMounted(loadData);
 .btn-delete { background: var(--bg-tertiary); border: 1px solid var(--border-default); color: var(--text-tertiary); }
 .btn-delete:hover:not(:disabled) { border-color: #ef4444; color: #ef4444; }
 .btn-delete:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.btn-rotate { background: var(--bg-tertiary); border: 1px solid var(--border-default); color: var(--text-tertiary); }
+.btn-rotate:hover:not(:disabled) { border-color: var(--accent-amber, #f59e0b); color: var(--accent-amber, #f59e0b); }
+.btn-rotate:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.rotate-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.rotate-modal {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-default);
+  border-radius: 12px;
+  padding: 24px;
+  max-width: 480px;
+  width: calc(100% - 32px);
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.5);
+}
+
+.rotate-modal h3 {
+  margin: 0 0 12px 0;
+  font-size: 1.125rem;
+  color: var(--text-primary);
+}
+
+.rotate-modal p {
+  margin: 0 0 20px 0;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  font-size: 0.875rem;
+}
+
+.rotate-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
 
 .generated-key-notice {
   background: var(--surface-elevated, #1a1a2e);

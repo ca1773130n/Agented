@@ -15,23 +15,48 @@ logger = logging.getLogger(__name__)
 # =============================================================================
 
 
+def _resolve_user_id(conn, user_id: Optional[str]) -> Optional[str]:
+    """Default to the legacy user when caller didn't pass one."""
+    if user_id:
+        return user_id
+    row = conn.execute(
+        "SELECT id FROM users WHERE email = ?", ("legacy@local",)
+    ).fetchone()
+    return row[0] if row else None
+
+
 def create_product(
     name: str,
     description: str = None,
     status: str = "active",
     owner_team_id: str = None,
     owner_agent_id: str = None,
+    user_id: Optional[str] = None,
 ) -> Optional[str]:
-    """Add a new product. Returns product_id on success, None on failure."""
+    """Add a new product. Returns product_id on success, None on failure.
+
+    ``user_id`` is the owning user (track B, wave 39 multi-tenancy
+    starter). When omitted, falls back to the legacy@local user so
+    existing single-user call sites keep working.
+    """
     with get_connection() as conn:
         try:
             product_id = _get_unique_product_id(conn)
+            owner_user_id = _resolve_user_id(conn, user_id)
             conn.execute(
                 """
-                INSERT INTO products (id, name, description, status, owner_team_id, owner_agent_id)
-                VALUES (?, ?, ?, ?, ?, ?)
+                INSERT INTO products (id, name, description, status, owner_team_id, owner_agent_id, user_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
-                (product_id, name, description, status, owner_team_id, owner_agent_id),
+                (
+                    product_id,
+                    name,
+                    description,
+                    status,
+                    owner_team_id,
+                    owner_agent_id,
+                    owner_user_id,
+                ),
             )
             conn.commit()
             return product_id
@@ -96,7 +121,11 @@ def get_product(product_id: str) -> Optional[dict]:
 
 
 def get_all_products(limit: Optional[int] = None, offset: int = 0) -> List[dict]:
-    """Get all products with project counts and owner agent name, with optional pagination."""
+    """Get all products with project counts and owner agent name.
+
+    Unscoped; useful for admin views. Per-user scoping uses
+    :func:`get_products_for_user`.
+    """
     with get_connection() as conn:
         sql = """
             SELECT p.*, t.name as owner_team_name, sa.name as owner_agent_name,
@@ -109,6 +138,37 @@ def get_all_products(limit: Optional[int] = None, offset: int = 0) -> List[dict]
             ORDER BY p.name ASC
         """
         params: list = []
+        if limit is not None:
+            sql += " LIMIT ? OFFSET ?"
+            params.extend([limit, offset])
+        cursor = conn.execute(sql, params)
+        return [dict(row) for row in cursor.fetchall()]
+
+
+def get_products_for_user(
+    user_id: str,
+    limit: Optional[int] = None,
+    offset: int = 0,
+) -> List[dict]:
+    """Per-user scoped product listing (wave 39 multi-tenancy starter).
+
+    Returns only the products owned by *user_id*. Pattern repeats for
+    every other owned-entity table — when migrating those, add a
+    sibling ``get_<entity>_for_user`` alongside the unscoped reader.
+    """
+    with get_connection() as conn:
+        sql = """
+            SELECT p.*, t.name as owner_team_name, sa.name as owner_agent_name,
+                   COUNT(pr.id) as project_count
+            FROM products p
+            LEFT JOIN teams t ON p.owner_team_id = t.id
+            LEFT JOIN super_agents sa ON p.owner_agent_id = sa.id
+            LEFT JOIN projects pr ON p.id = pr.product_id
+            WHERE p.user_id = ?
+            GROUP BY p.id
+            ORDER BY p.name ASC
+        """
+        params: list = [user_id]
         if limit is not None:
             sql += " LIMIT ? OFFSET ?"
             params.extend([limit, offset])

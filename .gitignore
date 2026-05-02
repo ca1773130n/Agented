@@ -41,6 +41,13 @@ data/trigger_events/
 
 # Environment / secrets
 .env
+.env.*
+!.env.example
 backend/.secret_key
 .serena/
 .worktrees/
+
+# SQLite WAL/SHM sidecar files (not part of the schema; vary per-process)
+*.db-shm
+*.db-wal
+*.db-journal

@@ -1,4 +1,4 @@
-"""Shared pytest fixtures for Agented tests."""
+"""Shared pytest fixtures for Agented tests (Litestar-only after wave 81)."""
 
 import logging
 import os
@@ -22,11 +22,8 @@ def isolated_db(tmp_path, monkeypatch):
     These warnings do not affect test correctness since assertions happen
     before teardown.
     """
-    # Suppress SQLite table-not-found warnings from daemon threads during teardown
     warnings.filterwarnings("ignore", message=".*no such table.*")
     warnings.filterwarnings("ignore", message=".*database is locked.*")
-    # Suppress PytestUnhandledThreadExceptionWarning from daemon thread teardown race
-    # (workflow execution threads access temp DB after pytest fixture cleanup)
     warnings.filterwarnings("ignore", category=pytest.PytestUnhandledThreadExceptionWarning)
 
     db_file = str(tmp_path / "test.db")
@@ -38,27 +35,6 @@ def isolated_db(tmp_path, monkeypatch):
     init_db()
     seed_predefined_triggers()
     yield db_file
-
-
-@pytest.fixture(scope="session")
-def app():
-    """Create a Flask test application once per session.
-
-    The app is reused across all tests; per-test DB isolation is handled
-    by the ``isolated_db`` fixture which patches ``config.DB_PATH`` before
-    each test.  Because ``get_connection()`` reads ``DB_PATH`` dynamically,
-    the session-scoped app always connects to the correct temp database.
-    """
-    from app import create_app
-
-    application = create_app(config={"TESTING": True})
-    return application
-
-
-@pytest.fixture()
-def client(app):
-    """Flask test client."""
-    return app.test_client()
 
 
 @pytest.fixture(autouse=True)
@@ -77,21 +53,3 @@ def reset_rbac_cache():
         invalidate_key_cache()
     except ImportError:
         logger.debug("Could not import invalidate_key_cache (module not loaded)")
-
-
-@pytest.fixture(autouse=True)
-def reset_github_webhook_rate_limit():
-    """Clear per-repo rate limit state between tests to prevent cross-test interference."""
-    try:
-        from app.routes.github_webhook import _repo_last_event
-
-        _repo_last_event.clear()
-    except ImportError:
-        logger.debug("Could not import _repo_last_event for pre-test cleanup (module not loaded)")
-    yield
-    try:
-        from app.routes.github_webhook import _repo_last_event
-
-        _repo_last_event.clear()
-    except ImportError:
-        logger.debug("Could not import _repo_last_event for post-test cleanup (module not loaded)")

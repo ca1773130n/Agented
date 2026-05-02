@@ -64,6 +64,8 @@
     "skipAnyway": "スキップする",
     "keepGoing": "続ける",
     "elementNotFound": "{element}が見つかりませんでした。",
+    "dismissTooltip": "セットアップツアーを終了",
+    "dismissAria": "ツアーを閉じる",
     "pageSlow": "このページの読み込みに想定より時間がかかっています。",
     "restartSetupGuide": "セットアップガイドを再開",
     "restartDesc": "オンボーディングツアーを再開して、ワークスペースのセットアップとアカウント設定をやり直せます。既存の設定には影響しません。",
@@ -167,6 +169,104 @@
     "stepLogin": "ログイン",
     "stepPlanSave": "プラン & 保存",
     "stepDone": "完了",
+    "tour": {
+      "sub": {
+        "yesno": {
+          "title": "アカウントをお持ちですか？",
+          "message": "このバックエンドのアカウントを既に持っているか選択してください。"
+        },
+        "name": {
+          "title": "アカウント名を入力",
+          "message": "後で見分けがつくようにラベルを入力してください（例：「個人」「仕事」）。任意 — 空欄ならデフォルト値が使われます。"
+        },
+        "email": {
+          "title": "アカウントのメール",
+          "message": "このアカウントに紐づくメールを入力してください。サインインページに login_hint として渡します。"
+        },
+        "next": {
+          "title": "CLI 確認に進む",
+          "message": "「次へ」をクリックすると、CLI がインストールされているか確認してステップ 2 に進みます。"
+        }
+      },
+      "cli": {
+        "status": {
+          "title": "CLI インストール確認",
+          "message": "CLI がインストールされているか確認してください。未インストールの場合は「インストール」ボタンが自動で取得します。"
+        },
+        "path": {
+          "title": "設定ディレクトリを確認",
+          "message": "このアカウント専用の設定フォルダです。次のステップで自動作成します。別のパスを使うなら「カスタマイズ」をクリックしてください。"
+        },
+        "next": {
+          "title": "CLI を起動",
+          "message": "「次へ」をクリックするとバックグラウンドで CLI を起動し、ステップ 3（サインイン）に進みます。"
+        }
+      },
+      "login": {
+        "booting": {
+          "title": "CLI 起動中 — アカウントタイプを選択",
+          "message": "バックグラウンドで CLI が起動しています。その間にどのログインタイプかを決めてください: Pro / Max / Team サブスクリプション → 「subscription」、API 課金（sk-ant-… / sk-… キー）→ 「API key」、サードパーティ（Bedrock / Foundry / Vertex AI）→ 「3rd-party」。間もなくこれらの選択肢のメニューが表示されます。"
+        },
+        "pickMethod": {
+          "title": "サインイン方法を選択",
+          "message": "アカウントに合った選択肢をクリックしてください: 1 = サブスクリプション（Pro / Max / Team）、2 = API キー課金、3 = サードパーティプラットフォーム。直後にブラウザが開きます。"
+        },
+        "authorize": {
+          "title": "ブラウザで承認",
+          "message": "ブラウザのタブが開きました。ステップ 1 のメールでサインインし、「Authorize」をクリックしてください。タブが開かなかった場合はこの URL をクリックしてください。"
+        },
+        "paste": {
+          "title": "認証コードを貼り付け",
+          "message": "リダイレクトページのコードをコピーしてここに貼り付け、Send をクリックしてください。約 5〜10 秒で検証します。"
+        }
+      },
+      "proxy": {
+        "install": {
+          "title": "CLIProxyAPI をインストール",
+          "message": "Install をクリックして CLIProxyAPI をセットアップしてください。他のツールが OpenAI 互換エンドポイントでこのアカウントに接続できるようになります。不要なら下の Skip をクリックしてください。"
+        },
+        "start": {
+          "title": "プロキシに登録",
+          "message": "「Start proxy registration」をクリックして開始してください — プロキシ OAuth 用のブラウザタブが開きます。プロキシが不要なら下の Skip をクリックしてステップ 5 に進んでください。"
+        },
+        "callback": {
+          "title": "コールバック URL を貼り付け",
+          "message": "ブラウザのアドレスバーから localhost コールバック URL 全体をコピーしてここに貼り付け、Submit をクリックしてください。リダイレクトページに「connection refused」が表示されても問題ありません。"
+        },
+        "continue": {
+          "title": "プロキシ登録完了",
+          "message": "登録に成功しました。下の Continue をクリックしてステップ 5 に進んでください。"
+        }
+      },
+      "plan": {
+        "review": {
+          "title": "確認",
+          "message": "入力した内容を確認してください。誤りがあれば「戻る」をクリックして修正してください。"
+        },
+        "pick": {
+          "title": "プランを選択",
+          "message": "Pro、Max、または API を選んでください。CLI がステップ 3 で検出したサブスクリプションをもとに表示しますが、ここで上書きできます。"
+        },
+        "default": {
+          "title": "デフォルトに設定？（任意）",
+          "message": "このアカウントをバックエンドのデフォルトに指定するならチェックしてください。"
+        },
+        "save": {
+          "title": "アカウントを保存",
+          "message": "Save をクリックすると、アカウントを保存して完了画面に進みます。ヒント: このアカウントをバックエンドのデフォルトにしたい場合は、先に上の「デフォルトに設定」をチェックしてください。"
+        }
+      },
+      "done": {
+        "add": {
+          "title": "別のアカウントを追加？",
+          "message": "同じバックエンドに別のアカウントを追加するにはここをクリックしてください（例：2 つ目の Claude アカウント）。"
+        },
+        "nextBackend": {
+          "title": "次のバックエンドへ",
+          "message": "次のバックエンド（Codex / Gemini / OpenCode）にツアーを進めるにはここをクリックしてください。"
+        }
+      }
+    },
     "guide": {
       "subscription": "{backend}のサブスクリプションをお持ちですか？「はい」を選択してアカウント名を入力してください。",
       "cliInstalled": "{backend} CLIがインストールされています（{version}）。設定ディレクトリを確認して次へ進んでください。",
@@ -177,6 +277,37 @@
       "plan": "この{backend}アカウントのサブスクリプションプランを選択して保存してください。",
       "done": "アカウントが保存されました！{backend}アカウントを追加するか、「完了 — 次のバックエンド」をクリックして続けてください。"
     }
+  },
+  "backendDetail": {
+    "documentation": "ドキュメント",
+    "login": "ログイン",
+    "proxyLogin": "プロキシログイン",
+    "availableModels": "利用可能なモデル",
+    "capabilities": "機能",
+    "cliPath": "CLI パス",
+    "openCodeNote": "OpenCode は他の AI バックエンド経由で動作します。各バックエンドでアカウントを登録してください。",
+    "availableBackendAccounts": "利用可能なバックエンドアカウント",
+    "noOtherBackendAccounts": "他のバックエンドにアカウントが見つかりません。先に Claude、Codex、Gemini バックエンドにアカウントを追加してください。",
+    "openCodeAccounts": "OpenCode アカウント",
+    "accounts": "アカウント",
+    "addAccount": "アカウントを追加",
+    "default": "デフォルト",
+    "emailLabel": "メール：",
+    "planLabel": "プラン：",
+    "configPathLabel": "設定パス：",
+    "apiKeyEnvLabel": "API キー環境変数：",
+    "executionsLabel": "実行回数：",
+    "lastUsedLabel": "最終使用：",
+    "rateLimited": "レート制限",
+    "healthy": "正常",
+    "checkRateLimits": "レート制限を確認",
+    "checking": "確認中...",
+    "clearRateLimit": "レート制限を解除",
+    "resets": "リセット",
+    "emptyOpenCode": "OpenCode は他のバックエンドのアカウントを使用します。個別のアカウントは不要です。",
+    "emptyAccounts": "アカウントが設定されていません。このバックエンドを使用するにはアカウントを追加してください。",
+    "deleteAccount": "アカウントを削除",
+    "confirmDeleteAccount": "このアカウントを削除してもよろしいですか？"
   },
   "directoryBrowser": {
     "title": "ディレクトリを選択",

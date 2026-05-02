@@ -4325,6 +4325,207 @@ def _migrate_99_kg_extraction_log(conn):
     """)
 
 
+def _add_user_id_column(conn, table: str) -> None:
+    """Idempotent helper: add user_id column + backfill + index for *table*.
+
+    Used by every owned-entity multi-tenancy migration from wave 41 onward.
+    Walking the table list explicitly (rather than a single mega-migration)
+    keeps each migration version atomic — if a future schema change breaks
+    one table, only that one's migration needs a fix.
+    """
+    table = _validate_sql_identifier(table, "table")
+    cursor = conn.execute(f"PRAGMA table_info({table})")
+    existing = {row[1] for row in cursor.fetchall()}
+    if "user_id" in existing:
+        return
+    conn.execute(
+        f"ALTER TABLE {table} ADD COLUMN user_id TEXT REFERENCES users(id)"
+    )
+    conn.execute(
+        f"UPDATE {table} SET user_id = (SELECT id FROM users WHERE email = ?) "
+        f"WHERE user_id IS NULL",
+        ("legacy@local",),
+    )
+    conn.execute(
+        f"CREATE INDEX IF NOT EXISTS idx_{table}_user_id ON {table}(user_id)"
+    )
+
+
+def _migrate_106_owned_entities_batch1_user_id(conn):
+    """Multi-tenancy starter — 5 tables (track B, wave 41)."""
+    for table in ("projects", "teams", "agents", "plugins", "super_agents"):
+        _add_user_id_column(conn, table)
+
+
+def _migrate_108_password_reset_tokens(conn):
+    """Forgot-password support — single-use tokens (track B, wave 43).
+
+    The reset email side is intentionally NOT wired (no SMTP infra in
+    this codebase yet). The endpoint logs the reset link to stderr,
+    which is enough for local dev / single-operator setups.
+    """
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS password_reset_tokens (
+            id TEXT PRIMARY KEY,
+            token TEXT UNIQUE NOT NULL,
+            user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            expires_at TIMESTAMP NOT NULL,
+            consumed_at TIMESTAMP
+        )
+        """
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_prt_token ON password_reset_tokens(token)"
+    )
+
+
+def _migrate_107_owned_entities_batch2_user_id(conn):
+    """Multi-tenancy — remaining owned-entity tables (track B, wave 42).
+
+    Covers hooks, commands, rules, triggers, mcp_servers, sketches,
+    workflows, user_skills, agent_conversations, design_conversations.
+    audit_events intentionally excluded — those are immutable system
+    events without an owning user.
+    """
+    for table in (
+        "hooks",
+        "commands",
+        "rules",
+        "triggers",
+        "mcp_servers",
+        "sketches",
+        "workflows",
+        "user_skills",
+        "agent_conversations",
+        "design_conversations",
+    ):
+        _add_user_id_column(conn, table)
+
+
+def _migrate_105_products_user_id(conn):
+    """Per-entity multi-tenancy starter (track B, wave 39).
+
+    Adds an optional user_id column to ``products`` and backfills every
+    existing row to the synthetic legacy@local user. The column stays
+    nullable so existing schema-level INSERTs continue to work — the DB
+    layer (``app/db/products.py``) handles the default.
+
+    This is the *pattern* for the remaining 24 owned-entity tables.
+    Subsequent migrations will repeat it for projects, teams, agents,
+    plugins, and so on. Each table gets:
+      1. ALTER TABLE ... ADD COLUMN user_id TEXT REFERENCES users(id)
+      2. UPDATE ... SET user_id = legacy_user WHERE user_id IS NULL
+      3. CREATE INDEX idx_<table>_user_id ON <table>(user_id)
+    """
+    cursor = conn.execute("PRAGMA table_info(products)")
+    existing = {row[1] for row in cursor.fetchall()}
+    if "user_id" in existing:
+        return  # idempotent
+
+    conn.execute("ALTER TABLE products ADD COLUMN user_id TEXT REFERENCES users(id)")
+    conn.execute(
+        "UPDATE products SET user_id = (SELECT id FROM users WHERE email = ?) "
+        "WHERE user_id IS NULL",
+        ("legacy@local",),
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_products_user_id ON products(user_id)"
+    )
+
+
+def _migrate_104_sessions_table(conn):
+    """Sessions table for the login endpoint (track B, wave 32)."""
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS sessions (
+            id TEXT PRIMARY KEY,
+            token TEXT UNIQUE NOT NULL,
+            user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            expires_at TIMESTAMP NOT NULL,
+            last_used_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+    )
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions(token)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON sessions(expires_at)")
+
+
+def _migrate_103_users_password_hash(conn):
+    """Add password_hash column to users (track B, wave 31).
+
+    Nullable so the legacy@local user (and any pre-existing users) keep
+    working; password-required entry points (login flow, wave 32+) will
+    reject users with NULL hashes.
+    """
+    cursor = conn.execute("PRAGMA table_info(users)")
+    existing = {row[1] for row in cursor.fetchall()}
+    if "password_hash" not in existing:
+        conn.execute("ALTER TABLE users ADD COLUMN password_hash TEXT")
+
+
+def _migrate_102_user_roles_user_id(conn):
+    """Add user_id column to user_roles and backfill existing rows.
+
+    Track B, wave 20. Schema becomes multi-user-ready while preserving
+    single-user behaviour: every existing user_roles row is reassigned
+    to a synthetic "legacy@local" user so authorization keeps working.
+    """
+    cursor = conn.execute("PRAGMA table_info(user_roles)")
+    existing = {row[1] for row in cursor.fetchall()}
+    if "user_id" in existing:
+        return  # idempotent
+
+    legacy_row = conn.execute(
+        "SELECT id FROM users WHERE email = ?", ("legacy@local",)
+    ).fetchone()
+    if legacy_row:
+        legacy_id = legacy_row[0]
+    else:
+        legacy_id = "user-legacy"
+        conn.execute(
+            """INSERT INTO users (id, email, display_name, is_active)
+               VALUES (?, ?, ?, 1)""",
+            (legacy_id, "legacy@local", "Legacy single-user"),
+        )
+
+    conn.execute("ALTER TABLE user_roles ADD COLUMN user_id TEXT REFERENCES users(id)")
+    conn.execute(
+        "UPDATE user_roles SET user_id = ? WHERE user_id IS NULL",
+        (legacy_id,),
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_user_roles_user_id ON user_roles(user_id)"
+    )
+
+
+def _migrate_101_users_table(conn):
+    """Add the users table — foundation for multi-user mode (track B).
+
+    Schema-only: no application code consumes the table yet (waves 20-21
+    will wire the FK from user_roles + the ContextVar plumbing). Existing
+    deployments stay in single-user mode through an optional FK that
+    defaults to NULL.
+    """
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS users (
+            id TEXT PRIMARY KEY,
+            email TEXT UNIQUE NOT NULL,
+            display_name TEXT,
+            is_active INTEGER NOT NULL DEFAULT 1,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+    )
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_users_is_active ON users(is_active)")
+
+
 def _migrate_100_session_per_worktree(conn):
     """Add session-per-worktree columns to super_agent_sessions."""
     cursor = conn.execute("PRAGMA table_info(super_agent_sessions)")
@@ -4476,4 +4677,13 @@ VERSIONED_MIGRATIONS = [
     (99, "kg_extraction_log", _migrate_99_kg_extraction_log),
     # v0.5.0 session-per-worktree
     (100, "session_per_worktree", _migrate_100_session_per_worktree),
+    # multi-user foundation (track B)
+    (101, "users_table", _migrate_101_users_table),
+    (102, "user_roles_user_id", _migrate_102_user_roles_user_id),
+    (103, "users_password_hash", _migrate_103_users_password_hash),
+    (104, "sessions_table", _migrate_104_sessions_table),
+    (105, "products_user_id", _migrate_105_products_user_id),
+    (106, "owned_entities_batch1", _migrate_106_owned_entities_batch1_user_id),
+    (107, "owned_entities_batch2", _migrate_107_owned_entities_batch2_user_id),
+    (108, "password_reset_tokens", _migrate_108_password_reset_tokens),
 ]

@@ -51,13 +51,21 @@ def invalidate_key_cache():
         _has_any_keys_cache.clear()
 
 
-def create_user_role(api_key: str, label: str, role: str = "viewer") -> Optional[str]:
+def create_user_role(
+    api_key: str,
+    label: str,
+    role: str = "viewer",
+    user_id: Optional[str] = None,
+) -> Optional[str]:
     """Create a new user role mapping for an API key.
 
     Args:
         api_key: The API key to associate with the role.
         label: Human-readable label for this key/role assignment.
         role: One of viewer, operator, editor, admin.
+        user_id: Owning user's id. When omitted, falls back to the
+            ``legacy@local`` user provisioned by migration v102 — this
+            preserves single-user behaviour for existing call sites.
 
     Returns:
         The generated role ID, or None on failure.
@@ -69,10 +77,16 @@ def create_user_role(api_key: str, label: str, role: str = "viewer") -> Optional
     try:
         with get_connection() as conn:
             role_id = _get_unique_role_id(conn)
+            owner_id = user_id
+            if owner_id is None:
+                row = conn.execute(
+                    "SELECT id FROM users WHERE email = ?", ("legacy@local",)
+                ).fetchone()
+                owner_id = row[0] if row else None
             conn.execute(
-                """INSERT INTO user_roles (id, api_key, label, role)
-                   VALUES (?, ?, ?, ?)""",
-                (role_id, api_key, label, role),
+                """INSERT INTO user_roles (id, api_key, label, role, user_id)
+                   VALUES (?, ?, ?, ?, ?)""",
+                (role_id, api_key, label, role, owner_id),
             )
             conn.commit()
             invalidate_key_cache()
@@ -88,12 +102,47 @@ def get_role_for_api_key(api_key: str) -> Optional[str]:
     Returns:
         The role string (e.g. 'admin'), or None if not found.
     """
+    result = get_role_and_user_for_api_key(api_key)
+    return result[0] if result else None
+
+
+def get_role_and_user_for_api_key(api_key: str) -> Optional[tuple[str, Optional[str]]]:
+    """Look up (role, user_id) for an API key using constant-time comparison.
+
+    Returns:
+        A (role, user_id) tuple, or None if the key isn't recognized.
+        ``user_id`` is None on legacy rows that haven't been backfilled
+        (shouldn't happen in practice — migration v102 backfills them).
+    """
     with get_connection() as conn:
-        rows = conn.execute("SELECT api_key, role FROM user_roles").fetchall()
-        for row_key, role in rows:
+        rows = conn.execute("SELECT api_key, role, user_id FROM user_roles").fetchall()
+        for row_key, role, user_id in rows:
             if hmac.compare_digest(api_key, row_key):
-                return role
+                return (role, user_id)
         return None
+
+
+_ROLE_RANK = {"viewer": 0, "operator": 1, "editor": 2, "admin": 3}
+
+
+def get_highest_role_for_user(user_id: str) -> Optional[str]:
+    """Return the strongest role the user holds across any of their api_keys.
+
+    If the user owns multiple user_roles rows with different roles
+    (e.g. admin + editor), the strongest one wins under the standard
+    ordering: admin > editor > operator > viewer. Returns None when
+    the user has no role rows.
+    """
+    if not user_id:
+        return None
+    with get_connection() as conn:
+        rows = conn.execute(
+            "SELECT role FROM user_roles WHERE user_id = ?", (user_id,)
+        ).fetchall()
+    if not rows:
+        return None
+    best = max(rows, key=lambda r: _ROLE_RANK.get(r[0], -1))
+    return best[0] if _ROLE_RANK.get(best[0], -1) >= 0 else None
 
 
 def get_user_role(role_id: str) -> Optional[dict]:
@@ -159,6 +208,45 @@ def update_user_role(role_id: str, label: Optional[str] = None, role: Optional[s
         )
         conn.commit()
         return cursor.rowcount > 0
+
+
+def rotate_user_role(role_id: str) -> Optional[dict]:
+    """Atomically rotate the API key for an existing role record.
+
+    Generates a fresh ``secrets.token_hex(32)`` key and inserts a new
+    user_roles row with the same label and role, then deletes the old row.
+    Both writes happen inside a single transaction so a partial-rotate
+    can never leave the caller holding two valid keys (or none).
+
+    Returns the new role record dict, or ``None`` if ``role_id`` doesn't
+    exist.
+    """
+    with get_connection() as conn:
+        conn.row_factory = _dict_factory
+        existing = conn.execute(
+            "SELECT id, label, role, user_id FROM user_roles WHERE id = ?", (role_id,)
+        ).fetchone()
+        if not existing:
+            conn.row_factory = None
+            return None
+
+        new_id = _get_unique_role_id(conn)
+        new_key = generate_api_key()
+        conn.execute(
+            """INSERT INTO user_roles (id, api_key, label, role, user_id)
+               VALUES (?, ?, ?, ?, ?)""",
+            (new_id, new_key, existing["label"], existing["role"], existing.get("user_id")),
+        )
+        conn.execute("DELETE FROM user_roles WHERE id = ?", (role_id,))
+        conn.commit()
+
+        new_row = conn.execute(
+            "SELECT * FROM user_roles WHERE id = ?", (new_id,)
+        ).fetchone()
+        conn.row_factory = None
+
+    invalidate_key_cache()
+    return new_row
 
 
 def delete_user_role(role_id: str) -> bool:

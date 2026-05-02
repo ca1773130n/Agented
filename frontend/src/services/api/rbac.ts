@@ -38,6 +38,11 @@ export const rbacApi = {
       method: 'DELETE',
     }),
 
+  rotateRole: (roleId: string) =>
+    apiFetch<{ message: string; role: UserRole }>(`/admin/rbac/roles/${roleId}/rotate`, {
+      method: 'POST',
+    }),
+
   getPermissions: () =>
     apiFetch<{ permissions: PermissionMatrix }>('/admin/rbac/permissions'),
 };

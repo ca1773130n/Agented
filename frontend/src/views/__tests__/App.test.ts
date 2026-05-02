@@ -25,6 +25,14 @@ vi.mock('../../services/api', () => ({
     authStatus: vi.fn().mockResolvedValue({ auth_required: false, authenticated: false }),
   },
   getApiKey: vi.fn().mockReturnValue(null),
+  getSessionToken: vi.fn().mockReturnValue(null),
+  setSessionToken: vi.fn(),
+  clearSessionToken: vi.fn(),
+  authApi: {
+    login: vi.fn(),
+    me: vi.fn().mockResolvedValue({ id: null, email: null, display_name: null }),
+    logout: vi.fn(),
+  },
 }));
 
 vi.mock('../../composables/useTourMachine', () => ({
@@ -43,7 +51,6 @@ vi.mock('../../composables/useTourMachine', () => ({
     completeTour: vi.fn(),
     restartTour: vi.fn(),
     clearTourState: vi.fn(),
-    checkAndAutoAdvance: vi.fn(),
   }),
 }));
 

@@ -13,6 +13,7 @@ import ApiKeyBanner from './components/layout/ApiKeyBanner.vue';
 import ErrorBoundary from './components/base/ErrorBoundary.vue';
 import { registerGenericTools } from './webmcp/generic-tools';
 import { useSidebarCollapse } from './composables/useSidebarCollapse';
+import { useAuth } from './composables/useAuth';
 import { useSidebarData } from './composables/useSidebarData';
 import { useHealthPolling } from './composables/useHealthPolling';
 
@@ -47,6 +48,13 @@ const tourSubstepLabel = computed(() => TOUR_STEP_MAP[tour.currentStep.value]?.s
 const tourGuideOverride = ref<string | null>(null);
 provide('setTourGuide', (msg: string | null) => { tourGuideOverride.value = msg; });
 
+// Dynamic title override — sub-step components (e.g. AccountWizard) can
+// replace the static tour-step title (e.g. "AI backend account") with a
+// per-substep title ("Pick subscription", "Sign in", "Save the account")
+// so the tooltip header reflects what the user is actually doing.
+const tourTitleOverride = ref<string | null>(null);
+provide('setTourTitle', (title: string | null) => { tourTitleOverride.value = title; });
+
 // Dynamic target override — components (e.g. AccountWizard) can redirect the spotlight
 const tourTargetOverride = ref<string | null>(null);
 provide('setTourTarget', (selector: string | null) => { tourTargetOverride.value = selector; });
@@ -54,13 +62,18 @@ provide('setTourTarget', (selector: string | null) => { tourTargetOverride.value
 // Reset overrides when step changes
 watch(() => tour.currentStep.value, () => {
   tourGuideOverride.value = null;
+  tourTitleOverride.value = null;
   tourTargetOverride.value = null;
 });
 
 const tourStepWithGuide = computed(() => {
   if (!tourStep.value) return null;
-  if (!tourGuideOverride.value) return tourStep.value;
-  return { ...tourStep.value, message: tourGuideOverride.value };
+  if (!tourGuideOverride.value && !tourTitleOverride.value) return tourStep.value;
+  return {
+    ...tourStep.value,
+    message: tourGuideOverride.value ?? tourStep.value.message,
+    title: tourTitleOverride.value ?? tourStep.value.title,
+  };
 });
 
 // Tour completion screen
@@ -69,6 +82,19 @@ const tourComplete = computed(() => tour.state.value === 'complete');
 function handleTourDone() {
   tour.restartTour(); // Resets machine to idle, clears localStorage
   router.push('/');
+}
+
+/** User clicked the X on the tour bar — exit the tour without resuming.
+ *  Same effect as completing it (clears state + lands on home). The tour
+ *  can be re-launched from Settings → Setup Guide → Restart Setup Guide. */
+function handleTourDismiss() {
+  if (typeof window !== 'undefined') {
+    const ok = window.confirm(
+      'Exit the setup tour? You can restart it from Settings → Setup Guide.',
+    );
+    if (!ok) return;
+  }
+  tour.restartTour();
 }
 
 /** Navigate to the route for a given tour step (deduplicates against current route) */
@@ -256,6 +282,9 @@ watch(() => route.query.tour, (tourQuery) => {
 
 onMounted(async () => {
   startPolling(10000);
+  // Wave 35: rehydrate session from localStorage before the auth-status
+  // check so the app boots into "logged in" without a flash of /login.
+  await useAuth().restore();
   const isReady = await checkAuthStatus();
   appReady.value = true;
   if (isReady) {
@@ -294,7 +323,14 @@ onUnmounted(() => {
       <div v-if="isMobile && isMobileOpen" class="sidebar-backdrop" @click="closeMobile"></div>
 
       <!-- Desktop collapse toggle -->
-      <button v-if="!isMobile" class="collapse-toggle" :aria-label="isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'" @click="toggleCollapse">
+      <button
+        v-if="!isMobile"
+        class="collapse-toggle"
+        :aria-label="isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'"
+        :aria-expanded="!isCollapsed"
+        aria-controls="app-sidebar-nav"
+        @click="toggleCollapse"
+      >
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <polyline v-if="isCollapsed" points="9,18 15,12 9,6"/>
           <polyline v-else points="15,18 9,12 15,6"/>
@@ -379,6 +415,7 @@ onUnmounted(() => {
       @next="tour.nextStep"
       @skip="tour.skipStep"
       @retry="handleTourRetry"
+      @dismiss="handleTourDismiss"
     />
 
     <Teleport to="body">

@@ -165,6 +165,9 @@ useFocusTrap(floating, isTrapActive)
   font-size: 13px;
   color: var(--text-secondary);
   line-height: 1.5;
+  /* Preserve newlines so multi-step instructions stay structured. */
+  white-space: pre-line;
+  max-width: 360px;
 }
 
 .tour-tooltip-arrow {

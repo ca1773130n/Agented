@@ -6,7 +6,7 @@
  */
 
 // Client infrastructure
-export { API_BASE, ApiError, apiFetch, isAbortError, getApiKey, setApiKey, clearApiKey, createAuthenticatedEventSource, createBackoffEventSource } from './client';
+export { API_BASE, ApiError, apiFetch, isAbortError, getApiKey, setApiKey, clearApiKey, getSessionToken, setSessionToken, clearSessionToken, createAuthenticatedEventSource, createBackoffEventSource } from './client';
 export type { AuthenticatedEventSource, AuthenticatedEventSourceOptions, BackoffEventSource, BackoffEventSourceOptions } from './client';
 
 // Domain API objects (value exports)
@@ -54,6 +54,8 @@ export { promptSnippetApi } from './prompt-snippets';
 export { specializedBotApi } from './specialized-bots';
 export { secretsApi } from './secrets';
 export { rbacApi } from './rbac';
+export { authApi } from './auth';
+export type { AuthUser, LoginResponse } from './auth';
 export { gitopsApi } from './gitops';
 export { integrationApi, slackApi } from './integrations';
 export type { Integration, SlackStatus, SlackCommandLog } from './integrations';

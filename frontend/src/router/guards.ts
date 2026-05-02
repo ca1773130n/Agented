@@ -106,9 +106,10 @@ export function registerGuards(router: Router): void {
       document.title = 'Agented';
     }
 
-    // Auth guard: redirect to /welcome if not authenticated
-    // Skip for the welcome page itself and not-found
-    if (to.name !== 'welcome' && to.name !== 'not-found') {
+    // Public routes (login, welcome, not-found) bypass the auth gate.
+    const isPublic = to.meta.public === true || to.name === 'welcome' || to.name === 'not-found';
+
+    if (!isPublic) {
       if (!authChecked) {
         try {
           const status = await healthApi.authStatus();
@@ -120,6 +121,15 @@ export function registerGuards(router: Router): void {
       }
       if (needsSetup) {
         return { name: 'welcome' };
+      }
+
+      // Track B (wave 35): when no API key is stored, require a session.
+      // The legacy api-key-only path stays valid as long as the key is set.
+      const { getApiKey, getSessionToken } = await import('../services/api');
+      const hasApiKey = !!getApiKey();
+      const hasSession = !!getSessionToken();
+      if (!hasApiKey && !hasSession) {
+        return { name: 'login', query: { next: to.fullPath } };
       }
     }
 

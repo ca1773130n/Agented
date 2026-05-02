@@ -4,8 +4,7 @@ import { useI18n } from 'vue-i18n'
 import TourSpotlight from './TourSpotlight.vue'
 import TourTooltip from './TourTooltip.vue'
 import TourProgressBar from './TourProgressBar.vue'
-
-// OB-38: ARIA live announcement for screen readers
+import { useTourTargetBus } from '../../composables/useTourTargetBus'
 
 interface StepLike {
   target: string
@@ -35,149 +34,145 @@ const emit = defineEmits<{
   next: []
   skip: []
   retry: []
+  dismiss: []
 }>()
 
 const { t } = useI18n()
+const bus = useTourTargetBus()
 
 const targetEl = ref<HTMLElement | null>(null)
 const targetRect = ref<DOMRect | null>(null)
-let observer: MutationObserver | null = null
+let unsubscribe: (() => void) | null = null
 let resizeObserver: ResizeObserver | null = null
-let tracking = false
-let pollInterval: ReturnType<typeof setInterval> | null = null
+let scrollHandler: (() => void) | null = null
 
-// Loading timeout state (OB-40): 5s spinner-to-fallback
+// OB-40: 5s "page is slow" fallback
 const loadingTimedOut = ref(false)
-let routeLoadTimeout: ReturnType<typeof setTimeout> | null = null
+let loadingTimer: ReturnType<typeof setTimeout> | null = null
 
-// Element-not-found state (OB-41): 3s scoped observer fallback
+// OB-41: 3s "element not found" fallback (precedence over OB-40)
 const elementNotFoundTimeout = ref(false)
-let elementFindTimeout: ReturnType<typeof setTimeout> | null = null
+let elementTimer: ReturnType<typeof setTimeout> | null = null
 
-// Human-readable name for the element-not-found fallback
-const currentTargetName = computed(() => {
-  return props.step?.title ?? 'this element'
-})
+const currentTargetName = computed(() => props.step?.title ?? 'this element')
 
-// OB-38: ARIA live announcement text for screen readers
 const announcement = computed(() => {
   if (!props.active || !props.step) return ''
   const stepOf = t('tour.stepOf', { current: props.stepNumber, total: props.totalSteps })
   return `${stepOf}: ${props.step.title}. ${props.step.message}`
 })
 
+const currentSelector = computed(() =>
+  props.effectiveTarget?.target || props.step?.target || null,
+)
+
+function isValidRect(rect: DOMRect): boolean {
+  // Reject zero-dim rects and rects parked at origin during route transitions.
+  if (rect.width === 0 || rect.height === 0) return false
+  if (rect.top === 0 && rect.left === 0 && rect.bottom < 50) return false
+  return true
+}
+
 function updateRect() {
-  if (targetEl.value) {
-    targetRect.value = targetEl.value.getBoundingClientRect()
-  }
-}
-
-function startTracking() {
-  if (tracking) return
-  tracking = true
-  window.addEventListener('scroll', updateRect, { capture: true, passive: true })
-  window.addEventListener('resize', updateRect, { passive: true })
-}
-
-function stopTracking() {
-  if (!tracking) return
-  tracking = false
-  window.removeEventListener('scroll', updateRect, true)
-  window.removeEventListener('resize', updateRect)
-}
-
-function disconnectResizeObserver() {
-  resizeObserver?.disconnect()
-  resizeObserver = null
-}
-
-function observeTargetResize(el: HTMLElement) {
-  disconnectResizeObserver()
-  resizeObserver = new ResizeObserver(updateRect)
-  resizeObserver.observe(el)
-}
-
-function clearTimers() {
-  if (routeLoadTimeout !== null) {
-    clearTimeout(routeLoadTimeout)
-    routeLoadTimeout = null
-  }
-  if (elementFindTimeout !== null) {
-    clearTimeout(elementFindTimeout)
-    elementFindTimeout = null
-  }
-  if (pollInterval !== null) {
-    clearInterval(pollInterval)
-    pollInterval = null
-  }
-}
-
-function findTarget() {
-  const sel = props.effectiveTarget?.target || props.step?.target
-  if (!sel) {
-    targetEl.value = null
+  const el = targetEl.value
+  if (!el || !el.isConnected) {
     targetRect.value = null
     return
   }
-  const el = document.querySelector(sel) as HTMLElement | null
-  if (el) {
-    const rect = el.getBoundingClientRect()
-    // Reject elements not yet laid out: zero-size or parked at origin
-    if ((rect.width === 0 && rect.height === 0) ||
-        (rect.top === 0 && rect.left === 0 && rect.bottom < 50)) {
-      targetEl.value = null
-      targetRect.value = null
-      return
-    }
-    targetEl.value = el
-    targetRect.value = rect
-    observer?.disconnect()
-    clearTimers()
-    loadingTimedOut.value = false
-    elementNotFoundTimeout.value = false
-    startTracking()
-    observeTargetResize(el)
-    // Re-read rect after layout stabilizes — route transitions can move elements
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        if (targetEl.value === el) {
-          const stableRect = el.getBoundingClientRect()
-          if (stableRect.width > 0 && stableRect.height > 0) {
-            targetRect.value = stableRect
-          }
-        }
-      })
-    })
-  } else {
-    targetEl.value = null
-    targetRect.value = null
+  const rect = el.getBoundingClientRect()
+  targetRect.value = isValidRect(rect) ? rect : null
+}
+
+function attachToElement(el: HTMLElement) {
+  targetEl.value = el
+  updateRect()
+
+  resizeObserver?.disconnect()
+  resizeObserver = new ResizeObserver(updateRect)
+  resizeObserver.observe(el)
+
+  if (!scrollHandler) {
+    scrollHandler = updateRect
+    window.addEventListener('scroll', scrollHandler, { capture: true, passive: true })
+    window.addEventListener('resize', scrollHandler, { passive: true })
   }
+
+  // Re-read rect after layout settles — route transitions can shift elements.
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      if (targetEl.value === el) updateRect()
+    })
+  })
+}
+
+function detach() {
+  targetEl.value = null
+  targetRect.value = null
+  resizeObserver?.disconnect()
+  resizeObserver = null
+  if (scrollHandler) {
+    window.removeEventListener('scroll', scrollHandler, true)
+    window.removeEventListener('resize', scrollHandler)
+    scrollHandler = null
+  }
+}
+
+function clearTimers() {
+  if (loadingTimer !== null) { clearTimeout(loadingTimer); loadingTimer = null }
+  if (elementTimer !== null) { clearTimeout(elementTimer); elementTimer = null }
+}
+
+function startTimers() {
+  clearTimers()
+  elementTimer = setTimeout(() => {
+    elementTimer = null
+    if (!targetEl.value) elementNotFoundTimeout.value = true
+  }, 3000)
+  loadingTimer = setTimeout(() => {
+    loadingTimer = null
+    if (!targetEl.value) loadingTimedOut.value = true
+  }, 5000)
+}
+
+function unsubscribeFromBus() {
+  unsubscribe?.()
+  unsubscribe = null
+}
+
+function subscribeToSelector(sel: string | null) {
+  unsubscribeFromBus()
+  detach()
+  clearTimers()
+  loadingTimedOut.value = false
+  elementNotFoundTimeout.value = false
+
+  if (!sel || !props.active) return
+
+  startTimers()
+  unsubscribe = bus.subscribe(sel, (el) => {
+    if (el) {
+      attachToElement(el)
+      clearTimers()
+      loadingTimedOut.value = false
+      elementNotFoundTimeout.value = false
+    } else {
+      detach()
+      // Bus will re-emit when the element returns; restart fallback timers
+      // so the user sees feedback if the element is gone for >3s.
+      if (loadingTimer === null && elementTimer === null) startTimers()
+    }
+  })
 }
 
 function handleRetry() {
   loadingTimedOut.value = false
-  clearTimers()
-  findTarget()
+  elementNotFoundTimeout.value = false
+  subscribeToSelector(currentSelector.value)
   emit('retry')
 }
 
 function handleElementRetry() {
-  elementNotFoundTimeout.value = false
-  clearTimers()
-  findTarget()
-  emit('retry')
-}
-
-function cleanup() {
-  observer?.disconnect()
-  observer = null
-  disconnectResizeObserver()
-  stopTracking()
-  clearTimers()
-  loadingTimedOut.value = false
-  elementNotFoundTimeout.value = false
-  targetEl.value = null
-  targetRect.value = null
+  handleRetry()
 }
 
 const SIGNIFICANT_STEP_TITLES = ['AI Backend Accounts']
@@ -186,124 +181,28 @@ function isSignificantStep(step: StepLike): boolean {
   return SIGNIFICANT_STEP_TITLES.includes(step.title)
 }
 
-function startObserverWithTimeouts() {
-  if (targetEl.value) return // Already found
-
-  observer?.disconnect()
-  observer = new MutationObserver(findTarget)
-  // OB-41: Scope observer to route root element, not document.body
-  const scopeRoot = document.querySelector('#main-content') ?? document.body
-  observer.observe(scopeRoot, { childList: true, subtree: true })
-
-  // Polling fallback — MutationObserver can miss Vue component mounts
-  // that render synchronously during route transitions
-  if (pollInterval === null) {
-    pollInterval = setInterval(() => {
-      if (targetEl.value) {
-        clearInterval(pollInterval!)
-        pollInterval = null
-        return
-      }
-      findTarget()
-    }, 300)
-  }
-
-  // OB-40: 5s loading timeout — route may be slow to load
-  if (routeLoadTimeout === null) {
-    routeLoadTimeout = setTimeout(() => {
-      routeLoadTimeout = null
-      if (!targetEl.value) {
-        loadingTimedOut.value = true
-      }
-    }, 5000)
-  }
-
-  // OB-41: 3s element-not-found timeout — route loaded but element missing
-  if (elementFindTimeout === null) {
-    elementFindTimeout = setTimeout(() => {
-      elementFindTimeout = null
-      if (!targetEl.value) {
-        elementNotFoundTimeout.value = true
-      }
-    }, 3000)
-  }
-}
-
-// Derive the target selector so we only fully reset when it actually changes
-// (not on message-only guide updates, which would cause tooltip to jump from top-left).
-const currentTargetSelector = computed(() =>
-  props.effectiveTarget?.target || props.step?.target || null
-)
-
-// Track step identity to detect same-selector-different-step changes
-// (e.g. backends.claude → backends.gemini both use [data-tour="add-account-btn"])
-// Include substepLabel + message to distinguish backend substeps with identical title/target.
+// Step identity captures every prop combination that should retrigger the bus
+// (selector + step title + substep label + message).
 const stepIdentity = computed(() =>
-  `${currentTargetSelector.value}::${props.step?.title}::${props.substepLabel}::${props.step?.message}`
+  `${currentSelector.value}::${props.step?.title}::${props.substepLabel}::${props.step?.message}`,
 )
 
 watch(
   [() => props.active, stepIdentity],
-  ([active, newId], [_prevActive, prevId] = [false, '']) => {
-    if (!active) {
-      cleanup()
-      return
-    }
-
-    const wasInactive = !_prevActive
-    const selectorChanged = currentTargetSelector.value !==
-      (prevId ? prevId.split('::')[0] : null)
-    const stepChanged = newId !== prevId
-
-    // Re-process when: step changed OR active just became true (e.g. route left /welcome)
-    if (!stepChanged && !wasInactive) return
-
-    loadingTimedOut.value = false
-    elementNotFoundTimeout.value = false
-    clearTimers()
-
-    // Full reset only when the CSS selector itself changed
-    if (selectorChanged) {
-      stopTracking()
-      disconnectResizeObserver()
-      targetEl.value = null
-      targetRect.value = null
+  ([active]) => {
+    if (active) {
+      subscribeToSelector(currentSelector.value)
     } else {
-      // Same selector, different step (e.g. route changed) —
-      // invalidate the element ref so findTarget re-queries the DOM.
-      // Also clear targetRect — stale rect from previous page causes
-      // tooltip to flash at wrong position or jump to top-left.
-      targetEl.value = null
-      targetRect.value = null
-      stopTracking()
-      disconnectResizeObserver()
+      unsubscribeFromBus()
+      detach()
+      clearTimers()
+      loadingTimedOut.value = false
+      elementNotFoundTimeout.value = false
     }
-
-    // Robust target search: wait for route transition, then retry with increasing delays.
-    // First delay must be long enough for Vue Router to unmount old page and mount new one.
-    // Starting at 0ms would find the OLD page's elements (being destroyed, rect at 0,0).
-    const delays = [400, 600, 800, 1000, 1500, 2000, 2500, 3000]
-    let attempt = 0
-    function tryFind() {
-      if (!props.active || targetEl.value) return
-      findTarget()
-      if (!targetEl.value && attempt < delays.length) {
-        setTimeout(tryFind, delays[attempt])
-        attempt++
-      } else if (!targetEl.value) {
-        // All retries exhausted — fall back to observer + timeouts
-        startObserverWithTimeouts()
-      }
-    }
-    // Always start with a delay — never search immediately.
-    // Immediate search finds OLD page elements during route transitions.
-    setTimeout(tryFind, delays[attempt])
-    attempt++
   },
   { immediate: true },
 )
 
-// Keyboard navigation — Enter=next, Escape=skip (when skippable)
 function handleKeydown(e: KeyboardEvent) {
   if (!props.active || !props.step) return
   if (e.key === 'Enter') {
@@ -314,17 +213,17 @@ function handleKeydown(e: KeyboardEvent) {
       e.preventDefault()
       emit('skip')
     }
-    // Non-skippable: do nothing (OB-33)
   }
 }
 
 onMounted(() => {
-  if (props.active) findTarget()
   document.addEventListener('keydown', handleKeydown)
 })
 
 onUnmounted(() => {
-  cleanup()
+  unsubscribeFromBus()
+  detach()
+  clearTimers()
   document.removeEventListener('keydown', handleKeydown)
 })
 </script>
@@ -339,8 +238,12 @@ onUnmounted(() => {
       class="sr-only"
     >{{ announcement }}</div>
 
-    <!-- Spotlight highlight -->
-    <TourSpotlight :target-rect="targetRect" :visible="!!targetRect" :reduced="isModalOpen" />
+    <!-- Spotlight highlight (rect must have non-zero size — never anchor to 0,0) -->
+    <TourSpotlight
+      :target-rect="targetRect"
+      :visible="!!targetRect && targetRect.width > 0 && targetRect.height > 0"
+      :reduced="isModalOpen"
+    />
 
     <!-- Fullscreen dim when no target found yet -->
     <div v-if="!targetEl" :class="['tour-dim-fallback', { 'modal-open': isModalOpen }]" />
@@ -371,12 +274,13 @@ onUnmounted(() => {
       <span class="spinner-text">{{ t('common.loading') }}</span>
     </div>
 
-    <!-- Tooltip anchored to spotlight target -->
+    <!-- Tooltip anchored to spotlight target — gate on rect validity so it
+         never flashes at (0,0) when the host element is mid-transition. -->
     <TourTooltip
       :target-rect="targetRect"
       :title="step.title"
       :message="effectiveTarget?.message || step.message"
-      :visible="!!targetRect"
+      :visible="!!targetRect && targetRect.width > 0 && targetRect.height > 0"
     />
 
     <!-- Bottom progress bar -->
@@ -391,6 +295,7 @@ onUnmounted(() => {
       :skip-needs-confirm="step.skippable && isSignificantStep(step)"
       @next="$emit('next')"
       @skip="$emit('skip')"
+      @dismiss="$emit('dismiss')"
     />
   </div>
 </template>

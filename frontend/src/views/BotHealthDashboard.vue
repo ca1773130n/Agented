@@ -4,17 +4,21 @@ import type { HealthAlert, HealthStatusResponse } from '../services/api';
 import { analyticsApi, ApiError } from '../services/api';
 import HealthAlertList from '../components/analytics/HealthAlertList.vue';
 import LoadingState from '../components/base/LoadingState.vue';
+import ErrorState from '../components/base/ErrorState.vue';
 import StatCard from '../components/base/StatCard.vue';
 import { useToast } from '../composables/useToast';
 const showToast = useToast();
 
 const isLoading = ref(true);
+const loadError = ref<string | null>(null);
 const isRunningCheck = ref(false);
 const healthStatus = ref<HealthStatusResponse | null>(null);
 const alerts = ref<HealthAlert[]>([]);
 let refreshInterval: ReturnType<typeof setInterval> | null = null;
 
 async function loadData() {
+  isLoading.value = true;
+  loadError.value = null;
   try {
     const [statusRes, alertsRes] = await Promise.all([
       analyticsApi.fetchHealthStatus(),
@@ -23,8 +27,7 @@ async function loadData() {
     healthStatus.value = statusRes;
     alerts.value = alertsRes.alerts || [];
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Failed to load health data';
-    showToast(message, 'error');
+    loadError.value = err instanceof ApiError ? err.message : 'Failed to load health data';
   } finally {
     isLoading.value = false;
   }
@@ -82,6 +85,8 @@ onUnmounted(() => {
   <div class="health-dashboard">
 
     <LoadingState v-if="isLoading" message="Loading health data..." />
+
+    <ErrorState v-else-if="loadError" :message="loadError" @retry="loadData" />
 
     <template v-else>
       <!-- Status summary -->

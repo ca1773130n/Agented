@@ -12,8 +12,7 @@ import DocumentEditor from '../components/super-agents/DocumentEditor.vue';
 import SubagentComposition from '../components/super-agents/SubagentComposition.vue';
 import MessageInbox from '../components/super-agents/MessageInbox.vue';
 import MessageThread from '../components/super-agents/MessageThread.vue';
-// T21 follow-up: re-import GitActionsToolbar once psa-* ↔ ai-accounts session bridge lands.
-// import GitActionsToolbar from '../components/ai/GitActionsToolbar.vue';
+import GitActionsToolbar from '../components/ai/GitActionsToolbar.vue';
 import { useWebMcpTool } from '../composables/useWebMcpTool';
 
 const props = defineProps<{
@@ -52,6 +51,16 @@ const selectedThreadPeer = ref<string | null>(null);
 // When set, the left pane shows a read-only viewer of a historical psa-* session
 // instead of the live ai-accounts-backed AiChatPanel.
 const viewingHistoricalSessionId = ref<string | null>(null);
+
+// Tracks which psa-* session the user is currently working in. Drives
+// GitActionsToolbar visibility (worktree_path may trigger per-session git
+// operations). This is separate from the ai-accounts chat session which
+// AiChatPanel owns internally.
+const activeSession = ref<SuperAgentSession | null>(null);
+
+function selectActiveSession(s: SuperAgentSession | null) {
+  activeSession.value = s;
+}
 
 async function loadSessions() {
   if (!superAgentId.value) return;
@@ -95,11 +104,15 @@ function handleThreadBack() {
   selectedThreadPeer.value = null;
 }
 
-function handleSelectSession(sessId: string) {
+function handleSelectSession(sess: SuperAgentSession) {
   // Historical psa-* SuperAgent sessions live in Agented's own SQLite, not in the
   // ai-accounts sidecar, so we open them in a read-only viewer beside the live chat
   // panel. A future task may import them into the sidecar for seamless continuation.
-  viewingHistoricalSessionId.value = sessId;
+  viewingHistoricalSessionId.value = sess.id;
+  // Also mark this session as the "active" one so GitActionsToolbar can operate
+  // against its worktree. Independent from viewingHistoricalSessionId — clearing
+  // the viewer does NOT clear the active selection.
+  selectActiveSession(sess);
 }
 
 function handleCloseHistorical() {
@@ -163,10 +176,16 @@ async function loadData() {
       <!-- Left panel: Chat UI (now backed by ai-accounts sidecar) -->
       <!-- When viewing a historical psa-* session, swap the live chat panel for a read-only viewer. -->
       <div class="left-panel">
-        <!-- T21 follow-up: restore <GitActionsToolbar> once psa-* ↔ ai-accounts session bridge lands.
-             Deferred because currentSession requires reactive sessionId from the old useAiChat
-             which the migration removed; @ai-accounts/vue-headless::useSmartChat hides its
-             internal session ID. -->
+        <!-- Git actions for the currently-active psa-* session (independent of the
+             ai-accounts chat session, which AiChatPanel owns internally). Rendered
+             above both viewer and live chat so it stays visible regardless of which
+             mode the left panel is in. -->
+        <GitActionsToolbar
+          v-if="activeSession?.worktree_path"
+          :session="activeSession"
+          :super-agent-id="superAgentId"
+          @action-complete="loadSessions"
+        />
         <HistoricalSessionViewer
           v-if="viewingHistoricalSessionId"
           :super-agent-id="superAgentId"
@@ -241,8 +260,8 @@ async function loadData() {
                 v-for="sess in sessions"
                 :key="sess.id"
                 class="session-card"
-                :class="{ active: viewingHistoricalSessionId === sess.id }"
-                @click="handleSelectSession(sess.id)"
+                :class="{ active: activeSession?.id === sess.id || viewingHistoricalSessionId === sess.id }"
+                @click="handleSelectSession(sess)"
               >
                 <div class="session-info">
                   <span class="session-id">{{ sess.title || sess.id }}</span>

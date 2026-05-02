@@ -14,10 +14,23 @@ from __future__ import annotations
 import json
 import logging
 import os
+import resource
 import sqlite3
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
+
+# Bump soft file-descriptor limit early. macOS defaults to 256, which the
+# bundle plugin install + concurrent SQLite + subprocess CLI orchestrators
+# can blow past, surfacing as "Too many open files" + "unable to open
+# database file" warnings. Cap at the hard limit so we never request more
+# than the system allows.
+try:
+    _soft, _hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+    if _soft < 8192:
+        resource.setrlimit(resource.RLIMIT_NOFILE, (min(8192, _hard), _hard))
+except (ValueError, OSError):
+    pass
 
 from ai_accounts_core.adapters.auth_apikey import ApiKeyAuth
 from ai_accounts_core.adapters.auth_noauth import NoAuth
@@ -140,20 +153,24 @@ def _migrate_legacy_backends(legacy_db: str, target_db: str) -> None:
     finally:
         target.close()
 
-# Use ApiKeyAuth if AI_ACCOUNTS_API_KEY is set; fall back to NoAuth in dev
-_api_key = os.environ.get("AI_ACCOUNTS_API_KEY")
+# Pick an auth strategy.
+#
+# Priority:
+#   1. ``AI_ACCOUNTS_API_KEY`` env — explicit static token, always authed.
+#   2. Static snapshot from agented.db's ``user_roles`` table (legacy:
+#      previous fallback queried ``settings.api_key`` which never existed,
+#      so the sidecar silently ran with NoAuth even when Flask was
+#      properly keyed — H3 in code review).
+#   3. ``LazyFlaskKeyAuth`` — re-reads ``user_roles`` on each request.
+#      This makes the sidecar bootable BEFORE Flask has been keyed: it
+#      refuses every request until the welcome page inserts a row, and
+#      auto-picks up the new key on the very next request without needing
+#      a restart.  Without this, ``just deploy`` on a fresh DB would race
+#      and the user would see "no API key available" exits.
+#   4. ``NoAuth`` only when the operator explicitly opts in via
+#      ``AI_ACCOUNTS_ALLOW_NOAUTH=1`` (localhost-only dev mode).
 _legacy_db_path = os.path.join(os.path.dirname(__file__), "..", "agented.db")
-if not _api_key:
-    # In dev, try to read the same key Flask uses from agented.db settings
-    try:
-        if os.path.exists(_legacy_db_path):
-            conn = sqlite3.connect(_legacy_db_path)
-            row = conn.execute("SELECT value FROM settings WHERE key = 'api_key'").fetchone()
-            conn.close()
-            if row:
-                _api_key = row[0]
-    except Exception:
-        pass
+_env_api_key = os.environ.get("AI_ACCOUNTS_API_KEY")
 
 # Best-effort migration from the pre-split schema. Safe to call on every
 # boot: no-ops once the target table has any rows.
@@ -162,13 +179,111 @@ try:
 except Exception as exc:  # pragma: no cover — migration must never crash boot
     logger.warning("legacy backend migration failed: %s", exc)
 
-auth = ApiKeyAuth(token=_api_key) if _api_key else NoAuth()
+
+class LazyFlaskKeyAuth:
+    """Auth strategy that mirrors Flask's ``user_roles`` admin keys on
+    every request.  Lets the sidecar boot before Flask has been keyed
+    (returns 401 until a row appears) and auto-picks up new keys without
+    a restart.  Bearer-token only, like :class:`ApiKeyAuth`.
+    """
+
+    _PREFIX = "bearer "
+    # Cache the allowed-keys set in-memory for this many seconds. Bypasses
+    # the per-request SQLite read (which can stall when Flask's writer is
+    # mid-transaction) AND survives Flask DB rotations within the TTL.
+    # Picked 5s — short enough that key rotation is felt in <1 redirect,
+    # long enough to absorb hot bursts (one fetch per 5s under steady load).
+    _CACHE_TTL_SECONDS = 5.0
+
+    def __init__(self, db_path: str) -> None:
+        self._db_path = db_path
+        from ai_accounts_core.domain.principal import Principal
+
+        self._principal = Principal(
+            id="api_key", display_name="API Key", scopes=frozenset({"*"})
+        )
+        self._cache: set[str] | None = None
+        self._cache_at: float = 0.0
+
+    def _read_keys_from_db(self) -> set[str]:
+        if not os.path.exists(self._db_path):
+            return set()
+        try:
+            conn = sqlite3.connect(self._db_path)
+        except sqlite3.Error:
+            return set()
+        try:
+            try:
+                rows = conn.execute(
+                    "SELECT api_key FROM user_roles WHERE api_key IS NOT NULL"
+                ).fetchall()
+            except sqlite3.Error:
+                return set()
+        finally:
+            conn.close()
+        return {r[0] for r in rows if r and r[0]}
+
+    def _allowed_keys(self) -> set[str]:
+        import time
+
+        now = time.monotonic()
+        if (
+            self._cache is not None
+            and (now - self._cache_at) < self._CACHE_TTL_SECONDS
+        ):
+            return self._cache
+        keys = self._read_keys_from_db()
+        self._cache = keys
+        self._cache_at = now
+        return keys
+
+    async def authenticate(self, request):
+        import hmac
+
+        header = request.headers.get("authorization") or request.headers.get(
+            "Authorization"
+        )
+        if not header or not header.lower().startswith(self._PREFIX):
+            return None
+        presented = header[len(self._PREFIX) :]
+        for stored in self._allowed_keys():
+            if hmac.compare_digest(presented, stored):
+                return self._principal
+        return None
+
+
+if _env_api_key:
+    auth = ApiKeyAuth(token=_env_api_key)
+elif os.environ.get("AI_ACCOUNTS_ALLOW_NOAUTH") == "1":
+    logger.warning(
+        "ai-accounts: AI_ACCOUNTS_ALLOW_NOAUTH=1 — running with NoAuth. "
+        "ALL requests authenticated as 'local'. Never expose port 20001 "
+        "or its Vite /api/v1 proxy outside localhost in this mode."
+    )
+    auth = NoAuth()
+else:
+    auth = LazyFlaskKeyAuth(_legacy_db_path)
+    logger.info(
+        "ai-accounts: using LazyFlaskKeyAuth — every request validates "
+        "against agented.db's user_roles. Sidecar will refuse traffic "
+        "until the welcome page generates an admin key (or until "
+        "AI_ACCOUNTS_API_KEY is set in the environment)."
+    )
+
+# Read the runtime environment from AGENTED_ENV ("development" | "production").
+# Default is "development". Production refuses to start without an explicit
+# AI_ACCOUNTS_VAULT_KEY (no silent dev-fallback).
+_AGENTED_ENV = os.environ.get("AGENTED_ENV", "development")
+if _AGENTED_ENV not in ("development", "production"):
+    raise RuntimeError(
+        f"AGENTED_ENV must be 'development' or 'production', got {_AGENTED_ENV!r}"
+    )
 
 app = create_app(
     AiAccountsConfig(
-        env="development",
+        env=_AGENTED_ENV,
         storage=SqliteStorage("./ai_accounts.db"),
-        vault=EnvKeyVault.from_env(env="development"),
+        vault=EnvKeyVault.from_env(env=_AGENTED_ENV),
         auth=auth,
         backends=(
             ClaudeBackend(),
