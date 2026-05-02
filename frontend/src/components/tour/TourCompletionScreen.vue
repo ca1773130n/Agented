@@ -89,7 +89,7 @@ const skippedItems = computed(() =>
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(0, 0, 0, 0.75);
+  background: var(--tour-overlay-dim);
 }
 
 .completion-card {
@@ -126,10 +126,10 @@ const skippedItems = computed(() =>
 
 @keyframes pulse-ring {
   0%, 100% {
-    box-shadow: 0 0 0 0 rgba(0, 255, 136, 0);
+    box-shadow: 0 0 0 0 var(--tour-success-pulse-from);
   }
   50% {
-    box-shadow: 0 0 0 8px rgba(0, 255, 136, 0.4);
+    box-shadow: 0 0 0 8px var(--tour-success-pulse-to);
   }
 }
 

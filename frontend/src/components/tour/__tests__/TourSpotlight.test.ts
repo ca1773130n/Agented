@@ -36,11 +36,60 @@ describe('TourSpotlight', () => {
     expect(spotlight.exists()).toBe(true)
 
     const style = spotlight.attributes('style')
-    // Default padding is 8px (parsed from CSS custom property, fallback)
-    expect(style).toContain('top: 192px')   // 200 - 8
-    expect(style).toContain('left: 92px')   // 100 - 8
-    expect(style).toContain('width: 316px') // 300 + 16
-    expect(style).toContain('height: 66px') // 50 + 16
+    // Plan 02-01 (OB-11): without a targetEl prop, the spotlight falls back
+    // to the section/card default of 12px from computeSpotlightGeometry(null).
+    expect(style).toContain('top: 188px')   // 200 - 12
+    expect(style).toContain('left: 88px')   // 100 - 12
+    expect(style).toContain('width: 324px') // 300 + 24
+    expect(style).toContain('height: 74px') // 50 + 24
+  })
+
+  it('uses input-tight padding (4px) when targetEl is an <input>', () => {
+    const rect = mockDOMRect({ top: 200, left: 100, width: 300, height: 50 })
+    const input = document.createElement('input')
+    document.body.appendChild(input)
+    try {
+      const wrapper = mount(TourSpotlight, {
+        props: { targetRect: rect, targetEl: input, visible: true },
+      })
+      const style = wrapper.find('.tour-spotlight').attributes('style')
+      expect(style).toContain('top: 196px')  // 200 - 4
+      expect(style).toContain('width: 308px') // 300 + 8
+    } finally {
+      input.remove()
+    }
+  })
+
+  it('uses button padding (6px) when targetEl is a <button>', () => {
+    const rect = mockDOMRect({ top: 200, left: 100, width: 300, height: 50 })
+    const button = document.createElement('button')
+    document.body.appendChild(button)
+    try {
+      const wrapper = mount(TourSpotlight, {
+        props: { targetRect: rect, targetEl: button, visible: true },
+      })
+      const style = wrapper.find('.tour-spotlight').attributes('style')
+      expect(style).toContain('top: 194px')  // 200 - 6
+      expect(style).toContain('width: 312px') // 300 + 12
+    } finally {
+      button.remove()
+    }
+  })
+
+  it('honours data-tour-padding override on the target', () => {
+    const rect = mockDOMRect({ top: 200, left: 100, width: 300, height: 50 })
+    const button = document.createElement('button')
+    button.dataset.tourPadding = '20'
+    document.body.appendChild(button)
+    try {
+      const wrapper = mount(TourSpotlight, {
+        props: { targetRect: rect, targetEl: button, visible: true },
+      })
+      const style = wrapper.find('.tour-spotlight').attributes('style')
+      expect(style).toContain('top: 180px')  // 200 - 20
+    } finally {
+      button.remove()
+    }
   })
 
   it('has box-shadow style on the spotlight element via CSS class', () => {

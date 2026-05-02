@@ -507,6 +507,11 @@ onUnmounted(() => {
   --tour-spotlight-padding: 8px;
   --tour-glow-color: var(--accent-cyan);
   --tour-glow-dim: rgba(0, 212, 255, 0.3);
+  /* OB-13: completion-screen success-pulse tokens (Phase 2 plan 02-01).
+   * Both colors use the existing accent green so the pulse matches the rest
+   * of the success affordance (icon ring border, check glyph). */
+  --tour-success-pulse-from: rgba(0, 255, 136, 0);
+  --tour-success-pulse-to: rgba(0, 255, 136, 0.4);
   --tour-glow-bright: rgba(0, 212, 255, 0.5);
   --tour-transition-speed: 200ms;
 }
