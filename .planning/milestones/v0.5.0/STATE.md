@@ -5,16 +5,17 @@
 See: .planning/PROJECT.md (updated 2026-03-21)
 
 **Core value:** Enable engineering teams to orchestrate AI-powered automation through a unified dashboard
-**Current focus:** Phase 3 — Welcome Flow + Tour Entry
+**Current focus:** Phase 4 — Core Step Content
 **Primary hypothesis:** A guided onboarding tour can bring new users from zero to first bot execution in under 3 minutes
 
 ## Current Position
 
-Phase: 2 of 10 (Visual Layer) — **COMPLETE**
+Phase: 3 of 10 (Welcome Flow + Tour Entry) — **COMPLETE**
 Phase 1: COMPLETE
-Plan: phase-2/02-01 shipped
-Status: Phase 3 ready to plan
-Last activity: 2026-05-03 — Phase 2 plan 02-01 visual gaps closed
+Phase 2: COMPLETE
+Plan: phase-3/03-01 shipped
+Status: Phase 4 ready to plan
+Last activity: 2026-05-03 — Phase 3 plan 03-01 welcome polish
 
 Phase 1 status (verified during Phase 2 discovery):
 - The XState machine + composable shipped in earlier "tour wave" commits
@@ -24,6 +25,17 @@ Phase 1 status (verified during Phase 2 discovery):
   is shipped and tested. Wiring `useTourMachine` to consume it (instead of
   the stubbed `() => false` guards) is a Phase 1 follow-up captured in the
   Phase 2 plan doc's "Out of scope" section.
+
+Phase 3 deliverables (plan 03-01):
+- OB-01 ✓ (welcome page with bento grid + CTA — pre-existing; verified the
+  router guard prevents dashboard flash)
+- OB-02 ✓ (keygen + monospace key display + copy button + warning copy —
+  pre-existing; added unit tests for warning visibility + clipboard write)
+- OB-03 ✓ (smooth transition; tightened phase-fade enter 250ms + leave 150ms
+  = 400ms total to fit comfortably under the 500ms criterion)
+- Stale `v0.4.0` version label in welcome header bumped to `v0.5.0`
+- 3 new unit tests in `WelcomePage.test.ts` (warning visible, copy →
+  clipboard, transition class applied)
 
 Phase 2 deliverables (plan 02-01):
 - OB-09 ✓ (TourSpotlight box-shadow dimming — pre-existing)
