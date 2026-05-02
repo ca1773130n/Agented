@@ -835,4 +835,15 @@ describe('useTourMachine', () => {
       expect(tour.state.value).toBe('idle')
     })
   })
+
+  // OB-42: tour routes are prefetched on tour start via dynamic
+  // import(). The helper uses Promise.allSettled internally so a
+  // failed chunk load can never reject the prefetch — guard against
+  // a future regression that switches to Promise.all.
+  describe('prefetchTourRoutes (OB-42)', () => {
+    it('settles without throwing', async () => {
+      const { prefetchTourRoutes } = await import('../useTourMachine')
+      await expect(prefetchTourRoutes()).resolves.not.toThrow()
+    })
+  })
 })

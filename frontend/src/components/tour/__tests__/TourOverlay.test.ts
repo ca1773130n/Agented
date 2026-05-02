@@ -180,6 +180,54 @@ describe('TourOverlay', () => {
     expect(wrapper.find('.tour-dim-fallback').exists()).toBe(true)
   })
 
+  // OB-44: a modal opening during a tour step (e.g. "Add Account")
+  // must remain interactive — the overlay reduces dimming and the
+  // spotlight enters its `reduced` mode. Driven by the `isModalOpen`
+  // prop, which is provided/injected from App.vue.
+  describe('OB-44 — modal coordination', () => {
+    const baseProps = {
+      active: true,
+      step: workspaceStep,
+      effectiveTarget: workspaceStep,
+      substepLabel: null,
+      stepNumber: 2,
+      totalSteps: 8,
+    }
+
+    it('adds .modal-open to the dim fallback when isModalOpen is true', () => {
+      const wrapper = mount(TourOverlay, {
+        props: { ...baseProps, isModalOpen: true },
+      })
+      const dim = wrapper.find('.tour-dim-fallback')
+      expect(dim.exists()).toBe(true)
+      expect(dim.classes()).toContain('modal-open')
+    })
+
+    it('omits .modal-open by default (isModalOpen unset)', () => {
+      const wrapper = mount(TourOverlay, { props: baseProps })
+      const dim = wrapper.find('.tour-dim-fallback')
+      expect(dim.classes()).not.toContain('modal-open')
+    })
+
+    it('passes isModalOpen through to TourSpotlight as :reduced', () => {
+      const target = document.createElement('div')
+      target.setAttribute('data-tour', 'workspace-root')
+      document.body.appendChild(target)
+      try {
+        const wrapper = mount(TourOverlay, {
+          props: { ...baseProps, isModalOpen: true },
+          attachTo: document.body,
+        })
+        const spotlight = wrapper.findComponent({ name: 'TourSpotlight' })
+        expect(spotlight.exists()).toBe(true)
+        expect(spotlight.props('reduced')).toBe(true)
+        wrapper.unmount()
+      } finally {
+        document.body.removeChild(target)
+      }
+    })
+  })
+
   it('Enter key emits next when active', async () => {
     const wrapper = mount(TourOverlay, {
       props: { active: true, step: workspaceStep, effectiveTarget: workspaceStep, substepLabel: null, stepNumber: 2, totalSteps: 8 },

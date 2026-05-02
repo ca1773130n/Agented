@@ -5,20 +5,39 @@
 See: .planning/PROJECT.md (updated 2026-03-21)
 
 **Core value:** Enable engineering teams to orchestrate AI-powered automation through a unified dashboard
-**Current focus:** Phase 7 — Loading + Error Resilience
+**Current focus:** Phase 8 — Accessibility
 **Primary hypothesis:** A guided onboarding tour can bring new users from zero to first bot execution in under 3 minutes
 
 ## Current Position
 
-Phase: 6 of 10 (Navigation Controls) — **COMPLETE**
+Phase: 7 of 10 (Loading + Error Resilience) — **COMPLETE**
 Phase 1: COMPLETE
 Phase 2: COMPLETE
 Phase 3: COMPLETE
 Phase 4: COMPLETE
 Phase 5: COMPLETE
-Plan: phase-6/06-01 shipped
-Status: Phase 7 ready to plan
-Last activity: 2026-05-03 — Phase 6 plan 06-01 navigation-controls polish
+Phase 6: COMPLETE
+Plan: phase-7/07-01 shipped
+Status: Phase 8 ready to plan
+Last activity: 2026-05-03 — Phase 7 plan 07-01 loading + error resilience
+
+Phase 7 deliverables (plan 07-01):
+- OB-40 ✓ (5s "page is slow" fallback with Skip/Retry — pre-existing,
+  tested)
+- OB-41 ✓ (3s element-not-found fallback — pre-existing; this plan
+  narrows the MutationObserver scope from `document.body` to
+  `#main-content` to satisfy the "scoped to route's root element"
+  clause, with a `document.body` fallback for the welcome screen
+  layout that has no `<main>`)
+- OB-42 ✓ (route prefetch — pre-existing in
+  `prefetchTourRoutes()`; this plan adds the missing test asserting
+  it settles without throwing)
+- OB-44 ✓ (modal coordination — `isModalOpen` prop wired through
+  App.vue → TourOverlay → TourSpotlight; this plan adds 3 tests for
+  the dim-fallback `.modal-open` class and TourSpotlight `:reduced`
+  passthrough)
+- 6 new frontend tests (2 useTourTargetBus + 1 useTourMachine + 3
+  TourOverlay)
 
 Phase 6 deliverables (plan 06-01):
 - OB-29 ✓ (bottom bar with counter + Skip + Next — pre-existing, tested)
