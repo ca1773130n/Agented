@@ -87,7 +87,7 @@ def readiness(request: Request) -> dict[str, Any]:
     except Exception as e:  # noqa: BLE001
         health["components"]["cli_proxy"] = {"status": "unknown", "error": str(e)}
 
-    from app import _startup_warnings
+    from app_litestar.lifecycle import _startup_warnings
 
     if _startup_warnings:
         health["components"]["startup"] = {

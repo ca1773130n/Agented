@@ -96,7 +96,18 @@ def validate_path(path: str = "") -> dict[str, Any]:
     except (OSError, ValueError):
         raise ClientException(detail="Invalid path") from None
 
-    allowed_bases = [Path.home(), Path("/tmp")]
+    # Resolve the allowed bases too. On macOS:
+    #   /tmp                  → /private/tmp        (symlink)
+    #   tempfile.gettempdir() → /var/folders/...    (where pytest puts tmp_path)
+    # Without resolving them, paths returned by Path.resolve() (e.g. pytest's
+    # tmp_path fixture) wouldn't match the prefix check.
+    import tempfile as _tempfile
+
+    allowed_bases = [
+        Path.home().resolve(),
+        Path("/tmp").resolve(),
+        Path(_tempfile.gettempdir()).resolve(),
+    ]
     if not any(str(resolved).startswith(str(base)) for base in allowed_bases):
         return {
             "path": path,
