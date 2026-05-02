@@ -117,6 +117,66 @@ def instance_id() -> dict[str, Any]:
     return {"instance_id": row[0] if row else None}
 
 
+@get("/setup-status", sync_to_thread=False)
+def setup_status() -> dict[str, Any]:
+    """Aggregate guard prefetch for the v0.5.0 onboarding tour (OB-07).
+
+    Returns the instance_id plus a `has_*` boolean for each setup-tour step.
+    Public — no auth required, same scope as `/health/instance-id`. The
+    frontend tour calls this once at boot to populate guards without 6+
+    sequential round-trips. Guard fields default to `False` if their backing
+    table is missing or unreadable, so the tour can still advance.
+    """
+    from app.database import get_connection
+
+    result: dict[str, Any] = {
+        "instance_id": None,
+        "has_workspace": False,
+        "has_claude_account": False,
+        "has_codex_account": False,
+        "has_gemini_account": False,
+        "has_opencode_account": False,
+        "has_harness_synced": False,
+        "has_first_product": False,
+    }
+
+    try:
+        with get_connection() as conn:
+            row = conn.execute(
+                "SELECT value FROM app_meta WHERE key = 'instance_id'"
+            ).fetchone()
+            if row:
+                result["instance_id"] = row[0]
+
+            row = conn.execute(
+                "SELECT value FROM settings WHERE key = 'workspace_root'"
+            ).fetchone()
+            result["has_workspace"] = bool(row and (row[0] or "").strip())
+
+            row = conn.execute(
+                "SELECT value FROM app_meta WHERE key = 'harness_synced_at'"
+            ).fetchone()
+            result["has_harness_synced"] = bool(row and row[0])
+
+            for backend in ("claude", "codex", "gemini", "opencode"):
+                row = conn.execute(
+                    "SELECT 1 FROM backend_accounts ba "
+                    "JOIN ai_backends ab ON ab.id = ba.backend_id "
+                    "WHERE ab.type = ? LIMIT 1",
+                    (backend,),
+                ).fetchone()
+                result[f"has_{backend}_account"] = row is not None
+
+            row = conn.execute("SELECT 1 FROM products LIMIT 1").fetchone()
+            result["has_first_product"] = row is not None
+    except Exception:
+        # DB unreadable — return the defaults so the tour treats it as a fresh
+        # install rather than blocking forever on a 500.
+        pass
+
+    return result
+
+
 @get("/auth-status", sync_to_thread=False)
 def auth_status(request: Request) -> dict[str, bool]:
     """Tells the frontend whether auth is configured. Public."""
@@ -209,5 +269,13 @@ def setup(data: SetupBody, request: Request) -> dict[str, Any]:
 
 health_router = Router(
     path="/health",
-    route_handlers=[liveness, readiness, instance_id, auth_status, verify_key, setup],
+    route_handlers=[
+        liveness,
+        readiness,
+        instance_id,
+        setup_status,
+        auth_status,
+        verify_key,
+        setup,
+    ],
 )
