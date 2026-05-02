@@ -73,6 +73,19 @@ from .routes.leaf_crud_i import (
     super_agent_messages_router,
     team_generation_router,
 )
+from .routes.streams import (
+    agent_conversation_stream_router,
+    backends_stream_router,
+    command_conversation_stream_router,
+    execution_stream_router,
+    hook_conversation_stream_router,
+    plugin_conversation_stream_router,
+    project_stream_router,
+    rule_conversation_stream_router,
+    setup_stream_router,
+    super_agents_stream_router,
+    teams_stream_router,
+)
 from .routes.webhooks import (
     github_webhook_router,
     oauth_callback_router,
@@ -211,6 +224,17 @@ def create_app() -> Litestar:
             github_webhook_router,
             oauth_callback_router,
             webhook_router,
+            execution_stream_router,
+            plugin_conversation_stream_router,
+            command_conversation_stream_router,
+            hook_conversation_stream_router,
+            rule_conversation_stream_router,
+            agent_conversation_stream_router,
+            project_stream_router,
+            backends_stream_router,
+            setup_stream_router,
+            super_agents_stream_router,
+            teams_stream_router,
         ],
         dependencies={"caller": provide_caller},
     )

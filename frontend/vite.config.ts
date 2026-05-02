@@ -101,12 +101,7 @@ export default defineConfig(({ mode }) => {
         '/admin/diff-context': { target: 'http://127.0.0.1:20002', changeOrigin: true },
         '/admin/branches': { target: 'http://127.0.0.1:20002', changeOrigin: true },
         '/admin/conversations': { target: 'http://127.0.0.1:20002', changeOrigin: true },
-        // wave 75 — /admin/executions/* CRUD on Litestar; /executions/{id}/stream stays on Flask.
-        // Order: stream pattern first (more specific) routes to Flask :20000.
-        '^/admin/executions/[^/]+/stream(\\?.*)?$': {
-          target: 'http://127.0.0.1:20000',
-          changeOrigin: true,
-        },
+        // wave 75 + 78 — /admin/executions/* + SSE all on Litestar.
         '/admin/executions': {
           target: 'http://127.0.0.1:20002',
           changeOrigin: true,
@@ -115,11 +110,7 @@ export default defineConfig(({ mode }) => {
           target: 'http://127.0.0.1:20002',
           changeOrigin: true,
         },
-        // wave 76 — setup CRUD; /api/setup/{id}/stream stays on Flask.
-        '^/api/setup/[^/]+/stream(\\?.*)?$': {
-          target: 'http://127.0.0.1:20000',
-          changeOrigin: true,
-        },
+        // wave 76 + 78 — /api/setup/* + SSE all on Litestar.
         '/api/setup': {
           target: 'http://127.0.0.1:20002',
           changeOrigin: true,
@@ -130,34 +121,17 @@ export default defineConfig(({ mode }) => {
           target: 'http://127.0.0.1:20002',
           changeOrigin: true,
         },
-        // /admin/super-agents/{id}/messages/* CRUD; /messages/stream stays on Flask.
-        '^/admin/super-agents/[^/]+/messages/stream(\\?.*)?$': {
-          target: 'http://127.0.0.1:20000',
-          changeOrigin: true,
-        },
-        '^/admin/super-agents/[^/]+/messages(/[^/]+/read)?$': {
+        // wave 76 + 78 — super-agent message + chat (CRUD + streams) all on Litestar.
+        '^/admin/super-agents/[^/]+/messages': {
           target: 'http://127.0.0.1:20002',
           changeOrigin: true,
         },
-        '^/admin/super-agents/[^/]+/messages/(inbox|outbox)$': {
+        '^/admin/super-agents/[^/]+/sessions/[^/]+/chat': {
           target: 'http://127.0.0.1:20002',
           changeOrigin: true,
         },
-        // /admin/super-agents/{id}/sessions/{sid}/chat (POST) → Litestar; /chat/stream stays on Flask.
-        '^/admin/super-agents/[^/]+/sessions/[^/]+/chat/stream(\\?.*)?$': {
-          target: 'http://127.0.0.1:20000',
-          changeOrigin: true,
-        },
-        '^/admin/super-agents/[^/]+/sessions/[^/]+/chat$': {
-          target: 'http://127.0.0.1:20002',
-          changeOrigin: true,
-        },
-        // /admin/teams/generate (POST async) + /generate/{id}; /generate/stream stays on Flask.
-        '^/admin/teams/generate/stream(\\?.*)?$': {
-          target: 'http://127.0.0.1:20000',
-          changeOrigin: true,
-        },
-        '^/admin/teams/generate(/[^/]+)?$': {
+        // /admin/teams/generate (POST async) + /generate/{id} + /generate/stream — all Litestar.
+        '^/admin/teams/generate(/.*)?$': {
           target: 'http://127.0.0.1:20002',
           changeOrigin: true,
         },
@@ -167,25 +141,8 @@ export default defineConfig(({ mode }) => {
         // wave 71 — sketches + agent_conversations CRUD + plugin_exports.
         '/admin/sketches': { target: 'http://127.0.0.1:20002', changeOrigin: true },
         '/admin/plugin-exports': { target: 'http://127.0.0.1:20002', changeOrigin: true },
-        // /api/agents/conversations/{id}/stream stays on Flask — others to Litestar.
-        '^/api/agents/conversations/(start|[^/]+/(message|finalize|abandon))': {
-          target: 'http://127.0.0.1:20002',
-          changeOrigin: true,
-        },
-        '^/api/agents/conversations/[^/]+$': {
-          target: 'http://127.0.0.1:20002',
-          changeOrigin: true,
-        },
-        // wave 72 — plugin/command/hook/rule conversations CRUD; /stream stays on Flask.
-        '^/api/(plugins|commands|hooks|rules)/conversations/?$': {
-          target: 'http://127.0.0.1:20002',
-          changeOrigin: true,
-        },
-        '^/api/(plugins|commands|hooks|rules)/conversations/(start|[^/]+/(message|finalize|resume|abandon))': {
-          target: 'http://127.0.0.1:20002',
-          changeOrigin: true,
-        },
-        '^/api/(plugins|commands|hooks|rules)/conversations/[^/]+$': {
+        // wave 71 + 72 + 78 — every conversation namespace (CRUD + /stream) goes to Litestar.
+        '^/api/(plugins|commands|hooks|rules|agents)/conversations': {
           target: 'http://127.0.0.1:20002',
           changeOrigin: true,
         },
@@ -195,26 +152,13 @@ export default defineConfig(({ mode }) => {
         '/api/discover-skills': { target: 'http://127.0.0.1:20002', changeOrigin: true },
         '/api/browse-directory': { target: 'http://127.0.0.1:20002', changeOrigin: true },
         '/api/create-directory': { target: 'http://127.0.0.1:20002', changeOrigin: true },
-        // /admin/backends/test (POST), /proxy/*, /gemini/*, /{id}/install|check|connect|auth-status|discover-models|accounts/* go to Litestar; /stream entries stay on Flask.
-        '^/admin/backends/(test$|proxy/|gemini/|[^/]+/(install|check|connect$|auth-status|discover-models|accounts/[0-9]+/(rate-limits|usage)))': {
+        // wave 73 + 78 — /admin/backends/* (CRUD + SSE streams) all on Litestar.
+        '/admin/backends': {
           target: 'http://127.0.0.1:20002',
           changeOrigin: true,
         },
-        // /admin/backends/{id}/connect/{sess}/respond + DELETE /connect/{sess}.
-        '^/admin/backends/[^/]+/connect/[^/]+(/respond)?$': {
-          target: 'http://127.0.0.1:20002',
-          changeOrigin: true,
-        },
-        // wave 74 — /api/projects/* GRD; chat/stream and sessions/{id}/stream stay on Flask.
-        '^/api/projects/[^/]+/(sync|milestones|phases|plans|chat$|planning|sessions$|sessions/(ralph|team)$)': {
-          target: 'http://127.0.0.1:20002',
-          changeOrigin: true,
-        },
-        '^/api/projects/[^/]+/plans/[^/]+(/status)?$': {
-          target: 'http://127.0.0.1:20002',
-          changeOrigin: true,
-        },
-        '^/api/projects/[^/]+/sessions/[^/]+/(output|stop|pause|resume|input|monitor)$': {
+        // wave 74 + 78 — /api/projects/* GRD (CRUD + SSE streams) all on Litestar.
+        '/api/projects': {
           target: 'http://127.0.0.1:20002',
           changeOrigin: true,
         },
@@ -341,12 +285,7 @@ export default defineConfig(({ mode }) => {
         '/admin/diff-context': { target: 'http://127.0.0.1:20002', changeOrigin: true },
         '/admin/branches': { target: 'http://127.0.0.1:20002', changeOrigin: true },
         '/admin/conversations': { target: 'http://127.0.0.1:20002', changeOrigin: true },
-        // wave 75 — /admin/executions/* CRUD on Litestar; /executions/{id}/stream stays on Flask.
-        // Order: stream pattern first (more specific) routes to Flask :20000.
-        '^/admin/executions/[^/]+/stream(\\?.*)?$': {
-          target: 'http://127.0.0.1:20000',
-          changeOrigin: true,
-        },
+        // wave 75 + 78 — /admin/executions/* + SSE all on Litestar.
         '/admin/executions': {
           target: 'http://127.0.0.1:20002',
           changeOrigin: true,
@@ -355,11 +294,7 @@ export default defineConfig(({ mode }) => {
           target: 'http://127.0.0.1:20002',
           changeOrigin: true,
         },
-        // wave 76 — setup CRUD; /api/setup/{id}/stream stays on Flask.
-        '^/api/setup/[^/]+/stream(\\?.*)?$': {
-          target: 'http://127.0.0.1:20000',
-          changeOrigin: true,
-        },
+        // wave 76 + 78 — /api/setup/* + SSE all on Litestar.
         '/api/setup': {
           target: 'http://127.0.0.1:20002',
           changeOrigin: true,
@@ -370,34 +305,17 @@ export default defineConfig(({ mode }) => {
           target: 'http://127.0.0.1:20002',
           changeOrigin: true,
         },
-        // /admin/super-agents/{id}/messages/* CRUD; /messages/stream stays on Flask.
-        '^/admin/super-agents/[^/]+/messages/stream(\\?.*)?$': {
-          target: 'http://127.0.0.1:20000',
-          changeOrigin: true,
-        },
-        '^/admin/super-agents/[^/]+/messages(/[^/]+/read)?$': {
+        // wave 76 + 78 — super-agent message + chat (CRUD + streams) all on Litestar.
+        '^/admin/super-agents/[^/]+/messages': {
           target: 'http://127.0.0.1:20002',
           changeOrigin: true,
         },
-        '^/admin/super-agents/[^/]+/messages/(inbox|outbox)$': {
+        '^/admin/super-agents/[^/]+/sessions/[^/]+/chat': {
           target: 'http://127.0.0.1:20002',
           changeOrigin: true,
         },
-        // /admin/super-agents/{id}/sessions/{sid}/chat (POST) → Litestar; /chat/stream stays on Flask.
-        '^/admin/super-agents/[^/]+/sessions/[^/]+/chat/stream(\\?.*)?$': {
-          target: 'http://127.0.0.1:20000',
-          changeOrigin: true,
-        },
-        '^/admin/super-agents/[^/]+/sessions/[^/]+/chat$': {
-          target: 'http://127.0.0.1:20002',
-          changeOrigin: true,
-        },
-        // /admin/teams/generate (POST async) + /generate/{id}; /generate/stream stays on Flask.
-        '^/admin/teams/generate/stream(\\?.*)?$': {
-          target: 'http://127.0.0.1:20000',
-          changeOrigin: true,
-        },
-        '^/admin/teams/generate(/[^/]+)?$': {
+        // /admin/teams/generate (POST async) + /generate/{id} + /generate/stream — all Litestar.
+        '^/admin/teams/generate(/.*)?$': {
           target: 'http://127.0.0.1:20002',
           changeOrigin: true,
         },
@@ -407,25 +325,8 @@ export default defineConfig(({ mode }) => {
         // wave 71 — sketches + agent_conversations CRUD + plugin_exports.
         '/admin/sketches': { target: 'http://127.0.0.1:20002', changeOrigin: true },
         '/admin/plugin-exports': { target: 'http://127.0.0.1:20002', changeOrigin: true },
-        // /api/agents/conversations/{id}/stream stays on Flask — others to Litestar.
-        '^/api/agents/conversations/(start|[^/]+/(message|finalize|abandon))': {
-          target: 'http://127.0.0.1:20002',
-          changeOrigin: true,
-        },
-        '^/api/agents/conversations/[^/]+$': {
-          target: 'http://127.0.0.1:20002',
-          changeOrigin: true,
-        },
-        // wave 72 — plugin/command/hook/rule conversations CRUD; /stream stays on Flask.
-        '^/api/(plugins|commands|hooks|rules)/conversations/?$': {
-          target: 'http://127.0.0.1:20002',
-          changeOrigin: true,
-        },
-        '^/api/(plugins|commands|hooks|rules)/conversations/(start|[^/]+/(message|finalize|resume|abandon))': {
-          target: 'http://127.0.0.1:20002',
-          changeOrigin: true,
-        },
-        '^/api/(plugins|commands|hooks|rules)/conversations/[^/]+$': {
+        // wave 71 + 72 + 78 — every conversation namespace (CRUD + /stream) goes to Litestar.
+        '^/api/(plugins|commands|hooks|rules|agents)/conversations': {
           target: 'http://127.0.0.1:20002',
           changeOrigin: true,
         },
@@ -435,26 +336,13 @@ export default defineConfig(({ mode }) => {
         '/api/discover-skills': { target: 'http://127.0.0.1:20002', changeOrigin: true },
         '/api/browse-directory': { target: 'http://127.0.0.1:20002', changeOrigin: true },
         '/api/create-directory': { target: 'http://127.0.0.1:20002', changeOrigin: true },
-        // /admin/backends/test (POST), /proxy/*, /gemini/*, /{id}/install|check|connect|auth-status|discover-models|accounts/* go to Litestar; /stream entries stay on Flask.
-        '^/admin/backends/(test$|proxy/|gemini/|[^/]+/(install|check|connect$|auth-status|discover-models|accounts/[0-9]+/(rate-limits|usage)))': {
+        // wave 73 + 78 — /admin/backends/* (CRUD + SSE streams) all on Litestar.
+        '/admin/backends': {
           target: 'http://127.0.0.1:20002',
           changeOrigin: true,
         },
-        // /admin/backends/{id}/connect/{sess}/respond + DELETE /connect/{sess}.
-        '^/admin/backends/[^/]+/connect/[^/]+(/respond)?$': {
-          target: 'http://127.0.0.1:20002',
-          changeOrigin: true,
-        },
-        // wave 74 — /api/projects/* GRD; chat/stream and sessions/{id}/stream stay on Flask.
-        '^/api/projects/[^/]+/(sync|milestones|phases|plans|chat$|planning|sessions$|sessions/(ralph|team)$)': {
-          target: 'http://127.0.0.1:20002',
-          changeOrigin: true,
-        },
-        '^/api/projects/[^/]+/plans/[^/]+(/status)?$': {
-          target: 'http://127.0.0.1:20002',
-          changeOrigin: true,
-        },
-        '^/api/projects/[^/]+/sessions/[^/]+/(output|stop|pause|resume|input|monitor)$': {
+        // wave 74 + 78 — /api/projects/* GRD (CRUD + SSE streams) all on Litestar.
+        '/api/projects': {
           target: 'http://127.0.0.1:20002',
           changeOrigin: true,
         },
