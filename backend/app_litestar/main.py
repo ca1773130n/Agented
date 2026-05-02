@@ -13,6 +13,7 @@ from .routes.auth import auth_router
 from .routes.health import health_router
 from .routes.rbac import rbac_router
 from .routes.admin_misc import admin_misc_router
+from .routes.agents_and_tracing import agents_router, tracing_router
 from .routes.bot_templates import bot_templates_router
 from .routes.budgets import budgets_router
 from .routes.misc import misc_router
@@ -56,6 +57,8 @@ def create_app() -> Litestar:
             skill_conversations_router,
             skills_router,
             skill_sets_router,
+            agents_router,
+            tracing_router,
         ],
         dependencies={"caller": provide_caller},
     )
