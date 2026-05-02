@@ -67,6 +67,11 @@ export default defineConfig(({ mode }) => {
         '/admin/prompt-snippets': { target: 'http://127.0.0.1:20002', changeOrigin: true },
         '/admin/scope-filters': { target: 'http://127.0.0.1:20002', changeOrigin: true },
         '/admin/trigger-conditions': { target: 'http://127.0.0.1:20002', changeOrigin: true },
+        // wave 66 — marketplaces + integrations admin + audit + pr_reviews.
+        '/admin/marketplaces': { target: 'http://127.0.0.1:20002', changeOrigin: true },
+        '/admin/integrations': { target: 'http://127.0.0.1:20002', changeOrigin: true },
+        '/api/audit': { target: 'http://127.0.0.1:20002', changeOrigin: true },
+        '/api/pr-reviews': { target: 'http://127.0.0.1:20002', changeOrigin: true },
         '/admin/analytics/cross-team-insights': { target: 'http://127.0.0.1:20002', changeOrigin: true },
         '/admin/analytics/scheduling-suggestions': { target: 'http://127.0.0.1:20002', changeOrigin: true },
         '/admin/execution-search': { target: 'http://127.0.0.1:20002', changeOrigin: true },
@@ -156,6 +161,11 @@ export default defineConfig(({ mode }) => {
         '/admin/prompt-snippets': { target: 'http://127.0.0.1:20002', changeOrigin: true },
         '/admin/scope-filters': { target: 'http://127.0.0.1:20002', changeOrigin: true },
         '/admin/trigger-conditions': { target: 'http://127.0.0.1:20002', changeOrigin: true },
+        // wave 66 — marketplaces + integrations admin + audit + pr_reviews.
+        '/admin/marketplaces': { target: 'http://127.0.0.1:20002', changeOrigin: true },
+        '/admin/integrations': { target: 'http://127.0.0.1:20002', changeOrigin: true },
+        '/api/audit': { target: 'http://127.0.0.1:20002', changeOrigin: true },
+        '/api/pr-reviews': { target: 'http://127.0.0.1:20002', changeOrigin: true },
         '/admin/analytics/cross-team-insights': { target: 'http://127.0.0.1:20002', changeOrigin: true },
         '/admin/analytics/scheduling-suggestions': { target: 'http://127.0.0.1:20002', changeOrigin: true },
         '/admin/execution-search': { target: 'http://127.0.0.1:20002', changeOrigin: true },

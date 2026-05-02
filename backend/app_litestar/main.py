@@ -18,6 +18,12 @@ from .routes.leaf_crud_a import (
     scope_filters_router,
     trigger_conditions_router,
 )
+from .routes.leaf_crud_b import (
+    audit_router,
+    integrations_router,
+    marketplace_router,
+    pr_reviews_router,
+)
 from .routes.rbac import rbac_router
 from .routes.admin_misc import admin_misc_router
 from .routes.admin_tooling import (
@@ -103,6 +109,10 @@ def create_app() -> Litestar:
             scope_filters_router,
             trigger_conditions_router,
             bot_memory_router,
+            marketplace_router,
+            integrations_router,
+            audit_router,
+            pr_reviews_router,
         ],
         dependencies={"caller": provide_caller},
     )
