@@ -215,3 +215,55 @@ class TestTraceStats:
         assert stats["total_traces"] == 3
         assert stats["completed"] == 2
         assert stats["errors"] == 1
+
+
+class TestCorruptAttributes:
+    """v0.5.2: corrupt JSON in trace_spans.attributes used to be silently
+    swallowed by `pass`, masking DB corruption / encoding bugs and
+    dropping the previous attributes without trace. These tests verify
+    the function still completes (no raise), logs a WARNING with the
+    span id, and clobbers the corrupt blob with the new attributes.
+    """
+
+    def _corrupt_attributes(self, span_id: str, value: str = "{not valid json") -> None:
+        """Directly stomp the attributes column with a malformed payload."""
+        from app.database import get_connection
+
+        with get_connection() as conn:
+            conn.execute(
+                "UPDATE trace_spans SET attributes = ? WHERE id = ?",
+                (value, span_id),
+            )
+            conn.commit()
+
+    def test_end_span_logs_and_replaces_corrupt_attributes(self, isolated_db, caplog):
+        trace = create_trace("T", "agent", "agent-01")
+        span = create_span(trace["id"], "S", "TOOL_CALL", attributes={"old": "x"})
+        self._corrupt_attributes(span["id"])
+
+        with caplog.at_level("WARNING", logger="app.db.tracing"):
+            ended = end_span(span["id"], attributes={"new": "y"})
+
+        # Function completed without raising; new attributes applied.
+        assert ended is not None
+        assert ended["attributes"] == {"new": "y"}
+        # Operator-visible warning includes the span id.
+        assert any(
+            "end_span: corrupt attributes JSON" in r.message and span["id"] in r.message
+            for r in caplog.records
+        )
+
+    def test_update_span_logs_and_replaces_corrupt_attributes(self, isolated_db, caplog):
+        trace = create_trace("T", "agent", "agent-01")
+        span = create_span(trace["id"], "S", "GENERIC", attributes={"k": "v"})
+        self._corrupt_attributes(span["id"], value="not even close to JSON")
+
+        with caplog.at_level("WARNING", logger="app.db.tracing"):
+            updated = update_span(span["id"], attributes={"after": True})
+
+        assert updated is not None
+        assert updated["attributes"] == {"after": True}
+        assert any(
+            "update_span: corrupt attributes JSON" in r.message and span["id"] in r.message
+            for r in caplog.records
+        )
