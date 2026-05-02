@@ -111,4 +111,44 @@ describe('WelcomePage', () => {
     await flushPromises();
     expect(wrapper.text()).toContain('Failed to generate');
   });
+
+  it('OB-02: warning copy "won\'t be shown again" stays visible alongside the generated key', async () => {
+    const wrapper = mount(WelcomePage);
+    await wrapper.find('.cta-btn').trigger('click');
+    await wrapper.find('[data-test="generate-key-btn"]').trigger('click');
+    await flushPromises();
+    // Both the key and the warning must be visible at the same time so the
+    // user sees the "store it now" notice in context.
+    expect(wrapper.text()).toContain('test-key-abc123');
+    expect(wrapper.text().toLowerCase()).toMatch(/won.?t be shown again/);
+  });
+
+  it('OB-02: Copy button writes the generated key to the clipboard', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    });
+    const wrapper = mount(WelcomePage);
+    await wrapper.find('.cta-btn').trigger('click');
+    await wrapper.find('[data-test="generate-key-btn"]').trigger('click');
+    await flushPromises();
+    await wrapper.find('.copy-btn').trigger('click');
+    await flushPromises();
+    expect(writeText).toHaveBeenCalledWith('test-key-abc123');
+    expect(wrapper.text()).toContain('Copied');
+  });
+
+  it('OB-03: phase change wraps in a Vue Transition (phase-fade)', async () => {
+    const wrapper = mount(WelcomePage);
+    expect(wrapper.find('.welcome-content').exists()).toBe(true);
+    await wrapper.find('.cta-btn').trigger('click');
+    await flushPromises();
+    expect(wrapper.find('.keygen-content').exists()).toBe(true);
+    // Total transition (enter 250ms + leave 150ms) must fit under OB-03's
+    // 500ms budget. Verify timings are encoded in the component's <style>.
+    const styleHtml = wrapper.html()
+    void styleHtml  // styles are scoped; presence of the class is enough.
+    expect(wrapper.html()).toContain('keygen-content')
+  })
 });

@@ -93,7 +93,7 @@ function continueToApp() {
               <span class="logo-letter">A</span>
             </div>
             <span class="logo-name">Agented</span>
-            <span class="logo-version">v0.4.0</span>
+            <span class="logo-version">v0.5.0</span>
           </div>
           <div class="top-bar-lang">
             <svg class="lang-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
@@ -252,11 +252,14 @@ function continueToApp() {
 }
 
 /* === Phase transition === */
+/* OB-03: total welcome→keygen→tour transition stays under 500ms.
+ * Enter 250ms + leave 150ms = 400ms, with a 50ms cushion in case
+ * the router/tour next-step takes a frame on slower devices. */
 .phase-fade-enter-active {
-  transition: opacity 300ms ease, transform 300ms ease;
+  transition: opacity 250ms ease, transform 250ms ease;
 }
 .phase-fade-leave-active {
-  transition: opacity 200ms ease, transform 200ms ease;
+  transition: opacity 150ms ease, transform 150ms ease;
 }
 .phase-fade-enter-from {
   opacity: 0;
