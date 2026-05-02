@@ -102,6 +102,43 @@ describe('useTourTargetBus', () => {
     expect(cb).not.toHaveBeenCalled();
   });
 
+  // OB-41: MutationObserver must be scoped to the route's main
+  // container (`#main-content`), not `document.body`. The welcome
+  // screen layout has no `#main-content`, so the implementation falls
+  // back to body — both paths are covered below.
+  describe('OB-41 — observer scope', () => {
+    it('observes #main-content when present', async () => {
+      const main = document.createElement('main');
+      main.id = 'main-content';
+      document.body.appendChild(main);
+
+      const bus = useTourTargetBus();
+      const cb = vi.fn();
+      cleanup.push(bus.subscribe('[data-tour="scoped"]', cb));
+      cb.mockClear();
+
+      const inScope = document.createElement('button');
+      inScope.setAttribute('data-tour', 'scoped');
+      main.appendChild(inScope);
+      await flushMO();
+
+      expect(cb).toHaveBeenCalledWith(inScope);
+    });
+
+    it('falls back to document.body when #main-content is absent', async () => {
+      const bus = useTourTargetBus();
+      const cb = vi.fn();
+      cleanup.push(bus.subscribe('[data-tour="welcome-mount"]', cb));
+
+      const el = document.createElement('div');
+      el.setAttribute('data-tour', 'welcome-mount');
+      document.body.appendChild(el);
+      await flushMO();
+
+      expect(cb).toHaveBeenCalledWith(el);
+    });
+  });
+
   it('multiple subscribers on the same selector each get notified', async () => {
     const bus = useTourTargetBus();
     const cb1 = vi.fn();

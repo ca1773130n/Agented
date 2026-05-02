@@ -8,9 +8,16 @@
  *
  * Subscribers register a CSS selector and a callback. The bus:
  *   - resolves immediately on subscribe (synchronous initial call)
- *   - watches `document.body` for childList/subtree changes via a single
- *     MutationObserver per subscriber and re-emits when the matched
- *     element changes (mount, unmount, replacement)
+ *   - watches the active route's main container (`#main-content`, the
+ *     `<main>` element wrapping `<router-view>`) for childList/subtree
+ *     changes via a MutationObserver per subscriber, and re-emits when
+ *     the matched element changes (mount, unmount, replacement). Falls
+ *     back to `document.body` when `#main-content` isn't mounted yet
+ *     (e.g. on the welcome screen, which uses a separate layout).
+ *
+ * The scoping satisfies OB-41: "scoped to the route's root element,
+ * not document.body". Header/sidebar churn outside the main container
+ * no longer triggers re-resolution.
  *
  * Multiple subscribers on the same selector each get their own observer
  * and callback. Unsubscribe disconnects the observer.
@@ -38,8 +45,13 @@ export function useTourTargetBus(): TourTargetBus {
     last = (document.querySelector(selector) as HTMLElement | null) ?? null;
     cb(last);
 
+    // OB-41: scope to the route's main container, fall back to body
+    // when not yet mounted (welcome screen layout).
+    const scopeRoot =
+      (document.querySelector('#main-content') as HTMLElement | null) ??
+      document.body;
     const observer = new MutationObserver(resolve);
-    observer.observe(document.body, { childList: true, subtree: true });
+    observer.observe(scopeRoot, { childList: true, subtree: true });
 
     return () => observer.disconnect();
   }
