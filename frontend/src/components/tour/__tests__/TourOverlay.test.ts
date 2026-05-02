@@ -355,6 +355,91 @@ describe('TourOverlay', () => {
       vi.useRealTimers()
     })
 
+    // OB-31: skip confirmation for non-trivial steps. Phase 6 plan 06-01
+    // extended SIGNIFICANT_STEP_TITLES from just `'AI Backend Accounts'` to
+    // also include the three product/project/team titles. Each test below
+    // mounts the overlay with a step that should trigger the confirm row.
+    describe('OB-31 — significant-step skip confirmation', () => {
+      function mountWithStep(step: typeof workspaceStep) {
+        return mount(TourOverlay, {
+          props: {
+            active: true,
+            step,
+            effectiveTarget: step,
+            substepLabel: null,
+            stepNumber: 5,
+            totalSteps: 8,
+          },
+        })
+      }
+
+      it('"AI Backend Accounts" still triggers confirm', async () => {
+        const wrapper = mountWithStep({
+          id: 'backends.claude',
+          route: '/backends/backend-claude',
+          target: '[data-tour="add-account-btn"]',
+          title: 'AI Backend Accounts',
+          message: 'Register a Claude Code account.',
+          skippable: true,
+        })
+        await wrapper.find('.tour-skip-btn').trigger('click')
+        expect(wrapper.find('.tour-skip-confirm').exists()).toBe(true)
+      })
+
+      it('"Create Your First Product" triggers confirm', async () => {
+        const wrapper = mountWithStep({
+          id: 'create_product',
+          route: '/products',
+          target: '[data-tour="create-product"]',
+          title: 'Create Your First Product',
+          message: 'Products group related projects under a shared context.',
+          skippable: true,
+        })
+        await wrapper.find('.tour-skip-btn').trigger('click')
+        expect(wrapper.find('.tour-skip-confirm').exists()).toBe(true)
+      })
+
+      it('"Create Your First Project" triggers confirm', async () => {
+        const wrapper = mountWithStep({
+          id: 'create_project',
+          route: '/products',
+          target: '[data-tour="create-project"]',
+          title: 'Create Your First Project',
+          message: 'Projects track work within a product.',
+          skippable: true,
+        })
+        await wrapper.find('.tour-skip-btn').trigger('click')
+        expect(wrapper.find('.tour-skip-confirm').exists()).toBe(true)
+      })
+
+      it('"Assign Teams to Project" triggers confirm', async () => {
+        const wrapper = mountWithStep({
+          id: 'create_team',
+          route: '/projects',
+          target: '[data-tour="assign-teams"]',
+          title: 'Assign Teams to Project',
+          message: 'Bundled teams are ready to assign.',
+          skippable: true,
+        })
+        await wrapper.find('.tour-skip-btn').trigger('click')
+        expect(wrapper.find('.tour-skip-confirm').exists()).toBe(true)
+      })
+
+      it('a non-significant skippable step (Token Monitoring) skips without confirm', async () => {
+        const wrapper = mountWithStep({
+          id: 'monitoring',
+          route: '/settings',
+          target: '[data-tour="token-monitoring"]',
+          title: 'Token Monitoring',
+          message: 'Configure rate limit monitoring.',
+          skippable: true,
+        })
+        await wrapper.find('.tour-skip-btn').trigger('click')
+        expect(wrapper.find('.tour-skip-confirm').exists()).toBe(false)
+        expect(wrapper.emitted('skip')).toBeTruthy()
+      })
+    })
+
     it('does not show fallback when element is found before timeout', async () => {
       vi.useFakeTimers()
 

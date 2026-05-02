@@ -5,19 +5,35 @@
 See: .planning/PROJECT.md (updated 2026-03-21)
 
 **Core value:** Enable engineering teams to orchestrate AI-powered automation through a unified dashboard
-**Current focus:** Phase 6 — Navigation Controls
+**Current focus:** Phase 7 — Loading + Error Resilience
 **Primary hypothesis:** A guided onboarding tour can bring new users from zero to first bot execution in under 3 minutes
 
 ## Current Position
 
-Phase: 5 of 10 (Form Field Guidance) — **COMPLETE**
+Phase: 6 of 10 (Navigation Controls) — **COMPLETE**
 Phase 1: COMPLETE
 Phase 2: COMPLETE
 Phase 3: COMPLETE
 Phase 4: COMPLETE
-Plan: phase-5/05-01 shipped
-Status: Phase 6 ready to plan
-Last activity: 2026-05-03 — Phase 5 plan 05-01 form-guide tests
+Phase 5: COMPLETE
+Plan: phase-6/06-01 shipped
+Status: Phase 7 ready to plan
+Last activity: 2026-05-03 — Phase 6 plan 06-01 navigation-controls polish
+
+Phase 6 deliverables (plan 06-01):
+- OB-29 ✓ (bottom bar with counter + Skip + Next — pre-existing, tested)
+- OB-30 ✓ (substep labels — pre-existing, tested)
+- OB-31 ✓ (skip confirm; SIGNIFICANT_STEP_TITLES extended from 1 entry to
+  4: "AI Backend Accounts", "Create Your First Product", "Create Your
+  First Project", "Assign Teams to Project")
+- OB-32 ✓ (no X glyph — replaced `✕` in TourProgressBar's dismiss button
+  with the labelled "Exit Tour" string; click-on-overlay already
+  prevented in TourOverlay.vue:233)
+- OB-33 ✓ (keyboard nav — pre-existing, Enter/Escape in TourOverlay,
+  focus-trap in TourTooltip)
+- 8 new frontend tests (3 progress-bar OB-32 cases + 5 overlay OB-31
+  significant-step cases)
+- New i18n key `tour.exitTour: "Exit Tour"`
 
 Phase 5 deliverables (plan 05-01):
 - OB-25 ✓ (auto-discovery via `.form-group` walk — pre-existing, now tested)

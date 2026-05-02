@@ -66,6 +66,7 @@
     "elementNotFound": "We couldn't find {element}.",
     "dismissTooltip": "Exit the setup tour",
     "dismissAria": "Dismiss tour",
+    "exitTour": "Exit Tour",
     "pageSlow": "This page is taking longer than expected.",
     "restartSetupGuide": "Restart Setup Guide",
     "restartDesc": "Restart the onboarding tour to re-run through workspace setup and account configuration. Your existing configuration will not be affected.",

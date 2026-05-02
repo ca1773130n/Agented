@@ -175,7 +175,15 @@ function handleElementRetry() {
   handleRetry()
 }
 
-const SIGNIFICANT_STEP_TITLES = ['AI Backend Accounts']
+// OB-31: skipping any of these requires confirmation. The criterion calls
+// out "backend accounts, product/project creation" — the latter three
+// titles match the step definitions in `src/constants/tourSteps.ts`.
+const SIGNIFICANT_STEP_TITLES = [
+  'AI Backend Accounts',
+  'Create Your First Product',
+  'Create Your First Project',
+  'Assign Teams to Project',
+]
 
 function isSignificantStep(step: StepLike): boolean {
   return SIGNIFICANT_STEP_TITLES.includes(step.title)
