@@ -11,6 +11,13 @@ from litestar import Litestar
 from .auth import provide_caller
 from .routes.auth import auth_router
 from .routes.health import health_router
+from .routes.leaf_crud_a import (
+    bookmarks_router,
+    bot_memory_router,
+    prompt_snippets_router,
+    scope_filters_router,
+    trigger_conditions_router,
+)
 from .routes.rbac import rbac_router
 from .routes.admin_misc import admin_misc_router
 from .routes.admin_tooling import (
@@ -91,6 +98,11 @@ def create_app() -> Litestar:
             gitops_router,
             version_pins_router,
             retention_router,
+            bookmarks_router,
+            prompt_snippets_router,
+            scope_filters_router,
+            trigger_conditions_router,
+            bot_memory_router,
         ],
         dependencies={"caller": provide_caller},
     )

@@ -59,6 +59,14 @@ export default defineConfig(({ mode }) => {
           changeOrigin: true
         },
         '/admin/bots/sla': { target: 'http://127.0.0.1:20002', changeOrigin: true },
+        // /admin/bots/memory + /admin/bots/{id}/memory/* — wave 65.
+        '/admin/bots/memory': { target: 'http://127.0.0.1:20002', changeOrigin: true },
+        '^/admin/bots/[^/]+/memory': { target: 'http://127.0.0.1:20002', changeOrigin: true },
+        // /admin/bookmarks/* + /admin/prompt-snippets/* + /admin/scope-filters/* + /admin/trigger-conditions/* — wave 65.
+        '/admin/bookmarks': { target: 'http://127.0.0.1:20002', changeOrigin: true },
+        '/admin/prompt-snippets': { target: 'http://127.0.0.1:20002', changeOrigin: true },
+        '/admin/scope-filters': { target: 'http://127.0.0.1:20002', changeOrigin: true },
+        '/admin/trigger-conditions': { target: 'http://127.0.0.1:20002', changeOrigin: true },
         '/admin/analytics/cross-team-insights': { target: 'http://127.0.0.1:20002', changeOrigin: true },
         '/admin/analytics/scheduling-suggestions': { target: 'http://127.0.0.1:20002', changeOrigin: true },
         '/admin/execution-search': { target: 'http://127.0.0.1:20002', changeOrigin: true },
@@ -140,6 +148,14 @@ export default defineConfig(({ mode }) => {
           changeOrigin: true
         },
         '/admin/bots/sla': { target: 'http://127.0.0.1:20002', changeOrigin: true },
+        // /admin/bots/memory + /admin/bots/{id}/memory/* — wave 65.
+        '/admin/bots/memory': { target: 'http://127.0.0.1:20002', changeOrigin: true },
+        '^/admin/bots/[^/]+/memory': { target: 'http://127.0.0.1:20002', changeOrigin: true },
+        // /admin/bookmarks/* + /admin/prompt-snippets/* + /admin/scope-filters/* + /admin/trigger-conditions/* — wave 65.
+        '/admin/bookmarks': { target: 'http://127.0.0.1:20002', changeOrigin: true },
+        '/admin/prompt-snippets': { target: 'http://127.0.0.1:20002', changeOrigin: true },
+        '/admin/scope-filters': { target: 'http://127.0.0.1:20002', changeOrigin: true },
+        '/admin/trigger-conditions': { target: 'http://127.0.0.1:20002', changeOrigin: true },
         '/admin/analytics/cross-team-insights': { target: 'http://127.0.0.1:20002', changeOrigin: true },
         '/admin/analytics/scheduling-suggestions': { target: 'http://127.0.0.1:20002', changeOrigin: true },
         '/admin/execution-search': { target: 'http://127.0.0.1:20002', changeOrigin: true },
