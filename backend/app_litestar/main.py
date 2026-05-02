@@ -38,6 +38,15 @@ from .routes.leaf_crud_d import (
     knowledge_graph_router,
     pr_assignment_router,
 )
+from .routes.leaf_crud_e import (
+    bot_pipes_router,
+    health_monitor_router,
+    monitoring_router,
+    onboarding_router,
+    orchestration_router,
+    project_instances_router,
+    repo_bot_defaults_router,
+)
 from .routes.rbac import rbac_router
 from .routes.admin_misc import admin_misc_router
 from .routes.admin_tooling import (
@@ -137,6 +146,13 @@ def create_app() -> Litestar:
             campaigns_router,
             execution_tagging_router,
             pr_assignment_router,
+            monitoring_router,
+            health_monitor_router,
+            orchestration_router,
+            onboarding_router,
+            project_instances_router,
+            repo_bot_defaults_router,
+            bot_pipes_router,
         ],
         dependencies={"caller": provide_caller},
     )
