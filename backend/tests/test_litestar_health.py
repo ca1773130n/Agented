@@ -30,6 +30,103 @@ class TestInstanceId:
         assert body["instance_id"]
 
 
+class TestSetupStatus:
+    """Phase 1 plan 01-01: aggregate guard prefetch for the v0.5.0 tour."""
+
+    def _post(self, c, body):
+        return c.get("/health/setup-status")
+
+    def test_fresh_db_returns_all_false(self, isolated_db):
+        with _client(isolated_db) as c:
+            resp = c.get("/health/setup-status")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert isinstance(body["instance_id"], str) and body["instance_id"]
+        for field in (
+            "has_workspace",
+            "has_claude_account",
+            "has_codex_account",
+            "has_gemini_account",
+            "has_opencode_account",
+            "has_harness_synced",
+            "has_first_product",
+        ):
+            assert body[field] is False, f"{field} should default to False on fresh DB"
+
+    def test_populated_workspace_setting(self, isolated_db):
+        from app.db.connection import get_connection
+
+        with get_connection() as conn:
+            conn.execute(
+                "INSERT OR REPLACE INTO settings (key, value) VALUES ('workspace_root', ?)",
+                ("/tmp/workspace",),
+            )
+            conn.commit()
+        with _client(isolated_db) as c:
+            resp = c.get("/health/setup-status")
+        assert resp.json()["has_workspace"] is True
+
+    def test_blank_workspace_setting_treated_as_unset(self, isolated_db):
+        from app.db.connection import get_connection
+
+        with get_connection() as conn:
+            conn.execute(
+                "INSERT OR REPLACE INTO settings (key, value) VALUES ('workspace_root', ?)",
+                ("   ",),
+            )
+            conn.commit()
+        with _client(isolated_db) as c:
+            resp = c.get("/health/setup-status")
+        assert resp.json()["has_workspace"] is False
+
+    def test_per_backend_account_detection(self, isolated_db):
+        from app.db.connection import get_connection
+
+        # Add a Claude account, leave the other three unconfigured.
+        with get_connection() as conn:
+            conn.execute(
+                "INSERT INTO backend_accounts (backend_id, account_name) VALUES (?, ?)",
+                ("backend-claude", "primary"),
+            )
+            conn.commit()
+        with _client(isolated_db) as c:
+            resp = c.get("/health/setup-status")
+        body = resp.json()
+        assert body["has_claude_account"] is True
+        assert body["has_codex_account"] is False
+        assert body["has_gemini_account"] is False
+        assert body["has_opencode_account"] is False
+
+    def test_first_product_detection(self, isolated_db):
+        from app.db.products import create_product
+
+        create_product(name="Demo", description="")
+        with _client(isolated_db) as c:
+            resp = c.get("/health/setup-status")
+        assert resp.json()["has_first_product"] is True
+
+    def test_harness_synced_marker(self, isolated_db):
+        from app.db.connection import get_connection
+
+        with get_connection() as conn:
+            conn.execute(
+                "INSERT OR REPLACE INTO app_meta (key, value) VALUES "
+                "('harness_synced_at', ?)",
+                ("2026-05-03T00:00:00Z",),
+            )
+            conn.commit()
+        with _client(isolated_db) as c:
+            resp = c.get("/health/setup-status")
+        assert resp.json()["has_harness_synced"] is True
+
+    def test_no_auth_required(self, isolated_db):
+        # The setup-status endpoint must be reachable before the user has any
+        # API key configured (the welcome page calls it pre-auth).
+        with _client(isolated_db) as c:
+            resp = c.get("/health/setup-status")
+        assert resp.status_code == 200
+
+
 class TestAuthStatus:
     def test_needs_setup_when_no_keys(self, isolated_db):
         with _client(isolated_db) as c:

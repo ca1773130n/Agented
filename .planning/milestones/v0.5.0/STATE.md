@@ -5,17 +5,26 @@
 See: .planning/PROJECT.md (updated 2026-03-21)
 
 **Core value:** Enable engineering teams to orchestrate AI-powered automation through a unified dashboard
-**Current focus:** Phase 1 — Backend + State Machine Foundation
+**Current focus:** Phase 2 — Visual Layer
 **Primary hypothesis:** A guided onboarding tour can bring new users from zero to first bot execution in under 3 minutes
 
 ## Current Position
 
-Phase: 1 of 10 (Backend + State Machine Foundation)
-Plan: 0 of 2 in current phase
-Status: Ready to plan
-Last activity: 2026-03-21 — Roadmap created for v0.5.0
+Phase: 1 of 10 (Backend + State Machine Foundation) — **COMPLETE**
+Plan: 2 of 2 shipped
+Status: Phase 2 ready to plan
+Last activity: 2026-05-03 — Phase 1 plans 01-01 + 01-02 implemented and merged
 
-Progress: [----------] 0%
+Phase 1 deliverables:
+- `GET /health/setup-status` aggregate endpoint (Plan 01-01)
+- XState v5 hierarchical machine in `frontend/src/tour/machine.ts` (Plan 01-01)
+- `frontend/src/tour/persistence.ts` with instance_id invalidation (Plan 01-02)
+- `frontend/src/tour/setupStatus.ts` guard prefetch client (Plan 01-02)
+- `frontend/src/tour/useTour.ts` Vue composable (Plan 01-02)
+- Z-index scale already in App.vue (`--z-tour-overlay` through `--z-tour-progress` at 10000+) — OB-43 satisfied without changes
+- 7 backend tests + 36 frontend tests added
+
+Progress: [#---------] 10%
 
 ## Current Baseline
 
