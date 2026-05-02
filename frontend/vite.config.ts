@@ -161,6 +161,9 @@ export default defineConfig(({ mode }) => {
           target: 'http://127.0.0.1:20002',
           changeOrigin: true,
         },
+        // wave 77 — GitHub webhook + OAuth callback proxy + generic webhook.
+        '/api/webhooks/github': { target: 'http://127.0.0.1:20002', changeOrigin: true },
+        '/api/oauth-callback': { target: 'http://127.0.0.1:20002', changeOrigin: true },
         // wave 71 — sketches + agent_conversations CRUD + plugin_exports.
         '/admin/sketches': { target: 'http://127.0.0.1:20002', changeOrigin: true },
         '/admin/plugin-exports': { target: 'http://127.0.0.1:20002', changeOrigin: true },
@@ -398,6 +401,9 @@ export default defineConfig(({ mode }) => {
           target: 'http://127.0.0.1:20002',
           changeOrigin: true,
         },
+        // wave 77 — GitHub webhook + OAuth callback proxy + generic webhook.
+        '/api/webhooks/github': { target: 'http://127.0.0.1:20002', changeOrigin: true },
+        '/api/oauth-callback': { target: 'http://127.0.0.1:20002', changeOrigin: true },
         // wave 71 — sketches + agent_conversations CRUD + plugin_exports.
         '/admin/sketches': { target: 'http://127.0.0.1:20002', changeOrigin: true },
         '/admin/plugin-exports': { target: 'http://127.0.0.1:20002', changeOrigin: true },

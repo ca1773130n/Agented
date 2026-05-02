@@ -73,6 +73,11 @@ from .routes.leaf_crud_i import (
     super_agent_messages_router,
     team_generation_router,
 )
+from .routes.webhooks import (
+    github_webhook_router,
+    oauth_callback_router,
+    webhook_router,
+)
 from .routes.leaf_crud_h import (
     backends_router,
     utility_leftover_router,
@@ -203,6 +208,9 @@ def create_app() -> Litestar:
             team_generation_router,
             chunks_router,
             super_agent_chat_router,
+            github_webhook_router,
+            oauth_callback_router,
+            webhook_router,
         ],
         dependencies={"caller": provide_caller},
     )
