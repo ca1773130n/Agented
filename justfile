@@ -134,7 +134,8 @@ ensure-backend:
 build: ensure-frontend
     {{use-node}} cd frontend && npm run build
 
-# Run backend API server (development mode, port 20000)
+# Run Litestar backend API server (development mode, port 20000).
+# Wave 80: Flask is retired; Litestar serves :20000 directly via uvicorn.
 dev-backend: ensure-backend
     cd backend && uv run python run.py --debug
 
@@ -174,7 +175,7 @@ dev-frontend: ensure-frontend ai-accounts-dist-fresh
 dev-ai-accounts: ensure-backend
     cd backend && uv run python scripts/run_ai_accounts.py
 
-# Run all three dev servers in parallel (Flask :20000, Litestar :20001, Vite :3000)
+# Run all three dev servers in parallel (Litestar :20000, ai-accounts sidecar :20001, Vite :3000)
 dev-all:
     just kill
     just dev-backend & just dev-ai-accounts & just dev-frontend & wait
@@ -281,7 +282,7 @@ doctor:
     check just         "1.30"    'just --version'
     echo
     echo "== Ports =="
-    if lsof -ti:20000 >/dev/null 2>&1; then echo "  20000 (Flask)   — IN USE"; else echo "  20000 (Flask)   — free"; fi
+    if lsof -ti:20000 >/dev/null 2>&1; then echo "  20000 (Litestar) — IN USE"; else echo "  20000 (Litestar) — free"; fi
     if lsof -ti:20001 >/dev/null 2>&1; then echo "  20001 (sidecar) — IN USE"; else echo "  20001 (sidecar) — free"; fi
     if lsof -ti:3000  >/dev/null 2>&1; then echo "  3000  (Vite)    — IN USE"; else echo "  3000  (Vite)    — free"; fi
     exit "$fail"

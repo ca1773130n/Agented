@@ -1,5 +1,11 @@
 """Gunicorn configuration for Agented backend.
 
+Serves the Litestar ASGI app (`app_litestar.main:create_app()`) via the
+UvicornWorker worker class. Wave 80 retires the Flask app — every route,
+middleware, scheduler and lifecycle hook now lives on Litestar. Process
+management still goes through gunicorn so existing scripts (`just deploy`,
+launchd, systemd units, ...) keep working without changes.
+
 workers=1 is MANDATORY until in-memory SSE state is migrated to Redis.
 The following services store state in class-level dicts or module globals
 that are NOT shared across processes:
@@ -20,42 +26,40 @@ from dotenv import load_dotenv
 load_dotenv()
 
 import os
+import resource
+
+# Bump soft file-descriptor limit early. macOS defaults to 256, which the
+# bundle plugin install + concurrent SQLite connections can blow past,
+# surfacing as "Too many open files" + "unable to open database file"
+# during plugin extraction.
+try:
+    _soft, _hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+    if _soft < 8192:
+        resource.setrlimit(resource.RLIMIT_NOFILE, (min(8192, _hard), _hard))
+except (ValueError, OSError):
+    pass
 
 # Server socket
 bind = os.environ.get("GUNICORN_BIND", "0.0.0.0:20000")
 
-# Worker processes — see module docstring for why this MUST be 1
+# Single worker — see module docstring for why this MUST be 1.
 workers = 1
 
-# Gevent worker class for async SSE support.
-# Allows the single worker to handle many concurrent long-lived SSE
-# connections via cooperative greenlet scheduling.
-# Gunicorn's GeventWorker calls monkey.patch_all() before loading the app,
-# which transparently converts threading.Thread/Lock to greenlets and
-# subprocess.Popen to a cooperative version.
-worker_class = "gevent"
+# UvicornWorker drives the Litestar ASGI app. Async SSE / long-lived
+# streams are handled by uvicorn's event loop (asyncio + httptools).
+worker_class = "uvicorn.workers.UvicornWorker"
 
-# Max concurrent greenlets per worker
-worker_connections = 1000
-
-# Timeout for worker response (seconds).
-# Long timeout to accommodate SSE streams and long-running AI executions
-# (Claude CLI subprocess can run for several minutes).
+# Generous timeout so Claude/Codex CLI subprocesses (multi-minute) and
+# SSE streams don't trip Gunicorn's worker-stuck detector.
 timeout = 300
 
 # Graceful timeout — time to finish in-flight requests after SIGTERM
 graceful_timeout = 30
 
-# Do NOT set preload_app = True. With gevent workers, monkey patching
-# happens post-fork in GeventWorker.patch(). preload_app loads the app
-# in the master process BEFORE monkey patching, causing unpatched module
-# references. See 02-RESEARCH.md Pitfall 3.
-
 # Logging
-# Disabled: request lifecycle logged by app middleware in JSON format (see middleware.py)
 accesslog = None
-errorlog = "-"  # stderr
+errorlog = "-"
 loglevel = os.environ.get("LOG_LEVEL", "info")
 
-# WSGI application — references the `application` object in run.py
+# ASGI application — references the `application` callable in run.py
 wsgi_app = "run:application"

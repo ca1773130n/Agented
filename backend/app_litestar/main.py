@@ -1,14 +1,25 @@
 """Litestar app factory.
 
-Initially exposes only a /health/liveness route so the skeleton is
-verifiable end-to-end. Wave 23 onwards adds real routes.
+The full Agented API surface — every route migrated from Flask in
+waves 23–78 — plus the lifecycle hooks, middleware, CORS, and
+exception handlers that took over from Flask in wave 80.
 """
 
 from __future__ import annotations
 
+import os
+
 from litestar import Litestar
+from litestar.config.cors import CORSConfig
 
 from .auth import provide_caller
+from .exception_handlers import EXCEPTION_HANDLERS
+from .lifecycle import on_shutdown, on_startup
+from .middleware import (
+    ApiKeyMiddleware,
+    RequestContextMiddleware,
+    RequestLoggingMiddleware,
+)
 from .routes.auth import auth_router
 from .routes.health import health_router
 from .routes.leaf_crud_a import (
@@ -136,9 +147,36 @@ from .routes.utility import utility_router
 from .routes.workflows import workflows_router
 
 
+def _cors_config() -> CORSConfig:
+    """Mirror Flask CORS: dev-localhost always allowed, env CSV widens."""
+    allowed = [
+        o.strip()
+        for o in os.environ.get("CORS_ALLOWED_ORIGINS", "").split(",")
+        if o.strip()
+    ]
+    for dev_origin in ("http://localhost:3000", "http://127.0.0.1:3000"):
+        if dev_origin not in allowed:
+            allowed.append(dev_origin)
+    return CORSConfig(
+        allow_origins=allowed,
+        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+        allow_headers=["Content-Type", "X-API-Key", "X-Request-ID", "Authorization"],
+        allow_credentials=True,
+    )
+
+
 def create_app() -> Litestar:
     """Build the Litestar application instance."""
     return Litestar(
+        cors_config=_cors_config(),
+        middleware=[
+            RequestContextMiddleware,
+            ApiKeyMiddleware,
+            RequestLoggingMiddleware,
+        ],
+        exception_handlers=EXCEPTION_HANDLERS,
+        on_startup=[on_startup],
+        on_shutdown=[on_shutdown],
         route_handlers=[
             health_router,
             rbac_router,
