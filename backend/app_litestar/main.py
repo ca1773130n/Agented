@@ -66,6 +66,13 @@ from .routes.leaf_crud_g import (
 )
 from .routes.executions import executions_router
 from .routes.grd_routes import grd_router
+from .routes.leaf_crud_i import (
+    chunks_router,
+    setup_router,
+    super_agent_chat_router,
+    super_agent_messages_router,
+    team_generation_router,
+)
 from .routes.leaf_crud_h import (
     backends_router,
     utility_leftover_router,
@@ -191,6 +198,11 @@ def create_app() -> Litestar:
             backends_router,
             grd_router,
             executions_router,
+            setup_router,
+            super_agent_messages_router,
+            team_generation_router,
+            chunks_router,
+            super_agent_chat_router,
         ],
         dependencies={"caller": provide_caller},
     )

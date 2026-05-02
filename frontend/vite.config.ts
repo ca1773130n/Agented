@@ -115,6 +115,52 @@ export default defineConfig(({ mode }) => {
           target: 'http://127.0.0.1:20002',
           changeOrigin: true,
         },
+        // wave 76 — setup CRUD; /api/setup/{id}/stream stays on Flask.
+        '^/api/setup/[^/]+/stream(\\?.*)?$': {
+          target: 'http://127.0.0.1:20000',
+          changeOrigin: true,
+        },
+        '/api/setup': {
+          target: 'http://127.0.0.1:20002',
+          changeOrigin: true,
+        },
+        // wave 76 — chunks + super_agent messages/chat (CRUD); SSE streams stay on Flask.
+        '/admin/chunked-executions': { target: 'http://127.0.0.1:20002', changeOrigin: true },
+        '^/admin/bots/[^/]+/run-chunked$': {
+          target: 'http://127.0.0.1:20002',
+          changeOrigin: true,
+        },
+        // /admin/super-agents/{id}/messages/* CRUD; /messages/stream stays on Flask.
+        '^/admin/super-agents/[^/]+/messages/stream(\\?.*)?$': {
+          target: 'http://127.0.0.1:20000',
+          changeOrigin: true,
+        },
+        '^/admin/super-agents/[^/]+/messages(/[^/]+/read)?$': {
+          target: 'http://127.0.0.1:20002',
+          changeOrigin: true,
+        },
+        '^/admin/super-agents/[^/]+/messages/(inbox|outbox)$': {
+          target: 'http://127.0.0.1:20002',
+          changeOrigin: true,
+        },
+        // /admin/super-agents/{id}/sessions/{sid}/chat (POST) → Litestar; /chat/stream stays on Flask.
+        '^/admin/super-agents/[^/]+/sessions/[^/]+/chat/stream(\\?.*)?$': {
+          target: 'http://127.0.0.1:20000',
+          changeOrigin: true,
+        },
+        '^/admin/super-agents/[^/]+/sessions/[^/]+/chat$': {
+          target: 'http://127.0.0.1:20002',
+          changeOrigin: true,
+        },
+        // /admin/teams/generate (POST async) + /generate/{id}; /generate/stream stays on Flask.
+        '^/admin/teams/generate/stream(\\?.*)?$': {
+          target: 'http://127.0.0.1:20000',
+          changeOrigin: true,
+        },
+        '^/admin/teams/generate(/[^/]+)?$': {
+          target: 'http://127.0.0.1:20002',
+          changeOrigin: true,
+        },
         // wave 71 — sketches + agent_conversations CRUD + plugin_exports.
         '/admin/sketches': { target: 'http://127.0.0.1:20002', changeOrigin: true },
         '/admin/plugin-exports': { target: 'http://127.0.0.1:20002', changeOrigin: true },
@@ -303,6 +349,52 @@ export default defineConfig(({ mode }) => {
           changeOrigin: true,
         },
         '^/admin/triggers/[^/]+/executions': {
+          target: 'http://127.0.0.1:20002',
+          changeOrigin: true,
+        },
+        // wave 76 — setup CRUD; /api/setup/{id}/stream stays on Flask.
+        '^/api/setup/[^/]+/stream(\\?.*)?$': {
+          target: 'http://127.0.0.1:20000',
+          changeOrigin: true,
+        },
+        '/api/setup': {
+          target: 'http://127.0.0.1:20002',
+          changeOrigin: true,
+        },
+        // wave 76 — chunks + super_agent messages/chat (CRUD); SSE streams stay on Flask.
+        '/admin/chunked-executions': { target: 'http://127.0.0.1:20002', changeOrigin: true },
+        '^/admin/bots/[^/]+/run-chunked$': {
+          target: 'http://127.0.0.1:20002',
+          changeOrigin: true,
+        },
+        // /admin/super-agents/{id}/messages/* CRUD; /messages/stream stays on Flask.
+        '^/admin/super-agents/[^/]+/messages/stream(\\?.*)?$': {
+          target: 'http://127.0.0.1:20000',
+          changeOrigin: true,
+        },
+        '^/admin/super-agents/[^/]+/messages(/[^/]+/read)?$': {
+          target: 'http://127.0.0.1:20002',
+          changeOrigin: true,
+        },
+        '^/admin/super-agents/[^/]+/messages/(inbox|outbox)$': {
+          target: 'http://127.0.0.1:20002',
+          changeOrigin: true,
+        },
+        // /admin/super-agents/{id}/sessions/{sid}/chat (POST) → Litestar; /chat/stream stays on Flask.
+        '^/admin/super-agents/[^/]+/sessions/[^/]+/chat/stream(\\?.*)?$': {
+          target: 'http://127.0.0.1:20000',
+          changeOrigin: true,
+        },
+        '^/admin/super-agents/[^/]+/sessions/[^/]+/chat$': {
+          target: 'http://127.0.0.1:20002',
+          changeOrigin: true,
+        },
+        // /admin/teams/generate (POST async) + /generate/{id}; /generate/stream stays on Flask.
+        '^/admin/teams/generate/stream(\\?.*)?$': {
+          target: 'http://127.0.0.1:20000',
+          changeOrigin: true,
+        },
+        '^/admin/teams/generate(/[^/]+)?$': {
           target: 'http://127.0.0.1:20002',
           changeOrigin: true,
         },
