@@ -204,11 +204,10 @@ export default defineConfig(({ mode }) => {
           target: 'http://127.0.0.1:20000',
           changeOrigin: true
         },
-        '/docs': {
-          target: 'http://127.0.0.1:20000',
-          changeOrigin: true
-        },
-        '/openapi': {
+        // Wave 80: Flask retired. /docs + /openapi were flask-openapi3
+        // paths; Litestar serves the spec at /schema (+ /schema/swagger,
+        // /schema/redoc). Hand-link from frontend if needed.
+        '/schema': {
           target: 'http://127.0.0.1:20000',
           changeOrigin: true
         }
@@ -390,11 +389,10 @@ export default defineConfig(({ mode }) => {
           target: 'http://127.0.0.1:20000',
           changeOrigin: true
         },
-        '/docs': {
-          target: 'http://127.0.0.1:20000',
-          changeOrigin: true
-        },
-        '/openapi': {
+        // Wave 80: Flask retired. /docs + /openapi were flask-openapi3
+        // paths; Litestar serves the spec at /schema (+ /schema/swagger,
+        // /schema/redoc). Hand-link from frontend if needed.
+        '/schema': {
           target: 'http://127.0.0.1:20000',
           changeOrigin: true
         }
