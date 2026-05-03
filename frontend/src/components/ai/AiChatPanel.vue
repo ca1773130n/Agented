@@ -23,6 +23,9 @@ interface Message {
 interface Props {
   messages?: Message[]
   streamingContent?: string
+  inputMessage?: string
+  inputPlaceholder?: string
+  isProcessing?: boolean
   // Kept for API compat with the legacy 837-line consumers, but NOT
   // forwarded to ChatBubble (vue-styled has no icon-paths prop).
   // v0.5.4 wrapper accepts the prop and ignores it; visual parity, not
@@ -33,8 +36,17 @@ interface Props {
 withDefaults(defineProps<Props>(), {
   messages: () => [],
   streamingContent: '',
+  inputMessage: '',
+  inputPlaceholder: 'Type a message...',
+  isProcessing: false,
   assistantIconPaths: () => [],
 })
+
+const emit = defineEmits<{
+  'update:inputMessage': [value: string]
+  send: []
+  keydown: [event: KeyboardEvent]
+}>()
 
 defineOptions({ name: 'AiChatPanel', inheritAttrs: false })
 </script>
@@ -61,6 +73,31 @@ defineOptions({ name: 'AiChatPanel', inheritAttrs: false })
           :streaming="true"
         />
       </div>
+    </div>
+    <!--
+      Wrapper-owned input: vue-styled's ChatInput is uncontrolled (only
+      placeholder/disabled/isStreaming props, single send(content) emit),
+      so we render our own textarea to honour the legacy controlled
+      :input-message + update:input-message + send + keydown contract.
+    -->
+    <div class="ai-chat-panel__input">
+      <textarea
+        data-testid="input"
+        :value="inputMessage"
+        :placeholder="inputPlaceholder"
+        :disabled="isProcessing"
+        rows="3"
+        @input="emit('update:inputMessage', ($event.target as HTMLTextAreaElement).value)"
+        @keydown="(e: KeyboardEvent) => emit('keydown', e)"
+      />
+      <button
+        data-testid="send"
+        type="button"
+        :disabled="isProcessing"
+        @click="emit('send')"
+      >
+        Send
+      </button>
     </div>
   </div>
 </template>

@@ -58,4 +58,28 @@ describe('AiChatPanel (translation wrapper)', () => {
     })
     expect(wrapper.find('[data-testid="streaming-bubble"]').exists()).toBe(false)
   })
+
+  it('emits update:inputMessage when the textarea changes', async () => {
+    const wrapper = mount(AiChatPanel, { props: { inputMessage: '' } })
+    const ta = wrapper.find('[data-testid="input"]')
+    expect(ta.exists()).toBe(true)
+    await ta.setValue('hello')
+    expect(wrapper.emitted('update:inputMessage')).toBeTruthy()
+    expect(wrapper.emitted('update:inputMessage')!.at(-1)).toEqual(['hello'])
+  })
+
+  it('emits send when the send button is clicked', async () => {
+    const wrapper = mount(AiChatPanel, { props: { inputMessage: 'hello' } })
+    const sendBtn = wrapper.find('[data-testid="send"]')
+    expect(sendBtn.exists()).toBe(true)
+    await sendBtn.trigger('click')
+    expect(wrapper.emitted('send')).toBeTruthy()
+  })
+
+  it('forwards keydown events on the textarea', async () => {
+    const wrapper = mount(AiChatPanel, { props: { inputMessage: '' } })
+    const ta = wrapper.find('[data-testid="input"]')
+    await ta.trigger('keydown', { key: 'Enter' })
+    expect(wrapper.emitted('keydown')).toBeTruthy()
+  })
 })
