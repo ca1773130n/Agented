@@ -6,7 +6,10 @@ agent_memory + bulk + replay + conversation_branches.
 from __future__ import annotations
 
 import json
+import logging
 from typing import Any, Optional
+
+logger = logging.getLogger(__name__)
 
 from litestar import Router, delete, get, post, put
 from litestar.exceptions import (
@@ -250,7 +253,12 @@ def get_memory_config(agent_id: str) -> dict[str, Any]:
         try:
             config = json.loads(agent["memory_config"])
         except (json.JSONDecodeError, TypeError):
-            pass
+            logger.warning(
+                "get_memory_config: corrupt memory_config JSON for agent %s; "
+                "returning defaults. raw=%r",
+                agent_id,
+                str(agent["memory_config"])[:200],
+            )
     if not config:
         config = {
             "enabled": True,
@@ -282,7 +290,12 @@ def update_memory_config(agent_id: str, data: dict) -> dict[str, Any]:
         try:
             existing = json.loads(agent["memory_config"])
         except (json.JSONDecodeError, TypeError):
-            pass
+            logger.warning(
+                "update_memory_config: corrupt memory_config JSON for agent %s; "
+                "previous config will be lost (only body keys will be set). raw=%r",
+                agent_id,
+                str(agent["memory_config"])[:200],
+            )
 
     for key in (
         "enabled",
