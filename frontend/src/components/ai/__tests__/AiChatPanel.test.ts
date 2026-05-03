@@ -207,3 +207,254 @@ describe('AiChatPanel (translation wrapper)', () => {
     expect(wrapper.emitted('finalize')!.at(-1)).toEqual([{ parsed: 'parseable-config-content' }])
   })
 })
+
+// 11 production call sites whose AiChatPanel prop sets are smoke-tested
+// against the rebuilt wrapper. Each prop set is the union of bindings
+// inspected from the actual <AiChatPanel /> in the named view file.
+// Mounting must complete with NO Vue "Extraneous non-props attribute"
+// warnings — that warning is exactly the silent breakage symptom the
+// b2ee00d WIP introduced. Anything new the wrapper needs comes out of
+// running this suite.
+const callSitePropSets: Array<{ name: string; props: Record<string, unknown> }> = [
+  {
+    name: 'SketchChatPage',
+    props: {
+      messages: [],
+      isProcessing: false,
+      streamingContent: '',
+      inputMessage: '',
+      conversationId: null,
+      canFinalize: false,
+      isFinalizing: false,
+      assistantIconPaths: [],
+      inputPlaceholder: 'x',
+      entityLabel: 'sketch',
+      bannerTitle: '',
+      bannerButtonLabel: '',
+      showBackendSelector: false,
+    },
+  },
+  {
+    name: 'PluginDesignPage',
+    props: {
+      messages: [],
+      isProcessing: false,
+      streamingContent: '',
+      inputMessage: '',
+      conversationId: null,
+      canFinalize: false,
+      isFinalizing: false,
+      initStreamingParser: () => {},
+      showBackendSelector: true,
+      useSmartScroll: true,
+      selectedBackend: null,
+      selectedAccountId: null,
+      selectedModel: null,
+      assistantIconPaths: [],
+      inputPlaceholder: 'x',
+      entityLabel: 'plugin',
+      bannerTitle: '',
+      bannerButtonLabel: '',
+      detectedEntityName: undefined,
+    },
+  },
+  {
+    name: 'RuleDesignPage',
+    props: {
+      messages: [],
+      isProcessing: false,
+      streamingContent: '',
+      inputMessage: '',
+      conversationId: null,
+      canFinalize: false,
+      isFinalizing: false,
+      initStreamingParser: () => {},
+      showBackendSelector: true,
+      useSmartScroll: true,
+      selectedBackend: null,
+      selectedAccountId: null,
+      selectedModel: null,
+      assistantIconPaths: [],
+      inputPlaceholder: 'x',
+      entityLabel: 'rule',
+      bannerTitle: 'Rule Ready to Create!',
+      bannerButtonLabel: 'Create Rule Now',
+      detectedEntityName: undefined,
+    },
+  },
+  {
+    name: 'WorkflowPlaygroundPage',
+    props: {
+      messages: [],
+      isProcessing: false,
+      streamingContent: '',
+      inputMessage: '',
+      conversationId: null,
+      canFinalize: false,
+      isFinalizing: false,
+      assistantIconPaths: [],
+      inputPlaceholder: 'x',
+      entityLabel: 'Workflow',
+      bannerTitle: '',
+      bannerButtonLabel: '',
+      showBackendSelector: true,
+      selectedBackend: null,
+      selectedAccountId: null,
+      selectedModel: null,
+    },
+  },
+  {
+    name: 'ProjectManagementPage',
+    props: {
+      messages: [],
+      isProcessing: false,
+      streamingContent: '',
+      inputMessage: '',
+      conversationId: null,
+      canFinalize: false,
+      isFinalizing: false,
+      assistantIconPaths: ['M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z'],
+      inputPlaceholder: 'x',
+      entityLabel: 'project',
+      bannerTitle: '',
+      bannerButtonLabel: '',
+      readOnly: false,
+      useSmartScroll: true,
+    },
+  },
+  {
+    name: 'HookDesignPage',
+    props: {
+      messages: [],
+      isProcessing: false,
+      streamingContent: '',
+      inputMessage: '',
+      conversationId: null,
+      canFinalize: false,
+      isFinalizing: false,
+      initStreamingParser: () => {},
+      showBackendSelector: true,
+      useSmartScroll: true,
+      selectedBackend: null,
+      selectedAccountId: null,
+      selectedModel: null,
+      assistantIconPaths: [],
+      inputPlaceholder: 'x',
+      entityLabel: 'hook',
+      bannerTitle: 'Hook Ready to Create!',
+      bannerButtonLabel: 'Create Hook Now',
+      detectedEntityName: undefined,
+    },
+  },
+  {
+    name: 'CommandDesignPage',
+    props: {
+      messages: [],
+      isProcessing: false,
+      streamingContent: '',
+      inputMessage: '',
+      conversationId: null,
+      canFinalize: false,
+      isFinalizing: false,
+      initStreamingParser: () => {},
+      showBackendSelector: true,
+      useSmartScroll: true,
+      selectedBackend: null,
+      selectedAccountId: null,
+      selectedModel: null,
+      assistantIconPaths: [],
+      inputPlaceholder: 'x',
+      entityLabel: 'command',
+      bannerTitle: 'Command Ready to Create!',
+      bannerButtonLabel: 'Create Command Now',
+      detectedEntityName: undefined,
+    },
+  },
+  {
+    name: 'AIBackendsPage',
+    props: {
+      messages: [],
+      isProcessing: false,
+      streamingContent: '',
+      inputMessage: '',
+      conversationId: null,
+      canFinalize: false,
+      isFinalizing: false,
+      assistantIconPaths: [],
+      inputPlaceholder: 'x',
+      entityLabel: 'backend',
+      bannerTitle: '',
+      bannerButtonLabel: '',
+    },
+  },
+  {
+    name: 'SuperAgentPlayground',
+    props: {
+      messages: [],
+      isProcessing: false,
+      streamingContent: '',
+      inputMessage: '',
+      conversationId: null,
+      canFinalize: false,
+      isFinalizing: false,
+      assistantIconPaths: [],
+      inputPlaceholder: 'x',
+      entityLabel: 'super-agent',
+      bannerTitle: '',
+      bannerButtonLabel: '',
+    },
+  },
+  {
+    name: 'SkillCreateWizard',
+    props: {
+      messages: [],
+      isProcessing: false,
+      streamingContent: '',
+      inputMessage: '',
+      conversationId: null,
+      canFinalize: false,
+      isFinalizing: false,
+      assistantIconPaths: [],
+      inputPlaceholder: 'x',
+      entityLabel: 'skill',
+      bannerTitle: '',
+      bannerButtonLabel: '',
+    },
+  },
+  {
+    name: 'AgentCreateWizard',
+    props: {
+      messages: [],
+      isProcessing: false,
+      streamingContent: '',
+      inputMessage: '',
+      conversationId: null,
+      canFinalize: false,
+      isFinalizing: false,
+      assistantIconPaths: [],
+      inputPlaceholder: 'x',
+      entityLabel: 'agent',
+      bannerTitle: '',
+      bannerButtonLabel: '',
+    },
+  },
+]
+
+describe('AiChatPanel — 11 call site smoke', () => {
+  for (const { name, props } of callSitePropSets) {
+    it(`mounts cleanly with ${name} props (no Extraneous attribute warnings)`, () => {
+      const warnings: string[] = []
+      const origWarn = console.warn
+      console.warn = (msg: unknown) => {
+        warnings.push(String(msg))
+      }
+      try {
+        mount(AiChatPanel, { props })
+      } finally {
+        console.warn = origWarn
+      }
+      const extraneous = warnings.filter((w) => w.includes('Extraneous non-props attribute'))
+      expect(extraneous, `${name} prop set leaked: ${extraneous.join(' | ')}`).toEqual([])
+    })
+  }
+})
