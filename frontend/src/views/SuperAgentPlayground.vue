@@ -4,7 +4,7 @@ import { useRouter, useRoute } from 'vue-router';
 import { superAgentApi, superAgentSessionApi, projectInstanceApi } from '../services/api';
 import type { ChatMode, SuperAgent, SuperAgentSession } from '../services/api';
 import EntityLayout from '../layouts/EntityLayout.vue';
-import AiChatPanel from '../components/ai/AiChatPanel.vue';
+import { AiChatPanel } from '@ai-accounts/vue-styled';
 import HistoricalSessionViewer from '../components/monitoring/HistoricalSessionViewer.vue';
 import { useToast } from '../composables/useToast';
 import { handleApiError } from '../services/api/error-handler';

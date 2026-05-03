@@ -126,7 +126,7 @@ import PageHeader from '../components/base/PageHeader.vue';
 import LoadingState from '../components/base/LoadingState.vue';
 import ErrorState from '../components/base/ErrorState.vue';
 import EmptyState from '../components/base/EmptyState.vue';
-import AiChatPanel from '../components/ai/AiChatPanel.vue';
+import { AiChatPanel } from '@ai-accounts/vue-styled';
 import { useToast } from '../composables/useToast';
 
 const router = useRouter();
