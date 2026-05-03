@@ -12,7 +12,7 @@
  */
 import { ref, computed, onMounted } from 'vue'
 import { ChatBubble, ChatControls, FinalizationBanner } from '@ai-accounts/vue-styled'
-import { useAiAccounts } from '@ai-accounts/vue-headless'
+import { useAiAccounts, useSmartScroll } from '@ai-accounts/vue-headless'
 import type { BackendDTO, BackendOption, ChatMode } from '@ai-accounts/ts-core'
 
 interface Message {
@@ -42,6 +42,9 @@ interface Props {
   entityLabel?: string
   detectedEntityName?: string
   configParser?: (content: string) => Record<string, unknown> | null
+  // Scroll + streaming hooks
+  useSmartScroll?: boolean
+  initStreamingParser?: (parser: unknown) => void
   // Kept for API compat with the legacy 837-line consumers, but NOT
   // forwarded to ChatBubble (vue-styled has no icon-paths prop).
   // v0.5.4 wrapper accepts the prop and ignores it; visual parity, not
@@ -67,8 +70,12 @@ const props = withDefaults(defineProps<Props>(), {
   entityLabel: '',
   detectedEntityName: undefined,
   configParser: undefined,
+  useSmartScroll: false,
+  initStreamingParser: undefined,
   assistantIconPaths: () => [],
 })
+
+const scroll = useSmartScroll()
 
 const emit = defineEmits<{
   'update:inputMessage': [value: string]
@@ -126,6 +133,11 @@ async function loadModelsFor(backend: BackendDTO) {
 }
 
 onMounted(async () => {
+  // The legacy 837-line wrapper handed callers a parser hook on mount.
+  // Path Y will design the hook payload properly; for v0.5.4 we invoke
+  // with a placeholder so source-compat callers don't crash.
+  props.initStreamingParser?.({})
+
   if (!props.showBackendSelector) return
   try {
     const { items } = await client.listBackends()
@@ -167,7 +179,10 @@ defineOptions({ name: 'AiChatPanel', inheritAttrs: false })
         @update:selectedModel="(v: string | null) => emit('update:selectedModel', v)"
       />
     </div>
-    <div class="ai-chat-panel__messages">
+    <div
+      class="ai-chat-panel__messages"
+      :ref="useSmartScroll ? (el) => { scroll.containerRef.value = el as HTMLElement | null } : undefined"
+    >
       <slot v-if="!messages || messages.length === 0" name="welcome" />
       <div
         v-for="(msg, i) in messages"

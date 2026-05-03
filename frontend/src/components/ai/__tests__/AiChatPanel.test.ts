@@ -155,6 +155,16 @@ describe('AiChatPanel (translation wrapper)', () => {
     expect(wrapper.find('[data-testid="welcome-content"]').exists()).toBe(false)
   })
 
+  it('attaches useSmartScroll containerRef when useSmartScroll is true (smoke)', () => {
+    expect(() => mount(AiChatPanel, { props: { useSmartScroll: true } })).not.toThrow()
+  })
+
+  it('invokes initStreamingParser on mount if provided', () => {
+    const initStreamingParser = vi.fn()
+    mount(AiChatPanel, { props: { initStreamingParser } })
+    expect(initStreamingParser).toHaveBeenCalledTimes(1)
+  })
+
   it('emits finalize with parsed config when banner fires', async () => {
     const configParser = (s: string) => ({ parsed: s })
     const wrapper = mount(AiChatPanel, {
