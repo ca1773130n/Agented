@@ -29,12 +29,18 @@ config.global.provide = {
 // processGroups / backendResponses / synthesisState / isAllModeActive +
 // the legacy "smart-chat fallback" pass-throughs (density, defaultBackend,
 // defaultModel, placeholder, welcomeTitle, welcomeSubtitle).
-// Same stub registered under both names — `AiChatPanel` for any
-// remaining local import (Agented's restored b2ee00d~1 component) and
-// `AiChatPanelManaged` for path-Y-migrated pages that import from
-// `@ai-accounts/vue-styled`. Once Path Y completes for all 11 callers
-// and the local AiChatPanel.vue is deleted (v0.5.9 cleanup tail), the
-// AiChatPanel stub entry can drop.
+// Stub registered under both upstream component names:
+//   - `AiChatPanel` — upstream's self-managed component (used by
+//     AIBackendsPage + SuperAgentPlayground post-v0.5.9). Drives
+//     state internally via `useSmartChat`; needs the global plugin
+//     context which tests don't install.
+//   - `AiChatPanelManaged` — upstream's caller-managed component
+//     (used by the 9 path-Y-migrated wizard pages).
+//
+// Same stub object for both — its prop list is the union of both
+// upstream surfaces, which is harmless: undeclared props are
+// silently consumed without `Extraneous` warnings, and the wrapper
+// div + slot forwarding work identically.
 const aiChatPanelStub = {
     name: 'AiChatPanel',
     props: [
