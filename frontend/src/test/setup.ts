@@ -23,11 +23,36 @@ config.global.provide = {
 
 // Global stub for AiChatPanel -- the real component requires the aiAccountsPlugin
 // (provided at app level) which isn't installed in test mounts. Stub it with a
-// simple placeholder that preserves the component name for findComponent lookups.
+// placeholder that declares the full v0.5.4 consumer prop surface so unit
+// tests mounting pages with <AiChatPanel> don't emit Vue
+// "Extraneous non-props attribute" warnings. Mirrors the props/emits set
+// the rebuilt translation wrapper accepts.
 config.global.stubs = {
   ...(config.global.stubs || {}),
   AiChatPanel: {
     name: 'AiChatPanel',
+    props: [
+      // Caller-managed state
+      'messages', 'isProcessing', 'streamingContent', 'inputMessage',
+      'conversationId', 'canFinalize', 'isFinalizing',
+      // Backend selector
+      'showBackendSelector', 'selectedBackend', 'selectedAccountId',
+      'selectedModel', 'chatMode',
+      // Display
+      'inputPlaceholder', 'entityLabel', 'bannerTitle', 'bannerButtonLabel',
+      'assistantIconPaths', 'detectedEntityName',
+      // Hooks
+      'initStreamingParser', 'useSmartScroll', 'configParser',
+      // BaseAiChatPanel pass-throughs
+      'density', 'defaultBackend', 'defaultModel', 'placeholder',
+      'welcomeTitle', 'welcomeSubtitle', 'readOnly',
+      'showProcessGroups', 'showActions',
+    ],
+    emits: [
+      'update:inputMessage', 'update:selectedBackend',
+      'update:selectedAccountId', 'update:selectedModel',
+      'update:chatMode', 'send', 'keydown', 'finalize',
+    ],
     // Render all named slots so tests can assert on content passed via
     // #header-extra, #welcome, etc. Default slot last.
     template: `
