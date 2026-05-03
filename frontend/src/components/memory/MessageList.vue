@@ -18,7 +18,7 @@ defineProps<{ messages: MemoryMessage[] }>();
         data-testid="message-row"
       >
         <ChatBubble
-          :role="msg.role"
+          :role="(msg.role as 'user' | 'assistant' | 'system' | 'tool')"
           :content="msg.content"
           :timestamp="msg.created_at"
         />

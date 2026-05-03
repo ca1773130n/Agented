@@ -13,4 +13,18 @@ export const observabilityRoutes: RouteRecordRaw[] = [
     component: () => import('../../views/TraceDetailPage.vue'),
     meta: { title: 'Trace Detail' },
   },
+  {
+    path: '/agents/:id/memory',
+    name: 'agent-memory',
+    component: () => import('../../views/MemoryPage.vue'),
+    meta: { title: 'Agent Memory' },
+    props: true,
+  },
+  {
+    path: '/agents/:id/memory/threads/:thread_id',
+    name: 'agent-memory-thread-detail',
+    component: () => import('../../views/ThreadDetailPage.vue'),
+    meta: { title: 'Memory Thread Detail' },
+    props: true,
+  },
 ];
