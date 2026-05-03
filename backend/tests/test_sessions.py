@@ -49,11 +49,21 @@ class TestGetSessionByToken:
 
 
 class TestRevokeSession:
-    def test_revoke_deletes_session(self, isolated_db):
+    def test_revoke_soft_deletes_session(self, isolated_db):
+        """revoke_session now soft-deletes (sets revoked_at) instead of hard DELETE."""
+        from app.database import get_connection
         uid = create_user("revoke@example.com")
         sess = create_session(uid)
         assert revoke_session(sess["token"]) is True
+        # Token lookup returns None (revoked).
         assert get_session_by_token(sess["token"]) is None
+        # Row still exists with revoked_at set (soft-delete, not hard DELETE).
+        with get_connection() as conn:
+            row = conn.execute(
+                "SELECT revoked_at FROM sessions WHERE id = ?", (sess["id"],)
+            ).fetchone()
+        assert row is not None
+        assert row[0] is not None  # revoked_at populated
 
     def test_revoke_unknown_returns_false(self, isolated_db):
         assert revoke_session("ghost") is False
