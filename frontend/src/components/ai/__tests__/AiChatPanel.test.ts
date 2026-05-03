@@ -16,7 +16,7 @@ vi.mock('@ai-accounts/vue-headless', () => ({
   useSmartScroll: () => ({ containerRef: { value: null } }),
   useAiAccounts: () => ({
     client: {
-      listBackends: vi.fn().mockResolvedValue({ backends: [] }),
+      listBackends: vi.fn().mockResolvedValue({ items: [] }),
       listModels: vi.fn().mockResolvedValue({ items: [] }),
     },
   }),
@@ -81,5 +81,36 @@ describe('AiChatPanel (translation wrapper)', () => {
     const ta = wrapper.find('[data-testid="input"]')
     await ta.trigger('keydown', { key: 'Enter' })
     expect(wrapper.emitted('keydown')).toBeTruthy()
+  })
+
+  it('shows backend selector when showBackendSelector is true', () => {
+    const wrapper = mount(AiChatPanel, { props: { showBackendSelector: true } })
+    expect(wrapper.find('[data-testid="backend-selector"]').exists()).toBe(true)
+  })
+
+  it('hides backend selector by default', () => {
+    const wrapper = mount(AiChatPanel)
+    expect(wrapper.find('[data-testid="backend-selector"]').exists()).toBe(false)
+  })
+
+  it('emits update:selectedBackend / update:selectedAccountId / update:selectedModel when ChatControls fires', async () => {
+    const wrapper = mount(AiChatPanel, {
+      props: {
+        showBackendSelector: true,
+        selectedBackend: 'claude',
+        selectedAccountId: 'acc-1',
+        selectedModel: 'opus-4',
+      },
+    })
+    const { ChatControls } = await import('@ai-accounts/vue-styled')
+    const controls = wrapper.findComponent(ChatControls)
+    expect(controls.exists()).toBe(true)
+    controls.vm.$emit('update:selectedBackend', 'codex')
+    controls.vm.$emit('update:selectedAccount', 'acc-2')
+    controls.vm.$emit('update:selectedModel', 'sonnet-4')
+    await wrapper.vm.$nextTick()
+    expect(wrapper.emitted('update:selectedBackend')!.at(-1)).toEqual(['codex'])
+    expect(wrapper.emitted('update:selectedAccountId')!.at(-1)).toEqual(['acc-2'])
+    expect(wrapper.emitted('update:selectedModel')!.at(-1)).toEqual(['sonnet-4'])
   })
 })

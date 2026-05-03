@@ -10,7 +10,10 @@
  * v0.5.4: rebuilt from a 36-line pass-through to fix the b2ee00d WIP regression
  * that left 11 call sites silently broken.
  */
-import { ChatBubble } from '@ai-accounts/vue-styled'
+import { ref, computed, onMounted } from 'vue'
+import { ChatBubble, ChatControls } from '@ai-accounts/vue-styled'
+import { useAiAccounts } from '@ai-accounts/vue-headless'
+import type { BackendDTO, BackendOption, ChatMode } from '@ai-accounts/ts-core'
 
 interface Message {
   role: 'user' | 'assistant' | 'system' | 'tool'
@@ -26,6 +29,11 @@ interface Props {
   inputMessage?: string
   inputPlaceholder?: string
   isProcessing?: boolean
+  showBackendSelector?: boolean
+  selectedBackend?: string | null
+  selectedAccountId?: string | null
+  selectedModel?: string | null
+  chatMode?: ChatMode
   // Kept for API compat with the legacy 837-line consumers, but NOT
   // forwarded to ChatBubble (vue-styled has no icon-paths prop).
   // v0.5.4 wrapper accepts the prop and ignores it; visual parity, not
@@ -33,26 +41,93 @@ interface Props {
   assistantIconPaths?: string[]
 }
 
-withDefaults(defineProps<Props>(), {
+const props = withDefaults(defineProps<Props>(), {
   messages: () => [],
   streamingContent: '',
   inputMessage: '',
   inputPlaceholder: 'Type a message...',
   isProcessing: false,
+  showBackendSelector: false,
+  selectedBackend: null,
+  selectedAccountId: null,
+  selectedModel: null,
+  chatMode: 'single',
   assistantIconPaths: () => [],
 })
 
 const emit = defineEmits<{
   'update:inputMessage': [value: string]
+  'update:selectedBackend': [value: string | null]
+  'update:selectedAccountId': [value: string | null]
+  'update:selectedModel': [value: string | null]
+  'update:chatMode': [value: ChatMode]
   send: []
   keydown: [event: KeyboardEvent]
 }>()
+
+// Build the BackendOption[] list locally — useSmartChat does NOT expose
+// backendOptions (codex review caught that hallucination). Mirrors the
+// pattern in upstream BaseAiChatPanel.vue: listBackends → group by kind →
+// fetch models lazily per kind.
+const { client } = useAiAccounts()
+const backends = ref<BackendDTO[]>([])
+const modelsByKind = ref<Record<string, string[]>>({})
+const internalChatMode = ref<ChatMode>(props.chatMode)
+
+const backendOptions = computed<BackendOption[]>(() =>
+  Array.from(new Set(backends.value.map((b) => b.kind))).map((kind) => {
+    const forKind = backends.value.filter((b) => b.kind === kind)
+    return {
+      kind,
+      displayName: kind,
+      accounts: forKind.map((b) => ({ id: b.id, label: b.display_name || b.id })),
+      models: modelsByKind.value[kind] ?? [],
+    }
+  }),
+)
+
+async function loadModelsFor(backend: BackendDTO) {
+  if (modelsByKind.value[backend.kind]) return
+  try {
+    const { items } = await client.listModels(backend.id)
+    modelsByKind.value = {
+      ...modelsByKind.value,
+      [backend.kind]: items.map((m) => m.id),
+    }
+  } catch {
+    /* leave models empty; user can retry */
+  }
+}
+
+onMounted(async () => {
+  if (!props.showBackendSelector) return
+  try {
+    const { items } = await client.listBackends()
+    backends.value = items
+    await Promise.all(items.filter((b) => b.status === 'ready').map(loadModelsFor))
+  } catch {
+    backends.value = []
+  }
+})
 
 defineOptions({ name: 'AiChatPanel', inheritAttrs: false })
 </script>
 
 <template>
   <div class="ai-chat-panel">
+    <div v-if="showBackendSelector" data-testid="backend-selector">
+      <ChatControls
+        :chat-mode="internalChatMode"
+        :selected-backend="selectedBackend"
+        :selected-account="selectedAccountId"
+        :selected-model="selectedModel"
+        :backends="backendOptions"
+        @update:chatMode="(v: ChatMode) => { internalChatMode = v; emit('update:chatMode', v) }"
+        @update:selectedBackend="(v: string | null) => emit('update:selectedBackend', v)"
+        @update:selectedAccount="(v: string | null) => emit('update:selectedAccountId', v)"
+        @update:selectedModel="(v: string | null) => emit('update:selectedModel', v)"
+      />
+    </div>
     <div class="ai-chat-panel__messages">
       <div
         v-for="(msg, i) in messages"
