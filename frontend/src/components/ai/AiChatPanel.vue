@@ -12,15 +12,18 @@
  */
 import { ref, computed, onMounted } from 'vue'
 import { ChatBubble, ChatControls, FinalizationBanner } from '@ai-accounts/vue-styled'
-import { useAiAccounts, useSmartScroll } from '@ai-accounts/vue-headless'
+import { useAiAccounts, useSmartScroll as _useSmartScroll } from '@ai-accounts/vue-headless'
 import type { BackendDTO, BackendOption, ChatMode } from '@ai-accounts/ts-core'
 
+// Loose Message shape — accepts both ConversationMessage (from
+// Agented's services/api types) and the older inline shapes used by
+// useConversation / useSketchChat. No index signature so consumer
+// types don't need one.
 interface Message {
   role: 'user' | 'assistant' | 'system' | 'tool'
   content: string
   backend?: string | null
   timestamp?: string | null
-  [key: string]: unknown
 }
 
 interface Props {
@@ -44,7 +47,14 @@ interface Props {
   configParser?: (content: string) => Record<string, unknown> | null
   // Scroll + streaming hooks
   useSmartScroll?: boolean
-  initStreamingParser?: (parser: unknown) => void
+  // Caller-supplied imperative hook. Legacy 837-line wrapper invoked it on
+  // mount with whatever payload the caller's parser-init function expected
+  // (typically an HTMLElement container). v0.5.4 wrapper preserves the
+  // imperative contract but invokes with `undefined` — call sites that
+  // need a typed payload should be migrated in path Y. Type signature is
+  // intentionally `Function` so any caller-defined arity/type matches.
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-function-type
+  initStreamingParser?: Function
   // Pass-through / display props that BaseAiChatPanel used to consume
   density?: 'minimal' | 'detailed'
   defaultBackend?: string
@@ -94,11 +104,15 @@ const props = withDefaults(defineProps<Props>(), {
   assistantIconPaths: () => [],
 })
 
-const scroll = useSmartScroll()
+const scroll = _useSmartScroll()
 
 const emit = defineEmits<{
   'update:inputMessage': [value: string]
-  'update:selectedBackend': [value: string | null]
+  // selectedBackend re-emitted as `string` (not nullable) for source-compat
+  // with legacy 837-line consumers — useConversation.setBackend(s: string)
+  // is non-nullable. ChatControls emits string | null when deselected;
+  // the wrapper coerces null to '' at the boundary.
+  'update:selectedBackend': [value: string]
   'update:selectedAccountId': [value: string | null]
   'update:selectedModel': [value: string | null]
   'update:chatMode': [value: ChatMode]
@@ -154,8 +168,8 @@ async function loadModelsFor(backend: BackendDTO) {
 onMounted(async () => {
   // The legacy 837-line wrapper handed callers a parser hook on mount.
   // Path Y will design the hook payload properly; for v0.5.4 we invoke
-  // with a placeholder so source-compat callers don't crash.
-  props.initStreamingParser?.({})
+  // with no argument so source-compat callers can choose to ignore it.
+  props.initStreamingParser?.()
 
   if (!props.showBackendSelector) return
   try {
@@ -193,7 +207,7 @@ defineOptions({ name: 'AiChatPanel', inheritAttrs: false })
         :selected-model="selectedModel"
         :backends="backendOptions"
         @update:chatMode="(v: ChatMode) => { internalChatMode = v; emit('update:chatMode', v) }"
-        @update:selectedBackend="(v: string | null) => emit('update:selectedBackend', v)"
+        @update:selectedBackend="(v: string | null) => emit('update:selectedBackend', v ?? '')"
         @update:selectedAccount="(v: string | null) => emit('update:selectedAccountId', v)"
         @update:selectedModel="(v: string | null) => emit('update:selectedModel', v)"
       />
@@ -202,10 +216,10 @@ defineOptions({ name: 'AiChatPanel', inheritAttrs: false })
       class="ai-chat-panel__messages"
       :ref="useSmartScroll ? (el) => { scroll.containerRef.value = el as HTMLElement | null } : undefined"
     >
-      <slot v-if="!messages || messages.length === 0" name="welcome" />
+      <slot v-if="messages.length === 0" name="welcome" />
       <div
         v-for="(msg, i) in messages"
-        :key="(msg as { id?: string }).id ?? i"
+        :key="((msg as unknown as { id?: string }).id) ?? i"
         data-testid="bubble-row"
       >
         <ChatBubble

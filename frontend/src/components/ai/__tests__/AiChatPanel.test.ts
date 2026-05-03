@@ -32,8 +32,8 @@ describe('AiChatPanel (translation wrapper)', () => {
 
   it('renders each message as a wrapper-owned bubble row', () => {
     const messages = [
-      { role: 'user', content: 'Hello' },
-      { role: 'assistant', content: 'Hi there' },
+      { role: 'user' as const, content: 'Hello' },
+      { role: 'assistant' as const, content: 'Hi there' },
     ]
     const wrapper = mount(AiChatPanel, { props: { messages } })
     const items = wrapper.findAll('[data-testid="bubble-row"]')
@@ -43,7 +43,7 @@ describe('AiChatPanel (translation wrapper)', () => {
   it('renders streamingContent as an in-flight bubble after the messages', () => {
     const wrapper = mount(AiChatPanel, {
       props: {
-        messages: [{ role: 'user', content: 'Hi' }],
+        messages: [{ role: 'user' as const, content: 'Hi' }],
         streamingContent: 'partial response...',
       },
     })
@@ -54,7 +54,7 @@ describe('AiChatPanel (translation wrapper)', () => {
 
   it('does not render a streaming bubble when streamingContent is empty', () => {
     const wrapper = mount(AiChatPanel, {
-      props: { messages: [{ role: 'user', content: 'Hi' }], streamingContent: '' },
+      props: { messages: [{ role: 'user' as const, content: 'Hi' }], streamingContent: '' },
     })
     expect(wrapper.find('[data-testid="streaming-bubble"]').exists()).toBe(false)
   })
@@ -149,7 +149,7 @@ describe('AiChatPanel (translation wrapper)', () => {
 
   it('does not show welcome slot when messages exist', () => {
     const wrapper = mount(AiChatPanel, {
-      props: { messages: [{ role: 'user', content: 'x' }] },
+      props: { messages: [{ role: 'user' as const, content: 'x' }] },
       slots: { welcome: '<div data-testid="welcome-content">Hi</div>' },
     })
     expect(wrapper.find('[data-testid="welcome-content"]').exists()).toBe(false)
@@ -176,7 +176,7 @@ describe('AiChatPanel (translation wrapper)', () => {
     const wrapper = mount(AiChatPanel, {
       props: {
         density: 'minimal',
-        messages: [{ role: 'assistant', content: 'with tool call' }],
+        messages: [{ role: 'assistant' as const, content: 'with tool call' }],
       },
     })
     expect(wrapper.findComponent(ProcessGroup).exists()).toBe(false)
@@ -192,8 +192,8 @@ describe('AiChatPanel (translation wrapper)', () => {
         entityLabel: 'plugin',
         detectedEntityName: 'foo',
         messages: [
-          { role: 'user', content: 'q' },
-          { role: 'assistant', content: 'parseable-config-content' },
+          { role: 'user' as const, content: 'q' },
+          { role: 'assistant' as const, content: 'parseable-config-content' },
         ],
         configParser,
       },
