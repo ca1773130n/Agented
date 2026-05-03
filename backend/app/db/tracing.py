@@ -123,9 +123,17 @@ def end_trace(
         row = cursor.fetchone()
         duration_ms = None
         if row:
-            started = datetime.fromisoformat(row["started_at"])
-            finished = datetime.fromisoformat(now)
-            duration_ms = int((finished - started).total_seconds() * 1000)
+            try:
+                started = datetime.fromisoformat(row["started_at"])
+                finished = datetime.fromisoformat(now)
+                duration_ms = int((finished - started).total_seconds() * 1000)
+            except (TypeError, ValueError):
+                logger.warning(
+                    "end_trace: could not parse started_at for trace %s; "
+                    "duration_ms will be NULL. raw=%r",
+                    trace_id,
+                    row["started_at"],
+                )
         conn.execute(
             """UPDATE traces SET status = ?, output = ?, error_message = ?,
                    duration_ms = ?, finished_at = ?
@@ -215,9 +223,17 @@ def end_span(
         duration_ms = None
         merged_attrs = None
         if row:
-            started = datetime.fromisoformat(row["started_at"])
-            finished = datetime.fromisoformat(now)
-            duration_ms = int((finished - started).total_seconds() * 1000)
+            try:
+                started = datetime.fromisoformat(row["started_at"])
+                finished = datetime.fromisoformat(now)
+                duration_ms = int((finished - started).total_seconds() * 1000)
+            except (TypeError, ValueError):
+                logger.warning(
+                    "end_span: could not parse started_at for span %s; "
+                    "duration_ms will be NULL. raw=%r",
+                    span_id,
+                    row["started_at"],
+                )
             # Merge attributes
             if attributes:
                 existing = {}

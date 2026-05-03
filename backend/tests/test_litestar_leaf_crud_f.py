@@ -62,6 +62,78 @@ def test_get_memory_config_404(isolated_db):
     assert resp.status_code == 404
 
 
+def _make_agent_with_corrupt_memory_config(raw: str = "{not valid"):
+    """Helper for v0.5.3 audit #6/#7 — insert an agent whose
+    memory_config column holds a malformed JSON blob."""
+    from app.database import get_connection
+    from app.db.agents import create_agent
+
+    agent_id = create_agent(name="MemCfgAgent", description="x")
+    assert agent_id is not None
+    with get_connection() as conn:
+        conn.execute(
+            "UPDATE agents SET memory_config = ? WHERE id = ?", (raw, agent_id)
+        )
+        conn.commit()
+    return agent_id
+
+
+def test_get_memory_config_logs_and_returns_defaults_on_corrupt(isolated_db, monkeypatch):
+    """v0.5.3 audit #6: silent corrupt-JSON parse used to return the
+    default config without surfacing the corruption. Now logs a WARNING
+    and still returns defaults so the API contract is preserved.
+
+    The Litestar test client's logger plumbing doesn't propagate to
+    pytest's caplog reliably, so spy on the route module's logger
+    directly via monkeypatch.
+    """
+    from app_litestar.routes import leaf_crud_f
+
+    warnings: list[tuple[str, tuple]] = []
+    monkeypatch.setattr(
+        leaf_crud_f.logger,
+        "warning",
+        lambda fmt, *args, **kwargs: warnings.append((fmt, args)),
+    )
+
+    agent_id = _make_agent_with_corrupt_memory_config()
+    with _client() as c:
+        resp = c.get(f"/admin/agents/{agent_id}/memory/config")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["enabled"] is True  # default config restored
+    assert any(
+        "corrupt memory_config JSON" in fmt and agent_id in args for fmt, args in warnings
+    ), f"expected warning, got {warnings}"
+
+
+def test_update_memory_config_logs_on_corrupt_existing(isolated_db, monkeypatch):
+    """v0.5.3 audit #7: silent corrupt-JSON parse during update used to
+    drop unrelated keys (existing = {} after the silent except). Now
+    logs a WARNING. Behavior — partial update only setting body keys —
+    is unchanged because preserving a corrupt blob is not safe."""
+    from app_litestar.routes import leaf_crud_f
+
+    warnings: list[tuple[str, tuple]] = []
+    monkeypatch.setattr(
+        leaf_crud_f.logger,
+        "warning",
+        lambda fmt, *args, **kwargs: warnings.append((fmt, args)),
+    )
+
+    agent_id = _make_agent_with_corrupt_memory_config()
+    with _client() as c:
+        resp = c.put(
+            f"/admin/agents/{agent_id}/memory/config",
+            json={"enabled": False},
+        )
+    assert resp.status_code == 200
+    assert resp.json()["enabled"] is False
+    assert any(
+        "corrupt memory_config JSON" in fmt and agent_id in args for fmt, args in warnings
+    ), f"expected warning, got {warnings}"
+
+
 # Bulk
 
 

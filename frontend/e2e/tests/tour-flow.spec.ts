@@ -192,4 +192,56 @@ test.describe('Tour flow — complete navigation', () => {
     });
     expect(inChrome).toBe(false);
   });
+
+  // OB-44 + OB-47: a modal that opens during a tour step (the
+  // AccountWizard during the backends step) is still interactive,
+  // and the tour overlay reduces its dimming so the modal isn't
+  // visually fighting the spotlight.
+  //
+  // Strategy: the unit-level test in TourOverlay.test.ts already
+  // covers prop flow (`isModalOpen` → `.modal-open` + spotlight
+  // `:reduced`). E2E adds the integration: the click on the
+  // highlighted Add Account button actually mounts the wizard and
+  // the wizard receives focus / pointer events.
+  test('modal opens and is interactive during backends step', async ({ tourPage, page }) => {
+    await tourPage.startTour();
+    await tourPage.expectVisible();
+
+    // Advance past Workspace (step 2) to backends.claude (step 3).
+    await tourPage.clickNext();
+    await tourPage.expectStepText('STEP 3 OF 8');
+
+    // The spotlight target on this step is `[data-tour="add-account-btn"]`.
+    const addAccountBtn = page.locator('[data-tour="add-account-btn"]').first();
+    await expect(addAccountBtn).toBeVisible();
+    await addAccountBtn.click();
+
+    // AccountWizard mounts with a stable `data-tour="account-wizard"`
+    // anchor on its container.
+    const wizard = page.locator('[data-tour="account-wizard"]');
+    await expect(wizard).toBeVisible();
+
+    // The wizard's close button must be clickable — i.e., the tour
+    // overlay isn't intercepting pointer events. We don't actually
+    // close it (some tour state machines auto-cancel on close); we
+    // just verify hover-ability and pointer-events.
+    const wizardClose = wizard.locator('.wizard-close');
+    await expect(wizardClose).toBeVisible();
+    const pointerEvents = await wizardClose.evaluate(
+      (el) => getComputedStyle(el).pointerEvents,
+    );
+    expect(pointerEvents).not.toBe('none');
+
+    // App.vue's `provide('setTourModalOpen', ...)` should have flipped
+    // — verify TourSpotlight entered reduced mode by reading its
+    // `tour-spotlight--reduced` class. Either that OR the dim
+    // fallback's `.modal-open` class (when no spotlight target) is
+    // acceptable evidence that `modalOpenDuringTour` propagated.
+    const overlayInModalMode = await page.evaluate(() => {
+      const reducedSpot = document.querySelector('.tour-spotlight--reduced');
+      const modalOpenDim = document.querySelector('.tour-dim-fallback.modal-open');
+      return Boolean(reducedSpot) || Boolean(modalOpenDim);
+    });
+    expect(overlayInModalMode).toBe(true);
+  });
 });

@@ -267,3 +267,51 @@ class TestCorruptAttributes:
             "update_span: corrupt attributes JSON" in r.message and span["id"] in r.message
             for r in caplog.records
         )
+
+
+class TestCorruptStartedAt:
+    """v0.5.3: end_trace and end_span used to call datetime.fromisoformat
+    on raw column values — a corrupt or NULL `started_at` raised
+    ValueError/TypeError and bubbled up as a 500. Audit #9 + #10. The fix
+    catches the parse failure, logs a warning with the entity id, and
+    returns the row with `duration_ms = NULL` so the API contract holds.
+    """
+
+    def _corrupt_started_at(self, table: str, row_id: str, value: str = "not-a-date") -> None:
+        from app.database import get_connection
+
+        with get_connection() as conn:
+            conn.execute(
+                f"UPDATE {table} SET started_at = ? WHERE id = ?",  # noqa: S608 — table is a literal
+                (value, row_id),
+            )
+            conn.commit()
+
+    def test_end_trace_logs_and_nulls_duration_on_corrupt_started_at(
+        self, isolated_db, caplog
+    ):
+        trace = create_trace("T", "agent", "agent-01")
+        self._corrupt_started_at("traces", trace["id"])
+        with caplog.at_level("WARNING", logger="app.db.tracing"):
+            ended = end_trace(trace["id"], "completed")
+        assert ended is not None
+        assert ended["duration_ms"] is None
+        assert any(
+            "end_trace: could not parse started_at" in r.message and trace["id"] in r.message
+            for r in caplog.records
+        )
+
+    def test_end_span_logs_and_nulls_duration_on_corrupt_started_at(
+        self, isolated_db, caplog
+    ):
+        trace = create_trace("T", "agent", "agent-01")
+        span = create_span(trace["id"], "S", "TOOL_CALL")
+        self._corrupt_started_at("trace_spans", span["id"])
+        with caplog.at_level("WARNING", logger="app.db.tracing"):
+            ended = end_span(span["id"], status="completed")
+        assert ended is not None
+        assert ended["duration_ms"] is None
+        assert any(
+            "end_span: could not parse started_at" in r.message and span["id"] in r.message
+            for r in caplog.records
+        )
