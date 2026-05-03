@@ -133,3 +133,34 @@ class TestStreamTrace:
                         break
         assert b"span_started" in body
         assert s1["id"].encode() in body
+
+    def test_stream_trace_unknown_trace_emits_error(self, isolated_db):
+        with self._client_with_router() as c:
+            with c.stream("GET", "/admin/traces/missing/stream") as resp:
+                assert resp.status_code == 200
+                body = b""
+                for chunk in resp.iter_bytes():
+                    body += chunk
+                    if b"error" in body and b"not_found" in body:
+                        break
+                    if len(body) > 4096:
+                        break
+        assert b"event: error" in body
+        assert b"not_found" in body
+
+    def test_stream_trace_completed_emits_trace_ended_and_closes(self, isolated_db):
+        from app.db.tracing import create_trace, end_trace
+
+        trace = create_trace("T", "agent", "agent-01")
+        end_trace(trace["id"], "completed")  # already terminal
+        with self._client_with_router() as c:
+            with c.stream("GET", f"/admin/traces/{trace['id']}/stream") as resp:
+                assert resp.status_code == 200
+                body = b""
+                for chunk in resp.iter_bytes():
+                    body += chunk
+                    if b"trace_ended" in body:
+                        break
+                    if len(body) > 16_384:
+                        break
+        assert b"event: trace_ended" in body
