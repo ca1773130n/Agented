@@ -2,7 +2,7 @@
  * Tracing API module.
  * Provides structured trace and span operations for observability.
  */
-import { apiFetch } from './client';
+import { apiFetch, createAuthenticatedEventSource, type AuthenticatedEventSource } from './client';
 
 // --- Types ---
 
@@ -25,18 +25,19 @@ export type EntityType = 'agent' | 'bot' | 'trigger' | 'team';
 export interface Trace {
   id: string;
   name: string;
-  entity_type: EntityType;
+  entity_type: EntityType | string;
   entity_id: string;
-  execution_id: string | null;
-  status: TraceStatus;
-  input: Record<string, unknown> | null;
-  output: Record<string, unknown> | null;
-  metadata: Record<string, unknown> | null;
-  error_message: string | null;
+  execution_id?: string | null;
+  status: TraceStatus | string;
+  input?: Record<string, unknown> | null;
+  output?: Record<string, unknown> | null;
+  metadata?: Record<string, unknown> | null;
+  attributes?: Record<string, unknown> | null;
+  error_message?: string | null;
   duration_ms: number | null;
   started_at: string;
   finished_at: string | null;
-  created_at: string;
+  created_at?: string;
   spans?: TraceSpan[];
   span_count?: number;
 }
@@ -46,17 +47,35 @@ export interface TraceSpan {
   trace_id: string;
   parent_span_id: string | null;
   name: string;
-  span_type: SpanType;
-  status: TraceStatus;
-  input: Record<string, unknown> | null;
-  output: Record<string, unknown> | null;
-  attributes: Record<string, unknown> | null;
-  metadata: Record<string, unknown> | null;
-  error_message: string | null;
+  span_type: SpanType | string;
+  status: TraceStatus | string;
+  input?: Record<string, unknown> | null;
+  output?: Record<string, unknown> | null;
+  attributes?: Record<string, unknown> | null;
+  metadata?: Record<string, unknown> | null;
+  error_message?: string | null;
   duration_ms: number | null;
   started_at: string;
   finished_at: string | null;
   children?: TraceSpan[];
+}
+
+export interface TraceWithSpans {
+  trace: Trace;
+  spans: TraceSpan[];
+}
+
+export interface ListTracesParams {
+  entityType?: string;
+  entityId?: string;
+  status?: string;
+  limit?: number;
+  offset?: number;
+}
+
+export interface ListTracesResponse {
+  traces: Trace[];
+  total: number;
 }
 
 export interface TraceStats {
@@ -125,7 +144,40 @@ function toQueryString(params?: Record<string, unknown>): string {
 // --- API ---
 
 export const tracingApi = {
-  // Trace operations
+  // v0.5.10: observability UI surface (list / get / stats / stream).
+  async list(params: ListTracesParams = {}): Promise<ListTracesResponse> {
+    const qs = new URLSearchParams();
+    if (params.entityType) qs.set('entity_type', params.entityType);
+    if (params.entityId) qs.set('entity_id', params.entityId);
+    if (params.status) qs.set('status', params.status);
+    qs.set('limit', String(params.limit ?? 100));
+    qs.set('offset', String(params.offset ?? 0));
+    return apiFetch<ListTracesResponse>(`/admin/traces/?${qs.toString()}`);
+  },
+
+  async stats(params: { entityType?: string; entityId?: string } = {}): Promise<TraceStats> {
+    const qs = new URLSearchParams();
+    if (params.entityType) qs.set('entity_type', params.entityType);
+    if (params.entityId) qs.set('entity_id', params.entityId);
+    return apiFetch<TraceStats>(`/admin/traces/stats?${qs.toString()}`);
+  },
+
+  async get(traceId: string): Promise<TraceWithSpans> {
+    return apiFetch<TraceWithSpans>(`/admin/traces/${encodeURIComponent(traceId)}`);
+  },
+
+  /**
+   * Open an authenticated EventSource against the SSE stream for a
+   * trace. Caller is responsible for adding event listeners and calling
+   * .close().
+   */
+  stream(traceId: string): AuthenticatedEventSource {
+    return createAuthenticatedEventSource(
+      `/admin/traces/${encodeURIComponent(traceId)}/stream`,
+    );
+  },
+
+  // Legacy / wave-60 methods (kept for backward compat).
   listTraces: (params?: { entity_type?: string; entity_id?: string; status?: string; limit?: number; offset?: number }) =>
     apiFetch<TraceListResponse>(`/admin/traces${toQueryString(params)}`),
 
