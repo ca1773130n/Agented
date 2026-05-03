@@ -3,7 +3,7 @@ import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { pluginConversationApi } from '../services/api';
 import { useConversation, createConfigParser } from '../composables/useConversation';
-import AiChatPanel from '../components/ai/AiChatPanel.vue';
+import { AiChatPanelManaged as AiChatPanel } from '@ai-accounts/vue-styled';
 import ConfigPreviewSidebar from '../components/plugins/ConfigPreviewSidebar.vue';
 import PageLayout from '../components/base/PageLayout.vue';
 import { useToast } from '../composables/useToast';
