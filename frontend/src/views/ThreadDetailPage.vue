@@ -1,0 +1,98 @@
+<script setup lang="ts">
+import { ref, computed, onMounted, watch } from 'vue';
+import { useRoute } from 'vue-router';
+import {
+  agentMemoryApi,
+  type MemoryThread,
+  type MemoryMessage,
+} from '../services/api/agentMemory';
+import { useFocusRefresh } from '../composables/useFocusRefresh';
+import MessageList from '../components/memory/MessageList.vue';
+
+const route = useRoute();
+const agentId = computed(() => route.params.id as string);
+const threadId = computed(() => route.params.thread_id as string);
+
+const thread = ref<MemoryThread | null>(null);
+const messages = ref<MemoryMessage[]>([]);
+const loading = ref(false);
+const error = ref<string | null>(null);
+
+async function load() {
+  loading.value = true;
+  error.value = null;
+  try {
+    const [t, m] = await Promise.all([
+      agentMemoryApi.getThread(agentId.value, threadId.value),
+      agentMemoryApi.getMessages(agentId.value, threadId.value),
+    ]);
+    thread.value = t;
+    messages.value = m.messages;
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : 'Failed to load thread';
+  } finally {
+    loading.value = false;
+  }
+}
+
+async function refreshMessages() {
+  if (!threadId.value) return;
+  try {
+    const m = await agentMemoryApi.getMessages(agentId.value, threadId.value);
+    messages.value = m.messages;
+  } catch {
+    // silent — keep existing messages on transient refresh failure
+  }
+}
+
+onMounted(() => { void load(); });
+watch([agentId, threadId], () => { void load(); });
+
+useFocusRefresh(refreshMessages);
+</script>
+
+<template>
+  <div class="thread-detail-page">
+    <RouterLink
+      :to="{ name: 'agent-memory', params: { id: agentId } }"
+      class="back-link"
+    >
+      ← Back to Memory
+    </RouterLink>
+
+    <div v-if="loading" class="state state-loading" data-testid="thread-detail-loading">
+      Loading thread…
+    </div>
+    <div
+      v-else-if="error"
+      class="state state-error"
+      data-testid="thread-detail-error"
+    >
+      {{ error }}
+      <button @click="load" class="retry-btn">Retry</button>
+    </div>
+    <template v-else-if="thread">
+      <header class="thread-header">
+        <h1>{{ thread.title || '(untitled)' }}</h1>
+        <div class="thread-meta">
+          <span>{{ thread.resource_type }}:{{ thread.resource_id }}</span>
+          <span>Created {{ thread.created_at }}</span>
+          <span>{{ messages.length }} messages</span>
+        </div>
+      </header>
+      <MessageList :messages="messages" />
+    </template>
+  </div>
+</template>
+
+<style scoped>
+.thread-detail-page { padding: 24px; max-width: 900px; margin: 0 auto; }
+.back-link { display: inline-block; margin-bottom: 16px; color: var(--accent-cyan); text-decoration: none; font-size: 13px; }
+.back-link:hover { text-decoration: underline; }
+.thread-header { margin-bottom: 24px; padding-bottom: 16px; border-bottom: 1px solid var(--border-subtle); }
+.thread-header h1 { margin: 0 0 8px; }
+.thread-meta { display: flex; gap: 16px; color: var(--text-tertiary); font-size: 13px; }
+.state { padding: 48px; text-align: center; color: var(--text-tertiary); font-style: italic; }
+.state-error { color: var(--accent-red); }
+.retry-btn { margin-left: 8px; padding: 4px 12px; background: var(--bg-tertiary); border: 1px solid var(--border-subtle); border-radius: 4px; color: var(--text-primary); cursor: pointer; }
+</style>
