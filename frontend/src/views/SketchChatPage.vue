@@ -2,7 +2,7 @@
 import { ref, computed, onMounted, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { useSketchChat } from '../composables/useSketchChat';
-import AiChatPanel from '../components/ai/AiChatPanel.vue';
+import { AiChatPanelManaged as AiChatPanel } from '@ai-accounts/vue-styled';
 import SketchClassification from '../components/sketches/SketchClassification.vue';
 import SketchRouting from '../components/sketches/SketchRouting.vue';
 import SketchStatusTracker from '../components/sketches/SketchStatusTracker.vue';

@@ -3,7 +3,7 @@ import { onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { agentConversationApi } from '../services/api';
 import { useConversation, createConfigParser } from '../composables/useConversation';
-import AiChatPanel from '../components/ai/AiChatPanel.vue';
+import { AiChatPanelManaged as AiChatPanel } from '@ai-accounts/vue-styled';
 import { useToast } from '../composables/useToast';
 import { useWebMcpTool } from '../composables/useWebMcpTool';
 

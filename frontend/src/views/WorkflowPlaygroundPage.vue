@@ -3,7 +3,7 @@ import { ref, nextTick, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router';
 import type { ConversationMessage, AuthenticatedEventSource } from '../services/api';
 import { workflowApi, superAgentApi, superAgentSessionApi } from '../services/api';
-import AiChatPanel from '../components/ai/AiChatPanel.vue';
+import { AiChatPanelManaged as AiChatPanel } from '@ai-accounts/vue-styled';
 import WorkflowCanvas from '../components/workflow/WorkflowCanvas.vue';
 import { useToast } from '../composables/useToast';
 import { useWebMcpTool } from '../composables/useWebMcpTool';
