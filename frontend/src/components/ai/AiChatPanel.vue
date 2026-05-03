@@ -1,43 +1,18 @@
 <script setup lang="ts">
 /**
- * Agented's AiChatPanel -- thin wrapper around @ai-accounts/vue-styled AiChatPanel.
- * Preserves the import path for existing views during migration.
+ * Agented translation wrapper around @ai-accounts/vue-styled subcomponents.
+ *
+ * Accepts the legacy 837-line consumer API (caller-managed messages /
+ * streaming / input / backend selector) and renders via published vue-styled
+ * subcomponents. useSmartChat is consulted for chatMode + resetSession only;
+ * messages, streaming, and input are caller-owned.
+ *
+ * v0.5.4: rebuilt from a 36-line pass-through to fix the b2ee00d WIP regression
+ * that left 11 call sites silently broken.
  */
-import { AiChatPanel as BaseAiChatPanel } from '@ai-accounts/vue-styled'
-
-interface Props {
-  density?: 'minimal' | 'detailed'
-  defaultBackend?: string
-  defaultModel?: string
-  placeholder?: string
-  welcomeTitle?: string
-  welcomeSubtitle?: string
-  readOnly?: boolean
-  entityLabel?: string
-  bannerTitle?: string
-  bannerButtonLabel?: string
-  showProcessGroups?: boolean
-  showActions?: boolean
-  configParser?: (content: string) => Record<string, unknown> | null
-}
-
-withDefaults(defineProps<Props>(), {
-  density: 'detailed',
-  placeholder: 'Type a message...',
-})
-
-const emit = defineEmits<{
-  finalize: [config: Record<string, unknown> | null]
-}>()
+defineOptions({ name: 'AiChatPanel', inheritAttrs: false })
 </script>
 
 <template>
-  <BaseAiChatPanel
-    v-bind="$props"
-    @finalize="emit('finalize', $event)"
-  >
-    <template v-for="(_, name) in $slots" #[name]="slotData">
-      <slot :name="name" v-bind="slotData ?? {}" />
-    </template>
-  </BaseAiChatPanel>
+  <div class="ai-chat-panel" />
 </template>
