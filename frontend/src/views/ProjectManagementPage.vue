@@ -10,7 +10,7 @@ import EntityLayout from '../layouts/EntityLayout.vue';
 import MilestoneOverview from '../components/grd/MilestoneOverview.vue';
 import KanbanBoard from '../components/grd/KanbanBoard.vue';
 import ProjectSessionPanel from '../components/sessions/ProjectSessionPanel.vue';
-import AiChatPanel from '../components/ai/AiChatPanel.vue';
+import { AiChatPanelManaged as AiChatPanel } from '@ai-accounts/vue-styled';
 
 const props = defineProps<{
   projectId?: string;

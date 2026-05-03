@@ -29,9 +29,13 @@ config.global.provide = {
 // processGroups / backendResponses / synthesisState / isAllModeActive +
 // the legacy "smart-chat fallback" pass-throughs (density, defaultBackend,
 // defaultModel, placeholder, welcomeTitle, welcomeSubtitle).
-config.global.stubs = {
-  ...(config.global.stubs || {}),
-  AiChatPanel: {
+// Same stub registered under both names — `AiChatPanel` for any
+// remaining local import (Agented's restored b2ee00d~1 component) and
+// `AiChatPanelManaged` for path-Y-migrated pages that import from
+// `@ai-accounts/vue-styled`. Once Path Y completes for all 11 callers
+// and the local AiChatPanel.vue is deleted (v0.5.9 cleanup tail), the
+// AiChatPanel stub entry can drop.
+const aiChatPanelStub = {
     name: 'AiChatPanel',
     props: [
       // Caller-managed state
@@ -67,7 +71,12 @@ config.global.stubs = {
         <slot />
       </div>
     `,
-  },
+}
+
+config.global.stubs = {
+  ...(config.global.stubs || {}),
+  AiChatPanel: aiChatPanelStub,
+  AiChatPanelManaged: aiChatPanelStub,
 }
 
 // Reset mocks before each test

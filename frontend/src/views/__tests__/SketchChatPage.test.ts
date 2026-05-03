@@ -77,8 +77,12 @@ describe('SketchChatPage', () => {
     const wrapper = mountPage()
     await flushPromises()
 
-    const chatPanel = wrapper.findComponent({ name: 'AiChatPanel' })
-    expect(chatPanel.exists()).toBe(true)
+    // After the v0.5.7/v0.5.8 path-Y migration the component is imported
+    // upstream as `AiChatPanelManaged` (aliased to `AiChatPanel` for SFC
+    // template compat). The global stub renders a `.stub-ai-chat-panel`
+    // wrapper div for both names; use that selector instead of a brittle
+    // findComponent({ name }) lookup.
+    expect(wrapper.find('.stub-ai-chat-panel').exists()).toBe(true)
   })
 })
 
