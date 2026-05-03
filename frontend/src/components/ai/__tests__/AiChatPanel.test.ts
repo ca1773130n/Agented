@@ -132,6 +132,29 @@ describe('AiChatPanel (translation wrapper)', () => {
     expect(wrapper.find('[data-testid="finalize-banner"]').exists()).toBe(false)
   })
 
+  it('forwards header-extra slot', () => {
+    const wrapper = mount(AiChatPanel, {
+      slots: { 'header-extra': '<div data-testid="header-extra-content">CUSTOM</div>' },
+    })
+    expect(wrapper.find('[data-testid="header-extra-content"]').exists()).toBe(true)
+  })
+
+  it('forwards welcome slot when no messages', () => {
+    const wrapper = mount(AiChatPanel, {
+      props: { messages: [] },
+      slots: { welcome: '<div data-testid="welcome-content">Hi there</div>' },
+    })
+    expect(wrapper.find('[data-testid="welcome-content"]').exists()).toBe(true)
+  })
+
+  it('does not show welcome slot when messages exist', () => {
+    const wrapper = mount(AiChatPanel, {
+      props: { messages: [{ role: 'user', content: 'x' }] },
+      slots: { welcome: '<div data-testid="welcome-content">Hi</div>' },
+    })
+    expect(wrapper.find('[data-testid="welcome-content"]').exists()).toBe(false)
+  })
+
   it('emits finalize with parsed config when banner fires', async () => {
     const configParser = (s: string) => ({ parsed: s })
     const wrapper = mount(AiChatPanel, {

@@ -141,6 +141,9 @@ defineOptions({ name: 'AiChatPanel', inheritAttrs: false })
 
 <template>
   <div class="ai-chat-panel">
+    <div class="ai-chat-panel__header">
+      <slot name="header-extra" />
+    </div>
     <div v-if="canFinalize" data-testid="finalize-banner">
       <FinalizationBanner
         :title="bannerTitle"
@@ -165,6 +168,7 @@ defineOptions({ name: 'AiChatPanel', inheritAttrs: false })
       />
     </div>
     <div class="ai-chat-panel__messages">
+      <slot v-if="!messages || messages.length === 0" name="welcome" />
       <div
         v-for="(msg, i) in messages"
         :key="(msg as { id?: string }).id ?? i"
