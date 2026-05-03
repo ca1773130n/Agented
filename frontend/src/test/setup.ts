@@ -21,12 +21,14 @@ config.global.provide = {
   refreshTriggers: mockRefreshTriggers
 }
 
-// Global stub for AiChatPanel -- the real component requires the aiAccountsPlugin
-// (provided at app level) which isn't installed in test mounts. Stub it with a
-// placeholder that declares the full v0.5.4 consumer prop surface so unit
-// tests mounting pages with <AiChatPanel> don't emit Vue
-// "Extraneous non-props attribute" warnings. Mirrors the props/emits set
-// the rebuilt translation wrapper accepts.
+// Global stub for AiChatPanel — the restored 808-line component is heavy
+// and depends on subcomponents that themselves require @ai-accounts plugin
+// state. Stub it with a placeholder declaring the restored prop surface so
+// unit tests mounting consumer pages don't emit Vue "Extraneous non-props
+// attribute" warnings. v0.5.5 surface is a superset of v0.5.4 — adds
+// processGroups / backendResponses / synthesisState / isAllModeActive +
+// the legacy "smart-chat fallback" pass-throughs (density, defaultBackend,
+// defaultModel, placeholder, welcomeTitle, welcomeSubtitle).
 config.global.stubs = {
   ...(config.global.stubs || {}),
   AiChatPanel: {
@@ -43,7 +45,9 @@ config.global.stubs = {
       'assistantIconPaths', 'detectedEntityName',
       // Hooks
       'initStreamingParser', 'useSmartScroll', 'configParser',
-      // BaseAiChatPanel pass-throughs
+      // Restored b2ee00d~1 — All/Compound mode state
+      'processGroups', 'backendResponses', 'synthesisState', 'isAllModeActive',
+      // Legacy "smart-chat fallback" pass-throughs (AIBackendsPage, SuperAgentPlayground)
       'density', 'defaultBackend', 'defaultModel', 'placeholder',
       'welcomeTitle', 'welcomeSubtitle', 'readOnly',
       'showProcessGroups', 'showActions',
