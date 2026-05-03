@@ -1,4 +1,4 @@
-import { ref, watch, onUnmounted, type Ref, type Readonly } from 'vue';
+import { ref, watch, onUnmounted, type Ref } from 'vue';
 import { tracingApi, type TraceSpan, type Trace } from '../services/api/tracing';
 
 export type TraceStreamEvent =

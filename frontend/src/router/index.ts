@@ -12,6 +12,7 @@ import { superAgentRoutes } from './routes/superAgents';
 import { triggerRoutes } from './routes/triggers';
 import { settingsRoutes } from './routes/settings';
 import { miscRoutes } from './routes/misc';
+import { observabilityRoutes } from './routes/observability';
 import { registerGuards } from './guards';
 
 // Extend RouteMeta with Agented-specific fields
@@ -42,6 +43,7 @@ export const router = createRouter({
     ...triggerRoutes,
     ...settingsRoutes,
     ...miscRoutes,
+    ...observabilityRoutes,
     // Catch-all 404 route (must be last)
     {
       path: '/:pathMatch(.*)*',
