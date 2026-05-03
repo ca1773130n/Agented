@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import asyncio
+import json
 from typing import Any, Optional
 
 from litestar import Router, delete, get, post, put
 from litestar.exceptions import HTTPException, NotFoundException
+from litestar.response import Stream
 
 from app.db.owned_entities import get_for_user
 from app.db.tracing import (
@@ -170,6 +173,55 @@ def get_trace_detail(trace_id: str) -> dict[str, Any]:
     return trace
 
 
+@get("/{trace_id:str}/stream", media_type="text/event-stream", sync_to_thread=False)
+async def stream_trace(trace_id: str) -> Stream:
+    """v0.5.10: SSE stream of live trace events.
+
+    Polls the DB every 1s for span and trace state changes, emits
+    diffs as SSE frames:
+      - span_started: data is the full span dict
+      - span_ended: data is the full span dict (status changed)
+      - trace_ended: data is the trace dict; closes the stream
+
+    Closes after the trace reaches 'completed' / 'error' status, or
+    after a 10-min hard timeout, or when the client disconnects.
+
+    The polling-loop variant is intentional for v0.5.10: keeps the
+    write path (tracing.py end_span/update_span/end_trace) untouched.
+    Migrate to a process-local pub/sub bus once a second consumer of
+    the event stream appears.
+    """
+
+    async def event_generator():
+        seen_span_ids: set[str] = set()
+        span_status: dict[str, str] = {}
+        deadline = asyncio.get_event_loop().time() + 600.0  # 10 min
+        while True:
+            trace = get_trace(trace_id)
+            if trace is None:
+                yield f'event: error\ndata: {json.dumps({"reason": "not_found"})}\n\n'
+                return
+            spans = list_spans(trace_id)
+            for s in spans:
+                sid = s["id"]
+                if sid not in seen_span_ids:
+                    seen_span_ids.add(sid)
+                    span_status[sid] = s["status"]
+                    yield f'event: span_started\ndata: {json.dumps(s, default=str)}\n\n'
+                elif span_status.get(sid) != s["status"]:
+                    span_status[sid] = s["status"]
+                    yield f'event: span_ended\ndata: {json.dumps(s, default=str)}\n\n'
+            if trace["status"] in ("completed", "error"):
+                yield f'event: trace_ended\ndata: {json.dumps(trace, default=str)}\n\n'
+                return
+            if asyncio.get_event_loop().time() > deadline:
+                yield f'event: timeout\ndata: {json.dumps({"reason": "max_duration"})}\n\n'
+                return
+            await asyncio.sleep(1.0)
+
+    return Stream(event_generator(), media_type="text/event-stream")
+
+
 @put("/{trace_id:str}/end", sync_to_thread=False)
 def end_trace_route(trace_id: str, data: dict) -> dict[str, Any]:
     if not get_trace(trace_id):
@@ -241,6 +293,7 @@ tracing_router = Router(
         create_new_trace,
         trace_stats,
         get_trace_detail,
+        stream_trace,
         end_trace_route,
         delete_trace_route,
         create_new_span,
