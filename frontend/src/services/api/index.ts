@@ -103,8 +103,12 @@ export { skillSetsApi } from './skill-sets';
 export type { SkillSet } from './skill-sets';
 export { payloadTransformerApi } from './payload-transformers';
 export type { PayloadTransformer, TransformRuleItem, UpsertTransformerRequest, UpsertTransformerResponse } from './payload-transformers';
-export { agentMemoryApi } from './agent-memory';
-export type { MemoryThread, MemoryMessage, WorkingMemory, MemoryConfig, ThreadListResponse, MessageListResponse, RecallResponse, SaveMessagesRequest } from './agent-memory';
+export { agentMemoryApi } from './agentMemory';
+export type {
+  MemoryThread, MemoryMessage, WorkingMemory, RecallResponse,
+  ListThreadsParams, ListThreadsResponse, ListMessagesResponse,
+} from './agentMemory';
+export type { MemoryConfig, ThreadListResponse, MessageListResponse, SaveMessagesRequest } from './agent-memory';
 export { tracingApi } from './tracing';
 export type { Trace, TraceSpan, TraceWithSpans, ListTracesParams, ListTracesResponse, TraceStats, SpanType, TraceStatus, EntityType as TraceEntityType, TraceListResponse as TracingListResponse, SpanListResponse, CreateTraceRequest, EndTraceRequest, CreateSpanRequest, EndSpanRequest } from './tracing';
 export { knowledgeGraphApi } from './knowledge-graph';
