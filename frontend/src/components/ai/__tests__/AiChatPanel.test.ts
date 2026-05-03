@@ -113,4 +113,47 @@ describe('AiChatPanel (translation wrapper)', () => {
     expect(wrapper.emitted('update:selectedAccountId')!.at(-1)).toEqual(['acc-2'])
     expect(wrapper.emitted('update:selectedModel')!.at(-1)).toEqual(['sonnet-4'])
   })
+
+  it('shows finalization banner when canFinalize is true', () => {
+    const wrapper = mount(AiChatPanel, {
+      props: {
+        canFinalize: true,
+        bannerTitle: 'Plugin Ready',
+        bannerButtonLabel: 'Create',
+        entityLabel: 'plugin',
+      },
+    })
+    expect(wrapper.find('[data-testid="finalize-banner"]').exists()).toBe(true)
+    expect(wrapper.text()).toContain('Plugin Ready')
+  })
+
+  it('does not show banner when canFinalize is false', () => {
+    const wrapper = mount(AiChatPanel, { props: { canFinalize: false } })
+    expect(wrapper.find('[data-testid="finalize-banner"]').exists()).toBe(false)
+  })
+
+  it('emits finalize with parsed config when banner fires', async () => {
+    const configParser = (s: string) => ({ parsed: s })
+    const wrapper = mount(AiChatPanel, {
+      props: {
+        canFinalize: true,
+        bannerTitle: 'Plugin Ready',
+        bannerButtonLabel: 'Create',
+        entityLabel: 'plugin',
+        detectedEntityName: 'foo',
+        messages: [
+          { role: 'user', content: 'q' },
+          { role: 'assistant', content: 'parseable-config-content' },
+        ],
+        configParser,
+      },
+    })
+    const { FinalizationBanner } = await import('@ai-accounts/vue-styled')
+    const banner = wrapper.findComponent(FinalizationBanner)
+    expect(banner.exists()).toBe(true)
+    banner.vm.$emit('finalize')
+    await wrapper.vm.$nextTick()
+    expect(wrapper.emitted('finalize')).toBeTruthy()
+    expect(wrapper.emitted('finalize')!.at(-1)).toEqual([{ parsed: 'parseable-config-content' }])
+  })
 })

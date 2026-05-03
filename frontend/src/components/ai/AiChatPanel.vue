@@ -11,7 +11,7 @@
  * that left 11 call sites silently broken.
  */
 import { ref, computed, onMounted } from 'vue'
-import { ChatBubble, ChatControls } from '@ai-accounts/vue-styled'
+import { ChatBubble, ChatControls, FinalizationBanner } from '@ai-accounts/vue-styled'
 import { useAiAccounts } from '@ai-accounts/vue-headless'
 import type { BackendDTO, BackendOption, ChatMode } from '@ai-accounts/ts-core'
 
@@ -34,6 +34,14 @@ interface Props {
   selectedAccountId?: string | null
   selectedModel?: string | null
   chatMode?: ChatMode
+  // Finalization banner
+  canFinalize?: boolean
+  isFinalizing?: boolean
+  bannerTitle?: string
+  bannerButtonLabel?: string
+  entityLabel?: string
+  detectedEntityName?: string
+  configParser?: (content: string) => Record<string, unknown> | null
   // Kept for API compat with the legacy 837-line consumers, but NOT
   // forwarded to ChatBubble (vue-styled has no icon-paths prop).
   // v0.5.4 wrapper accepts the prop and ignores it; visual parity, not
@@ -52,6 +60,13 @@ const props = withDefaults(defineProps<Props>(), {
   selectedAccountId: null,
   selectedModel: null,
   chatMode: 'single',
+  canFinalize: false,
+  isFinalizing: false,
+  bannerTitle: '',
+  bannerButtonLabel: '',
+  entityLabel: '',
+  detectedEntityName: undefined,
+  configParser: undefined,
   assistantIconPaths: () => [],
 })
 
@@ -63,7 +78,18 @@ const emit = defineEmits<{
   'update:chatMode': [value: ChatMode]
   send: []
   keydown: [event: KeyboardEvent]
+  finalize: [config: Record<string, unknown> | null]
 }>()
+
+function onFinalize() {
+  const lastAssistant = [...props.messages]
+    .reverse()
+    .find((m) => m.role === 'assistant')
+  const config = props.configParser && lastAssistant
+    ? props.configParser(lastAssistant.content)
+    : null
+  emit('finalize', config)
+}
 
 // Build the BackendOption[] list locally — useSmartChat does NOT expose
 // backendOptions (codex review caught that hallucination). Mirrors the
@@ -115,6 +141,16 @@ defineOptions({ name: 'AiChatPanel', inheritAttrs: false })
 
 <template>
   <div class="ai-chat-panel">
+    <div v-if="canFinalize" data-testid="finalize-banner">
+      <FinalizationBanner
+        :title="bannerTitle"
+        :button-label="bannerButtonLabel"
+        :entity-label="entityLabel"
+        :entity-name="detectedEntityName"
+        :is-finalizing="isFinalizing"
+        @finalize="onFinalize"
+      />
+    </div>
     <div v-if="showBackendSelector" data-testid="backend-selector">
       <ChatControls
         :chat-mode="internalChatMode"
