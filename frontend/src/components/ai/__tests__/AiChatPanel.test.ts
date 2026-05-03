@@ -29,4 +29,14 @@ describe('AiChatPanel (translation wrapper)', () => {
     const wrapper = mount(AiChatPanel)
     expect(wrapper.find('.ai-chat-panel').exists()).toBe(true)
   })
+
+  it('renders each message as a wrapper-owned bubble row', () => {
+    const messages = [
+      { role: 'user', content: 'Hello' },
+      { role: 'assistant', content: 'Hi there' },
+    ]
+    const wrapper = mount(AiChatPanel, { props: { messages } })
+    const items = wrapper.findAll('[data-testid="bubble-row"]')
+    expect(items).toHaveLength(2)
+  })
 })
