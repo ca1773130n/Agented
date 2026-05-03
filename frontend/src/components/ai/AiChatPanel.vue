@@ -45,6 +45,16 @@ interface Props {
   // Scroll + streaming hooks
   useSmartScroll?: boolean
   initStreamingParser?: (parser: unknown) => void
+  // Pass-through / display props that BaseAiChatPanel used to consume
+  density?: 'minimal' | 'detailed'
+  defaultBackend?: string
+  defaultModel?: string
+  placeholder?: string
+  welcomeTitle?: string
+  welcomeSubtitle?: string
+  readOnly?: boolean
+  showProcessGroups?: boolean
+  showActions?: boolean
   // Kept for API compat with the legacy 837-line consumers, but NOT
   // forwarded to ChatBubble (vue-styled has no icon-paths prop).
   // v0.5.4 wrapper accepts the prop and ignores it; visual parity, not
@@ -72,6 +82,15 @@ const props = withDefaults(defineProps<Props>(), {
   configParser: undefined,
   useSmartScroll: false,
   initStreamingParser: undefined,
+  density: 'detailed',
+  defaultBackend: undefined,
+  defaultModel: undefined,
+  placeholder: 'Type a message...',
+  welcomeTitle: 'AI Chat',
+  welcomeSubtitle: 'Send a message to get started',
+  readOnly: false,
+  showProcessGroups: undefined,
+  showActions: undefined,
   assistantIconPaths: () => [],
 })
 
@@ -215,7 +234,7 @@ defineOptions({ name: 'AiChatPanel', inheritAttrs: false })
         data-testid="input"
         :value="inputMessage"
         :placeholder="inputPlaceholder"
-        :disabled="isProcessing"
+        :disabled="isProcessing || readOnly"
         rows="3"
         @input="emit('update:inputMessage', ($event.target as HTMLTextAreaElement).value)"
         @keydown="(e: KeyboardEvent) => emit('keydown', e)"
@@ -223,7 +242,7 @@ defineOptions({ name: 'AiChatPanel', inheritAttrs: false })
       <button
         data-testid="send"
         type="button"
-        :disabled="isProcessing"
+        :disabled="isProcessing || readOnly"
         @click="emit('send')"
       >
         Send

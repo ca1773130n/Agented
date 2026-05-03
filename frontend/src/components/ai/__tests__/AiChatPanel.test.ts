@@ -165,6 +165,23 @@ describe('AiChatPanel (translation wrapper)', () => {
     expect(initStreamingParser).toHaveBeenCalledTimes(1)
   })
 
+  it('readOnly disables the textarea', () => {
+    const wrapper = mount(AiChatPanel, { props: { readOnly: true } })
+    const ta = wrapper.find('[data-testid="input"]')
+    expect(ta.attributes('disabled')).toBeDefined()
+  })
+
+  it('density=minimal does not render ProcessGroup (v0.5.4 path-Z minimal scope)', async () => {
+    const { ProcessGroup } = await import('@ai-accounts/vue-styled')
+    const wrapper = mount(AiChatPanel, {
+      props: {
+        density: 'minimal',
+        messages: [{ role: 'assistant', content: 'with tool call' }],
+      },
+    })
+    expect(wrapper.findComponent(ProcessGroup).exists()).toBe(false)
+  })
+
   it('emits finalize with parsed config when banner fires', async () => {
     const configParser = (s: string) => ({ parsed: s })
     const wrapper = mount(AiChatPanel, {
