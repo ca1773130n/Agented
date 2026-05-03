@@ -39,4 +39,23 @@ describe('AiChatPanel (translation wrapper)', () => {
     const items = wrapper.findAll('[data-testid="bubble-row"]')
     expect(items).toHaveLength(2)
   })
+
+  it('renders streamingContent as an in-flight bubble after the messages', () => {
+    const wrapper = mount(AiChatPanel, {
+      props: {
+        messages: [{ role: 'user', content: 'Hi' }],
+        streamingContent: 'partial response...',
+      },
+    })
+    const rows = wrapper.findAll('[data-testid="bubble-row"]')
+    expect(rows).toHaveLength(1)
+    expect(wrapper.find('[data-testid="streaming-bubble"]').exists()).toBe(true)
+  })
+
+  it('does not render a streaming bubble when streamingContent is empty', () => {
+    const wrapper = mount(AiChatPanel, {
+      props: { messages: [{ role: 'user', content: 'Hi' }], streamingContent: '' },
+    })
+    expect(wrapper.find('[data-testid="streaming-bubble"]').exists()).toBe(false)
+  })
 })

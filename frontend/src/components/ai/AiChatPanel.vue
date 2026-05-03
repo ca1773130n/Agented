@@ -22,6 +22,7 @@ interface Message {
 
 interface Props {
   messages?: Message[]
+  streamingContent?: string
   // Kept for API compat with the legacy 837-line consumers, but NOT
   // forwarded to ChatBubble (vue-styled has no icon-paths prop).
   // v0.5.4 wrapper accepts the prop and ignores it; visual parity, not
@@ -31,6 +32,7 @@ interface Props {
 
 withDefaults(defineProps<Props>(), {
   messages: () => [],
+  streamingContent: '',
   assistantIconPaths: () => [],
 })
 
@@ -50,6 +52,13 @@ defineOptions({ name: 'AiChatPanel', inheritAttrs: false })
           :content="msg.content"
           :backend="msg.backend"
           :timestamp="msg.timestamp"
+        />
+      </div>
+      <div v-if="streamingContent" data-testid="streaming-bubble">
+        <ChatBubble
+          role="assistant"
+          :content="streamingContent"
+          :streaming="true"
         />
       </div>
     </div>
