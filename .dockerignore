@@ -1,0 +1,43 @@
+# v0.5.13: docker build context exclusions.
+
+.git
+.gitignore
+.github
+
+# Build artifacts (re-built inside the image)
+frontend/dist
+frontend/node_modules
+backend/.venv
+backend/__pycache__
+**/__pycache__
+**/*.pyc
+**/*.pyo
+
+# Local dev state
+*.db
+agented.db*
+.env
+.env.local
+.env.*
+!.env.example
+secrets/
+
+# Test + dev artifacts
+.pytest_cache
+backend/.pytest_cache
+**/coverage
+**/htmlcov
+.vite
+node_modules
+
+# IDE / OS
+.idea
+.vscode
+.DS_Store
+
+# Planning + docs (ship from VCS, not from runtime image)
+.planning
+docs
+
+# Existing helper trees
+ai-accounts
