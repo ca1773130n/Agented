@@ -86,3 +86,25 @@ class TestCLI:
         captured = capsys.readouterr()
         assert "red" in captured.err
         assert "backend.liveness" in captured.err
+
+
+class TestLivenessOnly:
+    def test_liveness_only_skips_readiness_and_sidecar(self, capsys):
+        """Container HEALTHCHECK uses --liveness-only because the sidecar
+        is a separate container in compose. Probing localhost:20001 from
+        inside the backend container would always fail."""
+        from scripts.healthcheck import run, main
+        with patch("scripts.healthcheck.urllib.request.urlopen", return_value=_ok_response(200)) as up:
+            rc, results = run(liveness_only=True)
+        assert rc == 0
+        assert set(results) == {"backend.liveness"}
+        assert up.call_count == 1
+
+    def test_liveness_only_via_CLI_flag(self, capsys):
+        from scripts.healthcheck import main
+        with patch("scripts.healthcheck.urllib.request.urlopen", return_value=_ok_response(200)):
+            rc = main(["--liveness-only"])
+        assert rc == 0
+        captured = capsys.readouterr()
+        assert "backend.liveness" in captured.out
+        assert "sidecar.health" not in captured.out

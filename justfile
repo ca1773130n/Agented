@@ -188,9 +188,10 @@ check-env:
 healthcheck:
     cd backend && uv run python scripts/healthcheck.py
 
-# v0.5.13: build the production container image.
+# v0.5.13: build the production container image. Build context is the
+# PARENT directory so the sibling ai-accounts/ tree is reachable.
 docker-build:
-    docker compose build
+    cd .. && docker build -f Agented/Dockerfile -t agented:latest .
 
 # v0.5.13: bring the production stack up (backend + sidecar).
 docker-up:

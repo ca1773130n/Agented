@@ -9,40 +9,48 @@
 
 services:
   agented-backend:
+    # Build context is the PARENT of Agented so ai-accounts/ is reachable.
     build:
-      context: .
-      dockerfile: Dockerfile
-    image: ghcr.io/ca1773130n/agented:latest
+      context: ..
+      dockerfile: Agented/Dockerfile
+    image: ghcr.io/ca1773130n/agented:${GHCR_TAG:-latest}
     container_name: agented-backend
     env_file:
       - .env
     environment:
       AGENTED_ENV: production
+      AGENTED_DB_PATH: /app/data/agented.db
+      # In compose the sidecar is a separate DNS name; the in-image
+      # HEALTHCHECK uses --liveness-only and probes only this container.
+      AGENTED_BACKEND_URL: http://127.0.0.1:20000
     ports:
       - "20000:20000"
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "python", "scripts/healthcheck.py"]
+      test: ["CMD", "python", "scripts/healthcheck.py", "--liveness-only"]
       interval: 30s
       timeout: 10s
       retries: 3
     volumes:
-      - agented-data:/app/backend/data
+      - agented-data:/app/data
 
   agented-sidecar:
-    image: ghcr.io/ca1773130n/agented:latest
+    image: ghcr.io/ca1773130n/agented:${GHCR_TAG:-latest}
     container_name: agented-sidecar
     command: ["python", "scripts/run_ai_accounts.py"]
     env_file:
       - .env
     environment:
       AGENTED_ENV: production
+      AGENTED_DB_PATH: /app/data/agented.db
     ports:
       - "20001:20001"
     restart: unless-stopped
     depends_on:
       agented-backend:
         condition: service_started
+    volumes:
+      - agented-data:/app/data
 
 volumes:
   agented-data:

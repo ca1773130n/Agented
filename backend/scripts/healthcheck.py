@@ -43,16 +43,25 @@ def run(
     *,
     backend_base: Optional[str] = None,
     sidecar_base: Optional[str] = None,
+    liveness_only: bool = False,
 ) -> tuple[int, dict]:
-    """Returns (exit_code, structured_result)."""
+    """Returns (exit_code, structured_result).
+
+    liveness_only=True skips readiness + sidecar probes — used by the
+    in-container Docker HEALTHCHECK where the sidecar runs in a
+    separate container and DB readiness depends on it.
+    """
     backend_base = backend_base or os.environ.get("AGENTED_BACKEND_URL", _DEFAULT_BACKEND)
     sidecar_base = sidecar_base or os.environ.get("AGENTED_SIDECAR_URL", _DEFAULT_SIDECAR)
 
-    probes = [
-        ("backend.liveness", f"{backend_base}/health/liveness"),
-        ("backend.readiness", f"{backend_base}/health/readiness"),
-        ("sidecar.health", f"{sidecar_base}/health"),
-    ]
+    if liveness_only:
+        probes = [("backend.liveness", f"{backend_base}/health/liveness")]
+    else:
+        probes = [
+            ("backend.liveness", f"{backend_base}/health/liveness"),
+            ("backend.readiness", f"{backend_base}/health/readiness"),
+            ("sidecar.health", f"{sidecar_base}/health"),
+        ]
 
     results = {}
     any_red = False
@@ -66,7 +75,9 @@ def run(
 
 
 def main(argv: Optional[list[str]] = None) -> int:
-    rc, results = run()
+    argv = argv if argv is not None else sys.argv[1:]
+    liveness_only = "--liveness-only" in argv
+    rc, results = run(liveness_only=liveness_only)
     if rc != 0:
         print(json.dumps({"status": "red", "probes": results}, indent=2), file=sys.stderr)
     else:
