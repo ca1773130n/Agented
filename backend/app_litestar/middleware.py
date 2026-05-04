@@ -520,6 +520,10 @@ class PerformanceMiddleware(ASGIMiddleware):
 
     Clients (browsers, profile.py) read this to measure per-request
     server-side cost without parsing logs. Adds <1ms overhead.
+
+    v0.6.2: also records each request into the in-process metrics
+    registry so /admin/metrics can emit Prometheus-format counters
+    + duration histograms.
     """
 
     async def handle(
@@ -532,10 +536,13 @@ class PerformanceMiddleware(ASGIMiddleware):
         from time import perf_counter
 
         started = perf_counter()
+        method = scope.get("method", "GET")
+        path = scope.get("path", "")
         sent_start = False
+        captured_status: int = 0
 
         async def send_with_timing(message: Any) -> None:
-            nonlocal sent_start
+            nonlocal sent_start, captured_status
             if message["type"] == "http.response.start" and not sent_start:
                 elapsed_ms = (perf_counter() - started) * 1000.0
                 hdrs = list(message.get("headers", []))
@@ -543,8 +550,52 @@ class PerformanceMiddleware(ASGIMiddleware):
                     (b"server-timing", f"app;dur={elapsed_ms:.1f}".encode("latin-1"))
                 )
                 message = {**message, "headers": hdrs}
+                captured_status = int(message.get("status", 0))
                 sent_start = True
             await send(message)
 
-        await next_app(scope, receive, send_with_timing)
+        try:
+            await next_app(scope, receive, send_with_timing)
+        finally:
+            # v0.6.2: feed the metrics registry post-response. Done in
+            # finally so error paths still record.
+            try:
+                from app_litestar.metrics import registry as _metrics_registry
+                _metrics_registry.record_request(
+                    method, path, captured_status or 500,
+                    (perf_counter() - started) * 1000.0,
+                )
+            except Exception:  # noqa: BLE001 — never fail the request on a metric failure
+                pass
+
+
+class SlowRequestMiddleware(ASGIMiddleware):
+    """v0.6.2: log WARN on requests slower than SLOW_REQUEST_THRESHOLD_MS.
+
+    Threshold is read once at module load via _int_env. Operator
+    bumps it via env to silence false positives during dev.
+    """
+
+    async def handle(
+        self, scope: Scope, receive: Receive, send: Send, next_app: ASGIApp
+    ) -> None:
+        if scope["type"] != "http":
+            await next_app(scope, receive, send)
+            return
+
+        from time import perf_counter
+
+        threshold_ms = _int_env("SLOW_REQUEST_THRESHOLD_MS", 500)
+        started = perf_counter()
+        try:
+            await next_app(scope, receive, send)
+        finally:
+            elapsed_ms = (perf_counter() - started) * 1000.0
+            if elapsed_ms >= threshold_ms:
+                method = scope.get("method", "GET")
+                path = scope.get("path", "")
+                logger.warning(
+                    "slow request: %s %s took %.1fms (threshold %dms)",
+                    method, path, elapsed_ms, threshold_ms,
+                )
 

@@ -23,8 +23,10 @@ from .middleware import (
     RequestContextMiddleware,
     RequestLoggingMiddleware,
     SecurityHeadersMiddleware,
+    SlowRequestMiddleware,
 )
 from .routes.auth import auth_router
+from .routes.metrics import metrics_router
 from .routes.health import health_router
 from .routes.leaf_crud_a import (
     bookmarks_router,
@@ -198,6 +200,9 @@ def create_app() -> Litestar:
             # the timing reflects the actual handler cost, not middleware
             # overhead.
             PerformanceMiddleware(),
+            # v0.6.2: log WARN if a request exceeds the threshold.
+            # Innermost-after-Performance so its timing matches.
+            SlowRequestMiddleware(),
         ],
         exception_handlers=EXCEPTION_HANDLERS,
         on_startup=[on_startup],
@@ -207,6 +212,7 @@ def create_app() -> Litestar:
             rbac_router,
             auth_router,
             auth_management_router,
+            metrics_router,
             utility_router,
             misc_router,
             admin_misc_router,
