@@ -4468,6 +4468,47 @@ def _migrate_110_session_rotated_at(conn):
                 raise
 
 
+def _migrate_112_list_page_indices(conn):
+    """v0.6.0 round-1: indices for the operator-UI default list pages.
+
+    db_audit revealed that `projects` and `triggers` ORDER BY created_at
+    DESC LIMIT 50 fell back to full-table-scan + temp B-tree sort. Add
+    descending indices so the ORDER BY can stream from the index.
+    """
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_projects_created_at "
+        "ON projects(created_at DESC)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_triggers_created_at "
+        "ON triggers(created_at DESC)"
+    )
+
+
+def _migrate_111_session_lookup_indices(conn):
+    """v0.6.0: indices for fast session lookup.
+
+    The v0.5.12 get_session_by_token did SELECT * FROM sessions and
+    iterated with hmac.compare_digest. For correctness this was fine
+    (and the sessions table is small in practice), but it scales
+    O(n) with active session count. The v0.6.0 lookup uses
+    `WHERE token = ? OR rotated_from_token = ?` which needs indices
+    on both predicates.
+
+    Migration 104 already creates a non-unique idx_sessions_token
+    AND the table-level `token TEXT UNIQUE NOT NULL` constraint
+    creates an auto-unique index (sqlite_autoindex_sessions_2).
+    Migration 109 already creates idx_sessions_rotated_from_token.
+    We only add the user_active covering index that wasn't there.
+    """
+    # Covering index for revoke_user_sessions / get_active_for_user
+    # paths (`WHERE user_id = ? AND revoked_at IS NULL`).
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_sessions_user_active "
+        "ON sessions(user_id, revoked_at)"
+    )
+
+
 def _migrate_107_owned_entities_batch2_user_id(conn):
     """Multi-tenancy — remaining owned-entity tables (track B, wave 42).
 
@@ -4778,4 +4819,8 @@ VERSIONED_MIGRATIONS = [
     # v0.5.12 round-3 fix: separate rotation timestamp so grace window
     # cannot be slid forward by replaying the rotated_from_token.
     (110, "session_rotated_at", _migrate_110_session_rotated_at),
+    # v0.6.0 perf: indices for fast session lookup.
+    (111, "session_lookup_indices", _migrate_111_session_lookup_indices),
+    # v0.6.0 round-1: list-page ORDER BY indices (Codex-flagged).
+    (112, "list_page_indices", _migrate_112_list_page_indices),
 ]

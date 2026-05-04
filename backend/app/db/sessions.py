@@ -29,6 +29,12 @@ DEFAULT_LIFETIME = dt.timedelta(days=14)
 DEFAULT_IDLE_LIFETIME = dt.timedelta(minutes=30)
 ROTATION_GRACE_WINDOW = dt.timedelta(seconds=5)
 
+# v0.6.0 round-2: pre-computed sentinel for the timing-floor compare
+# on a 0-row miss. 43 chars matches the secrets.token_urlsafe(32)
+# output length used by _generate_token. Allocating per-call would
+# leak the request's token length via heap traffic.
+_DUMMY_TOKEN_FOR_TIMING_FLOOR = "0" * 43
+
 
 def _row_to_dict(cursor, row):
     return {col[0]: row[idx] for idx, col in enumerate(cursor.description)}
@@ -71,20 +77,28 @@ def get_session_by_token(
     *,
     idle_lifetime: dt.timedelta = DEFAULT_IDLE_LIFETIME,
 ) -> Optional[dict]:
-    """Token lookup with no early-return. Returns the session row, or
-    None on miss / absolute expiry / idle expiry / revocation. Touches
-    last_used_at on hit. Within the rotation grace window, the
-    previous token (rotated_from_token) also resolves to the row.
+    """Token lookup with index-driven SELECT. Returns the session row,
+    or None on miss / absolute expiry / idle expiry / revocation.
+    Touches last_used_at on hit. Within the rotation grace window,
+    the previous token (rotated_from_token) also resolves to the row.
 
     Logs lifecycle events on idle/expired/revoked-use paths.
 
-    The scan visits every active session row before returning, which
-    eliminates row-position-dependent timing leaks. Per-row work still
-    differs slightly (matched rows run revocation/expiry/idle checks;
-    non-matching rows skip them), and successful auth pays a post-scan
-    UPDATE while a miss does not — so this is not strictly
-    constant-time, but it is robust enough for the threat model where
-    an attacker cannot directly observe per-row CPU.
+    Timing contract (v0.6.0 round-1):
+      - Per-row work is uniform: every matched row runs both the
+        primary and rotated-token compare_digest calls plus the
+        revocation/expiry/idle checks before deciding.
+      - 0-row miss path pays one dummy compare_digest so the lookup
+        cost doesn't drop to a bare SELECT (eliminates the "did we
+        compare?" timing leak).
+      - The hit path pays one extra UPDATE (touch last_used_at).
+        That asymmetry is observable in microseconds but does not
+        depend on token contents — so it's robust against the
+        threat model where the attacker can only see network-level
+        latency, not per-CPU-cycle timing.
+
+    Lookup goes through idx_sessions_token (auto-unique from the
+    `token UNIQUE` table constraint) + idx_sessions_rotated_from_token.
     """
 
     if not token:
@@ -95,15 +109,31 @@ def get_session_by_token(
     failure_event: Optional[tuple[str, str, Optional[str], Optional[dict]]] = None
     with get_connection() as conn:
         conn.row_factory = _row_to_dict
-        rows = conn.execute("SELECT * FROM sessions").fetchall()
+        # Indexed lookup via idx_sessions_token (auto-unique from the
+        # `token TEXT UNIQUE NOT NULL` table constraint, migration 104)
+        # + idx_sessions_rotated_from_token (migration 109). At most 2
+        # rows match in practice; the loop runs compare_digest on each
+        # so per-row work is uniform, and on a 0-row miss we still pay
+        # one compare_digest below to floor the timing.
+        rows = conn.execute(
+            "SELECT * FROM sessions WHERE token = ? OR rotated_from_token = ?",
+            (token, token),
+        ).fetchall()
         conn.row_factory = None
+        if not rows:
+            # Floor the miss timing — equalize against the hit path's
+            # compare cost. Doesn't fully equalize against the post-hit
+            # UPDATE, but eliminates the "0 vs 1+ compares" leak.
+            # _DUMMY_TOKEN_FOR_TIMING_FLOOR is module-level so we don't
+            # allocate per-call.
+            hmac.compare_digest(_DUMMY_TOKEN_FOR_TIMING_FLOOR, token)
+            return None
         for row in rows:
-            # Match against either current or rotated-from token. Both
-            # comparisons run for every row so timing does not leak which
-            # one matched (or that any row matched).
             primary_match = hmac.compare_digest(row["token"], token)
             rotated_token = row.get("rotated_from_token") or ""
-            rotated_compare = hmac.compare_digest(rotated_token, token) if rotated_token else False
+            rotated_compare = (
+                hmac.compare_digest(rotated_token, token) if rotated_token else False
+            )
             # v0.5.12 round-3: anchor grace window to `rotated_at`
             # (set only by rotate_session) instead of `last_used_at`
             # (refreshed on every successful auth). Otherwise an

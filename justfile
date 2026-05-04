@@ -211,6 +211,14 @@ docker-logs:
 docker-backup:
     docker compose exec agented-backend python scripts/backup.py
 
+# v0.6.0: hit running server N times per endpoint; report p50/p95.
+profile *args:
+    cd backend && uv run python scripts/profile.py {{args}}
+
+# v0.6.0: audit SQLite indices + EXPLAIN-QUERY-PLAN of hot queries.
+db-audit *args:
+    cd backend && uv run python scripts/db_audit.py {{args}}
+
 # v0.5.15: snapshot both SQLite DBs to AGENTED_BACKUP_DIR + apply
 # retention + optional remote sync via BACKUP_REMOTE_CMD.
 backup:
