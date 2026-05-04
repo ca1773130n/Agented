@@ -196,6 +196,33 @@ OPTIONAL_VARS: list[dict] = [
         "default": "5",
         "secret": False,
     },
+    # v0.5.15 backup configuration — see backend/scripts/backup.py.
+    {
+        "name": "AGENTED_BACKUP_DIR",
+        "description": "Directory for SQLite snapshot files. Created lazily.",
+        "example": "/var/agented/backups",
+        "default": "backend/backups",
+        "secret": False,
+    },
+    {
+        "name": "BACKUP_REMOTE_CMD",
+        "description": (
+            "Optional shell command template for off-site sync. {file} is "
+            "replaced by the snapshot path. Examples: "
+            "'rclone copy {file} agented-backup:', "
+            "'aws s3 cp {file} s3://agented-backups/'."
+        ),
+        "example": "rclone copy {file} agented-backup:",
+        "default": "(unset; no off-site sync)",
+        "secret": False,
+    },
+    {
+        "name": "BACKUP_RETENTION_DAYS",
+        "description": "Days to retain local snapshots. Older files are deleted after each run.",
+        "example": "30",
+        "default": "30",
+        "secret": False,
+    },
 ]
 
 

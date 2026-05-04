@@ -1,0 +1,12 @@
+# v0.5.15: systemd timer firing the agented-backup.service daily at 03:00.
+
+[Unit]
+Description=Daily Agented SQLite backup
+
+[Timer]
+OnCalendar=*-*-* 03:00:00
+Persistent=true
+Unit=agented-backup.service
+
+[Install]
+WantedBy=timers.target
