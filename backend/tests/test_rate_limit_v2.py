@@ -159,6 +159,64 @@ class TestRegression:
             assert await _drive("GET", "/health/liveness", ip="7.7.7.7") == 200
 
 
+@pytest.mark.asyncio
+class TestFullStackOrdering:
+    """v0.5.14 Codex round-1 fix: ApiKeyMiddleware must run BEFORE
+    RateLimitMiddleware so principal is in scope when the rate-limit
+    middleware resolves the per-user budget."""
+
+    async def test_authed_request_uses_user_key_not_ip(self, isolated_db):
+        """Drives the real Litestar stack: api-key auth, role check,
+        rate-limit. Verifies that two API keys for the SAME user share
+        a budget (key wins over IP)."""
+        from litestar import get
+        from litestar.testing import create_test_client
+        from app_litestar.middleware import ApiKeyMiddleware, RateLimitMiddleware
+        from app_litestar.rate_limit_guard import (
+            clear_overrides, register_override,
+        )
+        from app.database import get_connection
+        from app.db.rbac import create_user_role, generate_api_key
+        from app.db.sessions import create_session
+
+        clear_overrides()
+        # Tighten /api/* GET so we hit the limit fast.
+        register_override("GET", "/api/probe", 3, 60.0)
+
+        @get("/api/probe", sync_to_thread=False)
+        def probe() -> dict:
+            return {"ok": True}
+
+        # Provision two API keys belonging to the SAME user.
+        with get_connection() as conn:
+            conn.execute(
+                "INSERT OR IGNORE INTO users (id, email, password_hash, created_at) "
+                "VALUES (?, ?, ?, CURRENT_TIMESTAMP)",
+                ("u-shared", "u@shared", "x"),
+            )
+            conn.commit()
+        api_key_1 = generate_api_key()
+        api_key_2 = generate_api_key()
+        create_user_role(api_key_1, label="k1", role="viewer", user_id="u-shared")
+        create_user_role(api_key_2, label="k2", role="viewer", user_id="u-shared")
+
+        with create_test_client(
+            route_handlers=[probe],
+            middleware=[ApiKeyMiddleware(), RateLimitMiddleware()],
+        ) as client:
+            # 3 requests with key 1 — all 200.
+            for _ in range(3):
+                assert client.get("/api/probe", headers={"X-API-Key": api_key_1}).status_code == 200
+            # 4th request with key 2 — same user → SHARED budget → 429.
+            r = client.get("/api/probe", headers={"X-API-Key": api_key_2})
+            assert r.status_code == 429, (
+                "Per-user keying broken: requests with different keys "
+                "for the same user should share a rate-limit budget"
+            )
+
+        clear_overrides()
+
+
 class TestEnvDrivenDefaults:
     """Module-level _RATE_LIMITS is built at import time from env vars.
     Validating the parser via direct unit test rather than re-importing

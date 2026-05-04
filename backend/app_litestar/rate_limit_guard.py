@@ -34,16 +34,11 @@ def clear_overrides() -> None:
 def requires_rate_limit(limit: int, window_seconds: float):
     """Litestar guard factory. Tighter limit than the coarse default.
 
-    Registers the (method, path) → (limit, window) mapping on the
-    first request that hits this route. Returns a no-op guard;
-    actual enforcement happens in RateLimitMiddleware via the
-    registry.
-
-    The first request to a guarded route falls through to the coarse
-    default; subsequent requests use the registered override. This is
-    acceptable because coarse defaults are always more permissive than
-    overrides — a single coarse-rule pass-through cannot exceed the
-    override's intent.
+    Returns a guard that also re-registers the override on every
+    request (cheap; idempotent). The override is also registered
+    EAGERLY at app startup via `eager_register_from_app(app)`, so
+    even the very first cold request to a guarded route hits the
+    correct limit instead of the coarse default.
     """
     if limit <= 0 or window_seconds <= 0:
         raise ValueError(
@@ -58,4 +53,44 @@ def requires_rate_limit(limit: int, window_seconds: float):
             register_override(method, path, limit, window_seconds)
         # Enforcement is in middleware. Guard returns None.
 
+    # Stamp the guard so the eager startup walker can identify it
+    # without resorting to closure introspection.
+    guard.__rate_limit__ = (limit, window_seconds)  # type: ignore[attr-defined]
     return guard
+
+
+def eager_register_from_app(app) -> None:
+    """Walk a Litestar app's route table and pre-populate the override
+    registry from any handler whose `guards` includes a guard produced
+    by `requires_rate_limit`.
+
+    Eliminates the cold-request gap where the coarse default applies
+    until the guard registers itself on first hit.
+    """
+    try:
+        routes = app.routes
+    except AttributeError:
+        return
+
+    for route in routes:
+        path = getattr(route, "path", None) or getattr(route, "path_format", None)
+        if not path:
+            continue
+        # Litestar HTTP routes have a `route_handler_map` of {method:
+        # (handler, _)} OR `methods` + `route_handler`. Cover both shapes.
+        handlers_by_method = {}
+        if hasattr(route, "route_handler_map"):
+            for method, entry in route.route_handler_map.items():
+                handler = entry[0] if isinstance(entry, tuple) else entry
+                handlers_by_method[method] = handler
+        elif hasattr(route, "route_handler"):
+            handler = route.route_handler
+            for method in getattr(route, "methods", []) or ["GET"]:
+                handlers_by_method[method] = handler
+
+        for method, handler in handlers_by_method.items():
+            for guard in getattr(handler, "guards", []) or []:
+                meta = getattr(guard, "__rate_limit__", None)
+                if meta is not None:
+                    limit, window = meta
+                    register_override(method, path, limit, window)
