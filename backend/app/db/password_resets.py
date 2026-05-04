@@ -15,6 +15,7 @@ import secrets
 from typing import Optional
 
 from .connection import get_connection
+from app.utils.timezone import utcnow as _utcnow
 
 logger = logging.getLogger(__name__)
 DEFAULT_LIFETIME = dt.timedelta(hours=1)
@@ -24,7 +25,7 @@ def request_reset(user_id: str, lifetime: dt.timedelta = DEFAULT_LIFETIME) -> Op
     """Issue a fresh password-reset token for *user_id*. Returns the token."""
     token = secrets.token_urlsafe(32)
     token_id = "prt-" + secrets.token_hex(3)
-    expires_at = dt.datetime.utcnow() + lifetime
+    expires_at = _utcnow() + lifetime
     with get_connection() as conn:
         conn.execute(
             """INSERT INTO password_reset_tokens (id, token, user_id, expires_at)
@@ -40,7 +41,7 @@ def consume_token(token: str) -> Optional[str]:
     on miss/expired/already-consumed."""
     if not token:
         return None
-    now = dt.datetime.utcnow()
+    now = _utcnow()
     with get_connection() as conn:
         rows = conn.execute(
             "SELECT id, token, user_id, expires_at, consumed_at "

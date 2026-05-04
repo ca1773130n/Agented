@@ -10,6 +10,7 @@ from typing import Optional
 
 from .connection import get_connection
 from .ids import _get_unique_secret_id
+from app.utils.timezone import utcnow as _utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +25,7 @@ def create_secret(
     """Create a new secret with an encrypted value. Returns the secret ID."""
     with get_connection() as conn:
         secret_id = _get_unique_secret_id(conn)
-        now = datetime.datetime.utcnow().isoformat() + "Z"
+        now = _utcnow().isoformat() + "Z"
         conn.execute(
             """INSERT INTO secrets (id, name, encrypted_value, description, scope, created_by,
                created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
@@ -77,7 +78,7 @@ def update_secret(
 ) -> bool:
     """Update a secret's encrypted value and/or description. Returns True if updated."""
     with get_connection() as conn:
-        now = datetime.datetime.utcnow().isoformat() + "Z"
+        now = _utcnow().isoformat() + "Z"
         parts = ["updated_at = ?"]
         params = [now]
         if encrypted_value is not None:
@@ -104,7 +105,7 @@ def delete_secret(secret_id: str) -> bool:
 def update_last_accessed(secret_id: str) -> bool:
     """Update the last_accessed_at timestamp for a secret."""
     with get_connection() as conn:
-        now = datetime.datetime.utcnow().isoformat() + "Z"
+        now = _utcnow().isoformat() + "Z"
         cursor = conn.execute(
             "UPDATE secrets SET last_accessed_at = ? WHERE id = ?", (now, secret_id)
         )

@@ -19,6 +19,8 @@ import logging
 import secrets
 from typing import Optional
 
+from app.utils.timezone import utcnow as _utcnow
+
 from . import session_events
 from .connection import get_connection
 from .ids import _get_unique_session_id
@@ -52,7 +54,7 @@ def _hash_token(token: str) -> str:
 
 def create_session(user_id: str, lifetime: dt.timedelta = DEFAULT_LIFETIME) -> Optional[dict]:
     """Issue a fresh session for *user_id*. Returns the row including the token."""
-    expires_at = dt.datetime.utcnow() + lifetime
+    expires_at = _utcnow() + lifetime
     with get_connection() as conn:
         sess_id = _get_unique_session_id(conn)
         token = _generate_token()
@@ -103,7 +105,7 @@ def get_session_by_token(
 
     if not token:
         return None
-    now = dt.datetime.utcnow()
+    now = _utcnow()
     grace_cutoff = (now - ROTATION_GRACE_WINDOW).isoformat()
     matched_row: Optional[dict] = None
     failure_event: Optional[tuple[str, str, Optional[str], Optional[dict]]] = None
@@ -192,7 +194,7 @@ def revoke_session(token: str, *, reason: str = "logout") -> bool:
 
     if not token:
         return False
-    now = dt.datetime.utcnow().isoformat()
+    now = _utcnow().isoformat()
     with get_connection() as conn:
         conn.row_factory = _row_to_dict
         rows = conn.execute(
@@ -227,7 +229,7 @@ def rotate_session(token: str) -> Optional[dict]:
 
     if not token:
         return None
-    now = dt.datetime.utcnow().isoformat()
+    now = _utcnow().isoformat()
     new_token = _generate_token()
     with get_connection() as conn:
         conn.row_factory = _row_to_dict
@@ -283,7 +285,7 @@ def revoke_user_sessions(user_id: str, *, reason: str) -> int:
     Reasons: 'role_change', 'key_rotation', 'admin', 'logout', etc.
     """
 
-    now = dt.datetime.utcnow().isoformat()
+    now = _utcnow().isoformat()
     with get_connection() as conn:
         # Capture the affected sessions for audit log before the UPDATE.
         conn.row_factory = _row_to_dict
@@ -309,10 +311,28 @@ def revoke_user_sessions(user_id: str, *, reason: str) -> int:
     return affected
 
 
-def purge_expired_sessions() -> int:
-    """Delete every session whose expires_at has passed. Returns the count."""
-    now = dt.datetime.utcnow().isoformat()
+def expire_sessions() -> int:
+    """Soft-revoke every session whose expires_at has passed. Returns count.
+
+    v0.6.1: renamed from `purge_expired_sessions` and switched to
+    soft-delete for consistency with `revoke_session` /
+    `revoke_user_sessions`. The expired rows now stay in the table
+    with `revoked_at` + `revoke_reason='expired'` set, preserving
+    them for the session_events audit log.
+
+    Hard-delete cleanup of long-revoked rows belongs to a separate
+    retention pass (out of scope for v0.6.1).
+    """
+    now = _utcnow().isoformat()
     with get_connection() as conn:
-        cursor = conn.execute("DELETE FROM sessions WHERE expires_at <= ?", (now,))
+        cursor = conn.execute(
+            "UPDATE sessions SET revoked_at = ?, revoke_reason = 'expired' "
+            "WHERE expires_at <= ? AND revoked_at IS NULL",
+            (now, now),
+        )
         conn.commit()
         return cursor.rowcount
+
+
+# Backwards-compatible alias — deprecated in v0.6.1; remove in v0.7.0.
+purge_expired_sessions = expire_sessions

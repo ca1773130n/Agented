@@ -4,6 +4,7 @@ import logging
 import math
 import re
 from datetime import datetime, timedelta
+from app.utils.timezone import utcnow as _utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -161,7 +162,7 @@ def apply_decay(agent_id: str) -> int:
     from ..db.connection import get_connection
 
     count = 0
-    now = datetime.utcnow()
+    now = _utcnow()
 
     with get_connection() as conn:
         cursor = conn.execute(
@@ -244,7 +245,7 @@ def should_consolidate(agent_id: str, thread_id: str, threshold: int = 50) -> bo
                 last_time = datetime.strptime(last, "%Y-%m-%d %H:%M:%S")
 
             # Must be at least 1 hour since last consolidation
-            if datetime.utcnow() - last_time < timedelta(hours=1):
+            if _utcnow() - last_time < timedelta(hours=1):
                 return False
 
             # Check if enough new messages since last consolidation

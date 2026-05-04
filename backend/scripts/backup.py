@@ -27,6 +27,7 @@ import sys
 import time
 from pathlib import Path
 from typing import Optional
+from app.utils.timezone import utcnow as _utcnow
 
 
 logger = logging.getLogger(__name__)
@@ -59,7 +60,7 @@ def _default_dest_dir() -> Path:
 
 def _utc_timestamp() -> str:
     """ISO-8601 UTC with colons → hyphens for filename safety."""
-    now = dt.datetime.utcnow().replace(microsecond=0)
+    now = _utcnow().replace(microsecond=0)
     return now.isoformat().replace(":", "-") + "Z"
 
 
