@@ -109,9 +109,12 @@ jobs:
           context: .
           file: Agented/Dockerfile
           push: true
+          # Hardcoded lowercase — `github.repository` is `ca1773130n/Agented`
+          # but Docker tags require lowercase. Hardcoding avoids the
+          # tr-uppercase-to-lowercase shell dance.
           tags: |
-            ghcr.io/${{ github.repository }}:${{ github.ref_name }}
-            ghcr.io/${{ github.repository }}:latest
+            ghcr.io/ca1773130n/agented:${{ github.ref_name }}
+            ghcr.io/ca1773130n/agented:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
