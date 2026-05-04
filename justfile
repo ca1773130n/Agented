@@ -206,6 +206,20 @@ docker-down:
 docker-logs:
     docker compose logs -f
 
+# v0.5.15: trigger a snapshot from inside the running backend container.
+# Writes to the agented-backups volume (mounted at /app/backups).
+docker-backup:
+    docker compose exec agented-backend python scripts/backup.py
+
+# v0.5.15: snapshot both SQLite DBs to AGENTED_BACKUP_DIR + apply
+# retention + optional remote sync via BACKUP_REMOTE_CMD.
+backup:
+    cd backend && uv run python scripts/backup.py
+
+# v0.5.15: restore from a snapshot. Stop the service first.
+restore:
+    cd backend && uv run python scripts/restore.py
+
 # v0.5.13: production deploy recipe. Distinct from `just deploy` (dev).
 # Validates env, builds frontend, kills, starts sidecar + gunicorn daemonized.
 # Sidecar readiness wait has a 60s timeout so a crashed sidecar fails loudly

@@ -20,6 +20,10 @@ services:
     environment:
       AGENTED_ENV: production
       AGENTED_DB_PATH: /app/data/agented.db
+      # v0.5.15: snapshot dir lives on the dedicated backups volume
+      # so `docker exec agented-backend just backup` writes to a
+      # host-visible location (default volume binds to ./backups).
+      AGENTED_BACKUP_DIR: /app/backups
       # In compose the sidecar is a separate DNS name; the in-image
       # HEALTHCHECK uses --liveness-only and probes only this container.
       AGENTED_BACKEND_URL: http://127.0.0.1:20000
@@ -33,6 +37,7 @@ services:
       retries: 3
     volumes:
       - agented-data:/app/data
+      - agented-backups:/app/backups
 
   agented-sidecar:
     image: ghcr.io/ca1773130n/agented:${GHCR_TAG:-latest}
@@ -43,6 +48,7 @@ services:
     environment:
       AGENTED_ENV: production
       AGENTED_DB_PATH: /app/data/agented.db
+      AGENTED_BACKUP_DIR: /app/backups
     ports:
       - "20001:20001"
     restart: unless-stopped
@@ -51,6 +57,10 @@ services:
         condition: service_started
     volumes:
       - agented-data:/app/data
+      - agented-backups:/app/backups
 
 volumes:
   agented-data:
+  # v0.5.15: dedicated backup volume — survives container replacement;
+  # operator can rsync/copy /var/lib/docker/volumes/agented-backups/ off-host.
+  agented-backups:

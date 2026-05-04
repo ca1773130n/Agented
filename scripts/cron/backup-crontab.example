@@ -1,0 +1,10 @@
+# v0.5.15: Example crontab entry for daily Agented backup at 03:00.
+#
+# Install (operator's user crontab):
+#   crontab -e
+#   # paste the line below, with REPLACE_ME_REPO_PATH adjusted.
+#
+# Optional: redirect stderr to a log file:
+#   ... >> /home/operator/Agented/backend/backup.log 2>&1
+
+0 3 * * * cd REPLACE_ME_REPO_PATH && /usr/bin/just backup

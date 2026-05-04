@@ -1,0 +1,25 @@
+# v0.5.15: Linux systemd one-shot service for Agented SQLite backup.
+# Pair with agented-backup.timer for scheduling.
+#
+# CUSTOMIZE: replace REPLACE_ME_REPO_PATH and REPLACE_ME_HOME (see
+# agented-backend.service for placeholder semantics).
+#
+# INSTALL:
+#   mkdir -p ~/.config/systemd/user
+#   cp scripts/systemd/agented-backup.service ~/.config/systemd/user/
+#   cp scripts/systemd/agented-backup.timer   ~/.config/systemd/user/
+#   systemctl --user daemon-reload
+#   systemctl --user enable --now agented-backup.timer
+
+[Unit]
+Description=Agented SQLite backup (oneshot)
+Documentation=https://github.com/ca1773130n/Agented/blob/main/docs/deploy/BACKUP.md
+
+[Service]
+Type=oneshot
+WorkingDirectory=REPLACE_ME_REPO_PATH
+EnvironmentFile=REPLACE_ME_REPO_PATH/.env
+Environment=AGENTED_ENV=production
+ExecStart=/usr/bin/just backup
+StandardOutput=journal
+StandardError=journal
