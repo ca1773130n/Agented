@@ -19,6 +19,7 @@ import logging
 
 from app.db.password_resets import consume_token, request_reset
 from app.db.sessions import create_session, revoke_session, revoke_user_sessions
+from app_litestar.rate_limit_guard import requires_rate_limit
 from app.db.users import (
     authenticate,
     create_user,
@@ -46,7 +47,7 @@ class SignupBody(Struct):
 _MIN_PASSWORD_LEN = 8
 
 
-@post("/signup", sync_to_thread=False)
+@post("/signup", sync_to_thread=False, guards=[requires_rate_limit(5, 60.0)])
 def signup(data: SignupBody) -> dict:
     """Open registration: create user + immediately issue a session token.
 
@@ -90,7 +91,7 @@ def signup(data: SignupBody) -> dict:
     }
 
 
-@post("/login", sync_to_thread=False)
+@post("/login", sync_to_thread=False, guards=[requires_rate_limit(5, 60.0)])
 def login(data: LoginBody) -> dict[str, Any]:
     """Verify credentials and issue a session token.
 
@@ -183,7 +184,12 @@ class ResetPasswordBody(Struct):
     password: str
 
 
-@post("/forgot-password", status_code=HTTP_204_NO_CONTENT, sync_to_thread=False)
+@post(
+    "/forgot-password",
+    status_code=HTTP_204_NO_CONTENT,
+    sync_to_thread=False,
+    guards=[requires_rate_limit(3, 60.0)],
+)
 def forgot_password(data: ForgotPasswordBody) -> None:
     """Issue a password-reset token for *email* if it exists.
 
@@ -203,7 +209,12 @@ def forgot_password(data: ForgotPasswordBody) -> None:
     return None
 
 
-@post("/reset-password", status_code=HTTP_204_NO_CONTENT, sync_to_thread=False)
+@post(
+    "/reset-password",
+    status_code=HTTP_204_NO_CONTENT,
+    sync_to_thread=False,
+    guards=[requires_rate_limit(5, 60.0)],
+)
 def reset_password(data: ResetPasswordBody) -> None:
     """Consume a reset token and set the new password."""
     if len(data.password) < 8:
