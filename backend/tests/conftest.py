@@ -22,6 +22,22 @@ if shutil.which("claude") is None:
 
 
 @pytest.fixture(autouse=True)
+def _reset_rate_limit_overrides():
+    """v0.5.14: rate_limit_guard._PER_ROUTE_OVERRIDES is module-global.
+    Tests that spin up the full Litestar app via on_startup populate it
+    via the eager walker; without a reset, those entries leak into
+    subsequent tests in OTHER files that don't clear the registry."""
+    try:
+        from app_litestar.rate_limit_guard import clear_overrides
+    except Exception:
+        yield
+        return
+    clear_overrides()
+    yield
+    clear_overrides()
+
+
+@pytest.fixture(autouse=True)
 def isolated_db(tmp_path, monkeypatch):
     """Provide each test with an isolated SQLite database.
 

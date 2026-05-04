@@ -216,6 +216,61 @@ class TestFullStackOrdering:
 
         clear_overrides()
 
+    async def test_authed_request_isolates_different_users(self, isolated_db):
+        """Codex round-2 D: different users hitting the same route through
+        the real stack must NOT share a budget. Pairs with the same-user
+        test above which asserts the symmetric shared-budget case."""
+        from litestar import get
+        from litestar.testing import create_test_client
+        from app_litestar.middleware import ApiKeyMiddleware, RateLimitMiddleware
+        from app_litestar.rate_limit_guard import (
+            clear_overrides, register_override,
+        )
+        from app.database import get_connection
+        from app.db.rbac import create_user_role, generate_api_key
+
+        clear_overrides()
+        register_override("GET", "/api/probe-iso", 3, 60.0)
+
+        @get("/api/probe-iso", sync_to_thread=False)
+        def probe_iso() -> dict:
+            return {"ok": True}
+
+        with get_connection() as conn:
+            for uid, email in (("u-A", "a@iso"), ("u-B", "b@iso")):
+                conn.execute(
+                    "INSERT OR IGNORE INTO users (id, email, password_hash, "
+                    "created_at) VALUES (?, ?, ?, CURRENT_TIMESTAMP)",
+                    (uid, email, "x"),
+                )
+            conn.commit()
+        key_a = generate_api_key()
+        key_b = generate_api_key()
+        create_user_role(key_a, label="A", role="viewer", user_id="u-A")
+        create_user_role(key_b, label="B", role="viewer", user_id="u-B")
+
+        with create_test_client(
+            route_handlers=[probe_iso],
+            middleware=[ApiKeyMiddleware(), RateLimitMiddleware()],
+        ) as client:
+            # User A burns their budget.
+            for _ in range(3):
+                assert client.get(
+                    "/api/probe-iso", headers={"X-API-Key": key_a}
+                ).status_code == 200
+            assert client.get(
+                "/api/probe-iso", headers={"X-API-Key": key_a}
+            ).status_code == 429
+            # User B should be unaffected.
+            assert client.get(
+                "/api/probe-iso", headers={"X-API-Key": key_b}
+            ).status_code == 200, (
+                "Per-user budget isolation broken: user B should have a "
+                "fresh budget on a route where user A is throttled"
+            )
+
+        clear_overrides()
+
 
 class TestEnvDrivenDefaults:
     """Module-level _RATE_LIMITS is built at import time from env vars.
