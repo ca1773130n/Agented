@@ -135,8 +135,21 @@ before installing.
 
 ### 5b. Container (Docker Compose)
 
+The container build needs the sibling `ai-accounts/` repo at the
+parent of Agented (same layout as dev — see `CLAUDE.md`):
+
+```
+parent/
+├── Agented/
+└── ai-accounts/
+```
+
+Both backend (`pyproject.toml`) and frontend (`package.json`) have
+path deps that reference `../../ai-accounts/packages/*`. The
+Dockerfile builds from the parent directory so those resolve.
+
 ```bash
-just docker-build      # builds the multi-stage image
+just docker-build      # cd .. && docker build -f Agented/Dockerfile .
 just docker-up         # starts backend + sidecar
 just docker-logs       # tails both services
 ```
@@ -200,7 +213,7 @@ bash scripts/setup.sh
 just deploy-prod
 ```
 
-Container:
+Container (the compose file interpolates `${GHCR_TAG:-latest}`):
 
 ```bash
 docker pull ghcr.io/ca1773130n/agented:<previous-tag>

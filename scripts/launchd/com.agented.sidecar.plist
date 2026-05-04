@@ -10,9 +10,10 @@
     <key>Label</key>
     <string>com.agented.sidecar</string>
 
+    <!-- /bin/zsh -lc sources ~/.zshrc per the macOS Keychain pattern. -->
     <key>ProgramArguments</key>
     <array>
-        <string>/bin/bash</string>
+        <string>/bin/zsh</string>
         <string>-lc</string>
         <string>cd REPLACE_ME_REPO_PATH/backend &amp;&amp; exec uv run python scripts/run_ai_accounts.py</string>
     </array>

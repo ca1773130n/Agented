@@ -6,9 +6,22 @@ _AGENTED_VARS = (
     "AGENTED_API_KEY",
     "AI_ACCOUNTS_API_KEY",
     "AI_ACCOUNTS_VAULT_KEY",
+    "AGENTED_VAULT_KEYS",
     "AGENTED_ENV",
+    "AGENTED_DB_PATH",
     "LOG_LEVEL",
+    "LOG_FORMAT",
     "GUNICORN_BIND",
+    "AGENTED_BACKEND_URL",
+    "AGENTED_SIDECAR_URL",
+    "AI_ACCOUNTS_ALLOW_NOAUTH",
+    "ANTHROPIC_API_KEY",
+    "GITHUB_WEBHOOK_SECRET",
+    "GITHUB_TOKEN",
+    "CORS_ALLOWED_ORIGINS",
+    "SENTRY_DSN",
+    "SENTRY_ENVIRONMENT",
+    "SENTRY_RELEASE",
     "VITE_HOST",
     "VITE_ALLOWED_HOSTS",
 )
@@ -38,12 +51,14 @@ class TestValidate:
         assert "AGENTED_API_KEY" in missing
         assert "AI_ACCOUNTS_API_KEY" in missing
         assert "AI_ACCOUNTS_VAULT_KEY" in missing
+        assert "AGENTED_VAULT_KEYS" in missing
 
     def test_production_posture_passes_when_all_set(self, monkeypatch):
         monkeypatch.setenv("AGENTED_ENV", "production")
         monkeypatch.setenv("AGENTED_API_KEY", "k1")
         monkeypatch.setenv("AI_ACCOUNTS_API_KEY", "k2")
         monkeypatch.setenv("AI_ACCOUNTS_VAULT_KEY", "k3")
+        monkeypatch.setenv("AGENTED_VAULT_KEYS", "k4")
         from scripts.check_env import validate
         ok, missing, warnings = validate()
         assert ok is True
@@ -54,10 +69,12 @@ class TestFileRedirect:
     def test_FILE_suffix_loads_from_path(self, monkeypatch, tmp_path):
         secret_file = tmp_path / "key.txt"
         secret_file.write_text("real-secret-value\n")
+        secret_file.chmod(0o600)
         monkeypatch.setenv("AGENTED_ENV", "production")
         monkeypatch.setenv("AGENTED_API_KEY_FILE", str(secret_file))
         monkeypatch.setenv("AI_ACCOUNTS_API_KEY", "k2")
         monkeypatch.setenv("AI_ACCOUNTS_VAULT_KEY", "k3")
+        monkeypatch.setenv("AGENTED_VAULT_KEYS", "k4")
         from scripts.check_env import resolve, validate
         assert resolve("AGENTED_API_KEY") == "real-secret-value"
         ok, missing, _ = validate()
@@ -68,6 +85,7 @@ class TestFileRedirect:
         monkeypatch.setenv("AGENTED_API_KEY_FILE", "/nonexistent/path")
         monkeypatch.setenv("AI_ACCOUNTS_API_KEY", "k2")
         monkeypatch.setenv("AI_ACCOUNTS_VAULT_KEY", "k3")
+        monkeypatch.setenv("AGENTED_VAULT_KEYS", "k4")
         from scripts.check_env import validate
         ok, missing, _ = validate()
         assert ok is False
@@ -80,6 +98,20 @@ class TestFileRedirect:
         monkeypatch.setenv("AGENTED_API_KEY_FILE", str(secret_file))
         from scripts.check_env import resolve
         assert resolve("AGENTED_API_KEY") == "from-env"
+
+    def test_world_readable_FILE_emits_permission_warning(self, monkeypatch, tmp_path):
+        secret_file = tmp_path / "key.txt"
+        secret_file.write_text("secret")
+        secret_file.chmod(0o644)  # world-readable
+        monkeypatch.setenv("AGENTED_ENV", "production")
+        monkeypatch.setenv("AGENTED_API_KEY_FILE", str(secret_file))
+        monkeypatch.setenv("AI_ACCOUNTS_API_KEY", "k2")
+        monkeypatch.setenv("AI_ACCOUNTS_VAULT_KEY", "k3")
+        monkeypatch.setenv("AGENTED_VAULT_KEYS", "k4")
+        from scripts.check_env import validate
+        ok, _, warnings = validate()
+        assert ok is True
+        assert any("world-readable" in w for w in warnings)
 
 
 class TestCLI:

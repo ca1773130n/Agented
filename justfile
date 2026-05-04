@@ -208,6 +208,8 @@ docker-logs:
 
 # v0.5.13: production deploy recipe. Distinct from `just deploy` (dev).
 # Validates env, builds frontend, kills, starts sidecar + gunicorn daemonized.
+# Sidecar readiness wait has a 60s timeout so a crashed sidecar fails loudly
+# instead of hanging the recipe forever.
 deploy-prod: kill check-env build
     #!/usr/bin/env bash
     set -euo pipefail
@@ -216,7 +218,18 @@ deploy-prod: kill check-env build
     echo "Backend API: http://localhost:20000"
     echo "Sidecar:     http://localhost:20001"
     (cd backend && nohup uv run python scripts/run_ai_accounts.py >sidecar.log 2>&1 &)
-    while ! curl -sf http://127.0.0.1:20001/health >/dev/null 2>&1; do sleep 0.5; done
+    SIDECAR_TIMEOUT=60
+    for i in $(seq 1 $SIDECAR_TIMEOUT); do
+      if curl -sf http://127.0.0.1:20001/health >/dev/null 2>&1; then
+        break
+      fi
+      if [ "$i" -eq "$SIDECAR_TIMEOUT" ]; then
+        echo "ERROR: sidecar did not become ready within ${SIDECAR_TIMEOUT}s." >&2
+        echo "Check backend/sidecar.log for the failure cause." >&2
+        exit 1
+      fi
+      sleep 1
+    done
     echo "Sidecar ready (logs: backend/sidecar.log)"
     (cd backend && OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES nohup uv run gunicorn -c gunicorn.conf.py >backend.log 2>&1 &)
     sleep 2
