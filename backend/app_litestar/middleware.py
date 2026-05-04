@@ -6,18 +6,20 @@ import hmac
 import logging
 import os
 import uuid
-from typing import Any
+from typing import Any, Optional
 
 from litestar.middleware import ASGIMiddleware
 from litestar.types import ASGIApp, Receive, Scope, Send
 
 from app.db.rbac import (
+    get_highest_role_for_user,
     get_role_and_user_for_api_key,
-    get_role_for_api_key,
     has_any_keys,
 )
 from app.db.sessions import get_session_by_token
+from app.db.sessions import rotate_session as _rotate_session
 from app.logging_config import current_user_var, request_id_var
+from app_litestar.auth_guards import has_sufficient_role, required_role
 
 logger = logging.getLogger("app.request")
 
@@ -143,6 +145,7 @@ class ApiKeyMiddleware(ASGIMiddleware):
         env_key = os.environ.get("AGENTED_API_KEY", "")
 
         if not db_has_keys and not env_key:
+            # Bootstrap mode — every request through.
             await next_app(scope, receive, send)
             return
 
@@ -150,28 +153,69 @@ class ApiKeyMiddleware(ASGIMiddleware):
             k.decode("latin-1").lower(): v.decode("latin-1")
             for k, v in scope.get("headers", ())
         }
-        provided = headers.get("x-api-key", "")
+        api_key_provided = headers.get("x-api-key", "")
+        bearer = ""
+        if headers.get("authorization", "").lower().startswith("bearer "):
+            bearer = headers["authorization"][7:].strip()
 
-        # Sessions: Authorization: Bearer <token> bypasses the X-API-Key check.
-        if not provided and headers.get("authorization"):
-            session_user = _resolve_session_user(headers["authorization"])
-            if session_user:
-                await next_app(scope, receive, send)
+        principal_role: Optional[str] = None
+        principal_user_id: Optional[str] = None
+        rotated_token: Optional[str] = None
+
+        # 1) Bearer session path.
+        if bearer:
+            session = get_session_by_token(bearer)
+            if session:
+                principal_user_id = session["user_id"]
+                principal_role = get_highest_role_for_user(principal_user_id)
+                # Rotate — issue a new token; emit X-New-Session-Token.
+                rotated = _rotate_session(bearer)
+                if rotated:
+                    rotated_token = rotated["token"]
+            else:
+                await self._unauthorized(send)
                 return
-
-        if not provided:
+        # 2) X-API-Key path (no rotation; explicit credentials).
+        elif api_key_provided:
+            if db_has_keys:
+                role_and_user = get_role_and_user_for_api_key(api_key_provided)
+                if role_and_user:
+                    principal_role, principal_user_id = role_and_user
+            if principal_role is None and env_key and hmac.compare_digest(
+                api_key_provided, env_key
+            ):
+                principal_role = "admin"  # env-key principal acts as admin
+            if principal_role is None:
+                await self._unauthorized(send)
+                return
+        else:
             await self._unauthorized(send)
             return
 
-        if db_has_keys and get_role_for_api_key(provided):
-            await next_app(scope, receive, send)
+        # 3) Coarse role check.
+        needed = required_role(method, path)
+        if needed is not None and not has_sufficient_role(principal_role, needed):
+            await self._forbidden(send)
             return
 
-        if env_key and hmac.compare_digest(provided, env_key):
-            await next_app(scope, receive, send)
-            return
+        # 4) Stash principal for per-route guards + handlers.
+        scope.setdefault("state", {})
+        scope["state"]["principal"] = {
+            "user_id": principal_user_id,
+            "role": principal_role,
+        }
 
-        await self._unauthorized(send)
+        # 5) Wrap `send` to inject X-New-Session-Token on the response start.
+        async def send_with_rotation(message: Any) -> None:
+            if message["type"] == "http.response.start" and rotated_token:
+                hdrs = list(message.get("headers", []))
+                hdrs.append(
+                    (b"x-new-session-token", rotated_token.encode("latin-1"))
+                )
+                message = dict(message, headers=hdrs)
+            await send(message)
+
+        await next_app(scope, receive, send_with_rotation)
 
     @staticmethod
     async def _unauthorized(send: Send) -> None:
@@ -180,6 +224,21 @@ class ApiKeyMiddleware(ASGIMiddleware):
             {
                 "type": "http.response.start",
                 "status": 401,
+                "headers": [
+                    (b"content-type", b"application/json"),
+                    (b"content-length", str(len(body)).encode()),
+                ],
+            }
+        )
+        await send({"type": "http.response.body", "body": body, "more_body": False})
+
+    @staticmethod
+    async def _forbidden(send: Send) -> None:
+        body = _json_error_body("FORBIDDEN", "Forbidden")
+        await send(
+            {
+                "type": "http.response.start",
+                "status": 403,
                 "headers": [
                     (b"content-type", b"application/json"),
                     (b"content-length", str(len(body)).encode()),
