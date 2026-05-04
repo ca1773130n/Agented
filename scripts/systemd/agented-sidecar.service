@@ -1,0 +1,23 @@
+# v0.5.13: Linux systemd user-service template for ai-accounts sidecar.
+# CUSTOMIZE: see agented-backend.service for placeholders.
+
+[Unit]
+Description=Agented ai-accounts sidecar
+Documentation=https://github.com/ca1773130n/Agented/blob/main/docs/deploy/RUNBOOK.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=REPLACE_ME_REPO_PATH/backend
+EnvironmentFile=REPLACE_ME_REPO_PATH/.env
+Environment=AGENTED_ENV=production
+ExecStart=REPLACE_ME_HOME/.local/bin/uv run python scripts/run_ai_accounts.py
+Restart=on-failure
+RestartSec=10
+TimeoutStopSec=30
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target
