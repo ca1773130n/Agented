@@ -34,6 +34,13 @@ class TestRequiredRole:
         from app_litestar.auth_guards import required_role
         assert required_role("POST", "/admin/auth/login") is None
 
+    def test_logout_endpoint_is_public(self):
+        """Logout must bypass the coarse role check so any authenticated
+        principal (including viewer) can end their session."""
+        from app_litestar.auth_guards import required_role, PUBLIC_PATHS
+        assert "/admin/auth/logout" in PUBLIC_PATHS
+        assert required_role("POST", "/admin/auth/logout") is None
+
     def test_unmapped_paths_default_public(self):
         from app_litestar.auth_guards import required_role
         assert required_role("GET", "/some/random/path") is None

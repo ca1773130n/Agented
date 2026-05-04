@@ -39,6 +39,7 @@ PUBLIC_PATHS: tuple[str, ...] = (
     "/docs",
     "/schema",
     "/admin/auth/login",
+    "/admin/auth/logout",
 )
 
 
