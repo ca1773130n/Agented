@@ -1,11 +1,13 @@
 """Session token storage (track B, wave 32).
 
-Tokens are 256-bit URL-safe random strings. Verification is constant-time
-(hmac.compare_digest) and rotates ``last_used_at`` so a future grooming
-job can prune idle sessions.
+Tokens are 256-bit URL-safe random strings. Per-token comparison is
+``hmac.compare_digest``; the lookup itself is a no-early-return scan
+that visits every active row before deciding (see
+``get_session_by_token`` for the precise timing contract).
 
-v0.5.12: idle-expiry, token rotation with grace window, revoke-by-user,
-soft-delete revocation, and audit logging via session_events.
+v0.5.12: idle-expiry, token rotation with grace window anchored to
+``rotated_at``, revoke-by-user, soft-delete revocation, and audit
+logging via session_events.
 """
 
 from __future__ import annotations
@@ -102,7 +104,12 @@ def get_session_by_token(
             primary_match = hmac.compare_digest(row["token"], token)
             rotated_token = row.get("rotated_from_token") or ""
             rotated_compare = hmac.compare_digest(rotated_token, token) if rotated_token else False
-            rotated_in_window = (row.get("last_used_at") or "") > grace_cutoff
+            # v0.5.12 round-3: anchor grace window to `rotated_at`
+            # (set only by rotate_session) instead of `last_used_at`
+            # (refreshed on every successful auth). Otherwise an
+            # attacker replaying the old token could slide the window
+            # forward indefinitely.
+            rotated_in_window = (row.get("rotated_at") or "") > grace_cutoff
             rotated_match = bool(rotated_token) and rotated_compare and rotated_in_window
             if not primary_match and not rotated_match:
                 continue
@@ -204,9 +211,12 @@ def rotate_session(token: str) -> Optional[dict]:
             old_token = row["token"]
             cursor = conn.execute(
                 """UPDATE sessions
-                   SET token = ?, rotated_from_token = ?, last_used_at = ?
+                   SET token = ?,
+                       rotated_from_token = ?,
+                       rotated_at = ?,
+                       last_used_at = ?
                    WHERE id = ? AND token = ? AND revoked_at IS NULL""",
-                (new_token, old_token, now, row["id"], old_token),
+                (new_token, old_token, now, now, row["id"], old_token),
             )
             conn.commit()
             if cursor.rowcount == 0:
@@ -227,6 +237,7 @@ def rotate_session(token: str) -> Optional[dict]:
                 return current
             row["token"] = new_token
             row["rotated_from_token"] = old_token
+            row["rotated_at"] = now
             row["last_used_at"] = now
             session_events.log_session_event(
                 row["id"], row["user_id"], "rotated",

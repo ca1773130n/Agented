@@ -4446,6 +4446,28 @@ def _migrate_109_session_audit_columns(conn):
     )
 
 
+def _migrate_110_session_rotated_at(conn):
+    """v0.5.12: anchor the rotation grace window to a stable timestamp.
+
+    Migration 109 used `last_used_at` for the rotation grace window,
+    but that column is also refreshed on every successful auth — so
+    an attacker holding an old token could replay it indefinitely,
+    each replay sliding the 5-second window forward. Add a
+    `rotated_at` column set only by `rotate_session`, never by the
+    per-request touch.
+    """
+    import sqlite3
+
+    cursor = conn.execute("PRAGMA table_info(sessions)")
+    existing = {row[1] for row in cursor.fetchall()}
+    if "rotated_at" not in existing:
+        try:
+            conn.execute("ALTER TABLE sessions ADD COLUMN rotated_at TIMESTAMP")
+        except sqlite3.OperationalError as exc:
+            if "duplicate column name" not in str(exc).lower():
+                raise
+
+
 def _migrate_107_owned_entities_batch2_user_id(conn):
     """Multi-tenancy — remaining owned-entity tables (track B, wave 42).
 
@@ -4753,4 +4775,7 @@ VERSIONED_MIGRATIONS = [
     (108, "password_reset_tokens", _migrate_108_password_reset_tokens),
     # v0.5.12 auth depth: session audit + lifecycle hardening
     (109, "session_audit_columns", _migrate_109_session_audit_columns),
+    # v0.5.12 round-3 fix: separate rotation timestamp so grace window
+    # cannot be slid forward by replaying the rotated_from_token.
+    (110, "session_rotated_at", _migrate_110_session_rotated_at),
 ]

@@ -132,6 +132,38 @@ class TestRevokedSessionLookup:
         assert "used_after_revocation" in types
 
 
+class TestGraceWindowReplayDefense:
+    def test_old_token_replay_does_not_extend_grace_window(self, isolated_db):
+        """Codex round-3: rotation grace window must NOT slide forward
+        on each replay of the old token. Anchor must be rotated_at,
+        which is set only by rotate_session, never by per-request touch.
+        """
+        import datetime as dt
+        from app.db.sessions import (
+            create_session, rotate_session, get_session_by_token,
+        )
+        from app.database import get_connection
+        _make_user("u1")
+        s = create_session("u1")
+        old = s["token"]
+        rotate_session(old)
+
+        # Backdate rotated_at to >5s ago. last_used_at is freshly NOW
+        # because rotate_session also touched it. Pre-fix code checked
+        # last_used_at > grace_cutoff → still in window. Post-fix
+        # checks rotated_at > grace_cutoff → out of window.
+        past = (dt.datetime.utcnow() - dt.timedelta(seconds=10)).isoformat()
+        with get_connection() as conn:
+            conn.execute(
+                "UPDATE sessions SET rotated_at = ? WHERE id = ?",
+                (past, s["id"]),
+            )
+            conn.commit()
+
+        # Replay with the OLD token must now miss.
+        assert get_session_by_token(old) is None
+
+
 class TestRotateOldTokenReturnsNone:
     def test_rotate_already_rotated_token_returns_none(self, isolated_db):
         """After rotation, the old token no longer matches any active
