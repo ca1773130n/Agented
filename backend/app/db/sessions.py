@@ -71,20 +71,20 @@ def get_session_by_token(
     *,
     idle_lifetime: dt.timedelta = DEFAULT_IDLE_LIFETIME,
 ) -> Optional[dict]:
-    """Token lookup with no early-return. Returns the session row, or
-    None on miss / absolute expiry / idle expiry / revocation. Touches
-    last_used_at on hit. Within the rotation grace window, the
-    previous token (rotated_from_token) also resolves to the row.
+    """Token lookup with index-driven SELECT. Returns the session row,
+    or None on miss / absolute expiry / idle expiry / revocation.
+    Touches last_used_at on hit. Within the rotation grace window,
+    the previous token (rotated_from_token) also resolves to the row.
 
     Logs lifecycle events on idle/expired/revoked-use paths.
 
-    The scan visits every active session row before returning, which
-    eliminates row-position-dependent timing leaks. Per-row work still
-    differs slightly (matched rows run revocation/expiry/idle checks;
-    non-matching rows skip them), and successful auth pays a post-scan
-    UPDATE while a miss does not — so this is not strictly
-    constant-time, but it is robust enough for the threat model where
-    an attacker cannot directly observe per-row CPU.
+    v0.6.0: lookup goes through idx_sessions_token (UNIQUE) +
+    idx_sessions_rotated_from_token_v2 — at most 2 rows match. The
+    loop still runs hmac.compare_digest on each match before deciding,
+    preserving the constant-time comparison contract within the
+    indexed result set. Successful auth pays a single UPDATE; a miss
+    pays only the SELECT — that asymmetry is observable but does not
+    depend on token contents.
     """
 
     if not token:
@@ -95,15 +95,22 @@ def get_session_by_token(
     failure_event: Optional[tuple[str, str, Optional[str], Optional[dict]]] = None
     with get_connection() as conn:
         conn.row_factory = _row_to_dict
-        rows = conn.execute("SELECT * FROM sessions").fetchall()
+        # v0.6.0: index-driven lookup (idx_sessions_token UNIQUE +
+        # idx_sessions_rotated_from_token_v2). At most 2 rows match
+        # (current token, rotated-from token); the loop still runs
+        # compare_digest on each so the constant-time contract is
+        # preserved within the indexed result set.
+        rows = conn.execute(
+            "SELECT * FROM sessions WHERE token = ? OR rotated_from_token = ?",
+            (token, token),
+        ).fetchall()
         conn.row_factory = None
         for row in rows:
-            # Match against either current or rotated-from token. Both
-            # comparisons run for every row so timing does not leak which
-            # one matched (or that any row matched).
             primary_match = hmac.compare_digest(row["token"], token)
             rotated_token = row.get("rotated_from_token") or ""
-            rotated_compare = hmac.compare_digest(rotated_token, token) if rotated_token else False
+            rotated_compare = (
+                hmac.compare_digest(rotated_token, token) if rotated_token else False
+            )
             # v0.5.12 round-3: anchor grace window to `rotated_at`
             # (set only by rotate_session) instead of `last_used_at`
             # (refreshed on every successful auth). Otherwise an
