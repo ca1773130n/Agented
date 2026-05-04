@@ -51,7 +51,20 @@ jobs:
       contents: read
       packages: write
     steps:
-      - uses: actions/checkout@v4
+      # Check out Agented INTO a subdirectory; the Dockerfile expects
+      # a build context that contains both Agented/ and ai-accounts/
+      # at the root.
+      - name: Checkout Agented
+        uses: actions/checkout@v4
+        with:
+          path: Agented
+
+      - name: Checkout ai-accounts (sibling)
+        uses: actions/checkout@v4
+        with:
+          repository: ca1773130n/ai-accounts
+          path: ai-accounts
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Setup Buildx
         uses: docker/setup-buildx-action@v3
@@ -66,7 +79,9 @@ jobs:
       - name: Build + push image
         uses: docker/build-push-action@v5
         with:
+          # Build context = workspace root (contains Agented/ + ai-accounts/).
           context: .
+          file: Agented/Dockerfile
           push: true
           tags: |
             ghcr.io/${{ github.repository }}:${{ github.ref_name }}

@@ -20,17 +20,20 @@ ARG PYTHON_VERSION=3.12
 
 # Stage 1 — frontend builder (resolves @ai-accounts/* file: deps)
 FROM node:20-alpine AS frontend-builder
+# pnpm is required because ai-accounts is a pnpm workspace using
+# `workspace:*` cross-package deps. plain npm cannot resolve those.
+RUN corepack enable && corepack prepare pnpm@latest --activate
 WORKDIR /build
-# Copy ai-accounts source so the file: deps in package.json resolve.
+# Copy ai-accounts source so the file: deps in Agented's package.json
+# resolve.
 COPY ai-accounts/ /build/ai-accounts/
-# Build ai-accounts packages so their dist/ is populated. Frontend
-# imports from @ai-accounts/*/dist (per package main/module/exports).
-RUN for pkg in ts-core vue-headless vue-styled; do \
-        if [ -d "/build/ai-accounts/packages/$pkg" ]; then \
-            (cd "/build/ai-accounts/packages/$pkg" && npm install --ignore-scripts && npm run build); \
-        fi; \
-    done
-# Now bring in Agented frontend and build it.
+# Install + build ai-accounts packages via pnpm so workspace:* deps
+# resolve. The frontend imports from @ai-accounts/*/dist (per each
+# package's main/module/exports).
+WORKDIR /build/ai-accounts
+RUN pnpm install --frozen-lockfile --ignore-scripts || pnpm install --ignore-scripts
+RUN pnpm -r --filter "@ai-accounts/ts-core" --filter "@ai-accounts/vue-headless" --filter "@ai-accounts/vue-styled" run build
+# Now bring in Agented frontend and build it via npm (its own package.json).
 COPY Agented/frontend/package.json Agented/frontend/package-lock.json* /build/Agented/frontend/
 WORKDIR /build/Agented/frontend
 RUN npm ci --ignore-scripts || npm install --ignore-scripts

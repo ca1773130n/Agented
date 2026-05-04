@@ -38,6 +38,8 @@ cp .env.example .env
 echo "AGENTED_API_KEY=$(openssl rand -hex 32)" >> .env.tmp
 echo "AI_ACCOUNTS_API_KEY=$(openssl rand -hex 32)" >> .env.tmp
 echo "AI_ACCOUNTS_VAULT_KEY=$(openssl rand -base64 32)" >> .env.tmp
+# AGENTED_VAULT_KEYS uses Fernet (cryptography lib) and must be base64-encoded.
+echo "AGENTED_VAULT_KEYS=$(python3 -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())')" >> .env.tmp
 # Merge .env.tmp into .env, then:
 rm .env.tmp
 chmod 600 .env  # sole-user-readable

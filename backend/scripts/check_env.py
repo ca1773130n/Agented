@@ -170,16 +170,14 @@ OPTIONAL_VARS: list[dict] = [
 ]
 
 
-_PERMISSION_WARNINGS: list[str] = []
-
-
-def _resolve_file_redirect(name: str) -> Optional[str]:
+def _resolve_file_redirect(
+    name: str, *, perm_warnings: Optional[list[str]] = None,
+) -> Optional[str]:
     """If `<NAME>_FILE` is set in env, read the file and return its
     stripped contents. Used for Docker-secrets / mounted secret files.
 
-    Records a warning into `_PERMISSION_WARNINGS` if the file is
-    world-readable — Docker-secrets mounts are typically 0644 so
-    this is informational unless the secret is on a host filesystem.
+    If `perm_warnings` is provided, appends a warning when the file is
+    world-readable. Pure pass-through otherwise — no module-level state.
     """
     import stat
 
@@ -190,24 +188,25 @@ def _resolve_file_redirect(name: str) -> Optional[str]:
     path = Path(path_str)
     if not path.is_file():
         return None
-    try:
-        mode = path.stat().st_mode
-        if mode & (stat.S_IROTH | stat.S_IWOTH):
-            _PERMISSION_WARNINGS.append(
-                f"{file_var}={path_str} is world-readable/writable; "
-                f"recommend chmod 600"
-            )
-    except OSError:
-        pass
+    if perm_warnings is not None:
+        try:
+            mode = path.stat().st_mode
+            if mode & (stat.S_IROTH | stat.S_IWOTH):
+                perm_warnings.append(
+                    f"{file_var}={path_str} is world-readable/writable; "
+                    f"recommend chmod 600"
+                )
+        except OSError:
+            pass
     return path.read_text().strip()
 
 
-def resolve(name: str) -> Optional[str]:
+def resolve(name: str, *, perm_warnings: Optional[list[str]] = None) -> Optional[str]:
     """Get a var's value: prefer literal env; fall back to *_FILE redirect."""
     val = os.environ.get(name)
     if val:
         return val
-    return _resolve_file_redirect(name)
+    return _resolve_file_redirect(name, perm_warnings=perm_warnings)
 
 
 def validate(*, strict: bool = True) -> tuple[bool, list[str], list[str]]:
@@ -216,8 +215,8 @@ def validate(*, strict: bool = True) -> tuple[bool, list[str], list[str]]:
     strict=True (default) treats missing required vars as failure.
     When AGENTED_ENV != 'production', strict is silently downgraded
     to False — dev environments boot with sparse env."""
-    _PERMISSION_WARNINGS.clear()
-    posture = resolve("AGENTED_ENV") or "development"
+    perm_warnings: list[str] = []
+    posture = resolve("AGENTED_ENV", perm_warnings=perm_warnings) or "development"
     if strict and posture != "production":
         strict = False
 
@@ -228,12 +227,12 @@ def validate(*, strict: bool = True) -> tuple[bool, list[str], list[str]]:
             if not resolve("AGENTED_ENV"):
                 warnings.append("AGENTED_ENV unset — defaulting to development")
             continue
-        if not resolve(spec["name"]):
+        if not resolve(spec["name"], perm_warnings=perm_warnings):
             if strict:
                 missing.append(spec["name"])
             else:
                 warnings.append(f"{spec['name']} unset (ok in dev, required in prod)")
-    warnings.extend(_PERMISSION_WARNINGS)
+    warnings.extend(perm_warnings)
     return (len(missing) == 0, missing, warnings)
 
 
