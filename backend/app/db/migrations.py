@@ -4479,7 +4479,41 @@ def _migrate_113_rotated_from_token_unique(conn):
     sessions (NULL rotated_from_token) don't conflict. SQLite has
     supported partial indices since 3.8.0; the test suite runs on
     3.40+.
+
+    Codex round-1 D: preflight dedup on populated DBs. If any
+    `rotated_from_token` values are duplicated, the older row's
+    pointer is nulled out (the session itself stays valid — just
+    loses the historical "rotated from X" backlink). A WARN is
+    logged so the operator can audit post-deploy.
     """
+    import logging
+    log = logging.getLogger(__name__)
+
+    # Preflight: find duplicates (newer row by id wins; older nulled).
+    duplicates = conn.execute(
+        "SELECT rotated_from_token, COUNT(*) AS n FROM sessions "
+        "WHERE rotated_from_token IS NOT NULL "
+        "GROUP BY rotated_from_token HAVING COUNT(*) > 1"
+    ).fetchall()
+    if duplicates:
+        for row in duplicates:
+            dup_token, n = row[0], row[1]
+            log.warning(
+                "migration 113: %d sessions share rotated_from_token=%r; "
+                "nulling out older rows to satisfy the new unique index.",
+                n, dup_token[:8] + "..." if len(dup_token) > 8 else dup_token,
+            )
+            # Keep the row with the largest (most-recent) id; null the rest.
+            conn.execute(
+                "UPDATE sessions SET rotated_from_token = NULL "
+                "WHERE rotated_from_token = ? AND id NOT IN ("
+                "  SELECT id FROM sessions WHERE rotated_from_token = ? "
+                "  ORDER BY id DESC LIMIT 1"
+                ")",
+                (dup_token, dup_token),
+            )
+        conn.commit()
+
     conn.execute(
         "CREATE UNIQUE INDEX IF NOT EXISTS idx_sessions_rotated_from_token_unique "
         "ON sessions(rotated_from_token) "

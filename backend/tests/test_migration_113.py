@@ -68,3 +68,56 @@ class TestMigration113:
                     (sid, _generate_token(), uid, "2099-01-01"),
                 )
             conn.commit()  # No IntegrityError
+
+    def test_preflight_dedups_existing_duplicates(self, isolated_db, caplog):
+        """Codex round-1 E: simulate a populated DB with duplicate
+        rotated_from_token values, run migration 113 manually, and
+        assert it dedups + warns instead of failing."""
+        import logging
+        from app.database import get_connection
+        from app.db.users import create_user
+        from app.db.sessions import _generate_token, _get_unique_session_id
+        from app.db.migrations import _migrate_113_rotated_from_token_unique
+
+        uid = create_user("dup@test")
+
+        # Drop the unique index so we can plant a duplicate.
+        with get_connection() as conn:
+            conn.execute(
+                "DROP INDEX IF EXISTS idx_sessions_rotated_from_token_unique"
+            )
+            conn.commit()
+            id1 = _get_unique_session_id(conn)
+            id2 = _get_unique_session_id(conn)
+            shared = "duplicate-rotated-token-xyz"
+            conn.execute(
+                "INSERT INTO sessions (id, token, user_id, expires_at, "
+                "rotated_from_token) VALUES (?, ?, ?, ?, ?)",
+                (id1, _generate_token(), uid, "2099-01-01", shared),
+            )
+            conn.execute(
+                "INSERT INTO sessions (id, token, user_id, expires_at, "
+                "rotated_from_token) VALUES (?, ?, ?, ?, ?)",
+                (id2, _generate_token(), uid, "2099-01-01", shared),
+            )
+            conn.commit()
+
+        # Run migration 113 against the polluted DB.
+        with caplog.at_level(logging.WARNING, logger="app.db.migrations"):
+            with get_connection() as conn:
+                _migrate_113_rotated_from_token_unique(conn)
+
+        # Migration must succeed (no exception) and the dup must be
+        # resolved: only one row keeps the rotated_from_token; the
+        # other got nulled.
+        with get_connection() as conn:
+            rows = conn.execute(
+                "SELECT id, rotated_from_token FROM sessions "
+                "WHERE id IN (?, ?) ORDER BY id",
+                (id1, id2),
+            ).fetchall()
+        survivors = [r for r in rows if r[1] == shared]
+        assert len(survivors) == 1
+        nulled = [r for r in rows if r[1] is None]
+        assert len(nulled) == 1
+        assert any("migration 113" in rec.message for rec in caplog.records)
