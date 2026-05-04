@@ -4468,6 +4468,25 @@ def _migrate_110_session_rotated_at(conn):
                 raise
 
 
+def _migrate_113_rotated_from_token_unique(conn):
+    """v0.6.1: enforce uniqueness on `rotated_from_token` via partial
+    unique index. Token rotation logic already maintains this in
+    practice (each rotation captures the previous unique token), but
+    the schema didn't enforce it — Codex round-1 #7 of v0.6.0 flagged
+    this as a deferrable theoretical gap. v0.6.1 closes it.
+
+    Partial unique index covers only non-NULL values; non-rotated
+    sessions (NULL rotated_from_token) don't conflict. SQLite has
+    supported partial indices since 3.8.0; the test suite runs on
+    3.40+.
+    """
+    conn.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_sessions_rotated_from_token_unique "
+        "ON sessions(rotated_from_token) "
+        "WHERE rotated_from_token IS NOT NULL"
+    )
+
+
 def _migrate_112_list_page_indices(conn):
     """v0.6.0 round-1: indices for the operator-UI default list pages.
 
@@ -4823,4 +4842,6 @@ VERSIONED_MIGRATIONS = [
     (111, "session_lookup_indices", _migrate_111_session_lookup_indices),
     # v0.6.0 round-1: list-page ORDER BY indices (Codex-flagged).
     (112, "list_page_indices", _migrate_112_list_page_indices),
+    # v0.6.1: enforce rotated_from_token uniqueness (v0.6.0 deferred).
+    (113, "rotated_from_token_unique", _migrate_113_rotated_from_token_unique),
 ]
