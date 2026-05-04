@@ -37,6 +37,7 @@ from app.services.backend_service import BackendService
 from app.services.execution_service import ExecutionService
 from app.services.github_service import GitHubService
 from app.services.skill_discovery_service import SkillDiscoveryService
+from app_litestar.auth_guards import requires_role
 
 logger = logging.getLogger(__name__)
 
@@ -202,7 +203,7 @@ utility_leftover_router = Router(
 # ===========================================================================
 
 
-@post("/{backend_id:str}/install", sync_to_thread=False)
+@post("/{backend_id:str}/install", sync_to_thread=False, guards=[requires_role("admin")])
 def install_backend_cli(backend_id: str) -> Any:
     return _result_or_raise(BackendService.install_backend_cli(backend_id))
 
