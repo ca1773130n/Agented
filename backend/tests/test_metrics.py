@@ -70,6 +70,23 @@ class TestRenderText:
         # No bucket/sum/count lines for histograms with no data.
         assert "agented_http_request_duration_ms_bucket" not in text
 
+    def test_session_event_label_escaping(self, isolated_db):
+        """Codex round-1 I1: session_event labels with `\\` + `"` must
+        escape in correct order (backslash first, then quote)."""
+        from app.database import get_connection
+        from app_litestar.metrics import registry
+        with get_connection() as conn:
+            conn.execute(
+                "INSERT INTO session_events (session_id, user_id, event_type) "
+                "VALUES ('s', 'u', ?)",
+                ('back\\slash"quote',),
+            )
+            conn.commit()
+        text = registry.render_text()
+        # Original `back\slash"quote` should render as
+        # `back\\slash\"quote` in the label value.
+        assert 'event_type="back\\\\slash\\"quote"' in text
+
 
 class TestHistogram:
     def test_buckets_cumulative(self):

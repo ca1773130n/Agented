@@ -150,7 +150,15 @@ class _Registry:
             lines.append("# HELP agented_session_events_total Session lifecycle events by type.")
             lines.append("# TYPE agented_session_events_total counter")
             for event_type, n in rows:
-                safe = (event_type or "unknown").replace('"', '\\"')
+                # Codex round-1 I1: Prometheus label-value escaping
+                # requires `\` → `\\` BEFORE `"` → `\"` (otherwise an
+                # event_type containing a backslash produces malformed
+                # exposition that scrapers may reject).
+                safe = (
+                    (event_type or "unknown")
+                    .replace("\\", "\\\\")
+                    .replace('"', '\\"')
+                )
                 lines.append(f'agented_session_events_total{{event_type="{safe}"}} {n}')
         except Exception:  # noqa: BLE001 — best-effort, never fail the scrape
             pass

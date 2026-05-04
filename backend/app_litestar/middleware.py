@@ -20,6 +20,10 @@ from app.db.sessions import get_session_by_token
 from app.db.sessions import rotate_session as _rotate_session
 from app.logging_config import current_user_var, request_id_var
 from app_litestar.auth_guards import has_sufficient_role, required_role
+# v0.6.2 round-1 M5: import the metrics registry at module load
+# instead of per-request inside PerformanceMiddleware.handle's
+# finally block.
+from app_litestar.metrics import registry as _metrics_registry
 
 logger = logging.getLogger("app.request")
 
@@ -558,9 +562,9 @@ class PerformanceMiddleware(ASGIMiddleware):
             await next_app(scope, receive, send_with_timing)
         finally:
             # v0.6.2: feed the metrics registry post-response. Done in
-            # finally so error paths still record.
+            # finally so error paths still record. Import is at module
+            # load (v0.6.2 round-1 M5) — no per-request import dance.
             try:
-                from app_litestar.metrics import registry as _metrics_registry
                 _metrics_registry.record_request(
                     method, path, captured_status or 500,
                     (perf_counter() - started) * 1000.0,
