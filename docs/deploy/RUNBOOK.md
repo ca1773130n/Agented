@@ -227,7 +227,37 @@ DB migrations are **forward-only**. If a migration is incompatible
 with the previous app version, rolling back the binary alone is not
 sufficient — restore the DB from backup (E milestone, v0.5.15).
 
-## 9. Logs + observability
+## 9. CI/CD release workflow setup
+
+The `.github/workflows/release.yml` workflow fires on every `v*` tag
+push. It checks out both Agented and the sibling `ai-accounts` repo,
+runs the test suite, builds the multi-stage Docker image, pushes
+to GHCR, and creates a GitHub Release.
+
+**Cross-repo checkout requires a PAT.** The default `GITHUB_TOKEN`
+is scoped to the repo running the workflow; checking out
+`ca1773130n/ai-accounts` from within Agented's workflow needs a
+token with read access to that separate repository.
+
+Setup (one-time):
+
+1. Create a fine-grained personal access token:
+   - Go to https://github.com/settings/personal-access-tokens
+   - Click "Generate new token"
+   - Repository access: `ca1773130n/ai-accounts` only
+   - Repository permissions: Contents → Read-only
+   - Expiration: longest available (the workflow won't recover from
+     a silent expiration; calendar a renewal)
+2. Save the token value
+3. In Agented's GitHub Settings → Secrets and variables → Actions:
+   - New repository secret named `AI_ACCOUNTS_TOKEN`
+   - Paste the token
+
+Without this secret, the release workflow fails at the
+"Checkout ai-accounts" step with a 404. The build won't reach the
+docker push.
+
+## 10. Logs + observability
 
 - Single-host gunicorn logs: `backend/backend.log` (default;
   configurable via `LOG_LEVEL`).
