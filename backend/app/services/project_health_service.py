@@ -9,6 +9,7 @@ import logging
 from typing import Optional
 
 from ..db.connection import get_connection
+from app.utils.timezone import utcnow as _utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -17,7 +18,7 @@ _WEEKS = 8
 
 def _iso_weeks_ago(n: int) -> str:
     """Return ISO datetime string for midnight N weeks ago (UTC)."""
-    dt = datetime.datetime.utcnow() - datetime.timedelta(weeks=n)
+    dt = _utcnow() - datetime.timedelta(weeks=n)
     return dt.strftime("%Y-%m-%dT00:00:00")
 
 
@@ -52,7 +53,7 @@ class ProjectHealthService:
         if not project:
             return None
 
-        now = datetime.datetime.utcnow()
+        now = _utcnow()
         cutoff = _iso_weeks_ago(_WEEKS)
 
         # -------------------------------------------------------------------

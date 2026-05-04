@@ -23,6 +23,8 @@ from litestar.exceptions import (
     NotFoundException,
 )
 
+from app.utils.timezone import utcnow as _utcnow
+
 from app.database import (
     add_project_phase,
     add_project_plan,
@@ -85,7 +87,7 @@ def trigger_sync(project_id: str) -> dict[str, Any]:
         raise ClientException(detail=str(e)) from e
     planning_dir = str(Path(local_path).expanduser().resolve() / ".planning")
     result = GrdSyncService.sync_project(project_id, planning_dir)
-    update_project(project_id, grd_sync_at=datetime.utcnow().isoformat())
+    update_project(project_id, grd_sync_at=_utcnow().isoformat())
     return {
         "synced": result["synced"],
         "skipped": result["skipped"],

@@ -4468,6 +4468,59 @@ def _migrate_110_session_rotated_at(conn):
                 raise
 
 
+def _migrate_113_rotated_from_token_unique(conn):
+    """v0.6.1: enforce uniqueness on `rotated_from_token` via partial
+    unique index. Token rotation logic already maintains this in
+    practice (each rotation captures the previous unique token), but
+    the schema didn't enforce it — Codex round-1 #7 of v0.6.0 flagged
+    this as a deferrable theoretical gap. v0.6.1 closes it.
+
+    Partial unique index covers only non-NULL values; non-rotated
+    sessions (NULL rotated_from_token) don't conflict. SQLite has
+    supported partial indices since 3.8.0; the test suite runs on
+    3.40+.
+
+    Codex round-1 D: preflight dedup on populated DBs. If any
+    `rotated_from_token` values are duplicated, the older row's
+    pointer is nulled out (the session itself stays valid — just
+    loses the historical "rotated from X" backlink). A WARN is
+    logged so the operator can audit post-deploy.
+    """
+    import logging
+    log = logging.getLogger(__name__)
+
+    # Preflight: find duplicates (newer row by id wins; older nulled).
+    duplicates = conn.execute(
+        "SELECT rotated_from_token, COUNT(*) AS n FROM sessions "
+        "WHERE rotated_from_token IS NOT NULL "
+        "GROUP BY rotated_from_token HAVING COUNT(*) > 1"
+    ).fetchall()
+    if duplicates:
+        for row in duplicates:
+            dup_token, n = row[0], row[1]
+            log.warning(
+                "migration 113: %d sessions share rotated_from_token=%r; "
+                "nulling out older rows to satisfy the new unique index.",
+                n, dup_token[:8] + "..." if len(dup_token) > 8 else dup_token,
+            )
+            # Keep the row with the largest (most-recent) id; null the rest.
+            conn.execute(
+                "UPDATE sessions SET rotated_from_token = NULL "
+                "WHERE rotated_from_token = ? AND id NOT IN ("
+                "  SELECT id FROM sessions WHERE rotated_from_token = ? "
+                "  ORDER BY id DESC LIMIT 1"
+                ")",
+                (dup_token, dup_token),
+            )
+        conn.commit()
+
+    conn.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_sessions_rotated_from_token_unique "
+        "ON sessions(rotated_from_token) "
+        "WHERE rotated_from_token IS NOT NULL"
+    )
+
+
 def _migrate_112_list_page_indices(conn):
     """v0.6.0 round-1: indices for the operator-UI default list pages.
 
@@ -4823,4 +4876,6 @@ VERSIONED_MIGRATIONS = [
     (111, "session_lookup_indices", _migrate_111_session_lookup_indices),
     # v0.6.0 round-1: list-page ORDER BY indices (Codex-flagged).
     (112, "list_page_indices", _migrate_112_list_page_indices),
+    # v0.6.1: enforce rotated_from_token uniqueness (v0.6.0 deferred).
+    (113, "rotated_from_token_unique", _migrate_113_rotated_from_token_unique),
 ]

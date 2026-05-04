@@ -30,6 +30,7 @@ import datetime
 import json
 import logging
 from typing import Any, Dict, List, Optional, Sequence
+from app.utils.timezone import utcnow as _utcnow
 
 audit_logger = logging.getLogger("agented.audit")
 
@@ -70,7 +71,7 @@ class AuditLogService:
             actor:       Who performed the action (default "system").
         """
         event: Dict[str, Any] = {
-            "ts": datetime.datetime.utcnow().isoformat() + "Z",
+            "ts": _utcnow().isoformat() + "Z",
             "action": action,
             "entity_type": entity_type,
             "entity_id": entity_id,
