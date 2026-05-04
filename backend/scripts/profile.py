@@ -33,11 +33,24 @@ _DEFAULT_ENDPOINTS = (
 
 
 def _percentile(values: list[float], pct: float) -> float:
+    """Nearest-rank percentile (no interpolation).
+
+    For N=0 returns 0.0. For p=0/100 returns min/max exactly. For other
+    percentiles uses ceil(pct/100 * N) - 1 as the rank index, which is
+    the standard nearest-rank definition (Wikipedia, NIST).
+    """
     if not values:
         return 0.0
     s = sorted(values)
-    idx = max(0, min(len(s) - 1, int(round((pct / 100.0) * (len(s) - 1)))))
-    return s[idx]
+    n = len(s)
+    if pct <= 0:
+        return s[0]
+    if pct >= 100:
+        return s[-1]
+    # Nearest-rank: index = ceil(pct/100 * N) - 1.
+    import math
+    rank = math.ceil(pct / 100.0 * n) - 1
+    return s[max(0, min(n - 1, rank))]
 
 
 def _request(url: str, *, timeout: float, headers: dict[str, str]) -> tuple[int, float, Optional[float]]:

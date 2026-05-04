@@ -17,6 +17,36 @@ class TestPercentile:
         from scripts.profile import _percentile
         assert _percentile([], 50) == 0.0
 
+    def test_percentile_n1(self):
+        """Single-value: every percentile returns that value."""
+        from scripts.profile import _percentile
+        assert _percentile([42.0], 0) == 42.0
+        assert _percentile([42.0], 50) == 42.0
+        assert _percentile([42.0], 100) == 42.0
+
+    def test_percentile_n2(self):
+        """Codex round-1 #5: nearest-rank for N=2 should split cleanly."""
+        from scripts.profile import _percentile
+        values = [10.0, 20.0]
+        # ceil(0.5 * 2) - 1 = 1 - 1 = 0 → 10.0
+        assert _percentile(values, 50) == 10.0
+        # ceil(0.95 * 2) - 1 = 2 - 1 = 1 → 20.0
+        assert _percentile(values, 95) == 20.0
+
+    def test_percentile_n4(self):
+        from scripts.profile import _percentile
+        values = [1.0, 2.0, 3.0, 4.0]
+        # ceil(0.5 * 4) - 1 = 2 - 1 = 1 → 2.0
+        assert _percentile(values, 50) == 2.0
+        # ceil(0.95 * 4) - 1 = 4 - 1 = 3 → 4.0
+        assert _percentile(values, 95) == 4.0
+
+    def test_percentile_p95_of_n100(self):
+        """100 values 1..100; p95 should be the 95th smallest = 95."""
+        from scripts.profile import _percentile
+        values = [float(i) for i in range(1, 101)]
+        assert _percentile(values, 95) == 95.0
+
 
 class TestProfileEndpoint:
     def test_aggregates_min_p50_p95_max(self):

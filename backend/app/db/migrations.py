@@ -4468,6 +4468,23 @@ def _migrate_110_session_rotated_at(conn):
                 raise
 
 
+def _migrate_112_list_page_indices(conn):
+    """v0.6.0 round-1: indices for the operator-UI default list pages.
+
+    db_audit revealed that `projects` and `triggers` ORDER BY created_at
+    DESC LIMIT 50 fell back to full-table-scan + temp B-tree sort. Add
+    descending indices so the ORDER BY can stream from the index.
+    """
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_projects_created_at "
+        "ON projects(created_at DESC)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_triggers_created_at "
+        "ON triggers(created_at DESC)"
+    )
+
+
 def _migrate_111_session_lookup_indices(conn):
     """v0.6.0: indices for fast session lookup.
 
@@ -4804,4 +4821,6 @@ VERSIONED_MIGRATIONS = [
     (110, "session_rotated_at", _migrate_110_session_rotated_at),
     # v0.6.0 perf: indices for fast session lookup.
     (111, "session_lookup_indices", _migrate_111_session_lookup_indices),
+    # v0.6.0 round-1: list-page ORDER BY indices (Codex-flagged).
+    (112, "list_page_indices", _migrate_112_list_page_indices),
 ]

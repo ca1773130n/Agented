@@ -30,16 +30,27 @@ import sqlite3
 
 # Hot-path query templates. (label, sql, expected_index_hint).
 _HOT_QUERIES: list[tuple[str, str]] = [
+    # Auth + session lookup paths (called on EVERY authenticated request).
     ("sessions_lookup_by_token",
      "SELECT * FROM sessions WHERE token = 'x' OR rotated_from_token = 'x'"),
     ("sessions_active_for_user",
      "SELECT id FROM sessions WHERE user_id = 'u' AND revoked_at IS NULL"),
     ("user_roles_by_api_key",
      "SELECT role, user_id FROM user_roles WHERE api_key = 'k'"),
+    # Audit log reads (admin /admin/auth/session-events).
     ("session_events_by_session",
      "SELECT * FROM session_events WHERE session_id = 's' ORDER BY occurred_at DESC LIMIT 10"),
     ("session_events_by_user",
      "SELECT * FROM session_events WHERE user_id = 'u' ORDER BY occurred_at DESC LIMIT 10"),
+    # List-page hot paths (operator UI default views).
+    ("agents_list",
+     "SELECT * FROM agents ORDER BY created_at DESC LIMIT 50"),
+    ("projects_list",
+     "SELECT * FROM projects ORDER BY created_at DESC LIMIT 50"),
+    ("triggers_list",
+     "SELECT * FROM triggers ORDER BY created_at DESC LIMIT 50"),
+    ("agent_conversations_for_agent",
+     "SELECT * FROM agent_conversations WHERE agent_id = 'a' ORDER BY started_at DESC LIMIT 20"),
 ]
 
 
@@ -77,18 +88,29 @@ def audit_indices(conn: sqlite3.Connection) -> dict:
 
 
 def explain_query(conn: sqlite3.Connection, sql: str) -> dict:
-    """Run EXPLAIN QUERY PLAN; return {plan: [steps], scan_only: bool}."""
+    """Run EXPLAIN QUERY PLAN; return {plan: [steps], scan_only: bool}.
+
+    SQLite plan vocabulary:
+      - 'SEARCH ... USING INDEX'       → index-driven (good)
+      - 'SCAN ... USING INDEX'         → ordered index scan (good for
+                                         ORDER BY + LIMIT)
+      - 'SCAN <table>' (no INDEX)      → full table scan (bad)
+
+    `scan_only` flags only the bare-SCAN case.
+    """
     try:
         rows = conn.execute(f"EXPLAIN QUERY PLAN {sql}").fetchall()
     except sqlite3.Error as exc:
         return {"plan": [], "scan_only": False, "error": str(exc)}
     steps = [str(r[3]) for r in rows]
-    text = " | ".join(steps)
-    has_scan = "SCAN" in text
-    has_search = "SEARCH" in text
-    # SCAN without SEARCH is a full table scan.
-    scan_only = has_scan and not has_search
-    return {"plan": steps, "scan_only": scan_only}
+    # A step is "bare scan" if it starts with "SCAN <table>" without
+    # "USING INDEX". Index-ordered scans (e.g. for ORDER BY+LIMIT)
+    # are not flagged.
+    bare_scan = any(
+        s.startswith("SCAN ") and "USING INDEX" not in s and "USING COVERING INDEX" not in s
+        for s in steps
+    )
+    return {"plan": steps, "scan_only": bare_scan}
 
 
 def main(argv: Optional[list[str]] = None) -> int:

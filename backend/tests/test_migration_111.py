@@ -40,9 +40,14 @@ class TestMigration111:
 
 
 class TestLookupUsesIndex:
-    def test_get_session_by_token_query_plan_uses_index(self, isolated_db):
-        """EXPLAIN QUERY PLAN of the v0.6.0 lookup query should report
-        SEARCH (index hit) instead of SCAN (full table scan)."""
+    def test_get_session_by_token_query_plan_uses_indices_on_both_branches(self, isolated_db):
+        """EXPLAIN QUERY PLAN of the v0.6.0 lookup must:
+          1) NOT contain a bare SCAN sessions step (full-table scan)
+          2) DO contain SEARCH steps for both OR branches.
+
+        Codex round-1 #2: the previous assertion (`"SCAN" not in plan
+        or "SEARCH" in plan`) passed even on mixed plans.
+        """
         from app.database import get_connection
         with get_connection() as conn:
             rows = conn.execute(
@@ -50,7 +55,20 @@ class TestLookupUsesIndex:
                 "SELECT * FROM sessions WHERE token = ? OR rotated_from_token = ?",
                 ("x", "x"),
             ).fetchall()
-        plan = " | ".join(str(r) for r in rows)
-        assert "SCAN" not in plan or "SEARCH" in plan, (
-            f"sessions lookup did not hit an index. PLAN: {plan}"
+        steps = [str(r[3]) for r in rows]
+        plan_text = " | ".join(steps)
+        # Reject any SCAN sessions step (only step types allowed are
+        # SEARCH steps or planner-internal MULTI-INDEX OR steps).
+        scan_steps = [s for s in steps if s.startswith("SCAN sessions")]
+        assert not scan_steps, (
+            f"sessions lookup contains SCAN step(s): {scan_steps}\n"
+            f"Full plan: {plan_text}"
+        )
+        # SEARCH should appear at least once (for at least one OR branch);
+        # SQLite's planner uses MULTI-INDEX OR which produces SEARCH steps
+        # for each branch index.
+        search_steps = [s for s in steps if s.startswith("SEARCH")]
+        assert search_steps, (
+            f"sessions lookup did not produce any SEARCH step. "
+            f"Full plan: {plan_text}"
         )

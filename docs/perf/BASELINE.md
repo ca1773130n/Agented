@@ -13,17 +13,28 @@ just profile -- --requests 200   # client-side p50/p95 over 200 reqs
 
 ## DB index audit (v0.6.0)
 
-After migration 111, every hot-path query hits an index:
+After migrations 111 + 112, every hot-path query in `db_audit.py`
+hits an index. Codex round-1 #6 caught that the original 5-query
+list was too narrow; we extended to 9 covering operator-UI list
+pages too:
 
-| Query                           | Plan                                                                 |
+| Query                                | Plan                                                              |
 |---|---|
-| `sessions_lookup_by_token`      | SEARCH via `sqlite_autoindex_sessions_2` (token) + `idx_sessions_rotated_from_token` |
-| `sessions_active_for_user`      | SEARCH via `idx_sessions_user_active` |
-| `user_roles_by_api_key`         | SEARCH via `sqlite_autoindex_user_roles_2 (api_key=?)` |
-| `session_events_by_session`     | SEARCH via `idx_session_events_session_id` |
-| `session_events_by_user`        | SEARCH via `idx_session_events_user_id` |
+| `sessions_lookup_by_token`           | SEARCH (auto-unique token + `idx_sessions_rotated_from_token`)    |
+| `sessions_active_for_user`           | SEARCH via `idx_sessions_user_active`                             |
+| `user_roles_by_api_key`              | SEARCH via auto-unique `api_key`                                  |
+| `session_events_by_session`          | SEARCH via `idx_session_events_session_id`                        |
+| `session_events_by_user`             | SEARCH via `idx_session_events_user_id`                           |
+| `agents_list` (ORDER BY created_at)  | SCAN USING INDEX `idx_agents_created_at` (index-ordered scan)     |
+| `projects_list` (NEW migration 112)  | SCAN USING INDEX `idx_projects_created_at`                        |
+| `triggers_list` (NEW migration 112)  | SCAN USING INDEX `idx_triggers_created_at`                        |
+| `agent_conversations_for_agent`      | SEARCH via `idx_agent_conversations_agent_id`                     |
 
-`scan_only_count: 0` — no full table scans on hot paths.
+`scan_only_count: 0` — no bare full-table scans on hot paths.
+
+`db_audit.py:explain_query` correctly distinguishes
+`SCAN ... USING INDEX` (index-ordered streaming, optimal for
+ORDER BY + LIMIT) from bare `SCAN <table>` (true full scan).
 
 ## Frontend bundle (v0.6.0)
 

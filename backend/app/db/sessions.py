@@ -78,13 +78,21 @@ def get_session_by_token(
 
     Logs lifecycle events on idle/expired/revoked-use paths.
 
-    v0.6.0: lookup goes through idx_sessions_token (UNIQUE) +
-    idx_sessions_rotated_from_token_v2 — at most 2 rows match. The
-    loop still runs hmac.compare_digest on each match before deciding,
-    preserving the constant-time comparison contract within the
-    indexed result set. Successful auth pays a single UPDATE; a miss
-    pays only the SELECT — that asymmetry is observable but does not
-    depend on token contents.
+    Timing contract (v0.6.0 round-1):
+      - Per-row work is uniform: every matched row runs both the
+        primary and rotated-token compare_digest calls plus the
+        revocation/expiry/idle checks before deciding.
+      - 0-row miss path pays one dummy compare_digest so the lookup
+        cost doesn't drop to a bare SELECT (eliminates the "did we
+        compare?" timing leak).
+      - The hit path pays one extra UPDATE (touch last_used_at).
+        That asymmetry is observable in microseconds but does not
+        depend on token contents — so it's robust against the
+        threat model where the attacker can only see network-level
+        latency, not per-CPU-cycle timing.
+
+    Lookup goes through idx_sessions_token (auto-unique from the
+    `token UNIQUE` table constraint) + idx_sessions_rotated_from_token.
     """
 
     if not token:
@@ -93,18 +101,30 @@ def get_session_by_token(
     grace_cutoff = (now - ROTATION_GRACE_WINDOW).isoformat()
     matched_row: Optional[dict] = None
     failure_event: Optional[tuple[str, str, Optional[str], Optional[dict]]] = None
+    # v0.6.0 round-1 fix: floor compare on miss so the indexed lookup
+    # doesn't leak hit-vs-miss via "did we run compare_digest?" timing.
+    # The token-length sentinel keeps the compare's work proportional
+    # to the input.
+    _DUMMY_TOKEN = "0" * len(token)
     with get_connection() as conn:
         conn.row_factory = _row_to_dict
-        # v0.6.0: index-driven lookup (idx_sessions_token UNIQUE +
-        # idx_sessions_rotated_from_token_v2). At most 2 rows match
-        # (current token, rotated-from token); the loop still runs
-        # compare_digest on each so the constant-time contract is
-        # preserved within the indexed result set.
+        # Indexed lookup via idx_sessions_token (auto-unique from the
+        # `token TEXT UNIQUE NOT NULL` table constraint, migration 104)
+        # + idx_sessions_rotated_from_token (migration 109). At most 2
+        # rows match in practice; the loop runs compare_digest on each
+        # so per-row work is uniform, and on a 0-row miss we still pay
+        # one compare_digest below to floor the timing.
         rows = conn.execute(
             "SELECT * FROM sessions WHERE token = ? OR rotated_from_token = ?",
             (token, token),
         ).fetchall()
         conn.row_factory = None
+        if not rows:
+            # Floor the miss timing — equalize against the hit path's
+            # compare cost. Doesn't fully equalize against the post-hit
+            # UPDATE, but eliminates the "0 vs 1+ compares" leak.
+            hmac.compare_digest(_DUMMY_TOKEN, token)
+            return None
         for row in rows:
             primary_match = hmac.compare_digest(row["token"], token)
             rotated_token = row.get("rotated_from_token") or ""
