@@ -188,6 +188,23 @@ check-env:
 healthcheck:
     cd backend && uv run python scripts/healthcheck.py
 
+# v0.5.13: build the production container image.
+docker-build:
+    docker compose build
+
+# v0.5.13: bring the production stack up (backend + sidecar).
+docker-up:
+    docker compose up -d
+    @echo "Stack up. Logs: just docker-logs"
+
+# v0.5.13: tear the stack down.
+docker-down:
+    docker compose down
+
+# v0.5.13: tail logs from both services.
+docker-logs:
+    docker compose logs -f
+
 # v0.5.13: production deploy recipe. Distinct from `just deploy` (dev).
 # Validates env, builds frontend, kills, starts sidecar + gunicorn daemonized.
 deploy-prod: kill check-env build

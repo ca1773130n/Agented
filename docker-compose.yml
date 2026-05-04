@@ -1,0 +1,48 @@
+# v0.5.13: production Docker Compose for Agented.
+# Two services share the same image; sidecar overrides the command.
+#
+# Bring up:   just docker-up
+# Tail logs:  just docker-logs
+# Tear down:  just docker-down
+#
+# Secrets via *_FILE convention — see docs/deploy/SECRETS.md.
+
+services:
+  agented-backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ghcr.io/ca1773130n/agented:latest
+    container_name: agented-backend
+    env_file:
+      - .env
+    environment:
+      AGENTED_ENV: production
+    ports:
+      - "20000:20000"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "scripts/healthcheck.py"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    volumes:
+      - agented-data:/app/backend/data
+
+  agented-sidecar:
+    image: ghcr.io/ca1773130n/agented:latest
+    container_name: agented-sidecar
+    command: ["python", "scripts/run_ai_accounts.py"]
+    env_file:
+      - .env
+    environment:
+      AGENTED_ENV: production
+    ports:
+      - "20001:20001"
+    restart: unless-stopped
+    depends_on:
+      agented-backend:
+        condition: service_started
+
+volumes:
+  agented-data:
