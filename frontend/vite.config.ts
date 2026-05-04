@@ -404,7 +404,22 @@ export default defineConfig(({ mode }) => {
       rollupOptions: {
         output: {
           manualChunks(id) {
+            // file: deps from sibling ai-accounts repo come in via
+            // node_modules/@ai-accounts/*. Split each so the largest
+            // (vue-styled, ~1MB) doesn't bloat any single chunk.
+            if (id.includes('@ai-accounts/vue-styled')) {
+              return 'ai-accounts-vue-styled'
+            }
+            if (id.includes('@ai-accounts/vue-headless')) {
+              return 'ai-accounts-vue-headless'
+            }
+            if (id.includes('@ai-accounts/ts-core')) {
+              return 'ai-accounts-ts-core'
+            }
+
             if (id.includes('node_modules')) {
+              // v0.6.0 perf: split the big vendors so vendor-core
+              // doesn't grow past ~1 MB on its own.
               if (id.includes('chart.js') || id.includes('chartjs-adapter-date-fns') || id.includes('date-fns')) {
                 return 'vendor-chart'
               }
@@ -417,7 +432,22 @@ export default defineConfig(({ mode }) => {
               if (id.includes('/marked/') || id.includes('dompurify')) {
                 return 'vendor-markdown'
               }
-              // All remaining node_modules in a single vendor chunk (Vue, etc.)
+              if (id.includes('/vue-router/') || id.includes('/@vue/devtools')) {
+                return 'vendor-vue-router'
+              }
+              if (id.includes('/vue/dist/') || id.includes('/@vue/runtime') || id.includes('/@vue/reactivity') || id.includes('/@vue/shared')) {
+                return 'vendor-vue'
+              }
+              if (id.includes('/axios/') || id.includes('/follow-redirects/') || id.includes('/form-data/')) {
+                return 'vendor-axios'
+              }
+              if (id.includes('@msgpack/msgpack') || id.includes('msgpack-lite')) {
+                return 'vendor-msgpack'
+              }
+              if (id.includes('/lodash')) {
+                return 'vendor-lodash'
+              }
+              // All remaining node_modules in a single vendor chunk.
               return 'vendor-core'
             }
           }
