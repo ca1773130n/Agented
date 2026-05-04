@@ -1,0 +1,135 @@
+name: release
+
+# v0.5.13: tag-triggered build + push to GHCR + GitHub Release.
+# Pushing a tag matching v* runs the workflow end-to-end.
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      # Agented's frontend (file:../../ai-accounts/packages/*) and
+      # backend (path = ../../ai-accounts/packages/*) both reference
+      # the sibling ai-accounts/ tree. Check it out at the workspace
+      # root so the file:/path: resolutions work.
+      - name: Checkout Agented
+        uses: actions/checkout@v4
+        with:
+          path: Agented
+
+      - name: Checkout ai-accounts (sibling)
+        uses: actions/checkout@v4
+        with:
+          repository: ca1773130n/ai-accounts
+          path: ai-accounts
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: 'Agented/frontend/package-lock.json'
+
+      - name: Setup pnpm + build ai-accounts packages
+        run: |
+          corepack enable
+          corepack prepare pnpm@latest --activate
+          cd ai-accounts
+          pnpm install --frozen-lockfile --ignore-scripts || pnpm install --ignore-scripts
+          pnpm -r --filter "@ai-accounts/ts-core" --filter "@ai-accounts/vue-headless" --filter "@ai-accounts/vue-styled" run build
+
+      - name: Frontend install
+        working-directory: Agented/frontend
+        run: npm ci
+
+      - name: Frontend tests
+        working-directory: Agented/frontend
+        run: npm run test:run
+
+      - name: Frontend build
+        working-directory: Agented/frontend
+        run: npm run build
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v3
+
+      - name: Backend install + tests
+        working-directory: Agented/backend
+        run: |
+          uv sync --extra dev || uv sync
+          uv run pytest
+
+  build-image:
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      # Check out Agented INTO a subdirectory; the Dockerfile expects
+      # a build context that contains both Agented/ and ai-accounts/
+      # at the root.
+      - name: Checkout Agented
+        uses: actions/checkout@v4
+        with:
+          path: Agented
+
+      - name: Checkout ai-accounts (sibling)
+        uses: actions/checkout@v4
+        with:
+          repository: ca1773130n/ai-accounts
+          path: ai-accounts
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: GHCR login
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build + push image
+        uses: docker/build-push-action@v5
+        with:
+          # Build context = workspace root (contains Agented/ + ai-accounts/).
+          context: .
+          file: Agented/Dockerfile
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}:${{ github.ref_name }}
+            ghcr.io/${{ github.repository }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  release-notes:
+    needs: build-image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          # Annotated tag message → release body. Falls back to a
+          # generic message if the tag was lightweight.
+          BODY="$(git tag -l --format='%(contents)' "$REF_NAME")"
+          if [ -z "$BODY" ]; then
+            BODY="Release $REF_NAME"
+          fi
+          gh release create "$REF_NAME" --title "$REF_NAME" --notes "$BODY"

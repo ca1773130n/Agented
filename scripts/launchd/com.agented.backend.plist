@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  v0.5.13: macOS launchd template for the Agented backend (gunicorn).
+
+  CUSTOMIZE BEFORE INSTALL:
+    1. Replace REPLACE_ME_REPO_PATH with your absolute Agented checkout path.
+    2. Verify ~/.zshrc exports AGENTED_API_KEY etc. (Keychain pattern); OR
+       set EnvironmentVariables below directly.
+    3. Adjust StandardOut/Err paths if you prefer ~/Library/Logs/.
+
+  INSTALL:
+    cp scripts/launchd/com.agented.backend.plist ~/Library/LaunchAgents/
+    launchctl load ~/Library/LaunchAgents/com.agented.backend.plist
+
+  UNLOAD:
+    launchctl unload ~/Library/LaunchAgents/com.agented.backend.plist
+-->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.agented.backend</string>
+
+    <!-- /bin/zsh -lc sources ~/.zshrc, picking up macOS Keychain
+         exports (AGENTED_API_KEY etc.) per docs/deploy/SECRETS.md.
+         /bin/bash -lc would miss them. -->
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/zsh</string>
+        <string>-lc</string>
+        <string>cd REPLACE_ME_REPO_PATH/backend &amp;&amp; exec uv run gunicorn -c gunicorn.conf.py</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>REPLACE_ME_REPO_PATH/backend</string>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>KeepAlive</key>
+    <dict>
+        <key>SuccessfulExit</key>
+        <false/>
+    </dict>
+
+    <key>StandardOutPath</key>
+    <string>REPLACE_ME_REPO_PATH/backend/backend.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>REPLACE_ME_REPO_PATH/backend/backend.log</string>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>OBJC_DISABLE_INITIALIZE_FORK_SAFETY</key>
+        <string>YES</string>
+        <key>AGENTED_ENV</key>
+        <string>production</string>
+    </dict>
+
+    <key>ThrottleInterval</key>
+    <integer>10</integer>
+</dict>
+</plist>

@@ -180,6 +180,62 @@ dev-all:
     just kill
     just dev-backend & just dev-ai-accounts & just dev-frontend & wait
 
+# v0.5.13: validate required env vars (fail loudly on missing).
+check-env:
+    cd backend && uv run python -m scripts.check_env
+
+# v0.5.13: probe backend liveness/readiness + sidecar; exits nonzero on red.
+healthcheck:
+    cd backend && uv run python scripts/healthcheck.py
+
+# v0.5.13: build the production container image. Build context is the
+# PARENT directory so the sibling ai-accounts/ tree is reachable.
+docker-build:
+    cd .. && docker build -f Agented/Dockerfile -t agented:latest .
+
+# v0.5.13: bring the production stack up (backend + sidecar).
+docker-up:
+    docker compose up -d
+    @echo "Stack up. Logs: just docker-logs"
+
+# v0.5.13: tear the stack down.
+docker-down:
+    docker compose down
+
+# v0.5.13: tail logs from both services.
+docker-logs:
+    docker compose logs -f
+
+# v0.5.13: production deploy recipe. Distinct from `just deploy` (dev).
+# Validates env, builds frontend, kills, starts sidecar + gunicorn daemonized.
+# Sidecar readiness wait has a 60s timeout so a crashed sidecar fails loudly
+# instead of hanging the recipe forever.
+deploy-prod: kill check-env build
+    #!/usr/bin/env bash
+    set -euo pipefail
+    [ -f .node-path ] && source .node-path
+    echo "Frontend (built): {{justfile_directory()}}/frontend/dist"
+    echo "Backend API: http://localhost:20000"
+    echo "Sidecar:     http://localhost:20001"
+    (cd backend && nohup uv run python scripts/run_ai_accounts.py >sidecar.log 2>&1 &)
+    SIDECAR_TIMEOUT=60
+    for i in $(seq 1 $SIDECAR_TIMEOUT); do
+      if curl -sf http://127.0.0.1:20001/health >/dev/null 2>&1; then
+        break
+      fi
+      if [ "$i" -eq "$SIDECAR_TIMEOUT" ]; then
+        echo "ERROR: sidecar did not become ready within ${SIDECAR_TIMEOUT}s." >&2
+        echo "Check backend/sidecar.log for the failure cause." >&2
+        exit 1
+      fi
+      sleep 1
+    done
+    echo "Sidecar ready (logs: backend/sidecar.log)"
+    (cd backend && OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES nohup uv run gunicorn -c gunicorn.conf.py >backend.log 2>&1 &)
+    sleep 2
+    echo "Backend started (logs: backend/backend.log)"
+    echo "Run \`just healthcheck\` to verify."
+
 # Deploy: build frontend, then start sidecar + backend + frontend dev server
 # Frontend: http://localhost:3000 | Backend API: http://localhost:20000 | Sidecar: http://localhost:20001
 deploy: kill ensure-backend build

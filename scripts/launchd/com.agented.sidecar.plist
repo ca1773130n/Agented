@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  v0.5.13: macOS launchd template for the ai-accounts sidecar.
+
+  CUSTOMIZE: replace REPLACE_ME_REPO_PATH (see backend plist for instructions).
+-->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.agented.sidecar</string>
+
+    <!-- /bin/zsh -lc sources ~/.zshrc per the macOS Keychain pattern. -->
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/zsh</string>
+        <string>-lc</string>
+        <string>cd REPLACE_ME_REPO_PATH/backend &amp;&amp; exec uv run python scripts/run_ai_accounts.py</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>REPLACE_ME_REPO_PATH/backend</string>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>KeepAlive</key>
+    <dict>
+        <key>SuccessfulExit</key>
+        <false/>
+    </dict>
+
+    <key>StandardOutPath</key>
+    <string>REPLACE_ME_REPO_PATH/backend/sidecar.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>REPLACE_ME_REPO_PATH/backend/sidecar.log</string>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>AGENTED_ENV</key>
+        <string>production</string>
+    </dict>
+
+    <key>ThrottleInterval</key>
+    <integer>10</integer>
+</dict>
+</plist>
