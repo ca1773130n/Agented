@@ -29,6 +29,12 @@ DEFAULT_LIFETIME = dt.timedelta(days=14)
 DEFAULT_IDLE_LIFETIME = dt.timedelta(minutes=30)
 ROTATION_GRACE_WINDOW = dt.timedelta(seconds=5)
 
+# v0.6.0 round-2: pre-computed sentinel for the timing-floor compare
+# on a 0-row miss. 43 chars matches the secrets.token_urlsafe(32)
+# output length used by _generate_token. Allocating per-call would
+# leak the request's token length via heap traffic.
+_DUMMY_TOKEN_FOR_TIMING_FLOOR = "0" * 43
+
 
 def _row_to_dict(cursor, row):
     return {col[0]: row[idx] for idx, col in enumerate(cursor.description)}
@@ -101,11 +107,6 @@ def get_session_by_token(
     grace_cutoff = (now - ROTATION_GRACE_WINDOW).isoformat()
     matched_row: Optional[dict] = None
     failure_event: Optional[tuple[str, str, Optional[str], Optional[dict]]] = None
-    # v0.6.0 round-1 fix: floor compare on miss so the indexed lookup
-    # doesn't leak hit-vs-miss via "did we run compare_digest?" timing.
-    # The token-length sentinel keeps the compare's work proportional
-    # to the input.
-    _DUMMY_TOKEN = "0" * len(token)
     with get_connection() as conn:
         conn.row_factory = _row_to_dict
         # Indexed lookup via idx_sessions_token (auto-unique from the
@@ -123,7 +124,9 @@ def get_session_by_token(
             # Floor the miss timing — equalize against the hit path's
             # compare cost. Doesn't fully equalize against the post-hit
             # UPDATE, but eliminates the "0 vs 1+ compares" leak.
-            hmac.compare_digest(_DUMMY_TOKEN, token)
+            # _DUMMY_TOKEN_FOR_TIMING_FLOOR is module-level so we don't
+            # allocate per-call.
+            hmac.compare_digest(_DUMMY_TOKEN_FOR_TIMING_FLOOR, token)
             return None
         for row in rows:
             primary_match = hmac.compare_digest(row["token"], token)
