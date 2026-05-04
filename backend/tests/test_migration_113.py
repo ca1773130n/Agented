@@ -120,4 +120,9 @@ class TestMigration113:
         assert len(survivors) == 1
         nulled = [r for r in rows if r[1] is None]
         assert len(nulled) == 1
+        # Codex round-2: assert the max-id-survivor contract documented
+        # by the migration, not just the survivor count. Both ids are
+        # auto-generated TEXT — lexicographic max corresponds to the
+        # most recently inserted row given the timestamp prefix.
+        assert survivors[0][0] == max(id1, id2)
         assert any("migration 113" in rec.message for rec in caplog.records)
