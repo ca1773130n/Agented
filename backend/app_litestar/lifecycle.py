@@ -222,10 +222,17 @@ def _register_cleanup_handlers() -> None:
         )
 
 
-def on_startup(app: Any) -> None:  # noqa: ARG001 — Litestar passes the app instance
+def on_startup(app: Any) -> None:
     """Litestar `on_startup` hook — runs once when the app boots."""
     if os.environ.get("AGENTED_LITESTAR_SKIP_STARTUP") == "1":
         logger.info("AGENTED_LITESTAR_SKIP_STARTUP=1 — skipping background init")
+        # v0.5.14: still register rate-limit overrides — cheap, route-table
+        # only, no DB or subprocess work.
+        try:
+            from .rate_limit_guard import eager_register_from_app
+            eager_register_from_app(app)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("rate-limit eager registration skipped: %s", exc)
         return
     _init_database()
     _detect_backends()
@@ -234,6 +241,14 @@ def on_startup(app: Any) -> None:  # noqa: ARG001 — Litestar passes the app in
     # runs standalone. The service tolerates None via attribute getattr.
     _setup_scheduler(None)
     _register_cleanup_handlers()
+    # v0.5.14: pre-populate the rate-limit override registry from the app's
+    # route table so the very first cold request to a guarded path sees
+    # the right limit (instead of the more permissive coarse default).
+    try:
+        from .rate_limit_guard import eager_register_from_app
+        eager_register_from_app(app)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("rate-limit eager registration skipped: %s", exc)
 
 
 def on_shutdown() -> None:

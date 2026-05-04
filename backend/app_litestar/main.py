@@ -183,12 +183,16 @@ def create_app() -> Litestar:
         #   - SecurityHeaders is innermost-of-the-cross-cutting layer so its
         #     header injection runs on every response (incl. handler 200s,
         #     401s, 429s) on the way back out.
+        #   - v0.5.14: ApiKeyMiddleware runs BEFORE RateLimitMiddleware so
+        #     scope["state"]["principal"] is populated when rate-limit
+        #     resolves the per-user budget. Otherwise authed traffic
+        #     silently falls back to per-IP keying.
         middleware=[
             RequestContextMiddleware(),
             RequestLoggingMiddleware(),
             SecurityHeadersMiddleware(),
-            RateLimitMiddleware(),
             ApiKeyMiddleware(),
+            RateLimitMiddleware(),
         ],
         exception_handlers=EXCEPTION_HANDLERS,
         on_startup=[on_startup],

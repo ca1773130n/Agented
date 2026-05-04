@@ -167,6 +167,35 @@ OPTIONAL_VARS: list[dict] = [
         "default": "",
         "secret": False,
     },
+    # v0.5.14 rate-limiting overrides — see app_litestar/middleware.py.
+    {
+        "name": "RATE_LIMIT_API_GET_PER_MIN",
+        "description": "Per-key rate limit on GET /api/* (per minute).",
+        "example": "60",
+        "default": "60",
+        "secret": False,
+    },
+    {
+        "name": "RATE_LIMIT_API_WRITE_PER_MIN",
+        "description": "Per-key rate limit on POST/PUT/PATCH /api/* (per minute).",
+        "example": "30",
+        "default": "30",
+        "secret": False,
+    },
+    {
+        "name": "RATE_LIMIT_ADMIN_PER_MIN",
+        "description": "Per-key rate limit on /admin/* (per minute, all methods).",
+        "example": "30",
+        "default": "30",
+        "secret": False,
+    },
+    {
+        "name": "RATE_LIMIT_LOGIN_PER_MIN",
+        "description": "Per-IP rate limit on /api/auth/login (informational; actual override is hardcoded at 5/min).",
+        "example": "5",
+        "default": "5",
+        "secret": False,
+    },
 ]
 
 

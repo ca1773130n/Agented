@@ -379,14 +379,40 @@ class _FixedWindowLimiter:
 
 _limiter = _FixedWindowLimiter()
 
-# Per-prefix limits ported from app/routes/__init__.py (Flask-Limiter wiring):
-#   `limiter.limit("20/10seconds")(webhook_bp)`  → POST /
-#   `limiter.limit("30/minute")(github_webhook_bp)` → POST /api/webhooks/github
-_RATE_LIMITS: tuple[tuple[str, int, float], ...] = (
-    ("/api/webhooks/github", 30, 60.0),
-    # Bare "/" handler is the generic webhook receiver (wave 77).
-    # Match it explicitly so the limiter doesn't count unrelated requests.
-)
+
+def _int_env(name: str, default: int) -> int:
+    """Read an integer env var; fall back to default + log on parse error."""
+    raw = os.environ.get(name)
+    if raw is None or raw == "":
+        return default
+    try:
+        return int(raw)
+    except ValueError:
+        logger.warning("%s=%r is not an integer; using default %d", name, raw, default)
+        return default
+
+
+# v0.5.14: env-tunable defaults. Read once at module load.
+_GET_LIMIT = _int_env("RATE_LIMIT_API_GET_PER_MIN", 60)
+_WRITE_LIMIT = _int_env("RATE_LIMIT_API_WRITE_PER_MIN", 30)
+_ADMIN_LIMIT = _int_env("RATE_LIMIT_ADMIN_PER_MIN", 30)
+
+
+# (method, prefix, limit, window_seconds). First method+prefix match wins.
+# Method "*" is a wildcard. Existing webhook rules (preserved from wave 77)
+# sort first so they take precedence over the broader /api/* defaults.
+_RATE_LIMITS: list[tuple[str, str, int, float]] = [
+    # Webhook receivers (existing behavior).
+    ("POST", "/api/webhooks/github", 30, 60.0),
+    ("POST", "/", 20, 10.0),
+    # v0.5.14 broad defaults — first specific-method match wins, then *.
+    ("GET", "/api/", _GET_LIMIT, 60.0),
+    ("POST", "/api/", _WRITE_LIMIT, 60.0),
+    ("PUT", "/api/", _WRITE_LIMIT, 60.0),
+    ("PATCH", "/api/", _WRITE_LIMIT, 60.0),
+    ("DELETE", "/api/", max(1, _WRITE_LIMIT // 2), 60.0),
+    ("*", "/admin/", _ADMIN_LIMIT, 60.0),
+]
 
 
 def _client_ip(scope: Scope) -> str:
@@ -404,8 +430,47 @@ def _client_ip(scope: Scope) -> str:
     return client[0] if client else "unknown"
 
 
+def _resolve_rate_key(scope: Scope) -> tuple[str, str]:
+    """Returns (kind, value).
+
+    Authenticated requests get keyed by user_id (set in scope["state"]
+    by ApiKeyMiddleware in v0.5.12). Unauthed routes (login, signup,
+    bootstrap mode) fall back to per-IP."""
+    state = scope.get("state") or {}
+    principal = state.get("principal") if isinstance(state, dict) else None
+    if principal and principal.get("user_id"):
+        return ("user", principal["user_id"])
+    return ("ip", _client_ip(scope))
+
+
+def _match_rate_limit(method: str, path: str) -> Optional[tuple[int, float]]:
+    """Resolve (limit, window) for (method, path). Returns None if no
+    rule matches.
+
+    Per-route overrides (registered by `requires_rate_limit` guard)
+    win over the coarse defaults table.
+    """
+    from .rate_limit_guard import get_override
+
+    override = get_override(method, path)
+    if override is not None:
+        return override
+    for rule_method, prefix, limit, window in _RATE_LIMITS:
+        method_match = rule_method == method or rule_method == "*"
+        if not method_match:
+            continue
+        if prefix == "/":
+            if path == "/":
+                return (limit, window)
+            continue
+        if path.startswith(prefix):
+            return (limit, window)
+    return None
+
+
 class RateLimitMiddleware(ASGIMiddleware):
-    """Apply per-IP rate limits on the webhook receivers."""
+    """v0.5.14: per-key rate limits on /api/* + /admin/* + per-route
+    overrides + preserved webhook rules."""
 
     async def handle(
         self, scope: Scope, receive: Receive, send: Send, next_app: ASGIApp
@@ -417,21 +482,16 @@ class RateLimitMiddleware(ASGIMiddleware):
         path = scope.get("path", "")
         method = scope.get("method", "GET")
 
-        # Generic webhook receiver lives at root POST /
-        if method == "POST" and path == "/":
-            limit_match = ("/", 20, 10.0)
-        else:
-            limit_match = next(
-                (entry for entry in _RATE_LIMITS if path.startswith(entry[0])),
-                None,
-            )
-
-        if limit_match is None:
+        rule = _match_rate_limit(method, path)
+        if rule is None:
             await next_app(scope, receive, send)
             return
+        limit, window = rule
 
-        prefix, limit, window = limit_match
-        if not _limiter.hit((_client_ip(scope), prefix), limit, window):
+        key_kind, key_val = _resolve_rate_key(scope)
+        limiter_key = (f"{key_kind}:{key_val}", path)
+
+        if not _limiter.hit(limiter_key, limit, window):
             body = _json_error_body("RATE_LIMITED", "Rate limit exceeded")
             await send(
                 {
