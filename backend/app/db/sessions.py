@@ -69,50 +69,56 @@ def get_session_by_token(
     *,
     idle_lifetime: dt.timedelta = DEFAULT_IDLE_LIFETIME,
 ) -> Optional[dict]:
-    """Constant-time token lookup. Returns the session row, or None on
-    miss / absolute expiry / idle expiry / revocation. Touches
+    """Token lookup with no early-return. Returns the session row, or
+    None on miss / absolute expiry / idle expiry / revocation. Touches
     last_used_at on hit. Within the rotation grace window, the
     previous token (rotated_from_token) also resolves to the row.
 
     Logs lifecycle events on idle/expired/revoked-use paths.
+
+    The scan visits every active session row before returning, which
+    eliminates row-position-dependent timing leaks. Per-row work still
+    differs slightly (matched rows run revocation/expiry/idle checks;
+    non-matching rows skip them), and successful auth pays a post-scan
+    UPDATE while a miss does not — so this is not strictly
+    constant-time, but it is robust enough for the threat model where
+    an attacker cannot directly observe per-row CPU.
     """
 
     if not token:
         return None
     now = dt.datetime.utcnow()
     grace_cutoff = (now - ROTATION_GRACE_WINDOW).isoformat()
+    matched_row: Optional[dict] = None
+    failure_event: Optional[tuple[str, str, Optional[str], Optional[dict]]] = None
     with get_connection() as conn:
         conn.row_factory = _row_to_dict
         rows = conn.execute("SELECT * FROM sessions").fetchall()
         conn.row_factory = None
         for row in rows:
-            # Match against either current or rotated-from token (constant time).
+            # Match against either current or rotated-from token. Both
+            # comparisons run for every row so timing does not leak which
+            # one matched (or that any row matched).
             primary_match = hmac.compare_digest(row["token"], token)
-            rotated_match = (
-                row.get("rotated_from_token")
-                and hmac.compare_digest(row["rotated_from_token"], token)
-                and (row.get("last_used_at") or "") > grace_cutoff
-            )
+            rotated_token = row.get("rotated_from_token") or ""
+            rotated_compare = hmac.compare_digest(rotated_token, token) if rotated_token else False
+            rotated_in_window = (row.get("last_used_at") or "") > grace_cutoff
+            rotated_match = bool(rotated_token) and rotated_compare and rotated_in_window
             if not primary_match and not rotated_match:
                 continue
 
-            # Revocation check.
             if row.get("revoked_at"):
-                session_events.log_session_event(
+                failure_event = (
                     row["id"], row["user_id"], "used_after_revocation",
-                    metadata={"reason": row.get("revoke_reason")},
+                    {"reason": row.get("revoke_reason")},
                 )
-                return None
+                continue
 
-            # Absolute expiry check.
             expires = dt.datetime.fromisoformat(row["expires_at"])
             if expires <= now:
-                session_events.log_session_event(
-                    row["id"], row["user_id"], "expired",
-                )
-                return None
+                failure_event = (row["id"], row["user_id"], "expired", None)
+                continue
 
-            # Idle expiry check.
             last_used = row.get("last_used_at")
             if last_used:
                 try:
@@ -120,25 +126,28 @@ def get_session_by_token(
                 except ValueError:
                     last_used_dt = now  # tolerate corrupt timestamp
                 if now - last_used_dt > idle_lifetime:
-                    session_events.log_session_event(
+                    failure_event = (
                         row["id"], row["user_id"], "idle_expired",
-                        metadata={
-                            "idle_minutes": int(
-                                (now - last_used_dt).total_seconds() / 60
-                            ),
-                        },
+                        {"idle_minutes": int((now - last_used_dt).total_seconds() / 60)},
                     )
-                    return None
+                    continue
 
-            # Touch last_used_at.
+            matched_row = row
+
+        if matched_row is not None:
             conn.execute(
                 "UPDATE sessions SET last_used_at = ? WHERE id = ?",
-                (now.isoformat(), row["id"]),
+                (now.isoformat(), matched_row["id"]),
             )
             conn.commit()
-            row["last_used_at"] = now.isoformat()
-            return row
-    return None
+            matched_row["last_used_at"] = now.isoformat()
+
+    if matched_row is None and failure_event is not None:
+        session_id, user_id, event_type, metadata = failure_event
+        session_events.log_session_event(
+            session_id, user_id, event_type, metadata=metadata,
+        )
+    return matched_row
 
 
 def revoke_session(token: str, *, reason: str = "logout") -> bool:
@@ -172,7 +181,11 @@ def rotate_session(token: str) -> Optional[dict]:
     """Issue a new token for the session matched by `token`. The previous
     token is preserved in `rotated_from_token` for the grace window.
 
-    Returns the updated row, or None if `token` doesn't match an active session.
+    Returns the updated row, or None if `token` doesn't match an active
+    session. Uses a compare-and-swap UPDATE so two concurrent rotations
+    of the same token produce a single canonical new token: the loser
+    reloads and returns the winner's row instead of issuing a stale
+    second rotation.
     """
 
     if not token:
@@ -189,13 +202,29 @@ def rotate_session(token: str) -> Optional[dict]:
             if not hmac.compare_digest(row["token"], token):
                 continue
             old_token = row["token"]
-            conn.execute(
+            cursor = conn.execute(
                 """UPDATE sessions
                    SET token = ?, rotated_from_token = ?, last_used_at = ?
-                   WHERE id = ?""",
-                (new_token, old_token, now, row["id"]),
+                   WHERE id = ? AND token = ? AND revoked_at IS NULL""",
+                (new_token, old_token, now, row["id"], old_token),
             )
             conn.commit()
+            if cursor.rowcount == 0:
+                # Lost the race. Reload to distinguish two scenarios:
+                #   a) parallel rotation won → canonical token differs;
+                #      return the reloaded row so the caller emits the
+                #      correct X-New-Session-Token.
+                #   b) parallel revocation set revoked_at → return None
+                #      so middleware does NOT emit a header for a
+                #      revoked session.
+                conn.row_factory = _row_to_dict
+                current = conn.execute(
+                    "SELECT * FROM sessions WHERE id = ?", (row["id"],)
+                ).fetchone()
+                conn.row_factory = None
+                if current is None or current.get("revoked_at"):
+                    return None
+                return current
             row["token"] = new_token
             row["rotated_from_token"] = old_token
             row["last_used_at"] = now

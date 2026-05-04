@@ -130,3 +130,19 @@ class TestRevokedSessionLookup:
         types = [e["event_type"] for e in events]
         assert "revoked" in types
         assert "used_after_revocation" in types
+
+
+class TestRotateOldTokenReturnsNone:
+    def test_rotate_already_rotated_token_returns_none(self, isolated_db):
+        """After rotation, the old token no longer matches any active
+        session row. Sequential second-rotate of the original token
+        returns None — the proper concurrent CAS path (loser reloads +
+        returns winner row) only triggers when two connections see the
+        same row before either commits, which is not testable here."""
+        from app.db.sessions import create_session, rotate_session
+        _make_user("u1")
+        s = create_session("u1")
+        old = s["token"]
+        first = rotate_session(old)
+        assert first is not None
+        assert rotate_session(old) is None

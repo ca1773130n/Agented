@@ -4386,16 +4386,30 @@ def _migrate_109_session_audit_columns(conn):
 
     Adds three columns to `sessions` for rotation grace window and
     revocation tracking, and creates the `session_events` audit table.
+
+    PRAGMA + ALTER is not atomic — two concurrent boots can both see a
+    missing column and both ALTER, with the second raising "duplicate
+    column name". Catching that error makes the migration idempotent
+    under concurrent invocation (`just deploy` + ad-hoc CLI overlap).
     """
-    # 1. Add columns to sessions (idempotent: PRAGMA-checked).
-    cursor = conn.execute("PRAGMA table_info(sessions)")
-    existing = {row[1] for row in cursor.fetchall()}
-    if "rotated_from_token" not in existing:
-        conn.execute("ALTER TABLE sessions ADD COLUMN rotated_from_token TEXT")
-    if "revoked_at" not in existing:
-        conn.execute("ALTER TABLE sessions ADD COLUMN revoked_at TIMESTAMP")
-    if "revoke_reason" not in existing:
-        conn.execute("ALTER TABLE sessions ADD COLUMN revoke_reason TEXT")
+    import sqlite3
+
+    def _add_column_if_missing(name: str, ddl_type: str) -> None:
+        cursor = conn.execute("PRAGMA table_info(sessions)")
+        existing = {row[1] for row in cursor.fetchall()}
+        if name in existing:
+            return
+        try:
+            conn.execute(f"ALTER TABLE sessions ADD COLUMN {name} {ddl_type}")
+        except sqlite3.OperationalError as exc:
+            # Concurrent boot won the race; column now exists.
+            if "duplicate column name" not in str(exc).lower():
+                raise
+
+    # 1. Add columns to sessions (idempotent: PRAGMA + duplicate-column-safe).
+    _add_column_if_missing("rotated_from_token", "TEXT")
+    _add_column_if_missing("revoked_at", "TIMESTAMP")
+    _add_column_if_missing("revoke_reason", "TEXT")
 
     # 2. Create session_events audit table.
     conn.execute(
