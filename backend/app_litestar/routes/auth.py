@@ -18,7 +18,7 @@ from msgspec import Struct
 import logging
 
 from app.db.password_resets import consume_token, request_reset
-from app.db.sessions import create_session, revoke_session
+from app.db.sessions import create_session, revoke_session, revoke_user_sessions
 from app.db.users import (
     authenticate,
     create_user,
@@ -144,10 +144,33 @@ def me(caller: Caller) -> dict[str, Any]:
 
 @post("/logout", status_code=HTTP_204_NO_CONTENT, sync_to_thread=False)
 def logout(request: Request) -> None:
-    """Revoke the current session token if present. Always 204."""
-    token = _resolve_session_token(request)
-    if token:
-        revoke_session(token)
+    """Revoke the caller's sessions. Always 204.
+
+    v0.5.12: revoke by user_id from middleware-stashed principal because
+    the bearer in the Authorization header has already been rotated by
+    the middleware (the original token now lives in `rotated_from_token`,
+    not `token`). When there's no principal (bootstrap mode), resolve
+    the token to a user and still revoke ALL their sessions — same
+    contract as the authenticated path.
+    """
+    from app.db.sessions import get_session_by_token
+
+    principal = request.scope.get("state", {}).get("principal")
+    user_id = principal.get("user_id") if principal else None
+    if not user_id:
+        token = _resolve_session_token(request)
+        if token:
+            session = get_session_by_token(token)
+            if session:
+                user_id = session["user_id"]
+            else:
+                # Token didn't resolve — keep prior behavior of revoking
+                # the literal token if it still exists by primary token
+                # match. Returns False quietly when not found.
+                revoke_session(token, reason="logout")
+                return None
+    if user_id:
+        revoke_user_sessions(user_id, reason="logout")
     return None
 
 

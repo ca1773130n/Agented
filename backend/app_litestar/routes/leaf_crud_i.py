@@ -44,6 +44,7 @@ from app.services.setup_execution_service import SetupExecutionService
 from app.services.setup_service import SetupBundleService
 from app.services.super_agent_session_service import SuperAgentSessionService
 from app.services.team_generation_service import TeamGenerationService
+from app_litestar.auth_guards import requires_role
 
 logger = logging.getLogger(__name__)
 
@@ -107,7 +108,7 @@ def cancel_setup(execution_id: str) -> dict[str, Any]:
     return {"message": "Setup cancelled"}
 
 
-@post("/bundle-install", sync_to_thread=False)
+@post("/bundle-install", sync_to_thread=False, guards=[requires_role("admin")])
 def bundle_install() -> Any:
     result, status = SetupBundleService.bundle_install()
     if status >= 400:

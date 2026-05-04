@@ -29,6 +29,7 @@ describe('API Service', () => {
     return {
       ok,
       status,
+      headers: new Headers(),
       text: () => Promise.resolve(JSON.stringify(data)),
       json: () => Promise.resolve(data)
     } as Response
@@ -430,6 +431,7 @@ describe('API Service', () => {
         }
         vi.mocked(fetch).mockResolvedValueOnce({
           ok: true,
+          headers: new Headers(),
           text: () => Promise.resolve(JSON.stringify(mockHealth)),
         } as unknown as Response)
 
@@ -692,6 +694,7 @@ describe('API Service', () => {
       vi.mocked(fetch).mockResolvedValueOnce({
         ok: false,
         status: 400,
+        headers: new Headers(),
         json: () => Promise.resolve({ error: 'Bad request' })
       } as Response)
 
@@ -709,6 +712,7 @@ describe('API Service', () => {
       vi.mocked(fetch).mockResolvedValueOnce({
         ok: true,
         status: 204,
+        headers: new Headers(),
         text: () => Promise.resolve('')
       } as Response)
 

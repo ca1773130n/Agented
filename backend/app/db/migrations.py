@@ -4381,6 +4381,93 @@ def _migrate_108_password_reset_tokens(conn):
     )
 
 
+def _migrate_109_session_audit_columns(conn):
+    """v0.5.12: session audit + lifecycle hardening.
+
+    Adds three columns to `sessions` for rotation grace window and
+    revocation tracking, and creates the `session_events` audit table.
+
+    PRAGMA + ALTER is not atomic — two concurrent boots can both see a
+    missing column and both ALTER, with the second raising "duplicate
+    column name". Catching that error makes the migration idempotent
+    under concurrent invocation (`just deploy` + ad-hoc CLI overlap).
+    """
+    import sqlite3
+
+    def _add_column_if_missing(name: str, ddl_type: str) -> None:
+        cursor = conn.execute("PRAGMA table_info(sessions)")
+        existing = {row[1] for row in cursor.fetchall()}
+        if name in existing:
+            return
+        try:
+            conn.execute(f"ALTER TABLE sessions ADD COLUMN {name} {ddl_type}")
+        except sqlite3.OperationalError as exc:
+            # Concurrent boot won the race; column now exists.
+            if "duplicate column name" not in str(exc).lower():
+                raise
+
+    # 1. Add columns to sessions (idempotent: PRAGMA + duplicate-column-safe).
+    _add_column_if_missing("rotated_from_token", "TEXT")
+    _add_column_if_missing("revoked_at", "TIMESTAMP")
+    _add_column_if_missing("revoke_reason", "TEXT")
+
+    # 2. Create session_events audit table.
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS session_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            session_id TEXT NOT NULL,
+            user_id TEXT,
+            event_type TEXT NOT NULL,
+            occurred_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            ip_address TEXT,
+            user_agent TEXT,
+            metadata TEXT
+        )
+        """
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_session_events_session_id "
+        "ON session_events(session_id)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_session_events_user_id "
+        "ON session_events(user_id)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_session_events_occurred_at "
+        "ON session_events(occurred_at DESC)"
+    )
+
+    # 3. Index for grace-window lookup.
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_sessions_rotated_from_token "
+        "ON sessions(rotated_from_token)"
+    )
+
+
+def _migrate_110_session_rotated_at(conn):
+    """v0.5.12: anchor the rotation grace window to a stable timestamp.
+
+    Migration 109 used `last_used_at` for the rotation grace window,
+    but that column is also refreshed on every successful auth — so
+    an attacker holding an old token could replay it indefinitely,
+    each replay sliding the 5-second window forward. Add a
+    `rotated_at` column set only by `rotate_session`, never by the
+    per-request touch.
+    """
+    import sqlite3
+
+    cursor = conn.execute("PRAGMA table_info(sessions)")
+    existing = {row[1] for row in cursor.fetchall()}
+    if "rotated_at" not in existing:
+        try:
+            conn.execute("ALTER TABLE sessions ADD COLUMN rotated_at TIMESTAMP")
+        except sqlite3.OperationalError as exc:
+            if "duplicate column name" not in str(exc).lower():
+                raise
+
+
 def _migrate_107_owned_entities_batch2_user_id(conn):
     """Multi-tenancy — remaining owned-entity tables (track B, wave 42).
 
@@ -4686,4 +4773,9 @@ VERSIONED_MIGRATIONS = [
     (106, "owned_entities_batch1", _migrate_106_owned_entities_batch1_user_id),
     (107, "owned_entities_batch2", _migrate_107_owned_entities_batch2_user_id),
     (108, "password_reset_tokens", _migrate_108_password_reset_tokens),
+    # v0.5.12 auth depth: session audit + lifecycle hardening
+    (109, "session_audit_columns", _migrate_109_session_audit_columns),
+    # v0.5.12 round-3 fix: separate rotation timestamp so grace window
+    # cannot be slid forward by replaying the rotated_from_token.
+    (110, "session_rotated_at", _migrate_110_session_rotated_at),
 ]

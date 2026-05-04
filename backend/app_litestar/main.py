@@ -147,6 +147,7 @@ from .routes.skills import (
 from .routes.teams import teams_router
 from .routes.triggers import triggers_router
 from .routes.utility import utility_router
+from .routes.auth_management import auth_management_router
 from .routes.workflows import workflows_router
 
 
@@ -196,6 +197,7 @@ def create_app() -> Litestar:
             health_router,
             rbac_router,
             auth_router,
+            auth_management_router,
             utility_router,
             misc_router,
             admin_misc_router,

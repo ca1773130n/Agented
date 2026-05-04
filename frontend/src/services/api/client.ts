@@ -151,6 +151,12 @@ async function apiFetchSingle<T>(url: string, options?: ApiFetchOptions): Promis
 
     clearTimeout(timeoutId);
 
+    // v0.5.12: consume rotated session token from response header.
+    const newToken = response.headers.get('x-new-session-token');
+    if (newToken) {
+      setSessionToken(newToken);
+    }
+
     if (!response.ok) {
       const data = await response.json().catch(() => ({}));
       const retryAfter = response.status === 429 ? parseRetryAfter(response.headers) : undefined;

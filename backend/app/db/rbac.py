@@ -10,6 +10,7 @@ import threading
 import time
 from typing import Optional
 
+from . import sessions as _sessions
 from .connection import get_connection
 from .ids import _get_unique_role_id
 
@@ -207,7 +208,18 @@ def update_user_role(role_id: str, label: Optional[str] = None, role: Optional[s
             params,
         )
         conn.commit()
-        return cursor.rowcount > 0
+        changed = cursor.rowcount > 0
+        # v0.5.12: invalidate the user's bearer sessions on role change.
+        if changed:
+            row = conn.execute(
+                "SELECT user_id FROM user_roles WHERE id = ?", (role_id,)
+            ).fetchone()
+            user_id = row[0] if row else None
+        else:
+            user_id = None
+    if user_id:
+        _sessions.revoke_user_sessions(user_id, reason="role_change")
+    return changed
 
 
 def rotate_user_role(role_id: str) -> Optional[dict]:
@@ -246,6 +258,8 @@ def rotate_user_role(role_id: str) -> Optional[dict]:
         conn.row_factory = None
 
     invalidate_key_cache()
+    if new_row and new_row.get("user_id"):
+        _sessions.revoke_user_sessions(new_row["user_id"], reason="key_rotation")
     return new_row
 
 
