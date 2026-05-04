@@ -206,6 +206,11 @@ docker-down:
 docker-logs:
     docker compose logs -f
 
+# v0.5.15: trigger a snapshot from inside the running backend container.
+# Writes to the agented-backups volume (mounted at /app/backups).
+docker-backup:
+    docker compose exec agented-backend python scripts/backup.py
+
 # v0.5.15: snapshot both SQLite DBs to AGENTED_BACKUP_DIR + apply
 # retention + optional remote sync via BACKUP_REMOTE_CMD.
 backup:

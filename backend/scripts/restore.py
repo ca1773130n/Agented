@@ -145,6 +145,16 @@ def main(argv: Optional[list[str]] = None) -> int:
                         help="Skip the confirmation prompt.")
     parser.add_argument("--no-safety-snapshot", action="store_true")
     parser.add_argument("--dest-dir", default=None)
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help=(
+            "Override the live-DB guard (recent *.db-wal). Use only after "
+            "confirming the service is actually stopped — e.g., `lsof "
+            "agented.db` returns nothing. Without --force, restore refuses "
+            "if WAL was modified within the last 60 seconds."
+        ),
+    )
     args = parser.parse_args(argv)
 
     dest_dir = Path(args.dest_dir) if args.dest_dir else _default_dest_dir()
@@ -179,12 +189,14 @@ def main(argv: Optional[list[str]] = None) -> int:
             return 2
 
     target_path = _resolve_target(label)
-    if _is_live_db(target_path):
+    if _is_live_db(target_path) and not args.force:
         print(
             f"ERROR: {target_path} appears to be in active use "
             f"(*.db-wal modified within last {LIVE_DB_GUARD_SECONDS}s).\n"
             f"Stop the service first (e.g., `just kill` or "
-            f"`systemctl --user stop agented-backend`).",
+            f"`systemctl --user stop agented-backend`).\n"
+            f"If the service is genuinely stopped (verify with "
+            f"`lsof {target_path}`), pass --force to override.",
             file=sys.stderr,
         )
         return 2

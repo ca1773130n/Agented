@@ -19,6 +19,7 @@ import datetime as dt
 import json
 import logging
 import os
+import shlex
 import shutil
 import sqlite3
 import subprocess
@@ -49,7 +50,9 @@ def _default_ai_accounts_db_path() -> Path:
 def _default_dest_dir() -> Path:
     explicit = os.environ.get("AGENTED_BACKUP_DIR")
     if explicit:
-        return Path(explicit)
+        # Resolve relative env values against an absolute path so the
+        # destination doesn't drift with the launcher's cwd.
+        return Path(explicit).expanduser().resolve()
     here = Path(__file__).resolve().parent.parent  # backend/
     return here / "backups"
 
@@ -60,16 +63,33 @@ def _utc_timestamp() -> str:
     return now.isoformat().replace(":", "-") + "Z"
 
 
-def snapshot_one(label: str, source: Path, dest_dir: Path, *, timestamp: str) -> Path:
+def snapshot_one(
+    label: str,
+    source: Path,
+    dest_dir: Path,
+    *,
+    timestamp: str,
+    pages_per_step: int = 100,
+) -> Path:
     """Atomic online snapshot via sqlite3.Connection.backup. Returns
     the destination path on success; raises on failure (and removes
-    any partial dest file)."""
+    any partial dest file).
+
+    `pages_per_step` controls SQLite's chunked copy: each call holds
+    the source's read lock briefly, releases, and resumes — letting
+    concurrent WAL writers proceed instead of starving on a single
+    big lock. 100 pages = ~400KB per chunk at the default 4KB page,
+    which is a reasonable balance between progress and lock fairness.
+    """
     dest_dir.mkdir(parents=True, exist_ok=True)
     dest = dest_dir / f"{label}-{timestamp}.db"
     src_conn = sqlite3.connect(str(source))
     dst_conn = sqlite3.connect(str(dest))
     try:
-        src_conn.backup(dst_conn)
+        # pages > 0 enables chunked copying; the API still produces
+        # an internally-consistent snapshot under concurrent writers
+        # because each chunk runs inside a sqlite read transaction.
+        src_conn.backup(dst_conn, pages=pages_per_step)
         dst_conn.commit()
     except Exception:
         try:
@@ -89,12 +109,19 @@ def snapshot_one(label: str, source: Path, dest_dir: Path, *, timestamp: str) ->
 
 def apply_retention(dest_dir: Path, retention_days: int, *, label: str) -> int:
     """Remove `{label}-*.db` files older than `retention_days`. Returns
-    count removed. Per-file errors are logged at WARN and skipped."""
+    count removed. Per-file errors are logged at WARN and skipped.
+
+    Pre-restore safety snapshots (`{label}-pre-restore-*.db`) are
+    excluded — those are operator safety nets from a restore event
+    and should outlive normal-rhythm retention.
+    """
     if retention_days <= 0:
         return 0
     cutoff = time.time() - retention_days * 86400
     removed = 0
     for entry in dest_dir.glob(f"{label}-*.db"):
+        if entry.stem.startswith(f"{label}-pre-restore-"):
+            continue
         try:
             if entry.stat().st_mtime < cutoff:
                 entry.unlink()
@@ -105,8 +132,15 @@ def apply_retention(dest_dir: Path, retention_days: int, *, label: str) -> int:
 
 
 def sync_remote(snapshot_path: Path, remote_cmd_template: str) -> bool:
-    """Substitute `{file}` and shell out. Returns True on exit code 0."""
-    cmd = remote_cmd_template.replace("{file}", str(snapshot_path))
+    """Substitute `{file}` and shell out. Returns True on exit code 0.
+
+    The substituted path is shlex-quoted before insertion so that
+    paths containing spaces or shell metacharacters don't break the
+    operator's command (or open an injection vector if the snapshot
+    path is somehow attacker-influenced).
+    """
+    quoted = shlex.quote(str(snapshot_path))
+    cmd = remote_cmd_template.replace("{file}", quoted)
     try:
         result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=600)
     except subprocess.TimeoutExpired:
@@ -174,24 +208,47 @@ def main(argv: Optional[list[str]] = None) -> int:
         "elapsed_seconds": 0.0,
     }
 
+    def _target_entry(
+        *,
+        label: str,
+        source: Path,
+        ok: bool,
+        snapshot: Optional[Path] = None,
+        size_bytes: Optional[int] = None,
+        remote_synced: Optional[bool] = None,
+        retained_removed: int = 0,
+        error: Optional[str] = None,
+    ) -> dict:
+        # Stable schema — every entry has the same keys; failure
+        # entries fill the data fields with None instead of omitting.
+        return {
+            "label": label,
+            "source": str(source),
+            "ok": ok,
+            "snapshot": str(snapshot) if snapshot else None,
+            "size_bytes": size_bytes,
+            "remote_synced": remote_synced,
+            "retained_removed": retained_removed,
+            "error": error,
+        }
+
     overall_ok = True
     for label, source in targets:
         if not source.exists():
             print(f"ERROR: source DB missing: {source}", file=sys.stderr)
-            summary["targets"].append({
-                "label": label, "source": str(source), "ok": False,
-                "error": "source missing",
-            })
+            summary["targets"].append(_target_entry(
+                label=label, source=source, ok=False, error="source missing",
+            ))
             overall_ok = False
             continue
         try:
             dest = snapshot_one(label, source, dest_dir, timestamp=timestamp)
         except Exception as exc:  # noqa: BLE001
             print(f"ERROR: snapshot failed for {label}: {exc}", file=sys.stderr)
-            summary["targets"].append({
-                "label": label, "source": str(source), "ok": False,
-                "error": f"snapshot failed: {exc}",
-            })
+            summary["targets"].append(_target_entry(
+                label=label, source=source, ok=False,
+                error=f"snapshot failed: {exc}",
+            ))
             overall_ok = False
             continue
 
@@ -202,15 +259,11 @@ def main(argv: Optional[list[str]] = None) -> int:
 
         removed = apply_retention(dest_dir, retention_days, label=label)
         summary["removed"] += removed
-        summary["targets"].append({
-            "label": label,
-            "source": str(source),
-            "snapshot": str(dest),
-            "size_bytes": size_bytes,
-            "remote_synced": remote_synced,
-            "retained_removed": removed,
-            "ok": True,
-        })
+        summary["targets"].append(_target_entry(
+            label=label, source=source, ok=True,
+            snapshot=dest, size_bytes=size_bytes,
+            remote_synced=remote_synced, retained_removed=removed,
+        ))
 
     summary["elapsed_seconds"] = round(time.monotonic() - started, 3)
     if not args.quiet:

@@ -110,3 +110,24 @@ class TestLiveDBGuard:
         assert rc == 2
         # Target was NOT overwritten.
         assert _read_marker(target) == "live"
+
+    def test_force_flag_overrides_live_guard(self, tmp_path, monkeypatch):
+        """Codex round-1 Issue 4: --force lets the operator override
+        when they've manually verified the service is stopped."""
+        from scripts import restore
+        target = tmp_path / "agented.db"
+        _seed_db(target, "live")
+        wal = target.with_suffix(target.suffix + "-wal")
+        wal.write_text("live")  # fresh WAL → guard would normally fire
+        snap = tmp_path / "agented-snap.db"
+        _seed_db(snap, "from-snap")
+        monkeypatch.setattr(restore, "_default_agented_db_path", lambda: target)
+        rc = restore.main([
+            "--target", "agented",
+            "--snapshot", str(snap),
+            "--yes",
+            "--no-safety-snapshot",
+            "--force",
+        ])
+        assert rc == 0
+        assert _read_marker(target) == "from-snap"

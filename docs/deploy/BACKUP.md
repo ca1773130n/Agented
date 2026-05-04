@@ -69,6 +69,31 @@ The Docker container mode (`just docker-up`) doesn't ship `rclone`
 or `aws-cli` in the image — use a host-side cron / launchd timer
 for off-site sync if running containerised.
 
+### Container deployment
+
+In container mode, snapshots write to the `agented-backups` volume
+(mounted at `/app/backups` inside both backend and sidecar
+containers). To trigger:
+
+```bash
+just docker-backup
+# Equivalent to:
+# docker compose exec agented-backend python scripts/backup.py
+```
+
+To pull snapshots out of the volume to a host directory:
+
+```bash
+docker run --rm -v agented_agented-backups:/src -v $(pwd)/backups-export:/dest \
+  alpine sh -c 'cp -r /src/. /dest/'
+```
+
+For off-site sync from containers, the cleanest pattern is a
+host-side cron that runs `just docker-backup` and then `rclone copy`
+the volume contents to remote — the in-container `BACKUP_REMOTE_CMD`
+hook works only if the operator builds a custom image with rclone
+or aws-cli installed.
+
 ## Scheduling
 
 Three template options. Pick one based on platform.
