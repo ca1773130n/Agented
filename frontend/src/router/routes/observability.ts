@@ -27,4 +27,11 @@ export const observabilityRoutes: RouteRecordRaw[] = [
     meta: { title: 'Memory Thread Detail' },
     props: true,
   },
+  {
+    // v0.6.3: operator dashboard for the v0.5.12 session_events audit log.
+    path: '/admin/session-events',
+    name: 'session-events',
+    component: () => import('../../views/SessionEventsPage.vue'),
+    meta: { title: 'Session Events', requiresRole: 'admin' },
+  },
 ];
