@@ -508,3 +508,43 @@ class RateLimitMiddleware(ASGIMiddleware):
             return
 
         await next_app(scope, receive, send)
+
+
+# ---------------------------------------------------------------------------
+# Performance / Server-Timing — v0.6.0
+# ---------------------------------------------------------------------------
+
+
+class PerformanceMiddleware(ASGIMiddleware):
+    """v0.6.0: emit Server-Timing response header with handler duration.
+
+    Clients (browsers, profile.py) read this to measure per-request
+    server-side cost without parsing logs. Adds <1ms overhead.
+    """
+
+    async def handle(
+        self, scope: Scope, receive: Receive, send: Send, next_app: ASGIApp
+    ) -> None:
+        if scope["type"] != "http":
+            await next_app(scope, receive, send)
+            return
+
+        from time import perf_counter
+
+        started = perf_counter()
+        sent_start = False
+
+        async def send_with_timing(message: Any) -> None:
+            nonlocal sent_start
+            if message["type"] == "http.response.start" and not sent_start:
+                elapsed_ms = (perf_counter() - started) * 1000.0
+                hdrs = list(message.get("headers", []))
+                hdrs.append(
+                    (b"server-timing", f"app;dur={elapsed_ms:.1f}".encode("latin-1"))
+                )
+                message = {**message, "headers": hdrs}
+                sent_start = True
+            await send(message)
+
+        await next_app(scope, receive, send_with_timing)
+

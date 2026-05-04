@@ -18,6 +18,7 @@ from .exception_handlers import EXCEPTION_HANDLERS
 from .lifecycle import on_shutdown, on_startup
 from .middleware import (
     ApiKeyMiddleware,
+    PerformanceMiddleware,
     RateLimitMiddleware,
     RequestContextMiddleware,
     RequestLoggingMiddleware,
@@ -193,6 +194,10 @@ def create_app() -> Litestar:
             SecurityHeadersMiddleware(),
             ApiKeyMiddleware(),
             RateLimitMiddleware(),
+            # v0.6.0: emit Server-Timing on every response. Innermost so
+            # the timing reflects the actual handler cost, not middleware
+            # overhead.
+            PerformanceMiddleware(),
         ],
         exception_handlers=EXCEPTION_HANDLERS,
         on_startup=[on_startup],
