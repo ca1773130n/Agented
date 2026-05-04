@@ -231,6 +231,14 @@ OPTIONAL_VARS: list[dict] = [
         "default": "500",
         "secret": False,
     },
+    # v0.6.4 plugin ecosystem.
+    {
+        "name": "AGENTED_PLUGIN_PATHS",
+        "description": "Colon-separated additional plugin search paths (like $PATH).",
+        "example": "/opt/plugins:/srv/agented/plugins",
+        "default": "(unset; falls back to ~/.claude/plugins, ~/.config/superpowers/plugins)",
+        "secret": False,
+    },
 ]
 
 

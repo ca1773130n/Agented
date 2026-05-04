@@ -27,6 +27,7 @@ from .middleware import (
 )
 from .routes.auth import auth_router
 from .routes.metrics import metrics_router
+from .routes.plugin_discovery import plugin_discovery_router
 from .routes.health import health_router
 from .routes.leaf_crud_a import (
     bookmarks_router,
@@ -213,6 +214,7 @@ def create_app() -> Litestar:
             auth_router,
             auth_management_router,
             metrics_router,
+            plugin_discovery_router,
             utility_router,
             misc_router,
             admin_misc_router,
