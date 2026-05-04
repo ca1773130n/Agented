@@ -223,6 +223,14 @@ OPTIONAL_VARS: list[dict] = [
         "default": "30",
         "secret": False,
     },
+    # v0.6.2 observability.
+    {
+        "name": "SLOW_REQUEST_THRESHOLD_MS",
+        "description": "SlowRequestMiddleware logs WARN for requests exceeding this many ms.",
+        "example": "500",
+        "default": "500",
+        "secret": False,
+    },
 ]
 
 
