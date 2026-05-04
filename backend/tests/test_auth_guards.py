@@ -26,22 +26,39 @@ class TestRequiredRole:
         from app_litestar.auth_guards import required_role
         assert required_role("GET", "/api/foo") == "viewer"
 
+    def test_post_api_requires_editor(self):
+        """v0.5.12 fix: mutating /api/* must require at least editor."""
+        from app_litestar.auth_guards import required_role
+        assert required_role("POST", "/api/projects/p1/phases") == "editor"
+
+    def test_put_api_requires_editor(self):
+        from app_litestar.auth_guards import required_role
+        assert required_role("PUT", "/api/settings/harness-plugin") == "editor"
+
+    def test_patch_api_requires_editor(self):
+        from app_litestar.auth_guards import required_role
+        assert required_role("PATCH", "/api/agents/a1") == "editor"
+
+    def test_delete_api_requires_admin(self):
+        from app_litestar.auth_guards import required_role
+        assert required_role("DELETE", "/api/agents/a1") == "admin"
+
     def test_health_is_public(self):
         from app_litestar.auth_guards import required_role
         assert required_role("GET", "/health/liveness") is None
 
-    def test_login_endpoint_is_public(self):
-        from app_litestar.auth_guards import required_role
-        assert required_role("POST", "/admin/auth/login") is None
-
-    def test_logout_endpoint_is_public(self):
+    def test_logout_endpoints_are_public(self):
         """Logout must bypass the coarse role check so any authenticated
         principal (including viewer) can end their session."""
         from app_litestar.auth_guards import required_role, PUBLIC_PATHS
         assert "/admin/auth/logout" in PUBLIC_PATHS
+        assert "/api/auth/logout" in PUBLIC_PATHS
         assert required_role("POST", "/admin/auth/logout") is None
+        assert required_role("POST", "/api/auth/logout") is None
 
     def test_unmapped_paths_default_public(self):
+        """Paths outside /api/ and /admin/ have no coarse rule (auth still
+        enforced by middleware where applicable)."""
         from app_litestar.auth_guards import required_role
         assert required_role("GET", "/some/random/path") is None
 

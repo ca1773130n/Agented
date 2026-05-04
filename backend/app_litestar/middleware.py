@@ -47,6 +47,13 @@ _AUTH_BYPASS_PREFIXES = (
     "/schema",
     "/api/webhooks/github",
     "/api/oauth-callback",
+    # Auth-establishing routes — caller has no credentials yet. v0.5.12:
+    # these must skip authentication entirely so unauthenticated users
+    # can sign up, log in, and recover passwords.
+    "/api/auth/login",
+    "/api/auth/signup",
+    "/api/auth/forgot-password",
+    "/api/auth/reset-password",
 )
 
 

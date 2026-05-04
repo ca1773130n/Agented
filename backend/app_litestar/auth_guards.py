@@ -23,8 +23,13 @@ ROLE_RANK: dict[str, int] = {
 
 # (method, prefix) → required role. Order matters for prefix matching:
 # the table is iterated and the first method-and-prefix match wins.
+# Coverage closes the v0.5.12 critical: mutating /api/* must be gated.
 ROLE_REQUIRED: list[tuple[str, str, str]] = [
     ("GET",    "/api/",   "viewer"),
+    ("POST",   "/api/",   "editor"),
+    ("PUT",    "/api/",   "editor"),
+    ("PATCH",  "/api/",   "editor"),
+    ("DELETE", "/api/",   "admin"),
     ("GET",    "/admin/", "viewer"),
     ("POST",   "/admin/", "editor"),
     ("PUT",    "/admin/", "editor"),
@@ -33,12 +38,17 @@ ROLE_REQUIRED: list[tuple[str, str, str]] = [
 ]
 
 # Public paths bypass the coarse role check (still authenticated by
-# ApiKeyMiddleware unless bootstrap mode applies).
+# ApiKeyMiddleware unless the path is also in middleware's
+# _AUTH_BYPASS_PREFIXES).
+#
+# Logout is here so any authenticated principal — including viewer —
+# can end their session. Login/signup/password-reset bypass auth
+# entirely at the middleware level (see _AUTH_BYPASS_PREFIXES).
 PUBLIC_PATHS: tuple[str, ...] = (
     "/health/",
     "/docs",
     "/schema",
-    "/admin/auth/login",
+    "/api/auth/logout",
     "/admin/auth/logout",
 )
 
