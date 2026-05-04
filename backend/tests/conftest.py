@@ -2,6 +2,7 @@
 
 import logging
 import os
+import shutil
 import sys
 import warnings
 
@@ -11,6 +12,13 @@ logger = logging.getLogger(__name__)
 
 # Ensure the backend app package is importable
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+
+# test_stream.py is a manual script that shells out to the `claude` CLI on
+# import. CI runners don't have it installed, so collection fails. Skip
+# only when the binary isn't on PATH; locally it auto-runs as before.
+collect_ignore = []
+if shutil.which("claude") is None:
+    collect_ignore.append("test_stream.py")
 
 
 @pytest.fixture(autouse=True)
