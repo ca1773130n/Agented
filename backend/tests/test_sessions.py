@@ -82,3 +82,29 @@ class TestPurgeExpired:
         assert removed >= 1
         assert get_session_by_token(live["token"]) is not None
         assert get_session_by_token(dead["token"]) is None
+
+    def test_v061_soft_delete_preserves_row_for_audit(self, isolated_db):
+        """v0.6.1: expire_sessions soft-deletes (sets revoked_at) rather
+        than hard-deleting, so the session_events audit log can still
+        reference the row and operators can see expiry history."""
+        from app.db.sessions import expire_sessions
+        from app.database import get_connection
+        uid = create_user("expire@example.com")
+        dead = create_session(uid, lifetime=dt.timedelta(seconds=-1))
+        n = expire_sessions()
+        assert n >= 1
+        # Lookup returns None (revoked) but the row still exists.
+        assert get_session_by_token(dead["token"]) is None
+        with get_connection() as conn:
+            row = conn.execute(
+                "SELECT revoked_at, revoke_reason FROM sessions WHERE id = ?",
+                (dead["id"],),
+            ).fetchone()
+        assert row is not None
+        assert row[0] is not None  # revoked_at populated
+        assert row[1] == "expired"  # reason set
+
+    def test_v061_alias_to_purge_expired_sessions(self, isolated_db):
+        """The old name still resolves for backwards compat."""
+        from app.db.sessions import expire_sessions, purge_expired_sessions
+        assert expire_sessions is purge_expired_sessions
