@@ -605,8 +605,30 @@ class TestRunTriggerSuccess:
 
 
 class TestSaveHelpers:
-    def test_save_trigger_event(self, tmp_path, monkeypatch):
+    def test_save_trigger_event_writes_to_db(self, isolated_db):
+        """v0.7.1: default behavior writes a row to trigger_events; no file."""
+        from app.services import trigger_event_service
+
+        trigger = _make_trigger()
+        event = {"action": "opened"}
+        event_id = ExecutionService.save_trigger_event(trigger, event)
+        assert event_id and event_id.isdigit()
+
+        row = trigger_event_service.get(int(event_id))
+        assert row is not None
+        assert row["trigger_id"] == "trg-test01"
+        assert row["dispatch_status"] == "fired"
+        assert row["matched"] == 1
+        # payload column is JSON-encoded
+        assert '"action"' in row["payload"]
+        assert '"opened"' in row["payload"]
+
+    def test_save_trigger_event_legacy_file_when_env_flag_set(
+        self, tmp_path, monkeypatch, isolated_db
+    ):
+        """Setting AGENTED_TRIGGER_EVENT_FILES=1 also writes the legacy JSON file."""
         monkeypatch.setattr("app.services.execution_service.TRIGGER_LOG_DIR", str(tmp_path))
+        monkeypatch.setenv("AGENTED_TRIGGER_EVENT_FILES", "1")
         trigger = _make_trigger()
         event = {"action": "opened"}
         event_id = ExecutionService.save_trigger_event(trigger, event)
