@@ -233,6 +233,20 @@ def dispatch_webhook_event(
 
     if not triggered:
         logger.debug("No webhook-triggered triggers or teams matched")
+        # v0.7.1: still record an unmatched event so operators can debug
+        # "trigger didn't fire" reports from the Payload Inspector.
+        try:
+            from . import trigger_event_service
+
+            trigger_event_service.record(
+                trigger_id=None,
+                payload=json.dumps(payload, ensure_ascii=False, default=str),
+                signature_header=signature_header,
+                dispatch_status="unmatched",
+                matched=False,
+            )
+        except Exception as e:  # pragma: no cover — defensive
+            logger.warning("Failed to record unmatched trigger event: %s", e)
 
     return triggered
 

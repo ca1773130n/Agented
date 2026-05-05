@@ -47,6 +47,7 @@ from .execution_runner import (
 from .github_service import GitHubService
 from .process_manager import ProcessManager
 from .prompt_renderer import PromptRenderer
+from . import trigger_event_service
 from .trigger_dispatcher import (
     dispatch_github_event as _dispatch_github_event,
     dispatch_pr_comment_commands as _dispatch_pr_comment_commands,
@@ -178,9 +179,46 @@ class ExecutionService:
 
     @staticmethod
     def save_trigger_event(trigger: dict, event: dict) -> str:
-        """Save the original trigger event for audit tracking. Returns event trigger_id."""
-        os.makedirs(TRIGGER_LOG_DIR, exist_ok=True)
+        """Capture an incoming trigger payload to the DB. Returns event id as str.
 
+        v0.7.1: writes to the trigger_events table via TriggerEventService.
+        Set AGENTED_TRIGGER_EVENT_FILES=1 to additionally emit the legacy
+        JSON file under data/trigger_events/ for debugging.
+        """
+        # The dispatcher may stash the raw signature header on the event dict
+        # under a private key; pull it out (and remove from the persisted body)
+        # so the column is populated correctly.
+        signature_header = None
+        if isinstance(event, dict):
+            signature_header = event.get("_signature_header")
+        try:
+            payload_json = json.dumps(event, ensure_ascii=False)
+        except (TypeError, ValueError) as e:
+            logger.warning("Failed to serialize trigger event payload: %s", e)
+            payload_json = json.dumps({"_serialization_error": str(e)})
+
+        try:
+            eid = trigger_event_service.record(
+                trigger_id=trigger.get("id"),
+                payload=payload_json,
+                signature_header=signature_header,
+                dispatch_status="fired",
+                matched=True,
+            )
+        except Exception as e:
+            logger.warning("Failed to record trigger event in DB: %s", e, exc_info=True)
+            # Fall back to a synthetic id so callers don't crash.
+            eid = 0
+
+        if os.environ.get("AGENTED_TRIGGER_EVENT_FILES") == "1":
+            ExecutionService._legacy_save_trigger_event_file(trigger, event)
+
+        return str(eid)
+
+    @staticmethod
+    def _legacy_save_trigger_event_file(trigger: dict, event: dict) -> None:
+        """Pre-v0.7.1 JSON-file capture path; debug-only when env flag is set."""
+        os.makedirs(TRIGGER_LOG_DIR, exist_ok=True)
         trigger_id = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
         trigger_data = {
             "trigger_id": trigger.get("id"),
@@ -189,16 +227,13 @@ class ExecutionService:
             "trigger_source": trigger.get("trigger_source"),
             "original_event": event,
         }
-
         trigger_file = os.path.join(TRIGGER_LOG_DIR, f"trigger_{trigger_id}.json")
         try:
             with open(trigger_file, "w", encoding="utf-8") as f:
                 json.dump(trigger_data, f, indent=2, ensure_ascii=False)
-            logger.debug("Saved trigger event: %s", trigger_file)
+            logger.debug("Saved trigger event (legacy file): %s", trigger_file)
         except Exception as e:
-            logger.warning("Failed to save trigger event: %s", e, exc_info=True)
-
-        return trigger_id
+            logger.warning("Failed to save trigger event file: %s", e, exc_info=True)
 
     @staticmethod
     def save_threat_report(trigger_id: str, message_text: str) -> str:
