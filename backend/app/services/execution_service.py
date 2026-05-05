@@ -732,13 +732,20 @@ class ExecutionService:
         payload: dict,
         raw_payload: bytes = None,
         signature_header: str = None,
+        skip_signature_validation: bool = False,
     ) -> bool:
-        """Dispatch a webhook event to matching triggers and teams based on configurable field matching."""
+        """Dispatch a webhook event to matching triggers and teams based on configurable field matching.
+
+        ``skip_signature_validation`` is used by the admin-only replay endpoint
+        after the original raw bytes are gone — re-encoding parsed JSON does
+        not reproduce the original signature, so HMAC checks would always fail.
+        """
         return _dispatch_webhook_event(
             payload,
             raw_payload,
             signature_header,
             save_trigger_event_fn=cls.save_trigger_event,
+            skip_signature_validation=skip_signature_validation,
         )
 
     @classmethod

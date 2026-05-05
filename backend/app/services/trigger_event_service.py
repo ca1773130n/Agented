@@ -66,7 +66,14 @@ def get(event_id: int) -> dict[str, Any] | None:
 
 
 def replay(event_id: int) -> bool:
-    """Re-dispatch a stored event. Returns True if a trigger fired."""
+    """Re-dispatch a stored event. Returns True if a trigger fired.
+
+    The original raw request bytes are not preserved — only the parsed JSON
+    payload — so any HMAC signature recorded on the event will not match a
+    re-encoding of that JSON. The replay path therefore bypasses signature
+    validation; the admin-only endpoint that calls this function provides the
+    necessary auth gate.
+    """
     e = get(event_id)
     if e is None:
         raise LookupError(f"trigger_event {event_id} not found")
@@ -79,6 +86,7 @@ def replay(event_id: int) -> bool:
         payload_dict,
         raw_payload=raw,
         signature_header=e["signature_header"],
+        skip_signature_validation=True,
     )
 
 

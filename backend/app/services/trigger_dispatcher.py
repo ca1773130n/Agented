@@ -54,6 +54,7 @@ def dispatch_webhook_event(
     raw_payload: bytes = None,
     signature_header: str = None,
     save_trigger_event_fn=None,
+    skip_signature_validation: bool = False,
 ) -> bool:
     """Dispatch a webhook event to matching triggers and teams based on configurable field matching.
 
@@ -62,6 +63,10 @@ def dispatch_webhook_event(
         raw_payload: Raw request body bytes, used for HMAC validation
         signature_header: Value of the X-Webhook-Signature-256 header
         save_trigger_event_fn: Callable to save trigger events (defaults to ExecutionService.save_trigger_event)
+        skip_signature_validation: When True, bypass HMAC signature checks even
+            for triggers with a configured ``webhook_secret``. Used by the
+            admin-only replay endpoint after the original raw bytes are gone
+            (re-encoding parsed JSON does not reproduce the original signature).
 
     Returns:
         True if at least one trigger or team was triggered
@@ -78,8 +83,9 @@ def dispatch_webhook_event(
     for trigger in triggers:
         # HMAC validation: if this trigger has a webhook_secret configured,
         # require a valid signature. Skip trigger if signature is missing or invalid.
+        # Admin replay bypasses this — see skip_signature_validation docstring.
         webhook_secret = trigger.get("webhook_secret")
-        if webhook_secret:
+        if webhook_secret and not skip_signature_validation:
             from .webhook_validation_service import WebhookValidationService
 
             if raw_payload is None or not WebhookValidationService.validate_signature(

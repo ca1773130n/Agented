@@ -115,6 +115,34 @@ def test_replay_unknown_event_raises(isolated_db):
         svc.replay(99999)
 
 
+def test_replay_skips_signature_validation(isolated_db, monkeypatch):
+    """Admin replay must bypass HMAC validation — original raw bytes are gone."""
+    eid = svc.record(
+        trigger_id="t1",
+        payload='{"event":"x"}',
+        # Non-matching signature: any sig over the stored payload would not
+        # match the original signed raw bytes anyway. Replay must not let
+        # webhook_secret triggers reject this on signature mismatch.
+        signature_header="sha256=does-not-match",
+        dispatch_status="fired",
+        matched=True,
+    )
+    captured: dict = {}
+
+    def fake_dispatch(*args, **kwargs):
+        captured["args"] = args
+        captured["kwargs"] = kwargs
+        return True
+
+    monkeypatch.setattr(
+        "app.services.execution_service.ExecutionService.dispatch_webhook_event",
+        fake_dispatch,
+    )
+    result = svc.replay(eid)
+    assert result is True
+    assert captured["kwargs"].get("skip_signature_validation") is True
+
+
 def test_purge_older_than_drops_old_rows(isolated_db):
     old_eid = svc.record(
         trigger_id="t1",
