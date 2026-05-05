@@ -17,6 +17,13 @@ export const miscRoutes: RouteRecordRaw[] = [
     component: () => import('../../views/ExecutionSearchPage.vue'),
     meta: { title: 'Execution Search' },
   },
+  // v0.7.0: per-bot success-rate / p95 / status rollups
+  {
+    path: '/bots/health',
+    name: 'bot-health',
+    component: () => import('../../views/BotHealthPage.vue'),
+    meta: { title: 'Bot Health' },
+  },
   // Sketch
   {
     path: '/sketches',
