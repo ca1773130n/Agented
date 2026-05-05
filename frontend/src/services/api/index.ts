@@ -35,6 +35,13 @@ export { orchestrationApi } from './orchestration';
 export { budgetApi } from './budgets';
 export { analyticsApi } from './analytics';
 export { monitoringApi } from './monitoring';
+export { triggerEventApi } from './trigger-events';
+export type {
+  TriggerEvent,
+  TriggerEventDispatchStatus,
+  TriggerEventListResponse,
+  TriggerEventReplayResponse,
+} from './trigger-events';
 export { botHealthApi } from './bot-health';
 export type { BotHealthStatus, BotHealthRollup, BotHealthResponse } from './bot-health';
 export { rotationApi } from './rotation';

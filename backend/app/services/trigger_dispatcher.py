@@ -54,6 +54,7 @@ def dispatch_webhook_event(
     raw_payload: bytes = None,
     signature_header: str = None,
     save_trigger_event_fn=None,
+    skip_signature_validation: bool = False,
 ) -> bool:
     """Dispatch a webhook event to matching triggers and teams based on configurable field matching.
 
@@ -62,6 +63,10 @@ def dispatch_webhook_event(
         raw_payload: Raw request body bytes, used for HMAC validation
         signature_header: Value of the X-Webhook-Signature-256 header
         save_trigger_event_fn: Callable to save trigger events (defaults to ExecutionService.save_trigger_event)
+        skip_signature_validation: When True, bypass HMAC signature checks even
+            for triggers with a configured ``webhook_secret``. Used by the
+            admin-only replay endpoint after the original raw bytes are gone
+            (re-encoding parsed JSON does not reproduce the original signature).
 
     Returns:
         True if at least one trigger or team was triggered
@@ -72,14 +77,16 @@ def dispatch_webhook_event(
         save_trigger_event_fn = ExecutionService.save_trigger_event
 
     triggered = False
+    matched_any = False
 
     # --- Trigger dispatch ---
     triggers = get_webhook_triggers()
     for trigger in triggers:
         # HMAC validation: if this trigger has a webhook_secret configured,
         # require a valid signature. Skip trigger if signature is missing or invalid.
+        # Admin replay bypasses this — see skip_signature_validation docstring.
         webhook_secret = trigger.get("webhook_secret")
-        if webhook_secret:
+        if webhook_secret and not skip_signature_validation:
             from .webhook_validation_service import WebhookValidationService
 
             if raw_payload is None or not WebhookValidationService.validate_signature(
@@ -96,6 +103,11 @@ def dispatch_webhook_event(
         text = match_payload(trigger, payload)
         if text is None:
             continue
+        # A trigger matched the payload. Track this independently of whether
+        # the dispatch eventually succeeds (queue full, session limit, etc.) so
+        # we don't record a false-positive "unmatched" event for matched-but-
+        # failed-to-fire payloads — they are already recorded as matched events.
+        matched_any = True
 
         # DB-backed deduplication: skip if identical payload was dispatched within TTL
         payload_hash = hashlib.sha256(
@@ -223,6 +235,7 @@ def dispatch_webhook_event(
         text = match_payload(trigger_config, payload)
         if text is None:
             continue
+        matched_any = True
 
         logger.info("Team '%s' triggered by webhook", team["name"])
 
@@ -231,8 +244,25 @@ def dispatch_webhook_event(
         TeamExecutionService.execute_team(team["id"], text, payload, "webhook")
         triggered = True
 
-    if not triggered:
+    if not matched_any:
         logger.debug("No webhook-triggered triggers or teams matched")
+        # v0.7.1: still record an unmatched event so operators can debug
+        # "trigger didn't fire" reports from the Payload Inspector.
+        # Keyed off matched_any (not triggered) so a match that fails to
+        # dispatch later (queue full, session limit) doesn't show up here as
+        # a duplicate "unmatched" row.
+        try:
+            from . import trigger_event_service
+
+            trigger_event_service.record(
+                trigger_id=None,
+                payload=json.dumps(payload, ensure_ascii=False, default=str),
+                signature_header=signature_header,
+                dispatch_status="unmatched",
+                matched=False,
+            )
+        except Exception as e:  # pragma: no cover — defensive
+            logger.warning("Failed to record unmatched trigger event: %s", e)
 
     return triggered
 

@@ -99,6 +99,24 @@ def _detect_backends() -> None:
         )
 
 
+def purge_trigger_events_job() -> None:
+    """v0.7.1: daily TTL purge of trigger_events.
+
+    Retention controlled by TRIGGER_EVENT_RETENTION_DAYS env var (default 30).
+    Exposed at module top-level so the scheduler can register it by reference
+    and the corresponding pytest can import + invoke it directly.
+    """
+    from app.services import trigger_event_service
+
+    days = int(os.environ.get("TRIGGER_EVENT_RETENTION_DAYS", "30"))
+    try:
+        deleted = trigger_event_service.purge_older_than(days=days)
+        if deleted:
+            logger.info("Purged %d trigger_events older than %d days", deleted, days)
+    except Exception as e:  # pragma: no cover — defensive
+        logger.warning("Trigger events purge job failed: %s", e, exc_info=True)
+
+
 def _setup_scheduler(app: Any) -> None:
     from app.services.scheduler_service import SchedulerService
 
@@ -143,6 +161,8 @@ def _setup_scheduler(app: Any) -> None:
             (run_consolidation_check, {"minutes": 5}, "memory_consolidation_check"),
             (run_decay_all, {"hours": 24}, "knowledge_decay"),
             (_SASvc.cleanup_stale_sessions, {"hours": 6}, "stale_sa_session_cleanup"),
+            # v0.7.1: daily TTL purge of trigger_events.
+            (purge_trigger_events_job, {"hours": 24}, "trigger_event_purge"),
         ]
         for func, interval_kwargs, job_id in periodic_jobs:
             SchedulerService._scheduler.add_job(

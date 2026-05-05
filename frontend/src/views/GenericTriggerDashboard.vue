@@ -6,6 +6,7 @@ import { auditApi, triggerApi, executionApi, ApiError } from '../services/api';
 import ExecutionLogViewer from '../components/triggers/ExecutionLogViewer.vue';
 import PromptVersionHistory from '../components/triggers/PromptVersionHistory.vue';
 import WebhookTestConsole from '../components/triggers/WebhookTestConsole.vue';
+import TriggerPayloadHistory from '../components/triggers/TriggerPayloadHistory.vue';
 import EntityLayout from '../layouts/EntityLayout.vue';
 import { useToast } from '../composables/useToast';
 import { handleApiError } from '../services/api/error-handler';
@@ -431,6 +432,11 @@ function getExecutionStatusClass(status?: string): string {
         <div v-if="activeToolTab === 'test-console'" class="tool-panel">
           <WebhookTestConsole :trigger-id="triggerId" />
         </div>
+      </div>
+
+      <!-- v0.7.1: Trigger Payload Inspector -->
+      <div class="payload-history-section">
+        <TriggerPayloadHistory :trigger-id="triggerId" />
       </div>
     </template>
   </div>
