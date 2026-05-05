@@ -388,7 +388,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, nextTick, onMounted, onUnmounted, watch, inject } from 'vue';
+import { ref, computed, onMounted, onUnmounted, watch, inject } from 'vue';
 import { useRoute } from 'vue-router';
 import { backendManagementApi, listGroupedBackends, getGroupedBackend, orchestrationApi, BACKEND_LOGIN_INFO, BACKEND_PLAN_OPTIONS, type AIBackendWithAccounts, type BackendAccount, type AccountHealth, type BackendCapabilities, type RateLimitWindow } from '../services/api';
 import PageHeader from '../components/base/PageHeader.vue';
@@ -649,23 +649,36 @@ function onWizardDone() {
   tourMachine.nextStep();
 }
 
-// v0.6.4 (revised): clear the overlay only after the NEW backend's
-// data has actually loaded into the page. Watching backend.value
-// (set by loadBackend after the sidecar round-trip completes) gives
-// the operator a continuous spinner from click → next-page-rendered,
-// instead of the 100-300ms gap when only watching the URL param.
+// v0.6.4 (third revision): clear the overlay only after the NEW
+// backend's content has actually painted on screen.
 //
-// We use nextTick after the backend ref flips so the DOM has rendered
-// the new content before the overlay hides.
+// Earlier revisions cleared on URL param change (released before
+// loadBackend resolved) and on backend.value.id flip with one
+// nextTick (released before the browser had painted the new DOM).
+// Operators reported the overlay still releasing before they saw
+// the next backend's page.
+//
+// This version uses three layered waits:
+//   1) flush: 'post'  — run the watch AFTER Vue's DOM patch
+//   2) double rAF     — wait two animation frames for paint
+//   3) 250ms settle   — buffer for subscoped reactive updates
+//                       (account list, health badges, etc.)
+function _waitForPaint(): Promise<void> {
+  return new Promise<void>((resolve) => {
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+  });
+}
+
 watch(
   () => backend.value?.id,
   async (newId) => {
     if (!isAdvancing.value) return;
     if (advancingFromId.value === null) return;
     if (!newId || newId === advancingFromId.value) return;
-    // New backend data is in place. Wait one tick so the template
-    // re-renders with it, then drop the overlay.
-    await nextTick();
+    await _waitForPaint();
+    await new Promise((r) => setTimeout(r, 250));
+    // Re-check in case advancing was cancelled while we waited.
+    if (!isAdvancing.value) return;
     isAdvancing.value = false;
     advancingFromId.value = null;
     if (advancingTimeout) {
@@ -673,6 +686,7 @@ watch(
       advancingTimeout = null;
     }
   },
+  { flush: 'post' },
 );
 
 onUnmounted(() => {
