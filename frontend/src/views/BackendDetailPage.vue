@@ -370,6 +370,18 @@
       @close="showLoginModal = false"
       @success="onLoginModalSuccess"
     />
+
+    <!-- v0.6.4: blocking overlay between "Move on to next backend" click
+         and the next-page navigation. Without this, the page sits on the
+         current backend's view (with the wizard's data-tour markers still
+         attached) for a perceptible moment after the click — operators
+         think the click was lost and click again. -->
+    <div v-if="isAdvancing" class="advancing-overlay" data-tour="advancing-overlay">
+      <div class="advancing-overlay__card">
+        <div class="advancing-overlay__spinner"></div>
+        <div class="advancing-overlay__text">{{ t('backendDetail.movingToNext', 'Moving to the next backend…') }}</div>
+      </div>
+    </div>
   </div>
     </template>
   </EntityLayout>
@@ -415,6 +427,12 @@ const tourMachine = useTourMachine();
 const showAddModal = ref(false);
 const editingAccount = ref<BackendAccount | null>(null);
 const isSaving = ref(false);
+// v0.6.4: blocking overlay shown while the tour advances to the next
+// backend. Cleared automatically by the route-change watch below;
+// also has a 4s safety timeout in case the tour finishes (no more
+// backends) and never navigates.
+const isAdvancing = ref(false);
+let advancingTimeout: ReturnType<typeof setTimeout> | null = null;
 
 // OB-44: Signal tour overlay when any account form/modal is open
 const setTourModalOpen = inject<(open: boolean) => void>('setTourModalOpen', () => {});
@@ -596,16 +614,48 @@ async function onWizardSaved() {
   await loadBackend();
 }
 
+function startAdvancingOverlay() {
+  isAdvancing.value = true;
+  if (advancingTimeout) clearTimeout(advancingTimeout);
+  // Safety timeout — if no route change happens within 4s (e.g. tour
+  // ended with no more backends), drop the overlay so the user isn't
+  // stuck looking at a spinner forever.
+  advancingTimeout = setTimeout(() => {
+    isAdvancing.value = false;
+    advancingTimeout = null;
+  }, 4000);
+}
+
 function onWizardSkip() {
   showAddModal.value = false;
   showToast?.('Backend skipped', 'info');
+  startAdvancingOverlay();
   tourMachine.nextStep();
 }
 
 function onWizardDone() {
   closeModal();
+  startAdvancingOverlay();
   tourMachine.nextStep();
 }
+
+// v0.6.4: clear the overlay as soon as the route changes (the new
+// backend's page is mounting). The tourMachine.nextStep call above
+// triggers a router.push under the hood; once the route resolves,
+// this watch fires.
+watch(() => route.params.backendId, () => {
+  if (isAdvancing.value) {
+    isAdvancing.value = false;
+    if (advancingTimeout) {
+      clearTimeout(advancingTimeout);
+      advancingTimeout = null;
+    }
+  }
+});
+
+onUnmounted(() => {
+  if (advancingTimeout) clearTimeout(advancingTimeout);
+});
 
 function onWizardAddAnother() {
   // Wizard handles its own reset; just reload backend data
@@ -1461,6 +1511,46 @@ onUnmounted(() => {
   color: var(--text-secondary);
   background: rgba(150, 150, 150, 0.08);
   border-radius: 4px;
+}
+
+/* v0.6.4: blocking overlay during tour transitions. */
+.advancing-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  /* Block clicks below. */
+  pointer-events: auto;
+  backdrop-filter: blur(2px);
+}
+.advancing-overlay__card {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1.25rem 1.75rem;
+  background: var(--surface-1, #1f1f1f);
+  border: 1px solid var(--border, #333);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+.advancing-overlay__spinner {
+  width: 24px;
+  height: 24px;
+  border: 3px solid rgba(255, 255, 255, 0.15);
+  border-top-color: var(--accent, #4a9eff);
+  border-radius: 50%;
+  animation: aia-advance-spin 0.8s linear infinite;
+}
+@keyframes aia-advance-spin {
+  to { transform: rotate(360deg); }
+}
+.advancing-overlay__text {
+  color: var(--text, #fff);
+  font-weight: 500;
+  font-size: 0.95rem;
 }
 
 </style>
