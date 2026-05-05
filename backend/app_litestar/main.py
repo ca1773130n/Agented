@@ -149,6 +149,7 @@ from .routes.skills import (
     skills_router,
 )
 from .routes.teams import teams_router
+from .routes.trigger_events import trigger_events_router
 from .routes.triggers import triggers_router
 from .routes.utility import utility_router
 from .routes.auth_management import auth_management_router
@@ -223,6 +224,7 @@ def create_app() -> Litestar:
             quality_ratings_router,
             scheduler_router,
             triggers_router,
+            trigger_events_router,
             payload_transformers_router,
             teams_router,
             projects_router,
