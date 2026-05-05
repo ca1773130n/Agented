@@ -23,6 +23,13 @@ from app.database import get_connection
 DEGRADED_SUCCESS_THRESHOLD = 0.80
 LATENCY_ANOMALY_RATIO = 5.0  # p95 / p50
 
+# Terminal status buckets. Codex round-1 #1: the previous code matched
+# only `success`/`failed`, silently dropping `timeout`/`cancelled` runs
+# from the denominator — a wedged bot reported `no_recent_runs` instead
+# of `down`. Non-terminal states (`running`, `paused`) stay excluded.
+SUCCESS_STATUSES = frozenset({"success"})
+FAILURE_STATUSES = frozenset({"failed", "timeout", "cancelled"})
+
 StatusPill = Literal["healthy", "degraded", "down", "no_recent_runs"]
 
 
@@ -67,8 +74,8 @@ def _compute_one(conn, bot_id: str, bot_name: str, cutoff_iso: str) -> BotHealth
             (bot_id, cutoff_iso),
         )
     )
-    success = [r for r in rows if r["status"] == "success"]
-    fail = [r for r in rows if r["status"] == "failed"]
+    success = [r for r in rows if r["status"] in SUCCESS_STATUSES]
+    fail = [r for r in rows if r["status"] in FAILURE_STATUSES]
     durations = sorted(r["duration_ms"] for r in rows if r["duration_ms"] is not None)
     p50 = _percentile(durations, 0.50)
     p95 = _percentile(durations, 0.95)

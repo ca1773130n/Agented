@@ -146,3 +146,50 @@ class TestComputeRollups:
         # Lock current tunings; if these change, callers need to know.
         assert DEGRADED_SUCCESS_THRESHOLD == 0.80
         assert LATENCY_ANOMALY_RATIO == 5.0
+
+    def test_timeout_counts_as_failure(self):
+        # Codex round-1 #1: timeout was previously dropped from both
+        # buckets, leaving the bot looking like `no_recent_runs`.
+        _seed_bot()
+        now = _now()
+        _seed_execution(
+            "bot-test",
+            "timeout",
+            now - timedelta(minutes=5),
+            30000,
+            error_message="exceeded deadline",
+        )
+        rollups = compute_rollups(window_days=7)
+        r = _find(rollups, "bot-test")
+        assert r.fail_count == 1
+        assert r.success_count == 0
+        assert r.status_pill == "down"
+
+    def test_cancelled_counts_as_failure(self):
+        _seed_bot()
+        now = _now()
+        _seed_execution(
+            "bot-test",
+            "cancelled",
+            now - timedelta(minutes=5),
+            100,
+            error_message="user aborted",
+        )
+        rollups = compute_rollups(window_days=7)
+        r = _find(rollups, "bot-test")
+        assert r.fail_count == 1
+        assert r.success_count == 0
+        assert r.status_pill == "down"
+
+    def test_running_does_not_count(self):
+        # Non-terminal states stay out of both buckets — a bot that is
+        # only ever observed mid-flight should still read as having no
+        # completed runs in the window.
+        _seed_bot()
+        now = _now()
+        _seed_execution("bot-test", "running", now - timedelta(minutes=1), None)
+        rollups = compute_rollups(window_days=7)
+        r = _find(rollups, "bot-test")
+        assert r.success_count == 0
+        assert r.fail_count == 0
+        assert r.status_pill == "no_recent_runs"
