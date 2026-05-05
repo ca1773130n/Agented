@@ -4732,6 +4732,38 @@ def _migrate_100_session_per_worktree(conn):
     )
 
 
+def _migrate_114_trigger_events(conn):
+    """v0.7.1: capture incoming webhook payloads in DB for inspection + replay.
+
+    `trigger_id` is intentionally nullable + no FK CASCADE — we keep
+    history if the trigger row is deleted, and we also record unmatched
+    webhooks (no trigger_id) so debugging works for "trigger didn't fire"
+    reports.
+    """
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS trigger_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            trigger_id TEXT,
+            received_at TIMESTAMP NOT NULL,
+            payload TEXT NOT NULL,
+            signature_header TEXT,
+            matched INTEGER NOT NULL DEFAULT 0,
+            dispatch_status TEXT,
+            dispatch_error TEXT
+        )
+        """
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_trigger_events_trigger_id "
+        "ON trigger_events(trigger_id, received_at DESC)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_trigger_events_received_at "
+        "ON trigger_events(received_at)"
+    )
+
+
 VERSIONED_MIGRATIONS = [
     (1, "add_github_columns", _migrate_add_github_columns),
     (2, "add_pr_reviews_table", _migrate_add_pr_reviews_table),
@@ -4878,4 +4910,6 @@ VERSIONED_MIGRATIONS = [
     (112, "list_page_indices", _migrate_112_list_page_indices),
     # v0.6.1: enforce rotated_from_token uniqueness (v0.6.0 deferred).
     (113, "rotated_from_token_unique", _migrate_113_rotated_from_token_unique),
+    # v0.7.1: trigger payload capture for inspector + replay.
+    (114, "trigger_events", _migrate_114_trigger_events),
 ]
