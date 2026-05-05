@@ -42,6 +42,8 @@ export type {
   TriggerEventListResponse,
   TriggerEventReplayResponse,
 } from './trigger-events';
+export { botHealthApi } from './bot-health';
+export type { BotHealthStatus, BotHealthRollup, BotHealthResponse } from './bot-health';
 export { rotationApi } from './rotation';
 export { schedulerApi } from './scheduler';
 export { healthApi, versionApi, utilityApi, settingsApi, setupApi, systemErrorApi } from './system';
