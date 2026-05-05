@@ -418,6 +418,13 @@ function handleSidebarKeydown(e: KeyboardEvent) {
           :class="{ active: sidebarActive('health-dashboard') }"
           :aria-current="sidebarActive('health-dashboard') ? 'page' : undefined"
           @click="navTo('health-dashboard')">
+          Health Monitor
+        </button>
+        <!-- v0.7.0: per-bot SLA rollup (success rate, p95, last failure). -->
+        <button type="button" class="submenu-item"
+          :class="{ active: sidebarActive('bot-health') }"
+          :aria-current="sidebarActive('bot-health') ? 'page' : undefined"
+          @click="navTo('bot-health')">
           Bot Health
         </button>
         <button type="button" class="submenu-item"

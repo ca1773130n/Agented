@@ -35,6 +35,8 @@ export { orchestrationApi } from './orchestration';
 export { budgetApi } from './budgets';
 export { analyticsApi } from './analytics';
 export { monitoringApi } from './monitoring';
+export { botHealthApi } from './bot-health';
+export type { BotHealthStatus, BotHealthRollup, BotHealthResponse } from './bot-health';
 export { rotationApi } from './rotation';
 export { schedulerApi } from './scheduler';
 export { healthApi, versionApi, utilityApi, settingsApi, setupApi, systemErrorApi } from './system';
