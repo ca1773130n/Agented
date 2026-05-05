@@ -5,6 +5,7 @@ v0.4 migration). The service externalises them as "bots" because that
 is the operator-facing concept; internally it queries
 `triggers` + `execution_logs.trigger_id`.
 """
+
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -118,9 +119,7 @@ class TestComputeRollups:
         now = _now()
         # 19 fast (100ms), 1 slow (10000ms) — p95 anomaly
         for i in range(19):
-            _seed_execution(
-                "bot-test", "success", now - timedelta(minutes=i), 100
-            )
+            _seed_execution("bot-test", "success", now - timedelta(minutes=i), 100)
         _seed_execution("bot-test", "success", now - timedelta(minutes=20), 10000)
         rollups = compute_rollups(window_days=7)
         r = _find(rollups, "bot-test")
@@ -193,3 +192,21 @@ class TestComputeRollups:
         assert r.success_count == 0
         assert r.fail_count == 0
         assert r.status_pill == "no_recent_runs"
+
+    def test_zero_median_with_high_p95_marks_degraded(self):
+        # Codex round-1 #3: previously the anomaly check bailed out when
+        # p50 == 0 (because of the falsy-zero short-circuit and the
+        # ratio division), so a bot with p50=0 + p95=5000ms read healthy.
+        _seed_bot()
+        now = _now()
+        # Most successes have duration_ms=0 (so p50 stays at 0)…
+        for i in range(15):
+            _seed_execution("bot-test", "success", now - timedelta(minutes=i), 0)
+        # …but enough slow runs push p95 well past the zero-floor.
+        for i in range(5):
+            _seed_execution("bot-test", "success", now - timedelta(minutes=20 + i), 5000)
+        rollups = compute_rollups(window_days=7)
+        r = _find(rollups, "bot-test")
+        assert r.p50_duration_ms == 0
+        assert r.p95_duration_ms is not None and r.p95_duration_ms >= 1000
+        assert r.status_pill == "degraded"

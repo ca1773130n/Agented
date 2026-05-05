@@ -22,6 +22,10 @@ from app.database import get_connection
 # Tunables — kept as module constants so behaviour change is grep-able.
 DEGRADED_SUCCESS_THRESHOLD = 0.80
 LATENCY_ANOMALY_RATIO = 5.0  # p95 / p50
+# Codex round-1 #3: when p50 == 0 the ratio check divides by zero and
+# silently bails, so a bot with p50=0 + p95=10000ms reads healthy.
+# Treat any p95 above this floor as anomalous when p50 is zero.
+LATENCY_ZERO_FLOOR_MS = 1000
 
 # Terminal status buckets. Codex round-1 #1: the previous code matched
 # only `success`/`failed`, silently dropping `timeout`/`cancelled` runs
@@ -127,6 +131,11 @@ def _classify(
         return "down"
     if rate is not None and rate < DEGRADED_SUCCESS_THRESHOLD:
         return "degraded"
-    if p50 and p95 and p50 > 0 and p95 / p50 >= LATENCY_ANOMALY_RATIO:
-        return "degraded"
+    if p50 is not None and p95 is not None:
+        if p50 == 0:
+            # Zero-median: any p95 above a small floor is anomalous.
+            if p95 >= LATENCY_ZERO_FLOOR_MS:
+                return "degraded"
+        elif p95 / p50 >= LATENCY_ANOMALY_RATIO:
+            return "degraded"
     return "healthy"
