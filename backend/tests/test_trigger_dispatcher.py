@@ -95,3 +95,144 @@ def test_no_match_still_records_unmatched(isolated_db, monkeypatch):
     assert len(rows) == 1
     assert rows[0]["trigger_id"] is None
     assert rows[0]["matched"] == 0
+
+
+# ---------------------------------------------------------------------------
+# v0.7.1 Codex Finding 1 (replay HMAC bypass scope) — integration tests.
+#
+# These two tests prove that ``skip_signature_validation`` is the *only*
+# thing gating the bypass — same payload, same wrong signature, opposite
+# kwarg → opposite outcomes. Mirrors the ``test_replay_skips_signature_
+# validation`` style in test_trigger_event_service.py but exercises the
+# real HMAC code path in trigger_dispatcher (no MagicMock on dispatcher).
+# ---------------------------------------------------------------------------
+
+
+def test_public_webhook_rejects_bad_signature(isolated_db, monkeypatch):
+    """Default path: a webhook_secret-configured trigger drops bad signatures.
+
+    Same call surface the public webhook receiver uses
+    (``skip_signature_validation=False``). With a real HMAC mismatch, the
+    trigger must be skipped — no enqueue, no fire, no save_trigger_event_fn
+    call for that trigger. This pins down the negative case so the bypass
+    can't quietly become global.
+    """
+    monkeypatch.setenv("GITHUB_WEBHOOK_SECRET", "test-receiver-secret")
+
+    trigger = _make_trigger(webhook_secret="per-trigger-secret-xyz")
+    monkeypatch.setattr(trigger_dispatcher, "get_webhook_triggers", lambda: [trigger])
+    monkeypatch.setattr(_db, "get_webhook_teams", lambda: [])
+    # Bypass dedup so we'd reach enqueue if HMAC validation incorrectly passed.
+    monkeypatch.setattr(
+        "app.services.trigger_dispatcher.check_and_insert_dedup_key",
+        lambda **kw: True,
+    )
+
+    enqueued: list = []
+
+    def fake_enqueue(**kwargs):
+        enqueued.append(kwargs)
+
+    from app.services import execution_queue_service
+
+    monkeypatch.setattr(
+        execution_queue_service.ExecutionQueueService, "enqueue", fake_enqueue
+    )
+
+    saves: list = []
+
+    def fake_save(trigger_dict, event):
+        saves.append((trigger_dict, event))
+        return "1"
+
+    payload = {"body": "hello world"}
+    raw_payload = b'{"body": "hello world"}'
+
+    fired = trigger_dispatcher.dispatch_webhook_event(
+        payload,
+        raw_payload=raw_payload,
+        signature_header="sha256=deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
+        save_trigger_event_fn=fake_save,
+        skip_signature_validation=False,
+    )
+
+    # No trigger fired, no enqueue, no save — signature mismatch killed it.
+    assert fired is False
+    assert enqueued == []
+    assert saves == []
+
+    # And because nothing matched (HMAC skipped the trigger before
+    # match_payload), an 'unmatched' row is recorded — confirming the
+    # public path treated the bad-signature trigger as if it didn't exist.
+    with get_connection() as conn:
+        rows = conn.execute(
+            "SELECT trigger_id, dispatch_status, matched FROM trigger_events "
+            "WHERE dispatch_status = 'unmatched'"
+        ).fetchall()
+    assert len(rows) == 1
+    assert rows[0]["trigger_id"] is None
+    assert rows[0]["matched"] == 0
+
+
+def test_admin_replay_bypasses_signature_validation(isolated_db, monkeypatch):
+    """Admin replay path: same wrong signature, but bypass kwarg → fires.
+
+    With ``skip_signature_validation=True`` the same payload+bad-signature
+    combination from the prior test must dispatch through to enqueue. This
+    is the path used by ``trigger_event_service.replay`` after the original
+    raw bytes (and their valid HMAC) are gone.
+    """
+    monkeypatch.setenv("GITHUB_WEBHOOK_SECRET", "test-receiver-secret")
+
+    trigger = _make_trigger(webhook_secret="per-trigger-secret-xyz")
+    monkeypatch.setattr(trigger_dispatcher, "get_webhook_triggers", lambda: [trigger])
+    monkeypatch.setattr(_db, "get_webhook_teams", lambda: [])
+    monkeypatch.setattr(
+        "app.services.trigger_dispatcher.check_and_insert_dedup_key",
+        lambda **kw: True,
+    )
+
+    enqueued: list = []
+
+    def fake_enqueue(**kwargs):
+        enqueued.append(kwargs)
+
+    from app.services import execution_queue_service
+
+    monkeypatch.setattr(
+        execution_queue_service.ExecutionQueueService, "enqueue", fake_enqueue
+    )
+
+    saves: list = []
+
+    def fake_save(trigger_dict, event):
+        saves.append((trigger_dict, event))
+        return "1"
+
+    payload = {"body": "hello world"}
+    raw_payload = b'{"body": "hello world"}'
+
+    fired = trigger_dispatcher.dispatch_webhook_event(
+        payload,
+        raw_payload=raw_payload,
+        # Identical wrong signature as the test above.
+        signature_header="sha256=deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
+        save_trigger_event_fn=fake_save,
+        skip_signature_validation=True,
+    )
+
+    # Bypass active → trigger fires through to enqueue.
+    assert fired is True
+    assert len(enqueued) == 1
+    assert enqueued[0]["trigger_id"] == trigger["id"]
+    assert enqueued[0]["trigger_type"] == "webhook"
+    assert len(saves) == 1
+    assert saves[0][0]["id"] == trigger["id"]
+
+    # And no false 'unmatched' row — the trigger genuinely matched.
+    with get_connection() as conn:
+        rows = conn.execute(
+            "SELECT trigger_id, dispatch_status, matched FROM trigger_events "
+            "WHERE dispatch_status = 'unmatched'"
+        ).fetchall()
+    assert rows == []
