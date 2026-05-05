@@ -35,6 +35,13 @@ export { orchestrationApi } from './orchestration';
 export { budgetApi } from './budgets';
 export { analyticsApi } from './analytics';
 export { monitoringApi } from './monitoring';
+export { triggerEventApi } from './trigger-events';
+export type {
+  TriggerEvent,
+  TriggerEventStatus,
+  TriggerEventListResponse,
+  TriggerEventReplayResponse,
+} from './trigger-events';
 export { rotationApi } from './rotation';
 export { schedulerApi } from './scheduler';
 export { healthApi, versionApi, utilityApi, settingsApi, setupApi, systemErrorApi } from './system';
