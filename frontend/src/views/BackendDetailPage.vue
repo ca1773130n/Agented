@@ -388,7 +388,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, watch, inject } from 'vue';
+import { ref, computed, nextTick, onMounted, onUnmounted, watch, inject } from 'vue';
 import { useRoute } from 'vue-router';
 import { backendManagementApi, listGroupedBackends, getGroupedBackend, orchestrationApi, BACKEND_LOGIN_INFO, BACKEND_PLAN_OPTIONS, type AIBackendWithAccounts, type BackendAccount, type AccountHealth, type BackendCapabilities, type RateLimitWindow } from '../services/api';
 import PageHeader from '../components/base/PageHeader.vue';
@@ -614,16 +614,26 @@ async function onWizardSaved() {
   await loadBackend();
 }
 
+// Snapshot of backend.value.id at the moment Done/Skip was clicked.
+// The overlay clears only after backend.value.id flips to a different
+// id (i.e. the next backend's data has actually loaded into this
+// reused page component), not just when the URL param changes.
+const advancingFromId = ref<string | null>(null);
+
 function startAdvancingOverlay() {
   isAdvancing.value = true;
+  advancingFromId.value = backend.value?.id ?? backendId.value ?? null;
   if (advancingTimeout) clearTimeout(advancingTimeout);
-  // Safety timeout — if no route change happens within 4s (e.g. tour
-  // ended with no more backends), drop the overlay so the user isn't
-  // stuck looking at a spinner forever.
+  // Safety timeout — if neither the route changes nor the backend
+  // loads within 8s (tour ended, network stall, etc.), drop the
+  // overlay so the user isn't stuck. 8s comfortably exceeds the
+  // sidecar+backend round-trip and the model-discovery background
+  // task that follows loadBackend().
   advancingTimeout = setTimeout(() => {
     isAdvancing.value = false;
+    advancingFromId.value = null;
     advancingTimeout = null;
-  }, 4000);
+  }, 8000);
 }
 
 function onWizardSkip() {
@@ -639,19 +649,31 @@ function onWizardDone() {
   tourMachine.nextStep();
 }
 
-// v0.6.4: clear the overlay as soon as the route changes (the new
-// backend's page is mounting). The tourMachine.nextStep call above
-// triggers a router.push under the hood; once the route resolves,
-// this watch fires.
-watch(() => route.params.backendId, () => {
-  if (isAdvancing.value) {
+// v0.6.4 (revised): clear the overlay only after the NEW backend's
+// data has actually loaded into the page. Watching backend.value
+// (set by loadBackend after the sidecar round-trip completes) gives
+// the operator a continuous spinner from click → next-page-rendered,
+// instead of the 100-300ms gap when only watching the URL param.
+//
+// We use nextTick after the backend ref flips so the DOM has rendered
+// the new content before the overlay hides.
+watch(
+  () => backend.value?.id,
+  async (newId) => {
+    if (!isAdvancing.value) return;
+    if (advancingFromId.value === null) return;
+    if (!newId || newId === advancingFromId.value) return;
+    // New backend data is in place. Wait one tick so the template
+    // re-renders with it, then drop the overlay.
+    await nextTick();
     isAdvancing.value = false;
+    advancingFromId.value = null;
     if (advancingTimeout) {
       clearTimeout(advancingTimeout);
       advancingTimeout = null;
     }
-  }
-});
+  },
+);
 
 onUnmounted(() => {
   if (advancingTimeout) clearTimeout(advancingTimeout);
