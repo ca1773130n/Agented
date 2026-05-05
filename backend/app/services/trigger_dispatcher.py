@@ -77,6 +77,7 @@ def dispatch_webhook_event(
         save_trigger_event_fn = ExecutionService.save_trigger_event
 
     triggered = False
+    matched_any = False
 
     # --- Trigger dispatch ---
     triggers = get_webhook_triggers()
@@ -102,6 +103,11 @@ def dispatch_webhook_event(
         text = match_payload(trigger, payload)
         if text is None:
             continue
+        # A trigger matched the payload. Track this independently of whether
+        # the dispatch eventually succeeds (queue full, session limit, etc.) so
+        # we don't record a false-positive "unmatched" event for matched-but-
+        # failed-to-fire payloads — they are already recorded as matched events.
+        matched_any = True
 
         # DB-backed deduplication: skip if identical payload was dispatched within TTL
         payload_hash = hashlib.sha256(
@@ -229,6 +235,7 @@ def dispatch_webhook_event(
         text = match_payload(trigger_config, payload)
         if text is None:
             continue
+        matched_any = True
 
         logger.info("Team '%s' triggered by webhook", team["name"])
 
@@ -237,10 +244,13 @@ def dispatch_webhook_event(
         TeamExecutionService.execute_team(team["id"], text, payload, "webhook")
         triggered = True
 
-    if not triggered:
+    if not matched_any:
         logger.debug("No webhook-triggered triggers or teams matched")
         # v0.7.1: still record an unmatched event so operators can debug
         # "trigger didn't fire" reports from the Payload Inspector.
+        # Keyed off matched_any (not triggered) so a match that fails to
+        # dispatch later (queue full, session limit) doesn't show up here as
+        # a duplicate "unmatched" row.
         try:
             from . import trigger_event_service
 
