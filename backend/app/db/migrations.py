@@ -4338,17 +4338,13 @@ def _add_user_id_column(conn, table: str) -> None:
     existing = {row[1] for row in cursor.fetchall()}
     if "user_id" in existing:
         return
-    conn.execute(
-        f"ALTER TABLE {table} ADD COLUMN user_id TEXT REFERENCES users(id)"
-    )
+    conn.execute(f"ALTER TABLE {table} ADD COLUMN user_id TEXT REFERENCES users(id)")
     conn.execute(
         f"UPDATE {table} SET user_id = (SELECT id FROM users WHERE email = ?) "
         f"WHERE user_id IS NULL",
         ("legacy@local",),
     )
-    conn.execute(
-        f"CREATE INDEX IF NOT EXISTS idx_{table}_user_id ON {table}(user_id)"
-    )
+    conn.execute(f"CREATE INDEX IF NOT EXISTS idx_{table}_user_id ON {table}(user_id)")
 
 
 def _migrate_106_owned_entities_batch1_user_id(conn):
@@ -4376,9 +4372,7 @@ def _migrate_108_password_reset_tokens(conn):
         )
         """
     )
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_prt_token ON password_reset_tokens(token)"
-    )
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_prt_token ON password_reset_tokens(token)")
 
 
 def _migrate_109_session_audit_columns(conn):
@@ -4427,13 +4421,9 @@ def _migrate_109_session_audit_columns(conn):
         """
     )
     conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_session_events_session_id "
-        "ON session_events(session_id)"
+        "CREATE INDEX IF NOT EXISTS idx_session_events_session_id ON session_events(session_id)"
     )
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_session_events_user_id "
-        "ON session_events(user_id)"
-    )
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_session_events_user_id ON session_events(user_id)")
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_session_events_occurred_at "
         "ON session_events(occurred_at DESC)"
@@ -4441,8 +4431,7 @@ def _migrate_109_session_audit_columns(conn):
 
     # 3. Index for grace-window lookup.
     conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_sessions_rotated_from_token "
-        "ON sessions(rotated_from_token)"
+        "CREATE INDEX IF NOT EXISTS idx_sessions_rotated_from_token ON sessions(rotated_from_token)"
     )
 
 
@@ -4487,6 +4476,7 @@ def _migrate_113_rotated_from_token_unique(conn):
     logged so the operator can audit post-deploy.
     """
     import logging
+
     log = logging.getLogger(__name__)
 
     # Preflight: find duplicates (newer row by id wins; older nulled).
@@ -4501,7 +4491,8 @@ def _migrate_113_rotated_from_token_unique(conn):
             log.warning(
                 "migration 113: %d sessions share rotated_from_token=%r; "
                 "nulling out older rows to satisfy the new unique index.",
-                n, dup_token[:8] + "..." if len(dup_token) > 8 else dup_token,
+                n,
+                dup_token[:8] + "..." if len(dup_token) > 8 else dup_token,
             )
             # Keep the row with the largest (most-recent) id; null the rest.
             conn.execute(
@@ -4528,14 +4519,8 @@ def _migrate_112_list_page_indices(conn):
     DESC LIMIT 50 fell back to full-table-scan + temp B-tree sort. Add
     descending indices so the ORDER BY can stream from the index.
     """
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_projects_created_at "
-        "ON projects(created_at DESC)"
-    )
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_triggers_created_at "
-        "ON triggers(created_at DESC)"
-    )
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_projects_created_at ON projects(created_at DESC)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_triggers_created_at ON triggers(created_at DESC)")
 
 
 def _migrate_111_session_lookup_indices(conn):
@@ -4557,8 +4542,7 @@ def _migrate_111_session_lookup_indices(conn):
     # Covering index for revoke_user_sessions / get_active_for_user
     # paths (`WHERE user_id = ? AND revoked_at IS NULL`).
     conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_sessions_user_active "
-        "ON sessions(user_id, revoked_at)"
+        "CREATE INDEX IF NOT EXISTS idx_sessions_user_active ON sessions(user_id, revoked_at)"
     )
 
 
@@ -4611,9 +4595,7 @@ def _migrate_105_products_user_id(conn):
         "WHERE user_id IS NULL",
         ("legacy@local",),
     )
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_products_user_id ON products(user_id)"
-    )
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_products_user_id ON products(user_id)")
 
 
 def _migrate_104_sessions_table(conn):
@@ -4660,9 +4642,7 @@ def _migrate_102_user_roles_user_id(conn):
     if "user_id" in existing:
         return  # idempotent
 
-    legacy_row = conn.execute(
-        "SELECT id FROM users WHERE email = ?", ("legacy@local",)
-    ).fetchone()
+    legacy_row = conn.execute("SELECT id FROM users WHERE email = ?", ("legacy@local",)).fetchone()
     if legacy_row:
         legacy_id = legacy_row[0]
     else:
@@ -4678,9 +4658,7 @@ def _migrate_102_user_roles_user_id(conn):
         "UPDATE user_roles SET user_id = ? WHERE user_id IS NULL",
         (legacy_id,),
     )
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_user_roles_user_id ON user_roles(user_id)"
-    )
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_user_roles_user_id ON user_roles(user_id)")
 
 
 def _migrate_101_users_table(conn):
@@ -4721,14 +4699,27 @@ def _migrate_100_session_per_worktree(conn):
     ]
     for col_name, col_type in new_cols:
         if col_name not in existing:
-            conn.execute(
-                f"ALTER TABLE super_agent_sessions ADD COLUMN {col_name} {col_type}"
-            )
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_sas_project ON super_agent_sessions(project_id)"
-    )
+            conn.execute(f"ALTER TABLE super_agent_sessions ADD COLUMN {col_name} {col_type}")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_sas_project ON super_agent_sessions(project_id)")
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_sas_session_type ON super_agent_sessions(session_type)"
+    )
+
+
+def _migrate_115_execution_logs_trigger_started_index(conn):
+    """v0.7.0: composite index for per-bot SLA queries.
+
+    The bot-health rollup runs one
+    `SELECT … FROM execution_logs WHERE trigger_id = ? AND started_at >= ?`
+    per trigger. Without a composite index, SQLite falls back to the
+    started_at index and re-filters trigger_id per row, repeated for
+    every bot. The composite (trigger_id, started_at DESC) lets the
+    planner do a single SEARCH per bot, which is the difference
+    between O(bots * runs) and O(bots * runs_in_window).
+    """
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_execution_logs_trigger_started "
+        "ON execution_logs(trigger_id, started_at DESC)"
     )
 
 
@@ -4878,4 +4869,10 @@ VERSIONED_MIGRATIONS = [
     (112, "list_page_indices", _migrate_112_list_page_indices),
     # v0.6.1: enforce rotated_from_token uniqueness (v0.6.0 deferred).
     (113, "rotated_from_token_unique", _migrate_113_rotated_from_token_unique),
+    # v0.7.0 round-1 (Codex): composite index for bot-health rollup query.
+    (
+        115,
+        "execution_logs_trigger_started_index",
+        _migrate_115_execution_logs_trigger_started_index,
+    ),
 ]
