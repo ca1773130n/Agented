@@ -22,12 +22,13 @@ import { triggerEventApi } from '../../../services/api';
 const mockEvent = {
   id: 1,
   trigger_id: 'trig-abc',
-  source: 'webhook',
-  status: 'fired',
   received_at: '2026-05-05T10:00:00Z',
-  payload: { foo: 'bar', n: 42 },
-  headers: { 'x-test': 'y' },
-  error_message: null,
+  // Backend returns the raw JSON string from the DB column, not a parsed object.
+  payload: JSON.stringify({ foo: 'bar', n: 42 }),
+  signature_header: 'sha256=abc',
+  matched: 1 as const,
+  dispatch_status: 'fired',
+  dispatch_error: null,
 };
 
 const mountComponent = (triggerId = 'trig-abc') =>
@@ -63,7 +64,7 @@ describe('TriggerPayloadHistory', () => {
 
     expect(wrapper.find('[data-testid="loading"]').exists()).toBe(false);
     expect(wrapper.find('[data-testid="event-1"]').exists()).toBe(true);
-    expect(wrapper.text()).toContain('webhook');
+    expect(wrapper.text()).toContain('matched');
     expect(wrapper.text()).toContain('fired');
   });
 

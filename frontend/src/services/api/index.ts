@@ -38,7 +38,7 @@ export { monitoringApi } from './monitoring';
 export { triggerEventApi } from './trigger-events';
 export type {
   TriggerEvent,
-  TriggerEventStatus,
+  TriggerEventDispatchStatus,
   TriggerEventListResponse,
   TriggerEventReplayResponse,
 } from './trigger-events';

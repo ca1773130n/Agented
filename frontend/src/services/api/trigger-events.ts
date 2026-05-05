@@ -9,20 +9,33 @@
  *
  * Backed by `trigger_events` (migration 114). Replay re-fires the
  * original payload through ExecutionService.
+ *
+ * Field shape mirrors the raw DB columns surfaced by the admin route:
+ * - `payload` is a JSON-encoded string (not a parsed object)
+ * - `matched` is 0 or 1
+ * - `dispatch_status` is the canonical status enum ('fired' | 'unmatched' | …)
+ * - `dispatch_error` is the failure reason when dispatch_status is an error
+ * - `signature_header` is the raw HMAC header (or null)
  */
 import { apiFetch } from './client';
 
-export type TriggerEventStatus = 'received' | 'matched' | 'fired' | 'skipped' | 'error';
+export type TriggerEventDispatchStatus =
+  | 'fired'
+  | 'unmatched'
+  | 'skipped'
+  | 'error'
+  | string;
 
 export interface TriggerEvent {
   id: number;
-  trigger_id: string;
-  source: string;
-  status: TriggerEventStatus | string;
+  trigger_id: string | null;
   received_at: string;
-  payload: unknown;
-  headers: Record<string, string> | null;
-  error_message: string | null;
+  /** JSON-encoded payload string. Parse with JSON.parse() at the call site. */
+  payload: string;
+  signature_header: string | null;
+  matched: 0 | 1;
+  dispatch_status: TriggerEventDispatchStatus;
+  dispatch_error: string | null;
 }
 
 export interface TriggerEventListResponse {

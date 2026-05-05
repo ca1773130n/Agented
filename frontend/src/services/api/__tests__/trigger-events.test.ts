@@ -9,7 +9,7 @@ import { triggerEventApi } from '../trigger-events';
 import type {
   TriggerEvent,
   TriggerEventListResponse,
-  TriggerEventStatus,
+  TriggerEventDispatchStatus,
 } from '../trigger-events';
 
 beforeEach(() => {
@@ -37,12 +37,12 @@ describe('triggerEventApi', () => {
         {
           id: 1,
           trigger_id: 'trig-abc',
-          source: 'webhook',
-          status: 'fired',
           received_at: '2026-05-05T10:00:00Z',
-          payload: { foo: 'bar' },
-          headers: { 'x-test': 'y' },
-          error_message: null,
+          payload: '{"foo":"bar"}',
+          signature_header: 'sha256=abc',
+          matched: 1,
+          dispatch_status: 'fired',
+          dispatch_error: null,
         },
       ],
     };
@@ -55,12 +55,12 @@ describe('triggerEventApi', () => {
     const event: TriggerEvent = {
       id: 42,
       trigger_id: 'trig-abc',
-      source: 'github',
-      status: 'matched',
       received_at: '2026-05-05T11:00:00Z',
-      payload: {},
-      headers: null,
-      error_message: null,
+      payload: '{}',
+      signature_header: null,
+      matched: 0,
+      dispatch_status: 'unmatched',
+      dispatch_error: null,
     };
     (apiFetch as ReturnType<typeof vi.fn>).mockResolvedValue(event);
     const got = await triggerEventApi.get(42);
@@ -79,7 +79,7 @@ describe('triggerEventApi', () => {
   });
 
   it('exposes types compile-time', () => {
-    const statuses: TriggerEventStatus[] = ['received', 'matched', 'fired', 'skipped', 'error'];
-    expect(statuses).toHaveLength(5);
+    const statuses: TriggerEventDispatchStatus[] = ['fired', 'unmatched', 'skipped', 'error'];
+    expect(statuses).toHaveLength(4);
   });
 });

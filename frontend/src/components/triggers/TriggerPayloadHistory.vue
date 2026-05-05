@@ -89,6 +89,18 @@ function formatJson(value: unknown): string {
   }
 }
 
+/** Parse the raw JSON-encoded `payload` string from the DB row.
+ * Falls back to the raw string when JSON.parse fails (e.g. a row with
+ * a serialization-error placeholder). */
+function parsedPayload(raw: string): unknown {
+  if (raw == null) return null;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return raw;
+  }
+}
+
 function statusClass(status: string): string {
   return `status-${status}`;
 }
@@ -130,8 +142,10 @@ watch(() => props.triggerId, loadEvents);
         <div class="event-header" @click="toggleExpand(event.id)">
           <div class="event-info">
             <span class="event-date">{{ formatDate(event.received_at) }}</span>
-            <span class="event-source">{{ event.source }}</span>
-            <span class="status-pill" :class="statusClass(event.status)">{{ event.status }}</span>
+            <span class="event-source">{{ event.matched ? 'matched' : 'unmatched' }}</span>
+            <span class="status-pill" :class="statusClass(event.dispatch_status)">{{
+              event.dispatch_status
+            }}</span>
           </div>
           <div class="event-actions">
             <button
@@ -177,16 +191,16 @@ watch(() => props.triggerId, loadEvents);
           class="event-body"
           data-testid="event-body"
         >
-          <div v-if="event.error_message" class="error-message">
-            <strong>Error:</strong> {{ event.error_message }}
+          <div v-if="event.dispatch_error" class="error-message">
+            <strong>Error:</strong> {{ event.dispatch_error }}
           </div>
           <div class="payload-section">
             <h4>Payload</h4>
-            <pre class="payload-json"><code>{{ formatJson(event.payload) }}</code></pre>
+            <pre class="payload-json"><code>{{ formatJson(parsedPayload(event.payload)) }}</code></pre>
           </div>
-          <div v-if="event.headers" class="headers-section">
-            <h4>Headers</h4>
-            <pre class="payload-json"><code>{{ formatJson(event.headers) }}</code></pre>
+          <div v-if="event.signature_header" class="headers-section">
+            <h4>Signature</h4>
+            <pre class="payload-json"><code>{{ event.signature_header }}</code></pre>
           </div>
         </div>
       </div>
