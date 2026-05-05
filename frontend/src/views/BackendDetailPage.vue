@@ -614,26 +614,27 @@ async function onWizardSaved() {
   await loadBackend();
 }
 
-// Snapshot of backend.value.id at the moment Done/Skip was clicked.
-// The overlay clears only after backend.value.id flips to a different
-// id (i.e. the next backend's data has actually loaded into this
-// reused page component), not just when the URL param changes.
+// Route-param snapshot at click time. We hold the overlay until BOTH
+// the URL has moved off this id AND backend.value has caught up to
+// the new URL. Watching backend.value.id alone failed: it could flip
+// before route.params settled, or the user could see the previous
+// page's content briefly under the overlay before the new content
+// rendered.
 const advancingFromId = ref<string | null>(null);
 
 function startAdvancingOverlay() {
   isAdvancing.value = true;
-  advancingFromId.value = backend.value?.id ?? backendId.value ?? null;
+  advancingFromId.value = backendId.value ?? backend.value?.id ?? null;
   if (advancingTimeout) clearTimeout(advancingTimeout);
-  // Safety timeout — if neither the route changes nor the backend
-  // loads within 8s (tour ended, network stall, etc.), drop the
-  // overlay so the user isn't stuck. 8s comfortably exceeds the
-  // sidecar+backend round-trip and the model-discovery background
-  // task that follows loadBackend().
+  // Safety timeout — covers tour-ended (no more backends, navigation
+  // never happens) and network stalls. 15s comfortably exceeds the
+  // worst-case sidecar+backend round-trip plus the model-discovery
+  // background task that follows loadBackend().
   advancingTimeout = setTimeout(() => {
     isAdvancing.value = false;
     advancingFromId.value = null;
     advancingTimeout = null;
-  }, 8000);
+  }, 15000);
 }
 
 function onWizardSkip() {
@@ -649,36 +650,48 @@ function onWizardDone() {
   tourMachine.nextStep();
 }
 
-// v0.6.4 (third revision): clear the overlay only after the NEW
-// backend's content has actually painted on screen.
+// Hold the overlay up until the new backend's page is FULLY visible.
+// Three preconditions must ALL hold before we begin the release:
+//   a) route.params.backendId differs from the snapshotted from-id
+//      → the URL has moved to the next backend
+//   b) backend.value !== null
+//      → loadBackend() has resolved (not still awaiting the network)
+//   c) backend.value.id === backendId.value
+//      → the loaded data matches the current route (not the stale
+//         previous backend's data still sitting in the ref)
 //
-// Earlier revisions cleared on URL param change (released before
-// loadBackend resolved) and on backend.value.id flip with one
-// nextTick (released before the browser had painted the new DOM).
-// Operators reported the overlay still releasing before they saw
-// the next backend's page.
-//
-// This version uses three layered waits:
-//   1) flush: 'post'  — run the watch AFTER Vue's DOM patch
-//   2) double rAF     — wait two animation frames for paint
-//   3) 250ms settle   — buffer for subscoped reactive updates
-//                       (account list, health badges, etc.)
+// Once all three hold, wait for: Vue's DOM patch (flush:'post'),
+// double requestAnimationFrame (browser paint), and a 600ms settle
+// for subscoped reactive updates (account list, health badges,
+// model-discovery follow-up). 600ms is intentionally generous —
+// operators reported the previous 250ms releasing before they
+// perceived the new page.
 function _waitForPaint(): Promise<void> {
   return new Promise<void>((resolve) => {
     requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
   });
 }
 
+const _readyForRelease = computed(() => {
+  if (!isAdvancing.value) return false;
+  if (!advancingFromId.value) return false;
+  const routeId = backendId.value;
+  if (!routeId || routeId === advancingFromId.value) return false;
+  const data = backend.value;
+  if (!data || !data.id) return false;
+  return data.id === routeId;
+});
+
 watch(
-  () => backend.value?.id,
-  async (newId) => {
-    if (!isAdvancing.value) return;
-    if (advancingFromId.value === null) return;
-    if (!newId || newId === advancingFromId.value) return;
+  _readyForRelease,
+  async (ready) => {
+    if (!ready) return;
     await _waitForPaint();
-    await new Promise((r) => setTimeout(r, 250));
-    // Re-check in case advancing was cancelled while we waited.
+    await new Promise((r) => setTimeout(r, 600));
+    // Re-check after the long wait — advancing may have been cancelled
+    // (e.g. user navigated away) or the route may have changed again.
     if (!isAdvancing.value) return;
+    if (!_readyForRelease.value) return;
     isAdvancing.value = false;
     advancingFromId.value = null;
     if (advancingTimeout) {
