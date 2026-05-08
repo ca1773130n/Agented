@@ -77,3 +77,8 @@ backend/.secret_key
 /codex-*.png
 /wizard-*.png
 /snap-*.yml
+
+
+# /understand analysis caches — keep top-level outputs only
+.understand-anything/intermediate/
+.understand-anything/tmp/

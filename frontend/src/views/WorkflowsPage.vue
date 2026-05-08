@@ -10,7 +10,7 @@ import ErrorState from '../components/base/ErrorState.vue';
 import StatusBadge from '../components/base/StatusBadge.vue';
 import { useToast } from '../composables/useToast';
 import { useFocusTrap } from '../composables/useFocusTrap';
-import { useWebMcpPageTools } from '../webmcp/useWebMcpPageTools';
+import { useWebMcpPageTools } from '../composables/useWebMcpPageTools';
 import { useWebMcpTool } from '../composables/useWebMcpTool';
 
 const router = useRouter();

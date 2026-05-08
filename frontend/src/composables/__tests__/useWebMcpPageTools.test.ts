@@ -9,7 +9,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { defineComponent, h, ref, nextTick } from 'vue';
 import { mount } from '@vue/test-utils';
 import { useWebMcpPageTools } from '../useWebMcpPageTools';
-import { getManifest, deregisterFromManifest } from '../tool-registry';
+import { getManifest, deregisterFromManifest } from '../../webmcp/tool-registry';
 
 const mockUnregister = vi.fn();
 const mockRegisterTool = vi.fn(() => ({ unregister: mockUnregister }));
