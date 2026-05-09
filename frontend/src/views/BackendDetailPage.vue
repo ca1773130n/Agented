@@ -49,32 +49,11 @@
         </template>
       </PageHeader>
 
-      <div class="backend-info-section">
-        <div class="info-grid">
-          <div class="info-card">
-            <h3>{{ t('backendDetail.availableModels') }}</h3>
-            <div class="model-tags">
-              <span v-for="model in backend.models" :key="model" class="model-tag">
-                {{ model }}
-              </span>
-            </div>
-          </div>
-          <div class="info-card capabilities-card" v-if="capabilityList.length > 0">
-            <h3>{{ t('backendDetail.capabilities') }}</h3>
-            <div class="capabilities-list">
-              <div v-for="cap in capabilityList" :key="cap.label" class="capability-item">
-                <span class="capability-dot" :class="{ active: cap.supported }"></span>
-                <span class="capability-label">{{ cap.label }}</span>
-                <span v-if="cap.flag" class="capability-flag">{{ cap.flag }}</span>
-              </div>
-            </div>
-          </div>
-          <div class="info-card" v-if="cliPath">
-            <h3>{{ t('backendDetail.cliPath') }}</h3>
-            <code class="cli-path-value">{{ cliPath }}</code>
-          </div>
-        </div>
-      </div>
+      <BackendInfoSection
+        :models="backend.models || []"
+        :capability-list="capabilityList"
+        :cli-path="cliPath"
+      />
 
       <!-- Inline Connect Terminal -->
       <div v-if="showConnect && backend" class="connect-section">
@@ -87,44 +66,7 @@
       </div>
 
       <!-- OpenCode cross-backend accounts -->
-      <div v-if="isOpenCode" class="opencode-section">
-        <div class="opencode-note" data-tour="opencode-info">
-          <span class="note-icon">i</span>
-          <span>{{ t('backendDetail.openCodeNote') }}</span>
-        </div>
-        <div class="section-header">
-          <h2>{{ t('backendDetail.availableBackendAccounts') }}</h2>
-        </div>
-        <div v-if="otherBackendAccounts.length === 0" class="empty-state">
-          <p>{{ t('backendDetail.noOtherBackendAccounts') }}</p>
-        </div>
-        <div v-else class="accounts-list">
-          <div v-for="group in otherBackendAccounts" :key="group.backend_type" class="cross-backend-group">
-            <div class="cross-backend-header">
-              <span class="cross-backend-name">{{ group.backend_name }}</span>
-              <span class="type-badge">{{ group.backend_type }}</span>
-            </div>
-            <div v-for="account in group.accounts" :key="account.id" class="account-card cross-backend-card">
-              <div class="account-info">
-                <div class="account-header">
-                  <h3>{{ account.account_name }}</h3>
-                  <span v-if="account.is_default" class="default-badge">{{ t('backendDetail.default') }}</span>
-                </div>
-                <div class="account-meta">
-                  <div v-if="account.email" class="meta-item">
-                    <span class="meta-label">{{ t('backendDetail.emailLabel') }}</span>
-                    <span>{{ account.email }}</span>
-                  </div>
-                  <div v-if="account.plan" class="meta-item">
-                    <span class="meta-label">{{ t('backendDetail.planLabel') }}</span>
-                    <span class="plan-badge">{{ account.plan }}</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
+      <BackendCrossAccountsList v-if="isOpenCode" :groups="otherBackendAccounts" />
 
       <div class="accounts-section">
         <div class="section-header">
@@ -241,111 +183,23 @@
           </form>
         </div>
 
-        <div v-if="backend.accounts?.length === 0" class="empty-state">
-          <p v-if="isOpenCode">{{ t('backendDetail.emptyOpenCode') }}</p>
-          <p v-else>{{ t('backendDetail.emptyAccounts') }}</p>
-        </div>
-
-        <div v-else class="accounts-list">
-          <div v-for="account in backend.accounts" :key="account.id" class="account-card">
-            <div class="account-info">
-              <div class="account-header">
-                <h3>{{ account.account_name }}</h3>
-                <span v-if="account.is_default" class="default-badge">{{ t('backendDetail.default') }}</span>
-                <!-- Health status badge -->
-                <template v-if="getAccountHealth(account.id)">
-                  <span v-if="getAccountHealth(account.id)!.is_rate_limited" class="health-badge rate-limited">
-                    <span class="health-dot red"></span>
-                    {{ t('backendDetail.rateLimited') }} ({{ formatCooldown(getAccountHealth(account.id)!) }})
-                  </span>
-                  <span v-else class="health-badge healthy">
-                    <span class="health-dot green"></span>
-                    {{ t('backendDetail.healthy') }}
-                  </span>
-                </template>
-              </div>
-              <div class="account-meta">
-                <div v-if="account.email" class="meta-item">
-                  <span class="meta-label">{{ t('backendDetail.emailLabel') }}</span>
-                  <span>{{ account.email }}</span>
-                </div>
-                <div v-if="account.config_path" class="meta-item">
-                  <span class="meta-label">{{ t('backendDetail.configPathLabel') }}</span>
-                  <code>{{ account.config_path }}</code>
-                </div>
-                <div v-if="account.api_key_env" class="meta-item">
-                  <span class="meta-label">{{ t('backendDetail.apiKeyEnvLabel') }}</span>
-                  <code>{{ account.api_key_env }}</code>
-                </div>
-                <div v-if="account.plan" class="meta-item">
-                  <span class="meta-label">{{ t('backendDetail.planLabel') }}</span>
-                  <span class="plan-badge">{{ account.plan }}</span>
-                </div>
-                <!-- Health stats -->
-                <template v-if="getAccountHealth(account.id)">
-                  <div class="meta-item">
-                    <span class="meta-label">{{ t('backendDetail.executionsLabel') }}</span>
-                    <span>{{ getAccountHealth(account.id)!.total_executions }}</span>
-                  </div>
-                  <div class="meta-item">
-                    <span class="meta-label">{{ t('backendDetail.lastUsedLabel') }}</span>
-                    <span>{{ formatRelativeTime(getAccountHealth(account.id)!.last_used_at) }}</span>
-                  </div>
-                </template>
-              </div>
-            </div>
-            <div class="account-actions">
-              <button
-                v-if="supportsConnect && backend.is_installed"
-                class="btn btn-sm btn-outline"
-                @click="loginConfigPath = account.config_path; proxyOnlyLogin = false; showLoginModal = true"
-              >
-                {{ t('backendDetail.login') }}
-              </button>
-              <button
-                v-if="supportsConnect"
-                class="btn btn-sm btn-outline"
-                @click="loginConfigPath = account.config_path; proxyOnlyLogin = true; showLoginModal = true"
-              >
-                {{ t('backendDetail.proxyLogin') }}
-              </button>
-              <button
-                v-if="backend.type !== 'opencode'"
-                class="btn btn-sm btn-outline"
-                :disabled="rateLimitState[account.id]?.loading"
-                @click="checkAccountRateLimits(account.id)"
-              >
-                {{ rateLimitState[account.id]?.loading ? t('backendDetail.checking') : t('backendDetail.checkRateLimits') }}
-              </button>
-              <button
-                v-if="getAccountHealth(account.id)?.is_rate_limited"
-                class="btn btn-sm btn-clear-rl"
-                @click="clearRateLimit(account.id)"
-              >
-                {{ t('backendDetail.clearRateLimit') }}
-              </button>
-
-              <button class="btn btn-sm btn-secondary" @click="editAccount(account)">{{ t('common.edit') }}</button>
-              <button class="btn btn-sm btn-danger" @click="deleteAccount(account.id)">{{ t('common.delete') }}</button>
-            </div>
-            <!-- Rate limit results -->
-            <div v-if="rateLimitState[account.id]?.windows?.length" class="rate-limit-results">
-              <div v-for="w in rateLimitState[account.id]!.windows" :key="w.window_type" class="rl-mini-gauge">
-                <div class="rl-mini-header">
-                  <span class="rl-mini-label">{{ w.window_type }}</span>
-                  <span class="rl-mini-pct" :style="{ color: getRateLimitColor(w.percentage) }">{{ Math.round(w.percentage) }}%</span>
-                </div>
-                <div class="rl-mini-bar">
-                  <div class="rl-mini-fill" :style="{ width: Math.min(w.percentage, 100) + '%', background: getRateLimitColor(w.percentage) }"></div>
-                </div>
-                <div v-if="w.resets_at" class="rl-mini-reset">{{ t('backendDetail.resets') }}: {{ new Date(w.resets_at).toLocaleString() }}</div>
-              </div>
-            </div>
-            <div v-else-if="rateLimitState[account.id]?.error" class="rate-limit-error">
-              {{ rateLimitState[account.id]!.error }}
-            </div>
-          </div>
-        </div>
+        <BackendAccountList
+          :accounts="backend.accounts || []"
+          :is-open-code="isOpenCode"
+          :is-installed="!!backend.is_installed"
+          :supports-connect="supportsConnect"
+          :backend-type="backend.type"
+          :rate-limit-state="rateLimitState"
+          :get-account-health="getAccountHealth"
+          :format-cooldown="formatCooldown"
+          :format-relative-time="formatRelativeTime"
+          :get-rate-limit-color="getRateLimitColor"
+          @login="onAccountLogin"
+          @edit="editAccount"
+          @delete="deleteAccount"
+          @check-rate-limits="checkAccountRateLimits"
+          @clear-rate-limit="clearRateLimit"
+        />
       </div>
     </template>
 
@@ -395,6 +249,9 @@ import PageHeader from '../components/base/PageHeader.vue';
 import EntityLayout from '../layouts/EntityLayout.vue';
 import BackendConnect from '../components/monitoring/BackendConnect.vue';
 import AccountLoginModal from '../components/monitoring/AccountLoginModal.vue';
+import BackendInfoSection from '../components/monitoring/BackendInfoSection.vue';
+import BackendCrossAccountsList from '../components/monitoring/BackendCrossAccountsList.vue';
+import BackendAccountList from '../components/monitoring/BackendAccountList.vue';
 import { AccountWizard } from '@ai-accounts/vue-styled';
 import { useAiAccounts } from '@ai-accounts/vue-headless';
 import { useI18n } from 'vue-i18n';
@@ -824,6 +681,12 @@ function onLoginModalSuccess() {
   loadBackend();
 }
 
+function onAccountLogin(payload: { account: BackendAccount; proxyOnly: boolean }) {
+  loginConfigPath.value = payload.account.config_path || undefined;
+  proxyOnlyLogin.value = payload.proxyOnly;
+  showLoginModal.value = true;
+}
+
 async function checkAccountRateLimits(accountId: string) {
   rateLimitState.value[accountId] = { loading: true, windows: [], error: null };
   try {
@@ -917,14 +780,6 @@ onUnmounted(() => {
   to { opacity: 1; transform: translateY(0); }
 }
 
-.backend-info-section {
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-default);
-  border-radius: 12px;
-  padding: 1.5rem;
-  margin-bottom: 2rem;
-}
-
 .backend-badges {
   display: flex;
   align-items: center;
@@ -966,49 +821,6 @@ onUnmounted(() => {
   color: var(--accent-crimson);
 }
 
-.info-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 1rem;
-}
-
-.info-card {
-  background: var(--bg-primary);
-  border: 1px solid var(--border-default);
-  border-radius: 8px;
-  padding: 1rem;
-}
-
-.info-card h3 {
-  margin: 0 0 0.5rem 0;
-  font-size: 0.8125rem;
-  color: var(--text-secondary);
-  font-weight: 500;
-}
-
-.info-card p {
-  margin: 0;
-  font-size: 1rem;
-  color: var(--text-primary);
-}
-
-.model-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-}
-
-.model-tag {
-  padding: 0.25rem 0.75rem;
-  background: var(--accent-violet-dim);
-  color: var(--accent-violet);
-  border: 1px solid rgba(136, 85, 255, 0.25);
-  border-radius: 20px;
-  font-size: 0.75rem;
-  font-weight: 600;
-  font-family: var(--font-mono);
-}
-
 .accounts-section {
   background: var(--bg-secondary);
   border: 1px solid var(--border-default);
@@ -1028,137 +840,6 @@ onUnmounted(() => {
   font-size: 1.125rem;
   font-weight: 600;
   color: var(--text-primary);
-}
-
-.accounts-list {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-}
-
-.account-card {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  flex-wrap: wrap;
-  padding: 1rem;
-  background: var(--bg-primary);
-  border: 1px solid var(--border-default);
-  border-radius: 8px;
-}
-
-.account-header {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  margin-bottom: 0.5rem;
-}
-
-.account-header h3 {
-  margin: 0;
-  font-size: 1rem;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.default-badge {
-  padding: 0.125rem 0.5rem;
-  background: var(--primary-color);
-  color: white;
-  border-radius: 10px;
-  font-size: 0.6875rem;
-  font-weight: 500;
-}
-
-.account-meta {
-  display: flex;
-  flex-direction: column;
-  gap: 0.375rem;
-}
-
-.meta-item {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-size: 0.8125rem;
-}
-
-.meta-label {
-  color: var(--text-secondary);
-}
-
-.meta-item code {
-  padding: 0.125rem 0.375rem;
-  background: var(--bg-tertiary);
-  border-radius: 4px;
-  font-family: monospace;
-  font-size: 0.75rem;
-  color: var(--text-primary);
-}
-
-.plan-badge {
-  padding: 0.125rem 0.5rem;
-  background: var(--bg-tertiary);
-  border-radius: 10px;
-  font-size: 0.75rem;
-  text-transform: capitalize;
-}
-
-.account-actions {
-  display: flex;
-  gap: 0.5rem;
-  flex-shrink: 0;
-}
-
-/* Capabilities */
-.capabilities-list {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
-.capability-item {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-size: 0.875rem;
-}
-
-.capability-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--text-tertiary);
-  flex-shrink: 0;
-}
-
-.capability-dot.active {
-  background: var(--accent-emerald);
-  box-shadow: 0 0 4px var(--accent-emerald-dim);
-}
-
-.capability-label {
-  color: var(--text-primary);
-}
-
-.capability-flag {
-  font-family: monospace;
-  font-size: 0.75rem;
-  color: var(--text-secondary);
-  background: var(--bg-tertiary);
-  padding: 0.125rem 0.375rem;
-  border-radius: 4px;
-}
-
-.cli-path-value {
-  display: block;
-  padding: 0.375rem 0.5rem;
-  background: var(--bg-tertiary);
-  border-radius: 4px;
-  font-family: monospace;
-  font-size: 0.8125rem;
-  color: var(--text-primary);
-  word-break: break-all;
 }
 
 /* Inline Account Form */
@@ -1304,127 +985,6 @@ onUnmounted(() => {
   filter: brightness(0.9);
 }
 
-/* Health badges */
-.health-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.375rem;
-  padding: 0.125rem 0.5rem;
-  border-radius: 10px;
-  font-size: 0.6875rem;
-  font-weight: 500;
-}
-
-.health-badge.healthy {
-  background: var(--accent-emerald-dim);
-  color: var(--accent-emerald);
-}
-
-.health-badge.rate-limited {
-  background: var(--accent-crimson-dim);
-  color: var(--accent-crimson);
-  font-family: var(--font-mono, monospace);
-}
-
-.health-dot {
-  display: inline-block;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-
-.health-dot.green {
-  background: var(--accent-emerald);
-  box-shadow: 0 0 4px var(--accent-emerald-dim);
-}
-
-.health-dot.red {
-  background: var(--accent-crimson);
-  box-shadow: 0 0 4px var(--accent-crimson-dim);
-}
-
-.btn-clear-rl {
-  padding: 0.375rem 0.75rem;
-  font-size: 0.8125rem;
-  background: transparent;
-  border: 1px solid var(--accent-crimson);
-  color: var(--accent-crimson);
-  border-radius: 6px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.btn-clear-rl:hover {
-  background: var(--accent-crimson);
-  color: white;
-}
-
-/* OpenCode section */
-.opencode-section {
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-default);
-  border-radius: 12px;
-  padding: 1.5rem;
-  margin-bottom: 1rem;
-}
-
-.opencode-note {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 12px 16px;
-  margin-bottom: 1rem;
-  background: var(--bg-primary);
-  border: 1px solid var(--border-default);
-  border-left: 3px solid var(--accent-emerald);
-  border-radius: 8px;
-  font-size: 0.8125rem;
-  color: var(--text-secondary);
-  line-height: 1.4;
-}
-
-.note-icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  background: var(--accent-emerald-dim);
-  color: var(--accent-emerald);
-  font-size: 0.7rem;
-  font-weight: 700;
-  flex-shrink: 0;
-}
-
-.cross-backend-group {
-  margin-bottom: 1rem;
-}
-
-.cross-backend-group:last-child {
-  margin-bottom: 0;
-}
-
-.cross-backend-header {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  margin-bottom: 0.5rem;
-  padding: 0.25rem 0;
-}
-
-.cross-backend-name {
-  font-size: 0.875rem;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.cross-backend-card {
-  opacity: 0.85;
-  border-style: dashed;
-}
-
 /* Login banner in inline form */
 .login-banner {
   display: flex;
@@ -1491,75 +1051,6 @@ onUnmounted(() => {
 .connect-section {
   margin-bottom: 1rem;
   animation: fadeIn 0.3s ease;
-}
-
-/* Rate limit results */
-.rate-limit-results {
-  width: 100%;
-  margin-top: 0.75rem;
-  padding-top: 0.75rem;
-  border-top: 1px solid var(--border-default);
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.75rem;
-}
-
-.rl-mini-gauge {
-  flex: 1;
-  min-width: 140px;
-  max-width: 220px;
-  padding: 0.5rem;
-  background: var(--bg-tertiary);
-  border-radius: 6px;
-}
-
-.rl-mini-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 0.375rem;
-}
-
-.rl-mini-label {
-  font-size: 0.7rem;
-  color: var(--text-secondary);
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-}
-
-.rl-mini-pct {
-  font-family: var(--font-mono);
-  font-size: 0.85rem;
-  font-weight: 700;
-}
-
-.rl-mini-bar {
-  height: 5px;
-  border-radius: 3px;
-  background: rgba(255, 255, 255, 0.06);
-  overflow: hidden;
-}
-
-.rl-mini-fill {
-  height: 100%;
-  border-radius: 3px;
-  transition: width 0.3s ease;
-}
-
-.rl-mini-reset {
-  font-size: 0.65rem;
-  color: var(--text-tertiary);
-  margin-top: 0.25rem;
-}
-
-.rate-limit-error {
-  width: 100%;
-  margin-top: 0.5rem;
-  padding: 0.375rem 0.5rem;
-  font-size: 0.75rem;
-  color: var(--text-secondary);
-  background: rgba(150, 150, 150, 0.08);
-  border-radius: 4px;
 }
 
 /* v0.6.4: blocking overlay during tour transitions. */
