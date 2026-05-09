@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { shallowMount } from '@vue/test-utils';
+import { mount } from '@vue/test-utils';
 import type { MonitoringStatus, SnapshotHistory, WindowSnapshot } from '../../../services/api';
 
 // Mock chart.js (child components import it)
@@ -13,6 +13,13 @@ vi.mock('chart.js', () => {
 vi.mock('chartjs-adapter-date-fns', () => ({}));
 
 import MonitoringSection from '../MonitoringSection.vue';
+
+// Stub the leaf chart components so we don't drag chart.js into every test
+const chartStubs = {
+  RateLimitGauge: true,
+  CombinedUsageChart: true,
+  RemainingTimeChart: true,
+};
 
 function makeWindow(overrides: Partial<WindowSnapshot> = {}): WindowSnapshot {
   return {
@@ -57,8 +64,9 @@ const baseProps = {
 };
 
 function mountSection(overrides: Record<string, unknown> = {}) {
-  return shallowMount(MonitoringSection, {
+  return mount(MonitoringSection, {
     props: { ...baseProps, ...overrides },
+    global: { stubs: chartStubs },
   });
 }
 
