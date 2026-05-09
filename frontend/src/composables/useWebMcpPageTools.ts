@@ -20,8 +20,8 @@
  */
 
 import { type Ref } from 'vue';
-import { useWebMcpTool } from '../composables/useWebMcpTool';
-import type { ToolResponse } from './types';
+import { useWebMcpTool } from './useWebMcpTool';
+import type { ToolResponse } from '../webmcp/types';
 
 export interface ListState {
   items: unknown[];

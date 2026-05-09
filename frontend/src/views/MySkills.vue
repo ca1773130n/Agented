@@ -9,7 +9,7 @@ import LoadingState from '../components/base/LoadingState.vue';
 import EmptyState from '../components/base/EmptyState.vue';
 import { useToast } from '../composables/useToast';
 import { useFocusTrap } from '../composables/useFocusTrap';
-import { useWebMcpPageTools } from '../webmcp/useWebMcpPageTools';
+import { useWebMcpPageTools } from '../composables/useWebMcpPageTools';
 
 const props = defineProps<{
   highlightId?: string | null;

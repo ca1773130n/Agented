@@ -14,7 +14,7 @@ import { useToast } from '../composables/useToast';
 import { useListFilter } from '../composables/useListFilter';
 import { usePagination } from '../composables/usePagination';
 import { useFocusTrap } from '../composables/useFocusTrap';
-import { useWebMcpPageTools } from '../webmcp/useWebMcpPageTools';
+import { useWebMcpPageTools } from '../composables/useWebMcpPageTools';
 
 const router = useRouter();
 

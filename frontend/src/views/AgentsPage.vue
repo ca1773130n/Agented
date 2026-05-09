@@ -15,7 +15,7 @@ import ConfirmModal from '../components/base/ConfirmModal.vue';
 import { useToast } from '../composables/useToast';
 import { useListFilter } from '../composables/useListFilter';
 import { usePagination } from '../composables/usePagination';
-import { useWebMcpPageTools } from '../webmcp/useWebMcpPageTools';
+import { useWebMcpPageTools } from '../composables/useWebMcpPageTools';
 import { useWebMcpTool } from '../composables/useWebMcpTool';
 
 const router = useRouter();

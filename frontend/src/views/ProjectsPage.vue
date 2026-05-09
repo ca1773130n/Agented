@@ -14,7 +14,7 @@ import { useToast } from '../composables/useToast';
 import { useListFilter } from '../composables/useListFilter';
 import { useFocusTrap } from '../composables/useFocusTrap';
 import { usePagination } from '../composables/usePagination';
-import { useWebMcpPageTools } from '../webmcp/useWebMcpPageTools';
+import { useWebMcpPageTools } from '../composables/useWebMcpPageTools';
 
 const showToast = useToast();
 

@@ -9,7 +9,7 @@ import EmptyState from '../components/base/EmptyState.vue';
 import ErrorState from '../components/base/ErrorState.vue';
 import { useToast } from '../composables/useToast';
 import { useFocusTrap } from '../composables/useFocusTrap';
-import { useWebMcpPageTools } from '../webmcp/useWebMcpPageTools';
+import { useWebMcpPageTools } from '../composables/useWebMcpPageTools';
 
 const router = useRouter();
 

@@ -157,7 +157,7 @@ def recall_agent_memory(
         )
 
     if search_mode == "vector":
-        from app.db.agent_memory import vector_recall
+        from app.services.embedding_service import vector_recall
 
         vec_results = vector_recall(
             query=q,
@@ -169,7 +169,7 @@ def recall_agent_memory(
         results = [msg for msg, _score in vec_results]
         max_score = vec_results[0][1] if vec_results else 0.0
     elif search_mode == "hybrid":
-        from app.db.agent_memory import hybrid_recall
+        from app.services.embedding_service import hybrid_recall
 
         results = hybrid_recall(
             query=q,

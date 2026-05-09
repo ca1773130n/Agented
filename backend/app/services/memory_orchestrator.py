@@ -73,8 +73,10 @@ def orchestrated_recall(
     from ..db.agent_memory import (
         _expand_with_context,
         get_messages,
-        hybrid_recall,
         recall_messages,
+    )
+    from .embedding_service import (
+        hybrid_recall,
         vector_recall,
     )
     from ..db.knowledge_graph import (
