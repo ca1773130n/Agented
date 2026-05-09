@@ -28,22 +28,30 @@ logger = logging.getLogger(__name__)
 def create_fresh_schema(conn):
     """Create all tables and indexes on a fresh (empty) database.
 
-    Calls each per-domain DDL module in dependency order, then commits.
+    Calls each per-domain DDL module in FK dependency order — referenced
+    tables come before their referencing tables. SQLite does not validate
+    FK targets at CREATE TABLE time, but matching dependency order keeps
+    intent explicit and survives a future migration to a stricter dialect.
+
+    Note: ``_super_agents.super_agents`` references ``teams`` and
+    ``_orgs.team_members`` references ``super_agents`` — a true cycle.
+    SQLite tolerates one direction of unresolved FK at CREATE time, so we
+    create ``_super_agents`` first; the reverse edge resolves at INSERT.
 
     Args:
         conn: An open sqlite3 connection.
     """
-    create_core_tables(conn)
     create_agent_tables(conn)
-    create_skill_tables(conn)
+    create_super_agent_tables(conn)
     create_org_tables(conn)
-    create_plugin_tables(conn)
+    create_skill_tables(conn)
+    create_core_tables(conn)
     create_workflow_tables(conn)
     create_security_tables(conn)
-    create_monitoring_tables(conn)
+    create_plugin_tables(conn)
     create_triggers_infra_tables(conn)
-    create_super_agent_tables(conn)
     create_setup_tables(conn)
     create_embedding_tables(conn)
     create_misc_tables(conn)
+    create_monitoring_tables(conn)
     conn.commit()
