@@ -1,28 +1,43 @@
 <script setup lang="ts">
-import { ref, watch, onMounted, onUnmounted, provide, computed, getCurrentInstance } from 'vue';
+/**
+ * Application root.
+ *
+ * Owns the tour state machine, all `provide()` calls (so deep
+ * `inject()` consumers continue to resolve), and the welcome-vs-shell
+ * cross-fade. Layout, toast rendering, and boot sequencing have been
+ * split out into focused composables/components (v0.7.5d):
+ *
+ *   - useToastSystem  — toasts state + showToast/dismissToast
+ *   - useAppLayout    — isWelcomePage / isFullBleed
+ *   - useAppBoot      — auth check, ?tour=start watcher, mount hooks
+ *   - AppShell        — header + sidebar + main content frame
+ *   - AppToastHost    — teleported toast stack
+ */
+import { ref, watch, provide, computed, getCurrentInstance } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { setupApi, healthApi } from './services/api';
-import { useRoute, useRouter } from 'vue-router';
-import { useTourMachine, prefetchTourRoutes } from './composables/useTourMachine';
+import { useRouter } from 'vue-router';
+import { useTourMachine } from './composables/useTourMachine';
 import TourOverlay from './components/tour/TourOverlay.vue';
 import TourCompletionScreen from './components/tour/TourCompletionScreen.vue';
 import { TOUR_STEP_MAP, TOTAL_TOUR_STEPS } from './constants/tourSteps';
-import AppSidebar from './components/layout/AppSidebar.vue';
-import AppHeader from './components/layout/AppHeader.vue';
-import ApiKeyBanner from './components/layout/ApiKeyBanner.vue';
+import AppShell from './components/layout/AppShell.vue';
+import AppToastHost from './components/layout/AppToastHost.vue';
 import ErrorBoundary from './components/base/ErrorBoundary.vue';
 import { registerGenericTools } from './webmcp/generic-tools';
 import { useSidebarCollapse } from './composables/useSidebarCollapse';
-import { useAuth } from './composables/useAuth';
 import { useSidebarData } from './composables/useSidebarData';
 import { useHealthPolling } from './composables/useHealthPolling';
+import { useAppLayout } from './composables/useAppLayout';
+import { useToastSystem } from './composables/useToastSystem';
+import { useAppBoot } from './composables/useAppBoot';
 
-// Route state for layout decisions
-const route = useRoute();
 const router = useRouter();
 const { t } = useI18n();
-const isFullBleed = computed(() => route.meta.fullBleed === true);
-const isWelcomePage = computed(() => route.name === 'welcome');
+
+// Layout / route state
+const { isWelcomePage, isFullBleed } = useAppLayout();
+
+// Tour state machine — owned here so `provide()` chain stays rooted in App.vue
 const tour = useTourMachine();
 
 // ---------------------------------------------------------------------------
@@ -102,6 +117,7 @@ function navigateToTourStep(step: string) {
   const meta = TOUR_STEP_MAP[step];
   if (!meta) return;
   // Exact match or already on a sub-route (e.g. /products/prod-xxx matches /products)
+  const route = router.currentRoute.value;
   const alreadyOnRoute = route.path === meta.route || route.path.startsWith(meta.route + '/');
   if (alreadyOnRoute && (!meta.routeHash || route.hash === meta.routeHash)) return;
   const target = meta.routeHash ? { path: meta.route, hash: meta.routeHash } : { path: meta.route };
@@ -113,47 +129,7 @@ watch(() => tour.currentStep.value, (step) => {
   navigateToTourStep(step);
 });
 
-// Toast notification system
-type ToastType = 'success' | 'error' | 'info' | 'infrastructure';
-
-interface Toast {
-  id: number;
-  message: string;
-  type: ToastType;
-}
-
-const toasts = ref<Toast[]>([]);
-let toastId = 0;
-
-function showToast(message: string, type: ToastType = 'info', duration?: number) {
-  const id = ++toastId;
-  const defaultDuration = type === 'infrastructure' ? 8000 : type === 'error' ? 8000 : 4000;
-  toasts.value.push({ id, message, type });
-  setTimeout(() => {
-    toasts.value = toasts.value.filter(t => t.id !== id);
-  }, duration ?? defaultDuration);
-
-  // Auto-advance tour when a success toast matches the current step's trigger
-  // Skip auto-advance for backend account steps — the AccountWizard controls advancement
-  if (type === 'success' && tour.isActive.value) {
-    const step = tour.currentStep.value;
-    const isBackendStep = step.startsWith('backends.');
-    if (!isBackendStep) {
-      const meta = TOUR_STEP_MAP[step];
-      if (meta?.autoAdvanceOnToast && message.includes(meta.autoAdvanceOnToast)) {
-        setTimeout(() => tour.nextStep(), 800);
-      }
-    }
-  }
-}
-
-function dismissToast(id: number) {
-  toasts.value = toasts.value.filter(t => t.id !== id);
-}
-
-provide('showToast', showToast);
-
-// Modal coordination during tour (OB-44)
+// Modal coordination during tour (OB-44) — lives here so child modals can `inject('setTourModalOpen')`
 const modalOpenDuringTour = ref(false);
 provide('setTourModalOpen', (open: boolean) => {
   modalOpenDuringTour.value = open;
@@ -186,9 +162,13 @@ if (appInstance) {
   };
 }
 
-// Sidebar collapse/mobile state
+// Sidebar collapse / mobile state
 const { isCollapsed, isMobileOpen, isMobile, toggleCollapse, toggleMobile, closeMobile } =
   useSidebarCollapse();
+
+// Toast system — defined before useSidebarData since it consumes showToast
+const { toasts, showToast, dismissToast } = useToastSystem(tour);
+provide('showToast', showToast);
 
 // Sidebar data (triggers, projects, products, teams, plugins, backends, version)
 const {
@@ -214,88 +194,15 @@ provide('refreshTriggers', refreshTriggers);
 const { activeExecutionCount, healthColor, healthTooltip, startPolling, stopPolling } =
   useHealthPolling();
 
-// API key auth state — show banner when backend requires auth and no key is stored
-const showApiKeyBanner = ref(false);
-const appReady = ref(false);
-
-async function checkAuthStatus(): Promise<boolean> {
-  try {
-    const status = await healthApi.authStatus();
-    if (status.needs_setup) {
-      router.push({ name: 'welcome' });
-      return false;
-    } else if (status.auth_required && !status.authenticated) {
-      showApiKeyBanner.value = true;
-      return false;
-    }
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-function beginTourIfRequested(): boolean {
-  if (route.query.tour !== 'start' || tour.isActive.value) return false;
-  router.replace({ query: {} });
-  tour.startTour();
-  tour.nextStep(); // welcome -> workspace (welcome page already shown)
-  prefetchTourRoutes(); // OB-42: fire-and-forget route prefetch
-  return true;
-}
-
-function onAuthenticated() {
-  showApiKeyBanner.value = false;
-  loadSidebarData();
-  beginTourIfRequested();
-}
-
-function handleTourRetry() {
-  navigateToTourStep(tour.currentStep.value);
-}
-
-async function runBundleInstall() {
-  try {
-    const res = await setupApi.bundleInstall();
-    if (res.status === 'already_installed') return;
-
-    if (res.marketplace_created) {
-      showToast('Bundle marketplace connected', 'success');
-    }
-    const displayNames: Record<string, string> = { grd: 'GetResearchDone' };
-    for (const name of res.plugins_installed || []) {
-      await new Promise(r => setTimeout(r, 500));
-      showToast(`Installed ${displayNames[name] || name} plugin`, 'success');
-    }
-    loadPlugins();
-  } catch {
-    // Bundle install failed — will retry on next launch
-  }
-}
-
-// Watch for ?tour=start query param (set by WelcomePage after key generation)
-watch(() => route.query.tour, (tourQuery) => {
-  if (tourQuery === 'start') {
-    loadSidebarData();
-    beginTourIfRequested();
-  }
-});
-
-onMounted(async () => {
-  startPolling(10000);
-  // Wave 35: rehydrate session from localStorage before the auth-status
-  // check so the app boots into "logged in" without a flash of /login.
-  await useAuth().restore();
-  const isReady = await checkAuthStatus();
-  appReady.value = true;
-  if (isReady) {
-    loadSidebarData();
-    beginTourIfRequested();
-    runBundleInstall();
-  }
-});
-
-onUnmounted(() => {
-  stopPolling();
+// Boot flow — auth check, ?tour=start watcher, onMounted/onUnmounted
+const { showApiKeyBanner, appReady, onAuthenticated, handleTourRetry } = useAppBoot({
+  tour,
+  loadSidebarData,
+  loadPlugins,
+  startPolling,
+  stopPolling,
+  showToast,
+  navigateToTourStep,
 });
 </script>
 
@@ -303,106 +210,43 @@ onUnmounted(() => {
   <div v-if="appReady" :class="['app-layout', { 'sidebar-collapsed': isCollapsed && !isMobile, 'sidebar-mobile': isMobile }]">
     <a href="#main-content" class="skip-to-content">Skip to content</a>
 
-    <template v-if="!isWelcomePage">
-      <AppHeader @toggle-sidebar="toggleMobile" />
-
-      <ApiKeyBanner
-        v-if="showApiKeyBanner"
-        @authenticated="onAuthenticated"
-      />
-    </template>
-
     <div v-if="isWelcomePage" class="welcome-fullscreen">
       <ErrorBoundary>
         <router-view />
       </ErrorBoundary>
     </div>
 
-    <div v-else class="app-body">
-      <!-- Mobile backdrop overlay -->
-      <div v-if="isMobile && isMobileOpen" class="sidebar-backdrop" @click="closeMobile"></div>
+    <AppShell
+      v-else
+      :is-collapsed="isCollapsed"
+      :is-mobile="isMobile"
+      :is-mobile-open="isMobileOpen"
+      :app-version="appVersion"
+      :health-color="healthColor"
+      :health-tooltip="healthTooltip"
+      :active-execution-count="activeExecutionCount"
+      :custom-triggers="customTriggers"
+      :products="products"
+      :projects="projects"
+      :teams="teams"
+      :plugins="plugins"
+      :sidebar-backends="sidebarBackends"
+      :sidebar-loading="sidebarLoading"
+      :sidebar-errors="sidebarErrors"
+      :show-api-key-banner="showApiKeyBanner"
+      :is-full-bleed="isFullBleed"
+      @toggle-sidebar="toggleMobile"
+      @toggle-collapse="toggleCollapse"
+      @close-mobile="closeMobile"
+      @authenticated="onAuthenticated"
+      @retry-sidebar-section="retrySidebarSection"
+    >
+      <ErrorBoundary>
+        <router-view />
+      </ErrorBoundary>
+    </AppShell>
 
-      <!-- Desktop collapse toggle -->
-      <button
-        v-if="!isMobile"
-        class="collapse-toggle"
-        :aria-label="isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'"
-        :aria-expanded="!isCollapsed"
-        aria-controls="app-sidebar-nav"
-        @click="toggleCollapse"
-      >
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <polyline v-if="isCollapsed" points="9,18 15,12 9,6"/>
-          <polyline v-else points="15,18 9,12 15,6"/>
-        </svg>
-      </button>
-
-      <AppSidebar
-        :app-version="appVersion"
-        :health-color="healthColor"
-        :health-tooltip="healthTooltip"
-        :active-execution-count="activeExecutionCount"
-        :custom-triggers="customTriggers"
-        :products="products"
-        :projects="projects"
-        :teams="teams"
-        :plugins="plugins"
-        :sidebar-backends="sidebarBackends"
-        :collapsed="isCollapsed"
-        :is-mobile="isMobile"
-        :mobile-open="isMobileOpen"
-        :sidebar-loading="sidebarLoading"
-        :sidebar-errors="sidebarErrors"
-        @close-mobile="closeMobile"
-        @retry-sidebar-section="retrySidebarSection"
-      />
-
-      <main id="main-content" class="main-content" tabindex="-1">
-        <div class="content-wrapper" :class="{ 'full-bleed': isFullBleed }">
-          <ErrorBoundary>
-            <router-view />
-          </ErrorBoundary>
-        </div>
-      </main>
-    </div>
-
-    <!-- Toast Notifications -->
-    <Teleport to="body">
-      <div class="toast-container" role="status" aria-live="polite">
-        <TransitionGroup name="toast">
-          <div
-            v-for="toast in toasts"
-            :key="toast.id"
-            :class="['toast', toast.type]"
-          >
-            <div class="toast-icon">
-              <svg v-if="toast.type === 'success'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M20 6L9 17l-5-5"/>
-              </svg>
-              <svg v-else-if="toast.type === 'error'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <circle cx="12" cy="12" r="10"/>
-                <path d="M15 9l-6 6M9 9l6 6"/>
-              </svg>
-              <svg v-else-if="toast.type === 'infrastructure'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
-                <line x1="12" y1="9" x2="12" y2="13"/>
-                <line x1="12" y1="17" x2="12.01" y2="17"/>
-              </svg>
-              <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <circle cx="12" cy="12" r="10"/>
-                <path d="M12 16v-4M12 8h.01"/>
-              </svg>
-            </div>
-            <span class="toast-message">{{ toast.message }}</span>
-            <button class="toast-dismiss" @click="dismissToast(toast.id)" aria-label="Dismiss notification">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M18 6L6 18M6 6l12 12"/>
-              </svg>
-            </button>
-          </div>
-        </TransitionGroup>
-      </div>
-    </Teleport>
+    <AppToastHost :toasts="toasts" @dismiss="dismissToast" />
 
     <TourOverlay
       :active="tourActive"
