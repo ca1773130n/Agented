@@ -157,6 +157,13 @@ function createTestRouter(meta: Record<string, unknown> = {}): Router {
         component: defineComponent({ template: '<div>Home</div>' }),
         meta,
       },
+      {
+        path: '/welcome',
+        name: 'welcome',
+        component: defineComponent({
+          template: '<div data-testid="welcome-page">Welcome</div>',
+        }),
+      },
     ],
   });
 }
@@ -369,5 +376,46 @@ describe('App.vue calls lifecycle hooks', () => {
   it('calls loadSidebarData on mount', async () => {
     await mountApp();
     expect(mockLoadSidebarData).toHaveBeenCalled();
+  });
+});
+
+// v0.7.6 — Codex follow-up: welcome-branch render path coverage.
+// The pre-split App.vue had a single template; the v0.7.5d refactor introduced
+// a v-if=isWelcomePage / v-else=AppShell fork that was not directly tested.
+describe('App.vue welcome-branch render path', () => {
+  it('renders welcome-fullscreen and skips AppShell when route is /welcome', async () => {
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [
+        {
+          path: '/welcome',
+          name: 'welcome',
+          component: defineComponent({
+            template: '<div data-testid="welcome-page">Welcome</div>',
+          }),
+        },
+      ],
+    });
+    router.push('/welcome');
+    await router.isReady();
+
+    const wrapper = mount(App, { global: { plugins: [router] } });
+    await flushPromises();
+
+    // Welcome fullscreen wrapper IS rendered.
+    expect(wrapper.find('.welcome-fullscreen').exists()).toBe(true);
+    // The welcome page itself renders inside the welcome wrapper's <router-view>.
+    expect(wrapper.find('[data-testid="welcome-page"]').exists()).toBe(true);
+    // AppShell branch is suppressed: no sidebar, no header.
+    expect(wrapper.find('[data-testid="app-sidebar"]').exists()).toBe(false);
+    expect(wrapper.find('[data-testid="app-header"]').exists()).toBe(false);
+    // The shell-only collapse-toggle button must not appear either.
+    expect(wrapper.find('.collapse-toggle').exists()).toBe(false);
+  });
+
+  it('renders AppShell (not welcome-fullscreen) on a non-welcome route', async () => {
+    const wrapper = await mountApp();
+    expect(wrapper.find('.welcome-fullscreen').exists()).toBe(false);
+    expect(wrapper.find('[data-testid="app-sidebar"]').exists()).toBe(true);
   });
 });
