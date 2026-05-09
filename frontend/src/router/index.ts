@@ -13,6 +13,21 @@ import { triggerRoutes } from './routes/triggers';
 import { settingsRoutes } from './routes/settings';
 import { miscRoutes } from './routes/misc';
 import { observabilityRoutes } from './routes/observability';
+import { authRoutes } from './routes/auth';
+import { aiBackendRoutes } from './routes/aiBackends';
+import { botRoutes } from './routes/bots';
+import { executionRoutes } from './routes/executions';
+import { promptRoutes } from './routes/prompts';
+import { githubRoutes } from './routes/github';
+import { codeBlockRoutes } from './routes/codeBlocks';
+import { notificationRoutes } from './routes/notifications';
+import { triggersExtRoutes } from './routes/triggersExt';
+import { findingsRoutes } from './routes/findings';
+import { reportsRoutes } from './routes/reports';
+import { onboardingRoutes } from './routes/onboarding';
+import { infraRoutes } from './routes/infra';
+import { agentsExtRoutes } from './routes/agentsExt';
+import { observabilityExtRoutes } from './routes/observabilityExt';
 import { registerGuards } from './guards';
 
 // Extend RouteMeta with Agented-specific fields
@@ -42,6 +57,21 @@ export const router = createRouter({
     ...superAgentRoutes,
     ...triggerRoutes,
     ...settingsRoutes,
+    ...authRoutes,
+    ...aiBackendRoutes,
+    ...botRoutes,
+    ...executionRoutes,
+    ...promptRoutes,
+    ...githubRoutes,
+    ...codeBlockRoutes,
+    ...notificationRoutes,
+    ...triggersExtRoutes,
+    ...findingsRoutes,
+    ...reportsRoutes,
+    ...onboardingRoutes,
+    ...infraRoutes,
+    ...agentsExtRoutes,
+    ...observabilityExtRoutes,
     ...miscRoutes,
     ...observabilityRoutes,
     // Catch-all 404 route (must be last)
