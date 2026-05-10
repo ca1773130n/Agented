@@ -29,10 +29,28 @@ export const sketchApi = {
     apiFetch<{ message: string; classification: Record<string, unknown> }>(`/admin/sketches/${id}/classify`, {
       method: 'POST',
     }),
-  route: (id: string) =>
-    apiFetch<{ message: string; routing: Record<string, unknown>; session_id?: string; super_agent_id?: string }>(`/admin/sketches/${id}/route`, {
-      method: 'POST',
-    }),
+  /**
+   * Route a classified sketch and start execution.
+   *
+   * `useCliAgent` overrides the global YOLO setting for this run only:
+   * `true` forces the autonomous CLI runner (claude/codex/gemini with
+   * tool privileges); `false` forces the legacy CLIProxy pure-token
+   * path; `undefined` defers to the global `agent_yolo_mode` setting.
+   * The AiChatPanel toggle plumbs this through.
+   */
+  route: (id: string, opts?: { useCliAgent?: boolean }) => {
+    const body =
+      opts && typeof opts.useCliAgent === 'boolean'
+        ? JSON.stringify({ use_cli_agent: opts.useCliAgent })
+        : undefined;
+    return apiFetch<{ message: string; routing: Record<string, unknown>; session_id?: string; super_agent_id?: string }>(
+      `/admin/sketches/${id}/route`,
+      {
+        method: 'POST',
+        ...(body ? { body, headers: { 'Content-Type': 'application/json' } } : {}),
+      },
+    );
+  },
   getDelegations: (id: string) =>
     apiFetch<{ delegations: Delegation[] }>(`/admin/sketches/${id}/delegations`),
 };

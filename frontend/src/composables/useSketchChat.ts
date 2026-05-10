@@ -98,7 +98,7 @@ export function useSketchChat() {
     }, 3000);
   }
 
-  async function submitSketch(text: string) {
+  async function submitSketch(text: string, opts?: { useCliAgent?: boolean }) {
     isProcessing.value = true;
     error.value = null;
 
@@ -151,7 +151,7 @@ export function useSketchChat() {
         content: 'Routing...',
         timestamp: new Date().toISOString(),
       });
-      await routeSketch(sketchId);
+      await routeSketch(sketchId, opts);
     } catch (e: unknown) {
       if (isAbortError(e) || abortController.signal.aborted) return;
       const errMsg = e instanceof Error ? e.message : 'Failed to create or classify sketch';
@@ -168,12 +168,12 @@ export function useSketchChat() {
     }
   }
 
-  async function routeSketch(sketchId: string) {
+  async function routeSketch(sketchId: string, opts?: { useCliAgent?: boolean }) {
     try {
       isProcessing.value = true;
       error.value = null;
 
-      const routeResult = await sketchApi.route(sketchId);
+      const routeResult = await sketchApi.route(sketchId, opts);
 
       // Fetch updated sketch
       const updatedSketch = await sketchApi.get(sketchId);
