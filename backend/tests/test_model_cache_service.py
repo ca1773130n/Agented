@@ -177,6 +177,17 @@ def test_empty_discovery_uses_short_ttl(isolated_db, mock_discover):
     assert delta < timedelta(days=1)
 
 
+def test_refresh_returns_models_alongside_metadata(isolated_db, mock_discover):
+    """refresh() should include the filtered model list in its response dict."""
+    mock_discover.return_value = ["gpt-5", "gpt-5.1"]
+    result = model_cache_service.refresh("codex", "api_key")
+    assert "models" in result
+    assert result["models"] == ["gpt-5", "gpt-5.1"]
+    assert result["backend_kind"] == "codex"
+    assert result["auth_method"] == "api_key"
+    assert result["fresh"] is True
+
+
 def test_successful_discovery_uses_full_ttl(isolated_db, mock_discover):
     """Successful discovery keeps the configured 7-day TTL."""
     mock_discover.return_value = ["gpt-5"]

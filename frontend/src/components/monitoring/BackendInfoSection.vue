@@ -117,22 +117,19 @@ async function onRefreshClick() {
   refreshing.value = true;
   refreshError.value = null;
   try {
+    // v0.7.8 follow-up: refresh endpoint now returns models alongside metadata,
+    // so the UI can re-render the model list immediately without a second call.
     const resp = await modelCacheApi.refresh(
       props.backendKind,
       props.authMethod ?? 'unknown',
     );
-    // Refresh endpoint returns meta only; pull the fresh model list.
-    const listResp = await modelCacheApi.list(
-      props.backendKind,
-      props.authMethod ?? 'unknown',
-    );
-    localModels.value = listResp.models;
-    discoveredAt.value = resp.discovered_at ?? listResp.discovered_at;
+    localModels.value = resp.models;
+    discoveredAt.value = resp.discovered_at;
     if (resp.error_message) {
       refreshError.value = resp.error_message;
     }
     emit('models-refreshed', {
-      models: listResp.models,
+      models: resp.models,
       discoveredAt: discoveredAt.value ?? '',
     });
   } catch (e) {

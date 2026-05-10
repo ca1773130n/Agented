@@ -46,8 +46,8 @@ def get_models(
 
 
 def refresh(backend_kind: str, auth_method: str = "unknown") -> dict[str, Any]:
-    _models, meta = _discover_and_store(backend_kind, auth_method)
-    return meta
+    models, meta = _discover_and_store(backend_kind, auth_method)
+    return {**meta, "models": models}
 
 
 # Note (v0.7.8): the auth-method-change invalidation hook is deferred —
