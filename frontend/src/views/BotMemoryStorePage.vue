@@ -246,7 +246,7 @@ onMounted(loadBotList);
     </div>
 
     <!-- Add/Edit Modal -->
-    <div v-if="showAddModal" class="modal-overlay" @click.self="showAddModal = false">
+    <div v-if="showAddModal" class="modal-overlay" tabindex="-1" @click.self="showAddModal = false" @keydown.escape="showAddModal = false">
       <div class="modal">
         <div class="modal-header">
           <h3>{{ editingEntry ? 'Edit Memory Key' : 'Add Memory Key' }}</h3>
