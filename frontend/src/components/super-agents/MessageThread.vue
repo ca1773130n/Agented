@@ -2,6 +2,7 @@
 import { ref, computed, onMounted } from 'vue';
 import type { AgentMessage } from '../../services/api';
 import { agentMessageApi } from '../../services/api';
+import { safeFormatDateTime } from '../../utils/datetime';
 
 const props = defineProps<{
   superAgentId: string;
@@ -32,8 +33,7 @@ function isOwnMessage(msg: AgentMessage): boolean {
 }
 
 function formatTimestamp(ts?: string): string {
-  if (!ts) return '';
-  return new Date(ts).toLocaleString();
+  return safeFormatDateTime(ts);
 }
 
 async function loadMessages() {

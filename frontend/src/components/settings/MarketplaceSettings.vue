@@ -4,6 +4,7 @@ import type { Marketplace, MarketplacePlugin, Plugin } from '../../services/api'
 import { marketplaceApi, pluginApi, pluginExportApi, ApiError } from '../../services/api';
 import ConfirmModal from '../base/ConfirmModal.vue';
 import { useToast } from '../../composables/useToast';
+import { safeFormatDate } from '../../utils/datetime';
 
 defineProps<{
   marketplaces: Marketplace[];
@@ -389,7 +390,7 @@ loadAvailablePlugins();
                 <div class="item-name">{{ plugin.remote_name }}</div>
                 <div class="item-meta">
                   <span v-if="plugin.version">v{{ plugin.version }}</span>
-                  <span v-if="plugin.installed_at">Installed {{ new Date(plugin.installed_at).toLocaleDateString() }}</span>
+                  <span v-if="plugin.installed_at">Installed {{ safeFormatDate(plugin.installed_at) }}</span>
                 </div>
               </div>
               <button class="btn-icon btn-danger" @click="uninstallPlugin(plugin)" title="Uninstall">

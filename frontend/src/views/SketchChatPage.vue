@@ -13,6 +13,7 @@ import type { ConversationMessage } from '../services/api';
 import { useToast } from '../composables/useToast';
 import { handleApiError } from '../services/api/error-handler';
 import { useWebMcpTool } from '../composables/useWebMcpTool';
+import { safeFormatDate } from '../utils/datetime';
 
 const router = useRouter();
 
@@ -144,12 +145,7 @@ function handleClear() {
 }
 
 function formatDate(dateStr?: string): string {
-  if (!dateStr) return '';
-  try {
-    return new Date(dateStr).toLocaleDateString();
-  } catch {
-    return '';
-  }
+  return safeFormatDate(dateStr);
 }
 
 function getStatusClass(status: string): string {

@@ -2,6 +2,7 @@
 import { ref, onMounted, computed, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import type { AuditRecord, ProjectInfo } from '../services/api';
+import { safeFormatDate } from '../utils/datetime';
 import { auditApi, ApiError } from '../services/api';
 import PageHeader from '../components/base/PageHeader.vue';
 import LoadingState from '../components/base/LoadingState.vue';
@@ -110,8 +111,7 @@ watch(() => props.initialProjectFilter, (newVal) => {
 });
 
 function formatDate(dateStr: string): string {
-  if (!dateStr) return '-';
-  return new Date(dateStr).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+  return safeFormatDate(dateStr, '-', { year: 'numeric', month: 'short', day: 'numeric' });
 }
 
 function getStatusVariant(status: string): 'success' | 'danger' | 'neutral' {
