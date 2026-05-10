@@ -550,6 +550,12 @@ def send_chat_message(super_agent_id: str, session_id: str, data: dict) -> dict[
     if not success:
         raise ClientException(detail=error)
 
+    # Register the session in ChatStateService BEFORE pushing the user
+    # message delta. `push_delta` silently no-ops on unregistered sessions,
+    # so without this call the user's typed message would never reach
+    # any reconnecting subscriber. `init_session` is idempotent.
+    ChatStateService.init_session(session_id)
+
     message_id = generate_message_id()
     ChatStateService.push_delta(
         session_id,

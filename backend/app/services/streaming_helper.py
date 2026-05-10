@@ -56,6 +56,19 @@ def run_streaming_response(
     _session_id = session_id
     _super_agent_id = super_agent_id
 
+    # Register the session in ChatStateService synchronously, BEFORE the
+    # streaming thread is spawned. The frontend opens its SSE immediately
+    # after the POST that triggered us returns; if the session isn't
+    # already registered, `ChatStateService.subscribe()` yields a
+    # "Session not found" error event and closes the stream. The user
+    # sees that as a "Connection lost" toast on the panel.
+    #
+    # `init_session` is idempotent — when the caller (project chat,
+    # super-agent session create) already registered the session it's a
+    # no-op. Doing this here covers every caller of `run_streaming_response`
+    # in one place: sketches, playground chat, autofix, agent chats.
+    ChatStateService.init_session(_session_id)
+
     def _stream_response():
         try:
             from .cli_agent_runner_service import (
