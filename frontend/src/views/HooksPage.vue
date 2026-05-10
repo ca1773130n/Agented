@@ -282,11 +282,14 @@ function openCreateModal() {
   showCreateModal.value = true;
 }
 
+const isCreating = ref(false);
 async function createHook() {
+  if (isCreating.value) return;
   if (!formData.value.name.trim()) {
     showToast('Hook name is required', 'error');
     return;
   }
+  isCreating.value = true;
   try {
     await hookApi.create({
       name: formData.value.name,
@@ -305,6 +308,8 @@ async function createHook() {
     } else {
       showToast('Failed to create hook', 'error');
     }
+  } finally {
+    isCreating.value = false;
   }
 }
 
@@ -587,7 +592,9 @@ onMounted(() => {
             </div>
             <div class="modal-actions">
               <button type="button" class="btn" @click="showCreateModal = false">Cancel</button>
-              <button type="submit" class="btn btn-primary">Create Hook</button>
+              <button type="submit" class="btn btn-primary" :disabled="isCreating">
+                {{ isCreating ? 'Creating…' : 'Create Hook' }}
+              </button>
             </div>
           </form>
         </div>

@@ -292,11 +292,14 @@ function openCreateModal() {
   showCreateModal.value = true;
 }
 
+const isCreating = ref(false);
 async function createRule() {
+  if (isCreating.value) return;
   if (!formData.value.name.trim()) {
     showToast('Rule name is required', 'error');
     return;
   }
+  isCreating.value = true;
   try {
     await ruleApi.create({
       name: formData.value.name,
@@ -316,6 +319,8 @@ async function createRule() {
     } else {
       showToast('Failed to create rule', 'error');
     }
+  } finally {
+    isCreating.value = false;
   }
 }
 
@@ -608,7 +613,9 @@ onMounted(() => {
             </div>
             <div class="modal-actions">
               <button type="button" class="btn" @click="showCreateModal = false">Cancel</button>
-              <button type="submit" class="btn btn-primary">Create Rule</button>
+              <button type="submit" class="btn btn-primary" :disabled="isCreating">
+                {{ isCreating ? 'Creating…' : 'Create Rule' }}
+              </button>
             </div>
           </form>
         </div>

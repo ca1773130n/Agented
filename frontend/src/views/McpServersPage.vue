@@ -112,11 +112,14 @@ watch([searchQuery, sortField, sortOrder], () => {
   pagination.resetToFirstPage();
 });
 
+const isCreating = ref(false);
 async function createServer() {
+  if (isCreating.value) return;
   if (!newServer.value.name.trim()) {
     showToast('Server name is required', 'error');
     return;
   }
+  isCreating.value = true;
   try {
     await mcpServerApi.create({
       name: newServer.value.name,
@@ -136,6 +139,8 @@ async function createServer() {
     } else {
       showToast('Failed to create MCP server', 'error');
     }
+  } finally {
+    isCreating.value = false;
   }
 }
 
@@ -332,7 +337,9 @@ onMounted(() => {
           </div>
           <div class="modal-footer">
             <button class="btn" @click="showCreateModal = false">Cancel</button>
-            <button class="btn btn-primary" @click="createServer">Create Server</button>
+            <button class="btn btn-primary" :disabled="isCreating" @click="createServer">
+              {{ isCreating ? 'Creating…' : 'Create Server' }}
+            </button>
           </div>
         </div>
       </div>
