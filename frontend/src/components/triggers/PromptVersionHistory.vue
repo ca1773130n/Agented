@@ -363,7 +363,7 @@ onMounted(loadHistory);
 
 .confirm-btn {
   padding: 6px 14px;
-  background: var(--accent-amber);
+  background: var(--accent-cyan);
   color: var(--bg-primary);
   border: none;
   border-radius: 6px;
