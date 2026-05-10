@@ -2,6 +2,7 @@
 import { ref, onMounted, watch, onUnmounted } from 'vue';
 import { Chart, registerables } from 'chart.js';
 import type { PrHistoryPoint } from '../../services/api';
+import { safeFormatDate } from '../../utils/datetime';
 
 Chart.register(...registerables);
 
@@ -13,8 +14,7 @@ const canvasRef = ref<HTMLCanvasElement | null>(null);
 let chartInstance: Chart | null = null;
 
 function formatDateShort(dateStr: string): string {
-  if (!dateStr) return '-';
-  return new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  return safeFormatDate(dateStr, '-', { month: 'short', day: 'numeric' }, 'en-US');
 }
 
 function renderChart() {

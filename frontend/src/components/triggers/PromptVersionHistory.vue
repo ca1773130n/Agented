@@ -2,6 +2,7 @@
 import { ref, onMounted } from 'vue';
 import type { PromptHistoryEntry } from '../../services/api';
 import { triggerApi, ApiError } from '../../services/api';
+import { safeFormatDate } from '../../utils/datetime';
 import { useToast } from '../../composables/useToast';
 
 const props = defineProps<{
@@ -58,8 +59,7 @@ async function confirmRollback(versionId: number) {
 }
 
 function formatDate(dateStr: string): string {
-  if (!dateStr) return '-';
-  return new Date(dateStr).toLocaleDateString('en-US', {
+  return safeFormatDate(dateStr, '-', {
     year: 'numeric',
     month: 'short',
     day: 'numeric',

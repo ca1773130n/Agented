@@ -2,6 +2,7 @@
 import { ref, onMounted, onUnmounted, watch } from 'vue';
 import { Chart, registerables, type ChartDataset, type TooltipItem } from 'chart.js';
 import type { UsageSummaryEntry } from '../../services/api';
+import { safeFormatDate } from '../../utils/datetime';
 
 Chart.register(...registerables);
 
@@ -19,7 +20,7 @@ let chartInstance: Chart | null = null;
 
 function formatDateShort(dateStr: string): string {
   if (!dateStr) return '-';
-  return new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  return safeFormatDate(dateStr, '', { month: 'short', day: 'numeric' }, 'en-US');
 }
 
 function formatCurrency(value: number): string {

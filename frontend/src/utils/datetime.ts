@@ -31,9 +31,11 @@ function parseSafe(input: string | number | Date | null | undefined): Date | nul
 export function safeFormatDateTime(
   input: string | number | Date | null | undefined,
   fallback = '',
+  options?: Intl.DateTimeFormatOptions,
 ): string {
   const d = parseSafe(input);
-  return d ? d.toLocaleString() : fallback;
+  if (!d) return fallback;
+  return options ? d.toLocaleString(undefined, options) : d.toLocaleString();
 }
 
 /**
@@ -46,10 +48,12 @@ export function safeFormatDate(
   input: string | number | Date | null | undefined,
   fallback = '',
   options?: Intl.DateTimeFormatOptions,
+  locale?: string | string[],
 ): string {
   const d = parseSafe(input);
   if (!d) return fallback;
-  return options ? d.toLocaleDateString(undefined, options) : d.toLocaleDateString();
+  if (options || locale) return d.toLocaleDateString(locale, options);
+  return d.toLocaleDateString();
 }
 
 /**
@@ -61,9 +65,11 @@ export function safeFormatDate(
 export function safeFormatTime(
   input: string | number | Date | null | undefined,
   fallback = '',
+  options?: Intl.DateTimeFormatOptions,
 ): string {
   const d = parseSafe(input);
-  return d ? d.toLocaleTimeString() : fallback;
+  if (!d) return fallback;
+  return options ? d.toLocaleTimeString(undefined, options) : d.toLocaleTimeString();
 }
 
 /**

@@ -147,7 +147,14 @@ function typeLabel(t: ContextRule['type']): string {
           <div class="card rules-card">
             <div class="rules-header">
               <span>Context Rules</span>
-              <button class="btn-add" @click="showToast('Add rule coming soon', 'info')">+ Add Rule</button>
+              <!--
+                The "Add Rule" UI hasn't shipped yet. Hide the button
+                instead of showing a "coming soon" toast — the toast
+                made the button look interactive even though clicking
+                it never made progress, which is worse than no button.
+                Existing rules still render below; users can manage
+                them via the seeded set.
+              -->
             </div>
             <div class="rules-list">
               <div v-for="rule in rules" :key="rule.id" class="rule-row">

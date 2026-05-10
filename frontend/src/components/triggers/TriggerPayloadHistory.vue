@@ -10,6 +10,7 @@
 import { ref, onMounted, watch } from 'vue';
 import { triggerEventApi, ApiError } from '../../services/api';
 import type { TriggerEvent } from '../../services/api';
+import { safeFormatDateTime } from '../../utils/datetime';
 import { useToast } from '../../composables/useToast';
 
 const props = defineProps<{
@@ -70,8 +71,7 @@ async function confirmReplay(eventId: number) {
 }
 
 function formatDate(dateStr: string): string {
-  if (!dateStr) return '-';
-  return new Date(dateStr).toLocaleString('en-US', {
+  return safeFormatDateTime(dateStr, '-', {
     year: 'numeric',
     month: 'short',
     day: 'numeric',
