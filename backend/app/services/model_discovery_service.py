@@ -77,6 +77,79 @@ class ModelDiscoveryService:
             return models or []
         return []
 
+    @classmethod
+    def _discover_via_sidecar(
+        cls,
+        backend_kind: str,
+        auth_method: str = "unknown",
+        *,
+        timeout: float = 10.0,
+    ) -> Optional[list[str]]:
+        """Authoritative source: ask the ai-accounts sidecar to call each
+        backend's ``list_models()`` against the real provider API.
+
+        Returns model IDs or ``None`` on any failure so the caller can
+        continue the discovery chain without poisoning the cache.
+        """
+        import httpx
+
+        # Find a representative account for (kind, auth_method).
+        try:
+            from ..db.backends import get_backend_accounts
+        except ImportError:
+            logger.debug("get_backend_accounts not available; skipping sidecar discovery")
+            return None
+
+        accounts = get_backend_accounts(f"backend-{backend_kind}") or []
+        candidate = None
+        if auth_method != "unknown":
+            candidate = next(
+                (a for a in accounts if (a.get("auth_method") or "unknown") == auth_method),
+                None,
+            )
+        if candidate is None and accounts:
+            candidate = accounts[0]
+        if candidate is None:
+            return None
+
+        account_id = candidate.get("id") or candidate.get("account_id")
+        if not account_id:
+            return None
+
+        base_url = os.environ.get(
+            "AGENTED_SIDECAR_URL",
+            os.environ.get("AI_ACCOUNTS_SIDECAR_URL", "http://127.0.0.1:20001"),
+        )
+        api_key = os.environ.get("AI_ACCOUNTS_API_KEY") or os.environ.get("AGENTED_API_KEY", "")
+        headers = {"X-API-Key": api_key} if api_key else {}
+
+        url = f"{base_url}/api/v1/backends/{account_id}/models/"
+        try:
+            with httpx.Client(timeout=timeout) as client:
+                resp = client.get(url, headers=headers)
+            if resp.status_code != 200:
+                logger.warning(
+                    "Sidecar /models returned %d for %s/%s",
+                    resp.status_code,
+                    backend_kind,
+                    auth_method,
+                )
+                return None
+            body = resp.json()
+            items = body.get("items") if isinstance(body, dict) else body
+            if not isinstance(items, list):
+                return None
+            models = [str(m["id"]) for m in items if isinstance(m, dict) and m.get("id")]
+            return models or None
+        except (httpx.HTTPError, OSError, ValueError, KeyError) as exc:
+            logger.warning(
+                "Sidecar discovery failed for %s/%s: %s",
+                backend_kind,
+                auth_method,
+                exc,
+            )
+            return None
+
     # Providers whose models are accessible through other backends (Claude, Codex, Gemini).
     # When selecting a default model for the "opencode" backend, skip these so the
     # default is an OpenCode-native model, not a duplicate of another backend.
