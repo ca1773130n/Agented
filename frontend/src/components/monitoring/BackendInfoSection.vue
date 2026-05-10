@@ -31,6 +31,14 @@
         <div v-if="discoveredAtLabel" class="discovered-at" data-testid="discovered-at">
           {{ discoveredAtLabel }}
         </div>
+        <div
+          v-if="discoveryMethodLabel"
+          class="discovery-method"
+          :class="{ 'discovery-method-warn': discoveryMethodWarn }"
+          data-testid="discovery-method"
+        >
+          {{ discoveryMethodLabel }}
+        </div>
         <div v-if="refreshError" class="refresh-error" role="alert" data-testid="refresh-error">
           {{ refreshError }}
         </div>
@@ -82,6 +90,9 @@ const { t } = useI18n();
 // without requiring the parent to re-fetch.
 const localModels = ref<string[]>([...props.models]);
 const discoveredAt = ref<string | null>(null);
+// v0.7.9: surface the discovery_method (sidecar / local / pty / etc) so
+// operators can see whether models are authoritative or a fallback.
+const discoveryMethod = ref<string | null>(null);
 const refreshing = ref(false);
 const refreshError = ref<string | null>(null);
 
@@ -128,6 +139,35 @@ const discoveredAtLabel = computed(() => {
   return t('backendDetail.discoveredDaysAgo', { count: days }, `discovered ${days}d ago`);
 });
 
+// Map raw discovery_method values to a friendly label. Anything that's
+// not the authoritative sidecar path is rendered with a warning tone so
+// operators notice the fallback at a glance.
+const discoveryMethodLabel = computed(() => {
+  const m = discoveryMethod.value;
+  if (!m) return '';
+  switch (m) {
+    case 'sidecar':
+      return t('backendDetail.discoveryViaSidecar', 'via sidecar (authoritative)');
+    case 'local':
+      return t('backendDetail.discoveryViaLocal', 'via local cache');
+    case 'pty':
+      return t('backendDetail.discoveryViaPty', 'via PTY probe');
+    case 'cliproxy':
+      return t('backendDetail.discoveryViaCliproxy', 'via CLIProxyAPI');
+    case 'opencode':
+      return t('backendDetail.discoveryViaOpencode', 'via opencode CLI');
+    case 'empty':
+      return t('backendDetail.discoveryEmpty', 'no source returned models');
+    default:
+      return t('backendDetail.discoveryViaOther', { method: m }, `via ${m}`);
+  }
+});
+
+const discoveryMethodWarn = computed(() => {
+  const m = discoveryMethod.value;
+  return m !== null && m !== 'sidecar';
+});
+
 async function onRefreshClick() {
   if (!props.backendKind || refreshing.value) return;
   refreshing.value = true;
@@ -141,6 +181,7 @@ async function onRefreshClick() {
     );
     localModels.value = resp.models;
     discoveredAt.value = resp.discovered_at;
+    discoveryMethod.value = resp.discovery_method ?? null;
     if (resp.error_message) {
       refreshError.value = resp.error_message;
     }
@@ -251,6 +292,16 @@ async function onRefreshClick() {
   margin-top: 0.5rem;
   font-size: 0.6875rem;
   color: var(--text-tertiary);
+}
+
+.discovery-method {
+  margin-top: 0.25rem;
+  font-size: 0.6875rem;
+  color: var(--text-tertiary);
+}
+
+.discovery-method-warn {
+  color: var(--accent-amber, #d97706);
 }
 
 .refresh-error {

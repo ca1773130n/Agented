@@ -164,6 +164,50 @@ describe('BackendInfoSection', () => {
     clearSpy.mockRestore();
   });
 
+  // v0.7.9: discovery_method surfaces in the UI so operators can tell whether
+  // the models came from the authoritative sidecar path or a local fallback.
+  it('renders the "via sidecar" label when discovery_method is "sidecar"', async () => {
+    (modelCacheApi.refresh as ReturnType<typeof vi.fn>).mockResolvedValue({
+      models: ['claude-opus-4-7'],
+      backend_kind: 'claude',
+      auth_method: 'cli_browser',
+      discovery_method: 'sidecar',
+      discovered_at: new Date().toISOString(),
+      expires_at: new Date(Date.now() + 7 * 86400_000).toISOString(),
+      error_message: null,
+      fresh: true,
+    });
+    const wrapper = mountSection({ backendKind: 'claude', authMethod: 'cli_browser' });
+    await wrapper.find('[data-testid="refresh-models-btn"]').trigger('click');
+    await flushPromises();
+    const label = wrapper.find('[data-testid="discovery-method"]');
+    expect(label.exists()).toBe(true);
+    expect(label.text().toLowerCase()).toContain('sidecar');
+    // Sidecar is authoritative — should NOT carry the warning class.
+    expect(label.classes()).not.toContain('discovery-method-warn');
+  });
+
+  it('renders the "via local" label and warning when discovery_method is "local"', async () => {
+    (modelCacheApi.refresh as ReturnType<typeof vi.fn>).mockResolvedValue({
+      models: ['claude-opus-4-6'],
+      backend_kind: 'claude',
+      auth_method: 'cli_browser',
+      discovery_method: 'local',
+      discovered_at: new Date().toISOString(),
+      expires_at: new Date(Date.now() + 7 * 86400_000).toISOString(),
+      error_message: null,
+      fresh: true,
+    });
+    const wrapper = mountSection({ backendKind: 'claude', authMethod: 'cli_browser' });
+    await wrapper.find('[data-testid="refresh-models-btn"]').trigger('click');
+    await flushPromises();
+    const label = wrapper.find('[data-testid="discovery-method"]');
+    expect(label.exists()).toBe(true);
+    expect(label.text().toLowerCase()).toContain('local');
+    // Non-sidecar sources carry the warning class so operators notice.
+    expect(label.classes()).toContain('discovery-method-warn');
+  });
+
   it('emits models-refreshed with the new list', async () => {
     const fixedAt = '2026-05-10T00:00:00.000Z';
     (modelCacheApi.refresh as ReturnType<typeof vi.fn>).mockResolvedValue({
