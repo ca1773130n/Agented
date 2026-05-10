@@ -9,6 +9,7 @@ import HistoricalSessionViewer from '../components/monitoring/HistoricalSessionV
 import { useToast } from '../composables/useToast';
 import { handleApiError } from '../services/api/error-handler';
 import DocumentEditor from '../components/super-agents/DocumentEditor.vue';
+import { safeFormatDateTime } from '../utils/datetime';
 import SubagentComposition from '../components/super-agents/SubagentComposition.vue';
 import MessageInbox from '../components/super-agents/MessageInbox.vue';
 import MessageThread from '../components/super-agents/MessageThread.vue';
@@ -67,6 +68,25 @@ async function loadSessions() {
   try {
     const result = await superAgentSessionApi.list(superAgentId.value);
     sessions.value = result.sessions;
+    // First-mount continuity: when arriving on the playground without
+    // a session pre-selected from the route, auto-open the most-recent
+    // session in the read-only viewer so the user immediately sees
+    // their last conversation instead of an empty welcome screen. The
+    // user can still close it (handleCloseHistorical) to start a fresh
+    // chat. ``selectActiveSession`` separately drives the
+    // GitActionsToolbar — picking the most recent active worktree.
+    if (sessions.value.length > 0 && !viewingHistoricalSessionId.value) {
+      const sorted = [...sessions.value].sort((a, b) => {
+        const ta = a.started_at ? new Date(a.started_at).getTime() : 0;
+        const tb = b.started_at ? new Date(b.started_at).getTime() : 0;
+        return tb - ta;
+      });
+      const mostRecent = sorted[0];
+      if (mostRecent) {
+        viewingHistoricalSessionId.value = mostRecent.id;
+        selectActiveSession(mostRecent);
+      }
+    }
   } catch (err) {
     console.warn('[SuperAgentPlayground] Failed to load sessions:', err);
   }
@@ -120,8 +140,7 @@ function handleCloseHistorical() {
 }
 
 function formatSessionDate(dateStr?: string): string {
-  if (!dateStr) return '';
-  return new Date(dateStr).toLocaleString();
+  return safeFormatDateTime(dateStr);
 }
 
 async function loadData() {
