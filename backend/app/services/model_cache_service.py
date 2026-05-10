@@ -21,6 +21,9 @@ from app.services.model_discovery_service import ModelDiscoveryService
 logger = logging.getLogger(__name__)
 
 DEFAULT_TTL_DAYS = 7
+# Short TTL for failed/empty discoveries so a transient failure doesn't
+# poison the cache for a full TTL window.
+ERROR_TTL_SECONDS = 3600
 
 
 def _ttl_days() -> int:
@@ -43,8 +46,8 @@ def get_models(
 
 
 def refresh(backend_kind: str, auth_method: str = "unknown") -> dict[str, Any]:
-    _models, meta = _discover_and_store(backend_kind, auth_method)
-    return meta
+    models, meta = _discover_and_store(backend_kind, auth_method)
+    return {**meta, "models": models}
 
 
 # Note (v0.7.8): the auth-method-change invalidation hook is deferred —
@@ -131,7 +134,10 @@ def _discover_and_store(backend_kind: str, auth_method: str) -> tuple[list[str],
             exc_info=True,
         )
     discovered_at = datetime.now(timezone.utc)
-    expires_at = discovered_at + timedelta(days=_ttl_days())
+    if error_message or not raw_models:
+        expires_at = discovered_at + timedelta(seconds=ERROR_TTL_SECONDS)
+    else:
+        expires_at = discovered_at + timedelta(days=_ttl_days())
     with get_connection() as conn:
         conn.execute(
             """INSERT INTO model_discovery_cache
