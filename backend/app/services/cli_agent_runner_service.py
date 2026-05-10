@@ -72,6 +72,7 @@ def _run_subprocess(
     cmd: List[str],
     *,
     cwd: Optional[str],
+    env: Optional[dict] = None,
     line_handler: Callable[[str], Optional[str]],
     backend_label: str,
 ) -> Generator[str, None, None]:
@@ -80,6 +81,10 @@ def _run_subprocess(
     ``line_handler`` receives each raw decoded stdout line and returns
     text to yield (or ``None`` to skip). Backends choose how to parse:
     Claude parses NDJSON events, codex/gemini just yield the line as-is.
+
+    ``env`` overrides selected variables (the per-account ``CLAUDE_CONFIG_DIR``
+    / ``CODEX_HOME`` / ``GEMINI_HOME``). When ``None`` the subprocess
+    inherits the harness's env unchanged.
     """
     logger.info(
         "CLI agent: spawning %s (cwd=%s) cmd=%s", backend_label, cwd, " ".join(cmd)
@@ -91,6 +96,7 @@ def _run_subprocess(
             stderr=subprocess.PIPE,
             bufsize=0,
             cwd=cwd,
+            env=env,
         )
     except FileNotFoundError:
         logger.error("CLI agent: %s CLI not found", backend_label)
@@ -169,6 +175,41 @@ def _passthrough_line_handler(line: str) -> Optional[str]:
     return line + "\n"
 
 
+# Per-backend env var that points the CLI at a non-default config
+# directory. Multi-account ai-accounts setups put each account at a
+# distinct path (e.g. ``~/.claude-personal1``); without these the
+# CLI loads the default location and reports "Not logged in".
+_CONFIG_ENV_VAR = {
+    "claude": "CLAUDE_CONFIG_DIR",
+    "codex": "CODEX_HOME",
+    "gemini": "GEMINI_HOME",
+}
+
+
+def _build_env(backend_norm: str, config_dir: Optional[str]) -> Optional[dict]:
+    """Inherit os.environ + override the per-backend config var.
+
+    Returns ``None`` (Popen inherits env unchanged) when no override is
+    needed — keeps the spawn cheap and avoids surprising downstream
+    tools that read other env vars.
+    """
+    if not config_dir:
+        return None
+    var = _CONFIG_ENV_VAR.get(backend_norm)
+    if not var:
+        return None
+    expanded = os.path.expanduser(config_dir)
+    env = dict(os.environ)
+    env[var] = expanded
+    logger.info(
+        "CLI agent env: %s=%s for %s",
+        var,
+        expanded,
+        backend_norm,
+    )
+    return env
+
+
 def stream_via_cli_agent(
     messages: List[dict],
     *,
@@ -176,6 +217,7 @@ def stream_via_cli_agent(
     cwd: Optional[str],
     yolo: bool,
     model: Optional[str] = None,
+    config_dir: Optional[str] = None,
 ) -> Generator[str, None, None]:
     """Spawn the requested CLI as an autonomous agent and stream its output.
 
@@ -188,12 +230,19 @@ def stream_via_cli_agent(
             and tool use becomes meaningless.
         yolo: when ``True``, pass each backend's "skip approvals" flag.
         model: optional model override forwarded to ``-m``/``--model``.
+        config_dir: per-account config directory (e.g.
+            ``~/.claude-personal1``). When set, exported to the
+            backend's expected env var (CLAUDE_CONFIG_DIR / CODEX_HOME /
+            GEMINI_HOME) so the CLI reads the right credential vault
+            instead of defaulting to ``~/.claude`` / ``~/.codex``.
     """
     backend_norm = (backend or "").lower()
     prompt = _build_prompt(messages)
     if not prompt:
         yield "[Error: empty prompt — nothing to send to the agent]"
         return
+
+    env = _build_env(backend_norm, config_dir)
 
     if backend_norm == "claude":
         cmd = ["claude", "-p", prompt, "--output-format", "stream-json", "--verbose"]
@@ -202,7 +251,7 @@ def stream_via_cli_agent(
         if model:
             cmd.extend(["--model", model])
         yield from _run_subprocess(
-            cmd, cwd=cwd, line_handler=_claude_line_handler, backend_label="Claude"
+            cmd, cwd=cwd, env=env, line_handler=_claude_line_handler, backend_label="Claude"
         )
         return
 
@@ -219,18 +268,18 @@ def stream_via_cli_agent(
         if model:
             cmd.extend(["-m", model])
         yield from _run_subprocess(
-            cmd, cwd=cwd, line_handler=_passthrough_line_handler, backend_label="Codex"
+            cmd, cwd=cwd, env=env, line_handler=_passthrough_line_handler, backend_label="Codex"
         )
         return
 
     if backend_norm == "gemini":
         cmd = ["gemini", "-p", prompt]
         if yolo:
-            cmd.append("-y")
+            cmd.append("--yolo")
         if model:
             cmd.extend(["-m", model])
         yield from _run_subprocess(
-            cmd, cwd=cwd, line_handler=_passthrough_line_handler, backend_label="Gemini"
+            cmd, cwd=cwd, env=env, line_handler=_passthrough_line_handler, backend_label="Gemini"
         )
         return
 
@@ -267,6 +316,81 @@ def set_yolo_mode(enabled: bool) -> None:
 
 
 _CLI_RUNNABLE_BACKENDS = ("claude", "codex", "gemini")
+
+
+_BACKEND_KIND_TO_TYPE = {
+    "claude": "claude",
+    "codex": "codex",
+    "gemini": "gemini",
+}
+
+
+def resolve_account_config_dir(
+    account_id: Optional[str], backend_kind: str
+) -> Optional[str]:
+    """Look up the config directory for a chat account.
+
+    The frontend's account picker passes the sidecar's string id (e.g.
+    ``bkd-8o3x4n9d...``); v0.7.16 mirrors sidecar accounts into the
+    local ``backend_accounts`` table by display_name / config_path so
+    the same row exists locally with an integer ``id`` and the right
+    ``config_path``. We resolve preferentially by exact match heuristics:
+
+    1. If ``account_id`` is a digit string, treat as local PK.
+    2. If it looks like a sidecar id (``bkd-...``) or a display name,
+       fall back to "first row whose ai_backends.type matches kind"
+       preferring ``is_default=1`` — same pick-order the existing
+       monitoring code uses.
+    3. If ``account_id`` is None, pick the default for the backend kind.
+
+    Returns the expanduser'd config path, or ``None`` if no account is
+    available (caller should let the CLI hit its default).
+    """
+    backend_type = _BACKEND_KIND_TO_TYPE.get((backend_kind or "").lower())
+    if not backend_type:
+        return None
+    try:
+        from ..db.connection import get_connection
+    except Exception:
+        return None
+
+    try:
+        with get_connection() as conn:
+            row = None
+            if account_id and str(account_id).isdigit():
+                cur = conn.execute(
+                    """
+                    SELECT ba.config_path FROM backend_accounts ba
+                    JOIN ai_backends ab ON ba.backend_id = ab.id
+                    WHERE ba.id = ? AND ab.type = ?
+                    LIMIT 1
+                    """,
+                    (int(account_id), backend_type),
+                )
+                row = cur.fetchone()
+            if row is None:
+                # Default account for this backend kind.
+                cur = conn.execute(
+                    """
+                    SELECT ba.config_path FROM backend_accounts ba
+                    JOIN ai_backends ab ON ba.backend_id = ab.id
+                    WHERE ab.type = ? AND ba.config_path IS NOT NULL
+                    ORDER BY ba.is_default DESC, ba.id ASC
+                    LIMIT 1
+                    """,
+                    (backend_type,),
+                )
+                row = cur.fetchone()
+    except Exception as exc:
+        logger.debug("Account config-dir lookup failed: %s", exc)
+        return None
+
+    if not row:
+        return None
+    config_path = row["config_path"] if hasattr(row, "keys") else row[0]
+    if not config_path:
+        return None
+    return os.path.expanduser(config_path)
 
 
 def should_route_via_cli_agent(

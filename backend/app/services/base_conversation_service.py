@@ -311,6 +311,7 @@ class BaseConversationService(abc.ABC):
         """
         from .cli_agent_runner_service import (
             is_yolo_mode_enabled,
+            resolve_account_config_dir,
             should_route_via_cli_agent,
             stream_via_cli_agent,
         )
@@ -322,12 +323,15 @@ class BaseConversationService(abc.ABC):
         )
 
         if should_route_via_cli_agent(backend, use_cli_agent):
+            backend_norm = (backend or "").lower()
+            config_dir = resolve_account_config_dir(account_id, backend_norm)
             stream_iter = stream_via_cli_agent(
                 messages,
-                backend=(backend or "").lower(),
+                backend=backend_norm,
                 cwd=None,
                 yolo=is_yolo_mode_enabled(),
                 model=model,
+                config_dir=config_dir,
             )
         else:
             stream_iter = stream_llm_response(

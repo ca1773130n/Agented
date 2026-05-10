@@ -73,6 +73,7 @@ def run_streaming_response(
         try:
             from .cli_agent_runner_service import (
                 is_yolo_mode_enabled,
+                resolve_account_config_dir,
                 should_route_via_cli_agent,
                 stream_via_cli_agent,
             )
@@ -104,10 +105,17 @@ def run_streaming_response(
             # silently drop the SSE — see its docstring for the matrix.
             accumulated = []
             if should_route_via_cli_agent(backend, use_cli_agent):
+                # Resolve the account's config directory so the spawned
+                # CLI sees the right credential vault. Without this the
+                # CLI loads ``~/.claude`` / ``~/.codex`` and reports
+                # "Not logged in" — fatal because the harness has no
+                # TTY to retry the login flow.
+                config_dir = resolve_account_config_dir(account_id, backend)
                 logger.info(
-                    "Streaming via CLI agent runner (backend=%s, cwd=%s)",
+                    "Streaming via CLI agent runner (backend=%s, cwd=%s, config=%s)",
                     backend,
                     cwd,
+                    config_dir,
                 )
                 stream_iter = stream_via_cli_agent(
                     llm_messages,
@@ -115,6 +123,7 @@ def run_streaming_response(
                     cwd=cwd,
                     yolo=is_yolo_mode_enabled(),
                     model=model,
+                    config_dir=config_dir,
                 )
             else:
                 stream_iter = stream_llm_response(

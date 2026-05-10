@@ -131,7 +131,7 @@ def test_codex_non_yolo_uses_workspace_write_sandbox(captured):
     assert "--ask-for-approval" in cmd and "never" in cmd
 
 
-def test_gemini_yolo_passes_y_flag(captured):
+def test_gemini_yolo_passes_yolo_flag(captured):
     captured["proc"] = _FakeProc([b"out\n"])
     list(
         runner.stream_via_cli_agent(
@@ -143,7 +143,8 @@ def test_gemini_yolo_passes_y_flag(captured):
     )
     cmd = captured["cmd"]
     assert cmd[0] == "gemini"
-    assert "-y" in cmd
+    # Gemini CLI uses ``--yolo`` (long form); ``-y`` doesn't exist there.
+    assert "--yolo" in cmd
 
 
 def test_unsupported_backend_yields_error(captured):
@@ -311,6 +312,151 @@ def test_routing_defer_falls_over_to_cli_when_proxy_missing(monkeypatch):
     assert runner.should_route_via_cli_agent("claude", None) is True
     assert runner.should_route_via_cli_agent("codex", None) is True
     assert runner.should_route_via_cli_agent("gemini", None) is True
+
+
+# ---------------------------------------------------------------------------
+# Per-account config-dir env injection. Multi-account ai-accounts setups
+# put each account at a distinct path (~/.claude-personal1, etc.); the
+# CLI must read the right vault or it reports "Not logged in" with no
+# TTY available to recover.
+# ---------------------------------------------------------------------------
+
+
+def test_config_dir_sets_claude_config_dir_env(monkeypatch, captured):
+    captured["proc"] = _FakeProc([])
+    list(
+        runner.stream_via_cli_agent(
+            [{"role": "user", "content": "hi"}],
+            backend="claude",
+            cwd="/tmp",
+            yolo=True,
+            config_dir="~/.claude-personal1",
+        )
+    )
+    env = captured["kwargs"]["env"]
+    assert env is not None
+    assert env["CLAUDE_CONFIG_DIR"].endswith(".claude-personal1")
+    # Other env vars stay inherited so PATH etc. work.
+    assert "PATH" in env
+
+
+def test_config_dir_sets_codex_home_env(captured):
+    captured["proc"] = _FakeProc([])
+    list(
+        runner.stream_via_cli_agent(
+            [{"role": "user", "content": "hi"}],
+            backend="codex",
+            cwd="/tmp",
+            yolo=True,
+            config_dir="/Users/x/.codex-pro",
+        )
+    )
+    env = captured["kwargs"]["env"]
+    assert env["CODEX_HOME"] == "/Users/x/.codex-pro"
+
+
+def test_config_dir_sets_gemini_home_env(captured):
+    captured["proc"] = _FakeProc([])
+    list(
+        runner.stream_via_cli_agent(
+            [{"role": "user", "content": "hi"}],
+            backend="gemini",
+            cwd="/tmp",
+            yolo=True,
+            config_dir="~/.gemini-personal1",
+        )
+    )
+    env = captured["kwargs"]["env"]
+    assert env["GEMINI_HOME"].endswith(".gemini-personal1")
+
+
+def test_no_config_dir_inherits_env_unchanged(captured):
+    captured["proc"] = _FakeProc([])
+    list(
+        runner.stream_via_cli_agent(
+            [{"role": "user", "content": "hi"}],
+            backend="claude",
+            cwd="/tmp",
+            yolo=True,
+            config_dir=None,
+        )
+    )
+    # ``env=None`` lets Popen inherit os.environ unchanged, which is
+    # cheaper than copying the dict and avoids surprising downstream
+    # tools that read other env vars.
+    assert captured["kwargs"]["env"] is None
+
+
+def test_resolve_account_config_dir_picks_default(isolated_db):
+    """No account_id → first row matching backend type, prefer is_default."""
+    from app.db.backends import create_backend_account
+
+    create_backend_account(
+        backend_id="backend-claude",
+        account_name="alt",
+        email=None,
+        config_path="~/.claude-alt",
+        api_key_env=None,
+        is_default=0,
+        plan=None,
+        usage_data=None,
+    )
+    create_backend_account(
+        backend_id="backend-claude",
+        account_name="primary",
+        email=None,
+        config_path="~/.claude-primary",
+        api_key_env=None,
+        is_default=1,
+        plan=None,
+        usage_data=None,
+    )
+
+    result = runner.resolve_account_config_dir(None, "claude")
+    assert result is not None
+    assert result.endswith(".claude-primary")
+
+
+def test_resolve_account_config_dir_uses_local_int_id(isolated_db):
+    """Numeric account_id → exact local PK lookup."""
+    from app.db.backends import create_backend_account
+
+    create_backend_account(
+        backend_id="backend-codex",
+        account_name="primary",
+        email=None,
+        config_path="~/.codex-primary",
+        api_key_env=None,
+        is_default=1,
+        plan=None,
+        usage_data=None,
+    )
+    aid = create_backend_account(
+        backend_id="backend-codex",
+        account_name="alt",
+        email=None,
+        config_path="~/.codex-alt",
+        api_key_env=None,
+        is_default=0,
+        plan=None,
+        usage_data=None,
+    )
+
+    result = runner.resolve_account_config_dir(str(aid), "codex")
+    assert result is not None
+    assert result.endswith(".codex-alt")
+
+
+def test_resolve_account_config_dir_returns_none_when_no_accounts(isolated_db):
+    """No matching accounts → None (caller lets the CLI hit its default)."""
+    assert runner.resolve_account_config_dir(None, "claude") is None
+    assert runner.resolve_account_config_dir("999", "claude") is None
+
+
+def test_resolve_account_config_dir_unknown_backend(isolated_db):
+    assert runner.resolve_account_config_dir(None, "future-llm") is None
+    assert runner.resolve_account_config_dir(None, "") is None
+    assert runner.resolve_account_config_dir(None, None) is None
 
 
 def test_routing_proxy_probe_failure_does_not_crash(monkeypatch):
