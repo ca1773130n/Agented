@@ -155,6 +155,22 @@ def test_rollup_high_error_rate_degraded(isolated_db):
     assert r.status_pill == "errored"
 
 
+def test_recent_activity_with_error_cluster_marks_errored(isolated_db):
+    """Super-agent with recent success but error cluster in last 10 events → errored, not active."""
+    # 9 errors then 1 recent success — most-recent succeeds, but error rate is 90%
+    for i in range(9):
+        svc.record(
+            super_agent_id="sa1",
+            event_type="tool_call",
+            payload="{}",
+            status="error",
+            error_message="boom",
+        )
+    svc.record(super_agent_id="sa1", event_type="tool_call", payload="{}", status="ok")
+    r = svc.rollup("sa1", window_days=7)
+    assert r.status_pill == "errored"
+
+
 def test_rollup_last_event_error_marks_errored(isolated_db):
     svc.record(super_agent_id="sa-1", event_type="t", payload={}, status="ok")
     svc.record(

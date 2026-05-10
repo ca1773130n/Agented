@@ -117,6 +117,29 @@ def run_streaming_response(
                 stack_trace=traceback.format_exc(),
                 context={"session_id": _session_id, "super_agent_id": _super_agent_id},
             )
+            # v0.7.7: emit an activity event so the inspector timeline
+            # surfaces model-streaming failures. Best-effort — must never
+            # break the runtime.
+            try:
+                from app.services import super_agent_activity_service
+
+                super_agent_activity_service.record(
+                    super_agent_id=_super_agent_id,
+                    session_id=_session_id,
+                    event_type="error",
+                    payload={
+                        "source": "streaming_helper",
+                        "backend": backend,
+                        "model": model,
+                    },
+                    status="error",
+                    error_message=error_msg,
+                )
+            except Exception:
+                logger.warning(
+                    "Failed to record super-agent streaming-error activity",
+                    exc_info=True,
+                )
             try:
                 ChatStateService.push_delta(_session_id, "error", {"error": error_msg})
                 ChatStateService.push_status(_session_id, "error")
