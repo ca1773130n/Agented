@@ -283,7 +283,7 @@ export function useSketchChat() {
     }
   }
 
-  function selectSketch(sketch: Sketch) {
+  async function selectSketch(sketch: Sketch) {
     currentSketch.value = sketch;
     messages.value = [];
 
@@ -304,7 +304,7 @@ export function useSketchChat() {
         if (cls.confidence != null) parts.push(`Confidence: ${Math.round((cls.confidence as number) * 100)}%`);
         if (parts.length) {
           messages.value.push({
-            role: 'assistant',
+            role: 'system',
             content: parts.join(' | '),
             timestamp: sketch.updated_at || new Date().toISOString(),
           });
@@ -321,10 +321,46 @@ export function useSketchChat() {
         if (rt.reason) parts.push(`Reason: ${rt.reason}`);
         if (parts.length) {
           messages.value.push({
-            role: 'assistant',
+            role: 'system',
             content: parts.join(' | '),
             timestamp: sketch.updated_at || new Date().toISOString(),
           });
+        }
+
+        // Pull the agent's final response out of the session that
+        // executed this sketch. Without this, viewing a completed
+        // sketch only showed the user's prompt + the routing system
+        // banner — the actual answer was hidden in the SA session log
+        // and the user had to navigate to the playground to read it.
+        // Append every assistant turn as a bubble so the "what did the
+        // agent reply" question is answerable from the sketch list
+        // alone.
+        const sessionId = (rt.session_id as string | undefined) || undefined;
+        const saId = (rt.super_agent_id as string | undefined) || undefined;
+        if (sessionId && saId) {
+          executionSessionId.value = sessionId;
+          executionSuperAgentId.value = saId;
+          try {
+            const session = await superAgentSessionApi.get(saId, sessionId);
+            const log = parseJsonBlock(session.conversation_log) as
+              | Array<{ role?: string; content?: string; timestamp?: string }>
+              | null;
+            if (Array.isArray(log)) {
+              for (const turn of log) {
+                if (turn?.role === 'assistant' && typeof turn.content === 'string' && turn.content.trim()) {
+                  messages.value.push({
+                    role: 'assistant',
+                    content: turn.content,
+                    timestamp: turn.timestamp || sketch.updated_at || new Date().toISOString(),
+                  });
+                }
+              }
+            }
+          } catch {
+            // Session fetch failed — fall back to the system summary
+            // banner above. Don't surface a toast: completed-sketch
+            // browsing should be silent on best-effort lookups.
+          }
         }
       }
     }

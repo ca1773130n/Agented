@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, watch, onMounted } from 'vue';
+import type { RouteLocationRaw } from 'vue-router';
 import type { SuperAgent, TeamMember, Agent } from '../../services/api';
 import { superAgentApi, teamApi, agentApi } from '../../services/api';
 import { useToast } from '../../composables/useToast';
@@ -8,6 +9,32 @@ const props = defineProps<{
   superAgentId: string;
   teamId: string | null;
 }>();
+
+/**
+ * Resolve a team member to a router link target. Super-agent teammates
+ * jump straight to their playground (the most useful destination from
+ * here — that's where you'd start a chat with them). Bare-agent
+ * members route to the agent detail page. The current SA's own card
+ * (if it's listed as a team member) returns null so we don't render
+ * a self-link. Manually-described members without an id return null
+ * too; they stay as plain cards.
+ */
+function memberLinkTarget(member: TeamMember): RouteLocationRaw | null {
+  if (member.super_agent_id && member.super_agent_id !== props.superAgentId) {
+    return {
+      name: 'super-agent-playground',
+      params: { superAgentId: member.super_agent_id },
+    };
+  }
+  if (member.agent_id) {
+    return { name: 'agent-design', params: { agentId: member.agent_id } };
+  }
+  return null;
+}
+
+function childAgentLink(saId: string): RouteLocationRaw {
+  return { name: 'super-agent-playground', params: { superAgentId: saId } };
+}
 
 const showToast = useToast();
 
@@ -119,7 +146,14 @@ onMounted(loadComposition);
       <div v-if="teamMembers.length > 0" class="composition-section">
         <h4 class="subsection-title">Team Members</h4>
         <div class="member-list">
-          <div v-for="member in teamMembers" :key="member.id" class="member-card">
+          <component
+            :is="memberLinkTarget(member) ? 'router-link' : 'div'"
+            v-for="member in teamMembers"
+            :key="member.id"
+            :to="memberLinkTarget(member) ?? undefined"
+            class="member-card"
+            :class="{ 'member-card--linkable': memberLinkTarget(member) }"
+          >
             <div class="member-avatar">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/>
@@ -130,13 +164,17 @@ onMounted(loadComposition);
               <span class="member-name">{{ member.name }}</span>
               <span class="member-role">{{ member.role || 'member' }}</span>
             </div>
-            <button class="remove-member-btn" title="Remove from team" @click="removeMember(member)">
+            <button
+              class="remove-member-btn"
+              title="Remove from team"
+              @click.stop.prevent="removeMember(member)"
+            >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
                 <line x1="18" y1="6" x2="6" y2="18"/>
                 <line x1="6" y1="6" x2="18" y2="18"/>
               </svg>
             </button>
-          </div>
+          </component>
         </div>
       </div>
 
@@ -144,7 +182,14 @@ onMounted(loadComposition);
       <div v-if="childAgents.length > 0" class="composition-section">
         <h4 class="subsection-title">Child SuperAgents</h4>
         <div class="member-list">
-          <div v-for="agent in childAgents" :key="agent.id" class="member-card">
+          <component
+            :is="agent.id !== superAgentId ? 'router-link' : 'div'"
+            v-for="agent in childAgents"
+            :key="agent.id"
+            :to="agent.id !== superAgentId ? childAgentLink(agent.id) : undefined"
+            class="member-card"
+            :class="{ 'member-card--linkable': agent.id !== superAgentId }"
+          >
             <div class="member-avatar agent-avatar">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
                 <circle cx="12" cy="8" r="4"/>
@@ -163,7 +208,7 @@ onMounted(loadComposition);
                 </span>
               </div>
             </div>
-          </div>
+          </component>
         </div>
       </div>
 
@@ -290,11 +335,22 @@ onMounted(loadComposition);
   padding: 10px 12px;
   background: var(--bg-tertiary);
   border-radius: 8px;
-  transition: background 0.15s;
+  transition: background 0.15s, border-color 0.15s;
+  border: 1px solid transparent;
+  text-decoration: none;
+  color: inherit;
 }
 
 .member-card:hover {
   background: var(--bg-elevated, rgba(255, 255, 255, 0.05));
+}
+
+/* Linkable cards (clickable teammates) get a subtle pointer + accent
+   ring on hover so the user can tell which cards jump to a playground
+   vs. which are plain text (manual members, self). */
+.member-card--linkable { cursor: pointer; }
+.member-card--linkable:hover {
+  border-color: var(--accent-cyan, rgba(0, 212, 255, 0.6));
 }
 
 .member-avatar {
