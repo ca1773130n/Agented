@@ -62,10 +62,12 @@ def client(isolated_db):
 
 @pytest.fixture
 def mock_discover():
+    # v0.7.9: cache service now calls _discover_with_source which returns
+    # (models, source) tuples.
     with patch(
-        "app.services.model_cache_service.ModelDiscoveryService._discover_raw"
+        "app.services.model_cache_service.ModelDiscoveryService._discover_with_source"
     ) as m:
-        m.return_value = ["gpt-5", "gpt-5.1"]
+        m.return_value = (["gpt-5", "gpt-5.1"], "sidecar")
         yield m
 
 
