@@ -91,7 +91,10 @@ async function handleSaveDraft() {
     });
 
     showToast(`Trigger "${res.name}" created successfully`, 'success');
-    router.push({ name: 'bots' });
+    // The wizard previously navigated to a non-existent ``bots`` route
+    // and the user landed on the not-found page. The actual list of
+    // bots/triggers lives at the ``triggers`` route.
+    router.push({ name: 'triggers' });
   } catch (err) {
     if (err instanceof ApiError) {
       saveError.value = err.message;

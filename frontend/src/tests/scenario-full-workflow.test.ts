@@ -1039,7 +1039,7 @@ describe('Navigation', () => {
     wrapper.unmount()
   })
 
-  it('NaturalLanguageBotCreator navigates to bots on save', async () => {
+  it('NaturalLanguageBotCreator navigates to triggers on save', async () => {
     vi.useFakeTimers()
 
     const NLCreator = (await import('../views/NaturalLanguageBotCreator.vue')).default
@@ -1070,7 +1070,9 @@ describe('Navigation', () => {
           vi.advanceTimersByTime(1000)
           await flushPromises()
 
-          expect(mockPush).toHaveBeenCalledWith({ name: 'bots' })
+          // After v0.7.27 fix: was navigating to a non-existent
+          // ``bots`` route (404). Real list lives at ``triggers``.
+          expect(mockPush).toHaveBeenCalledWith({ name: 'triggers' })
         }
       }
     }

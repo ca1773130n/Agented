@@ -122,8 +122,10 @@ async function handleClone() {
     const res = await triggerApi.create(createData);
     showToast(`"${cloneConfig.value.name}" created successfully`, 'success');
 
-    // Navigate to the new trigger
-    router.push({ name: 'trigger-detail', params: { id: res.trigger_id } });
+    // Navigate to the new trigger. The actual route is ``trigger-dashboard``
+    // with a ``triggerId`` param; the previous ``trigger-detail`` ref
+    // dropped users onto the not-found page after a successful clone.
+    router.push({ name: 'trigger-dashboard', params: { triggerId: res.trigger_id } });
   } catch (err: unknown) {
     showToast(err instanceof Error ? err.message : 'Clone failed', 'error');
   } finally {
