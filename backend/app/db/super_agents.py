@@ -365,6 +365,26 @@ def get_active_sessions_list() -> List[dict]:
         return [dict(row) for row in cursor.fetchall()]
 
 
+def get_active_session_counts_by_super_agent() -> dict:
+    """Map ``super_agent_id`` → count of currently-active sessions.
+
+    Used by ``/admin/super-agents/activity-status`` to surface an
+    activity indicator on the SA list page (and any other per-SA
+    surface that wants to flag "this agent has a live session right
+    now"). Returns an empty dict when no sessions are active.
+    """
+    with get_connection() as conn:
+        cursor = conn.execute(
+            """
+            SELECT super_agent_id, COUNT(*) AS active
+            FROM super_agent_sessions
+            WHERE status = 'active'
+            GROUP BY super_agent_id
+            """
+        )
+        return {row["super_agent_id"]: row["active"] for row in cursor.fetchall()}
+
+
 def get_sessions_for_instance(instance_id: str) -> List[dict]:
     """Get all sessions for a project SA instance ordered by started_at DESC."""
     with get_connection() as conn:

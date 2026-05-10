@@ -198,6 +198,21 @@ class ChatStateService:
             return session["status"]
 
     @classmethod
+    def get_streaming_session_ids(cls) -> set[str]:
+        """Snapshot of session IDs currently in ``streaming`` status.
+
+        Used by the ``/admin/super-agents/activity-status`` endpoint to
+        flag SAs that are *actively producing a response right now* vs.
+        ones that just have a long-lived session row. Read under the
+        lock so we never see a half-mutated state map.
+        """
+        with cls._lock:
+            return {
+                sid for sid, session in cls._sessions.items()
+                if session.get("status") == "streaming"
+            }
+
+    @classmethod
     def reset(cls) -> None:
         """Reset all state. Used in tests to clean up between test runs."""
         with cls._lock:

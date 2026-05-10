@@ -59,6 +59,7 @@ export { healthApi, versionApi, utilityApi, settingsApi, setupApi, systemErrorAp
 export type { DirectoryEntry, BrowseDirectoryResponse, CreateDirectoryResponse } from './system';
 export type { SystemError, FixAttempt, SystemErrorWithFixes, ErrorSource, ErrorCategory, ErrorStatus, FixTier, FixStatus, SystemErrorListResponse, ErrorCountsResponse, ReportErrorRequest } from './types/system';
 export { superAgentApi, superAgentDocumentApi, superAgentSessionApi, agentMessageApi } from './super-agents';
+export type { SuperAgentActivityStatus } from './super-agents';
 export { workflowApi, workflowExecutionApi } from './workflows';
 export { sketchApi } from './sketches';
 export { grdApi } from './grd';

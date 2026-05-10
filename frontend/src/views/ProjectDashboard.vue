@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onUnmounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import type { Project, HarnessStatusResult, ProjectSkill, Hook, Command, Rule, Agent, TeamMember, ProjectInstallation, SuperAgent, SuperAgentSession, ProjectSAInstance } from '../services/api';
+import type { Project, HarnessStatusResult, ProjectSkill, Hook, Command, Rule, Agent, TeamMember, ProjectInstallation, SuperAgent, SuperAgentSession, ProjectSAInstance, SuperAgentActivityStatus } from '../services/api';
 import { projectApi, grdApi, hookApi, commandApi, ruleApi, agentApi, teamApi, superAgentApi, superAgentSessionApi, projectInstanceApi, ApiError } from '../services/api';
 import EntityLayout from '../layouts/EntityLayout.vue';
 import InteractiveSetup from '../components/projects/InteractiveSetup.vue';
@@ -85,6 +85,26 @@ const groupedSessions = computed<GroupedSessions[]>(() => {
 // GRD init status
 const grdInitStatus = ref<string>('none');
 let initPollInterval: ReturnType<typeof setInterval> | null = null;
+
+// SA activity-status snapshot, keyed by ``super_agent_id``. Powers the
+// "working now" badge on each session card so the user can see at a
+// glance which SAs are currently producing a response vs. just sitting
+// on a long-lived session. Polled every 7s — same cadence as the SA
+// list page so a backend-driven activity update lands within one tick
+// of the next nearest poll regardless of which page the user opened.
+const saActivityStatus = ref<Record<string, SuperAgentActivityStatus>>({});
+let activityPollInterval: ReturnType<typeof setInterval> | null = null;
+async function loadSaActivityStatus() {
+  try {
+    const data = await superAgentApi.activityStatus();
+    saActivityStatus.value = data.statuses || {};
+  } catch {
+    // Silent — no toast for transient activity-status failures.
+  }
+}
+function isSaWorking(saId: string): boolean {
+  return Boolean(saActivityStatus.value[saId]?.is_streaming);
+}
 
 // Interactive Setup state
 const showSetup = ref(false);
@@ -189,6 +209,8 @@ async function loadData() {
   loadLibraryItems();
   loadGrdStatus();
   loadActiveSessions();
+  loadSaActivityStatus();
+  activityPollInterval = setInterval(loadSaActivityStatus, 7000);
   loadProjectInstances();
   return project.value;
 }
@@ -290,6 +312,7 @@ watch(grdInitStatus, (newVal, oldVal) => {
 
 onUnmounted(() => {
   if (initPollInterval) clearInterval(initPollInterval);
+  if (activityPollInterval) clearInterval(activityPollInterval);
 });
 
 async function addSkill() {
@@ -570,6 +593,14 @@ function onSetupCompleted() {
           <div v-for="group in groupedSessions" :key="group.superAgent.id" class="session-group">
             <div class="session-group-header">
               <span class="session-agent-name">{{ group.superAgent.name }}</span>
+              <span
+                v-if="isSaWorking(group.superAgent.id)"
+                class="sa-working-pill"
+                title="This SuperAgent is producing a response right now"
+              >
+                <span class="sa-working-pill__dot" />
+                Working
+              </span>
               <span class="session-group-count">{{ group.sessions.length }} session{{ group.sessions.length !== 1 ? 's' : '' }}</span>
             </div>
             <div class="session-group-items">
@@ -709,8 +740,36 @@ function onSetupCompleted() {
 .sessions-loading, .sessions-empty { padding: 24px; text-align: center; color: var(--text-muted); font-size: 0.85rem; }
 .session-groups { padding: 12px 20px; display: flex; flex-direction: column; gap: 16px; }
 .session-group { border: 1px solid var(--border-subtle); border-radius: 8px; overflow: hidden; }
-.session-group-header { display: flex; align-items: center; justify-content: space-between; padding: 10px 16px; background: var(--bg-tertiary); border-bottom: 1px solid var(--border-subtle); }
+.session-group-header { display: flex; align-items: center; justify-content: space-between; padding: 10px 16px; background: var(--bg-tertiary); border-bottom: 1px solid var(--border-subtle); gap: 8px; }
 .session-agent-name { font-weight: 600; font-size: 0.9rem; color: var(--text-primary); }
+
+/* "Working" pill on a session group when the SA is actively
+   streaming a response right now. The dot pulses so it's visually
+   distinct from the static session-status-badge. */
+.sa-working-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 500;
+  background: rgba(245, 158, 11, 0.18);
+  color: var(--accent-amber, #f59e0b);
+  margin-right: auto;
+}
+.sa-working-pill__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 6px currentColor;
+  animation: sa-working-pulse 1.4s ease-in-out infinite;
+}
+@keyframes sa-working-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
 .session-group-count { font-size: 0.7rem; color: var(--text-tertiary); }
 .session-group-items { display: flex; flex-direction: column; }
 .session-card { padding: 10px 16px; display: flex; align-items: center; justify-content: space-between; gap: 12px; border-bottom: 1px solid var(--border-subtle); }

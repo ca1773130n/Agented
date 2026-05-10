@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router';
-import type { SuperAgent } from '../services/api';
+import type { SuperAgent, SuperAgentActivityStatus } from '../services/api';
 import { superAgentApi, ApiError } from '../services/api';
 import PageHeader from '../components/base/PageHeader.vue';
 import LoadingState from '../components/base/LoadingState.vue';
@@ -155,7 +155,52 @@ function getStatusClass(sa: SuperAgent) {
   return sa.enabled ? 'status-active' : 'status-inactive';
 }
 
-onMounted(loadSuperAgents);
+// Per-SA activity snapshot. Keyed by ``super_agent_id``; SAs with no
+// active sessions are absent from the map (treat as "idle"). Polled on
+// a 7-second cadence so the badge is fresh enough to surface a working
+// agent without putting load on the server when the page sits open.
+const activityStatus = ref<Record<string, SuperAgentActivityStatus>>({});
+let activityPoller: ReturnType<typeof setInterval> | null = null;
+
+async function loadActivityStatus() {
+  try {
+    const data = await superAgentApi.activityStatus();
+    activityStatus.value = data.statuses || {};
+  } catch {
+    // Ignore — silent fallback to "no activity" rather than spamming
+    // toasts on transient failures.
+  }
+}
+
+function activityLabel(saId: string): { text: string; cls: string } | null {
+  const status = activityStatus.value[saId];
+  if (!status) return null;
+  if (status.is_streaming) {
+    return { text: 'Working', cls: 'activity-pill activity-pill--working' };
+  }
+  if (status.active_sessions > 0) {
+    return {
+      text: status.active_sessions === 1
+        ? '1 active session'
+        : `${status.active_sessions} active sessions`,
+      cls: 'activity-pill activity-pill--active',
+    };
+  }
+  return null;
+}
+
+onMounted(() => {
+  loadSuperAgents();
+  loadActivityStatus();
+  activityPoller = setInterval(loadActivityStatus, 7000);
+});
+
+onUnmounted(() => {
+  if (activityPoller) {
+    clearInterval(activityPoller);
+    activityPoller = null;
+  }
+});
 </script>
 
 <template>
@@ -231,6 +276,14 @@ onMounted(loadSuperAgents);
             <div class="sa-badges">
               <span :class="['badge-backend', getBackendClass(sa.backend_type)]">{{ sa.backend_type }}</span>
               <span :class="['badge-status', getStatusClass(sa)]">{{ sa.enabled ? 'Active' : 'Inactive' }}</span>
+              <span
+                v-if="activityLabel(sa.id)"
+                :class="activityLabel(sa.id)!.cls"
+                :title="activityLabel(sa.id)!.text"
+              >
+                <span class="activity-pill__dot" />
+                {{ activityLabel(sa.id)!.text }}
+              </span>
             </div>
           </div>
         </div>
@@ -480,6 +533,43 @@ onMounted(loadSuperAgents);
 .status-inactive {
   background: rgba(136, 136, 136, 0.15);
   color: #888;
+}
+
+/* Live activity pill — surfaces "this SA has a session running right
+   now" or "this SA is actively producing a response right now" so the
+   user doesn't have to drill into each SA's playground to find out.
+   The dot pulses for the streaming variant so it's visually distinct
+   from a static "active session" badge. */
+.activity-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 500;
+}
+.activity-pill__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.activity-pill--active {
+  background: rgba(0, 212, 255, 0.12);
+  color: var(--accent-cyan, #00d4ff);
+}
+.activity-pill--working {
+  background: rgba(245, 158, 11, 0.18);
+  color: var(--accent-amber, #f59e0b);
+}
+.activity-pill--working .activity-pill__dot {
+  animation: sa-activity-pulse 1.4s ease-in-out infinite;
+  box-shadow: 0 0 6px currentColor;
+}
+@keyframes sa-activity-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
 }
 
 .sa-description {
