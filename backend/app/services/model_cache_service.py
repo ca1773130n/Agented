@@ -121,7 +121,7 @@ def _discover_and_store(backend_kind: str, auth_method: str) -> tuple[list[str],
     discovery_method = "mixed"
     error_message: str | None = None
     try:
-        raw_models = ModelDiscoveryService._discover_raw(backend_kind)
+        raw_models = ModelDiscoveryService._discover_raw(backend_kind, auth_method)
         if not raw_models:
             error_message = "no models discovered"
     except Exception as exc:

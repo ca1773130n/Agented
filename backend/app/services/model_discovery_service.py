@@ -24,47 +24,87 @@ class ModelDiscoveryService:
     """Discovers model lists from CLI tools and local config files."""
 
     @classmethod
-    def _discover_raw(cls, backend_type: str) -> list[str]:
-        """Discover raw model IDs (before normalization) for a backend."""
+    def _discover_raw(
+        cls, backend_type: str, auth_method: str = "unknown"
+    ) -> list[str]:
+        """Discover raw model IDs (before normalization) for a backend.
+
+        v0.7.9: the ai-accounts sidecar is the authoritative source —
+        it calls each backend's ``list_models()`` against the real
+        provider API. Local CLI artifacts (stats-cache, PTY probes) are
+        biased toward the user's *used* models, so they remain only as
+        fallbacks. ``_discover_with_source`` carries the actual source
+        label for telemetry.
+        """
+        models, _source = cls._discover_with_source(backend_type, auth_method)
+        return models
+
+    @classmethod
+    def _discover_with_source(
+        cls, backend_type: str, auth_method: str = "unknown"
+    ) -> tuple[list[str], str]:
+        """Like ``_discover_raw`` but also returns the source label that
+        produced the models. Sources: ``sidecar`` / ``local`` / ``pty`` /
+        ``cliproxy`` / ``opencode`` / ``empty``.
+        """
+        # Authoritative path: sidecar /api/v1/backends/{id}/models.
+        sidecar = cls._discover_via_sidecar(backend_type, auth_method)
+        if sidecar:
+            return sidecar, "sidecar"
+
         if backend_type == "claude":
             models = cls._discover_claude_models_local()
+            source = "local" if models else ""
             if not models:
                 models = cls._discover_claude_models_pty()
+                source = "pty" if models else ""
             # Merge additional sources — local/PTY only shows models you've used.
             # CLIProxyAPI and OpenCode CLI list all available anthropic models.
-            for extra in [
-                cls._discover_models_via_cliproxy("anthropic"),
-                cls._discover_anthropic_models_via_opencode(),
-            ]:
+            for extra_source, extra in (
+                ("cliproxy", cls._discover_models_via_cliproxy("anthropic")),
+                ("opencode", cls._discover_anthropic_models_via_opencode()),
+            ):
                 if extra:
                     existing = set(models or [])
                     for m in extra:
                         if m not in existing:
                             (models := models or []).append(m)
                             existing.add(m)
-            return models or []
+                    if not source:
+                        source = extra_source
+            return (models or []), (source or "empty")
         elif backend_type == "codex":
             models = cls._discover_codex_models_binary()
+            source = "local" if models else ""
             if not models:
                 models = cls._discover_codex_models_pty()
+                source = "pty" if models else ""
             if not models:
                 models = cls._discover_codex_models_local()
+                source = "local" if models else ""
             if not models:
                 models = cls._discover_models_via_cliproxy("openai")
-            return models or []
+                source = "cliproxy" if models else ""
+            return (models or []), (source or "empty")
         elif backend_type == "opencode":
             models = cls._discover_opencode_models_cli()
+            source = "opencode" if models else ""
             if not models:
                 models = cls._discover_opencode_models_local()
-            return models or []
+                source = "local" if models else ""
+            return (models or []), (source or "empty")
         elif backend_type == "gemini":
             models = cls._discover_gemini_models_package()
+            source = "local" if models else ""
             if not models:
                 models = cls._discover_gemini_models_cli()
+                source = "pty" if models else ""
             if not models:
                 models = cls._discover_gemini_models_api()
+                source = "local" if models else ""
             if not models:
                 models = cls._discover_gemini_models_local()
+                source = "local" if models else ""
             # Merge CLIProxyAPI models — the proxy is the actual routing layer,
             # so its model list is authoritative for what can be used.
             proxy_models = cls._discover_models_via_cliproxy("google")
@@ -74,8 +114,10 @@ class ModelDiscoveryService:
                     if m not in existing:
                         (models := models or []).append(m)
                         existing.add(m)
-            return models or []
-        return []
+                if not source:
+                    source = "cliproxy"
+            return (models or []), (source or "empty")
+        return [], "empty"
 
     @classmethod
     def _discover_via_sidecar(
