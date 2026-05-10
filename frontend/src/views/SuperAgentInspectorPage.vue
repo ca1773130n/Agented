@@ -21,33 +21,70 @@ const props = defineProps<{ superAgentId: string }>();
 
 const POLL_INTERVAL_MS = 10_000;
 
+// Known event types surfaced by the multi-select. Mirrors the emission
+// points across the backend (super_agent_session_service, streaming_helper,
+// super_agents_cluster.git_action). Free-form types still work via
+// payload, but the UI surfaces the canonical set explicitly.
+const EVENT_TYPES = [
+  'message_turn',
+  'tool_call',
+  'model_invoke',
+  'git_action',
+  'error',
+] as const;
+
+type StatusFilter = 'all' | 'ok' | 'error';
+type TimeWindow = '1h' | '24h' | '7d' | '30d';
+
+const TIME_WINDOW_TO_DAYS: Record<TimeWindow, number> = {
+  '1h': 1,
+  '24h': 1,
+  '7d': 7,
+  '30d': 30,
+};
+
+function sinceForWindow(w: TimeWindow): string {
+  const now = Date.now();
+  const ms =
+    w === '1h'
+      ? 60 * 60 * 1000
+      : w === '24h'
+        ? 24 * 60 * 60 * 1000
+        : w === '7d'
+          ? 7 * 24 * 60 * 60 * 1000
+          : 30 * 24 * 60 * 60 * 1000;
+  return new Date(now - ms).toISOString();
+}
+
 const rollup = ref<SuperAgentRollup | null>(null);
 const events = ref<SuperAgentActivityEvent[]>([]);
 const loading = ref(true);
 const error = ref<string | null>(null);
-const windowDays = ref(7);
-const typeFilter = ref<string>('');
+const timeWindow = ref<TimeWindow>('7d');
+const selectedTypes = ref<string[]>([]);
+const statusFilter = ref<StatusFilter>('all');
 const expanded = ref<Set<number>>(new Set());
 
 let pollHandle: ReturnType<typeof setInterval> | null = null;
 
-const selectedTypes = computed<string[]>(() =>
-  typeFilter.value
-    ? typeFilter.value
-        .split(',')
-        .map((t) => t.trim())
-        .filter(Boolean)
-    : [],
-);
+const filteredEvents = computed<SuperAgentActivityEvent[]>(() => {
+  if (statusFilter.value === 'all') return events.value;
+  if (statusFilter.value === 'error')
+    return events.value.filter((e) => e.status === 'error');
+  return events.value.filter((e) => e.status !== 'error');
+});
 
 async function load(showSpinner: boolean = true) {
   if (showSpinner) loading.value = true;
   error.value = null;
   try {
+    const since = sinceForWindow(timeWindow.value);
+    const days = TIME_WINDOW_TO_DAYS[timeWindow.value];
     const [r, list] = await Promise.all([
-      superAgentActivityApi.rollup(props.superAgentId, windowDays.value),
+      superAgentActivityApi.rollup(props.superAgentId, days),
       superAgentActivityApi.list(props.superAgentId, {
         limit: 200,
+        since,
         types: selectedTypes.value.length ? selectedTypes.value : undefined,
       }),
     ]);
@@ -60,6 +97,12 @@ async function load(showSpinner: boolean = true) {
   }
 }
 
+function toggleType(t: string) {
+  const idx = selectedTypes.value.indexOf(t);
+  if (idx === -1) selectedTypes.value = [...selectedTypes.value, t];
+  else selectedTypes.value = selectedTypes.value.filter((x) => x !== t);
+}
+
 onMounted(() => {
   load();
   pollHandle = setInterval(() => load(false), POLL_INTERVAL_MS);
@@ -69,7 +112,7 @@ onUnmounted(() => {
   if (pollHandle) clearInterval(pollHandle);
 });
 
-watch([windowDays, typeFilter], () => load());
+watch([timeWindow, selectedTypes, statusFilter], () => load(), { deep: true });
 
 function toggleExpand(id: number) {
   if (expanded.value.has(id)) {
@@ -112,14 +155,14 @@ function fmtPayload(p: string): string {
         <p class="sa-inspector__subtitle">{{ superAgentId }}</p>
       </div>
       <select
-        v-model.number="windowDays"
+        v-model="timeWindow"
         class="sa-inspector__window"
         data-testid="window-select"
       >
-        <option :value="1">Last 24h</option>
-        <option :value="7">Last 7 days</option>
-        <option :value="30">Last 30 days</option>
-        <option :value="90">Last 90 days</option>
+        <option value="1h">Last 1 hour</option>
+        <option value="24h">Last 24 hours</option>
+        <option value="7d">Last 7 days</option>
+        <option value="30d">Last 30 days</option>
       </select>
     </header>
 
@@ -172,19 +215,35 @@ function fmtPayload(p: string): string {
       </article>
 
       <div class="sa-inspector__filters">
-        <label>
-          Filter types:
-          <input
-            v-model="typeFilter"
-            type="text"
-            placeholder="message_turn,tool_call,…"
-            data-testid="type-filter"
-          />
+        <fieldset class="sa-inspector__type-filter" data-testid="type-filter">
+          <legend>Event types</legend>
+          <label
+            v-for="t in EVENT_TYPES"
+            :key="t"
+            class="sa-inspector__type-chip"
+            :data-testid="`type-chip-${t}`"
+          >
+            <input
+              type="checkbox"
+              :value="t"
+              :checked="selectedTypes.includes(t)"
+              @change="toggleType(t)"
+            />
+            <span>{{ t }}</span>
+          </label>
+        </fieldset>
+        <label class="sa-inspector__status-filter">
+          Status
+          <select v-model="statusFilter" data-testid="status-filter">
+            <option value="all">All</option>
+            <option value="ok">OK only</option>
+            <option value="error">Errored only</option>
+          </select>
         </label>
       </div>
 
       <div
-        v-if="events.length === 0"
+        v-if="filteredEvents.length === 0"
         class="sa-inspector__empty"
         data-testid="empty"
       >
@@ -192,7 +251,7 @@ function fmtPayload(p: string): string {
       </div>
       <ol v-else class="sa-timeline" data-testid="timeline">
         <li
-          v-for="ev in events"
+          v-for="ev in filteredEvents"
           :key="ev.id"
           class="sa-timeline__row"
           :data-status="ev.status"
@@ -287,17 +346,47 @@ function fmtPayload(p: string): string {
 }
 .sa-rollup__metrics dd { font-size: 16px; font-weight: 600; margin: 0; }
 .sa-inspector__filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  align-items: flex-end;
   margin-bottom: 12px;
   font-size: 12px;
 }
-.sa-inspector__filters input {
-  margin-left: 8px;
+.sa-inspector__type-filter {
+  border: 1px solid var(--border-default, rgba(255, 255, 255, 0.1));
+  border-radius: 4px;
+  padding: 4px 8px;
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+.sa-inspector__type-filter legend {
+  padding: 0 4px;
+  font-size: 11px;
+  color: var(--text-tertiary, rgba(255, 255, 255, 0.5));
+}
+.sa-inspector__type-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  padding: 2px 4px;
+}
+.sa-inspector__type-chip input { margin: 0; }
+.sa-inspector__status-filter {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.sa-inspector__status-filter select {
   padding: 4px 8px;
   background: var(--surface-1, rgba(255, 255, 255, 0.03));
   border: 1px solid var(--border-default, rgba(255, 255, 255, 0.1));
   border-radius: 4px;
   color: inherit;
-  min-width: 240px;
 }
 .sa-timeline {
   list-style: none;
