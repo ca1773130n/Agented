@@ -90,7 +90,11 @@ def _build_team_context_preamble(team_context: dict) -> str:
 
 
 def execute_sketch(
-    sketch_id: str, super_agent_id: str, content: str, team_id: Optional[str] = None
+    sketch_id: str,
+    super_agent_id: str,
+    content: str,
+    team_id: Optional[str] = None,
+    use_cli_agent: Optional[bool] = None,
 ) -> str:
     """Execute a routed sketch on a super agent session.
 
@@ -101,6 +105,12 @@ def execute_sketch(
     When ``super_agent_id`` starts with ``psa-``, the instance's template SA
     is used for backend detection, its ``worktree_path`` is passed as cwd,
     and the template SA ID is used for session management.
+
+    ``use_cli_agent`` overrides the global ``agent_yolo_mode`` setting for
+    this specific run. ``None`` defers to the global setting (which
+    defaults to YOLO-on); ``False`` forces the legacy CLIProxy path —
+    the AiChatPanel toggle plumbs this through so a user can opt out
+    of tool-using agents per panel without changing global config.
 
     Returns session_id.
     """
@@ -226,6 +236,7 @@ def execute_sketch(
         cwd=cwd,
         chat_mode="work" if cwd else None,
         instance_id=instance_id,
+        use_cli_agent=use_cli_agent,
     )
 
     return session_id

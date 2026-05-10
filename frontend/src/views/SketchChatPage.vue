@@ -61,6 +61,11 @@ const playgroundLink = computed(() => {
 const inputText = ref('');
 const isLoading = ref(true);
 const loadError = ref<string | null>(null);
+// AiChatPanel CLI-runner toggle. Default off so this panel keeps the
+// existing CLIProxy path until the user opts in. When flipped on, the
+// next sketch run forces the CLI agent runner regardless of the
+// global YOLO setting.
+const useCliRunner = ref(false);
 
 useWebMcpTool({
   name: 'agented_sketch_chat_get_state',
@@ -119,7 +124,7 @@ function handleSubmit() {
   const text = inputText.value.trim();
   if (!text || isProcessing.value) return;
   inputText.value = '';
-  submitSketch(text);
+  submitSketch(text, { useCliAgent: useCliRunner.value });
 }
 
 function handleKeyDown(e: KeyboardEvent) {
@@ -203,7 +208,9 @@ onMounted(() => {
         bannerTitle=""
         bannerButtonLabel=""
         :showBackendSelector="false"
+        :useCliRunner="useCliRunner"
         @update:inputMessage="inputText = $event"
+        @update:useCliRunner="useCliRunner = $event"
         @send="handleSubmit"
         @keydown="handleKeyDown"
       >

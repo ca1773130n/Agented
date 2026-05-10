@@ -127,7 +127,16 @@ def classify_sketch(sketch_id: str) -> dict[str, Any]:
 
 
 @post("/{sketch_id:str}/route", sync_to_thread=False)
-def route_sketch(sketch_id: str) -> dict[str, Any]:
+def route_sketch(sketch_id: str, data: Optional[dict] = None) -> dict[str, Any]:
+    """Route a classified sketch to its target super agent / team and start
+    execution.
+
+    The optional request body accepts ``use_cli_agent`` (bool) to override
+    the global ``agent_yolo_mode`` setting for this run only — the
+    AiChatPanel toggle plumbs this through. ``True`` forces the CLI
+    agent runner; ``False`` forces the legacy CLIProxy path; absent
+    defers to the global setting.
+    """
     sketch = get_sketch(sketch_id)
     if not sketch:
         raise NotFoundException(detail="Sketch not found")
@@ -154,7 +163,18 @@ def route_sketch(sketch_id: str) -> dict[str, Any]:
         return {"routing": routing}
 
     team_id = routing["target_id"] if routing["target_type"] == "team" else None
-    session_id = execute_sketch(sketch_id, super_agent_id, sketch["content"], team_id=team_id)
+    use_cli_agent: Optional[bool] = None
+    if isinstance(data, dict) and "use_cli_agent" in data:
+        raw = data.get("use_cli_agent")
+        if isinstance(raw, bool):
+            use_cli_agent = raw
+    session_id = execute_sketch(
+        sketch_id,
+        super_agent_id,
+        sketch["content"],
+        team_id=team_id,
+        use_cli_agent=use_cli_agent,
+    )
     routing["session_id"] = session_id
     routing["super_agent_id"] = super_agent_id
     update_sketch(sketch_id, routing_json=json.dumps(routing))

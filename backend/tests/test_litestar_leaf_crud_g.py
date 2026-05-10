@@ -60,6 +60,79 @@ def test_route_unknown_sketch_404(isolated_db):
     assert resp.status_code == 404
 
 
+def test_route_forwards_use_cli_agent_override(isolated_db, monkeypatch):
+    """`use_cli_agent` in the request body must reach `execute_sketch`.
+
+    Pins the AiChatPanel toggle's plumbing: when the panel flips its
+    CLI-runner toggle, the next ``POST /admin/sketches/{id}/route``
+    carries that value, which then drives whether ``run_streaming_response``
+    uses the CLI agent runner or the legacy CLIProxy path. We stub
+    classification + routing + execution so the test pins the wiring,
+    not provider/model behavior.
+    """
+    import json as _json
+
+    from app.db.sketches import create_sketch, update_sketch
+    from app_litestar.routes import leaf_crud_g
+
+    sketch_id = create_sketch(title="t", content="c")
+    update_sketch(
+        sketch_id,
+        classification_json=_json.dumps({"phase": "build"}),
+        status="classified",
+    )
+
+    monkeypatch.setattr(
+        "app.services.sketch_routing_service.SketchRoutingService.route",
+        lambda _classification, project_id=None: {
+            "target_type": "super_agent",
+            "target_id": "sa-x",
+            "reason": "test",
+        },
+    )
+
+    captured: dict = {}
+
+    def _fake_execute(sketch_id, super_agent_id, content, team_id=None, use_cli_agent=None):
+        captured["use_cli_agent"] = use_cli_agent
+        captured["sketch_id"] = sketch_id
+        return "sess-x"
+
+    monkeypatch.setattr(leaf_crud_g, "execute_sketch", _fake_execute)
+
+    with _client() as c:
+        resp = c.post(
+            f"/admin/sketches/{sketch_id}/route",
+            json={"use_cli_agent": False},
+        )
+    assert resp.status_code == 201, resp.text
+    assert captured["use_cli_agent"] is False
+    assert captured["sketch_id"] == sketch_id
+
+    captured.clear()
+    with _client() as c:
+        resp = c.post(
+            f"/admin/sketches/{sketch_id}/route",
+            json={"use_cli_agent": True},
+        )
+    assert captured["use_cli_agent"] is True
+
+    # Empty body → no override (falls back to global YOLO setting).
+    captured.clear()
+    with _client() as c:
+        resp = c.post(f"/admin/sketches/{sketch_id}/route", json={})
+    assert captured["use_cli_agent"] is None
+
+    # Non-bool values are rejected — the override must be unambiguous.
+    captured.clear()
+    with _client() as c:
+        resp = c.post(
+            f"/admin/sketches/{sketch_id}/route",
+            json={"use_cli_agent": "yes"},
+        )
+    assert captured["use_cli_agent"] is None
+
+
 def test_delegations_unknown_sketch_404(isolated_db):
     with _client() as c:
         resp = c.get("/admin/sketches/missing/delegations")
