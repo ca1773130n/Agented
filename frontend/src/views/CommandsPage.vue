@@ -268,7 +268,12 @@ function openCreateModal() {
   showCreateModal.value = true;
 }
 
+// Tracks the in-flight create so the modal's submit button is
+// disabled while the request is on the wire (prevents double-submit
+// duplicates). Mirrors the existing ``isSaving`` ref used by saveDetail.
+const isCreating = ref(false);
 async function createCommand() {
+  if (isCreating.value) return;
   if (!formData.value.name.trim()) {
     showToast('Command name is required', 'error');
     return;
@@ -280,6 +285,7 @@ async function createCommand() {
       return;
     }
   }
+  isCreating.value = true;
   try {
     await commandApi.create({
       name: formData.value.name,
@@ -298,6 +304,8 @@ async function createCommand() {
     } else {
       showToast('Failed to create command', 'error');
     }
+  } finally {
+    isCreating.value = false;
   }
 }
 
@@ -587,7 +595,9 @@ onMounted(() => {
             </div>
             <div class="modal-actions">
               <button type="button" class="btn" @click="showCreateModal = false">Cancel</button>
-              <button type="submit" class="btn btn-primary">Create Command</button>
+              <button type="submit" class="btn btn-primary" :disabled="isCreating">
+                {{ isCreating ? 'Creating…' : 'Create Command' }}
+              </button>
             </div>
           </form>
         </div>
