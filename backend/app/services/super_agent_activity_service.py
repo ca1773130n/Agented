@@ -164,12 +164,15 @@ def _classify(rows: list[Any]) -> StatusPill:
         return "idle"
     if rows[0]["status"] == "error":
         return "errored"
-    if minutes_since <= ACTIVE_WINDOW_MINUTES:
-        return "active"
+    # Spec: "Active — last activity within 5 minutes, no error in last 10
+    # events". Check recent-error-rate BEFORE active so an error cluster is
+    # not masked by a single recent success.
     recent = rows[:ERROR_LOOKBACK_EVENTS]
     err_rate = sum(1 for r in recent if r["status"] == "error") / len(recent)
     if err_rate >= ERROR_RATE_DEGRADED:
         return "errored"
+    if minutes_since <= ACTIVE_WINDOW_MINUTES:
+        return "active"
     return "healthy"
 
 
