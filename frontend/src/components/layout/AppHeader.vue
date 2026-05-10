@@ -192,18 +192,28 @@ const breadcrumbSegments = computed<BreadcrumbSegment[]>(() => {
     const isLast = i === pathSegments.length - 1;
     const label = resolveSegmentLabel(seg);
 
-    // Build navigation target for non-final, non-ID segments
+    // Build navigation target for non-final segments. Both static
+    // categories (``/super-agents``) AND entity IDs (``sa-...``) get
+    // links: clicking ``sa-X`` in the breadcrumb of
+    // ``/super-agents/sa-X/playground`` jumps to that SA's detail
+    // page. Previously entity IDs were skipped entirely, which left
+    // mid-depth segments rendered as plain text and broke "click
+    // anywhere in the breadcrumb to navigate" — the reported gap.
     let to: RouteLocationRaw | undefined;
     if (!isLast) {
       const routeName = segmentRoutes[seg];
       if (routeName) {
         to = { name: routeName };
-      } else if (!isEntityId(seg)) {
-        // Try resolving the accumulated path
+      } else {
+        // Try resolving the accumulated path so far. Works for both
+        // static segments (``/projects/{id}``) and entity IDs
+        // (``sa-...`` resolves to the SA detail route).
         try {
           const resolved = router.resolve(accumulated);
-          if (resolved.name && resolved.name !== 'not-found') to = { path: accumulated };
-        } catch { /* no matching route */ }
+          if (resolved.name && resolved.name !== 'not-found') {
+            to = { path: accumulated };
+          }
+        } catch { /* no matching route — leave as plain text */ }
       }
     }
 
