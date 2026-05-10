@@ -24,47 +24,87 @@ class ModelDiscoveryService:
     """Discovers model lists from CLI tools and local config files."""
 
     @classmethod
-    def _discover_raw(cls, backend_type: str) -> list[str]:
-        """Discover raw model IDs (before normalization) for a backend."""
+    def _discover_raw(
+        cls, backend_type: str, auth_method: str = "unknown"
+    ) -> list[str]:
+        """Discover raw model IDs (before normalization) for a backend.
+
+        v0.7.9: the ai-accounts sidecar is the authoritative source —
+        it calls each backend's ``list_models()`` against the real
+        provider API. Local CLI artifacts (stats-cache, PTY probes) are
+        biased toward the user's *used* models, so they remain only as
+        fallbacks. ``_discover_with_source`` carries the actual source
+        label for telemetry.
+        """
+        models, _source = cls._discover_with_source(backend_type, auth_method)
+        return models
+
+    @classmethod
+    def _discover_with_source(
+        cls, backend_type: str, auth_method: str = "unknown"
+    ) -> tuple[list[str], str]:
+        """Like ``_discover_raw`` but also returns the source label that
+        produced the models. Sources: ``sidecar`` / ``local`` / ``pty`` /
+        ``cliproxy`` / ``opencode`` / ``empty``.
+        """
+        # Authoritative path: sidecar /api/v1/backends/{id}/models.
+        sidecar = cls._discover_via_sidecar(backend_type, auth_method)
+        if sidecar:
+            return sidecar, "sidecar"
+
         if backend_type == "claude":
             models = cls._discover_claude_models_local()
+            source = "local" if models else ""
             if not models:
                 models = cls._discover_claude_models_pty()
+                source = "pty" if models else ""
             # Merge additional sources — local/PTY only shows models you've used.
             # CLIProxyAPI and OpenCode CLI list all available anthropic models.
-            for extra in [
-                cls._discover_models_via_cliproxy("anthropic"),
-                cls._discover_anthropic_models_via_opencode(),
-            ]:
+            for extra_source, extra in (
+                ("cliproxy", cls._discover_models_via_cliproxy("anthropic")),
+                ("opencode", cls._discover_anthropic_models_via_opencode()),
+            ):
                 if extra:
                     existing = set(models or [])
                     for m in extra:
                         if m not in existing:
                             (models := models or []).append(m)
                             existing.add(m)
-            return models or []
+                    if not source:
+                        source = extra_source
+            return (models or []), (source or "empty")
         elif backend_type == "codex":
             models = cls._discover_codex_models_binary()
+            source = "local" if models else ""
             if not models:
                 models = cls._discover_codex_models_pty()
+                source = "pty" if models else ""
             if not models:
                 models = cls._discover_codex_models_local()
+                source = "local" if models else ""
             if not models:
                 models = cls._discover_models_via_cliproxy("openai")
-            return models or []
+                source = "cliproxy" if models else ""
+            return (models or []), (source or "empty")
         elif backend_type == "opencode":
             models = cls._discover_opencode_models_cli()
+            source = "opencode" if models else ""
             if not models:
                 models = cls._discover_opencode_models_local()
-            return models or []
+                source = "local" if models else ""
+            return (models or []), (source or "empty")
         elif backend_type == "gemini":
             models = cls._discover_gemini_models_package()
+            source = "local" if models else ""
             if not models:
                 models = cls._discover_gemini_models_cli()
+                source = "pty" if models else ""
             if not models:
                 models = cls._discover_gemini_models_api()
+                source = "local" if models else ""
             if not models:
                 models = cls._discover_gemini_models_local()
+                source = "local" if models else ""
             # Merge CLIProxyAPI models — the proxy is the actual routing layer,
             # so its model list is authoritative for what can be used.
             proxy_models = cls._discover_models_via_cliproxy("google")
@@ -74,8 +114,83 @@ class ModelDiscoveryService:
                     if m not in existing:
                         (models := models or []).append(m)
                         existing.add(m)
-            return models or []
-        return []
+                if not source:
+                    source = "cliproxy"
+            return (models or []), (source or "empty")
+        return [], "empty"
+
+    @classmethod
+    def _discover_via_sidecar(
+        cls,
+        backend_kind: str,
+        auth_method: str = "unknown",
+        *,
+        timeout: float = 10.0,
+    ) -> Optional[list[str]]:
+        """Authoritative source: ask the ai-accounts sidecar to call each
+        backend's ``list_models()`` against the real provider API.
+
+        Returns model IDs or ``None`` on any failure so the caller can
+        continue the discovery chain without poisoning the cache.
+        """
+        import httpx
+
+        # Find a representative account for (kind, auth_method).
+        try:
+            from ..db.backends import get_backend_accounts
+        except ImportError:
+            logger.debug("get_backend_accounts not available; skipping sidecar discovery")
+            return None
+
+        accounts = get_backend_accounts(f"backend-{backend_kind}") or []
+        candidate = None
+        if auth_method != "unknown":
+            candidate = next(
+                (a for a in accounts if (a.get("auth_method") or "unknown") == auth_method),
+                None,
+            )
+        if candidate is None and accounts:
+            candidate = accounts[0]
+        if candidate is None:
+            return None
+
+        account_id = candidate.get("id") or candidate.get("account_id")
+        if not account_id:
+            return None
+
+        base_url = os.environ.get(
+            "AGENTED_SIDECAR_URL",
+            os.environ.get("AI_ACCOUNTS_SIDECAR_URL", "http://127.0.0.1:20001"),
+        )
+        api_key = os.environ.get("AI_ACCOUNTS_API_KEY") or os.environ.get("AGENTED_API_KEY", "")
+        headers = {"X-API-Key": api_key} if api_key else {}
+
+        url = f"{base_url}/api/v1/backends/{account_id}/models/"
+        try:
+            with httpx.Client(timeout=timeout) as client:
+                resp = client.get(url, headers=headers)
+            if resp.status_code != 200:
+                logger.warning(
+                    "Sidecar /models returned %d for %s/%s",
+                    resp.status_code,
+                    backend_kind,
+                    auth_method,
+                )
+                return None
+            body = resp.json()
+            items = body.get("items") if isinstance(body, dict) else body
+            if not isinstance(items, list):
+                return None
+            models = [str(m["id"]) for m in items if isinstance(m, dict) and m.get("id")]
+            return models or None
+        except (httpx.HTTPError, OSError, ValueError, KeyError) as exc:
+            logger.warning(
+                "Sidecar discovery failed for %s/%s: %s",
+                backend_kind,
+                auth_method,
+                exc,
+            )
+            return None
 
     # Providers whose models are accessible through other backends (Claude, Codex, Gemini).
     # When selecting a default model for the "opencode" backend, skip these so the

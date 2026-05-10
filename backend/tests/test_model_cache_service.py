@@ -11,11 +11,45 @@ from app.services import model_cache_service
 
 @pytest.fixture
 def mock_discover():
-    """Replace ModelDiscoveryService._discover_raw with a controllable mock."""
+    """Replace ModelDiscoveryService._discover_with_source with a controllable
+    mock. The fixture exposes the underlying ``return_value``/``side_effect``
+    interface tests have used since v0.7.8 (a bare list[str]) and adapts it
+    into the new ``(models, source)`` tuple under the hood.
+    """
     with patch(
-        "app.services.model_cache_service.ModelDiscoveryService._discover_raw"
+        "app.services.model_cache_service.ModelDiscoveryService._discover_with_source"
     ) as m:
-        yield m
+
+        class _Adapter:
+            """Maintains the legacy ``return_value`` / ``side_effect`` API
+            (a bare list) while feeding ``_discover_with_source`` a tuple."""
+
+            def __init__(self, mock):
+                self._mock = mock
+                self._call_count = 0
+
+            @property
+            def call_count(self):
+                return self._mock.call_count
+
+            @property
+            def return_value(self):
+                rv = self._mock.return_value
+                return rv[0] if isinstance(rv, tuple) else rv
+
+            @return_value.setter
+            def return_value(self, value):
+                self._mock.return_value = (value, "mixed")
+
+            @property
+            def side_effect(self):
+                return self._mock.side_effect
+
+            @side_effect.setter
+            def side_effect(self, value):
+                self._mock.side_effect = value
+
+        yield _Adapter(m)
 
 
 def test_first_call_populates_cache_and_returns_models(isolated_db, mock_discover):
@@ -203,3 +237,45 @@ def test_successful_discovery_uses_full_ttl(isolated_db, mock_discover):
     expires_at = datetime.fromisoformat(row["expires_at"])
     delta = expires_at - discovered_at
     assert delta == timedelta(days=7)
+
+
+# v0.7.9: discovery_method now reflects the actual source, not "mixed".
+
+
+def test_sidecar_path_records_method_sidecar(isolated_db):
+    """When the sidecar returns models, discovery_method == "sidecar"."""
+    with patch(
+        "app.services.model_cache_service.ModelDiscoveryService._discover_with_source",
+        return_value=(["claude-opus-4-7", "claude-sonnet-4-7"], "sidecar"),
+    ):
+        models, meta = model_cache_service.get_models(
+            backend_kind="claude", auth_method="cli_browser", force_refresh=True
+        )
+    assert "claude-opus-4-7" in models
+    assert meta["discovery_method"] == "sidecar"
+
+
+def test_fallback_to_local_records_method_local(isolated_db):
+    """When sidecar returns nothing and local stats-cache returns models,
+    discovery_method == "local"."""
+    with patch(
+        "app.services.model_cache_service.ModelDiscoveryService._discover_with_source",
+        return_value=(["claude-opus-4-6"], "local"),
+    ):
+        models, meta = model_cache_service.get_models(
+            backend_kind="claude", auth_method="cli_browser", force_refresh=True
+        )
+    assert models == ["claude-opus-4-6"]
+    assert meta["discovery_method"] == "local"
+
+
+def test_empty_discovery_records_method_empty(isolated_db):
+    """No models found → discovery_method == "empty"."""
+    with patch(
+        "app.services.model_cache_service.ModelDiscoveryService._discover_with_source",
+        return_value=([], "empty"),
+    ):
+        _models, meta = model_cache_service.get_models(
+            backend_kind="claude", auth_method="cli_browser", force_refresh=True
+        )
+    assert meta["discovery_method"] == "empty"

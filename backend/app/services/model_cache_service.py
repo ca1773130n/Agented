@@ -118,10 +118,15 @@ def _meta_from_row(row: dict[str, Any], *, fresh: bool) -> dict[str, Any]:
 
 def _discover_and_store(backend_kind: str, auth_method: str) -> tuple[list[str], dict[str, Any]]:
     raw_models: list[str] = []
-    discovery_method = "mixed"
+    # v0.7.9: record the actual source that produced the models so the
+    # operator UI can show whether the list is authoritative (sidecar) or
+    # a local CLI fallback. Sources: sidecar/local/pty/cliproxy/opencode/empty.
+    discovery_method = "empty"
     error_message: str | None = None
     try:
-        raw_models = ModelDiscoveryService._discover_raw(backend_kind)
+        raw_models, discovery_method = ModelDiscoveryService._discover_with_source(
+            backend_kind, auth_method
+        )
         if not raw_models:
             error_message = "no models discovered"
     except Exception as exc:
