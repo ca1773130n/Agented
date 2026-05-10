@@ -447,12 +447,12 @@ onMounted(() => {
     <EmptyState v-else-if="filteredAndSorted.length === 0 && hasActiveFilter" title="No matching teams" description="Try a different search term" />
 
     <div v-else class="teams-grid">
-      <div
+      <router-link
         v-for="team in filteredAndSorted"
         :key="team.id"
+        :to="{ name: 'team-dashboard', params: { teamId: team.id } }"
         class="team-card clickable"
         :style="{ '--team-color': team.color }"
-        @click="router.push({ name: 'team-dashboard', params: { teamId: team.id } })"
       >
         <div class="team-header">
           <div class="team-icon" :style="{ background: team.color }">
@@ -500,7 +500,7 @@ onMounted(() => {
             {{ deletingId === team.id ? 'Deleting...' : 'Delete' }}
           </button>
         </div>
-      </div>
+      </router-link>
     </div>
 
     <PaginationBar
@@ -706,6 +706,10 @@ onMounted(() => {
   border-radius: 12px;
   padding: 1.5rem;
   transition: all 0.2s;
+  /* router-link anchor reset (was a div). */
+  display: block;
+  text-decoration: none;
+  color: inherit;
 }
 
 .team-card:hover {

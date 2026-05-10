@@ -137,7 +137,12 @@ onMounted(loadData);
             <span class="col-score">Score</span>
             <span class="col-trend">Trend</span>
           </div>
-          <div v-for="team in teams" :key="team.team_id" class="table-row" @click="router.push({ name: 'team-dashboard', params: { teamId: team.team_id } })">
+          <router-link
+            v-for="team in teams"
+            :key="team.team_id"
+            :to="{ name: 'team-dashboard', params: { teamId: team.team_id } }"
+            class="table-row"
+          >
             <span class="col-rank">
               <span class="rank-num" :style="{ color: team.rank <= 3 ? medalColor(team.rank) : 'var(--text-tertiary)' }">
                 {{ team.rank <= 3 ? ['🥇','🥈','🥉'][team.rank - 1] : team.rank }}
@@ -158,7 +163,7 @@ onMounted(loadData);
               <span class="score-num">{{ team.score.toLocaleString() }}</span>
             </span>
             <span class="col-trend" :style="{ color: trendColor(team.trend) }">{{ trendIcon(team.trend) }}</span>
-          </div>
+          </router-link>
         </div>
       </div>
 
@@ -344,6 +349,8 @@ onMounted(loadData);
   cursor: pointer;
   transition: background 0.1s;
   align-items: center;
+  /* router-link anchor reset (was a div). */
+  text-decoration: none;
 }
 
 .table-row:hover { background: var(--bg-tertiary); }

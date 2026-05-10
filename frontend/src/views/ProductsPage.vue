@@ -210,11 +210,11 @@ onMounted(() => {
     <EmptyState v-else-if="filteredAndSorted.length === 0 && hasActiveFilter" title="No matching products" description="Try a different search term" />
 
     <div v-else class="products-grid">
-      <div
+      <router-link
         v-for="product in filteredAndSorted"
         :key="product.id"
+        :to="{ name: 'product-dashboard', params: { productId: product.id } }"
         class="product-card clickable"
-        @click="router.push({ name: 'product-dashboard', params: { productId: product.id } })"
       >
         <div class="product-header">
           <div class="product-icon">
@@ -251,7 +251,7 @@ onMounted(() => {
             {{ deletingId === product.id ? 'Deleting...' : 'Delete' }}
           </button>
         </div>
-      </div>
+      </router-link>
     </div>
 
     <PaginationBar
@@ -367,6 +367,10 @@ onMounted(() => {
   border-radius: 12px;
   padding: 1.5rem;
   transition: all 0.2s;
+  /* router-link anchor reset (was a div). */
+  display: block;
+  text-decoration: none;
+  color: inherit;
 }
 
 .product-card:hover {
