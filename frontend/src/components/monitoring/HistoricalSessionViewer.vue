@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, watch } from 'vue';
+import { marked } from 'marked';
 import { superAgentSessionApi } from '../../services/api';
 import { safeFormatDateTime } from '../../utils/datetime';
 
@@ -55,6 +56,26 @@ function formatTime(ts?: string): string {
   return safeFormatDateTime(ts);
 }
 
+/**
+ * Render a historical message's content as parsed markdown HTML.
+ *
+ * Before v0.7.36 this view rendered ``{{ msg.content }}`` as plain
+ * text, so headings, code fences, lists and links in the assistant's
+ * stored reply showed as literal markdown characters — ``## Summary``
+ * rendered as the string "## Summary" instead of a heading, code
+ * fences leaked their backticks, etc. ``marked.parse`` here mirrors
+ * the live AiChatPanel's behavior and the matching dark-theme styles
+ * below give headings/blockquotes/tables visible weight inside the
+ * read-only viewer.
+ *
+ * The content comes from our own SuperAgent session log (not from an
+ * untrusted source), so v-html on the parsed result is acceptable —
+ * same trust model the live chat bubble already operates under.
+ */
+function renderMarkdown(content: string | undefined | null): string {
+  return marked.parse(content || '') as string;
+}
+
 onMounted(load);
 watch(() => props.sessionId, load);
 </script>
@@ -86,7 +107,7 @@ watch(() => props.sessionId, load);
           <span v-if="msg.backend" class="backend">{{ msg.backend }}</span>
           <span class="time">{{ formatTime(msg.timestamp) }}</span>
         </div>
-        <div class="content">{{ msg.content }}</div>
+        <div class="content" v-html="renderMarkdown(msg.content)" />
       </div>
     </div>
   </div>
@@ -223,7 +244,95 @@ watch(() => props.sessionId, load);
   font-size: 13px;
   line-height: 1.5;
   color: var(--text-primary);
-  white-space: pre-wrap;
+  /* ``white-space: pre-wrap`` is dropped: marked.parse turns explicit
+     newlines into ``<br>`` / paragraph wraps, so pre-wrap would
+     double-space lists and add extra blank rows between rendered
+     paragraphs. ``word-break: break-word`` stays so long URLs /
+     identifiers wrap inside the viewer column. */
   word-break: break-word;
 }
+
+/* Mirror the dark-theme markdown rules from vue-styled's ChatBubble
+   so the read-only historical viewer renders headings, lists, code
+   fences, blockquotes, tables and links with the same visual weight
+   as the live chat bubble. v-html injects marked.parse's output
+   directly, so children need ``:deep()`` selectors to be matched
+   under scoped CSS. */
+.content :deep(p) { margin: 0.25rem 0; }
+.content :deep(ul),
+.content :deep(ol) { padding-inline-start: 1.5rem; margin: 0.25rem 0; }
+.content :deep(li) { margin: 0.125rem 0; }
+.content :deep(li > ul),
+.content :deep(li > ol) { margin: 0.125rem 0; }
+.content :deep(pre) {
+  background: var(--bg-tertiary, #0a0a0a);
+  border-radius: 6px;
+  padding: 0.6rem 0.75rem;
+  overflow-x: auto;
+  margin: 0.5rem 0;
+  font-size: 12px;
+}
+.content :deep(code) {
+  font-family: var(--font-mono, ui-monospace, monospace);
+}
+.content :deep(:not(pre) > code) {
+  background: var(--bg-tertiary, #0a0a0a);
+  padding: 0.05rem 0.3rem;
+  border-radius: 4px;
+}
+.content :deep(h1),
+.content :deep(h2),
+.content :deep(h3),
+.content :deep(h4),
+.content :deep(h5),
+.content :deep(h6) {
+  font-weight: 700;
+  line-height: 1.25;
+  margin: 0.75rem 0 0.35rem;
+  color: var(--text-primary);
+}
+.content :deep(h1) { font-size: 1.3rem; }
+.content :deep(h2) { font-size: 1.1rem; }
+.content :deep(h3) { font-size: 1.0rem; }
+.content :deep(h4) {
+  font-size: 0.9rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-secondary);
+}
+.content :deep(h5),
+.content :deep(h6) { font-size: 0.85rem; color: var(--text-secondary); }
+.content :deep(blockquote) {
+  border-left: 3px solid var(--border-strong, #3f3f46);
+  padding: 0.15rem 0.6rem;
+  margin: 0.4rem 0;
+  color: var(--text-secondary);
+}
+.content :deep(table) {
+  border-collapse: collapse;
+  margin: 0.5rem 0;
+  font-size: 0.85rem;
+}
+.content :deep(th),
+.content :deep(td) {
+  border: 1px solid var(--border-default);
+  padding: 0.3rem 0.55rem;
+  text-align: left;
+}
+.content :deep(th) {
+  background: var(--bg-tertiary);
+  font-weight: 600;
+}
+.content :deep(hr) {
+  border: 0;
+  border-top: 1px solid var(--border-default);
+  margin: 0.6rem 0;
+}
+.content :deep(a) {
+  color: var(--accent-cyan, #60a5fa);
+  text-decoration: underline;
+}
+.content :deep(a:hover) { text-decoration: none; }
+.content :deep(strong) { color: var(--text-primary); }
+.content :deep(em) { font-style: italic; }
 </style>
