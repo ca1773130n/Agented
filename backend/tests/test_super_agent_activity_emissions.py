@@ -128,7 +128,13 @@ def test_git_action_commit_failure_emits_error_status(isolated_db, tmp_path):
 
 
 def test_streaming_error_records_error_event(isolated_db):
-    """When stream_llm_response raises, an `error` event is recorded."""
+    """When stream_llm_response raises, an `error` event is recorded.
+
+    Forces the legacy CLIProxy path (``use_cli_agent=False``) since the
+    v0.7.17 default routes through the CLI agent runner, which has its
+    own subprocess-error coverage in ``test_cli_agent_runner.py``. This
+    test specifically pins the legacy-path error recording.
+    """
     from app.services.streaming_helper import run_streaming_response
 
     done = threading.Event()
@@ -159,6 +165,7 @@ def test_streaming_error_records_error_event(isolated_db):
             super_agent_id="sa-stream",
             backend="claude",
             on_error=_on_error,
+            use_cli_agent=False,
         )
         assert done.wait(timeout=5), "streaming thread did not finish"
 
