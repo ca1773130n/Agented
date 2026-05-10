@@ -191,7 +191,7 @@ onMounted(loadSnippets);
 
     <!-- Create/Edit Modal -->
     <Teleport to="body">
-      <div v-if="showModal" class="modal-overlay" @click.self="closeModal">
+      <div v-if="showModal" class="modal-overlay" tabindex="-1" @click.self="closeModal" @keydown.escape="closeModal">
         <div class="modal-content">
           <div class="modal-header">
             <h2>{{ editingSnippet ? 'Edit Snippet' : 'Create Snippet' }}</h2>
@@ -250,7 +250,7 @@ onMounted(loadSnippets);
 
     <!-- Delete Confirmation -->
     <Teleport to="body">
-      <div v-if="showDeleteConfirm" class="modal-overlay" @click.self="showDeleteConfirm = false">
+      <div v-if="showDeleteConfirm" class="modal-overlay" tabindex="-1" @click.self="showDeleteConfirm = false" @keydown.escape="showDeleteConfirm = false">
         <div class="modal-content modal-sm">
           <div class="modal-header">
             <h2>Delete Snippet</h2>

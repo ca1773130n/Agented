@@ -346,7 +346,7 @@ const lastTestForChannel = (id: string) => testResults.value.find((r) => r.chann
     </template>
 
     <!-- Add channel modal -->
-    <div v-if="showAddModal" class="modal-overlay" @click.self="showAddModal = false">
+    <div v-if="showAddModal" class="modal-overlay" tabindex="-1" @click.self="showAddModal = false" @keydown.escape="showAddModal = false">
       <div class="modal">
         <div class="modal-header">
           <h3>Add Notification Channel</h3>

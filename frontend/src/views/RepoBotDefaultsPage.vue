@@ -175,7 +175,7 @@ const totalBound = computed(() => bindings.value.filter(b => b.enabled).length);
     </div>
 
     <!-- Add Modal -->
-    <div v-if="showAddModal" class="modal-overlay" @click.self="showAddModal = false">
+    <div v-if="showAddModal" class="modal-overlay" tabindex="-1" @click.self="showAddModal = false" @keydown.escape="showAddModal = false">
       <div class="modal">
         <div class="modal-header">
           <h3>Add Repository Binding</h3>
