@@ -21,6 +21,14 @@ export const superAgentRoutes: RouteRecordRaw[] = [
     meta: { title: 'Super Agent Playground', requiresEntity: 'superAgentId' },
   },
   {
+    // v0.7.7: Super-Agent Activity Inspector — timeline + rollup + JSON drill-down.
+    path: '/super-agents/:superAgentId/inspector',
+    name: 'super-agent-inspector',
+    component: () => import('../../views/SuperAgentInspectorPage.vue'),
+    props: true,
+    meta: { title: 'Super Agent Inspector', requiresEntity: 'superAgentId' },
+  },
+  {
     path: '/projects/:projectId/instances/:instanceId/playground',
     name: 'project-instance-playground',
     component: () => import('../../views/SuperAgentPlayground.vue'),

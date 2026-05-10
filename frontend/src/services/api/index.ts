@@ -44,6 +44,13 @@ export type {
 } from './trigger-events';
 export { botHealthApi } from './bot-health';
 export type { BotHealthStatus, BotHealthRollup, BotHealthResponse } from './bot-health';
+export { superAgentActivityApi } from './super-agent-activity';
+export type {
+  SuperAgentActivityEvent,
+  SuperAgentActivityListResponse,
+  SuperAgentRollup,
+  SuperAgentStatusPill,
+} from './super-agent-activity';
 export { rotationApi } from './rotation';
 export { schedulerApi } from './scheduler';
 export { healthApi, versionApi, utilityApi, settingsApi, setupApi, systemErrorApi } from './system';

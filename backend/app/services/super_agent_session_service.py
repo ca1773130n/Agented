@@ -184,6 +184,14 @@ class SuperAgentSessionService:
             # Add to output buffer
             session["output_buffer"].append(f"[user] {content}")
 
+            # v0.7.7: emit activity event for inspector timeline.
+            cls._record_activity(
+                session,
+                session_id,
+                "message_turn",
+                {"role": "user", "content_snippet": content[:200], "backend": backend},
+            )
+
             return True, None
 
     @classmethod
@@ -225,6 +233,20 @@ class SuperAgentSessionService:
                 conversation_log=json.dumps(session["conversation_log"]),
                 token_count=session["token_count"],
             )
+
+            # v0.7.7: emit activity event for inspector timeline.
+            cls._record_activity(
+                session,
+                session_id,
+                "model_invoke",
+                {
+                    "role": "assistant",
+                    "content_snippet": content[:200],
+                    "backend": backend,
+                    "token_count": token_estimate,
+                },
+                cost_tokens_out=token_estimate,
+            )
             return True
 
     @classmethod
@@ -248,6 +270,17 @@ class SuperAgentSessionService:
                 conversation_log=json.dumps(session["conversation_log"]),
                 summary=session["summary"],
                 token_count=session["token_count"],
+            )
+
+            # v0.7.7: emit activity event for inspector timeline.
+            cls._record_activity(
+                session,
+                session_id,
+                "session_ended",
+                {
+                    "ended_at": iso_now,
+                    "token_count": session.get("token_count", 0),
+                },
             )
 
             # Remove from active sessions
@@ -435,6 +468,43 @@ class SuperAgentSessionService:
                 logger.debug("Failed to load project context for instance %s", instance_id)
 
         return "\n".join(parts)
+
+    @classmethod
+    def _record_activity(
+        cls,
+        session: dict,
+        session_id: str,
+        event_type: str,
+        payload: dict,
+        *,
+        status: str = "ok",
+        error_message: Optional[str] = None,
+        cost_tokens_in: Optional[int] = None,
+        cost_tokens_out: Optional[int] = None,
+        cost_usd: Optional[float] = None,
+    ) -> None:
+        """v0.7.7: Best-effort activity emission for the inspector timeline.
+
+        Failures here must never break the session — observability is a
+        side-channel. The Super-Agent Activity Inspector page reads from
+        the table this populates.
+        """
+        try:
+            from app.services import super_agent_activity_service
+
+            super_agent_activity_service.record(
+                super_agent_id=session.get("super_agent_id", "unknown"),
+                session_id=session_id,
+                event_type=event_type,
+                payload=payload,
+                status=status,
+                error_message=error_message,
+                cost_tokens_in=cost_tokens_in,
+                cost_tokens_out=cost_tokens_out,
+                cost_usd=cost_usd,
+            )
+        except Exception:  # pragma: no cover — defensive side-channel
+            logger.debug("Failed to record super-agent activity", exc_info=True)
 
     @classmethod
     def _compact_session(cls, session_id: str) -> None:

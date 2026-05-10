@@ -117,6 +117,29 @@ def purge_trigger_events_job() -> None:
         logger.warning("Trigger events purge job failed: %s", e, exc_info=True)
 
 
+def purge_super_agent_activity_job() -> None:
+    """v0.7.7: daily TTL purge of super_agent_activity.
+
+    Retention controlled by SUPER_AGENT_ACTIVITY_RETENTION_DAYS env var
+    (default 30). Mirrors purge_trigger_events_job — exposed at module
+    top-level so the scheduler can register it by reference and tests can
+    import + invoke it directly.
+    """
+    from app.services import super_agent_activity_service
+
+    days = int(os.environ.get("SUPER_AGENT_ACTIVITY_RETENTION_DAYS", "30"))
+    try:
+        deleted = super_agent_activity_service.purge_older_than(days=days)
+        if deleted:
+            logger.info(
+                "Purged %d super_agent_activity rows older than %d days",
+                deleted,
+                days,
+            )
+    except Exception as e:  # pragma: no cover — defensive
+        logger.warning("Super-agent activity purge job failed: %s", e, exc_info=True)
+
+
 def _setup_scheduler(app: Any) -> None:
     from app.services.scheduler_service import SchedulerService
 
@@ -163,6 +186,12 @@ def _setup_scheduler(app: Any) -> None:
             (_SASvc.cleanup_stale_sessions, {"hours": 6}, "stale_sa_session_cleanup"),
             # v0.7.1: daily TTL purge of trigger_events.
             (purge_trigger_events_job, {"hours": 24}, "trigger_event_purge"),
+            # v0.7.7: daily TTL purge of super_agent_activity.
+            (
+                purge_super_agent_activity_job,
+                {"hours": 24},
+                "super_agent_activity_purge",
+            ),
         ]
         for func, interval_kwargs, job_id in periodic_jobs:
             SchedulerService._scheduler.add_job(
