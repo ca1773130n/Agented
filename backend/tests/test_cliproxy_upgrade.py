@@ -310,3 +310,97 @@ class TestBrewUpgrade:
             ok, msg = CLIProxyManager._brew_upgrade()
         assert ok is False
         assert "brew upgrade error" in msg
+
+
+# ---------------------------------------------------------------------------
+# Admin endpoint POST /admin/system/cliproxy/upgrade
+# ---------------------------------------------------------------------------
+
+
+def _setup_user_with_role(role: str, email: str = "u@test"):
+    """Returns (user_id, api_key)."""
+    from app.database import get_connection
+    from app.db.rbac import create_user_role, generate_api_key
+
+    user_id = email
+    with get_connection() as conn:
+        conn.execute(
+            "INSERT OR IGNORE INTO users (id, email, password_hash, created_at) "
+            "VALUES (?, ?, ?, CURRENT_TIMESTAMP)",
+            (user_id, email, "x"),
+        )
+        conn.commit()
+    api_key = generate_api_key()
+    role_id = create_user_role(api_key, label="t", role=role, user_id=user_id)
+    assert role_id is not None
+    return user_id, api_key
+
+
+def _admin_client():
+    from litestar.testing import create_test_client
+
+    from app_litestar.middleware import ApiKeyMiddleware
+    from app_litestar.routes.cliproxy_lifecycle import cliproxy_lifecycle_router
+
+    return create_test_client(
+        route_handlers=[cliproxy_lifecycle_router],
+        middleware=[ApiKeyMiddleware()],
+    )
+
+
+class TestUpgradeEndpoint:
+    def test_admin_can_trigger_upgrade(self, isolated_db):
+        _, admin_key = _setup_user_with_role("admin", email="ad@test")
+        with (
+            patch.object(
+                CLIProxyManager,
+                "upgrade",
+                return_value=(True, "upgraded to 7.0.0"),
+            ) as mock_upgrade,
+            patch.object(CLIProxyManager, "detect_version", return_value="7.0.0"),
+        ):
+            with _admin_client() as c:
+                r = c.post(
+                    "/admin/system/cliproxy/upgrade",
+                    headers={"X-API-Key": admin_key},
+                )
+        assert r.status_code == 201
+        body = r.json()
+        assert body["success"] is True
+        assert body["version"] == "7.0.0"
+        assert "7.0.0" in body["message"]
+        mock_upgrade.assert_called_once()
+
+    def test_upgrade_failure_returned_as_success_false(self, isolated_db):
+        _, admin_key = _setup_user_with_role("admin", email="ad-fail@test")
+        with (
+            patch.object(
+                CLIProxyManager,
+                "upgrade",
+                return_value=(False, "brew upgrade failed: network"),
+            ),
+            patch.object(CLIProxyManager, "detect_version", return_value="6.8.30"),
+        ):
+            with _admin_client() as c:
+                r = c.post(
+                    "/admin/system/cliproxy/upgrade",
+                    headers={"X-API-Key": admin_key},
+                )
+        assert r.status_code == 201
+        body = r.json()
+        assert body["success"] is False
+        assert "brew upgrade failed" in body["message"]
+
+    def test_non_admin_gets_403(self, isolated_db):
+        _, viewer_key = _setup_user_with_role("viewer", email="vi@test")
+        with _admin_client() as c:
+            r = c.post(
+                "/admin/system/cliproxy/upgrade",
+                headers={"X-API-Key": viewer_key},
+            )
+        assert r.status_code == 403
+
+    def test_unauthenticated_gets_401_or_403(self, isolated_db):
+        with _admin_client() as c:
+            r = c.post("/admin/system/cliproxy/upgrade")
+        assert r.status_code in (401, 403)

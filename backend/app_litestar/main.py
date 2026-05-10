@@ -29,6 +29,7 @@ from .routes.auth import auth_router
 from .routes.metrics import metrics_router
 from .routes.plugin_discovery import plugin_discovery_router
 from .routes.bot_health import bot_health_router
+from .routes.cliproxy_lifecycle import cliproxy_lifecycle_router
 from .routes.health import health_router
 from .routes.leaf_crud_a import (
     bookmarks_router,
@@ -220,6 +221,7 @@ def create_app() -> Litestar:
             metrics_router,
             plugin_discovery_router,
             bot_health_router,
+            cliproxy_lifecycle_router,
             utility_router,
             misc_router,
             admin_misc_router,
