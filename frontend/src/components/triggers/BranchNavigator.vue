@@ -3,6 +3,7 @@ import { ref, toRef } from 'vue';
 import type { BranchTree } from '../../services/api';
 import { useConversationBranch } from '../../composables/useConversationBranch';
 import { safeFormatDateTime } from '../../utils/datetime';
+import MarkdownContent from '../base/MarkdownContent.vue';
 
 const props = defineProps<{
   conversationId: string;
@@ -169,7 +170,7 @@ loadBranches();
             @mouseleave="hoveredMessageIndex = null"
           >
             <div class="message-role">{{ msg.role }}</div>
-            <div class="message-content">{{ msg.content }}</div>
+            <MarkdownContent class="message-content" :content="msg.content" />
             <div class="message-footer">
               <span class="message-time">{{ formatDate(msg.created_at) }}</span>
               <button
