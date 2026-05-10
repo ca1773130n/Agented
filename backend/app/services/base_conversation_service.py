@@ -309,7 +309,11 @@ class BaseConversationService(abc.ABC):
         for a CLI-runnable backend (claude/codex/gemini). Otherwise
         falls through to the legacy ``stream_llm_response`` (CLIProxy).
         """
-        from .cli_agent_runner_service import is_yolo_mode_enabled, stream_via_cli_agent
+        from .cli_agent_runner_service import (
+            is_yolo_mode_enabled,
+            should_route_via_cli_agent,
+            stream_via_cli_agent,
+        )
         from .conversation_streaming import stream_llm_response
 
         full_response_parts = []
@@ -317,14 +321,10 @@ class BaseConversationService(abc.ABC):
             flush_callback=lambda text: cls._broadcast(conv_id, "response_chunk", {"content": text})
         )
 
-        backend_norm = (backend or "").lower()
-        cli_capable = backend_norm in ("claude", "codex", "gemini")
-        yolo_on = is_yolo_mode_enabled() if use_cli_agent is None else bool(use_cli_agent)
-
-        if yolo_on and cli_capable:
+        if should_route_via_cli_agent(backend, use_cli_agent):
             stream_iter = stream_via_cli_agent(
                 messages,
-                backend=backend_norm,
+                backend=(backend or "").lower(),
                 cwd=None,
                 yolo=is_yolo_mode_enabled(),
                 model=model,

@@ -80,11 +80,13 @@ export function useConversation<TConfig>(
   const selectedBackend = ref(options?.backend ?? 'auto');
   const selectedAccountId = ref<string | null>(options?.accountId ?? null);
   const selectedModel = ref<string | null>(options?.model ?? null);
-  // AiChatPanel CLI runner toggle. Default off so design conversations
-  // keep their existing CLIProxy behavior; flipping the panel pill on
-  // routes the next message through the CLI agent runner with tool
-  // privileges, regardless of the global YOLO setting.
-  const useCliRunner = ref(false);
+  // AiChatPanel CLI runner toggle. Default ON because the design
+  // conversation flow (rules / hooks / commands / plugins) ends in a
+  // finalize step that creates real entities; agents with tool
+  // privileges can read examples in the worktree and produce richer
+  // configs than pure-token chat. Flipping the pill OFF reverts to
+  // CLIProxy.
+  const useCliRunner = ref(true);
 
   function setBackend(backend: string) { selectedBackend.value = backend; }
   function setAccountId(accountId: string | null) { selectedAccountId.value = accountId; }

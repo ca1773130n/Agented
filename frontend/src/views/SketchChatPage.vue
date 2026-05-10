@@ -61,11 +61,12 @@ const playgroundLink = computed(() => {
 const inputText = ref('');
 const isLoading = ref(true);
 const loadError = ref<string | null>(null);
-// AiChatPanel CLI-runner toggle. Default off so this panel keeps the
-// existing CLIProxy path until the user opts in. When flipped on, the
-// next sketch run forces the CLI agent runner regardless of the
-// global YOLO setting.
-const useCliRunner = ref(false);
+// AiChatPanel CLI-runner toggle. Default ON because sketches are
+// agent-driven by definition — the user is asking an agent to do work
+// in the project worktree, which only makes sense with tool privileges.
+// Flipping the pill OFF routes the next run through CLIProxyAPI for
+// pure-token chat (no tools).
+const useCliRunner = ref(true);
 
 useWebMcpTool({
   name: 'agented_sketch_chat_get_state',
