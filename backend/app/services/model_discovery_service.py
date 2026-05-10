@@ -135,38 +135,16 @@ class ModelDiscoveryService:
         """
         import httpx
 
-        # Find a representative account for (kind, auth_method).
-        try:
-            from ..db.backends import get_backend_accounts
-        except ImportError:
-            logger.debug("get_backend_accounts not available; skipping sidecar discovery")
-            return None
-
-        accounts = get_backend_accounts(f"backend-{backend_kind}") or []
-        candidate = None
-        if auth_method != "unknown":
-            candidate = next(
-                (a for a in accounts if (a.get("auth_method") or "unknown") == auth_method),
-                None,
-            )
-        if candidate is None and accounts:
-            candidate = accounts[0]
-        if candidate is None:
-            return None
-
-        account_id = candidate.get("id") or candidate.get("account_id")
-        if not account_id:
-            return None
-
+        # Resolve sidecar URL + admin key. Accounts live in the SIDECAR's DB
+        # (Agented's local backends table is empty post-wave-80), so we ask
+        # the sidecar for them via GET /api/v1/backends/ rather than
+        # querying the local DB. The sidecar's LazyFlaskKeyAuth reads
+        # `Authorization: Bearer <key>` against the user_roles table; pull
+        # the first admin key out when AI_ACCOUNTS_API_KEY is unset.
         base_url = os.environ.get(
             "AGENTED_SIDECAR_URL",
             os.environ.get("AI_ACCOUNTS_SIDECAR_URL", "http://127.0.0.1:20001"),
         )
-        # The sidecar's LazyFlaskKeyAuth reads `Authorization: Bearer <key>`
-        # against the user_roles table — NOT X-API-Key. v0.7.9 wired the
-        # wrong header which 401'd silently. When AI_ACCOUNTS_API_KEY is
-        # unset (the common dev case), pull the first admin key out of
-        # user_roles to mirror what the sidecar itself accepts at boot.
         api_key = os.environ.get("AI_ACCOUNTS_API_KEY") or os.environ.get("AGENTED_API_KEY", "")
         if not api_key:
             try:
@@ -179,7 +157,50 @@ class ModelDiscoveryService:
                     api_key = row["api_key"] if hasattr(row, "keys") else row[0]
             except Exception as exc:
                 logger.debug("Could not read admin api_key from user_roles: %s", exc)
-        headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
+        if not api_key:
+            return None
+        headers = {"Authorization": f"Bearer {api_key}"}
+
+        # 1. List sidecar accounts and find one matching the requested
+        #    backend_kind (and auth_method when known).
+        try:
+            with httpx.Client(timeout=timeout) as client:
+                list_resp = client.get(f"{base_url}/api/v1/backends/?limit=200", headers=headers)
+            if list_resp.status_code != 200:
+                logger.warning(
+                    "Sidecar list-backends returned %d", list_resp.status_code,
+                )
+                return None
+            list_body = list_resp.json()
+            sidecar_accounts = list_body.get("items") if isinstance(list_body, dict) else list_body
+            if not isinstance(sidecar_accounts, list):
+                return None
+        except (httpx.HTTPError, OSError, ValueError) as exc:
+            logger.warning("Sidecar list-backends failed: %s", exc)
+            return None
+
+        kind_accounts = [
+            a for a in sidecar_accounts
+            if isinstance(a, dict) and (a.get("kind") == backend_kind)
+        ]
+        # Prefer a ready account; prefer one with the requested auth_method.
+        candidate = None
+        if auth_method != "unknown":
+            candidate = next(
+                (a for a in kind_accounts
+                 if (a.get("auth_method") or "unknown") == auth_method),
+                None,
+            )
+        if candidate is None:
+            candidate = next(
+                (a for a in kind_accounts if a.get("status") == "ready"),
+                None,
+            ) or (kind_accounts[0] if kind_accounts else None)
+        if candidate is None:
+            return None
+        account_id = candidate.get("id") or candidate.get("account_id")
+        if not account_id:
+            return None
 
         url = f"{base_url}/api/v1/backends/{account_id}/models/"
         try:
