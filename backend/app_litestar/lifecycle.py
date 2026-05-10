@@ -140,6 +140,37 @@ def purge_super_agent_activity_job() -> None:
         logger.warning("Super-agent activity purge job failed: %s", e, exc_info=True)
 
 
+def refresh_stale_model_caches_job() -> None:
+    """v0.7.8: daily background refresh of expiring model_discovery_cache rows.
+
+    Looks ahead one day (grace_seconds=86400) so caches are renewed before
+    they actually go stale, keeping interactive callers off the slow
+    subprocess/PTY discovery path. Mirrors purge_super_agent_activity_job:
+    exposed at module top-level so the scheduler can register it by
+    reference and tests can import + invoke it directly.
+    """
+    from app.services import model_cache_service
+
+    try:
+        stale = model_cache_service.list_stale(grace_seconds=86400)
+        if not stale:
+            return
+        for row in stale:
+            try:
+                model_cache_service.refresh(row["backend_kind"], row["auth_method"])
+            except Exception as inner:  # pragma: no cover — defensive
+                logger.warning(
+                    "Model cache refresh failed for %s/%s: %s",
+                    row.get("backend_kind"),
+                    row.get("auth_method"),
+                    inner,
+                    exc_info=True,
+                )
+        logger.info("Refreshed %d stale model_discovery_cache rows", len(stale))
+    except Exception as e:  # pragma: no cover — defensive
+        logger.warning("Model cache refresh job failed: %s", e, exc_info=True)
+
+
 def _setup_scheduler(app: Any) -> None:
     from app.services.scheduler_service import SchedulerService
 
@@ -191,6 +222,12 @@ def _setup_scheduler(app: Any) -> None:
                 purge_super_agent_activity_job,
                 {"hours": 24},
                 "super_agent_activity_purge",
+            ),
+            # v0.7.8: daily background refresh of expiring model caches.
+            (
+                refresh_stale_model_caches_job,
+                {"hours": 24},
+                "model_cache_refresh",
             ),
         ]
         for func, interval_kwargs, job_id in periodic_jobs:

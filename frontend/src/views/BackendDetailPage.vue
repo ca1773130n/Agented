@@ -53,6 +53,7 @@
         :models="backend.models || []"
         :capability-list="capabilityList"
         :cli-path="cliPath"
+        :backend-kind="backend.type"
       />
 
       <!-- Inline Connect Terminal -->
