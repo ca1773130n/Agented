@@ -197,7 +197,7 @@ const myTeamTriggers = computed(() => {
               <div class="my-bot-actions">
                 <button
                   class="btn btn-sm btn-secondary"
-                  @click="router.push({ name: 'trigger-detail', params: { id: trigger.id } })"
+                  @click="router.push({ name: 'trigger-dashboard', params: { triggerId: trigger.id } })"
                 >
                   View
                 </button>
