@@ -34,7 +34,16 @@ from ._runner import (  # noqa: F401  (re-export)
 )
 from .v04_initial import V04_MIGRATIONS
 from .v05_features import V05_MIGRATIONS
+from .v05_features import (  # noqa: F401  (re-export for legacy test imports)
+    _migrate_76_super_agent_dispatch,
+)
 from .v06_features import V06_MIGRATIONS
+from .v06_features import (  # noqa: F401  (re-export for legacy test imports)
+    _migrate_109_session_audit_columns,
+    _migrate_113_rotated_from_token_unique,
+    _migrate_114_trigger_events,
+    _migrate_115_execution_logs_trigger_started_index,
+)
 from .v07_features import V07_MIGRATIONS
 
 VERSIONED_MIGRATIONS = (
