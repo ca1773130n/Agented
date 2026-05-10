@@ -52,11 +52,15 @@ class SessionCollectionService:
                     results["claude"]["sessions"] += 1
                     results["claude"]["cost"] += usage.get("total_cost_usd", 0.0)
 
-        # Codex CLI sessions
+        # Codex CLI sessions. Codex 0.130+ stores rollouts under nested
+        # date dirs (`sessions/YYYY/MM/DD/rollout-<ts>-<uuid>.jsonl`) and
+        # the in-process file isn't yet flushed when collect_all runs;
+        # rglob picks up every depth, and we keep the legacy flat shape
+        # too because older releases wrote there.
         codex_dir = cls._find_codex_session_dir()
         if codex_dir and codex_dir.exists():
-            for jsonl_file in codex_dir.glob("*.jsonl"):
-                session_id = jsonl_file.stem
+            for jsonl_file in codex_dir.rglob("*.jsonl"):
+                session_id = cls._codex_session_id(jsonl_file)
                 usage = cls._parse_codex_session(jsonl_file)
                 if not usage or (usage["input_tokens"] == 0 and usage["output_tokens"] == 0):
                     continue
@@ -319,17 +323,41 @@ class SessionCollectionService:
         return sessions_dir if sessions_dir.exists() else None
 
     @classmethod
+    def _codex_session_id(cls, jsonl_path: Path) -> str:
+        """Derive a stable session ID from a Codex rollout filename.
+
+        Codex 0.130+ names files `rollout-<iso-ts>-<uuid>.jsonl`. We use the
+        trailing UUID so the same session keeps a stable identity even if
+        the rollout is rewritten with a different timestamp prefix.
+        Older flat-layout files keep their bare stem.
+        """
+        stem = jsonl_path.stem
+        if stem.startswith("rollout-"):
+            parts = stem.rsplit("-", 5)
+            if len(parts) >= 5:
+                return "-".join(parts[-5:])
+        return stem
+
+    @classmethod
     def _parse_codex_session(cls, jsonl_path: Path) -> Optional[dict]:
-        """Parse a Codex CLI JSONL session file and aggregate token usage."""
-        total_input = 0
-        total_output = 0
-        total_cached = 0
+        """Parse a Codex CLI JSONL session file and aggregate token usage.
+
+        Supports two formats:
+
+        * Codex 0.130+ rollouts emit `event_msg` entries with
+          `payload.type == "token_count"`, where `info.total_token_usage`
+          holds the running cumulative counts. We take the maximum across
+          messages so partial flushes during an active session still pick
+          up token growth.
+        * Legacy releases emitted `turn.completed` events with a top-level
+          `usage` object — kept for back-compat with older session dumps.
+        """
         num_turns = 0
         model = ""
         first_ts = None
         last_ts = None
 
-        # Codex reports cumulative tokens; we need final totals
+        # Cumulative max — both formats report monotonically growing totals.
         last_input = 0
         last_output = 0
         last_cached = 0
@@ -345,14 +373,33 @@ class SessionCollectionService:
                     except json.JSONDecodeError:
                         continue
 
-                    # Look for turn.completed events with usage
-                    if entry.get("type") == "turn.completed":
+                    etype = entry.get("type")
+
+                    # Codex 0.130+: event_msg / token_count
+                    if etype == "event_msg":
+                        payload = entry.get("payload") or {}
+                        if payload.get("type") == "token_count":
+                            info = payload.get("info") or {}
+                            usage = info.get("total_token_usage") or {}
+                            if usage:
+                                cur_input = usage.get("input_tokens", 0) or 0
+                                cur_output = usage.get("output_tokens", 0) or 0
+                                cur_cached = usage.get("cached_input_tokens", 0) or 0
+                                if cur_input > last_input:
+                                    last_input = cur_input
+                                if cur_output > last_output:
+                                    last_output = cur_output
+                                if cur_cached > last_cached:
+                                    last_cached = cur_cached
+                                num_turns += 1
+
+                    # Legacy: turn.completed with top-level usage
+                    elif etype == "turn.completed":
                         usage = entry.get("usage", {})
                         if usage:
                             cur_input = usage.get("input_tokens", 0)
                             cur_output = usage.get("output_tokens", 0)
                             cur_cached = usage.get("cached_input_tokens", 0)
-                            # Use the maximum values (cumulative)
                             if cur_input > last_input:
                                 last_input = cur_input
                             if cur_output > last_output:
@@ -361,9 +408,22 @@ class SessionCollectionService:
                                 last_cached = cur_cached
                             num_turns += 1
 
-                    # Try to extract model from turn context
-                    if entry.get("turn_context", {}).get("model"):
-                        model = entry["turn_context"]["model"]
+                    # Codex 0.130+ session_meta carries the model for the run.
+                    if etype == "session_meta":
+                        payload = entry.get("payload") or {}
+                        m = payload.get("model") or payload.get("cli_version_model")
+                        if m:
+                            model = m
+                    if etype == "turn_context":
+                        payload = entry.get("payload") or {}
+                        m = payload.get("model")
+                        if m:
+                            model = m
+
+                    # Legacy turn_context shape (top-level dict).
+                    legacy_ctx = entry.get("turn_context")
+                    if isinstance(legacy_ctx, dict) and legacy_ctx.get("model"):
+                        model = legacy_ctx["model"]
 
                     ts = entry.get("timestamp") or entry.get("created_at")
                     if ts:
