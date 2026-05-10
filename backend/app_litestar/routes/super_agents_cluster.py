@@ -316,6 +316,40 @@ def stream_session(
     return Stream(generate(), media_type="text/event-stream")
 
 
+def _emit_git_action_activity(
+    super_agent_id: str,
+    session_id: str,
+    action: str,
+    response: dict[str, Any],
+) -> None:
+    """v0.7.7: best-effort emission of git-action events to the inspector.
+
+    Observability side-channel — never raise. Mirrors the pattern in
+    SuperAgentSessionService._record_activity.
+    """
+    try:
+        from app.services import super_agent_activity_service
+
+        success = bool(response.get("success"))
+        super_agent_activity_service.record(
+            super_agent_id=super_agent_id,
+            session_id=session_id,
+            event_type="git_action",
+            payload={
+                "command": action,
+                "result": response,
+                "success": success,
+            },
+            status="ok" if success else "error",
+            error_message=None if success else str(response.get("output") or "")[:500],
+        )
+    except Exception:
+        logger.warning(
+            "Failed to record super-agent git_action activity",
+            exc_info=True,
+        )
+
+
 @post(
     "/{super_agent_id:str}/sessions/{session_id:str}/git-action",
     sync_to_thread=False,
@@ -323,7 +357,7 @@ def stream_session(
 def git_action(
     super_agent_id: str, session_id: str, data: dict, caller: Caller
 ) -> Any:
-    del caller, super_agent_id
+    del caller
     from app.db.super_agents import update_super_agent_session
 
     if not data:
@@ -340,6 +374,7 @@ def git_action(
     if not worktree_path:
         raise ClientException(detail="Session has no worktree")
 
+    response: dict[str, Any] = {"action": action, "success": False, "output": "Unknown action"}
     try:
         if action == "commit":
             message = data.get("message", "Work in progress")
@@ -351,22 +386,22 @@ def git_action(
                 ["git", "-C", worktree_path, "commit", "-m", message],
                 capture_output=True, text=True, timeout=30,
             )
-            return {
+            response = {
                 "action": action,
                 "success": result.returncode == 0,
                 "output": (result.stdout if result.returncode == 0 else result.stderr).strip(),
             }
-        if action == "push":
+        elif action == "push":
             result = subprocess.run(
                 ["git", "-C", worktree_path, "push", "-u", "origin", branch_name],
                 capture_output=True, text=True, timeout=60,
             )
-            return {
+            response = {
                 "action": action,
                 "success": result.returncode == 0,
                 "output": (result.stdout if result.returncode == 0 else result.stderr).strip(),
             }
-        if action == "create_pr":
+        elif action == "create_pr":
             pr_title = data.get("pr_title", session.get("title") or f"Session {session_id}")
             pr_body = data.get("pr_body", "")
             result = subprocess.run(
@@ -380,11 +415,12 @@ def git_action(
                 capture_output=True, text=True, timeout=30, cwd=worktree_path,
             )
             if result.returncode != 0:
-                return {"action": action, "success": False, "output": result.stderr.strip()}
-            pr_url = result.stdout.strip()
-            update_super_agent_session(session_id, pr_url=pr_url)
-            return {"action": action, "success": True, "pr_url": pr_url}
-        if action == "rebase":
+                response = {"action": action, "success": False, "output": result.stderr.strip()}
+            else:
+                pr_url = result.stdout.strip()
+                update_super_agent_session(session_id, pr_url=pr_url)
+                response = {"action": action, "success": True, "pr_url": pr_url}
+        elif action == "rebase":
             project_id = session.get("project_id")
             if project_id:
                 from app.db.projects import get_project as _get_project
@@ -404,9 +440,10 @@ def git_action(
                     ["git", "-C", worktree_path, "rebase", "--abort"],
                     capture_output=True, text=True, timeout=10,
                 )
-                return {"action": action, "success": False, "output": result.stderr.strip()}
-            return {"action": action, "success": True, "output": result.stdout.strip()}
-        if action == "diff":
+                response = {"action": action, "success": False, "output": result.stderr.strip()}
+            else:
+                response = {"action": action, "success": True, "output": result.stdout.strip()}
+        elif action == "diff":
             result = subprocess.run(
                 ["git", "-C", worktree_path, "diff", "main...HEAD", "--stat"],
                 capture_output=True, text=True, timeout=30,
@@ -415,21 +452,35 @@ def git_action(
                 ["git", "-C", worktree_path, "diff", "main...HEAD"],
                 capture_output=True, text=True, timeout=30,
             )
-            return {
+            response = {
                 "action": action,
                 "success": True,
                 "stat": result.stdout.strip(),
                 "diff": diff_detail.stdout[:10000],
             }
     except subprocess.TimeoutExpired:
+        _emit_git_action_activity(
+            super_agent_id,
+            session_id,
+            action,
+            {"action": action, "success": False, "output": f"Git {action} timed out"},
+        )
         raise HTTPException(
             status_code=504, detail=f"Git {action} timed out"
         ) from None
     except Exception as exc:  # noqa: BLE001
+        _emit_git_action_activity(
+            super_agent_id,
+            session_id,
+            action,
+            {"action": action, "success": False, "output": f"Git {action} failed: {exc}"},
+        )
         raise HTTPException(
             status_code=500, detail=f"Git {action} failed: {exc}"
         ) from None
-    return {"action": action, "success": False, "output": "Unknown action"}
+
+    _emit_git_action_activity(super_agent_id, session_id, action, response)
+    return response
 
 
 # ---------------------------------------------------------------------------
