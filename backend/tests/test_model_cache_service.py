@@ -138,3 +138,57 @@ def test_discovery_failure_records_error_message_and_empty_list(
     assert meta["error_message"] is not None
     assert "RuntimeError" in meta["error_message"]
     assert "subprocess died" in meta["error_message"]
+
+
+def test_failed_discovery_uses_short_ttl(isolated_db, mock_discover):
+    """A subprocess failure should expire in ~1 hour, NOT 7 days."""
+    mock_discover.side_effect = RuntimeError("subprocess died")
+    model_cache_service.get_models(backend_kind="codex", auth_method="api_key")
+    with get_connection() as conn:
+        row = conn.execute(
+            "SELECT discovered_at, expires_at FROM model_discovery_cache "
+            "WHERE backend_kind = ? AND auth_method = ?",
+            ("codex", "api_key"),
+        ).fetchone()
+    assert row is not None
+    discovered_at = datetime.fromisoformat(row["discovered_at"])
+    expires_at = datetime.fromisoformat(row["expires_at"])
+    delta = expires_at - discovered_at
+    # Should be exactly ERROR_TTL_SECONDS (1 hour), not 7 days.
+    assert delta == timedelta(seconds=model_cache_service.ERROR_TTL_SECONDS)
+    assert delta < timedelta(days=1)
+
+
+def test_empty_discovery_uses_short_ttl(isolated_db, mock_discover):
+    """Empty discovery (no models found) should also use the short TTL."""
+    mock_discover.return_value = []
+    model_cache_service.get_models(backend_kind="codex", auth_method="api_key")
+    with get_connection() as conn:
+        row = conn.execute(
+            "SELECT discovered_at, expires_at FROM model_discovery_cache "
+            "WHERE backend_kind = ? AND auth_method = ?",
+            ("codex", "api_key"),
+        ).fetchone()
+    assert row is not None
+    discovered_at = datetime.fromisoformat(row["discovered_at"])
+    expires_at = datetime.fromisoformat(row["expires_at"])
+    delta = expires_at - discovered_at
+    assert delta == timedelta(seconds=model_cache_service.ERROR_TTL_SECONDS)
+    assert delta < timedelta(days=1)
+
+
+def test_successful_discovery_uses_full_ttl(isolated_db, mock_discover):
+    """Successful discovery keeps the configured 7-day TTL."""
+    mock_discover.return_value = ["gpt-5"]
+    model_cache_service.get_models(backend_kind="codex", auth_method="api_key")
+    with get_connection() as conn:
+        row = conn.execute(
+            "SELECT discovered_at, expires_at FROM model_discovery_cache "
+            "WHERE backend_kind = ? AND auth_method = ?",
+            ("codex", "api_key"),
+        ).fetchone()
+    assert row is not None
+    discovered_at = datetime.fromisoformat(row["discovered_at"])
+    expires_at = datetime.fromisoformat(row["expires_at"])
+    delta = expires_at - discovered_at
+    assert delta == timedelta(days=7)
