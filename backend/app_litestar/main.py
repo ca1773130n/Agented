@@ -139,6 +139,7 @@ from .routes.rules_plugins_hooks_commands import (
     plugins_router,
     rules_router,
 )
+from .routes.model_cache import model_cache_router
 from .routes.scheduler import scheduler_router
 from .routes.super_agent_activity import super_agent_activity_router
 from .routes.super_agents_cluster import (
@@ -246,6 +247,7 @@ def create_app() -> Litestar:
             workflows_router,
             super_agents_router,
             super_agent_activity_router,
+            model_cache_router,
             super_agent_exports_router,
             settings_router,
             system_router,
