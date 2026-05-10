@@ -51,6 +51,8 @@ export type {
   SuperAgentRollup,
   SuperAgentStatusPill,
 } from './super-agent-activity';
+export { modelCacheApi } from './model-cache';
+export type { ModelCacheResponse, ModelCacheEntry } from './model-cache';
 export { rotationApi } from './rotation';
 export { schedulerApi } from './scheduler';
 export { healthApi, versionApi, utilityApi, settingsApi, setupApi, systemErrorApi } from './system';
