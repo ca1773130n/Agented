@@ -41,6 +41,13 @@ watch(showDirectoryBrowser, (open) => {
 const marketplaceAutoUpdate = ref(true);
 const originalAutoUpdate = ref(true);
 
+// YOLO mode for CLI agent runner. When ON (default), sketches and
+// agent-driven flows invoke claude/codex/gemini CLIs directly with
+// "skip approvals" flags so agents can use tools end-to-end. When
+// OFF, those flows fall back to CLIProxyAPI (pure-token chat, no
+// tool privileges).
+const yoloMode = ref(true);
+
 // Monitoring settings
 const monitoringConfig = ref<MonitoringConfig>({
   enabled: false,
@@ -100,6 +107,33 @@ async function saveAutoUpdateSetting() {
   } catch (err) {
     const message = err instanceof ApiError ? err.message : 'Failed to save setting';
     showToast(message, 'error');
+  }
+}
+
+async function loadYoloMode() {
+  try {
+    const data = await settingsApi.get('agent_yolo_mode');
+    // Default ON when the setting hasn't been written yet.
+    yoloMode.value = !data.value || data.value !== 'false';
+  } catch {
+    yoloMode.value = true;
+  }
+}
+
+async function saveYoloMode() {
+  try {
+    await settingsApi.set('agent_yolo_mode', String(yoloMode.value));
+    showToast(
+      yoloMode.value
+        ? 'YOLO mode enabled — agents run with tool privileges'
+        : 'YOLO mode disabled — agents fall back to CLIProxyAPI',
+      'success',
+    );
+  } catch (err) {
+    const message = err instanceof ApiError ? err.message : 'Failed to save YOLO mode';
+    showToast(message, 'error');
+    // Revert the optimistic flip so the UI reflects the persisted value.
+    yoloMode.value = !yoloMode.value;
   }
 }
 
@@ -178,6 +212,7 @@ function isAccountEnabled(accountId: string): boolean {
 onMounted(() => {
   loadGeneralSettings();
   loadAutoUpdateSetting();
+  loadYoloMode();
   loadMonitoringSettings();
 });
 </script>
@@ -235,6 +270,35 @@ onMounted(() => {
             <button
               :class="['toggle-switch', { active: marketplaceAutoUpdate }]"
               @click="marketplaceAutoUpdate = !marketplaceAutoUpdate; saveAutoUpdateSetting()"
+            >
+              <span class="toggle-knob"></span>
+            </button>
+          </label>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top: 1.5rem;">
+      <div class="card-header">
+        <h3>Agent Execution</h3>
+      </div>
+      <div class="card-body">
+        <div class="form-group toggle-group">
+          <label class="toggle-label">
+            <span class="toggle-text">
+              <strong>YOLO mode</strong>
+              <span class="toggle-description">
+                When ON (default), sketches and agent-driven sessions invoke the
+                <code>claude</code>/<code>codex</code>/<code>gemini</code> CLIs directly with
+                tool privileges so agents can read files, run shell commands, and edit code in
+                the project worktree. When OFF, those flows fall back to CLIProxyAPI for pure
+                token chat (no tool use). The ai-accounts chat panel keeps using CLIProxyAPI by
+                default regardless of this toggle.
+              </span>
+            </span>
+            <button
+              :class="['toggle-switch', { active: yoloMode }]"
+              @click="yoloMode = !yoloMode; saveYoloMode()"
             >
               <span class="toggle-knob"></span>
             </button>

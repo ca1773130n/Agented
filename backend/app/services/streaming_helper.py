@@ -26,6 +26,7 @@ def run_streaming_response(
     cwd: Optional[str] = None,
     chat_mode: Optional[str] = None,
     instance_id: Optional[str] = None,
+    use_cli_agent: Optional[bool] = None,
 ) -> None:
     """Launch a background thread that streams an LLM response.
 
@@ -44,12 +45,23 @@ def run_streaming_response(
         cwd: Optional working directory for CLI subprocess (work mode).
         chat_mode: Optional chat mode ('management' or 'work').
         instance_id: Optional project SA instance ID for project context.
+        use_cli_agent: When ``True``, route through the CLI agent runner
+            (claude/codex/gemini subprocess with tool privileges) instead
+            of CLIProxyAPI. When ``None`` (default), reads the global
+            ``agent_yolo_mode`` setting — on by default. Pass ``False``
+            to force CLIProxyAPI even when YOLO is globally on (the
+            ai-accounts chat panel uses this to keep its pure-token
+            flow).
     """
     _session_id = session_id
     _super_agent_id = super_agent_id
 
     def _stream_response():
         try:
+            from .cli_agent_runner_service import (
+                is_yolo_mode_enabled,
+                stream_via_cli_agent,
+            )
             from .conversation_streaming import stream_llm_response
 
             ChatStateService.push_status(_session_id, "streaming")
@@ -71,15 +83,38 @@ def run_streaming_response(
                         {"role": msg.get("role", "user"), "content": msg.get("content", "")}
                     )
 
+            # Resolve routing: explicit override wins, else fall back to the
+            # global YOLO setting. CLI agent path runs the backend's CLI as
+            # an autonomous tool-using agent in `cwd`; the legacy path
+            # streams through CLIProxyAPI for pure-token chat.
+            yolo_on = is_yolo_mode_enabled() if use_cli_agent is None else bool(use_cli_agent)
+
             accumulated = []
-            for chunk in stream_llm_response(
-                llm_messages,
-                model=model,
-                account_email=account_id,
-                backend=backend,
-                cwd=cwd,
-                chat_mode=chat_mode,
-            ):
+            if yolo_on and (backend or "").lower() in ("claude", "codex", "gemini"):
+                logger.info(
+                    "Streaming via CLI agent runner (backend=%s, cwd=%s, yolo=%s)",
+                    backend,
+                    cwd,
+                    yolo_on,
+                )
+                stream_iter = stream_via_cli_agent(
+                    llm_messages,
+                    backend=backend,
+                    cwd=cwd,
+                    yolo=is_yolo_mode_enabled(),
+                    model=model,
+                )
+            else:
+                stream_iter = stream_llm_response(
+                    llm_messages,
+                    model=model,
+                    account_email=account_id,
+                    backend=backend,
+                    cwd=cwd,
+                    chat_mode=chat_mode,
+                )
+
+            for chunk in stream_iter:
                 if chunk:
                     accumulated.append(chunk)
                     ChatStateService.push_delta(_session_id, "content_delta", {"content": chunk})
