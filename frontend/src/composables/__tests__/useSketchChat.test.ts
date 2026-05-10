@@ -267,10 +267,16 @@ describe('useSketchChat', () => {
         updated_at: '2026-01-02T00:00:00Z',
       } as any);
 
+      // The classification + routing summaries are factual metadata
+      // (phase, complexity, target SA), not the agent's reply, so they
+      // render as ``system`` bubbles. The actual agent response lands
+      // as an ``assistant`` bubble after the session-log fetch — that
+      // happens asynchronously and isn't observable here without
+      // awaiting the call.
       expect(chat.currentSketch.value?.id).toBe('sk-1');
       expect(chat.messages.value[0].role).toBe('user');
       expect(chat.messages.value[0].content).toBe('Full content here');
-      expect(chat.messages.value[1].role).toBe('assistant');
+      expect(chat.messages.value[1].role).toBe('system');
       expect(chat.messages.value[1].content).toContain('Phase: build');
     });
 
