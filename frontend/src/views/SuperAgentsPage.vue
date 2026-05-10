@@ -78,11 +78,17 @@ async function loadSuperAgents() {
   }
 }
 
+// Tracks the in-flight create so the modal's submit button is disabled
+// while the request is on the wire. Without it a double-click sent two
+// create requests and produced duplicate SuperAgents.
+const isCreating = ref(false);
 async function createSuperAgent() {
+  if (isCreating.value) return;
   if (!createForm.value.name.trim()) {
     showToast('Name is required', 'error');
     return;
   }
+  isCreating.value = true;
   try {
     await superAgentApi.create({
       name: createForm.value.name,
@@ -100,6 +106,8 @@ async function createSuperAgent() {
     } else {
       showToast('Failed to create super agent', 'error');
     }
+  } finally {
+    isCreating.value = false;
   }
 }
 
@@ -365,7 +373,9 @@ onUnmounted(() => {
           </div>
           <div class="modal-footer">
             <button class="btn" @click="showCreateModal = false">Cancel</button>
-            <button class="btn btn-primary" @click="createSuperAgent">Create</button>
+            <button class="btn btn-primary" :disabled="isCreating" @click="createSuperAgent">
+              {{ isCreating ? 'Creating…' : 'Create' }}
+            </button>
           </div>
         </div>
       </div>

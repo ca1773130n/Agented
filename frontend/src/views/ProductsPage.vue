@@ -101,11 +101,16 @@ async function loadProducts() {
 watch([() => pagination.currentPage.value, () => pagination.pageSize.value], () => { loadProducts(); });
 watch([searchQuery, sortField, sortOrder], () => { pagination.resetToFirstPage(); });
 
+// Tracks the in-flight create so the modal's submit button is disabled
+// while the request is on the wire — prevents double-submit duplicates.
+const isCreating = ref(false);
 async function createProduct() {
+  if (isCreating.value) return;
   if (!newProduct.value.name.trim()) {
     showToast('Product name is required', 'error');
     return;
   }
+  isCreating.value = true;
   try {
     const result = await productApi.create({
       name: newProduct.value.name,
@@ -131,6 +136,8 @@ async function createProduct() {
     } else {
       showToast('Failed to create product', 'error');
     }
+  } finally {
+    isCreating.value = false;
   }
 }
 
@@ -302,7 +309,9 @@ onMounted(() => {
           </div>
           <div class="modal-footer">
             <button class="btn btn-secondary" @click="showCreateModal = false">Cancel</button>
-            <button class="btn btn-primary" @click="createProduct">Create Product</button>
+            <button class="btn btn-primary" :disabled="isCreating" @click="createProduct">
+              {{ isCreating ? 'Creating…' : 'Create Product' }}
+            </button>
           </div>
         </div>
       </div>
