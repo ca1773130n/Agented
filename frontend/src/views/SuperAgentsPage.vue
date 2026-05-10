@@ -257,11 +257,11 @@ onUnmounted(() => {
     />
 
     <div v-else class="sa-grid">
-      <div
+      <router-link
         v-for="sa in filteredSuperAgents"
         :key="sa.id"
+        :to="{ name: 'super-agent-playground', params: { superAgentId: sa.id } }"
         class="sa-card"
-        @click="router.push({ name: 'super-agent-playground', params: { superAgentId: sa.id } })"
       >
         <div class="sa-card-header">
           <div class="sa-icon">
@@ -333,7 +333,7 @@ onUnmounted(() => {
             Delete
           </button>
         </div>
-      </div>
+      </router-link>
     </div>
 
     <!-- Create Modal -->
@@ -442,6 +442,10 @@ onUnmounted(() => {
   padding: 1.5rem;
   transition: all 0.2s;
   cursor: pointer;
+  /* router-link anchor reset (was a div). */
+  display: block;
+  text-decoration: none;
+  color: inherit;
 }
 
 .sa-card:hover {

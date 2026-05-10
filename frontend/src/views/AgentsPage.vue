@@ -221,7 +221,18 @@ onMounted(() => {
     <EmptyState v-else-if="filteredAndSorted.length === 0 && hasActiveFilter" title="No matching agents" description="Try a different search term" />
 
     <div v-else class="agents-grid">
-      <div v-for="agent in filteredAndSorted" :key="agent.id" class="agent-card clickable" :class="{ disabled: !agent.enabled }" @click="router.push({ name: 'agent-design', params: { agentId: agent.id } })">
+      <!--
+        Use <router-link> so middle-click and right-click → "open in new tab"
+        actually work. The previous @click="router.push(...)" pattern looked
+        clickable but silently swallowed the modifier-key intents.
+      -->
+      <router-link
+        v-for="agent in filteredAndSorted"
+        :key="agent.id"
+        :to="{ name: 'agent-design', params: { agentId: agent.id } }"
+        class="agent-card clickable"
+        :class="{ disabled: !agent.enabled }"
+      >
         <div class="agent-header">
           <div class="agent-icon">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
@@ -282,7 +293,7 @@ onMounted(() => {
             </svg>
           </button>
         </div>
-      </div>
+      </router-link>
     </div>
 
     <PaginationBar
@@ -324,6 +335,12 @@ onMounted(() => {
   border-radius: 12px;
   padding: 20px;
   transition: border-color 0.2s;
+  /* Reset default <router-link> anchor styling — the card was a
+     <div> historically, so the underline + accent-blue text would
+     leak across the whole card. */
+  display: block;
+  text-decoration: none;
+  color: inherit;
 }
 
 .agent-card:hover {

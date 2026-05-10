@@ -178,7 +178,15 @@ onMounted(() => {
     </EmptyState>
 
     <div v-else class="skills-grid">
-      <div v-for="skill in userSkills" :key="skill.id" :id="'entity-' + skill.id" :data-entity-name="skill.skill_name" class="skill-card" :class="{ disabled: !skill.enabled }" @click="router.push({ name: 'skill-detail', params: { skillId: skill.id } })">
+      <router-link
+        v-for="skill in userSkills"
+        :key="skill.id"
+        :id="'entity-' + skill.id"
+        :data-entity-name="skill.skill_name"
+        :to="{ name: 'skill-detail', params: { skillId: skill.id } }"
+        class="skill-card"
+        :class="{ disabled: !skill.enabled }"
+      >
         <div class="skill-header">
           <div class="skill-icon">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
@@ -221,7 +229,7 @@ onMounted(() => {
             Remove
           </button>
         </div>
-      </div>
+      </router-link>
     </div>
 
     <!-- Add Skill Modal -->
@@ -286,6 +294,10 @@ onMounted(() => {
   padding: 20px;
   transition: border-color 0.2s;
   cursor: pointer;
+  /* router-link anchor reset (was a div). */
+  display: block;
+  text-decoration: none;
+  color: inherit;
 }
 
 .skill-card:hover {

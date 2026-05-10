@@ -225,11 +225,11 @@ onMounted(() => {
     <EmptyState v-else-if="filteredAndSorted.length === 0 && hasActiveFilter" title="No matching projects" description="Try a different search term" />
 
     <div v-else class="projects-grid">
-      <div
+      <router-link
         v-for="project in filteredAndSorted"
         :key="project.id"
+        :to="{ name: 'project-dashboard', params: { projectId: project.id } }"
         class="project-card clickable"
-        @click="router.push({ name: 'project-dashboard', params: { projectId: project.id } })"
       >
         <div class="project-header">
           <div class="project-icon">
@@ -274,7 +274,7 @@ onMounted(() => {
             {{ deletingId === project.id ? 'Deleting...' : 'Delete' }}
           </button>
         </div>
-      </div>
+      </router-link>
     </div>
 
     <PaginationBar
@@ -400,6 +400,10 @@ onMounted(() => {
   border-radius: 12px;
   padding: 1.5rem;
   transition: all 0.2s;
+  /* router-link anchor reset (was a div). */
+  display: block;
+  text-decoration: none;
+  color: inherit;
 }
 
 .project-card.clickable {

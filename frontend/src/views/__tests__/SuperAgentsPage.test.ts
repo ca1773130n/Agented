@@ -159,15 +159,28 @@ describe('SuperAgentsPage', () => {
     expect(mockShowToast).toHaveBeenCalledWith('SuperAgent "Code Reviewer" deleted', 'success')
   })
 
-  it('navigates to playground on card click', async () => {
-    const wrapper = mountComponent()
+  it('renders each card as a router-link to the SA playground', async () => {
+    // The card was migrated from <div @click="router.push(...)"> to
+    // <router-link :to="..."> in v0.7.28 so middle-click and right-click
+    // → "open in new tab" actually work. Use Vue Test Utils' RouterLinkStub
+    // so the resolved ``to`` is queryable as a prop instead of getting
+    // serialized to ``[object Object]`` on a vanilla anchor stub.
+    const { RouterLinkStub } = await import('@vue/test-utils')
+    const wrapper = mount(SuperAgentsPage, {
+      global: {
+        provide: { showToast: mockShowToast },
+        stubs: { teleport: true, 'router-link': RouterLinkStub, 'RouterLink': RouterLinkStub },
+      },
+    })
     await flushPromises()
 
-    const firstCard = wrapper.findAll('.sa-card')[0]
-    expect(firstCard).toBeDefined()
-    await firstCard!.trigger('click')
-
-    expect(mockPush).toHaveBeenCalledWith({
+    const links = wrapper.findAllComponents(RouterLinkStub)
+    const cardLink = links.find(l => {
+      const to = l.props('to') as { name?: string } | undefined
+      return to?.name === 'super-agent-playground'
+    })
+    expect(cardLink).toBeDefined()
+    expect(cardLink!.props('to')).toEqual({
       name: 'super-agent-playground',
       params: { superAgentId: 'super-abc123' },
     })

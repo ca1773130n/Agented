@@ -297,7 +297,12 @@ onMounted(() => {
     <EmptyState v-else-if="filteredAndSorted.length === 0 && hasActiveFilter" title="No matching plugins" description="Try a different search term" />
 
     <div v-else class="plugins-grid">
-      <div v-for="plugin in filteredAndSorted" :key="plugin.id" class="plugin-card" @click="router.push({ name: 'plugin-detail', params: { pluginId: plugin.id } })">
+      <router-link
+        v-for="plugin in filteredAndSorted"
+        :key="plugin.id"
+        :to="{ name: 'plugin-detail', params: { pluginId: plugin.id } }"
+        class="plugin-card"
+      >
         <div class="plugin-header">
           <div class="plugin-icon">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
@@ -341,7 +346,7 @@ onMounted(() => {
             {{ deletingId === plugin.id ? 'Deleting...' : 'Delete' }}
           </button>
         </div>
-      </div>
+      </router-link>
     </div>
 
     <PaginationBar
@@ -577,6 +582,10 @@ onMounted(() => {
   padding: 1.5rem;
   transition: all 0.2s;
   cursor: pointer;
+  /* router-link anchor reset (was a div). */
+  display: block;
+  text-decoration: none;
+  color: inherit;
 }
 
 .plugin-card:hover {
