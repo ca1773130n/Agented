@@ -16,8 +16,21 @@ import type {
   SessionType,
 } from './types';
 
+export interface SuperAgentActivityStatus {
+  active_sessions: number;
+  is_streaming: boolean;
+}
+
 export const superAgentApi = {
   list: () => apiFetch<{ super_agents: SuperAgent[] }>('/admin/super-agents'),
+  /** Per-SA activity snapshot keyed by super_agent_id. SAs with no
+   *  active sessions are absent from the map (callers should treat
+   *  ``undefined`` as "idle"). Cheap enough to poll on a 5-10s
+   *  cadence; powers the activity pill on the SA list page. */
+  activityStatus: () =>
+    apiFetch<{ statuses: Record<string, SuperAgentActivityStatus> }>(
+      '/admin/super-agents/activity-status',
+    ),
   get: (id: string) => apiFetch<SuperAgent>(`/admin/super-agents/${id}`),
   create: (data: { name: string; description?: string; backend_type?: string; preferred_model?: string; team_id?: string; max_concurrent_sessions?: number; config_json?: string }) =>
     apiFetch<{ message: string; super_agent_id: string }>('/admin/super-agents', {

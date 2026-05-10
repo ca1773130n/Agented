@@ -66,6 +66,48 @@ def list_super_agents(
     }
 
 
+@get("/activity-status", sync_to_thread=False)
+def super_agent_activity_status() -> dict[str, Any]:
+    """Per-SA activity snapshot: ``has_active_session`` + ``is_streaming``.
+
+    Cheap to call (two indexed reads + a dict snapshot of the in-memory
+    ChatStateService), so the SA list page can poll it on a 5-10s
+    cadence to render a "working now / active session / idle" pill on
+    each card without round-tripping every SA's full session list.
+
+    Returns::
+
+        {
+          "statuses": {
+            "sa-X": {"active_sessions": 2, "is_streaming": true},
+            ...
+          }
+        }
+
+    SAs absent from the map have no active sessions.
+    """
+    from app.db.super_agents import get_active_session_counts_by_super_agent
+    from app.db.super_agents import get_active_sessions_list
+    from app.services.chat_state_service import ChatStateService
+
+    counts = get_active_session_counts_by_super_agent()
+    streaming = ChatStateService.get_streaming_session_ids()
+
+    streaming_sa_ids: set[str] = set()
+    if streaming:
+        for sess in get_active_sessions_list():
+            if sess.get("id") in streaming:
+                streaming_sa_ids.add(sess.get("super_agent_id"))
+
+    statuses: dict[str, dict] = {}
+    for sa_id, active in counts.items():
+        statuses[sa_id] = {
+            "active_sessions": active,
+            "is_streaming": sa_id in streaming_sa_ids,
+        }
+    return {"statuses": statuses}
+
+
 @post("/", sync_to_thread=False)
 def create_super_agent(data: dict, caller: Caller) -> dict[str, Any]:
     del caller
@@ -569,6 +611,7 @@ super_agents_router = Router(
     path="/admin/super-agents",
     route_handlers=[
         list_super_agents,
+        super_agent_activity_status,
         create_super_agent,
         get_super_agent_endpoint,
         update_super_agent_endpoint,
