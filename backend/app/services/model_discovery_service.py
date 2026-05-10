@@ -421,7 +421,9 @@ class ModelDiscoveryService:
         """Discover Codex models from models_cache.json.
 
         Checks default path and all account-specific config_path directories.
-        Only includes models with visibility='list' (matching what `/model` shows).
+        Includes any non-hidden model (matches the looser ai-accounts
+        sidecar filter — codex's `visibility` field can also be "available"
+        or unset on newer entries; only "hidden" is a definite exclusion).
         """
         all_models: list[str] = []
         seen: set[str] = set()
@@ -441,7 +443,7 @@ class ModelDiscoveryService:
                 for entry in entries:
                     slug = None
                     if isinstance(entry, dict) and "slug" in entry:
-                        if entry.get("visibility") == "list":
+                        if entry.get("visibility") != "hidden":
                             slug = entry["slug"]
                     elif isinstance(entry, str):
                         slug = entry
