@@ -404,3 +404,69 @@ class TestUpgradeEndpoint:
         with _admin_client() as c:
             r = c.post("/admin/system/cliproxy/upgrade")
         assert r.status_code in (401, 403)
+
+
+# ---------------------------------------------------------------------------
+# Autofix integration: 'unknown provider for model' triggers upgrade
+# ---------------------------------------------------------------------------
+
+
+class TestAutofixUnknownProvider:
+    def test_pattern_matches_unknown_provider(self):
+        from app.services.autofix_service import (
+            _find_tier1_fix,
+            _fix_cliproxy_unknown_provider,
+        )
+
+        fix_fn = _find_tier1_fix(
+            "proxy_error", "502 unknown provider for model claude-opus-4-7"
+        )
+        assert fix_fn is _fix_cliproxy_unknown_provider
+
+    def test_pattern_matches_cli_error_variant(self):
+        from app.services.autofix_service import (
+            _find_tier1_fix,
+            _fix_cliproxy_unknown_provider,
+        )
+
+        fix_fn = _find_tier1_fix(
+            "cli_error", "unknown provider for model gpt-5"
+        )
+        assert fix_fn is _fix_cliproxy_unknown_provider
+
+    def test_fix_function_calls_ensure_min_version(self):
+        from app.services.autofix_service import _fix_cliproxy_unknown_provider
+
+        with patch.object(
+            CLIProxyManager,
+            "ensure_min_version",
+            return_value=(True, "upgraded 6.8.30 -> 7.0.0"),
+        ) as mock_ensure:
+            result = _fix_cliproxy_unknown_provider({"id": "err-1"})
+        assert result["success"] is True
+        assert "6.8.30 -> 7.0.0" in result["action_taken"]
+        mock_ensure.assert_called_once()
+
+    def test_fix_function_returns_failure_when_upgrade_fails(self):
+        from app.services.autofix_service import _fix_cliproxy_unknown_provider
+
+        with patch.object(
+            CLIProxyManager,
+            "ensure_min_version",
+            return_value=(False, "brew upgrade failed"),
+        ):
+            result = _fix_cliproxy_unknown_provider({"id": "err-2"})
+        assert result["success"] is False
+        assert "brew upgrade failed" in result["action_taken"]
+
+    def test_fix_function_handles_exception(self):
+        from app.services.autofix_service import _fix_cliproxy_unknown_provider
+
+        with patch.object(
+            CLIProxyManager,
+            "ensure_min_version",
+            side_effect=RuntimeError("boom"),
+        ):
+            result = _fix_cliproxy_unknown_provider({"id": "err-3"})
+        assert result["success"] is False
+        assert "boom" in result["action_taken"]
