@@ -54,7 +54,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { modelCacheApi } from '../../services/api/model-cache';
 
@@ -85,6 +85,22 @@ const discoveredAt = ref<string | null>(null);
 const refreshing = ref(false);
 const refreshError = ref<string | null>(null);
 
+// v0.7.8 follow-up: tick the relative-time label so "discovered Xs ago"
+// updates while the view is open. Refresh every 30s; cleared on unmount.
+const now = ref(Date.now());
+let nowTimer: ReturnType<typeof setInterval> | null = null;
+onMounted(() => {
+  nowTimer = setInterval(() => {
+    now.value = Date.now();
+  }, 30000);
+});
+onUnmounted(() => {
+  if (nowTimer) {
+    clearInterval(nowTimer);
+    nowTimer = null;
+  }
+});
+
 watch(
   () => props.models,
   (next) => {
@@ -96,7 +112,7 @@ const discoveredAtLabel = computed(() => {
   if (!discoveredAt.value) return '';
   const then = Date.parse(discoveredAt.value);
   if (Number.isNaN(then)) return '';
-  const seconds = Math.max(1, Math.floor((Date.now() - then) / 1000));
+  const seconds = Math.max(1, Math.floor((now.value - then) / 1000));
   if (seconds < 60) {
     return t('backendDetail.discoveredSecondsAgo', { count: seconds }, `discovered ${seconds}s ago`);
   }

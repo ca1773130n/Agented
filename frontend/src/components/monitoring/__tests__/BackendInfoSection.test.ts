@@ -124,6 +124,46 @@ describe('BackendInfoSection', () => {
     expect(err.text()).toContain('subprocess died');
   });
 
+  it('discovered-at label ticks forward as time advances', async () => {
+    vi.useFakeTimers();
+    const fixedAt = new Date('2026-05-10T00:00:00.000Z');
+    vi.setSystemTime(fixedAt);
+    (modelCacheApi.refresh as ReturnType<typeof vi.fn>).mockResolvedValue({
+      models: ['gpt-5'],
+      backend_kind: 'codex',
+      auth_method: 'unknown',
+      discovery_method: 'mixed',
+      discovered_at: fixedAt.toISOString(),
+      expires_at: '2026-05-17T00:00:00.000Z',
+      error_message: null,
+      fresh: true,
+    });
+    const wrapper = mountSection({ backendKind: 'codex' });
+    await wrapper.find('[data-testid="refresh-models-btn"]').trigger('click');
+    await flushPromises();
+    // Advance just enough to render a small "seconds ago" value.
+    vi.setSystemTime(new Date(fixedAt.getTime() + 5_000));
+    await wrapper.vm.$nextTick();
+    const initial = wrapper.find('[data-testid="discovered-at"]').text();
+    expect(initial).toBeTruthy();
+    // Advance past the 30s tick boundary; expect label to re-render.
+    vi.setSystemTime(new Date(fixedAt.getTime() + 2 * 60_000));
+    vi.advanceTimersByTime(60_000);
+    await wrapper.vm.$nextTick();
+    const later = wrapper.find('[data-testid="discovered-at"]').text();
+    expect(later).toBeTruthy();
+    expect(later).not.toBe(initial);
+    vi.useRealTimers();
+  });
+
+  it('clears the tick interval on unmount', () => {
+    const clearSpy = vi.spyOn(globalThis, 'clearInterval');
+    const wrapper = mountSection({ backendKind: 'codex' });
+    wrapper.unmount();
+    expect(clearSpy).toHaveBeenCalled();
+    clearSpy.mockRestore();
+  });
+
   it('emits models-refreshed with the new list', async () => {
     const fixedAt = '2026-05-10T00:00:00.000Z';
     (modelCacheApi.refresh as ReturnType<typeof vi.fn>).mockResolvedValue({
