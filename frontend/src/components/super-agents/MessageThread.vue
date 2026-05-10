@@ -3,6 +3,7 @@ import { ref, computed, onMounted } from 'vue';
 import type { AgentMessage } from '../../services/api';
 import { agentMessageApi } from '../../services/api';
 import { safeFormatDateTime } from '../../utils/datetime';
+import MarkdownContent from '../base/MarkdownContent.vue';
 
 const props = defineProps<{
   superAgentId: string;
@@ -78,7 +79,7 @@ onMounted(loadMessages);
       >
         <div class="bubble-content">
           <div v-if="msg.priority === 'high'" class="bubble-priority">HIGH</div>
-          <div class="bubble-text">{{ msg.content }}</div>
+          <MarkdownContent class="bubble-text" :content="msg.content" :breaks="true" />
           <div class="bubble-meta">
             <span :class="['bubble-status', `status-${msg.status}`]">{{ msg.status }}</span>
             <span class="bubble-time">{{ formatTimestamp(msg.created_at) }}</span>
