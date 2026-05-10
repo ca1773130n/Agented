@@ -58,7 +58,17 @@ class MonitoringService:
         try:
             config = get_monitoring_config()
             if not config.get("enabled"):
-                # Auto-enable when backend accounts are configured
+                # Auto-enable when backend accounts are configured.
+                # Mirror sidecar-owned accounts into the local table first —
+                # post-wave-80 the sidecar is the source of truth and the
+                # local table is otherwise empty, which used to leave
+                # monitoring permanently disabled (no gauges).
+                try:
+                    from .sidecar_account_sync_service import sync_sidecar_accounts
+
+                    sync_sidecar_accounts()
+                except Exception as exc:
+                    logger.debug("Sidecar account sync (init): %s", exc)
                 try:
                     accounts = get_all_accounts_with_health()
                     if accounts:
@@ -184,6 +194,15 @@ class MonitoringService:
             return
 
         accounts_config = config.get("accounts", {})
+
+        # Refresh the sidecar mirror before each poll so newly added or
+        # renamed accounts surface without a server restart.
+        try:
+            from .sidecar_account_sync_service import sync_sidecar_accounts
+
+            sync_sidecar_accounts()
+        except Exception as exc:
+            logger.debug("Sidecar account sync (poll): %s", exc)
 
         # Get all accounts with backend type info
         try:
@@ -564,6 +583,15 @@ class MonitoringService:
 
         config = get_monitoring_config()
         now = datetime.now(timezone.utc)
+
+        # Refresh the sidecar mirror so the dashboard reflects accounts
+        # added/removed in the sidecar without waiting for the next poll.
+        try:
+            from .sidecar_account_sync_service import sync_sidecar_accounts
+
+            sync_sidecar_accounts()
+        except Exception as exc:
+            logger.debug("Sidecar account sync (status): %s", exc)
 
         # Build account name/plan lookup and detect shared credentials
         try:
