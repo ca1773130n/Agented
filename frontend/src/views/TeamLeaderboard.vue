@@ -242,7 +242,7 @@ onMounted(loadData);
   cursor: pointer;
   transition: all 0.15s;
 }
-.period-btn.active { background: var(--accent-amber); color: #000; }
+.period-btn.active { background: var(--accent-cyan); color: #000; }
 
 /* Podium */
 .podium {

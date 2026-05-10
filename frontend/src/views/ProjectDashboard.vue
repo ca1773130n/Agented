@@ -667,8 +667,8 @@ function onSetupCompleted() {
 .action-btn.harness-btn:hover:not(:disabled) { border-color: var(--accent-violet); }
 .action-btn.planning-btn { background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid transparent; }
 .action-btn.planning-btn:hover { border-color: #10b981; }
-.action-btn.setup-btn { background: var(--accent-amber-dim, rgba(255, 170, 0, 0.15)); color: var(--accent-amber, #ffaa00); border: 1px solid transparent; }
-.action-btn.setup-btn:hover:not(:disabled) { border-color: var(--accent-amber, #ffaa00); }
+.action-btn.setup-btn { background: var(--accent-cyan-dim, rgba(0, 212, 255, 0.15)); color: var(--accent-cyan, #00d4ff); border: 1px solid transparent; }
+.action-btn.setup-btn:hover:not(:disabled) { border-color: var(--accent-cyan, #00d4ff); }
 .init-badge { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: 50%; font-size: 10px; margin-left: 2px; }
 .init-badge--loading { background: var(--color-warning, #f59e0b); color: #000; animation: pulse 1.5s ease-in-out infinite; }
 .init-badge--ready { background: var(--color-success, #10b981); color: #fff; }
