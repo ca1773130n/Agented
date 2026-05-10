@@ -74,20 +74,38 @@ export const superAgentSessionApi = {
       method: 'POST',
       body: JSON.stringify({ message }),
     }),
-  /** Chat endpoint with backend/account/model selection (37-02 protocol). */
+  /** Chat endpoint with backend/account/model selection (37-02 protocol).
+   *
+   * `useCliAgent` overrides the global YOLO setting for this turn only —
+   * the AiChatPanel `useCliRunner` toggle plumbs through here. `true`
+   * forces the CLI agent runner (tool-using); `false` forces CLIProxy;
+   * `undefined` defers to the server's global `agent_yolo_mode`. */
   sendChatMessage: (
     superAgentId: string,
     sessionId: string,
     content: string,
-    options?: { backend?: string; account_id?: string; model?: string; mode?: string; chat_mode?: string },
-  ) =>
-    apiFetch<{ status: string; message_id: string; backends?: Record<string, unknown> }>(
+    options?: {
+      backend?: string;
+      account_id?: string;
+      model?: string;
+      mode?: string;
+      chat_mode?: string;
+      useCliAgent?: boolean;
+    },
+  ) => {
+    const { useCliAgent, ...rest } = options ?? {};
+    const payload: Record<string, unknown> = { content, ...rest };
+    if (typeof useCliAgent === 'boolean') {
+      payload.use_cli_agent = useCliAgent;
+    }
+    return apiFetch<{ status: string; message_id: string; backends?: Record<string, unknown> }>(
       `/admin/super-agents/${superAgentId}/sessions/${sessionId}/chat`,
       {
         method: 'POST',
-        body: JSON.stringify({ content, ...options }),
+        body: JSON.stringify(payload),
       },
-    ),
+    );
+  },
   end: (superAgentId: string, sessionId: string) =>
     apiFetch<{ message: string }>(`/admin/super-agents/${superAgentId}/sessions/${sessionId}/end`, {
       method: 'POST',

@@ -64,6 +64,11 @@ def _make_conversation_router(
         body = data or {}
         if not body.get("message"):
             raise ClientException(detail="message is required")
+        # Per-call CLI-runner override from the AiChatPanel toggle. Only
+        # bool values are honored; anything else falls back to the
+        # global YOLO setting.
+        raw_override = body.get("use_cli_agent")
+        use_cli_agent = raw_override if isinstance(raw_override, bool) else None
         return _result_or_raise(
             service.send_message(
                 conv_id,
@@ -71,6 +76,7 @@ def _make_conversation_router(
                 backend=body.get("backend"),
                 account_id=body.get("account_id"),
                 model=body.get("model"),
+                use_cli_agent=use_cli_agent,
             )
         )
 

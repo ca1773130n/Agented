@@ -13,7 +13,7 @@ export interface ConversationApi {
   list?: () => Promise<{ conversations: { id: string; entity_type: string; status: string; updated_at: string }[] }>;
   start: () => Promise<{ conversation_id: string; message: string }>;
   get?: (convId: string) => Promise<{ id: string; status: string; messages_parsed?: ConversationMessage[] }>;
-  sendMessage: (convId: string, message: string, options?: { backend?: string; account_id?: string; model?: string }) => Promise<{ message_id: string; status: string }>;
+  sendMessage: (convId: string, message: string, options?: { backend?: string; account_id?: string; model?: string; use_cli_agent?: boolean }) => Promise<{ message_id: string; status: string }>;
   stream: (convId: string) => import('../services/api/client').AuthenticatedEventSource;
   finalize: (convId: string) => Promise<Record<string, unknown>>;
   resume?: (convId: string) => Promise<{ message: string; conversation_id: string }>;
@@ -80,10 +80,16 @@ export function useConversation<TConfig>(
   const selectedBackend = ref(options?.backend ?? 'auto');
   const selectedAccountId = ref<string | null>(options?.accountId ?? null);
   const selectedModel = ref<string | null>(options?.model ?? null);
+  // AiChatPanel CLI runner toggle. Default off so design conversations
+  // keep their existing CLIProxy behavior; flipping the panel pill on
+  // routes the next message through the CLI agent runner with tool
+  // privileges, regardless of the global YOLO setting.
+  const useCliRunner = ref(false);
 
   function setBackend(backend: string) { selectedBackend.value = backend; }
   function setAccountId(accountId: string | null) { selectedAccountId.value = accountId; }
   function setModel(model: string | null) { selectedModel.value = model; }
+  function setUseCliRunner(value: boolean) { useCliRunner.value = value; }
 
   // smd.js streaming parser (shared composable)
   const streamingParser = useStreamingParser({ onFlush: scrollToBottom });
@@ -218,6 +224,9 @@ export function useConversation<TConfig>(
         backend: selectedBackend.value !== 'auto' ? selectedBackend.value : undefined,
         account_id: selectedAccountId.value || undefined,
         model: selectedModel.value || undefined,
+        // Only attach the override when the toggle is on so we don't
+        // shadow the global YOLO setting unnecessarily.
+        ...(useCliRunner.value ? { use_cli_agent: true } : {}),
       });
     } catch (e) {
       messages.value.pop();
@@ -337,6 +346,7 @@ export function useConversation<TConfig>(
     selectedBackend,
     selectedAccountId,
     selectedModel,
+    useCliRunner,
     startConversation,
     resumeConversation,
     checkActiveConversations,
@@ -350,5 +360,6 @@ export function useConversation<TConfig>(
     setBackend,
     setAccountId,
     setModel,
+    setUseCliRunner,
   };
 }

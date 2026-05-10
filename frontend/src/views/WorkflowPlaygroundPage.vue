@@ -49,6 +49,11 @@ const aiSessionId = ref<string | null>(null);
 const selectedBackend = ref('auto');
 const selectedAccountId = ref<string | null>(null);
 const selectedModel = ref<string | null>(null);
+// AiChatPanel CLI runner toggle. Default off → CLIProxy mode for the
+// playground's chat-style ideation, regardless of the global YOLO
+// setting. Flipping the pill on routes the next message through the
+// CLI agent runner with tool privileges.
+const useCliRunner = ref(false);
 let chatEventSource: AuthenticatedEventSource | null = null;
 
 // Chat panel configuration
@@ -164,7 +169,9 @@ function handleSend() {
   if (!isDemoMode.value && aiSuperAgentId.value && aiSessionId.value) {
     // Send via real AI backend
     superAgentSessionApi
-      .sendChatMessage(aiSuperAgentId.value, aiSessionId.value, userMsg)
+      .sendChatMessage(aiSuperAgentId.value, aiSessionId.value, userMsg, {
+        useCliAgent: useCliRunner.value,
+      })
       .catch(() => {
         // If real AI fails, fall back to stub
         isProcessing.value = false;
@@ -462,10 +469,12 @@ function openInBuilder() {
           :selected-backend="selectedBackend"
           :selected-account-id="selectedAccountId"
           :selected-model="selectedModel"
+          :useCliRunner="useCliRunner"
           @update:inputMessage="inputMessage = $event"
           @update:selected-backend="selectedBackend = $event"
           @update:selected-account-id="selectedAccountId = $event"
           @update:selected-model="selectedModel = $event"
+          @update:useCliRunner="useCliRunner = $event"
           @send="handleSend"
           @keydown="handleKeyDown"
         >

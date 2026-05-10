@@ -158,3 +158,65 @@ def test_send_chat_unknown_session_404(isolated_db):
             json={"content": "hi"},
         )
     assert resp.status_code == 404
+
+
+def test_send_chat_forwards_use_cli_agent_override(isolated_db, monkeypatch):
+    """`use_cli_agent` in body must reach `run_streaming_response`.
+
+    Pins the AiChatPanel toggle's plumbing on the super-agent chat
+    endpoint (Playground / WorkflowPlaygroundPage). Bool values flow
+    through; non-bool falls back to None so the global YOLO setting
+    decides — keeps the override unambiguous.
+    """
+    from app.db.super_agents import create_super_agent
+    from app.services.super_agent_session_service import SuperAgentSessionService
+    from app_litestar.routes import leaf_crud_i
+
+    sa_id = create_super_agent(name="t")
+    session_id, _ = SuperAgentSessionService.create_session(sa_id)
+
+    captured: list[dict] = []
+
+    def _fake_run(**kwargs):
+        captured.append(kwargs)
+
+    monkeypatch.setattr(leaf_crud_i, "run_streaming_response", _fake_run, raising=False)
+    # The route imports the helper inside the function body, so patch the
+    # source module too.
+    import app.services.streaming_helper as helper
+
+    monkeypatch.setattr(helper, "run_streaming_response", _fake_run)
+
+    with _client() as c:
+        resp = c.post(
+            f"/admin/super-agents/{sa_id}/sessions/{session_id}/chat",
+            json={"content": "hi", "use_cli_agent": True},
+        )
+    assert resp.status_code in (200, 201), resp.text
+    assert captured and captured[-1].get("use_cli_agent") is True
+
+    captured.clear()
+    with _client() as c:
+        resp = c.post(
+            f"/admin/super-agents/{sa_id}/sessions/{session_id}/chat",
+            json={"content": "hi", "use_cli_agent": False},
+        )
+    assert captured and captured[-1].get("use_cli_agent") is False
+
+    # Missing → None (defer to global YOLO).
+    captured.clear()
+    with _client() as c:
+        resp = c.post(
+            f"/admin/super-agents/{sa_id}/sessions/{session_id}/chat",
+            json={"content": "hi"},
+        )
+    assert captured and captured[-1].get("use_cli_agent") is None
+
+    # Non-bool → None (don't honor strings/numbers).
+    captured.clear()
+    with _client() as c:
+        resp = c.post(
+            f"/admin/super-agents/{sa_id}/sessions/{session_id}/chat",
+            json={"content": "hi", "use_cli_agent": "yes"},
+        )
+    assert captured and captured[-1].get("use_cli_agent") is None

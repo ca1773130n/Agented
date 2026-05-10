@@ -39,6 +39,10 @@ const chatIsProcessing = ref(false);
 const chatStreamingContent = ref('');
 const chatSessionId = ref<string | null>(null);
 const chatSuperAgentId = ref<string | null>(null);
+// AiChatPanel CLI runner toggle. Default off so project chat keeps the
+// CLIProxy path; flipping on routes the next message through the CLI
+// agent runner with tool privileges.
+const chatUseCliRunner = ref(false);
 let chatEventSource: AuthenticatedEventSource | null = null;
 let planChangedDebounce: ReturnType<typeof setTimeout> | null = null;
 
@@ -296,6 +300,7 @@ async function handleChatSend() {
     const res = await grdApi.sendProjectChat(projectId.value, {
       content,
       milestone_id: selectedMilestoneId.value ?? undefined,
+      useCliAgent: chatUseCliRunner.value,
     });
     chatSessionId.value = res.session_id;
     chatSuperAgentId.value = res.super_agent_id;
@@ -433,7 +438,9 @@ onUnmounted(() => {
               banner-button-label=""
               :read-only="false"
               :use-smart-scroll="true"
+              :use-cli-runner="chatUseCliRunner"
               @update:input-message="chatInput = $event"
+              @update:use-cli-runner="chatUseCliRunner = $event"
               @send="handleChatSend"
               @keydown="handleChatKeydown"
             />
