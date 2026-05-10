@@ -13,6 +13,7 @@ import hashlib
 import json
 import logging
 import os
+import platform
 import re
 import shutil
 import signal
@@ -34,9 +35,15 @@ logger = logging.getLogger(__name__)
 _GLOBAL_CONFIG = Path.home() / ".cli-proxy-api" / "config.yaml"
 _GLOBAL_AUTH_DIR = Path.home() / ".cli-proxy-api"
 
+# v0.7.13: minimum acceptable cliproxyapi version. ensure_min_version
+# auto-upgrades anything older on startup.
+MIN_CLIPROXY_VERSION = "7.0.0"
+
 
 class CLIProxyManager:
     """Singleton manager for a single global CLIProxyAPI instance."""
+
+    MIN_CLIPROXY_VERSION = MIN_CLIPROXY_VERSION
 
     _process: Optional[subprocess.Popen] = None
     _port: int = 8317
@@ -409,6 +416,163 @@ class CLIProxyManager:
         except Exception as exc:
             logger.warning("cliproxyapi install error: %s", exc)
         return False
+
+    # ------------------------------------------------------------------
+    # v0.7.13: Version detection + auto-upgrade
+    # ------------------------------------------------------------------
+
+    @classmethod
+    def detect_version(cls) -> Optional[str]:
+        """Return installed cliproxyapi version (e.g. '6.8.30') or None if unknown."""
+        if not shutil.which("cliproxyapi"):
+            return None
+        try:
+            out = subprocess.run(
+                ["cliproxyapi", "-V"],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            text = (out.stdout or "") + (out.stderr or "")
+            m = re.search(r"Version[:\s]+([\d.]+)", text)
+            return m.group(1) if m else None
+        except (subprocess.TimeoutExpired, OSError):
+            return None
+
+    @staticmethod
+    def _version_lt(a: str, b: str) -> bool:
+        """Return True iff a < b in semver-ish ordering."""
+
+        def parts(v: str) -> tuple:
+            return tuple(int(x) for x in v.split(".") if x.isdigit())
+
+        pa, pb = parts(a), parts(b)
+        n = max(len(pa), len(pb))
+        pa = pa + (0,) * (n - len(pa))
+        pb = pb + (0,) * (n - len(pb))
+        return pa < pb
+
+    @classmethod
+    def upgrade(cls) -> tuple[bool, str]:
+        """Upgrade cliproxyapi to latest available via the OS-native package
+        manager when possible. Returns (success, message)."""
+        system = platform.system()
+
+        # macOS — Homebrew is the canonical install path for this project.
+        if system == "Darwin" and shutil.which("brew"):
+            return cls._brew_upgrade()
+
+        # Linux — pull the latest release binary directly from GitHub.
+        if system == "Linux":
+            return cls._linux_upgrade_release_binary()
+
+        return False, f"Unsupported platform for auto-upgrade: {system}"
+
+    @classmethod
+    def _brew_upgrade(cls) -> tuple[bool, str]:
+        try:
+            # `brew upgrade` exits 0 even if already current; check version after.
+            result = subprocess.run(
+                ["brew", "upgrade", "cliproxyapi"],
+                capture_output=True,
+                text=True,
+                timeout=180,
+            )
+            if result.returncode == 0:
+                new_version = cls.detect_version() or "?"
+                logger.info("cliproxyapi upgraded via brew to %s", new_version)
+                return True, f"upgraded to {new_version}"
+            # Some brew versions exit non-zero on "already up to date" — treat as success.
+            combined = (result.stdout or "") + (result.stderr or "")
+            if "already" in combined.lower():
+                return True, "already current"
+            return False, f"brew upgrade failed: {result.stderr[:300]}"
+        except (subprocess.TimeoutExpired, OSError) as exc:
+            return False, f"brew upgrade error: {exc}"
+
+    @classmethod
+    def _linux_upgrade_release_binary(cls) -> tuple[bool, str]:
+        """Download latest cliproxyapi release binary from GitHub and install
+        to /usr/local/bin/. Falls back to ~/.local/bin/ if /usr/local/bin
+        isn't writable."""
+        import stat
+        import tempfile
+        import urllib.error
+        import urllib.request
+
+        try:
+            with urllib.request.urlopen(
+                "https://api.github.com/repos/router-for-me/CLIProxyAPI/releases/latest",
+                timeout=10,
+            ) as r:
+                release = json.loads(r.read())
+        except (urllib.error.URLError, OSError, ValueError) as exc:
+            return False, f"could not query github releases: {exc}"
+
+        machine = platform.machine().lower()
+        arch = "amd64" if machine in ("x86_64", "amd64") else machine
+        needle = f"linux-{arch}"
+        asset = next(
+            (a for a in release.get("assets", []) if needle in (a.get("name") or "").lower()),
+            None,
+        )
+        if not asset:
+            return False, f"no release asset matching '{needle}' in {release.get('tag_name')}"
+
+        install_dirs = ["/usr/local/bin", os.path.expanduser("~/.local/bin")]
+        install_dir = next((d for d in install_dirs if os.access(d, os.W_OK)), None)
+        if not install_dir:
+            return False, "no writable install directory (/usr/local/bin or ~/.local/bin)"
+
+        target = os.path.join(install_dir, "cliproxyapi")
+        try:
+            with tempfile.NamedTemporaryFile(delete=False) as tmp:
+                with urllib.request.urlopen(asset["browser_download_url"], timeout=120) as r:
+                    tmp.write(r.read())
+                tmp_path = tmp.name
+            os.replace(tmp_path, target)
+            os.chmod(
+                target,
+                os.stat(target).st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH,
+            )
+            new_version = cls.detect_version() or "?"
+            logger.info("cliproxyapi upgraded via GitHub release to %s", new_version)
+            return True, f"installed {release.get('tag_name')} to {target}"
+        except (OSError, urllib.error.URLError) as exc:
+            return False, f"download/install failed: {exc}"
+
+    @classmethod
+    def ensure_min_version(cls, min_version: Optional[str] = None) -> tuple[bool, str]:
+        """If installed version is below `min_version`, attempt upgrade.
+
+        Returns (now_meets_min, message). Safe to call on every startup;
+        does nothing when already current. Failures don't raise — the caller
+        decides whether to surface the warning.
+        """
+        target = min_version or cls.MIN_CLIPROXY_VERSION
+        current = cls.detect_version()
+        if current is None:
+            # Not installed — install_if_needed handles the bootstrap.
+            installed = cls.install_if_needed()
+            if not installed:
+                return False, "cliproxyapi not installed and install failed"
+            current = cls.detect_version()
+            if current is None:
+                return False, "post-install version probe failed"
+        if not cls._version_lt(current, target):
+            return True, f"already at {current} (>= {target})"
+        logger.info(
+            "cliproxyapi %s is below minimum %s — attempting upgrade",
+            current,
+            target,
+        )
+        ok, msg = cls.upgrade()
+        if ok:
+            new_version = cls.detect_version() or current
+            if not cls._version_lt(new_version, target):
+                return True, f"upgraded {current} -> {new_version}"
+            return False, f"upgrade ran but version still {new_version} < {target}"
+        return False, msg
 
     # ------------------------------------------------------------------
     # Legacy compatibility (used by super_agents.py, sketch_routing_service)
