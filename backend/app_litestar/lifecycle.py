@@ -321,6 +321,18 @@ def on_startup(app: Any) -> None:
             logger.warning("rate-limit eager registration skipped: %s", exc)
         return
     _init_database()
+    # v0.7.13: auto-upgrade cliproxyapi if below minimum required version.
+    # Don't block — log a warning on failure.
+    try:
+        from app.services.cliproxy_manager import CLIProxyManager
+
+        ok, msg = CLIProxyManager.ensure_min_version()
+        if ok:
+            logger.info("cliproxyapi version check: %s", msg)
+        else:
+            logger.warning("cliproxyapi version check: %s", msg)
+    except Exception:
+        logger.warning("cliproxyapi version check raised", exc_info=True)
     _detect_backends()
     # Pass `None` because SchedulerService.init expects a Flask-style object
     # only for testing-mode detection, which doesn't apply when Litestar
