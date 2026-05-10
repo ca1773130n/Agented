@@ -325,6 +325,7 @@ def project_chat(project_id: str, data: dict) -> dict[str, Any]:
     from app.services.chat_state_service import ChatStateService
     from app.services.cli_agent_runner_service import (
         is_yolo_mode_enabled,
+        resolve_account_config_dir,
         should_route_via_cli_agent,
         stream_via_cli_agent,
     )
@@ -397,6 +398,7 @@ def project_chat(project_id: str, data: dict) -> dict[str, Any]:
                     backend="claude",
                     cwd=None,
                     yolo=is_yolo_mode_enabled(),
+                    config_dir=resolve_account_config_dir(None, "claude"),
                 )
             else:
                 stream_iter = stream_llm_response(llm_messages, backend="claude")
