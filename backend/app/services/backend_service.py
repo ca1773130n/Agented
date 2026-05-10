@@ -239,15 +239,30 @@ class BackendService:
 
     @staticmethod
     def discover_models(backend_id: str) -> Tuple[dict, HTTPStatus]:
-        """Discover available models for a backend via CLI introspection."""
-        from ..services.model_discovery_service import ModelDiscoveryService
+        """Discover available models for a backend.
+
+        Routes through `model_cache_service.get_models()` so the initial
+        BackendDetailPage load benefits from the v0.7.8 cache + the
+        v0.7.9 sidecar-preferred discovery chain. Pre-v0.7.14 this called
+        `ModelDiscoveryService.discover_models` directly, which bypassed
+        the cache and produced a different (often shorter) list than the
+        Refresh button — confusing operators."""
+        from ..services import model_cache_service
 
         backend_id = _resolve_backend_id(backend_id)
         btype = get_backend_type(backend_id)
         if not btype:
             return error_response("NOT_FOUND", "Backend not found", HTTPStatus.NOT_FOUND)
 
-        models = ModelDiscoveryService.discover_models(btype)
+        try:
+            models, _meta = model_cache_service.get_models(
+                backend_kind=btype, auth_method="unknown",
+            )
+        except Exception:
+            # Cache layer is observability — never block the legacy route.
+            from ..services.model_discovery_service import ModelDiscoveryService
+            models = ModelDiscoveryService.discover_models(btype)
+
         if models:
             update_backend_models(backend_id, models)
 
