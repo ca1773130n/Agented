@@ -264,3 +264,54 @@ def set_yolo_mode(enabled: bool) -> None:
     from ..db.settings import set_setting
 
     set_setting("agent_yolo_mode", "true" if enabled else "false")
+
+
+_CLI_RUNNABLE_BACKENDS = ("claude", "codex", "gemini")
+
+
+def should_route_via_cli_agent(
+    backend: str | None,
+    use_cli_agent: Optional[bool],
+) -> bool:
+    """Decide whether a chat turn should spawn the CLI agent runner.
+
+    Three call sites — `streaming_helper.run_streaming_response`,
+    `BaseConversationService._stream_and_accumulate`, and
+    `grd_routes.project_chat` — all need the same routing decision.
+    Centralizing it here keeps the rule one place:
+
+    1. Backend not in {claude, codex, gemini} → never use the CLI
+       runner (those CLIs aren't installed / don't apply).
+    2. Caller passed ``use_cli_agent=True`` → CLI runner.
+    3. Caller passed ``use_cli_agent=False`` → CLIProxy. The caller
+       wants pure-token chat; honor that even if CLIProxy is missing
+       (the caller will see an explicit error and can recover).
+    4. Caller deferred (``None``) and global YOLO is on → CLI runner.
+    5. Caller deferred (``None``), global YOLO is off, but CLIProxy
+       is unreachable → CLI runner. The legacy CLIProxy path can't
+       satisfy the request and the alternative is yielding
+       ``[Error: CLIProxyAPI not running]`` into chat, which presents
+       to the user as a silent SSE drop. Falling over to the CLI
+       runner is the only way to actually answer.
+    """
+    backend_norm = (backend or "").lower()
+    if backend_norm not in _CLI_RUNNABLE_BACKENDS:
+        return False
+    if use_cli_agent is True:
+        return True
+    if use_cli_agent is False:
+        return False
+    if is_yolo_mode_enabled():
+        return True
+    try:
+        from .conversation_streaming import _find_cliproxy
+
+        if _find_cliproxy() is None:
+            logger.info(
+                "CLIProxy unavailable; falling over to CLI agent runner for %s",
+                backend_norm,
+            )
+            return True
+    except Exception:
+        logger.debug("CLIProxy availability probe failed", exc_info=True)
+    return False

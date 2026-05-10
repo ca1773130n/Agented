@@ -60,6 +60,7 @@ def run_streaming_response(
         try:
             from .cli_agent_runner_service import (
                 is_yolo_mode_enabled,
+                should_route_via_cli_agent,
                 stream_via_cli_agent,
             )
             from .conversation_streaming import stream_llm_response
@@ -83,19 +84,17 @@ def run_streaming_response(
                         {"role": msg.get("role", "user"), "content": msg.get("content", "")}
                     )
 
-            # Resolve routing: explicit override wins, else fall back to the
-            # global YOLO setting. CLI agent path runs the backend's CLI as
-            # an autonomous tool-using agent in `cwd`; the legacy path
-            # streams through CLIProxyAPI for pure-token chat.
-            yolo_on = is_yolo_mode_enabled() if use_cli_agent is None else bool(use_cli_agent)
-
+            # Routing decision lives in `should_route_via_cli_agent` so the
+            # three streaming sites (this one, design conversations, project
+            # chat) make the same choice. The helper also flips to the CLI
+            # runner when CLIProxy is unreachable so a missing proxy can't
+            # silently drop the SSE — see its docstring for the matrix.
             accumulated = []
-            if yolo_on and (backend or "").lower() in ("claude", "codex", "gemini"):
+            if should_route_via_cli_agent(backend, use_cli_agent):
                 logger.info(
-                    "Streaming via CLI agent runner (backend=%s, cwd=%s, yolo=%s)",
+                    "Streaming via CLI agent runner (backend=%s, cwd=%s)",
                     backend,
                     cwd,
-                    yolo_on,
                 )
                 stream_iter = stream_via_cli_agent(
                     llm_messages,

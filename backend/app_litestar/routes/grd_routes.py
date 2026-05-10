@@ -325,6 +325,7 @@ def project_chat(project_id: str, data: dict) -> dict[str, Any]:
     from app.services.chat_state_service import ChatStateService
     from app.services.cli_agent_runner_service import (
         is_yolo_mode_enabled,
+        should_route_via_cli_agent,
         stream_via_cli_agent,
     )
     from app.services.conversation_streaming import stream_llm_response
@@ -390,10 +391,7 @@ def project_chat(project_id: str, data: dict) -> dict[str, Any]:
                         {"role": msg.get("role", "user"), "content": msg.get("content", "")}
                     )
             accumulated: list[str] = []
-            yolo_on = (
-                is_yolo_mode_enabled() if use_cli_agent is None else bool(use_cli_agent)
-            )
-            if yolo_on:
+            if should_route_via_cli_agent("claude", use_cli_agent):
                 stream_iter = stream_via_cli_agent(
                     llm_messages,
                     backend="claude",

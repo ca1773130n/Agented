@@ -232,3 +232,100 @@ def test_yolo_mode_truthy_parsing(monkeypatch, raw, expected):
 
     monkeypatch.setattr(settings_module, "get_setting", lambda _k: raw)
     assert runner.is_yolo_mode_enabled() is expected
+
+
+# ---------------------------------------------------------------------------
+# should_route_via_cli_agent — routing matrix shared across the three
+# streaming sites (streaming_helper, base_conversation_service, grd_routes).
+# ---------------------------------------------------------------------------
+
+
+def test_routing_unsupported_backend_never_uses_cli(monkeypatch):
+    """OpenCode and exotic backends never go through the CLI runner.
+
+    Even if the global YOLO is on or CLIProxy is unavailable, an
+    `opencode` request must keep using its own dedicated path —
+    `stream_via_cli_agent` doesn't know how to drive opencode.
+    """
+    monkeypatch.setattr(runner, "is_yolo_mode_enabled", lambda: True)
+    assert runner.should_route_via_cli_agent("opencode", None) is False
+    assert runner.should_route_via_cli_agent("opencode", True) is False
+    assert runner.should_route_via_cli_agent(None, True) is False
+    assert runner.should_route_via_cli_agent("", True) is False
+
+
+def test_routing_explicit_true_wins(monkeypatch):
+    """Caller `use_cli_agent=True` overrides everything."""
+    monkeypatch.setattr(runner, "is_yolo_mode_enabled", lambda: False)
+    # Even when CLIProxy is reachable and YOLO is off:
+    monkeypatch.setattr(
+        "app.services.conversation_streaming._find_cliproxy",
+        lambda: ("http://localhost:1234", "key"),
+    )
+    assert runner.should_route_via_cli_agent("claude", True) is True
+
+
+def test_routing_explicit_false_wins_even_without_cliproxy(monkeypatch):
+    """Caller `use_cli_agent=False` is honored even if CLIProxy is gone.
+
+    If the operator explicitly opts into CLIProxy, we don't second-guess
+    them — the missing-proxy fallback only kicks in when the caller
+    deferred. They get whatever error CLIProxy yields.
+    """
+    monkeypatch.setattr(runner, "is_yolo_mode_enabled", lambda: True)
+    monkeypatch.setattr(
+        "app.services.conversation_streaming._find_cliproxy", lambda: None
+    )
+    assert runner.should_route_via_cli_agent("claude", False) is False
+
+
+def test_routing_defer_uses_cli_when_yolo_on(monkeypatch):
+    """Caller defers (None) + YOLO global on → CLI runner."""
+    monkeypatch.setattr(runner, "is_yolo_mode_enabled", lambda: True)
+    assert runner.should_route_via_cli_agent("claude", None) is True
+    assert runner.should_route_via_cli_agent("codex", None) is True
+    assert runner.should_route_via_cli_agent("gemini", None) is True
+
+
+def test_routing_defer_uses_cliproxy_when_yolo_off_and_proxy_up(monkeypatch):
+    """Caller defers, YOLO off, CLIProxy reachable → CLIProxy path."""
+    monkeypatch.setattr(runner, "is_yolo_mode_enabled", lambda: False)
+    monkeypatch.setattr(
+        "app.services.conversation_streaming._find_cliproxy",
+        lambda: ("http://localhost:1234", "key"),
+    )
+    assert runner.should_route_via_cli_agent("claude", None) is False
+
+
+def test_routing_defer_falls_over_to_cli_when_proxy_missing(monkeypatch):
+    """Caller defers, YOLO off, CLIProxy unreachable → CLI runner.
+
+    This is the core fallback that prevents a missing proxy from
+    silently dropping the SSE: the legacy CLIProxy path can't satisfy
+    the request, so the only way to actually answer is the CLI runner.
+    """
+    monkeypatch.setattr(runner, "is_yolo_mode_enabled", lambda: False)
+    monkeypatch.setattr(
+        "app.services.conversation_streaming._find_cliproxy", lambda: None
+    )
+    assert runner.should_route_via_cli_agent("claude", None) is True
+    assert runner.should_route_via_cli_agent("codex", None) is True
+    assert runner.should_route_via_cli_agent("gemini", None) is True
+
+
+def test_routing_proxy_probe_failure_does_not_crash(monkeypatch):
+    """If `_find_cliproxy` raises, the helper falls through cleanly.
+
+    Without this guard, an httpx import error or transient probe failure
+    could break the chat flow entirely; the helper logs and returns
+    False so the caller picks the legacy path.
+    """
+    monkeypatch.setattr(runner, "is_yolo_mode_enabled", lambda: False)
+
+    def _boom():
+        raise RuntimeError("probe failed")
+
+    monkeypatch.setattr(
+        "app.services.conversation_streaming._find_cliproxy", _boom
+    )
+    assert runner.should_route_via_cli_agent("claude", None) is False

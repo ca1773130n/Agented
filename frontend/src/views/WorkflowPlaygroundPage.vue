@@ -49,11 +49,11 @@ const aiSessionId = ref<string | null>(null);
 const selectedBackend = ref('auto');
 const selectedAccountId = ref<string | null>(null);
 const selectedModel = ref<string | null>(null);
-// AiChatPanel CLI runner toggle. Default off → CLIProxy mode for the
-// playground's chat-style ideation, regardless of the global YOLO
-// setting. Flipping the pill on routes the next message through the
-// CLI agent runner with tool privileges.
-const useCliRunner = ref(false);
+// AiChatPanel CLI runner toggle. Default ON because the workflow
+// playground asks the agent to design and execute multi-step pipelines
+// — that needs tool privileges. Flipping the pill OFF routes through
+// CLIProxyAPI for pure-token brainstorming.
+const useCliRunner = ref(true);
 let chatEventSource: AuthenticatedEventSource | null = null;
 
 // Chat panel configuration

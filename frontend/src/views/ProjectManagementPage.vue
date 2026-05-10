@@ -39,10 +39,11 @@ const chatIsProcessing = ref(false);
 const chatStreamingContent = ref('');
 const chatSessionId = ref<string | null>(null);
 const chatSuperAgentId = ref<string | null>(null);
-// AiChatPanel CLI runner toggle. Default off so project chat keeps the
-// CLIProxy path; flipping on routes the next message through the CLI
-// agent runner with tool privileges.
-const chatUseCliRunner = ref(false);
+// AiChatPanel CLI runner toggle. Default ON because project-management
+// chat is the agent-driven manager talking to the project's worktree —
+// without tool privileges the answers can only describe, not act.
+// Flipping the pill OFF falls back to CLIProxy pure-token chat.
+const chatUseCliRunner = ref(true);
 let chatEventSource: AuthenticatedEventSource | null = null;
 let planChangedDebounce: ReturnType<typeof setTimeout> | null = null;
 
