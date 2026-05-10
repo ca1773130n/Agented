@@ -129,14 +129,30 @@ describe('SuperAgentPlayground', () => {
     vi.mocked(api.agentMessageApi.listOutbox).mockResolvedValue({ messages: [] })
   })
 
-  it('renders left panel with AiChatPanel and right panel with tabs', async () => {
+  it('renders left panel + right panel tabs; auto-opens the most recent session in the read-only viewer', async () => {
+    // v0.7.35: when the user opens the playground and the SA already
+    // has session history, the most recent one auto-opens in the
+    // HistoricalSessionViewer so they see their last conversation
+    // instead of a blank welcome screen. AiChatPanel becomes the
+    // fallback for closed-viewer + no-session states.
     const wrapper = mountComponent()
     await flushPromises()
 
     expect(wrapper.find('.left-panel').exists()).toBe(true)
-    expect(wrapper.findComponent({ name: 'AiChatPanel' }).exists()).toBe(true)
+    expect(wrapper.findComponent({ name: 'HistoricalSessionViewer' }).exists()).toBe(true)
     expect(wrapper.find('.right-panel').exists()).toBe(true)
     expect(wrapper.findAll('.right-tab').length).toBe(4)
+  })
+
+  it('falls back to AiChatPanel when the SA has no session history', async () => {
+    const api = await import('../../services/api')
+    vi.mocked(api.superAgentSessionApi.list).mockResolvedValue({ sessions: [] })
+
+    const wrapper = mountComponent()
+    await flushPromises()
+
+    expect(wrapper.findComponent({ name: 'AiChatPanel' }).exists()).toBe(true)
+    expect(wrapper.findComponent({ name: 'HistoricalSessionViewer' }).exists()).toBe(false)
   })
 
   it('loads super agent details on mount', async () => {
