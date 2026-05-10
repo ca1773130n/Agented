@@ -146,7 +146,13 @@ class TestInstallBackendCli:
 
 
 class TestDiscoverModels:
-    """Tests for BackendService.discover_models()."""
+    """Tests for BackendService.discover_models().
+
+    v0.7.14 rerouted ``discover_models`` through ``model_cache_service.get_models``
+    so the initial-load list matches the Refresh button. The cache layer is the
+    primary path; ``ModelDiscoveryService.discover_models`` is only the fallback
+    when the cache raises. Tests patch the new primary surface.
+    """
 
     @patch("app.services.backend_service.update_backend_models")
     @patch("app.services.backend_service.get_backend_type")
@@ -156,8 +162,8 @@ class TestDiscoverModels:
         mock_type.return_value = "claude"
 
         with patch(
-            "app.services.model_discovery_service.ModelDiscoveryService.discover_models",
-            return_value=["claude-3-opus", "claude-3-sonnet"],
+            "app.services.model_cache_service.get_models",
+            return_value=(["claude-3-opus", "claude-3-sonnet"], {}),
         ):
             result, status = BackendService.discover_models("backend-claude")
 
@@ -183,11 +189,38 @@ class TestDiscoverModels:
         mock_type.return_value = "claude"
 
         with patch(
-            "app.services.model_discovery_service.ModelDiscoveryService.discover_models",
-            return_value=[],
+            "app.services.model_cache_service.get_models",
+            return_value=([], {}),
         ):
             result, status = BackendService.discover_models("backend-claude")
 
         assert status == HTTPStatus.OK
         assert result["models"] == []
         mock_update.assert_not_called()
+
+    @patch("app.services.backend_service.update_backend_models")
+    @patch("app.services.backend_service.get_backend_type")
+    @patch("app.services.backend_service.get_backend_by_id")
+    def test_discover_models_falls_back_when_cache_raises(
+        self, mock_resolve, mock_type, mock_update
+    ):
+        """When the cache layer raises, ``BackendService`` falls back to
+        ``ModelDiscoveryService.discover_models``. Pin that fallback path."""
+        mock_resolve.return_value = {"id": "backend-claude"}
+        mock_type.return_value = "claude"
+
+        with (
+            patch(
+                "app.services.model_cache_service.get_models",
+                side_effect=RuntimeError("cache disk error"),
+            ),
+            patch(
+                "app.services.model_discovery_service.ModelDiscoveryService.discover_models",
+                return_value=["fallback-model"],
+            ),
+        ):
+            result, status = BackendService.discover_models("backend-claude")
+
+        assert status == HTTPStatus.OK
+        assert result["models"] == ["fallback-model"]
+        mock_update.assert_called_once()
