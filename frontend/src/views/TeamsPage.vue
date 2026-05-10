@@ -167,7 +167,11 @@ async function loadAgents() {
   }
 }
 
+// Tracks the in-flight team create + topology update so the modal's
+// submit button is disabled while the request is on the wire.
+const isCreatingTeam = ref(false);
 async function createTeam() {
+  if (isCreatingTeam.value) return;
   if (!newTeam.value.name.trim()) {
     showToast('Team name is required', 'error');
     return;
@@ -176,6 +180,7 @@ async function createTeam() {
     showToast('Topology is required', 'error');
     return;
   }
+  isCreatingTeam.value = true;
   try {
     const result = await teamApi.create({
       name: newTeam.value.name,
@@ -206,6 +211,8 @@ async function createTeam() {
     } else {
       showToast('Failed to create team', 'error');
     }
+  } finally {
+    isCreatingTeam.value = false;
   }
 }
 
@@ -567,7 +574,13 @@ onMounted(() => {
           </div>
           <div class="modal-footer">
             <button class="btn btn-secondary" @click="showCreateModal = false">Cancel</button>
-            <button class="btn btn-primary" :disabled="!newTeam.name.trim() || !selectedTopology" @click="createTeam">Create Team</button>
+            <button
+              class="btn btn-primary"
+              :disabled="!newTeam.name.trim() || !selectedTopology || isCreatingTeam"
+              @click="createTeam"
+            >
+              {{ isCreatingTeam ? 'Creating…' : 'Create Team' }}
+            </button>
           </div>
         </div>
       </div>
