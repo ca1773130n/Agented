@@ -162,12 +162,11 @@ class ModelDiscoveryService:
             "AGENTED_SIDECAR_URL",
             os.environ.get("AI_ACCOUNTS_SIDECAR_URL", "http://127.0.0.1:20001"),
         )
-        # The sidecar enforces X-API-Key auth. The env var route is the
-        # documented one, but in fresh dev stacks it's often unset because
-        # both the sidecar and the gunicorn backend can read the admin key
-        # from `agented.db user_roles` directly. Mirror that fallback here
-        # so the v0.7.9 sidecar discovery actually authenticates instead
-        # of silently 401'ing and falling through to CLIProxyAPI.
+        # The sidecar's LazyFlaskKeyAuth reads `Authorization: Bearer <key>`
+        # against the user_roles table — NOT X-API-Key. v0.7.9 wired the
+        # wrong header which 401'd silently. When AI_ACCOUNTS_API_KEY is
+        # unset (the common dev case), pull the first admin key out of
+        # user_roles to mirror what the sidecar itself accepts at boot.
         api_key = os.environ.get("AI_ACCOUNTS_API_KEY") or os.environ.get("AGENTED_API_KEY", "")
         if not api_key:
             try:
@@ -180,7 +179,7 @@ class ModelDiscoveryService:
                     api_key = row["api_key"] if hasattr(row, "keys") else row[0]
             except Exception as exc:
                 logger.debug("Could not read admin api_key from user_roles: %s", exc)
-        headers = {"X-API-Key": api_key} if api_key else {}
+        headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
 
         url = f"{base_url}/api/v1/backends/{account_id}/models/"
         try:
