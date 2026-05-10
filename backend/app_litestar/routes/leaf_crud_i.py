@@ -538,6 +538,12 @@ def send_chat_message(super_agent_id: str, session_id: str, data: dict) -> dict[
     chat_mode = resolved["chat_mode"]
     instance = resolved["instance"]
 
+    # Per-call CLI runner override from the AiChatPanel toggle. Non-bool
+    # values fall back to None so the global ``agent_yolo_mode`` setting
+    # decides — keeps the override unambiguous.
+    raw_override = body.get("use_cli_agent")
+    use_cli_agent = raw_override if isinstance(raw_override, bool) else None
+
     success, error = SuperAgentSessionService.send_message(
         session_id, content, backend=effective_backend
     )
@@ -559,6 +565,7 @@ def send_chat_message(super_agent_id: str, session_id: str, data: dict) -> dict[
         cwd=cwd,
         chat_mode=chat_mode,
         instance_id=instance["id"] if instance else None,
+        use_cli_agent=use_cli_agent,
     )
     return {"status": "ok", "message_id": message_id}
 

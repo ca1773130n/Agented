@@ -148,7 +148,7 @@ export const pluginConversationApi = {
 
   get: (convId: string) => apiFetch<PluginConversation>(`/api/plugins/conversations/${convId}`),
 
-  sendMessage: (convId: string, message: string, options?: { backend?: string; account_id?: string; model?: string }) =>
+  sendMessage: (convId: string, message: string, options?: { backend?: string; account_id?: string; model?: string; use_cli_agent?: boolean }) =>
     apiFetch<{ message_id: string; status: string }>(`/api/plugins/conversations/${convId}/message`, {
       method: 'POST',
       body: JSON.stringify({ message, ...options }),

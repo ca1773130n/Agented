@@ -191,8 +191,15 @@ class BaseConversationService(abc.ABC):
         backend: str | None = None,
         account_id: str | None = None,
         model: str | None = None,
+        use_cli_agent: bool | None = None,
     ) -> Tuple[dict, HTTPStatus]:
-        """Send a user message and process with the selected backend CLI."""
+        """Send a user message and process with the selected backend CLI.
+
+        ``use_cli_agent`` overrides the global ``agent_yolo_mode`` setting
+        for this turn. ``True``/``False`` are explicit overrides; ``None``
+        defers to the global setting. Plumbed through from the
+        AiChatPanel CLI runner toggle on the design pages.
+        """
         if conv_id not in cls._conversations:
             # Try to resume from DB first
             resumed, status = cls.resume_conversation(conv_id)
@@ -215,7 +222,12 @@ class BaseConversationService(abc.ABC):
         threading.Thread(
             target=cls._process_with_claude,
             args=(conv_id, message),
-            kwargs={"backend": backend, "account_id": account_id, "model": model},
+            kwargs={
+                "backend": backend,
+                "account_id": account_id,
+                "model": model,
+                "use_cli_agent": use_cli_agent,
+            },
         ).start()
 
         return {"message_id": conv_id, "status": "processing"}, HTTPStatus.OK
@@ -288,8 +300,16 @@ class BaseConversationService(abc.ABC):
         model: str | None,
         backend: str | None,
         account_id: str | None,
+        use_cli_agent: bool | None = None,
     ) -> str:
-        """Stream LLM response and accumulate full text. Returns the complete response string."""
+        """Stream LLM response and accumulate full text. Returns the complete response string.
+
+        Routes through the CLI agent runner when ``use_cli_agent`` is
+        ``True``, or when ``None`` *and* the global YOLO setting is on
+        for a CLI-runnable backend (claude/codex/gemini). Otherwise
+        falls through to the legacy ``stream_llm_response`` (CLIProxy).
+        """
+        from .cli_agent_runner_service import is_yolo_mode_enabled, stream_via_cli_agent
         from .conversation_streaming import stream_llm_response
 
         full_response_parts = []
@@ -297,9 +317,24 @@ class BaseConversationService(abc.ABC):
             flush_callback=lambda text: cls._broadcast(conv_id, "response_chunk", {"content": text})
         )
 
-        for chunk in stream_llm_response(
-            messages, model=model, account_email=account_id, backend=backend
-        ):
+        backend_norm = (backend or "").lower()
+        cli_capable = backend_norm in ("claude", "codex", "gemini")
+        yolo_on = is_yolo_mode_enabled() if use_cli_agent is None else bool(use_cli_agent)
+
+        if yolo_on and cli_capable:
+            stream_iter = stream_via_cli_agent(
+                messages,
+                backend=backend_norm,
+                cwd=None,
+                yolo=is_yolo_mode_enabled(),
+                model=model,
+            )
+        else:
+            stream_iter = stream_llm_response(
+                messages, model=model, account_email=account_id, backend=backend
+            )
+
+        for chunk in stream_iter:
             full_response_parts.append(chunk)
             accumulator.add(chunk)
 
@@ -332,12 +367,17 @@ class BaseConversationService(abc.ABC):
         backend: str | None = None,
         account_id: str | None = None,
         model: str | None = None,
+        use_cli_agent: bool | None = None,
     ) -> None:
         """Process a message using real-time LLM streaming via LiteLLM.
 
         Uses the shared stream_llm_response() utility for token-by-token streaming
         instead of buffered subprocess output. A WordBoundaryAccumulator reduces SSE
         event frequency to 5-20 events/sec at word-boundary intervals.
+
+        When ``use_cli_agent`` is ``True`` (or defers to a YOLO-on global
+        setting and the backend supports it), routes through the CLI
+        agent runner so the design conversation can use tools.
         """
         conv = cls._conversations.get(conv_id)
         if conv is None:
@@ -353,7 +393,9 @@ class BaseConversationService(abc.ABC):
             # Build messages from conversation history
             messages = [{"role": msg.role, "content": msg.content} for msg in conv["messages"]]
 
-            response = cls._stream_and_accumulate(conv_id, messages, model, backend, account_id)
+            response = cls._stream_and_accumulate(
+                conv_id, messages, model, backend, account_id, use_cli_agent=use_cli_agent
+            )
 
             cls._persist_message(conv_id, "assistant", response)
 

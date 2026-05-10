@@ -323,6 +323,10 @@ def _resolve_manager_agent(project: dict) -> Optional[str]:
 @post("/{project_id:str}/chat", sync_to_thread=False)
 def project_chat(project_id: str, data: dict) -> dict[str, Any]:
     from app.services.chat_state_service import ChatStateService
+    from app.services.cli_agent_runner_service import (
+        is_yolo_mode_enabled,
+        stream_via_cli_agent,
+    )
     from app.services.conversation_streaming import stream_llm_response
     from app.services.project_chat_service import (
         build_project_context,
@@ -335,6 +339,8 @@ def project_chat(project_id: str, data: dict) -> dict[str, Any]:
     if not content:
         raise ClientException(detail="content is required")
     milestone_id = body.get("milestone_id")
+    raw_override = body.get("use_cli_agent")
+    use_cli_agent = raw_override if isinstance(raw_override, bool) else None
 
     project = _ensure_project(project_id)
     sa_id = _resolve_manager_agent(project)
@@ -384,7 +390,19 @@ def project_chat(project_id: str, data: dict) -> dict[str, Any]:
                         {"role": msg.get("role", "user"), "content": msg.get("content", "")}
                     )
             accumulated: list[str] = []
-            for chunk in stream_llm_response(llm_messages, backend="claude"):
+            yolo_on = (
+                is_yolo_mode_enabled() if use_cli_agent is None else bool(use_cli_agent)
+            )
+            if yolo_on:
+                stream_iter = stream_via_cli_agent(
+                    llm_messages,
+                    backend="claude",
+                    cwd=None,
+                    yolo=is_yolo_mode_enabled(),
+                )
+            else:
+                stream_iter = stream_llm_response(llm_messages, backend="claude")
+            for chunk in stream_iter:
                 if chunk:
                     accumulated.append(chunk)
                     ChatStateService.push_delta(_session_id, "content_delta", {"content": chunk})

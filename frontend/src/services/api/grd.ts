@@ -270,12 +270,18 @@ export const grdApi = {
   // Project AI Chat
   sendProjectChat: (
     projectId: string,
-    data: { content: string; milestone_id?: string },
-  ) =>
-    apiFetch<{ status: string; session_id: string; super_agent_id: string }>(
+    data: { content: string; milestone_id?: string; useCliAgent?: boolean },
+  ) => {
+    const { useCliAgent, ...rest } = data;
+    const payload: Record<string, unknown> = { ...rest };
+    if (typeof useCliAgent === 'boolean') {
+      payload.use_cli_agent = useCliAgent;
+    }
+    return apiFetch<{ status: string; session_id: string; super_agent_id: string }>(
       `/api/projects/${projectId}/chat`,
-      { method: 'POST', body: JSON.stringify(data) },
-    ),
+      { method: 'POST', body: JSON.stringify(payload) },
+    );
+  },
 
   streamProjectChat: (projectId: string): AuthenticatedEventSource =>
     createAuthenticatedEventSource(`/api/projects/${projectId}/chat/stream`),
