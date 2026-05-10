@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, watch } from 'vue';
 import { superAgentSessionApi } from '../../services/api';
+import { safeFormatDateTime } from '../../utils/datetime';
 
 interface Props {
   superAgentId: string;
@@ -51,12 +52,7 @@ async function load() {
 }
 
 function formatTime(ts?: string): string {
-  if (!ts) return '';
-  try {
-    return new Date(ts).toLocaleString();
-  } catch {
-    return ts;
-  }
+  return safeFormatDateTime(ts);
 }
 
 onMounted(load);

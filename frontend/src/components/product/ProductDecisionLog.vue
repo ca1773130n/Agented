@@ -4,6 +4,7 @@ import type { ProductDecision } from '../../services/api';
 import { productApi, ApiError } from '../../services/api';
 import { useToast } from '../../composables/useToast';
 import { useFocusTrap } from '../../composables/useFocusTrap';
+import { safeFormatDate } from '../../utils/datetime';
 
 const props = defineProps<{
   decisions: ProductDecision[];
@@ -92,8 +93,7 @@ function getStatusBadgeClass(status: string): string {
 }
 
 function formatDate(dateStr?: string): string {
-  if (!dateStr) return '';
-  return new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  return safeFormatDate(dateStr, '', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
 function parseTags(tagsJson?: string): string[] {

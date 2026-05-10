@@ -4,6 +4,7 @@ import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
 import { useSystemErrors } from '../composables/useSystemErrors';
 import type { SystemError } from '../services/api/types/system';
+import { safeFormatDateTime } from '../utils/datetime';
 
 const showToast = useToast();
 
@@ -219,7 +220,7 @@ onUnmounted(() => {
             </div>
             <div class="detail-row">
               <span class="detail-label">Timestamp</span>
-              <span class="detail-value">{{ new Date(selectedError.timestamp).toLocaleString() }}</span>
+              <span class="detail-value">{{ safeFormatDateTime(selectedError.timestamp) }}</span>
             </div>
             <div class="detail-row">
               <span class="detail-label">Source</span>

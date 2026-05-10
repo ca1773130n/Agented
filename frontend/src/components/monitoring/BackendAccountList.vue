@@ -96,7 +96,7 @@
           <div class="rl-mini-bar">
             <div class="rl-mini-fill" :style="{ width: Math.min(w.percentage, 100) + '%', background: getRateLimitColor(w.percentage) }"></div>
           </div>
-          <div v-if="w.resets_at" class="rl-mini-reset">{{ t('backendDetail.resets') }}: {{ new Date(w.resets_at).toLocaleString() }}</div>
+          <div v-if="w.resets_at" class="rl-mini-reset">{{ t('backendDetail.resets') }}: {{ safeFormatDateTime(w.resets_at) }}</div>
         </div>
       </div>
       <div v-else-if="rateLimitState[account.id]?.error" class="rate-limit-error">
@@ -109,6 +109,7 @@
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n';
 import type { BackendAccount, AccountHealth, RateLimitWindow } from '../../services/api';
+import { safeFormatDateTime } from '../../utils/datetime';
 
 interface RateLimitEntry {
   loading: boolean;

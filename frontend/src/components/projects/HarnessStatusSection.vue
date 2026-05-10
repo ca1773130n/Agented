@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { Project } from '../../services/api';
+import { safeFormatDate } from '../../utils/datetime';
 
 defineProps<{
   project: Project;
@@ -50,7 +51,7 @@ defineProps<{
       </div>
       <div v-if="project.created_at" class="info-item">
         <span class="info-label">Created</span>
-        <span class="info-value">{{ new Date(project.created_at).toLocaleDateString() }}</span>
+        <span class="info-value">{{ safeFormatDate(project.created_at) }}</span>
       </div>
     </div>
   </div>

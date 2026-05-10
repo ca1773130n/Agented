@@ -4,6 +4,7 @@ import type { AgentMessage, AuthenticatedEventSource } from '../../services/api'
 import { agentMessageApi, createAuthenticatedEventSource, API_BASE } from '../../services/api';
 import SendMessageForm from './SendMessageForm.vue';
 import { useToast } from '../../composables/useToast';
+import { safeFormatDateTime } from '../../utils/datetime';
 
 const props = defineProps<{
   superAgentId: string;
@@ -129,8 +130,7 @@ function statusClass(status: string): string {
 }
 
 function formatTimestamp(ts?: string): string {
-  if (!ts) return '';
-  return new Date(ts).toLocaleString();
+  return safeFormatDateTime(ts);
 }
 
 function truncate(text: string, max: number): string {
