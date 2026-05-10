@@ -4,6 +4,7 @@ import { Chart, registerables } from 'chart.js';
 import type { Plugin as ChartPlugin } from 'chart.js';
 import 'chartjs-adapter-date-fns';
 import type { ExecutionDataPoint } from '../../services/api';
+import { safeFormatDate } from '../../utils/datetime';
 
 Chart.register(...registerables);
 
@@ -50,7 +51,7 @@ const baselinePlugin: ChartPlugin = {
 
 function formatDateShort(dateStr: string): string {
   if (!dateStr) return '-';
-  return new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  return safeFormatDate(dateStr, '', { month: 'short', day: 'numeric' }, 'en-US');
 }
 
 function renderChart() {

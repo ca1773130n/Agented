@@ -3,6 +3,7 @@ import { ref, onMounted, onUnmounted, watch, nextTick } from 'vue';
 import { Chart, registerables, type ChartDataset } from 'chart.js';
 import 'chartjs-adapter-date-fns';
 import type { SnapshotHistoryEntry } from '../../services/api';
+import { safeFormatTime } from '../../utils/datetime';
 
 Chart.register(...registerables);
 
@@ -240,7 +241,7 @@ watch(() => [props.history, props.resetsAt, props.timeRangeStart, props.timeRang
     <div class="remaining-chart-header">
       <span class="remaining-chart-label">{{ label }}</span>
       <span v-if="resetsAt" class="remaining-reset-tag">
-        Reset: {{ new Date(resetsAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) }}
+        Reset: {{ safeFormatTime(resetsAt, '', { hour: '2-digit', minute: '2-digit' }) }}
       </span>
     </div>
     <div v-if="!history?.length" class="chart-no-data">

@@ -2,7 +2,6 @@
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
 import { useRoute, useRouter, type RouteLocationRaw } from 'vue-router';
 import { productApi, projectApi, teamApi, agentApi, superAgentApi } from '../../services/api';
-import { useToast } from '../../composables/useToast';
 import CommandPalette from './CommandPalette.vue';
 
 const emit = defineEmits<{
@@ -11,7 +10,9 @@ const emit = defineEmits<{
 
 const route = useRoute();
 const router = useRouter();
-const showToast = useToast();
+// showToast was previously used by the now-removed light-theme button.
+// The import is also gone below; if a future button needs toasts here,
+// re-add ``import { useToast } from '../../composables/useToast'``.
 
 // --- Dropdowns ---
 const showProfileDropdown = ref(false);
@@ -68,11 +69,6 @@ onUnmounted(() => {
   document.removeEventListener('click', handleClickOutside);
   document.removeEventListener('keydown', handleKeydown);
 });
-
-// --- Theme toggle ---
-function handleThemeToggle() {
-  showToast('Light theme coming soon', 'info');
-}
 
 // --- Entity name resolution ---
 const entityNameCache = ref(new Map<string, string>());
@@ -314,12 +310,9 @@ const mobileSegments = computed<BreadcrumbSegment[]>(() => {
         </svg>
       </button>
 
-      <!-- Theme toggle -->
-      <button class="header-action-btn" @click="handleThemeToggle" aria-label="Toggle theme" title="Toggle theme">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
-        </svg>
-      </button>
+      <!-- Theme toggle button hidden until light theme actually ships.
+           Was a no-op that fired a "coming soon" toast on every click,
+           which trained users to expect the button to do nothing. -->
 
       <!-- Notification bell -->
       <div ref="notificationDropdownRef" style="position: relative;">

@@ -2,6 +2,7 @@
 import { ref, toRef } from 'vue';
 import type { BranchTree } from '../../services/api';
 import { useConversationBranch } from '../../composables/useConversationBranch';
+import { safeFormatDateTime } from '../../utils/datetime';
 
 const props = defineProps<{
   conversationId: string;
@@ -55,7 +56,7 @@ function getBranchDisplayName(node: BranchTree, index: number): string {
 }
 
 function formatDate(dateStr: string): string {
-  return new Date(dateStr).toLocaleString('en-US', {
+  return safeFormatDateTime(dateStr, '', {
     month: 'short',
     day: 'numeric',
     hour: '2-digit',

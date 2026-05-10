@@ -4,6 +4,7 @@ import type { ReplayComparison, OutputDiff } from '../../services/api';
 import { replayApi, ApiError } from '../../services/api';
 import DiffViewer from './DiffViewer.vue';
 import { useToast } from '../../composables/useToast';
+import { safeFormatDateTime } from '../../utils/datetime';
 
 const props = defineProps<{
   executionId: string;
@@ -75,8 +76,7 @@ function closeDiff() {
 }
 
 function formatDate(dateStr: string): string {
-  if (!dateStr) return '-';
-  return new Date(dateStr).toLocaleString('en-US', {
+  return safeFormatDateTime(dateStr, '-', {
     month: 'short',
     day: 'numeric',
     hour: '2-digit',

@@ -3,6 +3,7 @@ import { ref, onMounted, onUnmounted, watch } from 'vue';
 import { Chart, registerables, type ChartDataset } from 'chart.js';
 import 'chartjs-adapter-date-fns';
 import type { RotationEvent } from '../../services/api';
+import { safeFormatDateTime } from '../../utils/datetime';
 
 Chart.register(...registerables);
 
@@ -130,7 +131,7 @@ function buildChart() {
             title: (items) => {
               const raw = items[0]?.raw as { meta: RotationEvent } | undefined;
               if (!raw?.meta) return '';
-              return new Date(raw.meta.created_at).toLocaleString();
+              return safeFormatDateTime(raw.meta.created_at);
             },
             label: (ctx) => {
               const raw = ctx.raw as { meta: RotationEvent } | undefined;
