@@ -47,6 +47,12 @@ def refresh(backend_kind: str, auth_method: str = "unknown") -> dict[str, Any]:
     return meta
 
 
+# Note (v0.7.8): the auth-method-change invalidation hook is deferred —
+# auth_method is not persisted in the Agented or ai-accounts DBs today, so
+# no central write path exists to call this from. Kept here so that a
+# future account-update path (ai-accounts sidecar or Agented backend
+# management) can wire it in. For now, users invalidate via the manual
+# "Refresh models" button or wait for the 7-day TTL.
 def invalidate(backend_kind: str, auth_method: str | None = None) -> int:
     sql = "DELETE FROM model_discovery_cache WHERE backend_kind = ?"
     params: list[Any] = [backend_kind]
