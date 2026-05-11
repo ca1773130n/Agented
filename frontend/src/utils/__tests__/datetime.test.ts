@@ -64,11 +64,11 @@ describe('datetime — safe formatters', () => {
       // this form must still render a non-Invalid string. Engines that
       // reject it must still produce the fallback (no leaked
       // "Invalid Date").
-      const out = safeFormatDateTime('2026-05-10 12:34:56', '—')
+      const out: string = safeFormatDateTime('2026-05-10 12:34:56', '—')
       expect(out).not.toContain('Invalid')
       // Either successfully parsed (some engines accept this) or
       // fell back — both are correct outcomes for this utility.
-      expect(out !== '' || out === '—').toBe(true)
+      expect(out.length).toBeGreaterThan(0)
     })
 
     it('passes through option overrides on safeFormatDate', () => {

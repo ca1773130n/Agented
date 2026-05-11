@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { ref, onMounted, watch, nextTick } from 'vue';
-import { useRouter } from 'vue-router';
 import type { Project, Product, Team } from '../services/api';
 import { projectApi, productApi, teamApi, ApiError } from '../services/api';
 import PageHeader from '../components/base/PageHeader.vue';
@@ -104,7 +103,9 @@ async function loadProjects() {
 watch([() => pagination.currentPage.value, () => pagination.pageSize.value], () => { loadProjects(); });
 watch([searchQuery, sortField, sortOrder], () => { pagination.resetToFirstPage(); });
 
-const router = useRouter();
+// ``useRouter`` was used by the old @click navigation; v0.7.28 swapped
+// cards to <router-link> so the imperative router instance is no
+// longer needed on this page.
 
 async function createProject() {
   if (!newProject.value.name.trim()) {

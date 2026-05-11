@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
-import { useRouter } from 'vue-router';
 import LoadingState from '../components/base/LoadingState.vue';
 import EmptyState from '../components/base/EmptyState.vue';
 
-const router = useRouter();
+// v0.7.28: row uses <router-link>, so the imperative router instance
+// previously held here is unused.
 
 const isLoading = ref(true);
 const selectedPeriod = ref<'7d' | '30d' | 'all'>('30d');

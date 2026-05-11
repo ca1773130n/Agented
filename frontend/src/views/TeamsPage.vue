@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { ref, onMounted, watch, nextTick } from 'vue';
-import { useRouter } from 'vue-router';
 import type { Team, Agent, TopologyType, GeneratedTeamConfig } from '../services/api';
 import { teamApi, agentApi, userSkillsApi, ApiError } from '../services/api';
 import TopologyPicker from '../components/teams/TopologyPicker.vue';
@@ -21,7 +20,8 @@ import { usePagination } from '../composables/usePagination';
 import { useWebMcpPageTools } from '../composables/useWebMcpPageTools';
 import { useWebMcpTool } from '../composables/useWebMcpTool';
 
-const router = useRouter();
+// v0.7.28: card uses <router-link>; the imperative router instance
+// is no longer needed.
 const showToast = useToast();
 
 const teams = ref<Team[]>([]);
