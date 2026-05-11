@@ -342,7 +342,11 @@ export function useSketchChat() {
           executionSuperAgentId.value = saId;
           try {
             const session = await superAgentSessionApi.get(saId, sessionId);
-            const log = parseJsonBlock(session.conversation_log) as
+            // ``conversation_log`` is typed as ``string | undefined`` on
+            // the session row. ``parseJsonBlock`` expects a string; pass
+            // an empty string when the field is missing so we get a
+            // clean ``null`` back instead of a TS error.
+            const log = parseJsonBlock(session.conversation_log ?? '') as
               | Array<{ role?: string; content?: string; timestamp?: string }>
               | null;
             if (Array.isArray(log)) {

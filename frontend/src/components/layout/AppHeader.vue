@@ -157,9 +157,11 @@ const idPrefixToParam: Record<string, string> = {
   'psa-': 'instanceId', 'pti-': 'teamInstanceId',
 };
 
-function isEntityId(segment: string): boolean {
-  return Object.keys(idPrefixToParam).some(prefix => segment.startsWith(prefix));
-}
+// ``isEntityId`` used to gate which segments got navigation links —
+// v0.7.23 dropped the guard so entity IDs link to their detail pages,
+// making the helper unused. Kept the prefix map (``idPrefixToParam``)
+// because ``resolveSegmentLabel`` still consults it for display-name
+// resolution.
 
 function resolveSegmentLabel(segment: string): string {
   // Known label
