@@ -43,6 +43,20 @@ const messages = ref<ChatMsg[]>([]);
 const streamingContent = ref('');
 const inputMessage = ref('');
 
+// "Thinking" state for the chat panel. Tracked locally rather than
+// reading ``session.isStreaming`` directly because the latter flips
+// true the moment SSE connects — well before the user has even typed
+// the first message, which made the panel look stuck at "AI is
+// thinking..." straight after Start.
+const awaitingResponse = ref(false);
+
+// Diagnostic line shown under the input when no output has arrived
+// within a few seconds after sending. Cleared on first chunk / on
+// session complete. Helps tell apart "still generating" from "claude
+// crashed and we don't know".
+const diagnostic = ref<string | null>(null);
+let diagnosticTimer: ReturnType<typeof setTimeout> | null = null;
+
 const hasActiveSession = computed(() => Boolean(session.activeSessionId.value));
 
 /**
@@ -57,6 +71,14 @@ const hasActiveSession = computed(() => Boolean(session.activeSessionId.value));
  */
 session.onOutput((line: string) => {
   streamingContent.value += line;
+  // The first chunk from claude clears the "thinking" indicator —
+  // we're now actively rendering the response in a live bubble.
+  awaitingResponse.value = false;
+  if (diagnosticTimer) {
+    clearTimeout(diagnosticTimer);
+    diagnosticTimer = null;
+  }
+  diagnostic.value = null;
 });
 
 session.onComplete((status: string) => {
@@ -64,6 +86,12 @@ session.onComplete((status: string) => {
   // bubble, then drop a small system note so the user can tell the
   // session has wound down.
   flushStreamingToMessage();
+  awaitingResponse.value = false;
+  if (diagnosticTimer) {
+    clearTimeout(diagnosticTimer);
+    diagnosticTimer = null;
+  }
+  diagnostic.value = null;
   messages.value.push({
     role: 'system',
     content: `Session ended (${status}).`,
@@ -108,12 +136,29 @@ async function handleSend() {
     showToast('No active session — click Start first.', 'info');
     return;
   }
+  awaitingResponse.value = true;
+  if (diagnosticTimer) clearTimeout(diagnosticTimer);
+  diagnosticTimer = setTimeout(() => {
+    // No output 8s after send — surface a hint so the user knows
+    // we're not just sitting on a spinner. Most claude responses
+    // start streaming inside 2-3 seconds.
+    if (awaitingResponse.value) {
+      diagnostic.value =
+        'No output yet from claude. If this hangs, the backend may need a restart to pick up v0.7.44 (pipe transport).';
+    }
+  }, 8000);
   await session.sendInput(text);
 }
 
 async function handleStart() {
   messages.value = [];
   streamingContent.value = '';
+  awaitingResponse.value = false;
+  diagnostic.value = null;
+  if (diagnosticTimer) {
+    clearTimeout(diagnosticTimer);
+    diagnosticTimer = null;
+  }
   await session.startSession({
     // ``--print`` + ``--input-format stream-json`` keeps claude alive
     // reading JSON events from stdin (the backend wraps the user's
@@ -185,7 +230,7 @@ defineExpose({ session });
     <AiChatPanelManaged
       class="chat-panel"
       :messages="messages"
-      :is-processing="session.isStreaming.value"
+      :is-processing="awaitingResponse"
       :streaming-content="streamingContent"
       :input-message="inputMessage"
       :read-only="!hasActiveSession"
@@ -196,6 +241,8 @@ defineExpose({ session });
       @update:input-message="inputMessage = $event"
       @send="handleSend"
     />
+
+    <div v-if="diagnostic" class="diagnostic-banner">{{ diagnostic }}</div>
 
     <div v-if="session.error.value" class="error-banner">
       <span>{{ session.error.value }}</span>
@@ -247,6 +294,13 @@ defineExpose({ session });
 .chat-panel {
   flex: 1;
   min-height: 0;
+}
+.diagnostic-banner {
+  padding: 8px 16px;
+  background: rgba(255, 200, 0, 0.08);
+  border-top: 1px solid rgba(255, 200, 0, 0.4);
+  font-size: 12px;
+  color: var(--text-secondary);
 }
 .error-banner {
   display: flex;
