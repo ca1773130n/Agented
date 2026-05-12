@@ -26,7 +26,11 @@ def test_creates_new_session_when_none_exist():
         result = SuperAgentSessionService.get_or_create_session("agent-1")
 
     assert result == "session-abc"
-    mock_create.assert_called_once_with("agent-1")
+    # v0.7.40 added the ``project_id`` kwarg; the default call from
+    # ``get_or_create_session`` forwards ``project_id=None`` so the
+    # downstream INSERT leaves the column NULL when no project context
+    # is supplied.
+    mock_create.assert_called_once_with("agent-1", project_id=None)
 
 
 def test_returns_existing_active_session():

@@ -11,6 +11,7 @@ import MilestoneOverview from '../components/grd/MilestoneOverview.vue';
 import KanbanBoard from '../components/grd/KanbanBoard.vue';
 import ProjectSessionPanel from '../components/sessions/ProjectSessionPanel.vue';
 import ProjectSuperAgentSessions from '../components/sessions/ProjectSuperAgentSessions.vue';
+import GrdSessionChatView from '../components/sessions/GrdSessionChatView.vue';
 import { AiChatPanelManaged as AiChatPanel } from '@ai-accounts/vue-styled';
 
 const props = defineProps<{
@@ -451,13 +452,23 @@ onUnmounted(() => {
       </template>
 
       <template v-else-if="activeTab === 'sessions'">
-        <!-- Sketch → SuperAgent routing produces sessions under the
-             ``super_agent_sessions`` table; the GRD session panel
-             below only knows about ``project_sessions`` (interactive
-             ``claude -p``). Render SA sessions first so /sketch work
-             surfaces on the page that the user expects. -->
+        <!-- Two parallel session systems coexist here:
+             * Sketch → SuperAgent routing → ``super_agent_sessions``
+               table — surfaced by ``ProjectSuperAgentSessions`` (read-
+               only list with playground links).
+             * GRD project sessions → ``project_sessions`` table — a
+               real PTY subprocess. Rendered by ``GrdSessionChatView``
+               in chat-style instead of the legacy terminal view so
+               markdown / headings / code fences render naturally. -->
         <ProjectSuperAgentSessions :project-id="projectId" />
-        <ProjectSessionPanel :project-id="projectId" />
+        <GrdSessionChatView :project-id="projectId" />
+        <!-- Legacy terminal-style view kept for ralph / team-spawn
+             use cases. Hidden behind a toggle so it doesn't clutter
+             the default chat-first UX. -->
+        <details class="terminal-session-toggle">
+          <summary>Open terminal view (for ralph loops / team spawn)</summary>
+          <ProjectSessionPanel :project-id="projectId" />
+        </details>
       </template>
     </template>
   </div>
@@ -537,6 +548,25 @@ onUnmounted(() => {
   color: var(--accent-cyan) !important;
   border-color: var(--accent-cyan) !important;
 }
+
+/* Collapsible terminal-view escape hatch — kept available for ralph
+   loops and team spawn but tucked behind a disclosure so the chat
+   view is the default. */
+.terminal-session-toggle {
+  margin-top: 16px;
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  background: var(--bg-secondary);
+}
+.terminal-session-toggle > summary {
+  cursor: pointer;
+  padding: 10px 14px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  user-select: none;
+}
+.terminal-session-toggle > summary:hover { color: var(--text-primary); }
+.terminal-session-toggle[open] > summary { border-bottom: 1px solid var(--border-default); }
 
 /* Kanban + Chat layout */
 .kanban-chat-layout {
