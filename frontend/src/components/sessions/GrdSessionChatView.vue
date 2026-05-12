@@ -2,23 +2,26 @@
 /**
  * Chat-style renderer on top of a GRD project session.
  *
- * The underlying transport is unchanged from ``ProjectSessionPanel`` —
- * still a PTY-backed subprocess managed by ``useProjectSession``,
- * still piping user input to stdin, still streaming stdout/stderr
- * lines back over SSE. What's different is the rendering: instead of
- * a monospace terminal block, output is accumulated into assistant
- * chat bubbles with proper markdown (lists, headings, code fences),
- * and user inputs render as user bubbles between turns.
+ * Strategy: spawn ``claude`` with ``--print --input-format stream-json
+ * --output-format stream-json --verbose``. This keeps the subprocess
+ * alive while reading user messages from stdin (as JSON envelopes,
+ * formatted server-side) and emitting one JSON event per line on
+ * stdout. The backend's existing stream-json parser
+ * (``_extract_stream_json_text``) lifts the text out, so the SSE
+ * stream the frontend sees is already clean prose — no TUI banner,
+ * no box-drawing chars, no ANSI escapes.
+ *
+ * The earlier attempt (v0.7.42) started bare ``claude``, which drops
+ * into the interactive TUI and leaks its welcome panel / box-drawing
+ * characters into the chat bubble. Hence v0.7.43.
  *
  * Why this exists vs. the SuperAgent playground:
  *   - GRD sessions still spawn arbitrary commands (claude, ralph_loop,
  *     team_spawn, etc.) — they're the right tool when you want a real
  *     subprocess that can talk to the filesystem and accept stdin.
- *   - But the *output* of a chat-like cmd (``claude`` in interactive
- *     REPL) is just text — there's no reason to render it as terminal
- *     output. Users said "I don't want to see terminal text in the
- *     GRD session"; this view answers that without abandoning the
- *     PTY model that the team-spawn / ralph-loop flows depend on.
+ *   - The team-spawn / ralph-loop flows keep their PTY model. This
+ *     view is a thin alternative for one specific case: talking to
+ *     claude in the project's worktree as if it were a chatbot.
  */
 import { ref, toRef, onMounted, computed } from 'vue';
 import { AiChatPanelManaged } from '@ai-accounts/vue-styled';
@@ -39,26 +42,21 @@ const session = useProjectSession(toRef(props, 'projectId'));
 const messages = ref<ChatMsg[]>([]);
 const streamingContent = ref('');
 const inputMessage = ref('');
-const justSent = ref(''); // remember last user text for echo-strip
 
 const hasActiveSession = computed(() => Boolean(session.activeSessionId.value));
 
 /**
- * Append a streamed PTY output line to the current assistant turn.
+ * Append a streamed output event to the current assistant turn.
  *
- * Heuristic: claude in interactive REPL echoes the user's input back
- * before its response (the tty echos stdin). If the first line after
- * a user send matches the user's text verbatim, swallow it so the
- * chat doesn't show the message twice.
+ * Each ``line`` arriving here is already the text extracted from a
+ * stream-json event by the backend (see
+ * ``_extract_stream_json_text``). For ``assistant`` events that's a
+ * full block joined by newlines; concat without an inserted separator
+ * so paragraph breaks come from the events themselves, not from our
+ * line-stitching.
  */
 session.onOutput((line: string) => {
-  if (justSent.value && line.trim() === justSent.value.trim()) {
-    justSent.value = '';
-    return;
-  }
-  // Preserve newlines between accumulated lines so marked.parse sees
-  // them as paragraph breaks.
-  streamingContent.value += (streamingContent.value ? '\n' : '') + line;
+  streamingContent.value += line;
 });
 
 session.onComplete((status: string) => {
@@ -105,7 +103,6 @@ async function handleSend() {
     content: text,
     timestamp: new Date().toISOString(),
   });
-  justSent.value = text;
 
   if (!session.activeSessionId.value) {
     showToast('No active session — click Start first.', 'info');
@@ -118,9 +115,24 @@ async function handleStart() {
   messages.value = [];
   streamingContent.value = '';
   await session.startSession({
-    cmd: ['claude'],
+    // ``--print`` + ``--input-format stream-json`` keeps claude alive
+    // reading JSON events from stdin (the backend wraps the user's
+    // text in the right envelope). ``--output-format stream-json``
+    // makes it emit one JSON event per line on stdout — the backend's
+    // stream-json parser converts that to clean prose before it
+    // reaches us, so no TUI banner / ANSI escapes leak through.
+    cmd: [
+      'claude',
+      '--print',
+      '--input-format',
+      'stream-json',
+      '--output-format',
+      'stream-json',
+      '--verbose',
+    ],
     execution_type: 'direct',
     execution_mode: 'interactive',
+    stream_json: true,
   });
 }
 
