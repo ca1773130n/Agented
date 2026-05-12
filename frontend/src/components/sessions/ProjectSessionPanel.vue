@@ -44,8 +44,15 @@ session.onError((message: string) => {
 
 async function handleStart() {
   outputRef.value?.reset();
+  // The PTY satisfies claude's isatty() check, so plain ``claude``
+  // drops into an interactive REPL where SessionInput pipes user
+  // messages to its stdin. The previous default of ``claude -p '...'``
+  // was non-interactive (``-p`` = print and exit) — claude responded
+  // to the one-shot prompt and exited immediately, leaving the user
+  // typing into a zombie session that emitted "Connection lost" on
+  // the next SSE reconnect.
   const request: CreateSessionRequest = {
-    cmd: ['claude', '-p', 'You are in an interactive session'],
+    cmd: ['claude'],
     execution_type: executionType.value,
     execution_mode: 'interactive',
   };

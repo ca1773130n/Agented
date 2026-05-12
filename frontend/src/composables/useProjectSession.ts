@@ -73,6 +73,14 @@ export function useProjectSession(projectId: Ref<string>) {
             sessions.value[idx] = { ...sessions.value[idx], status: data.status };
           }
           onCompleteCb?.(data.status, data.exit_code);
+          // The subprocess has exited cleanly. The backend has yielded
+          // ``complete`` and poisoned its subscriber queue, so the SSE
+          // stream is about to close. Close it ourselves first — that
+          // suppresses EventSource's auto-reconnect, which would
+          // otherwise hit the closed session three times and surface
+          // "Connection lost" to the user (the reported bug). The
+          // session ended normally, not from a network failure.
+          closeStream();
         } catch (e) {
           console.warn('[useProjectSession] Failed to parse complete event:', e, event.data);
         }
