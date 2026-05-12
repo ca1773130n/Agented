@@ -172,4 +172,29 @@ export const projectApi = {
 
   getOrCreateManager: (projectId: string) =>
     apiFetch<{ super_agent_id: string; created: boolean }>(`/admin/projects/${projectId}/manager`),
+
+  /**
+   * List SuperAgent sessions tied to this project (as opposed to the
+   * GRD-spawned interactive ``claude -p`` sessions surfaced by
+   * ``grdApi.listSessions``). Sketch routing creates these — they
+   * record the SA's work when a /sketch routes to one of the project's
+   * super agents. Optional ``status`` filter (e.g. ``"active"``).
+   */
+  listSuperAgentSessions: (projectId: string, opts?: { status?: string }) => {
+    const qs = opts?.status ? `?status=${encodeURIComponent(opts.status)}` : '';
+    return apiFetch<{
+      sessions: Array<{
+        id: string;
+        super_agent_id: string;
+        status: string;
+        started_at?: string;
+        ended_at?: string | null;
+        worktree_path?: string | null;
+        branch_name?: string | null;
+        title?: string | null;
+        session_type?: string | null;
+        token_count?: number;
+      }>;
+    }>(`/admin/projects/${projectId}/sessions${qs}`);
+  },
 };

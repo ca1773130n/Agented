@@ -10,6 +10,7 @@ import EntityLayout from '../layouts/EntityLayout.vue';
 import MilestoneOverview from '../components/grd/MilestoneOverview.vue';
 import KanbanBoard from '../components/grd/KanbanBoard.vue';
 import ProjectSessionPanel from '../components/sessions/ProjectSessionPanel.vue';
+import ProjectSuperAgentSessions from '../components/sessions/ProjectSuperAgentSessions.vue';
 import { AiChatPanelManaged as AiChatPanel } from '@ai-accounts/vue-styled';
 
 const props = defineProps<{
@@ -449,10 +450,15 @@ onUnmounted(() => {
         </div>
       </template>
 
-      <ProjectSessionPanel
-        v-else-if="activeTab === 'sessions'"
-        :project-id="projectId"
-      />
+      <template v-else-if="activeTab === 'sessions'">
+        <!-- Sketch → SuperAgent routing produces sessions under the
+             ``super_agent_sessions`` table; the GRD session panel
+             below only knows about ``project_sessions`` (interactive
+             ``claude -p``). Render SA sessions first so /sketch work
+             surfaces on the page that the user expects. -->
+        <ProjectSuperAgentSessions :project-id="projectId" />
+        <ProjectSessionPanel :project-id="projectId" />
+      </template>
     </template>
   </div>
     </template>
