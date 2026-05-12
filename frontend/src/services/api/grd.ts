@@ -88,6 +88,11 @@ export interface CreateSessionRequest {
   // already include those flags; this flag just tells the backend to
   // switch its parsers/wrappers to match.
   stream_json?: boolean;
+  // When false, the backend spawns the child via ``subprocess.Popen``
+  // with stdin/stdout pipes instead of ``pty.fork()``. Required for
+  // ``claude --print`` (it refuses to read from a tty). Defaults true
+  // on the server so ralph loops and team-spawn keep their PTY.
+  use_pty?: boolean;
 }
 
 export interface CreateSessionResponse {

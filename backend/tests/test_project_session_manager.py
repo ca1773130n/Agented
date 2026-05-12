@@ -253,6 +253,38 @@ class TestSendInput:
         result = ProjectSessionManager.send_input("psess-fail", "hello")
         assert result is False
 
+    def test_send_input_pipe_mode_writes_to_popen_stdin(self):
+        """v0.7.44 — pipe-mode sessions write to ``popen.stdin`` instead
+        of the PTY master fd. Reserve a session with a Popen mock and
+        verify ``send_input`` routes through it."""
+        fake_popen = MagicMock()
+        fake_popen.stdin = MagicMock()
+        si = _make_session_info(session_id="psess-pipe")
+        si.popen = fake_popen
+        ProjectSessionManager._sessions["psess-pipe"] = si
+
+        with patch("os.write") as mock_pty_write:
+            result = ProjectSessionManager.send_input("psess-pipe", "hello")
+
+        assert result is True
+        fake_popen.stdin.write.assert_called_once_with(b"hello\n")
+        fake_popen.stdin.flush.assert_called_once()
+        # PTY fd path must NOT be touched in pipe mode.
+        mock_pty_write.assert_not_called()
+
+    def test_send_input_pipe_mode_handles_broken_stdin(self):
+        """A closed stdin (BrokenPipeError) should surface as a clean
+        False, not a traceback into the route handler."""
+        fake_popen = MagicMock()
+        fake_popen.stdin = MagicMock()
+        fake_popen.stdin.write.side_effect = BrokenPipeError("EPIPE")
+        si = _make_session_info(session_id="psess-broken")
+        si.popen = fake_popen
+        ProjectSessionManager._sessions["psess-broken"] = si
+
+        result = ProjectSessionManager.send_input("psess-broken", "hi")
+        assert result is False
+
 
 # ---------------------------------------------------------------------------
 # stop_session
@@ -298,6 +330,64 @@ class TestFormatSse:
         assert result.startswith("event: output\n")
         assert '"line": "hello"' in result
         assert result.endswith("\n\n")
+
+
+# ---------------------------------------------------------------------------
+# Pipe transport (v0.7.44, option A) — end-to-end roundtrip
+# ---------------------------------------------------------------------------
+
+
+class TestPipeTransport:
+    """End-to-end test for ``use_pty=False`` against a real subprocess.
+
+    Uses ``cat`` so the test does not depend on ``claude`` being on
+    PATH; ``cat`` echoes stdin to stdout line-by-line which is enough
+    to verify the pipe-mode plumbing (send_input → popen.stdin →
+    child → popen.stdout → reader thread → ring buffer).
+    """
+
+    def test_use_pty_false_roundtrips_input(self, tmp_path):
+        # ``isolated_db`` (autouse in conftest) gives us a working
+        # temp DB. The session insert needs a real project row so the
+        # FK is satisfied.
+        from app.db.connection import get_connection
+
+        with get_connection() as conn:
+            conn.execute(
+                "INSERT INTO projects (id, name, created_at, updated_at) "
+                "VALUES ('proj-pipe', 'pipe-test', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"
+            )
+            conn.commit()
+
+        session_id = ProjectSessionManager.create_session(
+            project_id="proj-pipe",
+            cmd=["cat"],
+            cwd=str(tmp_path),
+            use_pty=False,
+        )
+
+        # Confirm the session is in pipe mode (not PTY).
+        si = ProjectSessionManager._sessions[session_id]
+        assert si.popen is not None
+
+        sent = ProjectSessionManager.send_input(session_id, "hello-from-test")
+        assert sent is True
+
+        # The reader's select() timeout is 0.5s — poll briefly.
+        import time as _time
+
+        for _ in range(40):  # up to 4 seconds
+            lines = ProjectSessionManager.get_output(session_id, last_n=10)
+            if any("hello-from-test" in line for line in lines):
+                break
+            _time.sleep(0.1)
+        else:
+            pytest.fail(
+                f"Pipe-mode roundtrip never surfaced the echoed line. "
+                f"Buffer contents: {ProjectSessionManager.get_output(session_id)}"
+            )
+
+        ProjectSessionManager.stop_session(session_id)
 
 
 # ---------------------------------------------------------------------------

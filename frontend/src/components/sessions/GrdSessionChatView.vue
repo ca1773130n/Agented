@@ -133,6 +133,10 @@ async function handleStart() {
     execution_type: 'direct',
     execution_mode: 'interactive',
     stream_json: true,
+    // ``claude --print`` refuses to read from a tty. The backend
+    // honors ``use_pty: false`` by spawning via ``subprocess.Popen``
+    // with anonymous pipes instead of ``pty.fork()``.
+    use_pty: false,
   });
 }
 
