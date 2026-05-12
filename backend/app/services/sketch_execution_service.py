@@ -117,6 +117,18 @@ def execute_sketch(
     # 1. Set status before launching thread
     update_sketch(sketch_id, status="in_progress")
 
+    # 1a. Pull the sketch's project_id up-front so direct-SA routing
+    #     (the non-psa- branch) can attach it to the SA session. Without
+    #     this the resulting ``super_agent_sessions`` row had ``project_id
+    #     = NULL`` and the project Sessions tab never saw the work that
+    #     /sketch produced. We still let the psa- branch override with
+    #     the instance's project_id below since that's the authoritative
+    #     source for project-instance routing.
+    sketch_for_project = get_sketch(sketch_id)
+    sketch_project_id: Optional[str] = (
+        sketch_for_project.get("project_id") if sketch_for_project else None
+    )
+
     # 2. Resolve backend — handle project SA instances (psa-) vs global SAs
     cwd: Optional[str] = None
     instance_id: Optional[str] = None
@@ -157,10 +169,17 @@ def execute_sketch(
             session_id = result["session_id"]
             cwd = result.get("worktree_path")
         else:
-            session_id = SuperAgentSessionService.get_or_create_session(effective_sa_id)
+            session_id = SuperAgentSessionService.get_or_create_session(
+                effective_sa_id, project_id=project_id or sketch_project_id
+            )
             cwd = instance.get("worktree_path") if instance else None
     else:
-        session_id = SuperAgentSessionService.get_or_create_session(effective_sa_id)
+        # Direct SA routing — the sketch's project_id is the only signal
+        # we have that this session belongs to a project. Pass it so the
+        # /projects/{id}/management Sessions tab can surface the work.
+        session_id = SuperAgentSessionService.get_or_create_session(
+            effective_sa_id, project_id=sketch_project_id
+        )
 
     # 4. Build content — prepend team context if team_id provided
     team_context = None
