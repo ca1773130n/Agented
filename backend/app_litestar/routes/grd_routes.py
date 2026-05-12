@@ -493,6 +493,12 @@ def create_session(project_id: str, data: dict) -> dict[str, Any]:
             # into TUI mode — leaking ANSI/box-drawing into chat
             # bubbles. See v0.7.43.
             "stream_json": bool(body.get("stream_json", False)),
+            # ``use_pty`` defaults to True for back-compat with ralph
+            # loops and team-spawn (they need a real tty). Chat-style
+            # ``claude --print --input-format stream-json`` sessions
+            # must pass ``use_pty: false`` because ``--print`` refuses
+            # to read from a tty.
+            "use_pty": bool(body.get("use_pty", True)),
         }
     )
 

@@ -20,10 +20,11 @@ import pty
 import re
 import select
 import signal
+import subprocess
 import threading
 import time
 from collections import deque
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from queue import Empty, Queue
 from typing import Dict, Generator, List, Optional
@@ -100,7 +101,16 @@ def _extract_stream_json_text(line: str) -> Optional[str]:
 
 @dataclass
 class SessionInfo:
-    """In-memory state for an active PTY session."""
+    """In-memory state for an active session.
+
+    Two transports are supported:
+    * **PTY** (default, ``popen is None``): ``master_fd`` is the PTY master.
+      Used by ralph loops, team-spawn, and any TUI-aware subprocess.
+    * **Pipe** (``popen is not None``): stdin/stdout are anonymous pipes.
+      Used for ``claude --print --input-format stream-json`` style chat,
+      where claude refuses to read from a tty. ``master_fd`` aliases
+      ``popen.stdout.fileno()`` so the reader thread is fd-uniform.
+    """
 
     session_id: str
     pid: int
@@ -118,6 +128,8 @@ class SessionInfo:
     max_lifetime_seconds: int = 14400
     paused: bool = False  # When True, output buffers but SSE broadcast is suppressed
     stream_json: bool = False  # When True, parse claude stream-json events for display
+    # Set on pipe-mode sessions only. None means PTY-mode (legacy path).
+    popen: Optional[subprocess.Popen] = field(default=None, repr=False)
 
 
 class ProjectSessionManager:
@@ -147,11 +159,16 @@ class ProjectSessionManager:
         execution_mode: str = "autonomous",
         env: dict = None,
         stream_json: bool = False,
+        use_pty: bool = True,
     ) -> str:
-        """Create a persistent PTY session.
+        """Create a persistent session.
 
-        Forks a child process in a new PTY, starts a reader thread for output capture,
-        and persists session metadata to the database.
+        Two transports are supported. Most callers want the default
+        PTY transport: ralph loops, team-spawn, and interactive
+        ``claude`` TUI all need a tty so the child sees ``isatty()``
+        succeed. Chat-style ``claude --print --input-format stream-json``
+        callers must pass ``use_pty=False`` because ``--print`` refuses
+        to read from a tty.
 
         Args:
             project_id: Project this session belongs to.
@@ -165,6 +182,11 @@ class ProjectSessionManager:
             execution_mode: "autonomous" or "interactive".
             env: Optional dict of environment variables to set in the child process.
                  Applied after fork, before exec. None means no changes.
+            stream_json: When True, the reader thread parses claude's
+                ``--output-format stream-json`` events into displayable text.
+            use_pty: When True (default), spawn the child via ``pty.fork()``.
+                When False, spawn via ``subprocess.Popen`` with anonymous
+                pipes — required for ``claude --print``.
 
         Returns:
             session_id (str): The unique session identifier (psess-XXXXXX).
@@ -194,35 +216,64 @@ class ProjectSessionManager:
                     "Could not resolve CLAUDE_CONFIG_DIR from backend accounts", exc_info=True
                 )
 
-        # Create PTY pair
-        master_fd, slave_fd = pty.openpty()
-        pid = os.fork()
+        popen: Optional[subprocess.Popen] = None
+        if use_pty:
+            # PTY transport — child's stdio is connected to a pseudo-tty.
+            master_fd, slave_fd = pty.openpty()
+            pid = os.fork()
 
-        if pid == 0:
-            # --- Child process ---
-            os.close(master_fd)
-            os.setsid()  # New session leader (detach from parent's process group)
-            os.dup2(slave_fd, 0)  # stdin
-            os.dup2(slave_fd, 1)  # stdout
-            os.dup2(slave_fd, 2)  # stderr
-            if slave_fd > 2:
-                os.close(slave_fd)
-            # Apply optional environment variables before exec
-            if env:
-                for k, v in env.items():
-                    os.environ[k] = v
-            try:
-                os.chdir(cwd)
-            except OSError:
+            if pid == 0:
+                # --- Child process ---
+                os.close(master_fd)
+                os.setsid()  # New session leader (detach from parent's process group)
+                os.dup2(slave_fd, 0)  # stdin
+                os.dup2(slave_fd, 1)  # stdout
+                os.dup2(slave_fd, 2)  # stderr
+                if slave_fd > 2:
+                    os.close(slave_fd)
+                # Apply optional environment variables before exec
+                if env:
+                    for k, v in env.items():
+                        os.environ[k] = v
+                try:
+                    os.chdir(cwd)
+                except OSError:
+                    os._exit(1)
+                try:
+                    os.execvp(cmd[0], cmd)
+                except OSError:
+                    os._exit(1)
                 os._exit(1)
-            try:
-                os.execvp(cmd[0], cmd)
-            except OSError:
-                os._exit(1)
-            os._exit(1)
 
-        # --- Parent process ---
-        os.close(slave_fd)
+            # --- Parent process ---
+            os.close(slave_fd)
+        else:
+            # Pipe transport — anonymous stdin/stdout pipes. Required for
+            # ``claude --print``: that flag refuses to read from a tty.
+            # ``preexec_fn=os.setsid`` mirrors the PTY child's setsid()
+            # so ``stop_session`` can still kill the whole process group.
+            # Env merges with os.environ to match the PTY behavior (a fork
+            # child inherits the parent's env; Popen does not unless we
+            # explicitly merge).
+            popen_env = {**os.environ, **(env or {})}
+            try:
+                popen = subprocess.Popen(
+                    cmd,
+                    stdin=subprocess.PIPE,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    cwd=cwd,
+                    env=popen_env,
+                    bufsize=0,
+                    preexec_fn=os.setsid,
+                )
+            except (OSError, FileNotFoundError) as exc:
+                logger.error("Failed to spawn pipe session: %s", exc)
+                raise
+            pid = popen.pid
+            # ``master_fd`` is repurposed as the read fd so the reader
+            # thread's select() loop stays uniform across both transports.
+            master_fd = popen.stdout.fileno()
 
         try:
             pgid = os.getpgid(pid)
@@ -253,6 +304,7 @@ class ProjectSessionManager:
             execution_type=execution_type,
             execution_mode=execution_mode,
             stream_json=stream_json,
+            popen=popen,
         )
 
         with cls._lock:
@@ -293,8 +345,14 @@ class ProjectSessionManager:
                 )
 
         logger.info(
-            f"Created PTY session {session_id} (pid={pid}, pgid={pgid}, "
-            f"type={execution_type}, mode={execution_mode})"
+            "Created %s session %s (pid=%s, pgid=%s, type=%s, mode=%s, stream_json=%s)",
+            "PTY" if use_pty else "pipe",
+            session_id,
+            pid,
+            pgid,
+            execution_type,
+            execution_mode,
+            stream_json,
         )
         return session_id
 
@@ -388,11 +446,23 @@ class ProjectSessionManager:
                     last_flush_time = time.monotonic()
 
         finally:
-            # Close master fd
-            try:
-                os.close(master_fd)
-            except OSError:
-                pass  # Intentionally silenced: cleanup/IO operation is best-effort
+            # Close the read fd. For pipe-mode sessions the fd is owned
+            # by ``popen.stdout`` — close that file object so Python's
+            # buffer state stays consistent. For PTY-mode the fd is the
+            # bare master we opened, so close it directly.
+            with cls._lock:
+                si = cls._sessions.get(session_id)
+                popen_obj = si.popen if si else None
+            if popen_obj is not None and popen_obj.stdout is not None:
+                try:
+                    popen_obj.stdout.close()
+                except (OSError, ValueError):
+                    pass  # Best-effort: stdout may already be closed.
+            else:
+                try:
+                    os.close(master_fd)
+                except OSError:
+                    pass  # Best-effort: PTY master may already be closed.
 
             # Flush remaining buffer content
             if buffer:
@@ -413,22 +483,41 @@ class ProjectSessionManager:
         if not session_info:
             return
 
-        # Check exit status
+        # Check exit status. Pipe-mode sessions go through subprocess.Popen
+        # which reaps the child itself; PTY-mode sessions need an explicit
+        # waitpid because we forked manually.
         exit_code = None
         status = "completed"
-        try:
-            _, wait_status = os.waitpid(session_info.pid, os.WNOHANG)
-            if os.WIFEXITED(wait_status):
-                exit_code = os.WEXITSTATUS(wait_status)
-                status = "completed" if exit_code == 0 else "failed"
-            elif os.WIFSIGNALED(wait_status):
-                exit_code = -os.WTERMSIG(wait_status)
+        if session_info.popen is not None:
+            try:
+                # ``wait`` rather than ``poll`` here because the reader loop
+                # only reaches this handler after observing EOF on stdout,
+                # so the child is on its way out — wait briefly to surface
+                # the return code without blocking forever.
+                exit_code = session_info.popen.wait(timeout=2)
+            except subprocess.TimeoutExpired:
+                # Process didn't exit promptly; surface whatever poll() has.
+                exit_code = session_info.popen.poll()
+            except OSError:
+                exit_code = None
+            if exit_code is None:
                 status = "failed"
-        except ChildProcessError:
-            # Process already reaped
-            status = "completed"
-        except OSError:
-            status = "failed"
+            else:
+                status = "completed" if exit_code == 0 else "failed"
+        else:
+            try:
+                _, wait_status = os.waitpid(session_info.pid, os.WNOHANG)
+                if os.WIFEXITED(wait_status):
+                    exit_code = os.WEXITSTATUS(wait_status)
+                    status = "completed" if exit_code == 0 else "failed"
+                elif os.WIFSIGNALED(wait_status):
+                    exit_code = -os.WTERMSIG(wait_status)
+                    status = "failed"
+            except ChildProcessError:
+                # Process already reaped
+                status = "completed"
+            except OSError:
+                status = "failed"
 
         # Update DB
         update_project_session(
@@ -505,6 +594,15 @@ class ProjectSessionManager:
 
         pid = session_info.pid
         pgid = session_info.pgid
+        popen = session_info.popen
+
+        # Closing stdin gives ``claude --print`` a graceful EOF to wind
+        # down on. The killpg below is the fallback if it doesn't.
+        if popen is not None and popen.stdin is not None:
+            try:
+                popen.stdin.close()
+            except OSError:
+                pass
 
         # Try graceful termination first
         try:
@@ -515,18 +613,26 @@ class ProjectSessionManager:
             logger.warning(f"SIGTERM to pgid {pgid} failed: {e}")
 
         # Wait up to 5 seconds for process to exit
+        exited = False
         for _ in range(50):  # 50 * 0.1s = 5s
-            try:
-                result = os.waitpid(pid, os.WNOHANG)
-                if result[0] != 0:
-                    # Process has exited
+            if popen is not None:
+                if popen.poll() is not None:
+                    exited = True
                     break
-            except ChildProcessError:
-                break  # Already reaped
-            except OSError:
-                break
+            else:
+                try:
+                    result = os.waitpid(pid, os.WNOHANG)
+                    if result[0] != 0:
+                        exited = True
+                        break
+                except ChildProcessError:
+                    exited = True
+                    break  # Already reaped
+                except OSError:
+                    break
             time.sleep(0.1)
-        else:
+
+        if not exited:
             # Still alive after 5s -- force kill
             try:
                 os.killpg(pgid, signal.SIGKILL)
@@ -615,11 +721,11 @@ class ProjectSessionManager:
 
     @classmethod
     def send_input(cls, session_id: str, text: str) -> bool:
-        """Send input text to a session's PTY stdin.
+        """Send input text to a session's stdin.
 
-        Writes text (with trailing newline) to the PTY master file descriptor.
-        Uses lock only for session lookup and activity update, not during the
-        blocking os.write() call.
+        For PTY sessions this writes to the master fd (which the child
+        sees as stdin). For pipe sessions this writes to the
+        ``Popen.stdin`` file object.
 
         Args:
             session_id: Target session.
@@ -633,11 +739,17 @@ class ProjectSessionManager:
             if not session_info or session_info.status != "active":
                 return False
             master_fd = session_info.master_fd
+            popen = session_info.popen
 
-        # Write outside lock to avoid blocking other threads during I/O
+        # Write outside lock to avoid blocking other threads during I/O.
+        payload = (text + "\n").encode("utf-8")
         try:
-            os.write(master_fd, (text + "\n").encode("utf-8"))
-        except OSError:
+            if popen is not None and popen.stdin is not None:
+                popen.stdin.write(payload)
+                popen.stdin.flush()
+            else:
+                os.write(master_fd, payload)
+        except (OSError, BrokenPipeError, ValueError):
             return False
 
         # Update activity timestamp

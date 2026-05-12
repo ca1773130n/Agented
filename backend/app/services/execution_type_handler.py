@@ -95,6 +95,7 @@ class DirectExecutionHandler(ExecutionTypeHandler):
             execution_type="direct",
             execution_mode=session_config.get("execution_mode", "autonomous"),
             stream_json=session_config.get("stream_json", False),
+            use_pty=session_config.get("use_pty", True),
         )
         info = ProjectSessionManager.get_session_info(session_id)
         return {
