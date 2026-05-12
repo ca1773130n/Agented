@@ -189,6 +189,25 @@ async function handleStop() {
   await session.stopSession();
 }
 
+function handleKeydown(event: KeyboardEvent) {
+  // Plain Enter sends; Shift+Enter inserts a newline. Matches the
+  // SuperAgent playground / ChatGPT / iMessage convention. ``isComposing``
+  // is true while IME composition is in progress (Korean / Japanese /
+  // Chinese input) — pressing Enter to commit a composition should
+  // NOT send the message.
+  if (
+    event.key === 'Enter' &&
+    !event.shiftKey &&
+    !event.isComposing &&
+    // 229 is the keyCode Safari/Chrome use for IME-in-progress Enter
+    // on some platforms; check both signals for robustness.
+    event.keyCode !== 229
+  ) {
+    event.preventDefault();
+    handleSend();
+  }
+}
+
 onMounted(() => {
   session.loadSessions();
 });
@@ -240,6 +259,7 @@ defineExpose({ session });
       :hide-cli-runner-toggle="true"
       @update:input-message="inputMessage = $event"
       @send="handleSend"
+      @keydown="handleKeydown"
     />
 
     <div v-if="diagnostic" class="diagnostic-banner">{{ diagnostic }}</div>
