@@ -485,6 +485,14 @@ def create_session(project_id: str, data: dict) -> dict[str, Any]:
             "worktree_path": body.get("worktree_path"),
             "execution_type": execution_type,
             "execution_mode": body.get("execution_mode", "autonomous"),
+            # Forwarded so chat-style views can opt into claude's
+            # ``--output-format stream-json`` rendering (parsed in
+            # ``ProjectSessionManager._reader_thread``). Without this,
+            # ``DirectExecutionHandler.start`` saw ``stream_json=False``
+            # regardless of the caller's intent and ``claude`` dropped
+            # into TUI mode — leaking ANSI/box-drawing into chat
+            # bubbles. See v0.7.43.
+            "stream_json": bool(body.get("stream_json", False)),
         }
     )
 
@@ -538,6 +546,29 @@ def session_input(project_id: str, session_id: str, data: dict) -> dict[str, Any
     text = (data or {}).get("text")
     if text is None:
         raise ClientException(detail="text is required")
+
+    if ProjectSessionManager.is_stream_json(session_id):
+        # claude was started with ``--input-format stream-json`` — it
+        # expects one JSON event per line on stdin, not raw text. Wrap
+        # the user's message in the envelope claude's Agent SDK expects
+        # and forward verbatim (no ASCII stripping — unicode user
+        # content must survive).
+        import json as _json
+
+        envelope = {
+            "type": "user",
+            "message": {
+                "role": "user",
+                "content": [{"type": "text", "text": text}],
+            },
+        }
+        payload = _json.dumps(envelope, ensure_ascii=False)
+        if not ProjectSessionManager.send_input(session_id, payload):
+            raise NotFoundException(detail="Session not found or not active")
+        return {"message": "Input sent", "session_id": session_id}
+
+    # Default (interactive PTY REPL): strip non-printable bytes so a
+    # rogue control char can't reprogram the user's terminal.
     sanitized = "".join(
         ch for ch in text if ch in {"\t", "\n", "\r"} or (32 <= ord(ch) < 127)
     )

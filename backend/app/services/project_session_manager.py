@@ -85,11 +85,13 @@ def _extract_stream_json_text(line: str) -> Optional[str]:
         return None
 
     if event_type == "result":
-        result_val = event.get("result")
-        if isinstance(result_val, str):
-            return result_val
-        if isinstance(result_val, dict):
-            return result_val.get("text") or result_val.get("content")
+        # In ``--input-format stream-json`` interactive chat, the
+        # ``result`` event duplicates whatever just came through as
+        # ``assistant`` (or as ``content_block_delta`` chunks). Emitting
+        # it again would produce a second copy of every answer in the
+        # chat panel. Skip it. (One-shot ``claude -p`` callers that
+        # bypass this extractor — e.g. cli_agent_runner_service — have
+        # their own parser and aren't affected.)
         return None
 
     # Skip noise: system/init, hooks, rate_limit_event, etc.
@@ -747,6 +749,18 @@ class ProjectSessionManager:
     def _format_sse(event_type: str, data: dict) -> str:
         """Format data as an SSE message string."""
         return f"event: {event_type}\ndata: {json.dumps(data)}\n\n"
+
+    @classmethod
+    def is_stream_json(cls, session_id: str) -> bool:
+        """Return whether the session was started in stream-json mode.
+
+        Used by the input endpoint to decide between raw-text passthrough
+        (PTY interactive REPL) and JSON-envelope wrapping (claude's
+        ``--input-format stream-json``).
+        """
+        with cls._lock:
+            si = cls._sessions.get(session_id)
+            return bool(si and si.stream_json)
 
     @classmethod
     def get_session_info(cls, session_id: str) -> Optional[dict]:

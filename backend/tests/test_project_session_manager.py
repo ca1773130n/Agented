@@ -91,13 +91,18 @@ class TestExtractStreamJsonText:
         assert "Read" in result
         assert "/tmp/x.py" in result
 
-    def test_result_event_string(self):
-        event = {"type": "result", "result": "Done!"}
-        assert _extract_stream_json_text(json.dumps(event)) == "Done!"
-
-    def test_result_event_dict(self):
-        event = {"type": "result", "result": {"text": "Finished"}}
-        assert _extract_stream_json_text(json.dumps(event)) == "Finished"
+    def test_result_event_is_suppressed(self):
+        """v0.7.43 — ``result`` events are intentionally dropped because
+        in ``--input-format stream-json`` interactive chat they duplicate
+        the text the ``assistant`` event already emitted, producing a
+        second copy of every answer in the chat panel."""
+        for payload in (
+            {"type": "result", "result": "Done!"},
+            {"type": "result", "result": {"text": "Finished"}},
+            {"type": "result", "result": {"content": "Wrapped"}},
+            {"type": "result"},  # no result key at all
+        ):
+            assert _extract_stream_json_text(json.dumps(payload)) is None
 
     def test_content_block_delta_text(self):
         event = {"type": "content_block_delta", "delta": {"type": "text_delta", "text": "hi"}}

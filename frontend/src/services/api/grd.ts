@@ -82,6 +82,12 @@ export interface CreateSessionRequest {
   worktree_path?: string;
   execution_type?: 'direct' | 'ralph_loop' | 'team_spawn';
   execution_mode?: 'autonomous' | 'interactive';
+  // When true, the backend parses claude's ``--output-format stream-json``
+  // events and the input endpoint wraps user text in the SDK envelope
+  // claude expects with ``--input-format stream-json``. The cmd must
+  // already include those flags; this flag just tells the backend to
+  // switch its parsers/wrappers to match.
+  stream_json?: boolean;
 }
 
 export interface CreateSessionResponse {
