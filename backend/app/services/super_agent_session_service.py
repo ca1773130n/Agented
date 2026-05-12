@@ -111,12 +111,23 @@ class SuperAgentSessionService:
                 session["branch_name"] = branch_name
 
     @classmethod
-    def get_or_create_session(cls, super_agent_id: str) -> str:
+    def get_or_create_session(
+        cls, super_agent_id: str, project_id: Optional[str] = None
+    ) -> str:
         """Return an existing session for the super agent, or create a new one.
 
         - If an active session exists for the super_agent_id, return its session_id.
         - If a paused session exists, resume it and return its session_id.
         - Otherwise, create a new session and return its session_id.
+
+        When ``project_id`` is supplied:
+          * New sessions are created with the project association so they
+            surface under ``get_sessions_for_project(project_id)`` (powers
+            the project Sessions tab and the v0.7.39 SA-sessions panel).
+          * Reused active / paused sessions that lack a ``project_id``
+            are backfilled in the same call — historically /sketch routing
+            reused a global session and the project association was
+            silently dropped.
 
         Raises SessionLimitError if create_session fails (e.g., concurrency limit reached).
         """
@@ -124,6 +135,9 @@ class SuperAgentSessionService:
             for session in cls._active_sessions.values():
                 if session["super_agent_id"] == super_agent_id:
                     if session["status"] == "active":
+                        if project_id and not session.get("project_id"):
+                            session["project_id"] = project_id
+                            cls._persist_project_id(session["session_id"], project_id)
                         return session["session_id"]
                     if session["status"] == "paused":
                         paused_session_id = session["session_id"]
@@ -133,12 +147,42 @@ class SuperAgentSessionService:
 
             if paused_session_id is not None:
                 cls.resume_session(paused_session_id)
+                if project_id:
+                    paused = cls._active_sessions.get(paused_session_id)
+                    if paused and not paused.get("project_id"):
+                        paused["project_id"] = project_id
+                        cls._persist_project_id(paused_session_id, project_id)
                 return paused_session_id
 
-            session_id, error = cls.create_session(super_agent_id)
+            session_id, error = cls.create_session(super_agent_id, project_id=project_id)
             if session_id is None:
                 raise SessionLimitError(error or "Failed to create session")
             return session_id
+
+    @classmethod
+    def _persist_project_id(cls, session_id: str, project_id: str) -> None:
+        """Backfill ``project_id`` on an existing session row.
+
+        Used when an in-memory session was created without a project
+        association but the caller now knows the project (e.g. sketch
+        routing reusing a long-lived SA session). Errors are swallowed
+        because the caller already has the session — failing to label
+        it shouldn't break the response.
+        """
+        try:
+            from ..db.connection import get_connection
+
+            with get_connection() as conn:
+                conn.execute(
+                    "UPDATE super_agent_sessions SET project_id = ? "
+                    "WHERE id = ? AND (project_id IS NULL OR project_id = '')",
+                    (project_id, session_id),
+                )
+                conn.commit()
+        except Exception:
+            logger.debug(
+                "Backfill project_id failed for session %s", session_id, exc_info=True
+            )
 
     @classmethod
     def send_message(
