@@ -40,7 +40,6 @@ const showToast = useToast();
 const session = useProjectSession(toRef(props, 'projectId'));
 
 const messages = ref<ChatMsg[]>([]);
-const streamingContent = ref('');
 const inputMessage = ref('');
 
 // "Thinking" state for the chat panel. Tracked locally rather than
@@ -70,9 +69,20 @@ const hasActiveSession = computed(() => Boolean(session.activeSessionId.value));
  * line-stitching.
  */
 session.onOutput((line: string) => {
-  streamingContent.value += line;
-  // The first chunk from claude clears the "thinking" indicator —
-  // we're now actively rendering the response in a live bubble.
+  // The backend's stream-json parser collapses each ``assistant``
+  // event (text + tool_use blocks joined by "\n") into one line.
+  // Without ``--include-partial-messages``, every line we see here
+  // IS a complete assistant turn — push it straight into messages
+  // so it persists. The earlier scheme (accumulate into
+  // ``streamingContent``, flush on session end) made the bubble
+  // appear for ~10ms and then disappear: ``awaitingResponse`` flipped
+  // false on first chunk, which hid the in-flight streaming bubble,
+  // and the permanent bubble only materialized at session-end.
+  messages.value.push({
+    role: 'assistant',
+    content: line,
+    timestamp: new Date().toISOString(),
+  });
   awaitingResponse.value = false;
   if (diagnosticTimer) {
     clearTimeout(diagnosticTimer);
@@ -82,10 +92,8 @@ session.onOutput((line: string) => {
 });
 
 session.onComplete((status: string) => {
-  // Finalize whatever's been streaming into a permanent assistant
-  // bubble, then drop a small system note so the user can tell the
-  // session has wound down.
-  flushStreamingToMessage();
+  // The session subprocess exited. Drop a small system note so the
+  // user can tell why the chat suddenly stops responding to input.
   awaitingResponse.value = false;
   if (diagnosticTimer) {
     clearTimeout(diagnosticTimer);
@@ -103,28 +111,10 @@ session.onError((message: string) => {
   showToast(message, 'error');
 });
 
-function flushStreamingToMessage() {
-  if (!streamingContent.value.trim()) {
-    streamingContent.value = '';
-    return;
-  }
-  messages.value.push({
-    role: 'assistant',
-    content: streamingContent.value,
-    timestamp: new Date().toISOString(),
-  });
-  streamingContent.value = '';
-}
-
 async function handleSend() {
   const text = inputMessage.value.trim();
   if (!text) return;
   inputMessage.value = '';
-
-  // If we have output in flight from the previous turn, lock it into
-  // an assistant bubble before the user bubble lands — otherwise the
-  // new user message appears above its own answer.
-  flushStreamingToMessage();
 
   messages.value.push({
     role: 'user',
@@ -152,7 +142,6 @@ async function handleSend() {
 
 async function handleStart() {
   messages.value = [];
-  streamingContent.value = '';
   awaitingResponse.value = false;
   diagnostic.value = null;
   if (diagnosticTimer) {
@@ -250,7 +239,6 @@ defineExpose({ session });
       class="chat-panel"
       :messages="messages"
       :is-processing="awaitingResponse"
-      :streaming-content="streamingContent"
       :input-message="inputMessage"
       :read-only="!hasActiveSession"
       welcome-title="Start to begin"
