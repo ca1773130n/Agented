@@ -139,6 +139,86 @@ def test_session_input_requires_text(isolated_db):
     assert resp.status_code == 400
 
 
+def test_session_input_stream_json_wraps_envelope(isolated_db, monkeypatch):
+    """v0.7.46 — when the session is in stream-json mode, the input
+    route must wrap the user's text in the Agent SDK V1 envelope
+    (``type/session_id/message/parent_tool_use_id``). Missing fields
+    caused claude to silently fail to parse the user event."""
+    import json as _json
+
+    from app.services.project_session_manager import ProjectSessionManager
+
+    captured: dict[str, str] = {}
+
+    def fake_send_input(session_id: str, payload: str) -> bool:
+        captured["session_id"] = session_id
+        captured["payload"] = payload
+        return True
+
+    monkeypatch.setattr(
+        ProjectSessionManager, "is_stream_json", classmethod(lambda cls, sid: True)
+    )
+    monkeypatch.setattr(
+        ProjectSessionManager,
+        "send_input",
+        classmethod(lambda cls, sid, payload: fake_send_input(sid, payload)),
+    )
+
+    with _client() as c:
+        resp = c.post(
+            "/api/projects/p-x/sessions/psess-abc/input",
+            json={"text": "안녕 claude"},
+        )
+
+    assert resp.status_code == 201, resp.text
+    assert captured["session_id"] == "psess-abc"
+    envelope = _json.loads(captured["payload"])
+    assert envelope == {
+        "type": "user",
+        "session_id": "",
+        "message": {
+            "role": "user",
+            "content": [{"type": "text", "text": "안녕 claude"}],
+        },
+        "parent_tool_use_id": None,
+    }
+
+
+def test_session_input_pty_mode_strips_non_ascii(isolated_db, monkeypatch):
+    """The original PTY interactive REPL path must keep its ASCII-only
+    sanitization (defense against rogue control chars rewriting the
+    user's terminal). Pin that the stream-json branch is NOT taken when
+    the session is in PTY mode."""
+    from app.services.project_session_manager import ProjectSessionManager
+
+    captured: dict[str, str] = {}
+
+    monkeypatch.setattr(
+        ProjectSessionManager, "is_stream_json", classmethod(lambda cls, sid: False)
+    )
+
+    def fake_send_input(cls, sid: str, payload: str) -> bool:
+        captured["payload"] = payload
+        return True
+
+    monkeypatch.setattr(
+        ProjectSessionManager, "send_input", classmethod(fake_send_input)
+    )
+
+    with _client() as c:
+        # Korean + emoji + a printable ASCII tail. PTY mode strips
+        # everything outside the [32, 127) range, leaving just the
+        # ASCII portion.
+        resp = c.post(
+            "/api/projects/p-x/sessions/psess-pty/input",
+            json={"text": "안녕\thello"},
+        )
+
+    assert resp.status_code == 201
+    # Tab + ASCII letters survive; Korean does not.
+    assert captured["payload"] == "\thello"
+
+
 def test_create_ralph_session_unknown_project_404(isolated_db):
     with _client() as c:
         resp = c.post("/api/projects/missing/sessions/ralph", json={})

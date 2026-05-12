@@ -555,18 +555,34 @@ def session_input(project_id: str, session_id: str, data: dict) -> dict[str, Any
 
     if ProjectSessionManager.is_stream_json(session_id):
         # claude was started with ``--input-format stream-json`` — it
-        # expects one JSON event per line on stdin, not raw text. Wrap
-        # the user's message in the envelope claude's Agent SDK expects
-        # and forward verbatim (no ASCII stripping — unicode user
-        # content must survive).
+        # expects one JSON event per line on stdin, not raw text. The
+        # envelope shape is documented in the Claude Agent SDK V1 docs
+        # (https://code.claude.com/docs/en/agent-sdk/typescript-v2-preview):
+        #
+        #   yield {
+        #     type: "user",
+        #     session_id: "",
+        #     message: { role: "user", content: [{type:"text", text:"..."}]},
+        #     parent_tool_use_id: null,
+        #   };
+        #
+        # The ``session_id`` and ``parent_tool_use_id`` fields are
+        # required — without them claude silently fails to parse the
+        # user event and the chat appears to hang (no assistant
+        # response). v0.7.46 added them after the v0.7.45 chat view
+        # sat at "AI is thinking..." with no claude output.
+        # Unicode user content (Korean, emoji, …) is preserved by
+        # ``ensure_ascii=False``.
         import json as _json
 
         envelope = {
             "type": "user",
+            "session_id": "",
             "message": {
                 "role": "user",
                 "content": [{"type": "text", "text": text}],
             },
+            "parent_tool_use_id": None,
         }
         payload = _json.dumps(envelope, ensure_ascii=False)
         if not ProjectSessionManager.send_input(session_id, payload):
