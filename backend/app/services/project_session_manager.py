@@ -44,6 +44,68 @@ logger = logging.getLogger(__name__)
 _ANSI_RE = re.compile(r"\x1b\[[0-9;]*[a-zA-Z]|\x1b\].*?\x07|\x1b\[.*?[@-~]")
 
 
+def _render_tool_use(block: dict) -> str:
+    """Render a ``tool_use`` block as distinct markdown.
+
+    Without this, ``**Name**: `arg``` reads like inline emphasis in a
+    chat bubble — nearly indistinguishable from prose. Tool calls
+    deserve visual separation (the user explicitly asked for it after
+    a chat turn surfaced ``Bash: ls /Users/...`` looking like a
+    sentence). Fenced code blocks are the cleanest path through
+    AiChatPanelManaged's MarkdownContent renderer.
+    """
+    name = block.get("name", "unknown")
+    inp = block.get("input", {}) or {}
+
+    if name == "Bash":
+        cmd = (inp.get("command") or "").strip()
+        if cmd:
+            return f"**▸ {name}**\n```bash\n{cmd}\n```"
+        return f"**▸ {name}**"
+
+    if name in ("Read", "Edit", "Write", "MultiEdit", "NotebookEdit"):
+        path = inp.get("file_path") or inp.get("path") or ""
+        return f"**▸ {name}** `{path}`"
+
+    if name in ("Grep", "Glob"):
+        pattern = inp.get("pattern") or inp.get("query") or ""
+        path = inp.get("path") or ""
+        if path:
+            return f"**▸ {name}** `{pattern}` in `{path}`"
+        return f"**▸ {name}** `{pattern}`"
+
+    if name == "WebFetch":
+        url = inp.get("url") or ""
+        return f"**▸ WebFetch** `{url}`"
+
+    if name == "WebSearch":
+        query = inp.get("query") or ""
+        return f"**▸ WebSearch** `{query}`"
+
+    if name == "Task":
+        subagent = inp.get("subagent_type") or "general"
+        desc = inp.get("description") or ""
+        return f"**▸ Task** ({subagent}) `{desc}`"
+
+    # Everything else (MCP tools, ToolSearch, …) — pick whichever
+    # argument has obvious display value, and put it in a code fence
+    # so it doesn't blend with the surrounding prose.
+    detail = (
+        inp.get("query")
+        or inp.get("command")
+        or inp.get("file_path")
+        or inp.get("path")
+        or inp.get("description")
+        or ""
+    )
+    if detail:
+        # Single short detail → inline. Longer → fence.
+        if len(detail) <= 80 and "\n" not in detail:
+            return f"**▸ {name}** `{detail}`"
+        return f"**▸ {name}**\n```\n{detail[:600]}\n```"
+    return f"**▸ {name}**"
+
+
 def _extract_stream_json_text(line: str) -> Optional[str]:
     """Extract displayable text from a claude --output-format stream-json event.
 
@@ -64,14 +126,7 @@ def _extract_stream_json_text(line: str) -> Optional[str]:
             if block_type == "text":
                 parts.append(block["text"])
             elif block_type == "tool_use":
-                name = block.get("name", "unknown")
-                inp = block.get("input", {})
-                # Show file path for file operations, or first arg for others
-                detail = inp.get("file_path") or inp.get("command") or ""
-                if detail:
-                    parts.append(f"**{name}**: `{detail[:120]}`")
-                else:
-                    parts.append(f"**{name}**")
+                parts.append(_render_tool_use(block))
             elif block_type == "tool_result":
                 content = block.get("content", "")
                 if isinstance(content, str) and content:
@@ -440,7 +495,22 @@ class ProjectSessionManager:
                 # were found for FLUSH_INTERVAL seconds, flush it anyway.
                 # This handles CLI tools that use cursor-movement escape sequences
                 # (e.g. \x1b[1G) instead of \r or \n for progress updates.
-                if buffer and (time.monotonic() - last_flush_time) >= FLUSH_INTERVAL:
+                #
+                # IMPORTANT: stream-json sessions opt out. Their contract is
+                # strict NDJSON — one JSON event per line, terminated by ``\n``.
+                # The system ``init`` event in particular is ~6-10KB once the
+                # tools list expands; it spans multiple ``os.read(…, 4096)``
+                # calls. Flushing the partial buffer mid-event produces a
+                # broken JSON fragment that ``json.loads`` rejects, so
+                # ``_extract_stream_json_text`` falls through to its
+                # "not JSON — pass through as plain text" branch and a slice
+                # of raw system-event bytes lands in the chat bubble. Wait
+                # for a real ``\n`` instead.
+                if (
+                    not _stream_json
+                    and buffer
+                    and (time.monotonic() - last_flush_time) >= FLUSH_INTERVAL
+                ):
                     _emit_line(buffer.decode("utf-8", errors="replace"))
                     buffer = b""
                     last_flush_time = time.monotonic()

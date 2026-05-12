@@ -13,6 +13,7 @@ from app.services.project_session_manager import (
     ProjectSessionManager,
     SessionInfo,
     _extract_stream_json_text,
+    _render_tool_use,
 )
 
 
@@ -78,6 +79,18 @@ class TestExtractStreamJsonText:
         result = _extract_stream_json_text(json.dumps(event))
         assert result == "Hello world"
 
+    def test_system_event_is_filtered(self):
+        """v0.7.48 — ``system/init`` events (with their multi-KB tool
+        registry) must not surface in chat. Critical regression: when
+        the reader's time-based flush kicked in on a split event, the
+        partial bytes leaked through as plain text."""
+        event = {
+            "type": "system",
+            "subtype": "init",
+            "tools": ["Bash", "Read"] * 50,  # bulk it up like a real init
+        }
+        assert _extract_stream_json_text(json.dumps(event)) is None
+
     def test_assistant_event_with_tool_use(self):
         event = {
             "type": "assistant",
@@ -107,6 +120,66 @@ class TestExtractStreamJsonText:
     def test_content_block_delta_text(self):
         event = {"type": "content_block_delta", "delta": {"type": "text_delta", "text": "hi"}}
         assert _extract_stream_json_text(json.dumps(event)) == "hi"
+
+
+class TestRenderToolUse:
+    """v0.7.48 — tool_use blocks render distinctly so the chat panel
+    doesn't show ``Bash: ls /tmp`` as a sentence-shaped bubble."""
+
+    def test_bash_command_uses_bash_fence(self):
+        rendered = _render_tool_use(
+            {"name": "Bash", "input": {"command": "ls /tmp"}}
+        )
+        assert "```bash" in rendered
+        assert "ls /tmp" in rendered
+        # Bold marker survives so MarkdownContent emphasizes the name.
+        assert "**" in rendered
+
+    def test_file_op_inlines_path(self):
+        for name in ("Read", "Edit", "Write"):
+            rendered = _render_tool_use(
+                {"name": name, "input": {"file_path": "/etc/hosts"}}
+            )
+            assert name in rendered
+            assert "`/etc/hosts`" in rendered
+            # No code fence for short inline paths — too noisy.
+            assert "```" not in rendered
+
+    def test_grep_renders_pattern_and_path(self):
+        rendered = _render_tool_use(
+            {
+                "name": "Grep",
+                "input": {"pattern": "TODO", "path": "src/"},
+            }
+        )
+        assert "Grep" in rendered
+        assert "`TODO`" in rendered
+        assert "`src/`" in rendered
+
+    def test_mcp_tool_short_arg_inline(self):
+        rendered = _render_tool_use(
+            {
+                "name": "mcp__plugin_context-mode__ctx_search",
+                "input": {"query": "session manager"},
+            }
+        )
+        assert "session manager" in rendered
+        # Short payload stays inline rather than fenced.
+        assert "```" not in rendered
+
+    def test_mcp_tool_long_arg_uses_fence(self):
+        long_query = "x" * 200
+        rendered = _render_tool_use(
+            {"name": "ctx_execute", "input": {"command": long_query}}
+        )
+        assert "```" in rendered
+        # Truncated at the 600 cap; bigger payloads still serialize.
+        assert "xxxx" in rendered
+
+    def test_tool_without_input_renders_name_only(self):
+        rendered = _render_tool_use({"name": "ToolSearch", "input": {}})
+        assert "ToolSearch" in rendered
+        assert "```" not in rendered
 
     def test_content_block_delta_non_text(self):
         event = {"type": "content_block_delta", "delta": {"type": "input_json_delta"}}
