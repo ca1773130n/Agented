@@ -44,18 +44,46 @@ session.onError((message: string) => {
 
 async function handleStart() {
   outputRef.value?.reset();
-  // The PTY satisfies claude's isatty() check, so plain ``claude``
-  // drops into an interactive REPL where SessionInput pipes user
-  // messages to its stdin. The previous default of ``claude -p '...'``
-  // was non-interactive (``-p`` = print and exit) — claude responded
-  // to the one-shot prompt and exited immediately, leaving the user
-  // typing into a zombie session that emitted "Connection lost" on
-  // the next SSE reconnect.
-  const request: CreateSessionRequest = {
-    cmd: ['claude'],
-    execution_type: executionType.value,
-    execution_mode: 'interactive',
-  };
+  // Direct mode runs claude in stream-json over a pipe transport — same
+  // plumbing as ``GrdSessionChatView``. This is what restores markdown
+  // rendering in ``SessionOutput``'s streaming parser: claude emits
+  // structured assistant events, the backend's stream-json parser lifts
+  // out clean prose / tool-use blocks, and ``write(line + '\n')``
+  // hands that to the markdown parser.
+  //
+  // History: v0.7.41 changed the cmd from ``claude -p 'You are in an
+  // interactive session'`` to bare ``claude`` to fix a Connection-lost
+  // bug — but that switched claude into its interactive TUI, which
+  // ``SessionOutput``'s markdown parser can't render (box-drawing
+  // chars, cursor escapes). The right answer was always stream-json
+  // (which didn't exist on this code path yet at the time). v0.7.49
+  // closes the loop.
+  //
+  // For ralph_loop / team_spawn, leave the cmd alone — those paths
+  // route through dedicated backend handlers that construct their own
+  // commands and don't need stream-json.
+  const isDirect = executionType.value === 'direct';
+  const request: CreateSessionRequest = isDirect
+    ? {
+        cmd: [
+          'claude',
+          '--print',
+          '--input-format',
+          'stream-json',
+          '--output-format',
+          'stream-json',
+          '--verbose',
+        ],
+        execution_type: 'direct',
+        execution_mode: 'interactive',
+        stream_json: true,
+        use_pty: false,
+      }
+    : {
+        cmd: ['claude'],
+        execution_type: executionType.value,
+        execution_mode: 'interactive',
+      };
   await session.startSession(request);
 }
 
