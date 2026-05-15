@@ -25,7 +25,10 @@ const projectId = computed(() => (route.params.projectId as string) || props.pro
 const showToast = useToast();
 
 // State
-const activeTab = ref<'kanban' | 'sessions'>('kanban');
+// Sessions tab opens by default — it's the live work surface
+// (chat panel + active claude session). Kanban is reference state
+// and reads fine on demand. v0.7.52.
+const activeTab = ref<'kanban' | 'sessions'>('sessions');
 const project = ref<Project | null>(null);
 const milestones = ref<GrdMilestone[]>([]);
 const phases = ref<GrdPhase[]>([]);
@@ -337,7 +340,13 @@ onUnmounted(() => {
     <template #default="{ reload: _reload }">
   <div class="project-management-page">
 
-    <template v-if="project">
+    <!-- Wrap multi-root v-if/v-else-if branches in `display:contents` divs so
+         Vue's parent block sees a stable single-root vnode in each branch.
+         Multi-root `<template v-if>` fragments shift the parent's
+         `dynamicChildren` count when toggled, corrupting `patchBlockChildren`
+         (TypeError reading 'el' on undefined). Same fix as EntityLayout.vue
+         and BackendDetailPage.vue. -->
+    <div v-if="project" class="project-management-page__content">
       <PageHeader title="Project Management" :subtitle="project?.name || undefined">
         <template #actions>
           <select
@@ -396,7 +405,7 @@ onUnmounted(() => {
         </button>
       </div>
 
-      <template v-if="activeTab === 'kanban'">
+      <div v-if="activeTab === 'kanban'" class="tab-pane">
         <MilestoneOverview
           :milestone="selectedMilestone"
           :phases="filteredPhases"
@@ -449,9 +458,9 @@ onUnmounted(() => {
             />
           </div>
         </div>
-      </template>
+      </div>
 
-      <template v-else-if="activeTab === 'sessions'">
+      <div v-else-if="activeTab === 'sessions'" class="tab-pane">
         <!-- Two parallel session systems coexist here:
              * Sketch → SuperAgent routing → ``super_agent_sessions``
                table — surfaced by ``ProjectSuperAgentSessions`` (read-
@@ -469,14 +478,23 @@ onUnmounted(() => {
           <summary>Open terminal view (for ralph loops / team spawn)</summary>
           <ProjectSessionPanel :project-id="projectId" />
         </details>
-      </template>
-    </template>
+      </div>
+    </div>
   </div>
     </template>
   </EntityLayout>
 </template>
 
 <style scoped>
+/* Layout-invisible wrappers for the v-if branches in the template.
+   `display: contents` removes the wrapper from the box tree, so the
+   children participate in `.project-management-page`'s flex column
+   exactly as they did when the branches were `<template>` fragments. */
+.project-management-page__content,
+.tab-pane {
+  display: contents;
+}
+
 .project-management-page {
   display: flex;
   flex-direction: column;
