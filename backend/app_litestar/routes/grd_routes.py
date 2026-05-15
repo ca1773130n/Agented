@@ -652,6 +652,84 @@ def remove_allowed_account_endpoint(
     return {"project_id": project_id, "account_id": account_id, "removed": True}
 
 
+@post(
+    "/{project_id:str}/sessions/{session_id:str}/answer-question",
+    sync_to_thread=False,
+)
+def session_answer_question(
+    project_id: str, session_id: str, data: dict
+) -> dict[str, Any]:
+    """v0.7.63 — receive a user's selection for an ``AskUserQuestion``
+    tool_use, wrap as a ``tool_result`` envelope, write to claude's
+    stdin. Claude continues the conversation with the answer.
+
+    Body shape:
+        {
+          "tool_use_id": "toolu_xxx",
+          "answers": { "<question text>": "<selected label>" | ["..."] }
+        }
+    """
+    del project_id
+    body = data or {}
+    tool_use_id = body.get("tool_use_id")
+    answers = body.get("answers")
+    if not tool_use_id or answers is None:
+        raise ClientException(
+            detail="tool_use_id and answers are required"
+        )
+
+    # Persist the user side so the chat panel re-renders the chosen
+    # option as a user bubble on next hydration. Render it as a
+    # short summary line — the full structured payload goes into
+    # claude's stdin separately.
+    try:
+        from app.db.grd import append_session_message
+
+        summary_lines: list[str] = []
+        for q, a in answers.items() if isinstance(answers, dict) else []:
+            shown = a if isinstance(a, str) else ", ".join(a or [])
+            summary_lines.append(f"**{q}** → {shown}")
+        if summary_lines:
+            append_session_message(
+                session_id, "user", "\n".join(summary_lines)
+            )
+    except Exception:
+        logger.warning(
+            "answer-question: failed to persist user answer for %s",
+            session_id,
+            exc_info=True,
+        )
+
+    if not ProjectSessionManager.is_stream_json(session_id):
+        raise ClientException(
+            detail="Session is not in stream-json mode; cannot answer."
+        )
+
+    import json as _json
+
+    envelope = {
+        "type": "user",
+        "session_id": "",
+        "message": {
+            "role": "user",
+            "content": [
+                {
+                    "type": "tool_result",
+                    "tool_use_id": tool_use_id,
+                    "content": _json.dumps(
+                        {"answers": answers}, ensure_ascii=False
+                    ),
+                }
+            ],
+        },
+        "parent_tool_use_id": None,
+    }
+    payload = _json.dumps(envelope, ensure_ascii=False)
+    if not ProjectSessionManager.send_input(session_id, payload):
+        raise NotFoundException(detail="Session not found or not active")
+    return {"message": "Answer sent", "session_id": session_id}
+
+
 @get("/{project_id:str}/sessions/{session_id:str}/messages", sync_to_thread=False)
 def session_messages(project_id: str, session_id: str) -> dict[str, Any]:
     """Return persisted chat messages for a session.
@@ -862,6 +940,7 @@ grd_router = Router(
         list_sessions,
         session_output,
         session_messages,
+        session_answer_question,
         list_allowed_accounts_endpoint,
         add_allowed_account_endpoint,
         remove_allowed_account_endpoint,

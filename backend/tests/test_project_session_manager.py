@@ -12,6 +12,7 @@ import pytest
 from app.services.project_session_manager import (
     ProjectSessionManager,
     SessionInfo,
+    _extract_stream_json_events,
     _extract_stream_json_text,
     _render_tool_use,
     _unwrap_markdown_fences,
@@ -121,6 +122,93 @@ class TestExtractStreamJsonText:
     def test_content_block_delta_text(self):
         event = {"type": "content_block_delta", "delta": {"type": "text_delta", "text": "hi"}}
         assert _extract_stream_json_text(json.dumps(event)) == "hi"
+
+
+class TestExtractStreamJsonEvents:
+    """v0.7.63 — ``_extract_stream_json_events`` returns an ordered list
+    of ``(event_type, data)`` tuples so the reader thread can broadcast
+    side-channel events (like ``AskUserQuestion``) alongside the
+    text/tool-use bubble content."""
+
+    def test_assistant_text_only_yields_single_output(self):
+        event = {
+            "type": "assistant",
+            "message": {"content": [{"type": "text", "text": "hello"}]},
+        }
+        events = _extract_stream_json_events(json.dumps(event))
+        assert events == [("output", {"line": "hello"})]
+
+    def test_ask_user_question_split_off_from_surrounding_text(self):
+        questions = [
+            {
+                "question": "Pick one",
+                "header": "Pick",
+                "multiSelect": False,
+                "options": [
+                    {"label": "A", "description": "a"},
+                    {"label": "B", "description": "b"},
+                ],
+            }
+        ]
+        event = {
+            "type": "assistant",
+            "message": {
+                "content": [
+                    {"type": "text", "text": "Need your input:"},
+                    {
+                        "type": "tool_use",
+                        "id": "toolu_abc",
+                        "name": "AskUserQuestion",
+                        "input": {"questions": questions},
+                    },
+                    {"type": "text", "text": "Thanks."},
+                ]
+            },
+        }
+        events = _extract_stream_json_events(json.dumps(event))
+        # 3 events, chronological order preserved
+        assert len(events) == 3
+        assert events[0] == ("output", {"line": "Need your input:"})
+        assert events[1][0] == "ask_user_question"
+        assert events[1][1]["tool_use_id"] == "toolu_abc"
+        assert events[1][1]["questions"] == questions
+        assert events[2] == ("output", {"line": "Thanks."})
+
+    def test_other_tool_use_stays_in_output_bubble(self):
+        """Non-AskUserQuestion tools still render as chips in the
+        ``output`` event."""
+        event = {
+            "type": "assistant",
+            "message": {
+                "content": [
+                    {"type": "text", "text": "Reading file."},
+                    {
+                        "type": "tool_use",
+                        "id": "toolu_read",
+                        "name": "Read",
+                        "input": {"file_path": "/etc/hosts"},
+                    },
+                ]
+            },
+        }
+        events = _extract_stream_json_events(json.dumps(event))
+        assert len(events) == 1
+        ev_type, ev_data = events[0]
+        assert ev_type == "output"
+        assert "Reading file." in ev_data["line"]
+        assert 'tool-call--file' in ev_data["line"]
+
+    def test_unknown_event_returns_empty_list(self):
+        for payload in (
+            {"type": "system", "subtype": "init"},
+            {"type": "result"},
+            {"type": "rate_limit_event"},
+        ):
+            assert _extract_stream_json_events(json.dumps(payload)) == []
+
+    def test_non_json_line_passes_through(self):
+        events = _extract_stream_json_events("plain text line")
+        assert events == [("output", {"line": "plain text line"})]
 
 
 class TestUnwrapMarkdownFences:

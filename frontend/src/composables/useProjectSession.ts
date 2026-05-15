@@ -8,6 +8,22 @@ import {
 } from '../services/api/grd';
 import { useEventSource } from './useEventSource';
 
+// v0.7.63 — shape of one ``AskUserQuestion`` entry as emitted by
+// claude's stream-json. ``options`` may also carry ``preview`` and
+// ``annotations`` fields; we treat them as opaque ``unknown`` here
+// so the renderer can adopt them later without an API break.
+export interface AskUserQuestionOption {
+  label: string;
+  description?: string;
+  preview?: string;
+}
+export interface AskUserQuestionItem {
+  question: string;
+  header?: string;
+  multiSelect?: boolean;
+  options: AskUserQuestionOption[];
+}
+
 /**
  * Composable for managing project session lifecycle, SSE streaming,
  * and session CRUD operations.
@@ -46,6 +62,12 @@ export function useProjectSession(projectId: Ref<string>) {
   let onOutputCb: ((line: string) => void) | undefined;
   let onCompleteCb: ((status: string, exitCode: number) => void) | undefined;
   let onErrorCb: ((message: string) => void) | undefined;
+  // v0.7.63 — claude's ``AskUserQuestion`` tool surfaces here as a
+  // structured payload (the backend splits it off the regular output
+  // bubble). Panels register a handler to render clickable options.
+  let onAskUserQuestionCb:
+    | ((payload: { tool_use_id: string; questions: AskUserQuestionItem[] }) => void)
+    | undefined;
 
   // SSE lifecycle managed by useEventSource.
   // sourceFactory will be set dynamically via connect() calls.
@@ -61,6 +83,21 @@ export function useProjectSession(projectId: Ref<string>) {
           onOutputCb?.(data.line);
         } catch (e) {
           console.warn('[useProjectSession] Failed to parse output event:', e, event.data);
+        }
+      },
+      ask_user_question: (event: MessageEvent) => {
+        try {
+          const data = JSON.parse(event.data);
+          onAskUserQuestionCb?.({
+            tool_use_id: data.tool_use_id ?? '',
+            questions: data.questions ?? [],
+          });
+        } catch (e) {
+          console.warn(
+            '[useProjectSession] Failed to parse ask_user_question event:',
+            e,
+            event.data,
+          );
         }
       },
       complete: (event: MessageEvent) => {
@@ -334,6 +371,12 @@ export function useProjectSession(projectId: Ref<string>) {
     onErrorCb = cb;
   }
 
+  function onAskUserQuestion(
+    cb: (payload: { tool_use_id: string; questions: AskUserQuestionItem[] }) => void,
+  ) {
+    onAskUserQuestionCb = cb;
+  }
+
   // SSE connection cleanup is handled by useEventSource's onUnmounted.
   // This separate onUnmounted resets streaming/ralph/team state on unmount.
   onUnmounted(() => {
@@ -367,5 +410,6 @@ export function useProjectSession(projectId: Ref<string>) {
     onOutput,
     onComplete,
     onError,
+    onAskUserQuestion,
   };
 }
