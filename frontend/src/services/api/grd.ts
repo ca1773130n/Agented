@@ -265,6 +265,24 @@ export const grdApi = {
       `/api/projects/${projectId}/sessions/${sessionId}/messages`
     ),
 
+  // v0.7.63 — answer an ``AskUserQuestion`` tool_use. ``answers`` maps
+  // each question's text to the selected option's label (or array of
+  // labels for multi-select). Backend wraps in a tool_result envelope
+  // and writes to claude's stdin.
+  answerSessionQuestion: (
+    projectId: string,
+    sessionId: string,
+    toolUseId: string,
+    answers: Record<string, string | string[]>,
+  ) =>
+    apiFetch<{ message: string; session_id: string }>(
+      `/api/projects/${projectId}/sessions/${sessionId}/answer-question`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ tool_use_id: toolUseId, answers }),
+      },
+    ),
+
   // v0.7.58 — per-project AI backend account whitelist.
   // Sessions started without yolo_mode require an account_id from
   // this list. Managed on the project settings page.

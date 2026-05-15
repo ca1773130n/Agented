@@ -335,6 +335,83 @@ def test_create_session_auto_title_blanks_name(isolated_db, monkeypatch):
     assert row["yolo_mode"] == 0
 
 
+def test_answer_question_requires_fields(isolated_db):
+    """v0.7.63 — POST /answer-question needs both tool_use_id + answers."""
+    with _client() as c:
+        # Missing tool_use_id
+        resp = c.post(
+            "/api/projects/p-x/sessions/sess-x/answer-question",
+            json={"answers": {"q": "A"}},
+        )
+        assert resp.status_code == 400
+        # Missing answers
+        resp = c.post(
+            "/api/projects/p-x/sessions/sess-x/answer-question",
+            json={"tool_use_id": "toolu_abc"},
+        )
+        assert resp.status_code == 400
+
+
+def test_answer_question_writes_tool_result_envelope(isolated_db, monkeypatch):
+    """When stream-json mode is active, the answer becomes a tool_result
+    on a ``user`` envelope written to claude's stdin."""
+    from app.services.project_session_manager import ProjectSessionManager
+
+    captured: dict[str, str] = {}
+
+    monkeypatch.setattr(
+        ProjectSessionManager, "is_stream_json", classmethod(lambda cls, sid: True)
+    )
+
+    def fake_send(cls, sid: str, payload: str) -> bool:
+        captured["sid"] = sid
+        captured["payload"] = payload
+        return True
+
+    monkeypatch.setattr(
+        ProjectSessionManager, "send_input", classmethod(fake_send)
+    )
+
+    with _client() as c:
+        resp = c.post(
+            "/api/projects/p-x/sessions/psess-q/answer-question",
+            json={
+                "tool_use_id": "toolu_abc",
+                "answers": {"Which one?": "Option A"},
+            },
+        )
+    assert resp.status_code == 201, resp.text
+
+    import json as _json
+
+    env = _json.loads(captured["payload"])
+    assert env["type"] == "user"
+    assert env["parent_tool_use_id"] is None
+    content = env["message"]["content"]
+    assert len(content) == 1
+    assert content[0]["type"] == "tool_result"
+    assert content[0]["tool_use_id"] == "toolu_abc"
+    inner = _json.loads(content[0]["content"])
+    assert inner == {"answers": {"Which one?": "Option A"}}
+
+
+def test_answer_question_rejected_when_not_stream_json(isolated_db, monkeypatch):
+    """For PTY sessions, claude reads raw stdin — a JSON envelope is
+    meaningless, so refuse rather than write garbage."""
+    from app.services.project_session_manager import ProjectSessionManager
+
+    monkeypatch.setattr(
+        ProjectSessionManager, "is_stream_json", classmethod(lambda cls, sid: False)
+    )
+
+    with _client() as c:
+        resp = c.post(
+            "/api/projects/p-x/sessions/psess-q/answer-question",
+            json={"tool_use_id": "toolu_abc", "answers": {"q": "A"}},
+        )
+    assert resp.status_code == 400
+
+
 def test_create_ralph_session_unknown_project_404(isolated_db):
     with _client() as c:
         resp = c.post("/api/projects/missing/sessions/ralph", json={})

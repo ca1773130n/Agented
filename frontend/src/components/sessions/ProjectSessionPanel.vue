@@ -9,6 +9,8 @@ import SessionOutput from './SessionOutput.vue';
 import SessionInput from './SessionInput.vue';
 import SessionControls from './SessionControls.vue';
 import SessionStartDialog from './SessionStartDialog.vue';
+import InteractiveQuestionCard from './InteractiveQuestionCard.vue';
+import type { AskUserQuestionItem } from '../../composables/useProjectSession';
 
 interface ChatMsg {
   role: 'user' | 'assistant' | 'system';
@@ -43,6 +45,15 @@ const awaitingResponse = ref(false);
 // in the first case ("AI will guide you through designing your ..."
 // is template copy for an entity-creation flow we don't fit). v0.7.61.
 const hydratedEmpty = ref(false);
+
+// v0.7.63 — pending ``AskUserQuestion`` payload. Set when the backend
+// emits an ``ask_user_question`` SSE event; cleared when the user
+// answers (or Skip's). Rendered as an ``InteractiveQuestionCard``
+// pinned below the chat panel.
+const pendingQuestion = ref<{
+  tool_use_id: string;
+  questions: AskUserQuestionItem[];
+} | null>(null);
 
 // Soft diagnostic shown if no output arrives within 8s of sending a
 // message. Most claude responses begin streaming within 2-3s, so 8s
@@ -124,6 +135,60 @@ session.onError((message: string) => {
   showToast(message, 'error');
 });
 
+session.onAskUserQuestion((payload) => {
+  // Setting pendingQuestion replaces any earlier question, which
+  // matches the natural flow (claude only asks one at a time). The
+  // ``awaitingResponse`` spinner stops since input now lives in the
+  // card.
+  pendingQuestion.value = payload;
+  awaitingResponse.value = false;
+  clearDiagnostic();
+});
+
+async function onQuestionAnswered(answers: Record<string, string | string[]>) {
+  const pending = pendingQuestion.value;
+  if (!pending) return;
+  pendingQuestion.value = null;
+
+  // Render a short summary user bubble so the chat reflects the
+  // selection (full structured payload goes to claude's stdin via
+  // the backend endpoint, which also persists it to log_json).
+  const summary = Object.entries(answers)
+    .map(([q, a]) => `**${q}** → ${Array.isArray(a) ? a.join(', ') : a}`)
+    .join('\n\n');
+  messages.value.push({
+    role: 'user',
+    content: summary,
+    timestamp: new Date().toISOString(),
+  });
+  awaitingResponse.value = true;
+
+  try {
+    await grdApi.answerSessionQuestion(
+      props.projectId,
+      session.activeSessionId.value ?? '',
+      pending.tool_use_id,
+      answers,
+    );
+  } catch (err) {
+    showToast(
+      err instanceof Error ? err.message : 'Failed to send answer',
+      'error',
+    );
+    awaitingResponse.value = false;
+  }
+}
+
+function onQuestionSkipped() {
+  pendingQuestion.value = null;
+  // Skipping means we don't send a tool_result; claude will keep
+  // waiting. A toast tells the user this is non-destructive.
+  showToast(
+    'Skipped — claude is still waiting. Reopen the question or stop the session.',
+    'info',
+  );
+}
+
 // Dialog visibility. ``handleStart`` (bound to the SessionControls
 // Start button) opens it; ``onDialogConfirm`` performs the actual
 // session create with the values the dialog collected.
@@ -148,6 +213,7 @@ async function onDialogConfirm(payload: {
   awaitingResponse.value = false;
   inputMessage.value = '';
   hydratedEmpty.value = false;
+  pendingQuestion.value = null;
   clearDiagnostic();
 
   const isDirect = payload.executionType === 'direct';
@@ -244,6 +310,7 @@ async function handleSessionClick(sessionId: string) {
   outputRef.value?.reset();
   messages.value = [];
   awaitingResponse.value = false;
+  pendingQuestion.value = null;
   session.switchSession(sessionId);
 
   // Hydrate chat history from the backend's persisted ``log_json``
@@ -382,6 +449,16 @@ onMounted(() => {
               </div>
             </template>
           </AiChatPanelManaged>
+
+          <!-- v0.7.63 — interactive ``AskUserQuestion`` widget. Shows
+               only when claude is waiting on a structured answer;
+               clears itself on submit / skip / Start. -->
+          <InteractiveQuestionCard
+            v-if="pendingQuestion && isDirectMode"
+            :questions="pendingQuestion.questions"
+            @confirm="onQuestionAnswered"
+            @cancel="onQuestionSkipped"
+          />
           <!-- Ralph loops / team spawn keep the monospace terminal so
                structured progress events (iteration counters, team
                membership tables) read cleanly. -->

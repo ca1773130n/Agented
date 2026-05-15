@@ -216,55 +216,104 @@ def _one_line(text: str, limit: int = 80) -> str:
 
 
 def _extract_stream_json_text(line: str) -> Optional[str]:
-    """Extract displayable text from a claude --output-format stream-json event.
+    """Back-compat shim — collapses ``_extract_stream_json_events`` to a
+    single string for callers that only care about the textual side.
 
-    Returns a human-readable string for display, or None to skip the event.
+    Kept so the existing test fixtures keep matching exactly. New code
+    should use the events list and broadcast each event type
+    independently (see ``_reader_loop``).
+    """
+    events = _extract_stream_json_events(line)
+    if not events:
+        return None
+    # Take only the ``output``-event text — interactive events
+    # (ask_user_question, …) don't have an SSE-style ``line`` form.
+    text_parts = [
+        ev_data.get("line", "")
+        for ev_type, ev_data in events
+        if ev_type == "output"
+    ]
+    joined = "\n".join(p for p in text_parts if p)
+    return joined or None
+
+
+def _extract_stream_json_events(line: str) -> list[tuple[str, dict]]:
+    """Parse one stream-json line into a list of SSE events to broadcast.
+
+    Most lines produce zero or one ``("output", {"line": "..."})``
+    tuple. Some produce side-channel events — e.g. ``AskUserQuestion``
+    tool_use becomes ``("ask_user_question", {"tool_use_id", "questions"})``
+    so the frontend can render clickable options instead of an inert
+    chip.
+
+    Returns: ordered list of ``(event_type, payload_dict)`` for the
+    reader thread to broadcast in sequence.
     """
     try:
         event = json.loads(line)
     except (json.JSONDecodeError, ValueError):
-        return line  # Not JSON — pass through as plain text
+        return [("output", {"line": line})]  # Not JSON — pass through
 
     event_type = event.get("type")
 
     if event_type == "assistant":
         msg = event.get("message", {})
-        parts = []
+        events: list[tuple[str, dict]] = []
+        # Each block emits at most one event. Text + non-AskUser tool_use
+        # blocks accumulate into one "output" event so the chat bubble
+        # stays grouped; AskUserQuestion gets its own event so the
+        # frontend can mount an interactive component.
+        text_buffer: list[str] = []
         for block in msg.get("content", []):
             block_type = block.get("type")
             if block_type == "text":
-                # Unwrap ``markdown`` fences so a file content like
-                # CLAUDE.md renders as rendered markdown (headings,
-                # lists, paragraphs) instead of a literal ``#``-laden
-                # code block. Other languages stay fenced.
-                parts.append(_unwrap_markdown_fences(block["text"]))
+                text_buffer.append(_unwrap_markdown_fences(block["text"]))
             elif block_type == "tool_use":
-                parts.append(_render_tool_use(block))
+                name = block.get("name")
+                if name == "AskUserQuestion":
+                    # Flush accumulated text first so chronological
+                    # order is preserved (text before the question).
+                    if text_buffer:
+                        events.append(
+                            ("output", {"line": "\n".join(text_buffer)})
+                        )
+                        text_buffer = []
+                    events.append(
+                        (
+                            "ask_user_question",
+                            {
+                                "tool_use_id": block.get("id", ""),
+                                "questions": (block.get("input") or {}).get(
+                                    "questions", []
+                                ),
+                            },
+                        )
+                    )
+                else:
+                    text_buffer.append(_render_tool_use(block))
             elif block_type == "tool_result":
                 content = block.get("content", "")
                 if isinstance(content, str) and content:
-                    parts.append(content[:500])
-        return "\n".join(parts) if parts else None
+                    text_buffer.append(content[:500])
+        if text_buffer:
+            events.append(("output", {"line": "\n".join(text_buffer)}))
+        return events
 
     # Streaming delta events (partial text during long responses)
     if event_type == "content_block_delta":
         delta = event.get("delta", {})
         if delta.get("type") == "text_delta":
-            return delta.get("text")
-        return None
+            text = delta.get("text", "")
+            return [("output", {"line": text})] if text else []
+        return []
 
     if event_type == "result":
-        # In ``--input-format stream-json`` interactive chat, the
-        # ``result`` event duplicates whatever just came through as
-        # ``assistant`` (or as ``content_block_delta`` chunks). Emitting
-        # it again would produce a second copy of every answer in the
-        # chat panel. Skip it. (One-shot ``claude -p`` callers that
-        # bypass this extractor — e.g. cli_agent_runner_service — have
-        # their own parser and aren't affected.)
-        return None
+        # Suppressed — duplicates the preceding ``assistant`` content.
+        # See note on v0.7.43.
+        return []
 
     # Skip noise: system/init, hooks, rate_limit_event, etc.
-    return None
+    return []
 
 
 @dataclass
@@ -543,46 +592,67 @@ class ProjectSessionManager:
             _stream_json = si.stream_json if si else False
 
         def _emit_line(line_text: str) -> None:
-            """Strip ANSI, optionally parse stream-json, broadcast non-empty lines."""
+            """Strip ANSI, optionally parse stream-json, broadcast events.
+
+            In stream-json mode one input line may produce multiple
+            output SSE events — e.g. a chat turn that contains text +
+            an ``AskUserQuestion`` tool_use emits an ``output`` event
+            for the text then an ``ask_user_question`` event for the
+            structured payload, in chronological order.
+            """
             cleaned = _ANSI_RE.sub("", line_text).strip()
             if not cleaned:
                 return
 
-            # In stream-json mode, extract human-readable text from JSON events
             if _stream_json:
-                extracted = _extract_stream_json_text(cleaned)
-                if not extracted:
-                    return  # Skip non-displayable events (hooks, rate limits, etc.)
-                cleaned = extracted
+                events = _extract_stream_json_events(cleaned)
+            else:
+                events = [("output", {"line": cleaned})]
+            if not events:
+                return
+
             with cls._lock:
                 si = cls._sessions.get(session_id)
-                if si:
-                    si.ring_buffer.append(cleaned)
-                    si.last_activity_at = datetime.now()
-                    is_paused = si.paused
-                else:
+                if not si:
                     return
-            if not is_paused:
-                cls._broadcast(
-                    session_id,
-                    "output",
-                    {"line": cleaned, "timestamp": datetime.now().isoformat()},
-                )
-                # Persist the assistant turn into ``log_json`` so the
-                # frontend can rehydrate the chat panel when the user
-                # clicks this session in the sidebar later (after the
-                # subprocess exits or gunicorn restarts the in-memory
-                # ring buffer is gone).
-                try:
-                    from app.db.grd import append_session_message
+                is_paused = si.paused
+                # Ring buffer keeps only ``output`` events — that's
+                # what gets replayed to a late SSE subscriber. Side-
+                # channel events (ask_user_question, …) can't be
+                # meaningfully replayed; if the user reconnects after
+                # the question was answered, the answer state lives
+                # elsewhere.
+                for ev_type, ev_data in events:
+                    if ev_type == "output":
+                        si.ring_buffer.append(ev_data["line"])
+                si.last_activity_at = datetime.now()
 
-                    append_session_message(session_id, "assistant", cleaned)
-                except Exception:
-                    logger.warning(
-                        "reader: failed to persist assistant message for %s",
-                        session_id,
-                        exc_info=True,
-                    )
+            if is_paused:
+                return
+
+            for ev_type, ev_data in events:
+                payload = {**ev_data, "timestamp": datetime.now().isoformat()}
+                cls._broadcast(session_id, ev_type, payload)
+                # Persist assistant text into log_json so the chat
+                # panel can rehydrate later. Interactive events
+                # (ask_user_question) aren't persisted today —
+                # answering one mutates the conversation, and that
+                # mutation is already captured via the resulting
+                # ``user`` (tool_result) line being persisted on the
+                # input side.
+                if ev_type == "output":
+                    try:
+                        from app.db.grd import append_session_message
+
+                        append_session_message(
+                            session_id, "assistant", ev_data["line"]
+                        )
+                    except Exception:
+                        logger.warning(
+                            "reader: failed to persist assistant message for %s",
+                            session_id,
+                            exc_info=True,
+                        )
 
         try:
             while True:
