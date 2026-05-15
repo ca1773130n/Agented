@@ -257,7 +257,7 @@ onMounted(() => {
   <div class="session-panel">
     <!-- Header bar -->
     <div class="panel-header">
-      <h3 class="panel-title">Sessions</h3>
+      <h3 class="panel-title">Interactive session</h3>
       <div class="header-actions">
         <ExecutionTypeSelector v-model="executionType" />
         <SessionControls
