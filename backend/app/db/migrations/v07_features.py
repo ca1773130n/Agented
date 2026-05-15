@@ -101,6 +101,33 @@ def _migrate_117_model_discovery_cache(conn):
     )
 
 
+def _migrate_119_session_name_and_yolo(conn) -> None:
+    """v0.7.57 — session-start dialog needs to persist name + yolo flag.
+
+    * ``name`` (TEXT, nullable) — user-supplied or backend-generated
+      title for the session, shown in the History sidebar.
+    * ``auto_title`` (BOOLEAN, default 1) — when true, an empty
+      ``name`` should be auto-filled (currently a simple fallback
+      based on session id; replaced with a claude-generated summary
+      in a follow-up).
+    * ``yolo_mode`` (BOOLEAN, default 0) — when true, the backend
+      appends ``--dangerously-skip-permissions`` and any per-project
+      account whitelist is bypassed. Recorded per-session so the
+      audit trail shows which sessions ran without permission gates.
+    """
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(project_sessions)")}
+    if "name" not in cols:
+        conn.execute("ALTER TABLE project_sessions ADD COLUMN name TEXT")
+    if "auto_title" not in cols:
+        conn.execute(
+            "ALTER TABLE project_sessions ADD COLUMN auto_title INTEGER NOT NULL DEFAULT 1"
+        )
+    if "yolo_mode" not in cols:
+        conn.execute(
+            "ALTER TABLE project_sessions ADD COLUMN yolo_mode INTEGER NOT NULL DEFAULT 0"
+        )
+
+
 V07_MIGRATIONS: list = [
     # v0.7.7: super-agent activity inspector — timeline + rollup.
     (116, "super_agent_activity", _migrate_116_super_agent_activity),
@@ -113,4 +140,6 @@ V07_MIGRATIONS: list = [
         "backfill_sketch_session_project_id",
         _migrate_118_backfill_sketch_session_project_id,
     ),
+    # v0.7.57: per-session name, auto-title flag, and yolo mode.
+    (119, "session_name_and_yolo", _migrate_119_session_name_and_yolo),
 ]

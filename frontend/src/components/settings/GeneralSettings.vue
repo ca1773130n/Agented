@@ -137,6 +137,43 @@ async function saveYoloMode() {
   }
 }
 
+// Per-session "default yolo" for the start-session dialog (v0.7.57).
+// Distinct from ``agent_yolo_mode`` above: that one toggles how
+// sketches / agent-driven flows invoke the CLIs; this one only
+// controls whether the dialog's yolo toggle is pre-checked when the
+// user clicks "Start session" on the project Sessions panel.
+const sessionDefaultYolo = ref(false);
+
+async function loadSessionDefaultYolo() {
+  try {
+    const data = await settingsApi.get('session_default_yolo');
+    const raw = (data.value || '').trim().toLowerCase();
+    sessionDefaultYolo.value =
+      raw === 'true' || raw === '1' || raw === 'yes';
+  } catch {
+    sessionDefaultYolo.value = false;
+  }
+}
+
+async function saveSessionDefaultYolo() {
+  try {
+    await settingsApi.set(
+      'session_default_yolo',
+      String(sessionDefaultYolo.value),
+    );
+    showToast(
+      sessionDefaultYolo.value
+        ? 'Yolo toggle will be on by default in the start-session dialog'
+        : 'Yolo toggle will be off by default in the start-session dialog',
+      'success',
+    );
+  } catch (err) {
+    const message = err instanceof ApiError ? err.message : 'Failed to save setting';
+    showToast(message, 'error');
+    sessionDefaultYolo.value = !sessionDefaultYolo.value;
+  }
+}
+
 async function loadMonitoringSettings() {
   loadingMonitoring.value = true;
   try {
@@ -213,6 +250,7 @@ onMounted(() => {
   loadGeneralSettings();
   loadAutoUpdateSetting();
   loadYoloMode();
+  loadSessionDefaultYolo();
   loadMonitoringSettings();
 });
 </script>
@@ -299,6 +337,39 @@ onMounted(() => {
             <button
               :class="['toggle-switch', { active: yoloMode }]"
               @click="yoloMode = !yoloMode; saveYoloMode()"
+            >
+              <span class="toggle-knob"></span>
+            </button>
+          </label>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top: 1.5rem;">
+      <div class="card-header">
+        <h3>Interactive Sessions</h3>
+      </div>
+      <div class="card-body">
+        <div class="form-group toggle-group">
+          <label class="toggle-label">
+            <span class="toggle-text">
+              <strong>Default Yolo on session start</strong>
+              <span class="toggle-description">
+                When ON, the Yolo toggle in the
+                "Start a new session" dialog is pre-checked. Yolo sessions append
+                <code>--dangerously-skip-permissions</code> to the
+                <code>claude</code> command and (in a follow-up) bypass the
+                per-project allowed-accounts whitelist. Distinct from the Agent
+                Execution YOLO above, which controls sketches and agent-driven
+                flows.
+              </span>
+            </span>
+            <button
+              :class="['toggle-switch', { active: sessionDefaultYolo }]"
+              @click="
+                sessionDefaultYolo = !sessionDefaultYolo;
+                saveSessionDefaultYolo()
+              "
             >
               <span class="toggle-knob"></span>
             </button>

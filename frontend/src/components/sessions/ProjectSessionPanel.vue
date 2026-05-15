@@ -8,7 +8,7 @@ import type { CreateSessionRequest } from '../../services/api/grd';
 import SessionOutput from './SessionOutput.vue';
 import SessionInput from './SessionInput.vue';
 import SessionControls from './SessionControls.vue';
-import ExecutionTypeSelector from './ExecutionTypeSelector.vue';
+import SessionStartDialog from './SessionStartDialog.vue';
 
 interface ChatMsg {
   role: 'user' | 'assistant' | 'system';
@@ -101,31 +101,31 @@ session.onError((message: string) => {
   showToast(message, 'error');
 });
 
-async function handleStart() {
+// Dialog visibility. ``handleStart`` (bound to the SessionControls
+// Start button) opens it; ``onDialogConfirm`` performs the actual
+// session create with the values the dialog collected.
+const showStartDialog = ref(false);
+
+function handleStart() {
+  showStartDialog.value = true;
+}
+
+async function onDialogConfirm(payload: {
+  name: string | null;
+  autoTitle: boolean;
+  yoloMode: boolean;
+  executionType: 'direct' | 'ralph_loop' | 'team_spawn';
+}) {
+  showStartDialog.value = false;
+  executionType.value = payload.executionType;
+
   outputRef.value?.reset();
   messages.value = [];
   awaitingResponse.value = false;
   inputMessage.value = '';
   clearDiagnostic();
-  // Direct mode runs claude in stream-json over a pipe transport — same
-  // plumbing as ``GrdSessionChatView``. This is what restores markdown
-  // rendering in ``SessionOutput``'s streaming parser: claude emits
-  // structured assistant events, the backend's stream-json parser lifts
-  // out clean prose / tool-use blocks, and ``write(line + '\n')``
-  // hands that to the markdown parser.
-  //
-  // History: v0.7.41 changed the cmd from ``claude -p 'You are in an
-  // interactive session'`` to bare ``claude`` to fix a Connection-lost
-  // bug — but that switched claude into its interactive TUI, which
-  // ``SessionOutput``'s markdown parser can't render (box-drawing
-  // chars, cursor escapes). The right answer was always stream-json
-  // (which didn't exist on this code path yet at the time). v0.7.49
-  // closes the loop.
-  //
-  // For ralph_loop / team_spawn, leave the cmd alone — those paths
-  // route through dedicated backend handlers that construct their own
-  // commands and don't need stream-json.
-  const isDirect = executionType.value === 'direct';
+
+  const isDirect = payload.executionType === 'direct';
   const request: CreateSessionRequest = isDirect
     ? {
         cmd: [
@@ -141,11 +141,17 @@ async function handleStart() {
         execution_mode: 'interactive',
         stream_json: true,
         use_pty: false,
+        name: payload.name,
+        auto_title: payload.autoTitle,
+        yolo_mode: payload.yoloMode,
       }
     : {
         cmd: ['claude'],
-        execution_type: executionType.value,
+        execution_type: payload.executionType,
         execution_mode: 'interactive',
+        name: payload.name,
+        auto_title: payload.autoTitle,
+        yolo_mode: payload.yoloMode,
       };
   await session.startSession(request);
 }
@@ -259,7 +265,6 @@ onMounted(() => {
     <div class="panel-header">
       <h3 class="panel-title">Interactive session</h3>
       <div class="header-actions">
-        <ExecutionTypeSelector v-model="executionType" />
         <SessionControls
           :session-status="activeSession?.status ?? null"
           :is-streaming="session.isStreaming.value"
@@ -288,7 +293,10 @@ onMounted(() => {
           >
             <span class="status-dot" :style="{ background: statusColor(s.status) }"></span>
             <div class="session-item-info">
-              <span class="session-item-id">{{ truncateId(s.id) }}</span>
+              <span class="session-item-id">
+                {{ s.name || truncateId(s.id) }}
+                <span v-if="s.yolo_mode" class="yolo-badge" title="Yolo mode">YOLO</span>
+              </span>
               <span class="session-item-type">{{ s.execution_type }}</span>
             </div>
           </button>
@@ -349,6 +357,12 @@ onMounted(() => {
       <span>{{ session.error.value }}</span>
       <button class="error-dismiss" @click="session.error.value = null">Dismiss</button>
     </div>
+
+    <SessionStartDialog
+      :visible="showStartDialog"
+      @close="showStartDialog = false"
+      @confirm="onDialogConfirm"
+    />
   </div>
 </template>
 
@@ -478,6 +492,21 @@ onMounted(() => {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.yolo-badge {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgba(255, 100, 100, 0.15);
+  color: var(--accent-red, #ff6464);
+  border: 1px solid rgba(255, 100, 100, 0.3);
+  text-transform: uppercase;
 }
 
 .session-item-type {
