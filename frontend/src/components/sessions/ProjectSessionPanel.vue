@@ -37,6 +37,13 @@ const messages = ref<ChatMsg[]>([]);
 const inputMessage = ref('');
 const awaitingResponse = ref(false);
 
+// ``hydratedEmpty`` distinguishes "you clicked an old session that
+// has no recorded transcript" from "you haven't started anything
+// yet" — the AiChatPanelManaged default welcome screen reads weirdly
+// in the first case ("AI will guide you through designing your ..."
+// is template copy for an entity-creation flow we don't fit). v0.7.61.
+const hydratedEmpty = ref(false);
+
 // Soft diagnostic shown if no output arrives within 8s of sending a
 // message. Most claude responses begin streaming within 2-3s, so 8s
 // of silence is a useful tripwire — and a "backend may need a
@@ -140,6 +147,7 @@ async function onDialogConfirm(payload: {
   messages.value = [];
   awaitingResponse.value = false;
   inputMessage.value = '';
+  hydratedEmpty.value = false;
   clearDiagnostic();
 
   const isDirect = payload.executionType === 'direct';
@@ -245,14 +253,16 @@ async function handleSessionClick(sessionId: string) {
   // exited, this is the ONLY way to recover the conversation —
   // the in-memory ring buffer is gone.
   if (isDirectMode.value) {
+    hydratedEmpty.value = false;
     try {
       const result = await grdApi.getSessionMessages(props.projectId, sessionId);
+      const raw = result.messages ?? [];
       // Collapse consecutive same-role entries into grouped bubbles
       // for the same reason as the live ``onOutput`` path. Without
       // this, a turn with 4 tool calls comes back as 4 separate
       // bubbles instead of one.
       const grouped: ChatMsg[] = [];
-      for (const m of result.messages ?? []) {
+      for (const m of raw) {
         const tail = grouped[grouped.length - 1];
         if (tail && tail.role === m.role) {
           tail.content = tail.content
@@ -263,6 +273,12 @@ async function handleSessionClick(sessionId: string) {
         }
       }
       messages.value = grouped;
+      // No transcript and the session is over → show a dedicated
+      // empty state. (For active sessions, the ring buffer will
+      // still stream live output so don't mark hydratedEmpty.)
+      const sess = session.sessions.value.find((s) => s.id === sessionId);
+      const isFinished = sess?.status === 'completed' || sess?.status === 'failed';
+      hydratedEmpty.value = grouped.length === 0 && isFinished;
     } catch {
       // Quiet — empty messages is the worst case, not a hard error.
     }
@@ -355,7 +371,17 @@ onMounted(() => {
             @update:input-message="inputMessage = $event"
             @send="handleChatSend"
             @keydown="handleChatKeydown"
-          />
+          >
+            <template #welcome>
+              <div v-if="hydratedEmpty" class="empty-historical">
+                <p class="empty-historical-title">No recorded transcript</p>
+                <p class="empty-historical-sub">
+                  This session ended before chat persistence was enabled, so its
+                  conversation can't be replayed. Start a new session to record one.
+                </p>
+              </div>
+            </template>
+          </AiChatPanelManaged>
           <!-- Ralph loops / team spawn keep the monospace terminal so
                structured progress events (iteration counters, team
                membership tables) read cleanly. -->
@@ -569,6 +595,30 @@ onMounted(() => {
 .chat-panel {
   flex: 1;
   min-height: 0;
+}
+
+.empty-historical {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 24px;
+  text-align: center;
+  gap: 8px;
+  color: var(--text-secondary);
+}
+.empty-historical-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+}
+.empty-historical-sub {
+  font-size: 13px;
+  max-width: 360px;
+  line-height: 1.5;
+  margin: 0;
+  color: var(--text-muted);
 }
 
 /* Empty state */
