@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, toRef, onMounted, computed } from 'vue';
+import { AiChatPanelManaged } from '@ai-accounts/vue-styled';
 import { useProjectSession } from '../../composables/useProjectSession';
 import { useToast } from '../../composables/useToast';
 import type { CreateSessionRequest } from '../../services/api/grd';
@@ -7,6 +8,12 @@ import SessionOutput from './SessionOutput.vue';
 import SessionInput from './SessionInput.vue';
 import SessionControls from './SessionControls.vue';
 import ExecutionTypeSelector from './ExecutionTypeSelector.vue';
+
+interface ChatMsg {
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+  timestamp?: string;
+}
 
 const props = defineProps<{
   projectId: string;
@@ -18,6 +25,17 @@ const session = useProjectSession(toRef(props, 'projectId'));
 const outputRef = ref<InstanceType<typeof SessionOutput> | null>(null);
 const executionType = ref<'direct' | 'ralph_loop' | 'team_spawn'>('direct');
 
+// Direct-mode chat state. ``direct`` runs claude in stream-json so
+// each ``onOutput`` line is already a complete assistant turn — render
+// as proper chat bubbles (user vs assistant) instead of dumping into
+// the terminal block. Ralph / team-spawn keep ``SessionOutput`` because
+// their structured progress (iterations, team membership) reads
+// better in monospace.
+const isDirectMode = computed(() => executionType.value === 'direct');
+const messages = ref<ChatMsg[]>([]);
+const inputMessage = ref('');
+const awaitingResponse = ref(false);
+
 // Active session object for status lookups
 const activeSession = computed(() => {
   if (!session.activeSessionId.value) return null;
@@ -26,11 +44,32 @@ const activeSession = computed(() => {
 
 // Wire up callbacks
 session.onOutput((line: string) => {
-  outputRef.value?.write(line + '\n');
+  if (isDirectMode.value) {
+    // Each line is a full assistant turn (stream-json without
+    // ``--include-partial-messages``); push straight into messages
+    // so the bubble persists.
+    messages.value.push({
+      role: 'assistant',
+      content: line,
+      timestamp: new Date().toISOString(),
+    });
+    awaitingResponse.value = false;
+  } else {
+    outputRef.value?.write(line + '\n');
+  }
 });
 
 session.onComplete((status: string, _exitCode: number) => {
-  outputRef.value?.finalize();
+  awaitingResponse.value = false;
+  if (isDirectMode.value) {
+    messages.value.push({
+      role: 'system',
+      content: `Session ended (${status}).`,
+      timestamp: new Date().toISOString(),
+    });
+  } else {
+    outputRef.value?.finalize();
+  }
   const isSuccess = status === 'completed';
   showToast(
     `Session ${isSuccess ? 'completed' : 'ended'} (${status})`,
@@ -44,6 +83,9 @@ session.onError((message: string) => {
 
 async function handleStart() {
   outputRef.value?.reset();
+  messages.value = [];
+  awaitingResponse.value = false;
+  inputMessage.value = '';
   // Direct mode runs claude in stream-json over a pipe transport — same
   // plumbing as ``GrdSessionChatView``. This is what restores markdown
   // rendering in ``SessionOutput``'s streaming parser: claude emits
@@ -88,11 +130,50 @@ async function handleStart() {
 }
 
 function handleSend(text: string) {
+  if (isDirectMode.value) {
+    // Echo the user's message into the chat as a user bubble before
+    // we ship it. The previous behavior only rendered claude's
+    // replies, which made the panel look like a monologue.
+    messages.value.push({
+      role: 'user',
+      content: text,
+      timestamp: new Date().toISOString(),
+    });
+    awaitingResponse.value = true;
+    inputMessage.value = '';
+  }
   session.sendInput(text);
+}
+
+// AiChatPanelManaged emits ``send`` with no args — it uses the
+// bound ``input-message`` value internally. Wrap our send so both
+// SessionInput (which passes text) and the chat panel (which uses
+// inputMessage state) hit the same code path.
+function handleChatSend() {
+  const text = inputMessage.value.trim();
+  if (!text) return;
+  handleSend(text);
+}
+
+function handleChatKeydown(event: KeyboardEvent) {
+  // Enter sends; Shift+Enter inserts a newline. IME composition
+  // (Korean / Japanese / Chinese) is preserved so pressing Enter to
+  // commit a composition doesn't accidentally submit.
+  if (
+    event.key === 'Enter' &&
+    !event.shiftKey &&
+    !event.isComposing &&
+    event.keyCode !== 229
+  ) {
+    event.preventDefault();
+    handleChatSend();
+  }
 }
 
 function handleSessionClick(sessionId: string) {
   outputRef.value?.reset();
+  messages.value = [];
+  awaitingResponse.value = false;
   session.switchSession(sessionId);
 }
 
@@ -167,11 +248,30 @@ onMounted(() => {
       <!-- Main content area -->
       <div class="session-main">
         <template v-if="session.activeSessionId.value">
-          <SessionOutput ref="outputRef" />
-          <SessionInput
-            :disabled="!session.isStreaming.value"
-            @send="handleSend"
+          <!-- Direct mode renders proper chat bubbles so the user's
+               prompt is visible alongside claude's responses. -->
+          <AiChatPanelManaged
+            v-if="isDirectMode"
+            class="chat-panel"
+            :messages="messages"
+            :is-processing="awaitingResponse"
+            :input-message="inputMessage"
+            input-placeholder="Type a message…"
+            :hide-cli-runner-toggle="true"
+            @update:input-message="inputMessage = $event"
+            @send="handleChatSend"
+            @keydown="handleChatKeydown"
           />
+          <!-- Ralph loops / team spawn keep the monospace terminal so
+               structured progress events (iteration counters, team
+               membership tables) read cleanly. -->
+          <template v-else>
+            <SessionOutput ref="outputRef" />
+            <SessionInput
+              :disabled="!session.isStreaming.value"
+              @send="handleSend"
+            />
+          </template>
         </template>
         <div v-else class="empty-state">
           <div class="empty-icon">
@@ -344,6 +444,11 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   min-width: 0;
+  min-height: 0;
+}
+
+.chat-panel {
+  flex: 1;
   min-height: 0;
 }
 
