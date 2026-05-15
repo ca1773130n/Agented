@@ -14,6 +14,7 @@ from app.services.project_session_manager import (
     SessionInfo,
     _extract_stream_json_text,
     _render_tool_use,
+    _unwrap_markdown_fences,
 )
 
 
@@ -120,6 +121,46 @@ class TestExtractStreamJsonText:
     def test_content_block_delta_text(self):
         event = {"type": "content_block_delta", "delta": {"type": "text_delta", "text": "hi"}}
         assert _extract_stream_json_text(json.dumps(event)) == "hi"
+
+
+class TestUnwrapMarkdownFences:
+    """v0.7.53 — when claude wraps file contents in a ``markdown``
+    fence, lift them out so marked renders the document instead of
+    showing literal ``#`` characters in a code block."""
+
+    def test_unwraps_markdown_lang(self):
+        text = "Contents:\n\n```markdown\n# Heading\n\nbody\n```\n"
+        out = _unwrap_markdown_fences(text)
+        assert "```" not in out
+        assert "# Heading" in out
+        assert "body" in out
+
+    def test_unwraps_md_lang(self):
+        text = "```md\n# Title\n```"
+        out = _unwrap_markdown_fences(text)
+        assert "# Title" in out
+        assert "```" not in out
+
+    def test_preserves_other_fence_languages(self):
+        # bash / python / json / untagged fences are code samples;
+        # they must NOT be unwrapped.
+        for fence_lang in ("bash", "python", "json", ""):
+            text = f"```{fence_lang}\nprint('hi')\n```"
+            assert _unwrap_markdown_fences(text) == text
+
+    def test_handles_multiple_markdown_fences(self):
+        text = (
+            "first:\n```markdown\n# one\n```\n\n"
+            "second:\n```md\n# two\n```\n"
+        )
+        out = _unwrap_markdown_fences(text)
+        assert "# one" in out
+        assert "# two" in out
+        assert "```" not in out
+
+    def test_no_markdown_fence_is_a_noop(self):
+        text = "plain prose with `inline` code"
+        assert _unwrap_markdown_fences(text) == text
 
 
 class TestRenderToolUse:
