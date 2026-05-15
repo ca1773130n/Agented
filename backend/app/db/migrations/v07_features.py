@@ -128,6 +128,36 @@ def _migrate_119_session_name_and_yolo(conn) -> None:
         )
 
 
+def _migrate_120_project_allowed_accounts(conn) -> None:
+    """v0.7.58 — per-project whitelist of AI backend accounts.
+
+    A session that starts with ``yolo_mode=false`` must use an
+    ``account_id`` (backend ID, e.g. ``bkd-jc3rl4t4dqw4``) that
+    appears in this table for its ``project_id``. Yolo bypasses
+    the check.
+
+    ``account_id`` is intentionally a free TEXT column (no FK to
+    ``backends`` because that table lives in the sidecar's
+    ``ai_accounts.db``, a separate SQLite file). Resolution and
+    validation happen at request time.
+    """
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS project_allowed_accounts (
+            project_id TEXT NOT NULL
+              REFERENCES projects(id) ON DELETE CASCADE,
+            account_id TEXT NOT NULL,
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (project_id, account_id)
+        )
+        """
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_project_allowed_accounts_project "
+        "ON project_allowed_accounts(project_id)"
+    )
+
+
 V07_MIGRATIONS: list = [
     # v0.7.7: super-agent activity inspector — timeline + rollup.
     (116, "super_agent_activity", _migrate_116_super_agent_activity),
@@ -142,4 +172,6 @@ V07_MIGRATIONS: list = [
     ),
     # v0.7.57: per-session name, auto-title flag, and yolo mode.
     (119, "session_name_and_yolo", _migrate_119_session_name_and_yolo),
+    # v0.7.58: per-project AI backend account whitelist.
+    (120, "project_allowed_accounts", _migrate_120_project_allowed_accounts),
 ]

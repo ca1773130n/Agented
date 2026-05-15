@@ -430,6 +430,68 @@ def append_session_message(
         return cursor.rowcount > 0
 
 
+def list_allowed_accounts(project_id: str) -> list[dict]:
+    """Return the AI backend accounts whitelisted for a project.
+
+    Empty list means no whitelist is configured — non-yolo sessions
+    cannot start until an account is added.
+    """
+    with get_connection() as conn:
+        rows = conn.execute(
+            "SELECT account_id, created_at FROM project_allowed_accounts "
+            "WHERE project_id = ? ORDER BY created_at",
+            (project_id,),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+def add_allowed_account(project_id: str, account_id: str) -> bool:
+    """Add an account to a project's whitelist.
+
+    Idempotent — re-adding the same pair is a no-op. Returns True if a
+    new row was inserted, False if it was already present.
+    """
+    with get_connection() as conn:
+        try:
+            cursor = conn.execute(
+                "INSERT INTO project_allowed_accounts (project_id, account_id) "
+                "VALUES (?, ?)",
+                (project_id, account_id),
+            )
+            conn.commit()
+            return cursor.rowcount > 0
+        except Exception:
+            # Most likely an IntegrityError from the composite PK
+            # (already present) — treat as no-op rather than 500.
+            return False
+
+
+def remove_allowed_account(project_id: str, account_id: str) -> bool:
+    """Remove an account from a project's whitelist.
+
+    Returns True if a row was deleted, False if the pair wasn't present.
+    """
+    with get_connection() as conn:
+        cursor = conn.execute(
+            "DELETE FROM project_allowed_accounts "
+            "WHERE project_id = ? AND account_id = ?",
+            (project_id, account_id),
+        )
+        conn.commit()
+        return cursor.rowcount > 0
+
+
+def is_account_allowed_for_project(project_id: str, account_id: str) -> bool:
+    """True if ``account_id`` is whitelisted for ``project_id``."""
+    with get_connection() as conn:
+        row = conn.execute(
+            "SELECT 1 FROM project_allowed_accounts "
+            "WHERE project_id = ? AND account_id = ? LIMIT 1",
+            (project_id, account_id),
+        ).fetchone()
+    return row is not None
+
+
 def get_session_messages(session_id: str) -> list[dict]:
     """Return the persisted chat log for a session.
 

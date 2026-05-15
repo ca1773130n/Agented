@@ -5,6 +5,7 @@ import type { Project, Team, Product } from '../services/api';
 import { projectApi, teamApi, productApi, ApiError } from '../services/api';
 import PageHeader from '../components/base/PageHeader.vue';
 import ProjectMcpPanel from '../components/project/ProjectMcpPanel.vue';
+import ProjectAllowedAccountsPanel from '../components/project/ProjectAllowedAccountsPanel.vue';
 import EntityLayout from '../layouts/EntityLayout.vue';
 import { useToast } from '../composables/useToast';
 import { handleApiError } from '../services/api/error-handler';
@@ -436,6 +437,16 @@ async function retryClone() {
         </div>
         <div class="card-body">
           <ProjectMcpPanel :projectId="projectId" />
+        </div>
+      </div>
+
+      <!-- v0.7.58 — Allowed AI accounts whitelist -->
+      <div class="card" v-if="project">
+        <div class="card-header">
+          <h3>Allowed AI accounts</h3>
+        </div>
+        <div class="card-body">
+          <ProjectAllowedAccountsPanel :projectId="projectId" />
         </div>
       </div>
 

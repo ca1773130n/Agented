@@ -479,6 +479,45 @@ def create_session(project_id: str, data: dict) -> dict[str, Any]:
     name = body.get("name")
     auto_title = bool(body.get("auto_title", True))
     yolo_mode = bool(body.get("yolo_mode", False))
+    account_id = body.get("account_id")
+
+    # v0.7.58 — per-project allowed-accounts enforcement.
+    # When yolo_mode is False, the dialog must surface an account
+    # picker drawn from the project's whitelist. We re-verify here
+    # because the dialog is just a UX hint — the canonical gate has
+    # to live server-side (a curl bypass on the same endpoint must
+    # not bypass the whitelist).
+    if not yolo_mode:
+        from litestar.exceptions import HTTPException
+
+        from app.db.grd import is_account_allowed_for_project, list_allowed_accounts
+
+        if not account_id:
+            allowed = list_allowed_accounts(project_id)
+            if not allowed:
+                raise HTTPException(
+                    status_code=403,
+                    detail=(
+                        "Project has no allowed AI accounts configured. "
+                        "Add one in project settings, or start the session "
+                        "with yolo_mode=true."
+                    ),
+                )
+            raise ClientException(
+                detail=(
+                    "account_id is required when yolo_mode is false. "
+                    "Pick an account from the project's whitelist."
+                ),
+            )
+        if not is_account_allowed_for_project(project_id, account_id):
+            raise HTTPException(
+                status_code=403,
+                detail=(
+                    f"account_id={account_id!r} is not whitelisted for this "
+                    "project. Add it on the project settings page, or start "
+                    "the session with yolo_mode=true."
+                ),
+            )
 
     # When yolo is on, inject ``--dangerously-skip-permissions`` into the
     # claude cmd if it isn't already there. (Ralph / team-spawn handlers
@@ -567,6 +606,50 @@ def session_output(
     last_n = max(1, min(last_n, 10000))
     lines = ProjectSessionManager.get_output(session_id, last_n=last_n)
     return {"lines": lines, "count": len(lines)}
+
+
+@get("/{project_id:str}/allowed-accounts", sync_to_thread=False)
+def list_allowed_accounts_endpoint(project_id: str) -> dict[str, Any]:
+    """v0.7.58 — list the AI backend accounts whitelisted for this
+    project. Sessions started with ``yolo_mode=false`` must pick an
+    account from this list."""
+    _ensure_project(project_id)
+    from app.db.grd import list_allowed_accounts
+
+    return {"allowed_accounts": list_allowed_accounts(project_id)}
+
+
+@post("/{project_id:str}/allowed-accounts", status_code=201, sync_to_thread=False)
+def add_allowed_account_endpoint(project_id: str, data: dict) -> dict[str, Any]:
+    _ensure_project(project_id)
+    body = data or {}
+    account_id = body.get("account_id")
+    if not account_id or not isinstance(account_id, str):
+        raise ClientException(detail="account_id (string) is required")
+    from app.db.grd import add_allowed_account
+
+    inserted = add_allowed_account(project_id, account_id)
+    return {
+        "project_id": project_id,
+        "account_id": account_id,
+        "inserted": inserted,
+    }
+
+
+@delete(
+    "/{project_id:str}/allowed-accounts/{account_id:str}",
+    status_code=200,
+    sync_to_thread=False,
+)
+def remove_allowed_account_endpoint(
+    project_id: str, account_id: str
+) -> dict[str, Any]:
+    _ensure_project(project_id)
+    from app.db.grd import remove_allowed_account
+
+    if not remove_allowed_account(project_id, account_id):
+        raise NotFoundException(detail="Account not in whitelist")
+    return {"project_id": project_id, "account_id": account_id, "removed": True}
 
 
 @get("/{project_id:str}/sessions/{session_id:str}/messages", sync_to_thread=False)
@@ -779,6 +862,9 @@ grd_router = Router(
         list_sessions,
         session_output,
         session_messages,
+        list_allowed_accounts_endpoint,
+        add_allowed_account_endpoint,
+        remove_allowed_account_endpoint,
         stop_session,
         pause_session,
         resume_session,

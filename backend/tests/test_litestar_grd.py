@@ -296,6 +296,11 @@ def test_create_session_auto_title_blanks_name(isolated_db, monkeypatch):
             "INSERT INTO project_sessions (id, project_id, status) "
             "VALUES ('psess-auto', 'proj-auto', 'active')"
         )
+        # v0.7.58 — non-yolo sessions need a whitelisted account.
+        conn.execute(
+            "INSERT INTO project_allowed_accounts (project_id, account_id) "
+            "VALUES ('proj-auto', 'bkd-auto')"
+        )
         conn.commit()
 
     from app.services.execution_type_handler import DirectExecutionHandler
@@ -314,6 +319,7 @@ def test_create_session_auto_title_blanks_name(isolated_db, monkeypatch):
                 "execution_type": "direct",
                 "auto_title": True,
                 "yolo_mode": False,
+                "account_id": "bkd-auto",  # v0.7.58 — must be whitelisted
                 # name passed but should be ignored (auto_title wins)
                 "name": "",
             },
