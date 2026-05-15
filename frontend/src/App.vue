@@ -1907,20 +1907,51 @@ body.tour-active .modal-overlay {
   text-decoration-thickness: 2px;
 }
 
-/* Headings inside chat bubbles get a tighter rhythm than the page
-   default so a "## Result" block doesn't dominate the message. */
-.aia-bubble__content h1,
-.aia-bubble__content h2,
-.aia-bubble__content h3,
-.aia-bubble__content h4 {
-  margin: 12px 0 6px;
-  line-height: 1.3;
-  font-weight: 600;
+/* Headings inside chat bubbles. ChatBubble.vue (in @ai-accounts/vue-styled)
+   ships its own scoped heading sizes that read flat: h1 1.35rem, h2 1.15rem,
+   h3 1rem — only ~0.1rem apart, so a level-1 heading doesn't look "the
+   biggest" relative to a level-2 next to it. Override here with a clearer
+   GitHub-style scale.
+
+   Specificity: ChatBubble's compiled scoped selector is
+   ``.aia-bubble__content[data-v-XXXX] h1`` — (class + attr + el). To win
+   without editing the ai-accounts package, use ``:where()``-free
+   duplicate-class trick (class + class + el) AND ``!important`` as a
+   belt-and-suspenders so future ai-accounts versions can't quietly out-
+   specificity these again. */
+.aia-bubble__content.aia-bubble__content h1,
+.aia-bubble__content.aia-bubble__content h2,
+.aia-bubble__content.aia-bubble__content h3,
+.aia-bubble__content.aia-bubble__content h4,
+.aia-bubble__content.aia-bubble__content h5,
+.aia-bubble__content.aia-bubble__content h6 {
+  margin: 14px 0 6px !important;
+  line-height: 1.25 !important;
+  font-weight: 600 !important;
+  color: var(--text-primary) !important;
 }
-.aia-bubble__content h1 { font-size: 1.25em; }
-.aia-bubble__content h2 { font-size: 1.15em; }
-.aia-bubble__content h3 { font-size: 1.05em; }
-.aia-bubble__content h4 { font-size: 0.95em; }
+.aia-bubble__content.aia-bubble__content h1 {
+  font-size: 1.85em !important;
+  padding-bottom: 0.2em;
+  border-bottom: 1px solid var(--border-default);
+}
+.aia-bubble__content.aia-bubble__content h2 {
+  font-size: 1.5em !important;
+  padding-bottom: 0.15em;
+  border-bottom: 1px solid var(--border-default);
+}
+.aia-bubble__content.aia-bubble__content h3 { font-size: 1.25em !important; }
+.aia-bubble__content.aia-bubble__content h4 { font-size: 1.05em !important; }
+.aia-bubble__content.aia-bubble__content h5 {
+  font-size: 0.9em !important;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-secondary) !important;
+}
+.aia-bubble__content.aia-bubble__content h6 {
+  font-size: 0.85em !important;
+  color: var(--text-muted) !important;
+}
 
 /* Lists need a small left indent and tighter spacing so claude's
    bulleted answers stay scannable. */
