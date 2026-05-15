@@ -37,6 +37,21 @@ const messages = ref<ChatMsg[]>([]);
 const inputMessage = ref('');
 const awaitingResponse = ref(false);
 
+// Soft diagnostic shown if no output arrives within 8s of sending a
+// message. Most claude responses begin streaming within 2-3s, so 8s
+// of silence is a useful tripwire — and a "backend may need a
+// restart" hint catches the most common stuck-spinner case during
+// rollout. (Migrated from GrdSessionChatView, which v0.7.55 drops.)
+const diagnostic = ref<string | null>(null);
+let diagnosticTimer: ReturnType<typeof setTimeout> | null = null;
+function clearDiagnostic() {
+  if (diagnosticTimer) {
+    clearTimeout(diagnosticTimer);
+    diagnosticTimer = null;
+  }
+  diagnostic.value = null;
+}
+
 // Active session object for status lookups
 const activeSession = computed(() => {
   if (!session.activeSessionId.value) return null;
@@ -55,6 +70,7 @@ session.onOutput((line: string) => {
       timestamp: new Date().toISOString(),
     });
     awaitingResponse.value = false;
+    clearDiagnostic();
   } else {
     outputRef.value?.write(line + '\n');
   }
@@ -62,6 +78,7 @@ session.onOutput((line: string) => {
 
 session.onComplete((status: string, _exitCode: number) => {
   awaitingResponse.value = false;
+  clearDiagnostic();
   if (isDirectMode.value) {
     messages.value.push({
       role: 'system',
@@ -70,12 +87,14 @@ session.onComplete((status: string, _exitCode: number) => {
     });
   } else {
     outputRef.value?.finalize();
+    // Only ralph / team-spawn use the toast — direct-mode users
+    // already see the system bubble inside the chat.
+    const isSuccess = status === 'completed';
+    showToast(
+      `Session ${isSuccess ? 'completed' : 'ended'} (${status})`,
+      isSuccess ? 'success' : 'info',
+    );
   }
-  const isSuccess = status === 'completed';
-  showToast(
-    `Session ${isSuccess ? 'completed' : 'ended'} (${status})`,
-    isSuccess ? 'success' : 'info',
-  );
 });
 
 session.onError((message: string) => {
@@ -87,6 +106,7 @@ async function handleStart() {
   messages.value = [];
   awaitingResponse.value = false;
   inputMessage.value = '';
+  clearDiagnostic();
   // Direct mode runs claude in stream-json over a pipe transport — same
   // plumbing as ``GrdSessionChatView``. This is what restores markdown
   // rendering in ``SessionOutput``'s streaming parser: claude emits
@@ -142,6 +162,19 @@ function handleSend(text: string) {
     });
     awaitingResponse.value = true;
     inputMessage.value = '';
+
+    // Soft tripwire — if 8s pass with no output, surface a hint.
+    // Cleared on the first ``onOutput`` chunk or on session
+    // complete. The "backend may need a restart" line is here
+    // because that's the single most common explanation when this
+    // fires (a stale gunicorn process).
+    clearDiagnostic();
+    diagnosticTimer = setTimeout(() => {
+      if (awaitingResponse.value) {
+        diagnostic.value =
+          'No output yet from claude. If this hangs, the backend may need a restart.';
+      }
+    }, 8000);
   }
   session.sendInput(text);
 }
@@ -307,6 +340,9 @@ onMounted(() => {
         </div>
       </div>
     </div>
+
+    <!-- Soft "no output yet" hint after 8s of silence on a send. -->
+    <div v-if="diagnostic" class="diagnostic-banner">{{ diagnostic }}</div>
 
     <!-- Error banner -->
     <div v-if="session.error.value" class="error-banner">
@@ -515,6 +551,14 @@ onMounted(() => {
 }
 
 /* Error banner */
+.diagnostic-banner {
+  padding: 8px 16px;
+  background: rgba(255, 200, 0, 0.08);
+  border-top: 1px solid rgba(255, 200, 0, 0.4);
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
 .error-banner {
   display: flex;
   align-items: center;
