@@ -61,14 +61,30 @@ const activeSession = computed(() => {
 // Wire up callbacks
 session.onOutput((line: string) => {
   if (isDirectMode.value) {
-    // Each line is a full assistant turn (stream-json without
-    // ``--include-partial-messages``); push straight into messages
-    // so the bubble persists.
-    messages.value.push({
-      role: 'assistant',
-      content: line,
-      timestamp: new Date().toISOString(),
-    });
+    // Claude's stream-json emits one ``assistant`` event per block —
+    // a single logical turn often arrives as text + tool_use +
+    // tool_use + text, four separate ``onOutput`` calls. Earlier
+    // versions pushed each into its own bubble; the user pointed
+    // out that a sequence of tool calls reads better as a single
+    // grouped bubble.
+    //
+    // Strategy: when the last message in the list is already
+    // ``assistant``, append to it with a paragraph break. Anything
+    // else (no messages yet, or a user/system message in between)
+    // starts a fresh bubble. This works the same way for live
+    // streaming and for historical replay from ``log_json``.
+    const last = messages.value[messages.value.length - 1];
+    if (last && last.role === 'assistant') {
+      last.content = last.content
+        ? `${last.content}\n\n${line}`
+        : line;
+    } else {
+      messages.value.push({
+        role: 'assistant',
+        content: line,
+        timestamp: new Date().toISOString(),
+      });
+    }
     awaitingResponse.value = false;
     clearDiagnostic();
   } else {
@@ -231,11 +247,22 @@ async function handleSessionClick(sessionId: string) {
   if (isDirectMode.value) {
     try {
       const result = await grdApi.getSessionMessages(props.projectId, sessionId);
-      messages.value = (result.messages ?? []).map((m) => ({
-        role: m.role,
-        content: m.content,
-        timestamp: m.ts,
-      }));
+      // Collapse consecutive same-role entries into grouped bubbles
+      // for the same reason as the live ``onOutput`` path. Without
+      // this, a turn with 4 tool calls comes back as 4 separate
+      // bubbles instead of one.
+      const grouped: ChatMsg[] = [];
+      for (const m of result.messages ?? []) {
+        const tail = grouped[grouped.length - 1];
+        if (tail && tail.role === m.role) {
+          tail.content = tail.content
+            ? `${tail.content}\n\n${m.content}`
+            : m.content;
+        } else {
+          grouped.push({ role: m.role, content: m.content, timestamp: m.ts });
+        }
+      }
+      messages.value = grouped;
     } catch {
       // Quiet — empty messages is the worst case, not a hard error.
     }
