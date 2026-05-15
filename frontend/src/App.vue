@@ -1722,4 +1722,140 @@ body.tour-active .modal-overlay {
     --tour-transition-speed: 0ms;
   }
 }
+
+/* ───────────────────────────────────────────────────────────────────
+   Tool-call chips inside ChatBubble (v0.7.51)
+
+   ``_render_tool_use`` (backend) emits ``<details class="tool-call">``
+   blocks with chip-styled ``<span class="tool-name">`` / ``<code
+   class="tool-arg">`` etc. inside the summary. ``ChatBubble`` uses
+   ``v-html`` to render parsed markdown, which means scoped styles
+   from any parent component can't reach inside. These rules live in
+   ``App.vue``'s global ``<style>`` instead.
+   ─────────────────────────────────────────────────────────────────── */
+.tool-call {
+  margin: 8px 0;
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  background: var(--bg-secondary);
+  overflow: hidden;
+}
+.tool-call > summary {
+  cursor: pointer;
+  padding: 8px 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  font-size: 13px;
+  user-select: none;
+  list-style: none;
+  position: relative;
+}
+.tool-call > summary::-webkit-details-marker {
+  display: none;
+}
+.tool-call > summary::before {
+  content: '▶';
+  display: inline-block;
+  width: 12px;
+  font-size: 9px;
+  color: var(--text-muted);
+  transition: transform 0.15s ease;
+  flex-shrink: 0;
+}
+.tool-call[open] > summary::before {
+  transform: rotate(90deg);
+}
+.tool-call > summary:hover {
+  background: var(--bg-tertiary);
+}
+.tool-call[open] > summary {
+  border-bottom: 1px solid var(--border-default);
+}
+
+.tool-call .tool-name {
+  font-family: 'Geist Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-weight: 600;
+  font-size: 12px;
+  color: var(--accent-cyan, #00bcd4);
+  background: rgba(0, 188, 212, 0.12);
+  padding: 2px 8px;
+  border-radius: 4px;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+/* Chip baseline for arg/path/pattern. Specific variants below tweak
+   color so the eye can tell apart "file path" vs "search pattern" at
+   a glance. */
+.tool-call .tool-arg,
+.tool-call .tool-path,
+.tool-call .tool-pattern {
+  font-family: 'Geist Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  border: 1px solid var(--border-default);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+.tool-call .tool-path {
+  color: var(--accent-purple, #b388ff);
+  background: rgba(179, 136, 255, 0.08);
+  border-color: rgba(179, 136, 255, 0.2);
+}
+.tool-call .tool-pattern {
+  color: var(--accent-yellow, #ffcc80);
+  background: rgba(255, 204, 128, 0.1);
+  border-color: rgba(255, 204, 128, 0.25);
+}
+.tool-call .tool-sep,
+.tool-call .tool-meta {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.tool-call .tool-detail {
+  margin: 0;
+  padding: 10px 14px;
+  background: var(--bg-primary);
+  font-family: 'Geist Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-x: auto;
+  white-space: pre;
+  color: var(--text-secondary);
+}
+.tool-call .tool-detail-empty {
+  padding: 10px 14px;
+  font-size: 12px;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+/* Kind-specific accent line so a glance distinguishes shell / file /
+   search / web / task without reading the label. */
+.tool-call--shell > summary {
+  border-left: 3px solid var(--accent-green, #4caf50);
+}
+.tool-call--file > summary {
+  border-left: 3px solid var(--accent-purple, #b388ff);
+}
+.tool-call--search > summary {
+  border-left: 3px solid var(--accent-yellow, #ffcc80);
+}
+.tool-call--web > summary {
+  border-left: 3px solid var(--accent-blue, #42a5f5);
+}
+.tool-call--task > summary {
+  border-left: 3px solid var(--accent-pink, #ec407a);
+}
+.tool-call--tool > summary {
+  border-left: 3px solid var(--accent-cyan, #00bcd4);
+}
 </style>
