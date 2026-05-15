@@ -1838,8 +1838,114 @@ body.tour-active .modal-overlay {
   font-style: italic;
 }
 
-/* Kind-specific accent line so a glance distinguishes shell / file /
-   search / web / task without reading the label. */
+/* ───────────────────────────────────────────────────────────────────
+   Inline ``<code>`` chip styling inside chat bubbles (v0.7.52)
+
+   The ai-accounts ChatBubble renders parsed markdown via ``v-html``;
+   marked turns backtick-wrapped fragments into plain ``<code>`` with
+   default monospace styling. The user wanted file paths, function
+   names, and other keywords to look visually distinct from prose —
+   the same chip look the tool-call summary already uses. Targeting
+   ``code`` inside ``.aia-bubble__content`` and excluding code blocks
+   (``pre code``) gives every backtick-wrapped fragment in claude's
+   replies a tag-style appearance.
+
+   Selector specificity is high enough to override ai-accounts'
+   own ChatBubble.vue ``code`` styles. ``[class*="hljs"]`` (highlighted
+   code-block tokens) is excluded so syntax-highlighting inside
+   fenced blocks isn't tinted by the chip background.
+   ─────────────────────────────────────────────────────────────────── */
+.aia-bubble__content code:not(pre code):not([class*="hljs"]) {
+  font-family: 'Geist Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.86em;
+  padding: 1px 8px;
+  border-radius: 4px;
+  background: var(--bg-tertiary);
+  color: var(--accent-purple, #b388ff);
+  border: 1px solid rgba(179, 136, 255, 0.18);
+  white-space: nowrap;
+  vertical-align: 1px;
+}
+
+/* Heuristic accent: anything that looks like a filesystem path
+   (starts with ``/`` or ``./`` / ``~/``) reads as a path chip.
+   Pure CSS can only check the FIRST character via ``:has()``-less
+   attribute selectors when the content is in an attribute, which it
+   isn't. So we rely on claude's convention (paths come backticked)
+   and tint all inline code purple — same family as ``tool-path``
+   inside ``<details>``. Function names / keywords come out the same
+   color; that's fine — they're all "identifiers, not prose". */
+
+/* Code blocks inside chat bubbles get a slightly elevated card look
+   so multi-line snippets are clearly demarcated from prose. */
+.aia-bubble__content pre {
+  margin: 10px 0;
+  padding: 12px 14px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  overflow-x: auto;
+  line-height: 1.5;
+}
+.aia-bubble__content pre code {
+  background: transparent;
+  border: 0;
+  padding: 0;
+  color: var(--text-primary);
+  white-space: pre;
+  font-size: 0.86em;
+}
+
+/* Links inside chat bubbles look "linky" rather than blending in. */
+.aia-bubble__content a {
+  color: var(--accent-cyan, #00bcd4);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  text-decoration-thickness: 1px;
+}
+.aia-bubble__content a:hover {
+  text-decoration-thickness: 2px;
+}
+
+/* Headings inside chat bubbles get a tighter rhythm than the page
+   default so a "## Result" block doesn't dominate the message. */
+.aia-bubble__content h1,
+.aia-bubble__content h2,
+.aia-bubble__content h3,
+.aia-bubble__content h4 {
+  margin: 12px 0 6px;
+  line-height: 1.3;
+  font-weight: 600;
+}
+.aia-bubble__content h1 { font-size: 1.25em; }
+.aia-bubble__content h2 { font-size: 1.15em; }
+.aia-bubble__content h3 { font-size: 1.05em; }
+.aia-bubble__content h4 { font-size: 0.95em; }
+
+/* Lists need a small left indent and tighter spacing so claude's
+   bulleted answers stay scannable. */
+.aia-bubble__content ul,
+.aia-bubble__content ol {
+  margin: 6px 0;
+  padding-left: 22px;
+}
+.aia-bubble__content li {
+  margin: 2px 0;
+}
+
+/* Blockquotes get a left accent bar — same hue as the assistant
+   chip — so quoted prose visually separates from the body. */
+.aia-bubble__content blockquote {
+  margin: 8px 0;
+  padding: 4px 0 4px 12px;
+  border-left: 3px solid var(--accent-cyan, #00bcd4);
+  color: var(--text-secondary);
+}
+
+/* ───────────────────────────────────────────────────────────────────
+   Kind-specific accent line so a glance distinguishes shell / file /
+   search / web / task without reading the label.
+   ─────────────────────────────────────────────────────────────────── */
 .tool-call--shell > summary {
   border-left: 3px solid var(--accent-green, #4caf50);
 }
