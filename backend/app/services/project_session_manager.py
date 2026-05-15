@@ -44,6 +44,31 @@ logger = logging.getLogger(__name__)
 _ANSI_RE = re.compile(r"\x1b\[[0-9;]*[a-zA-Z]|\x1b\].*?\x07|\x1b\[.*?[@-~]")
 
 
+_MD_FENCE_RE = re.compile(
+    r"```(?:markdown|md)\s*\n(.*?)\n```",
+    re.DOTALL | re.IGNORECASE,
+)
+
+
+def _unwrap_markdown_fences(text: str) -> str:
+    """Replace ``` ```markdown\\n…\\n``` ``` blocks with their inner content.
+
+    Claude wraps file contents in a ``markdown`` (or ``md``) fence
+    by default when it reads ``.md`` files. ``marked`` correctly
+    preserves fenced code, so those headings/lists end up rendered
+    as ``<pre><code>`` and ``#`` characters appear literal. From
+    the user's POV, "show me CLAUDE.md" should display the rendered
+    document, not the source bytes — so when the fence's language
+    tag is explicitly ``markdown``/``md``, lift the inner text out
+    and let marked parse it as actual markdown.
+
+    Other fence languages (``bash``, ``python``, ``json``, …) and
+    untagged fences are untouched — those are code samples the
+    user almost certainly wants to see verbatim.
+    """
+    return _MD_FENCE_RE.sub(lambda m: m.group(1), text)
+
+
 def _render_tool_use(block: dict) -> str:
     """Render a ``tool_use`` block as a collapsible HTML widget.
 
@@ -208,7 +233,11 @@ def _extract_stream_json_text(line: str) -> Optional[str]:
         for block in msg.get("content", []):
             block_type = block.get("type")
             if block_type == "text":
-                parts.append(block["text"])
+                # Unwrap ``markdown`` fences so a file content like
+                # CLAUDE.md renders as rendered markdown (headings,
+                # lists, paragraphs) instead of a literal ``#``-laden
+                # code block. Other languages stay fenced.
+                parts.append(_unwrap_markdown_fences(block["text"]))
             elif block_type == "tool_use":
                 parts.append(_render_tool_use(block))
             elif block_type == "tool_result":
