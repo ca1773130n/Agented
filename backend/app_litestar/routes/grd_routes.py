@@ -522,6 +522,22 @@ def session_output(
     return {"lines": lines, "count": len(lines)}
 
 
+@get("/{project_id:str}/sessions/{session_id:str}/messages", sync_to_thread=False)
+def session_messages(project_id: str, session_id: str) -> dict[str, Any]:
+    """Return persisted chat messages for a session.
+
+    Sourced from ``project_sessions.log_json``, which the input route
+    and reader thread both append to as the chat progresses. Survives
+    subprocess exit and gunicorn restart, unlike the in-memory ring
+    buffer that ``/output`` reads from.
+    """
+    del project_id
+    from app.db.grd import get_session_messages
+
+    messages = get_session_messages(session_id)
+    return {"messages": messages, "count": len(messages)}
+
+
 @post("/{project_id:str}/sessions/{session_id:str}/stop", sync_to_thread=False)
 def stop_session(project_id: str, session_id: str) -> dict[str, Any]:
     del project_id
@@ -552,6 +568,19 @@ def session_input(project_id: str, session_id: str, data: dict) -> dict[str, Any
     text = (data or {}).get("text")
     if text is None:
         raise ClientException(detail="text is required")
+
+    # Persist the user's message into ``project_sessions.log_json``
+    # before forwarding to claude — so even if the subprocess crashes
+    # or gunicorn restarts, clicking this session in the sidebar later
+    # still surfaces what the user said.
+    try:
+        from app.db.grd import append_session_message
+
+        append_session_message(session_id, "user", text)
+    except Exception:
+        logger.warning(
+            "session_input: failed to persist user message for %s", session_id, exc_info=True
+        )
 
     if ProjectSessionManager.is_stream_json(session_id):
         # claude was started with ``--input-format stream-json`` — it
@@ -702,6 +731,7 @@ grd_router = Router(
         create_session,
         list_sessions,
         session_output,
+        session_messages,
         stop_session,
         pause_session,
         resume_session,

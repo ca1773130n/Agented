@@ -3,6 +3,7 @@ import { ref, toRef, onMounted, computed } from 'vue';
 import { AiChatPanelManaged } from '@ai-accounts/vue-styled';
 import { useProjectSession } from '../../composables/useProjectSession';
 import { useToast } from '../../composables/useToast';
+import { grdApi } from '../../services/api/grd';
 import type { CreateSessionRequest } from '../../services/api/grd';
 import SessionOutput from './SessionOutput.vue';
 import SessionInput from './SessionInput.vue';
@@ -170,11 +171,30 @@ function handleChatKeydown(event: KeyboardEvent) {
   }
 }
 
-function handleSessionClick(sessionId: string) {
+async function handleSessionClick(sessionId: string) {
   outputRef.value?.reset();
   messages.value = [];
   awaitingResponse.value = false;
   session.switchSession(sessionId);
+
+  // Hydrate chat history from the backend's persisted ``log_json``
+  // before any new SSE output arrives, so clicking a session in
+  // the sidebar reveals what was actually said (rather than the
+  // empty welcome screen). For sessions whose subprocess has already
+  // exited, this is the ONLY way to recover the conversation —
+  // the in-memory ring buffer is gone.
+  if (isDirectMode.value) {
+    try {
+      const result = await grdApi.getSessionMessages(props.projectId, sessionId);
+      messages.value = (result.messages ?? []).map((m) => ({
+        role: m.role,
+        content: m.content,
+        timestamp: m.ts,
+      }));
+    } catch {
+      // Quiet — empty messages is the worst case, not a hard error.
+    }
+  }
 }
 
 function statusColor(status: string): string {

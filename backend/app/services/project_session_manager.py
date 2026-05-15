@@ -568,6 +568,21 @@ class ProjectSessionManager:
                     "output",
                     {"line": cleaned, "timestamp": datetime.now().isoformat()},
                 )
+                # Persist the assistant turn into ``log_json`` so the
+                # frontend can rehydrate the chat panel when the user
+                # clicks this session in the sidebar later (after the
+                # subprocess exits or gunicorn restarts the in-memory
+                # ring buffer is gone).
+                try:
+                    from app.db.grd import append_session_message
+
+                    append_session_message(session_id, "assistant", cleaned)
+                except Exception:
+                    logger.warning(
+                        "reader: failed to persist assistant message for %s",
+                        session_id,
+                        exc_info=True,
+                    )
 
         try:
             while True:
