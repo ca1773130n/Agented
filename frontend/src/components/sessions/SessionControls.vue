@@ -14,9 +14,12 @@ const emit = defineEmits<{
 
 <template>
   <div class="session-controls">
-    <!-- No session or completed/failed: show New Session -->
+    <!-- New Session is ALWAYS available. Previously this was gated
+         on the active session being completed/failed/absent, which
+         meant clicking a still-active prior session in the History
+         sidebar hid the button entirely — no way to start a new chat
+         without first stopping the selected one. v0.7.59. -->
     <button
-      v-if="!sessionStatus || sessionStatus === 'completed' || sessionStatus === 'failed'"
       class="ctrl-btn ctrl-btn--start"
       title="New Session"
       @click="emit('start')"
@@ -28,7 +31,7 @@ const emit = defineEmits<{
       <span>New Session</span>
     </button>
 
-    <!-- Active: show Pause + Stop -->
+    <!-- Active: show Pause + Stop alongside New Session -->
     <template v-if="sessionStatus === 'active'">
       <button
         class="ctrl-btn ctrl-btn--pause"
@@ -53,7 +56,7 @@ const emit = defineEmits<{
       </button>
     </template>
 
-    <!-- Paused: show Resume + Stop -->
+    <!-- Paused: show Resume + Stop alongside New Session -->
     <template v-if="sessionStatus === 'paused'">
       <button
         class="ctrl-btn ctrl-btn--resume"
