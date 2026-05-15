@@ -100,11 +100,14 @@ export interface CreateSessionRequest {
   // v0.7.57 — session-start dialog fields. ``name`` is the user-
   // supplied title; ``auto_title=true`` tells the backend to fill it
   // in (today: simple fallback; later: claude-summary). ``yolo_mode``
-  // appends ``--dangerously-skip-permissions`` and (forthcoming)
-  // bypasses the per-project account whitelist.
+  // appends ``--dangerously-skip-permissions`` and (v0.7.58) bypasses
+  // the per-project account whitelist.
   name?: string | null;
   auto_title?: boolean;
   yolo_mode?: boolean;
+  // v0.7.58 — required when yolo_mode is false; backend enforces it
+  // is in the project's allowed-accounts whitelist.
+  account_id?: string;
 }
 
 export interface CreateSessionResponse {
@@ -260,6 +263,29 @@ export const grdApi = {
   getSessionMessages: (projectId: string, sessionId: string) =>
     apiFetch<SessionMessagesResponse>(
       `/api/projects/${projectId}/sessions/${sessionId}/messages`
+    ),
+
+  // v0.7.58 — per-project AI backend account whitelist.
+  // Sessions started without yolo_mode require an account_id from
+  // this list. Managed on the project settings page.
+  listAllowedAccounts: (projectId: string) =>
+    apiFetch<{ allowed_accounts: { account_id: string; created_at: string }[] }>(
+      `/api/projects/${projectId}/allowed-accounts`,
+    ),
+
+  addAllowedAccount: (projectId: string, accountId: string) =>
+    apiFetch<{ project_id: string; account_id: string; inserted: boolean }>(
+      `/api/projects/${projectId}/allowed-accounts`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ account_id: accountId }),
+      },
+    ),
+
+  removeAllowedAccount: (projectId: string, accountId: string) =>
+    apiFetch<{ project_id: string; account_id: string; removed: boolean }>(
+      `/api/projects/${projectId}/allowed-accounts/${accountId}`,
+      { method: 'DELETE' },
     ),
 
   stopSession: (projectId: string, sessionId: string) =>

@@ -115,6 +115,7 @@ async function onDialogConfirm(payload: {
   autoTitle: boolean;
   yoloMode: boolean;
   executionType: 'direct' | 'ralph_loop' | 'team_spawn';
+  accountId: string | null;
 }) {
   showStartDialog.value = false;
   executionType.value = payload.executionType;
@@ -126,6 +127,15 @@ async function onDialogConfirm(payload: {
   clearDiagnostic();
 
   const isDirect = payload.executionType === 'direct';
+  const baseFields = {
+    name: payload.name,
+    auto_title: payload.autoTitle,
+    yolo_mode: payload.yoloMode,
+    // v0.7.58 — server requires account_id when yolo is off; passing
+    // null/omitted in yolo is fine because the backend short-circuits
+    // the whitelist check.
+    ...(payload.accountId ? { account_id: payload.accountId } : {}),
+  };
   const request: CreateSessionRequest = isDirect
     ? {
         cmd: [
@@ -141,17 +151,13 @@ async function onDialogConfirm(payload: {
         execution_mode: 'interactive',
         stream_json: true,
         use_pty: false,
-        name: payload.name,
-        auto_title: payload.autoTitle,
-        yolo_mode: payload.yoloMode,
+        ...baseFields,
       }
     : {
         cmd: ['claude'],
         execution_type: payload.executionType,
         execution_mode: 'interactive',
-        name: payload.name,
-        auto_title: payload.autoTitle,
-        yolo_mode: payload.yoloMode,
+        ...baseFields,
       };
   await session.startSession(request);
 }
@@ -360,6 +366,7 @@ onMounted(() => {
 
     <SessionStartDialog
       :visible="showStartDialog"
+      :project-id="projectId"
       @close="showStartDialog = false"
       @confirm="onDialogConfirm"
     />

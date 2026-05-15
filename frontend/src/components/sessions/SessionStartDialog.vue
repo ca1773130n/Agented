@@ -23,10 +23,16 @@
  */
 import { ref, computed, watch, onMounted } from 'vue';
 import { useFocusTrap } from '../../composables/useFocusTrap';
-import { settingsApi } from '../../services/api';
+import {
+  settingsApi,
+  grdApi,
+  listGroupedBackends,
+  getGroupedBackend,
+} from '../../services/api';
 
 const props = defineProps<{
   visible: boolean;
+  projectId: string;
 }>();
 
 const emit = defineEmits<{
@@ -38,6 +44,7 @@ const emit = defineEmits<{
       autoTitle: boolean;
       yoloMode: boolean;
       executionType: 'direct' | 'ralph_loop' | 'team_spawn';
+      accountId: string | null;
     },
   ): void;
 }>();
@@ -52,6 +59,35 @@ const yoloMode = ref(false);
 const executionType = ref<'direct' | 'ralph_loop' | 'team_spawn'>('direct');
 const userDefaultYolo = ref(false);
 const isLoadingDefaults = ref(false);
+
+// v0.7.58 — account picker (shown when yolo is off). The list comes
+// from ``listAllowedAccounts`` for this project; backend rejects
+// non-yolo sessions whose ``account_id`` isn't whitelisted, so the
+// dialog stays in sync with the canonical gate.
+interface AccountOption {
+  id: string;
+  account_name: string;
+  backend_type: string;
+}
+const allowedAccountIds = ref<string[]>([]);
+const allAccounts = ref<AccountOption[]>([]);
+const accountId = ref<string>('');
+const isLoadingAccounts = ref(false);
+
+const allowedAccountOptions = computed<AccountOption[]>(() => {
+  const idSet = new Set(allowedAccountIds.value);
+  return allAccounts.value.filter((a) => idSet.has(a.id));
+});
+
+const canSubmit = computed(() => {
+  if (isLoadingDefaults.value || isLoadingAccounts.value) return false;
+  // When yolo is off, an account must be picked AND it must be in
+  // the project's whitelist (the select only offers those, but a
+  // race where the whitelist becomes empty mid-flight would leave
+  // accountId empty).
+  if (!yoloMode.value && !accountId.value) return false;
+  return true;
+});
 
 /** Refresh dialog state from the user's stored defaults every time
  * the dialog opens — so toggling the ``session_default_yolo`` setting
@@ -73,6 +109,47 @@ async function hydrateDefaults() {
   }
 }
 
+async function loadAccounts() {
+  isLoadingAccounts.value = true;
+  try {
+    const [whitelistRes, backendsRes] = await Promise.all([
+      grdApi.listAllowedAccounts(props.projectId),
+      listGroupedBackends(),
+    ]);
+    allowedAccountIds.value = (whitelistRes.allowed_accounts ?? []).map(
+      (a) => a.account_id,
+    );
+    // Same fan-out as ProjectAllowedAccountsPanel: friendly names
+    // come from the sidecar's backend list, not from the whitelist
+    // (which only has account_ids).
+    const detailResults = await Promise.all(
+      (backendsRes.backends || []).map((b) => getGroupedBackend(b.id).catch(() => null)),
+    );
+    const flat: AccountOption[] = [];
+    detailResults.forEach((detail, idx) => {
+      if (!detail) return;
+      for (const acct of detail.accounts || []) {
+        flat.push({
+          id: acct.id,
+          account_name: acct.account_name,
+          backend_type: backendsRes.backends[idx].type,
+        });
+      }
+    });
+    allAccounts.value = flat;
+    // Auto-pick the first whitelisted account so the user doesn't
+    // have to make a second click when there's only one option.
+    const options = flat.filter((a) => allowedAccountIds.value.includes(a.id));
+    accountId.value = options.length === 1 ? options[0].id : '';
+  } catch {
+    allowedAccountIds.value = [];
+    allAccounts.value = [];
+    accountId.value = '';
+  } finally {
+    isLoadingAccounts.value = false;
+  }
+}
+
 watch(
   () => props.visible,
   (open) => {
@@ -81,17 +158,20 @@ watch(
       name.value = '';
       autoTitle.value = true;
       executionType.value = 'direct';
+      accountId.value = '';
       hydrateDefaults().then(() => {
         yoloMode.value = userDefaultYolo.value;
       });
+      loadAccounts();
     }
   },
 );
 
 onMounted(() => {
   // Prefetch so the first time the dialog opens we already know the
-  // yolo default.
+  // yolo default + the project's whitelist.
   hydrateDefaults();
+  loadAccounts();
 });
 
 function onSubmit() {
@@ -104,6 +184,9 @@ function onSubmit() {
     autoTitle: autoTitle.value,
     yoloMode: yoloMode.value,
     executionType: executionType.value,
+    // Yolo bypasses the whitelist on the server too — no need to
+    // send account_id; backend will auto-pick.
+    accountId: yoloMode.value ? null : accountId.value || null,
   });
 }
 </script>
@@ -186,8 +269,7 @@ function onSubmit() {
               <span class="toggle-title">Yolo mode</span>
               <span class="toggle-sub">
                 Appends <code>--dangerously-skip-permissions</code> and bypasses
-                the per-project allowed-accounts whitelist (enforcement landing
-                in a follow-up).
+                the project's allowed-accounts whitelist.
                 <template v-if="userDefaultYolo">
                   Default-on per your Settings.
                 </template>
@@ -196,11 +278,36 @@ function onSubmit() {
           </label>
         </div>
 
+        <div v-if="!yoloMode" class="form-group">
+          <label>AI account</label>
+          <select
+            v-model="accountId"
+            :disabled="isLoadingAccounts || allowedAccountOptions.length === 0"
+          >
+            <option value="" disabled>
+              {{
+                isLoadingAccounts
+                  ? 'Loading accounts…'
+                  : allowedAccountOptions.length === 0
+                  ? 'No accounts whitelisted — add one in project settings'
+                  : 'Pick an account…'
+              }}
+            </option>
+            <option v-for="a in allowedAccountOptions" :key="a.id" :value="a.id">
+              {{ a.account_name }} ({{ a.backend_type }})
+            </option>
+          </select>
+          <p class="form-hint">
+            Sessions must use a whitelisted account unless Yolo is on. Manage the
+            whitelist on the project's settings page.
+          </p>
+        </div>
+
         <div class="modal-actions">
           <button type="button" class="btn btn-secondary" @click="emit('close')">
             Cancel
           </button>
-          <button type="submit" class="btn btn-primary" :disabled="isLoadingDefaults">
+          <button type="submit" class="btn btn-primary" :disabled="!canSubmit">
             Start session
           </button>
         </div>
