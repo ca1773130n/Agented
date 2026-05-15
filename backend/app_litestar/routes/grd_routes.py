@@ -474,7 +474,25 @@ def create_session(project_id: str, data: dict) -> dict[str, Any]:
             cwd = ProjectWorkspaceService.resolve_working_directory(project_id)
         except ValueError as e:
             raise ClientException(detail=str(e)) from e
-    return handler.start(
+
+    # v0.7.57 — session-start dialog fields.
+    name = body.get("name")
+    auto_title = bool(body.get("auto_title", True))
+    yolo_mode = bool(body.get("yolo_mode", False))
+
+    # When yolo is on, inject ``--dangerously-skip-permissions`` into the
+    # claude cmd if it isn't already there. (Ralph / team-spawn handlers
+    # build their own commands; if they want yolo, they consult
+    # ``yolo_mode`` in their start logic.)
+    if (
+        yolo_mode
+        and cmd
+        and cmd[0] == "claude"
+        and "--dangerously-skip-permissions" not in cmd
+    ):
+        cmd = [*cmd, "--dangerously-skip-permissions"]
+
+    result = handler.start(
         {
             "project_id": project_id,
             "cmd": cmd,
@@ -499,8 +517,37 @@ def create_session(project_id: str, data: dict) -> dict[str, Any]:
             # must pass ``use_pty: false`` because ``--print`` refuses
             # to read from a tty.
             "use_pty": bool(body.get("use_pty", True)),
+            "yolo_mode": yolo_mode,
         }
     )
+
+    # Stamp name / auto_title / yolo_mode onto the row that the handler
+    # just inserted. Stored after-the-fact so handlers don't have to
+    # know about dialog fields.
+    session_id = result.get("session_id")
+    if session_id:
+        try:
+            from app.db.connection import get_connection
+
+            with get_connection() as conn:
+                conn.execute(
+                    "UPDATE project_sessions "
+                    "SET name = ?, auto_title = ?, yolo_mode = ? WHERE id = ?",
+                    (
+                        name if name and name.strip() else None,
+                        1 if auto_title else 0,
+                        1 if yolo_mode else 0,
+                        session_id,
+                    ),
+                )
+                conn.commit()
+        except Exception:
+            logger.warning(
+                "create_session: failed to persist dialog fields on %s",
+                session_id,
+                exc_info=True,
+            )
+    return result
 
 
 @get("/{project_id:str}/sessions", sync_to_thread=False)

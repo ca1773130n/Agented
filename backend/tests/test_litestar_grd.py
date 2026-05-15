@@ -219,6 +219,116 @@ def test_session_input_pty_mode_strips_non_ascii(isolated_db, monkeypatch):
     assert captured["payload"] == "\thello"
 
 
+def test_create_session_persists_dialog_fields(isolated_db, monkeypatch):
+    """v0.7.57 — the new session-start dialog sends name + auto_title
+    + yolo_mode. Pin that they're stored on the row and that yolo_mode
+    appends ``--dangerously-skip-permissions`` to the cmd."""
+    from app.db.connection import get_connection
+
+    with get_connection() as conn:
+        conn.execute(
+            "INSERT INTO projects (id, name, local_path, created_at, updated_at) "
+            "VALUES ('proj-dlg', 'dialog-test', '/tmp', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"
+        )
+        conn.commit()
+
+    captured_cmd: dict[str, list] = {}
+
+    def fake_handler_start(self, config: dict) -> dict:  # noqa: ARG001
+        captured_cmd["cmd"] = config["cmd"]
+        captured_cmd["yolo"] = config.get("yolo_mode")
+        return {"session_id": "psess-dlg01", "pid": 1234, "status": "active"}
+
+    # Seed a session row that the route handler will UPDATE after start.
+    with get_connection() as conn:
+        conn.execute(
+            "INSERT INTO project_sessions (id, project_id, status) "
+            "VALUES ('psess-dlg01', 'proj-dlg', 'active')"
+        )
+        conn.commit()
+
+    from app.services.execution_type_handler import DirectExecutionHandler
+
+    monkeypatch.setattr(DirectExecutionHandler, "start", fake_handler_start)
+
+    with _client() as c:
+        resp = c.post(
+            "/api/projects/proj-dlg/sessions",
+            json={
+                "cmd": ["claude", "--print", "--input-format", "stream-json",
+                        "--output-format", "stream-json", "--verbose"],
+                "execution_type": "direct",
+                "execution_mode": "interactive",
+                "stream_json": True,
+                "use_pty": False,
+                "name": "Refactor auth",
+                "auto_title": False,
+                "yolo_mode": True,
+            },
+        )
+    assert resp.status_code == 201, resp.text
+
+    # yolo appended dangerously-skip-permissions
+    assert "--dangerously-skip-permissions" in captured_cmd["cmd"]
+    assert captured_cmd["yolo"] is True
+
+    # Row got name + flags stamped
+    with get_connection() as conn:
+        row = conn.execute(
+            "SELECT name, auto_title, yolo_mode FROM project_sessions WHERE id = 'psess-dlg01'"
+        ).fetchone()
+    assert row["name"] == "Refactor auth"
+    assert row["auto_title"] == 0
+    assert row["yolo_mode"] == 1
+
+
+def test_create_session_auto_title_blanks_name(isolated_db, monkeypatch):
+    """When auto_title is on, the row's ``name`` stays NULL so the
+    backend (eventually claude-summary) can fill it later."""
+    from app.db.connection import get_connection
+
+    with get_connection() as conn:
+        conn.execute(
+            "INSERT INTO projects (id, name, local_path, created_at, updated_at) "
+            "VALUES ('proj-auto', 'auto-test', '/tmp', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"
+        )
+        conn.execute(
+            "INSERT INTO project_sessions (id, project_id, status) "
+            "VALUES ('psess-auto', 'proj-auto', 'active')"
+        )
+        conn.commit()
+
+    from app.services.execution_type_handler import DirectExecutionHandler
+
+    monkeypatch.setattr(
+        DirectExecutionHandler,
+        "start",
+        lambda self, cfg: {"session_id": "psess-auto", "pid": 1234, "status": "active"},
+    )
+
+    with _client() as c:
+        resp = c.post(
+            "/api/projects/proj-auto/sessions",
+            json={
+                "cmd": ["claude"],
+                "execution_type": "direct",
+                "auto_title": True,
+                "yolo_mode": False,
+                # name passed but should be ignored (auto_title wins)
+                "name": "",
+            },
+        )
+    assert resp.status_code == 201
+
+    with get_connection() as conn:
+        row = conn.execute(
+            "SELECT name, auto_title, yolo_mode FROM project_sessions WHERE id = 'psess-auto'"
+        ).fetchone()
+    assert row["name"] is None
+    assert row["auto_title"] == 1
+    assert row["yolo_mode"] == 0
+
+
 def test_create_ralph_session_unknown_project_404(isolated_db):
     with _client() as c:
         resp = c.post("/api/projects/missing/sessions/ralph", json={})

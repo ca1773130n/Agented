@@ -71,6 +71,10 @@ export interface GrdSession {
   last_activity_at: string | null;
   started_at: string | null;
   ended_at: string | null;
+  // v0.7.57 — session-start dialog fields persisted on the row.
+  name?: string | null;
+  auto_title?: boolean;
+  yolo_mode?: boolean;
 }
 
 export interface CreateSessionRequest {
@@ -93,6 +97,14 @@ export interface CreateSessionRequest {
   // ``claude --print`` (it refuses to read from a tty). Defaults true
   // on the server so ralph loops and team-spawn keep their PTY.
   use_pty?: boolean;
+  // v0.7.57 — session-start dialog fields. ``name`` is the user-
+  // supplied title; ``auto_title=true`` tells the backend to fill it
+  // in (today: simple fallback; later: claude-summary). ``yolo_mode``
+  // appends ``--dangerously-skip-permissions`` and (forthcoming)
+  // bypasses the per-project account whitelist.
+  name?: string | null;
+  auto_title?: boolean;
+  yolo_mode?: boolean;
 }
 
 export interface CreateSessionResponse {
