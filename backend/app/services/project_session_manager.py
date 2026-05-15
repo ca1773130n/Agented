@@ -45,65 +45,149 @@ _ANSI_RE = re.compile(r"\x1b\[[0-9;]*[a-zA-Z]|\x1b\].*?\x07|\x1b\[.*?[@-~]")
 
 
 def _render_tool_use(block: dict) -> str:
-    """Render a ``tool_use`` block as distinct markdown.
+    """Render a ``tool_use`` block as a collapsible HTML widget.
 
-    Without this, ``**Name**: `arg``` reads like inline emphasis in a
-    chat bubble — nearly indistinguishable from prose. Tool calls
-    deserve visual separation (the user explicitly asked for it after
-    a chat turn surfaced ``Bash: ls /Users/...`` looking like a
-    sentence). Fenced code blocks are the cleanest path through
-    AiChatPanelManaged's MarkdownContent renderer.
+    The earlier v0.7.48 markdown rendering (``**▸ Bash** `ls /tmp` ``)
+    looked indistinguishable from inline emphasis once
+    ``MarkdownContent`` wrapped paths in ``<code>``. Users asked for
+    proper tag-style chips for tool names + paths and a click-to-
+    expand for full tool input. ``ChatBubble`` pipes content through
+    ``marked.parse`` then ``DOMPurify`` (which keeps ``<details>``,
+    ``<summary>``, ``<span>``, ``<code>``, ``<pre>``), so HTML is the
+    cleanest way to ship this without subclassing the bubble.
+
+    Layout per call::
+
+        <details class="tool-call tool-call--bash">
+          <summary>
+            <span class="tool-name">▸ Bash</span>
+            <code class="tool-arg">ls /tmp</code>
+          </summary>
+          <pre><code>{...full JSON input...}</code></pre>
+        </details>
+
+    Styling lives in ``App.vue`` (global so it reaches v-html'd
+    bubble content — scoped styles can't cross that boundary).
     """
+    import html as _html
+    import json as _json
+
     name = block.get("name", "unknown")
     inp = block.get("input", {}) or {}
+
+    kind = _tool_kind(name)
+    esc_name = _html.escape(str(name))
+    summary_chips = f'<span class="tool-name">▸ {esc_name}</span>'
 
     if name == "Bash":
         cmd = (inp.get("command") or "").strip()
         if cmd:
-            return f"**▸ {name}**\n```bash\n{cmd}\n```"
-        return f"**▸ {name}**"
+            summary_chips += (
+                f' <code class="tool-arg">{_html.escape(_one_line(cmd, 80))}</code>'
+            )
 
-    if name in ("Read", "Edit", "Write", "MultiEdit", "NotebookEdit"):
+    elif name in ("Read", "Edit", "Write", "MultiEdit", "NotebookEdit"):
         path = inp.get("file_path") or inp.get("path") or ""
-        return f"**▸ {name}** `{path}`"
+        if path:
+            summary_chips += (
+                f' <code class="tool-path">{_html.escape(path)}</code>'
+            )
 
-    if name in ("Grep", "Glob"):
+    elif name in ("Grep", "Glob"):
         pattern = inp.get("pattern") or inp.get("query") or ""
         path = inp.get("path") or ""
+        if pattern:
+            summary_chips += (
+                f' <code class="tool-pattern">{_html.escape(pattern)}</code>'
+            )
         if path:
-            return f"**▸ {name}** `{pattern}` in `{path}`"
-        return f"**▸ {name}** `{pattern}`"
+            summary_chips += (
+                f' <span class="tool-sep">in</span>'
+                f' <code class="tool-path">{_html.escape(path)}</code>'
+            )
 
-    if name == "WebFetch":
+    elif name == "WebFetch":
         url = inp.get("url") or ""
-        return f"**▸ WebFetch** `{url}`"
+        if url:
+            summary_chips += (
+                f' <code class="tool-arg">{_html.escape(url)}</code>'
+            )
 
-    if name == "WebSearch":
+    elif name == "WebSearch":
         query = inp.get("query") or ""
-        return f"**▸ WebSearch** `{query}`"
+        if query:
+            summary_chips += (
+                f' <code class="tool-arg">{_html.escape(_one_line(query, 80))}</code>'
+            )
 
-    if name == "Task":
+    elif name == "Task":
         subagent = inp.get("subagent_type") or "general"
         desc = inp.get("description") or ""
-        return f"**▸ Task** ({subagent}) `{desc}`"
+        summary_chips += (
+            f' <span class="tool-meta">({_html.escape(subagent)})</span>'
+        )
+        if desc:
+            summary_chips += (
+                f' <code class="tool-arg">{_html.escape(_one_line(desc, 80))}</code>'
+            )
 
-    # Everything else (MCP tools, ToolSearch, …) — pick whichever
-    # argument has obvious display value, and put it in a code fence
-    # so it doesn't blend with the surrounding prose.
-    detail = (
-        inp.get("query")
-        or inp.get("command")
-        or inp.get("file_path")
-        or inp.get("path")
-        or inp.get("description")
-        or ""
+    else:
+        # MCP / ToolSearch / etc. Best-effort: pick the most
+        # distinctive arg for the chip.
+        detail = (
+            inp.get("query")
+            or inp.get("command")
+            or inp.get("file_path")
+            or inp.get("path")
+            or inp.get("description")
+            or ""
+        )
+        if detail:
+            summary_chips += (
+                f' <code class="tool-arg">{_html.escape(_one_line(detail, 80))}</code>'
+            )
+
+    # Expanded body: full JSON input. Empty inputs collapse to
+    # ``(no arguments)`` so the disclosure arrow isn't a dead end.
+    if inp:
+        try:
+            pretty = _json.dumps(inp, indent=2, ensure_ascii=False)
+        except (TypeError, ValueError):
+            pretty = str(inp)
+        body = f'<pre class="tool-detail"><code>{_html.escape(pretty)}</code></pre>'
+    else:
+        body = '<div class="tool-detail-empty">(no arguments)</div>'
+
+    return (
+        f'<details class="tool-call tool-call--{kind}">'
+        f'<summary>{summary_chips}</summary>'
+        f'{body}'
+        f'</details>'
     )
-    if detail:
-        # Single short detail → inline. Longer → fence.
-        if len(detail) <= 80 and "\n" not in detail:
-            return f"**▸ {name}** `{detail}`"
-        return f"**▸ {name}**\n```\n{detail[:600]}\n```"
-    return f"**▸ {name}**"
+
+
+def _tool_kind(name: str) -> str:
+    """Short kind tag for CSS hooks. Keeps the modifier class human-
+    readable (``tool-call--file``, ``tool-call--shell``, etc.)."""
+    if name == "Bash":
+        return "shell"
+    if name in ("Read", "Edit", "Write", "MultiEdit", "NotebookEdit"):
+        return "file"
+    if name in ("Grep", "Glob"):
+        return "search"
+    if name in ("WebFetch", "WebSearch"):
+        return "web"
+    if name == "Task":
+        return "task"
+    return "tool"
+
+
+def _one_line(text: str, limit: int = 80) -> str:
+    """Collapse multi-line text into a single readable preview line."""
+    flat = " ".join(text.split())
+    if len(flat) > limit:
+        return flat[: limit - 1] + "…"
+    return flat
 
 
 def _extract_stream_json_text(line: str) -> Optional[str]:

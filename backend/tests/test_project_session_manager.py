@@ -123,63 +123,100 @@ class TestExtractStreamJsonText:
 
 
 class TestRenderToolUse:
-    """v0.7.48 — tool_use blocks render distinctly so the chat panel
-    doesn't show ``Bash: ls /tmp`` as a sentence-shaped bubble."""
+    """v0.7.51 — tool_use blocks render as collapsible HTML widgets
+    (``<details>`` + chip-styled summary + ``<pre>`` body) so chat
+    panels can show distinct tag styling for tool names / paths and
+    let users click-to-expand the full input."""
 
-    def test_bash_command_uses_bash_fence(self):
+    def test_bash_returns_details_with_shell_kind(self):
         rendered = _render_tool_use(
             {"name": "Bash", "input": {"command": "ls /tmp"}}
         )
-        assert "```bash" in rendered
-        assert "ls /tmp" in rendered
-        # Bold marker survives so MarkdownContent emphasizes the name.
-        assert "**" in rendered
+        assert '<details class="tool-call tool-call--shell">' in rendered
+        assert '<span class="tool-name">▸ Bash</span>' in rendered
+        # Command chip in the summary…
+        assert '<code class="tool-arg">ls /tmp</code>' in rendered
+        # …and full JSON input in the expanded body. ``html.escape``
+        # turns the JSON quotes into ``&quot;`` — that's the wire
+        # form ``v-html`` will hand to the browser.
+        assert '<pre class="tool-detail">' in rendered
+        assert "&quot;command&quot;: &quot;ls /tmp&quot;" in rendered
+        assert "</details>" in rendered
 
-    def test_file_op_inlines_path(self):
-        for name in ("Read", "Edit", "Write"):
+    def test_file_ops_use_path_chip(self):
+        for name in ("Read", "Edit", "Write", "MultiEdit", "NotebookEdit"):
             rendered = _render_tool_use(
                 {"name": name, "input": {"file_path": "/etc/hosts"}}
             )
-            assert name in rendered
-            assert "`/etc/hosts`" in rendered
-            # No code fence for short inline paths — too noisy.
-            assert "```" not in rendered
+            assert f'<span class="tool-name">▸ {name}</span>' in rendered
+            assert '<code class="tool-path">/etc/hosts</code>' in rendered
+            assert "tool-call--file" in rendered
 
-    def test_grep_renders_pattern_and_path(self):
+    def test_grep_renders_pattern_and_path_chips(self):
         rendered = _render_tool_use(
-            {
-                "name": "Grep",
-                "input": {"pattern": "TODO", "path": "src/"},
-            }
+            {"name": "Grep", "input": {"pattern": "TODO", "path": "src/"}}
         )
-        assert "Grep" in rendered
-        assert "`TODO`" in rendered
-        assert "`src/`" in rendered
+        assert '<code class="tool-pattern">TODO</code>' in rendered
+        assert '<span class="tool-sep">in</span>' in rendered
+        assert '<code class="tool-path">src/</code>' in rendered
+        assert "tool-call--search" in rendered
 
-    def test_mcp_tool_short_arg_inline(self):
+    def test_mcp_tool_short_arg_inline_chip(self):
         rendered = _render_tool_use(
             {
                 "name": "mcp__plugin_context-mode__ctx_search",
                 "input": {"query": "session manager"},
             }
         )
-        assert "session manager" in rendered
-        # Short payload stays inline rather than fenced.
-        assert "```" not in rendered
+        assert '<code class="tool-arg">session manager</code>' in rendered
+        assert "tool-call--tool" in rendered
 
-    def test_mcp_tool_long_arg_uses_fence(self):
+    def test_long_arg_is_truncated_in_summary_full_in_body(self):
         long_query = "x" * 200
         rendered = _render_tool_use(
             {"name": "ctx_execute", "input": {"command": long_query}}
         )
-        assert "```" in rendered
-        # Truncated at the 600 cap; bigger payloads still serialize.
-        assert "xxxx" in rendered
+        # Summary chip is one-line truncated at ~80.
+        import re
 
-    def test_tool_without_input_renders_name_only(self):
+        chip = re.search(r'<code class="tool-arg">([^<]*)</code>', rendered)
+        assert chip is not None
+        assert len(chip.group(1)) <= 81  # 80 + ellipsis
+        assert chip.group(1).endswith("…")
+        # But the full payload is in the expanded body.
+        assert long_query in rendered
+
+    def test_tool_without_input_renders_no_args_placeholder(self):
         rendered = _render_tool_use({"name": "ToolSearch", "input": {}})
-        assert "ToolSearch" in rendered
-        assert "```" not in rendered
+        assert '<span class="tool-name">▸ ToolSearch</span>' in rendered
+        assert '<div class="tool-detail-empty">(no arguments)</div>' in rendered
+
+    def test_html_is_escaped_in_chips_and_body(self):
+        """A path / command with HTML-sensitive chars must not break
+        out of the chip — DOMPurify sanitizes downstream but we
+        still emit safe HTML at the source."""
+        rendered = _render_tool_use(
+            {
+                "name": "Bash",
+                "input": {"command": "echo '<script>x</script>'"},
+            }
+        )
+        assert "<script>" not in rendered
+        assert "&lt;script&gt;" in rendered
+
+    def test_task_renders_subagent_and_description(self):
+        rendered = _render_tool_use(
+            {
+                "name": "Task",
+                "input": {
+                    "subagent_type": "Explore",
+                    "description": "find session manager",
+                },
+            }
+        )
+        assert "tool-call--task" in rendered
+        assert '<span class="tool-meta">(Explore)</span>' in rendered
+        assert '<code class="tool-arg">find session manager</code>' in rendered
 
     def test_content_block_delta_non_text(self):
         event = {"type": "content_block_delta", "delta": {"type": "input_json_delta"}}
