@@ -106,6 +106,17 @@ export interface SessionOutputResponse {
   count: number;
 }
 
+export interface PersistedSessionMessage {
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+  ts: string;
+}
+
+export interface SessionMessagesResponse {
+  messages: PersistedSessionMessage[];
+  count: number;
+}
+
 export interface RalphConfig {
   max_iterations: number;
   completion_promise: string;
@@ -225,6 +236,18 @@ export const grdApi = {
   getSessionOutput: (projectId: string, sessionId: string, lastN = 100) =>
     apiFetch<SessionOutputResponse>(
       `/api/projects/${projectId}/sessions/${sessionId}/output?last_n=${lastN}`
+    ),
+
+  // Persisted chat history. Sourced from ``project_sessions.log_json``
+  // — survives subprocess exit and gunicorn restart, unlike the
+  // in-memory ring buffer that ``getSessionOutput`` reads. Backend-
+  // agnostic: the same flow works for claude / codex / gemini /
+  // opencode since we log on the user-input and assistant-output
+  // sides of the SSE pipeline, before the bytes reach a specific
+  // CLI's transcript format.
+  getSessionMessages: (projectId: string, sessionId: string) =>
+    apiFetch<SessionMessagesResponse>(
+      `/api/projects/${projectId}/sessions/${sessionId}/messages`
     ),
 
   stopSession: (projectId: string, sessionId: string) =>

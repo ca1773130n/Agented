@@ -393,6 +393,66 @@ def count_sessions_by_project(project_id: str) -> int:
         return cursor.fetchone()[0]
 
 
+def append_session_message(
+    session_id: str, role: str, content: str, timestamp: str | None = None
+) -> bool:
+    """Append a chat message to ``project_sessions.log_json``.
+
+    Uses SQLite's JSON1 ``json_insert`` to do the read-modify-write
+    atomically inside SQLite, so concurrent appends from the reader
+    thread (assistant turns) and route handler thread (user turns)
+    can't lose each other.
+
+    The ``log_json`` column is a JSON array of objects:
+    ``[{"role": "user"|"assistant"|"system", "content": str, "ts": iso8601}]``.
+
+    Returns False if the session row doesn't exist.
+    """
+    import json as _json
+    from datetime import datetime, timezone
+
+    entry = {
+        "role": role,
+        "content": content,
+        "ts": timestamp or datetime.now(timezone.utc).isoformat(),
+    }
+    payload = _json.dumps(entry, ensure_ascii=False)
+    with get_connection() as conn:
+        cursor = conn.execute(
+            "UPDATE project_sessions "
+            "SET log_json = json_insert("
+            "  COALESCE(log_json, json('[]')), '$[#]', json(?)"
+            ") "
+            "WHERE id = ?",
+            (payload, session_id),
+        )
+        conn.commit()
+        return cursor.rowcount > 0
+
+
+def get_session_messages(session_id: str) -> list[dict]:
+    """Return the persisted chat log for a session.
+
+    Used by the frontend to hydrate the ``messages`` ref when the
+    user clicks a prior session in the sidebar. Empty list if the
+    session has no log yet (or doesn't exist).
+    """
+    import json as _json
+
+    with get_connection() as conn:
+        row = conn.execute(
+            "SELECT log_json FROM project_sessions WHERE id = ?",
+            (session_id,),
+        ).fetchone()
+    if not row or not row["log_json"]:
+        return []
+    try:
+        parsed = _json.loads(row["log_json"])
+        return parsed if isinstance(parsed, list) else []
+    except (ValueError, TypeError):
+        return []
+
+
 def update_project_session(session_id: str, **kwargs) -> bool:
     """Update project session fields. Returns True on success.
 
