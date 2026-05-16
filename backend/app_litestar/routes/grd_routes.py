@@ -808,6 +808,102 @@ def session_answer_plan(
     return {"message": "Plan decision sent", "session_id": session_id}
 
 
+@post(
+    "/{project_id:str}/sessions/{session_id:str}/permission-request",
+    sync_to_thread=True,
+)
+def session_permission_request(
+    project_id: str, session_id: str, data: dict
+) -> dict[str, Any]:
+    """v0.7.69 — Agented permission hook → backend → web panel.
+
+    The hook script POSTs here when claude is about to use a tool.
+    We register a pending request, push a ``permission_request`` SSE
+    event to whatever frontend is subscribed to this session, then
+    block until the user clicks Approve / Deny in the web chat panel
+    (or 5 min default timeout, after which we return no-decision and
+    the hook falls back to claude's default permission flow).
+
+    Body shape:
+
+        {
+          "tool_name": "Bash",
+          "tool_input": {"command": "ls /tmp"},
+          "cwd": "/path/to/project",
+          "claude_session_id": "uuid-from-claude"
+        }
+
+    Response:
+
+        {"decision": "allow" | "deny"}  (200)
+
+    or for missing/invalid body:
+
+        400 with ClientException
+    """
+    del project_id
+    body = data or {}
+    tool_name = body.get("tool_name") or ""
+    tool_input = body.get("tool_input") or {}
+    if not tool_name or not isinstance(tool_input, dict):
+        raise ClientException(detail="tool_name and tool_input are required")
+
+    from app.services.permission_prompt_service import PermissionPromptRegistry
+
+    req = PermissionPromptRegistry.register(session_id, tool_name, tool_input)
+
+    # Broadcast to the panel so the user sees the prompt. Side-channel
+    # event type matches the contract the frontend's
+    # ``onPermissionRequest`` callback subscribes to.
+    ProjectSessionManager._broadcast(
+        session_id,
+        "permission_request",
+        {
+            "request_id": req.request_id,
+            "tool_name": tool_name,
+            "tool_input": tool_input,
+            "cwd": body.get("cwd"),
+        },
+    )
+
+    decision = PermissionPromptRegistry.wait_for_decision(req.request_id)
+    if decision in ("allow", "deny"):
+        return {"decision": decision}
+    # Timeout or cancellation → return 408 so the hook falls back to
+    # claude's normal permission flow (the script emits ``ask``).
+    raise HTTPException(
+        status_code=408,
+        detail="No user decision within timeout",
+    )
+
+
+@post(
+    "/{project_id:str}/sessions/{session_id:str}/permission-decision",
+    sync_to_thread=False,
+)
+def session_permission_decision(
+    project_id: str, session_id: str, data: dict
+) -> dict[str, Any]:
+    """v0.7.69 — frontend POSTs the user's Approve / Deny click here.
+
+    Body: ``{"request_id": "perm-…", "decision": "allow"|"deny"}``
+    """
+    del project_id, session_id
+    body = data or {}
+    rid = body.get("request_id")
+    decision = body.get("decision")
+    if not rid or decision not in ("allow", "deny"):
+        raise ClientException(
+            detail="request_id and decision (allow|deny) are required"
+        )
+
+    from app.services.permission_prompt_service import PermissionPromptRegistry
+
+    if not PermissionPromptRegistry.resolve(rid, decision):
+        raise NotFoundException(detail="Request not found (timed out?)")
+    return {"request_id": rid, "decision": decision, "resolved": True}
+
+
 @get("/{project_id:str}/sessions/{session_id:str}/messages", sync_to_thread=False)
 def session_messages(project_id: str, session_id: str) -> dict[str, Any]:
     """Return persisted chat messages for a session.
@@ -1020,6 +1116,8 @@ grd_router = Router(
         session_messages,
         session_answer_question,
         session_answer_plan,
+        session_permission_request,
+        session_permission_decision,
         list_allowed_accounts_endpoint,
         add_allowed_account_endpoint,
         remove_allowed_account_endpoint,
