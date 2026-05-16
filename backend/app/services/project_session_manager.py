@@ -324,6 +324,28 @@ def _extract_stream_json_events(line: str) -> list[tuple[str, dict]]:
                             },
                         )
                     )
+                elif name == "ExitPlanMode":
+                    # v0.7.65 — claude proposes a plan in plan mode.
+                    # The user must approve before claude starts
+                    # executing. Flush prior text, then side-channel
+                    # the plan payload so the frontend can render an
+                    # approve / keep-planning card.
+                    if text_buffer:
+                        events.append(
+                            ("output", {"line": "\n".join(text_buffer)})
+                        )
+                        text_buffer = []
+                    events.append(
+                        (
+                            "exit_plan_mode",
+                            {
+                                "tool_use_id": block.get("id", ""),
+                                "plan": (block.get("input") or {}).get(
+                                    "plan", ""
+                                ),
+                            },
+                        )
+                    )
                 else:
                     text_buffer.append(_render_tool_use(block))
             elif block_type == "tool_result":

@@ -283,6 +283,24 @@ export const grdApi = {
       },
     ),
 
+  // v0.7.65 — answer claude's ``ExitPlanMode`` tool_use. ``approved``
+  // is a boolean: true → "proceed with execution", false → "keep
+  // planning". Backend translates to claude's expected tool_result
+  // contract.
+  answerSessionPlan: (
+    projectId: string,
+    sessionId: string,
+    toolUseId: string,
+    approved: boolean,
+  ) =>
+    apiFetch<{ message: string; session_id: string }>(
+      `/api/projects/${projectId}/sessions/${sessionId}/answer-plan`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ tool_use_id: toolUseId, approved }),
+      },
+    ),
+
   // v0.7.58 — per-project AI backend account whitelist.
   // Sessions started without yolo_mode require an account_id from
   // this list. Managed on the project settings page.

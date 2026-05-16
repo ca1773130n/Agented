@@ -68,6 +68,12 @@ export function useProjectSession(projectId: Ref<string>) {
   let onAskUserQuestionCb:
     | ((payload: { tool_use_id: string; questions: AskUserQuestionItem[] }) => void)
     | undefined;
+  // v0.7.65 — ``ExitPlanMode``: claude is asking the user to approve
+  // a plan before execution. Payload carries the plan markdown and
+  // the tool_use_id for the answer round-trip.
+  let onExitPlanModeCb:
+    | ((payload: { tool_use_id: string; plan: string }) => void)
+    | undefined;
 
   // SSE lifecycle managed by useEventSource.
   // sourceFactory will be set dynamically via connect() calls.
@@ -95,6 +101,21 @@ export function useProjectSession(projectId: Ref<string>) {
         } catch (e) {
           console.warn(
             '[useProjectSession] Failed to parse ask_user_question event:',
+            e,
+            event.data,
+          );
+        }
+      },
+      exit_plan_mode: (event: MessageEvent) => {
+        try {
+          const data = JSON.parse(event.data);
+          onExitPlanModeCb?.({
+            tool_use_id: data.tool_use_id ?? '',
+            plan: data.plan ?? '',
+          });
+        } catch (e) {
+          console.warn(
+            '[useProjectSession] Failed to parse exit_plan_mode event:',
             e,
             event.data,
           );
@@ -377,6 +398,12 @@ export function useProjectSession(projectId: Ref<string>) {
     onAskUserQuestionCb = cb;
   }
 
+  function onExitPlanMode(
+    cb: (payload: { tool_use_id: string; plan: string }) => void,
+  ) {
+    onExitPlanModeCb = cb;
+  }
+
   // SSE connection cleanup is handled by useEventSource's onUnmounted.
   // This separate onUnmounted resets streaming/ralph/team state on unmount.
   onUnmounted(() => {
@@ -411,5 +438,6 @@ export function useProjectSession(projectId: Ref<string>) {
     onComplete,
     onError,
     onAskUserQuestion,
+    onExitPlanMode,
   };
 }

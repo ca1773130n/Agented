@@ -139,6 +139,34 @@ class TestExtractStreamJsonEvents:
         events = _extract_stream_json_events(json.dumps(event))
         assert events == [("output", {"line": "hello"})]
 
+    def test_exit_plan_mode_split_off_as_dedicated_event(self):
+        """v0.7.65 — ``ExitPlanMode`` tool_use emits its own
+        ``exit_plan_mode`` SSE event so the frontend can mount an
+        approve/decline card instead of treating it as a generic
+        chip."""
+        event = {
+            "type": "assistant",
+            "message": {
+                "content": [
+                    {"type": "text", "text": "Here's my plan:"},
+                    {
+                        "type": "tool_use",
+                        "id": "toolu_plan",
+                        "name": "ExitPlanMode",
+                        "input": {
+                            "plan": "## Step 1\nDo X\n\n## Step 2\nDo Y",
+                        },
+                    },
+                ]
+            },
+        }
+        events = _extract_stream_json_events(json.dumps(event))
+        assert len(events) == 2
+        assert events[0] == ("output", {"line": "Here's my plan:"})
+        assert events[1][0] == "exit_plan_mode"
+        assert events[1][1]["tool_use_id"] == "toolu_plan"
+        assert events[1][1]["plan"].startswith("## Step 1")
+
     def test_ask_user_question_split_off_from_surrounding_text(self):
         questions = [
             {
