@@ -369,8 +369,72 @@ def _extract_stream_json_events(line: str) -> list[tuple[str, dict]]:
         # See note on v0.7.43.
         return []
 
-    # Skip noise: system/init, hooks, rate_limit_event, etc.
+    if event_type == "system":
+        # v0.7.66 — surface ``PreToolUse`` / ``PostToolUse`` hook
+        # decisions as a side-channel ``hook_decision`` event the
+        # chat panel can render as a read-only badge. Other system
+        # subtypes (init, hook_started, rate_limit_event, …) stay
+        # filtered.
+        if event.get("subtype") == "hook_response":
+            return _extract_hook_decision_events(event)
+        return []
+
+    # Skip noise.
     return []
+
+
+def _extract_hook_decision_events(hook_event: dict) -> list[tuple[str, dict]]:
+    """Translate a ``system/hook_response`` into a ``hook_decision``
+    SSE event when its output contains a permission decision.
+
+    Claude's ``PreToolUse`` / ``PostToolUse`` hooks can return JSON in
+    the response ``output`` field with shape:
+
+        {"hookSpecificOutput": {
+            "hookEventName": "PreToolUse",
+            "permissionDecision": "allow"|"deny"|"ask",
+            ...}}
+
+    When that's present we lift it into a structured event for the
+    frontend; hooks that just return text or have no permission
+    decision are filtered (returning ``[]``).
+    """
+    output_raw = hook_event.get("output", "")
+    if not isinstance(output_raw, str) or not output_raw.strip():
+        return []
+    try:
+        output = json.loads(output_raw)
+    except (json.JSONDecodeError, ValueError):
+        return []
+    if not isinstance(output, dict):
+        return []
+    spec = output.get("hookSpecificOutput") or {}
+    if not isinstance(spec, dict):
+        return []
+    decision = spec.get("permissionDecision")
+    if decision not in ("allow", "deny", "ask"):
+        return []
+    return [
+        (
+            "hook_decision",
+            {
+                "hook_event": spec.get("hookEventName") or hook_event.get("hook_event"),
+                "hook_name": hook_event.get("hook_name"),
+                "tool_name": (
+                    hook_event.get("tool_name")
+                    or spec.get("toolName")
+                    or ""
+                ),
+                "tool_input": (
+                    hook_event.get("tool_input")
+                    or spec.get("toolInput")
+                    or {}
+                ),
+                "decision": decision,
+                "outcome": hook_event.get("outcome"),
+            },
+        )
+    ]
 
 
 @dataclass
