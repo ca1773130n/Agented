@@ -70,6 +70,10 @@ export function useProjectSession(projectId: Ref<string>) {
 
   // Callback registrations
   let onOutputCb: ((line: string) => void) | undefined;
+  // v0.7.67 — per-token text deltas (when --include-partial-messages
+  // is on). Frontend appends to the live bubble without separators,
+  // giving the same word-by-word streaming feel as the TUI.
+  let onOutputDeltaCb: ((delta: string) => void) | undefined;
   let onCompleteCb: ((status: string, exitCode: number) => void) | undefined;
   let onErrorCb: ((message: string) => void) | undefined;
   // v0.7.63 — claude's ``AskUserQuestion`` tool surfaces here as a
@@ -105,6 +109,18 @@ export function useProjectSession(projectId: Ref<string>) {
           onOutputCb?.(data.line);
         } catch (e) {
           console.warn('[useProjectSession] Failed to parse output event:', e, event.data);
+        }
+      },
+      output_delta: (event: MessageEvent) => {
+        try {
+          const data = JSON.parse(event.data);
+          onOutputDeltaCb?.(data.text ?? '');
+        } catch (e) {
+          console.warn(
+            '[useProjectSession] Failed to parse output_delta event:',
+            e,
+            event.data,
+          );
         }
       },
       ask_user_question: (event: MessageEvent) => {
@@ -419,6 +435,10 @@ export function useProjectSession(projectId: Ref<string>) {
     onOutputCb = cb;
   }
 
+  function onOutputDelta(cb: (delta: string) => void) {
+    onOutputDeltaCb = cb;
+  }
+
   function onComplete(cb: (status: string, exitCode: number) => void) {
     onCompleteCb = cb;
   }
@@ -474,6 +494,7 @@ export function useProjectSession(projectId: Ref<string>) {
     closeStream,
     // Callback setters
     onOutput,
+    onOutputDelta,
     onComplete,
     onError,
     onAskUserQuestion,

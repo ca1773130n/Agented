@@ -255,18 +255,27 @@ def _extract_stream_json_text(line: str) -> Optional[str]:
     events = _extract_stream_json_events(line)
     if not events:
         return None
-    # Take only the ``output``-event text — interactive events
-    # (ask_user_question, …) don't have an SSE-style ``line`` form.
-    text_parts = [
+    # Treat ``output_delta`` text as inline content (no separator, it's
+    # a partial token) and ``output`` lines as full content (joined
+    # with newlines). Interactive events (ask_user_question, …) don't
+    # have an SSE-style textual form.
+    deltas = "".join(
+        ev_data.get("text", "")
+        for ev_type, ev_data in events
+        if ev_type == "output_delta"
+    )
+    outputs = "\n".join(
         ev_data.get("line", "")
         for ev_type, ev_data in events
-        if ev_type == "output"
-    ]
-    joined = "\n".join(p for p in text_parts if p)
-    return joined or None
+        if ev_type == "output" and ev_data.get("line")
+    )
+    combined = (deltas + ("\n" if deltas and outputs else "") + outputs).strip("\n")
+    return combined or None
 
 
-def _extract_stream_json_events(line: str) -> list[tuple[str, dict]]:
+def _extract_stream_json_events(
+    line: str, session_info: Optional["SessionInfo"] = None
+) -> list[tuple[str, dict]]:
     """Parse one stream-json line into a list of SSE events to broadcast.
 
     Most lines produce zero or one ``("output", {"line": "..."})``
@@ -274,6 +283,14 @@ def _extract_stream_json_events(line: str) -> list[tuple[str, dict]]:
     tool_use becomes ``("ask_user_question", {"tool_use_id", "questions"})``
     so the frontend can render clickable options instead of an inert
     chip.
+
+    The optional ``session_info`` carries cross-line state — currently
+    just the ``had_recent_delta`` flag for v0.7.67 token-level
+    streaming dedup. When provided and a ``content_block_delta`` text
+    event has streamed during the current turn, we skip the
+    duplicate text blocks in the trailing ``assistant`` event.
+    Callers without state (tests) pass ``None`` and get the
+    pre-streaming behavior.
 
     Returns: ordered list of ``(event_type, payload_dict)`` for the
     reader thread to broadcast in sequence.
@@ -293,9 +310,16 @@ def _extract_stream_json_events(line: str) -> list[tuple[str, dict]]:
         # stays grouped; AskUserQuestion gets its own event so the
         # frontend can mount an interactive component.
         text_buffer: list[str] = []
+        # v0.7.67 — when token-level streaming was active during this
+        # turn, the trailing ``assistant`` event's text blocks duplicate
+        # everything that already streamed via ``content_block_delta``.
+        # Skip them.
+        skip_text = session_info is not None and session_info.had_recent_delta
         for block in msg.get("content", []):
             block_type = block.get("type")
             if block_type == "text":
+                if skip_text:
+                    continue
                 # Two normalization passes:
                 # 1. Lift ``markdown``-tagged fences so .md files render
                 #    as the source intends (headings, lists, paragraphs).
@@ -354,14 +378,23 @@ def _extract_stream_json_events(line: str) -> list[tuple[str, dict]]:
                     text_buffer.append(content[:500])
         if text_buffer:
             events.append(("output", {"line": "\n".join(text_buffer)}))
+        # Reset streaming state at the end of an assistant event —
+        # the next delta would belong to a new turn.
+        if session_info is not None:
+            session_info.had_recent_delta = False
         return events
 
-    # Streaming delta events (partial text during long responses)
+    # Streaming delta events (partial text during long responses).
+    # With ``--include-partial-messages`` (v0.7.67) claude emits these
+    # token-by-token; we surface them as ``output_delta`` so the
+    # frontend can append to the live bubble without separators.
     if event_type == "content_block_delta":
         delta = event.get("delta", {})
         if delta.get("type") == "text_delta":
             text = delta.get("text", "")
-            return [("output", {"line": text})] if text else []
+            if text and session_info is not None:
+                session_info.had_recent_delta = True
+            return [("output_delta", {"text": text})] if text else []
         return []
 
     if event_type == "result":
@@ -468,6 +501,12 @@ class SessionInfo:
     stream_json: bool = False  # When True, parse claude stream-json events for display
     # Set on pipe-mode sessions only. None means PTY-mode (legacy path).
     popen: Optional[subprocess.Popen] = field(default=None, repr=False)
+    # v0.7.67 — true after at least one ``content_block_delta`` text
+    # event has arrived in the current assistant turn. The extractor
+    # uses this to skip the final ``assistant`` event's text blocks
+    # (they'd duplicate what already streamed live). Reset to False
+    # at the end of each ``assistant`` event.
+    had_recent_delta: bool = False
 
 
 class ProjectSessionManager:
@@ -725,24 +764,31 @@ class ProjectSessionManager:
             if not cleaned:
                 return
 
+            # Pull the session up front — the extractor consults its
+            # ``had_recent_delta`` flag for token-level streaming dedup.
+            with cls._lock:
+                si = cls._sessions.get(session_id)
+                if not si:
+                    return
             if _stream_json:
-                events = _extract_stream_json_events(cleaned)
+                events = _extract_stream_json_events(cleaned, session_info=si)
             else:
                 events = [("output", {"line": cleaned})]
             if not events:
                 return
 
             with cls._lock:
+                # Re-fetch under the lock to read paused state freshly.
                 si = cls._sessions.get(session_id)
                 if not si:
                     return
                 is_paused = si.paused
                 # Ring buffer keeps only ``output`` events — that's
                 # what gets replayed to a late SSE subscriber. Side-
-                # channel events (ask_user_question, …) can't be
-                # meaningfully replayed; if the user reconnects after
-                # the question was answered, the answer state lives
-                # elsewhere.
+                # channel events (ask_user_question, output_delta, …)
+                # can't be meaningfully replayed; if the user
+                # reconnects after the question was answered, the
+                # answer state lives elsewhere.
                 for ev_type, ev_data in events:
                     if ev_type == "output":
                         si.ring_buffer.append(ev_data["line"])
