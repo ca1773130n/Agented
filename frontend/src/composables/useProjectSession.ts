@@ -24,6 +24,16 @@ export interface AskUserQuestionItem {
   options: AskUserQuestionOption[];
 }
 
+// v0.7.66 — payload for the read-only hook decision badge.
+export interface HookDecisionPayload {
+  hook_event: string | null; // PreToolUse | PostToolUse | …
+  hook_name: string | null;
+  tool_name: string;
+  tool_input: Record<string, unknown>;
+  decision: 'allow' | 'deny' | 'ask';
+  outcome: string | null; // success | failure
+}
+
 /**
  * Composable for managing project session lifecycle, SSE streaming,
  * and session CRUD operations.
@@ -74,6 +84,12 @@ export function useProjectSession(projectId: Ref<string>) {
   let onExitPlanModeCb:
     | ((payload: { tool_use_id: string; plan: string }) => void)
     | undefined;
+  // v0.7.66 — read-only ``PreToolUse``/``PostToolUse`` hook decision
+  // surfaced from claude's hook system. Frontend renders an inline
+  // badge so users can see what hooks decided.
+  let onHookDecisionCb:
+    | ((payload: HookDecisionPayload) => void)
+    | undefined;
 
   // SSE lifecycle managed by useEventSource.
   // sourceFactory will be set dynamically via connect() calls.
@@ -116,6 +132,25 @@ export function useProjectSession(projectId: Ref<string>) {
         } catch (e) {
           console.warn(
             '[useProjectSession] Failed to parse exit_plan_mode event:',
+            e,
+            event.data,
+          );
+        }
+      },
+      hook_decision: (event: MessageEvent) => {
+        try {
+          const data = JSON.parse(event.data);
+          onHookDecisionCb?.({
+            hook_event: data.hook_event ?? null,
+            hook_name: data.hook_name ?? null,
+            tool_name: data.tool_name ?? '',
+            tool_input: data.tool_input ?? {},
+            decision: data.decision,
+            outcome: data.outcome ?? null,
+          });
+        } catch (e) {
+          console.warn(
+            '[useProjectSession] Failed to parse hook_decision event:',
             e,
             event.data,
           );
@@ -404,6 +439,10 @@ export function useProjectSession(projectId: Ref<string>) {
     onExitPlanModeCb = cb;
   }
 
+  function onHookDecision(cb: (payload: HookDecisionPayload) => void) {
+    onHookDecisionCb = cb;
+  }
+
   // SSE connection cleanup is handled by useEventSource's onUnmounted.
   // This separate onUnmounted resets streaming/ralph/team state on unmount.
   onUnmounted(() => {
@@ -439,5 +478,6 @@ export function useProjectSession(projectId: Ref<string>) {
     onError,
     onAskUserQuestion,
     onExitPlanMode,
+    onHookDecision,
   };
 }

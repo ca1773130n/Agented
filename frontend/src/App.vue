@@ -1974,6 +1974,87 @@ body.tour-active .modal-overlay {
 }
 
 /* ───────────────────────────────────────────────────────────────────
+   Hook decision badges (v0.7.66)
+
+   ``ProjectSessionPanel`` emits a system-role message with embedded
+   HTML when claude's ``PreToolUse``/``PostToolUse`` hooks return a
+   permission decision. The bubble's ``v-html`` renders the markup;
+   these rules give the badge a compact pill look with a kind-specific
+   accent.
+   ─────────────────────────────────────────────────────────────────── */
+.hook-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-default);
+  color: var(--text-secondary);
+  font-family: 'Geist Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.hook-badge .hook-icon {
+  font-size: 11px;
+}
+.hook-badge .hook-event {
+  font-weight: 600;
+  color: var(--text-primary);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.hook-badge .hook-tool {
+  font-weight: 600;
+  color: var(--accent-cyan, #00bcd4);
+}
+.hook-badge .hook-arg {
+  font-family: 'Geist Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-default);
+  color: var(--text-primary);
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.hook-badge .hook-decision {
+  font-weight: 700;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 2px 7px;
+  border-radius: 4px;
+}
+.hook-badge--allow {
+  border-color: rgba(76, 175, 80, 0.4);
+  background: rgba(76, 175, 80, 0.06);
+}
+.hook-badge--allow .hook-decision {
+  background: rgba(76, 175, 80, 0.18);
+  color: var(--accent-green, #4caf50);
+}
+.hook-badge--deny {
+  border-color: rgba(255, 100, 100, 0.4);
+  background: rgba(255, 100, 100, 0.06);
+}
+.hook-badge--deny .hook-decision {
+  background: rgba(255, 100, 100, 0.18);
+  color: var(--accent-red, #ff6464);
+}
+.hook-badge--ask {
+  border-color: rgba(255, 200, 80, 0.4);
+  background: rgba(255, 200, 80, 0.06);
+}
+.hook-badge--ask .hook-decision {
+  background: rgba(255, 200, 80, 0.18);
+  color: var(--accent-yellow, #ffcc80);
+}
+
+/* ───────────────────────────────────────────────────────────────────
    Kind-specific accent line so a glance distinguishes shell / file /
    search / web / task without reading the label.
    ─────────────────────────────────────────────────────────────────── */

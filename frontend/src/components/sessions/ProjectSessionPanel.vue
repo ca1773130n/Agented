@@ -157,6 +157,48 @@ session.onExitPlanMode((payload) => {
   clearDiagnostic();
 });
 
+session.onHookDecision((payload) => {
+  // Render the hook decision as a system message containing a small
+  // HTML badge. ChatBubble's marked + DOMPurify pipeline preserves
+  // the markup; styling lives in App.vue's global CSS so it reaches
+  // inside the v-html-rendered subtree.
+  const escape = (s: string) =>
+    s
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+
+  const decisionKind = payload.decision; // allow | deny | ask
+  const tool = escape(payload.tool_name || 'tool');
+  const hookEv = escape(payload.hook_event || 'Hook');
+  // Show the first meaningful arg from the tool input so a Bash hook
+  // says "ls /tmp" not just "Bash".
+  const inp = payload.tool_input || {};
+  const detailRaw = (
+    (inp as Record<string, unknown>).command ||
+    (inp as Record<string, unknown>).file_path ||
+    (inp as Record<string, unknown>).path ||
+    (inp as Record<string, unknown>).pattern ||
+    ''
+  ) as string;
+  const detail = detailRaw ? `<code class="hook-arg">${escape(detailRaw)}</code>` : '';
+  const html =
+    `<div class="hook-badge hook-badge--${decisionKind}">` +
+    `<span class="hook-icon" aria-hidden="true">🛡</span>` +
+    `<span class="hook-event">${hookEv}</span>` +
+    `<span class="hook-tool">${tool}</span>` +
+    detail +
+    `<span class="hook-decision">${decisionKind}</span>` +
+    `</div>`;
+
+  messages.value.push({
+    role: 'system',
+    content: html,
+    timestamp: new Date().toISOString(),
+  });
+});
+
 async function onPlanApprove() {
   const pending = pendingPlan.value;
   if (!pending) return;
@@ -301,6 +343,13 @@ async function onDialogConfirm(payload: {
           '--output-format',
           'stream-json',
           '--verbose',
+          // v0.7.66 — pass through PreToolUse / PostToolUse hook
+          // lifecycle events so the chat can surface read-only
+          // permission decision badges. The backend filters
+          // hook noise (hook_started, etc.) and only emits a
+          // structured ``hook_decision`` event when a hook returns
+          // a permission decision.
+          '--include-hook-events',
         ],
         execution_type: 'direct',
         execution_mode: 'interactive',

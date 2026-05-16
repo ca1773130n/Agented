@@ -12,6 +12,7 @@ import pytest
 from app.services.project_session_manager import (
     ProjectSessionManager,
     SessionInfo,
+    _extract_hook_decision_events,
     _extract_stream_json_events,
     _extract_stream_json_text,
     _heal_stray_backtick_before_heading,
@@ -234,6 +235,78 @@ class TestExtractStreamJsonEvents:
             {"type": "rate_limit_event"},
         ):
             assert _extract_stream_json_events(json.dumps(payload)) == []
+
+    def test_hook_response_with_permission_decision_emits_badge(self):
+        """v0.7.66 — a system/hook_response with a PreToolUse
+        permission decision in its ``output`` should become a
+        ``hook_decision`` SSE event for the read-only badge."""
+        hook_event = {
+            "type": "system",
+            "subtype": "hook_response",
+            "hook_event": "PreToolUse",
+            "hook_name": "approve-bash",
+            "tool_name": "Bash",
+            "tool_input": {"command": "ls /tmp"},
+            "outcome": "success",
+            "output": json.dumps(
+                {
+                    "hookSpecificOutput": {
+                        "hookEventName": "PreToolUse",
+                        "permissionDecision": "allow",
+                    }
+                }
+            ),
+        }
+        events = _extract_stream_json_events(json.dumps(hook_event))
+        assert len(events) == 1
+        ev_type, payload = events[0]
+        assert ev_type == "hook_decision"
+        assert payload["decision"] == "allow"
+        assert payload["tool_name"] == "Bash"
+        assert payload["tool_input"] == {"command": "ls /tmp"}
+        assert payload["outcome"] == "success"
+
+    def test_hook_response_without_permission_is_filtered(self):
+        """Hooks that just write to stdout or have no
+        ``hookSpecificOutput.permissionDecision`` are noise and
+        should NOT show up as badges."""
+        hook_event = {
+            "type": "system",
+            "subtype": "hook_response",
+            "hook_event": "SessionStart",
+            "hook_name": "context-mode-init",
+            "output": json.dumps(
+                {"hookSpecificOutput": {"additionalContext": "boilerplate"}}
+            ),
+        }
+        assert _extract_stream_json_events(json.dumps(hook_event)) == []
+        # Also non-JSON output
+        hook_event["output"] = "[HarnessSync] 11 targets out of sync"
+        assert _extract_stream_json_events(json.dumps(hook_event)) == []
+        # Empty output
+        hook_event["output"] = ""
+        assert _extract_stream_json_events(json.dumps(hook_event)) == []
+
+    def test_hook_response_with_deny_decision(self):
+        hook_event = {
+            "type": "system",
+            "subtype": "hook_response",
+            "hook_event": "PreToolUse",
+            "tool_name": "Bash",
+            "tool_input": {"command": "rm -rf /"},
+            "outcome": "success",
+            "output": json.dumps(
+                {
+                    "hookSpecificOutput": {
+                        "hookEventName": "PreToolUse",
+                        "permissionDecision": "deny",
+                    }
+                }
+            ),
+        }
+        events = _extract_stream_json_events(json.dumps(hook_event))
+        assert len(events) == 1
+        assert events[0][1]["decision"] == "deny"
 
     def test_non_json_line_passes_through(self):
         events = _extract_stream_json_events("plain text line")
