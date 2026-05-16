@@ -179,6 +179,29 @@ session.onExitPlanMode((payload) => {
   clearDiagnostic();
 });
 
+session.onThinking((text: string) => {
+  // v0.7.68 — surface claude's extended-thinking reasoning as a
+  // collapsed-by-default disclosure widget. ChatBubble's marked +
+  // DOMPurify pipeline preserves the ``<details>`` element; styling
+  // lives in App.vue's global CSS so it crosses ``v-html``.
+  const escape = (s: string) =>
+    s
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  const html =
+    '<details class="thinking-block">' +
+    '<summary>💭 Thinking</summary>' +
+    `<pre class="thinking-body">${escape(text)}</pre>` +
+    '</details>';
+  messages.value.push({
+    role: 'system',
+    content: html,
+    timestamp: new Date().toISOString(),
+  });
+});
+
 session.onHookDecision((payload) => {
   // Render the hook decision as a system message containing a small
   // HTML badge. ChatBubble's marked + DOMPurify pipeline preserves
