@@ -395,6 +395,84 @@ def test_answer_question_writes_tool_result_envelope(isolated_db, monkeypatch):
     assert inner == {"answers": {"Which one?": "Option A"}}
 
 
+def test_answer_plan_requires_fields(isolated_db):
+    """v0.7.65 — POST /answer-plan needs tool_use_id + approved."""
+    with _client() as c:
+        resp = c.post(
+            "/api/projects/p-x/sessions/sess-x/answer-plan",
+            json={"approved": True},
+        )
+        assert resp.status_code == 400
+        resp = c.post(
+            "/api/projects/p-x/sessions/sess-x/answer-plan",
+            json={"tool_use_id": "toolu_p"},
+        )
+        assert resp.status_code == 400
+
+
+def test_answer_plan_approved_writes_correct_decision(isolated_db, monkeypatch):
+    """Approval becomes claude's documented 'User approved the plan.
+    Proceed with execution.' tool_result content."""
+    from app.services.project_session_manager import ProjectSessionManager
+
+    captured: dict[str, str] = {}
+    monkeypatch.setattr(
+        ProjectSessionManager, "is_stream_json", classmethod(lambda cls, sid: True)
+    )
+
+    def fake_send(cls, sid: str, payload: str) -> bool:
+        captured["payload"] = payload
+        return True
+
+    monkeypatch.setattr(ProjectSessionManager, "send_input", classmethod(fake_send))
+
+    with _client() as c:
+        resp = c.post(
+            "/api/projects/p-x/sessions/psess-p/answer-plan",
+            json={"tool_use_id": "toolu_p", "approved": True},
+        )
+    assert resp.status_code == 201, resp.text
+
+    import json as _json
+
+    env = _json.loads(captured["payload"])
+    content = env["message"]["content"][0]
+    assert content["type"] == "tool_result"
+    assert content["tool_use_id"] == "toolu_p"
+    assert "approved" in content["content"].lower()
+    assert "proceed" in content["content"].lower()
+
+
+def test_answer_plan_declined_writes_keep_planning_decision(
+    isolated_db, monkeypatch
+):
+    from app.services.project_session_manager import ProjectSessionManager
+
+    captured: dict[str, str] = {}
+    monkeypatch.setattr(
+        ProjectSessionManager, "is_stream_json", classmethod(lambda cls, sid: True)
+    )
+
+    def fake_send(cls, sid: str, payload: str) -> bool:
+        captured["payload"] = payload
+        return True
+
+    monkeypatch.setattr(ProjectSessionManager, "send_input", classmethod(fake_send))
+
+    with _client() as c:
+        resp = c.post(
+            "/api/projects/p-x/sessions/psess-p/answer-plan",
+            json={"tool_use_id": "toolu_p", "approved": False},
+        )
+    assert resp.status_code == 201
+
+    import json as _json
+
+    env = _json.loads(captured["payload"])
+    content = env["message"]["content"][0]
+    assert "keep planning" in content["content"].lower()
+
+
 def test_answer_question_rejected_when_not_stream_json(isolated_db, monkeypatch):
     """For PTY sessions, claude reads raw stdin — a JSON envelope is
     meaningless, so refuse rather than write garbage."""

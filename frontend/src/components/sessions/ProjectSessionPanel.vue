@@ -10,6 +10,7 @@ import SessionInput from './SessionInput.vue';
 import SessionControls from './SessionControls.vue';
 import SessionStartDialog from './SessionStartDialog.vue';
 import InteractiveQuestionCard from './InteractiveQuestionCard.vue';
+import PlanModeCard from './PlanModeCard.vue';
 import type { AskUserQuestionItem } from '../../composables/useProjectSession';
 
 interface ChatMsg {
@@ -54,6 +55,11 @@ const pendingQuestion = ref<{
   tool_use_id: string;
   questions: AskUserQuestionItem[];
 } | null>(null);
+
+// v0.7.65 — claude's ``ExitPlanMode`` payload. Distinct from
+// pendingQuestion because the UX is approve/decline rather than
+// multi-option selection.
+const pendingPlan = ref<{ tool_use_id: string; plan: string } | null>(null);
 
 // Soft diagnostic shown if no output arrives within 8s of sending a
 // message. Most claude responses begin streaming within 2-3s, so 8s
@@ -145,6 +151,64 @@ session.onAskUserQuestion((payload) => {
   clearDiagnostic();
 });
 
+session.onExitPlanMode((payload) => {
+  pendingPlan.value = payload;
+  awaitingResponse.value = false;
+  clearDiagnostic();
+});
+
+async function onPlanApprove() {
+  const pending = pendingPlan.value;
+  if (!pending) return;
+  pendingPlan.value = null;
+  messages.value.push({
+    role: 'user',
+    content: '**Plan decision** → Approved, proceeding with execution.',
+    timestamp: new Date().toISOString(),
+  });
+  awaitingResponse.value = true;
+  try {
+    await grdApi.answerSessionPlan(
+      props.projectId,
+      session.activeSessionId.value ?? '',
+      pending.tool_use_id,
+      true,
+    );
+  } catch (err) {
+    showToast(
+      err instanceof Error ? err.message : 'Failed to approve plan',
+      'error',
+    );
+    awaitingResponse.value = false;
+  }
+}
+
+async function onPlanKeepPlanning() {
+  const pending = pendingPlan.value;
+  if (!pending) return;
+  pendingPlan.value = null;
+  messages.value.push({
+    role: 'user',
+    content: '**Plan decision** → Keep planning (do not execute yet).',
+    timestamp: new Date().toISOString(),
+  });
+  awaitingResponse.value = true;
+  try {
+    await grdApi.answerSessionPlan(
+      props.projectId,
+      session.activeSessionId.value ?? '',
+      pending.tool_use_id,
+      false,
+    );
+  } catch (err) {
+    showToast(
+      err instanceof Error ? err.message : 'Failed to send plan decision',
+      'error',
+    );
+    awaitingResponse.value = false;
+  }
+}
+
 async function onQuestionAnswered(answers: Record<string, string | string[]>) {
   const pending = pendingQuestion.value;
   if (!pending) return;
@@ -214,6 +278,7 @@ async function onDialogConfirm(payload: {
   inputMessage.value = '';
   hydratedEmpty.value = false;
   pendingQuestion.value = null;
+  pendingPlan.value = null;
   clearDiagnostic();
 
   const isDirect = payload.executionType === 'direct';
@@ -311,6 +376,7 @@ async function handleSessionClick(sessionId: string) {
   messages.value = [];
   awaitingResponse.value = false;
   pendingQuestion.value = null;
+  pendingPlan.value = null;
   session.switchSession(sessionId);
 
   // Hydrate chat history from the backend's persisted ``log_json``
@@ -458,6 +524,16 @@ onMounted(() => {
             :questions="pendingQuestion.questions"
             @confirm="onQuestionAnswered"
             @cancel="onQuestionSkipped"
+          />
+
+          <!-- v0.7.65 — ``ExitPlanMode`` proposal. Claude wrote out a
+               plan in plan mode and is waiting for approval before
+               executing. -->
+          <PlanModeCard
+            v-if="pendingPlan && isDirectMode"
+            :plan="pendingPlan.plan"
+            @approve="onPlanApprove"
+            @keep-planning="onPlanKeepPlanning"
           />
           <!-- Ralph loops / team spawn keep the monospace terminal so
                structured progress events (iteration counters, team

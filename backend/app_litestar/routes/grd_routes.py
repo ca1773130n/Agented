@@ -730,6 +730,84 @@ def session_answer_question(
     return {"message": "Answer sent", "session_id": session_id}
 
 
+@post(
+    "/{project_id:str}/sessions/{session_id:str}/answer-plan",
+    sync_to_thread=False,
+)
+def session_answer_plan(
+    project_id: str, session_id: str, data: dict
+) -> dict[str, Any]:
+    """v0.7.65 — accept or decline claude's ``ExitPlanMode`` proposal.
+
+    Body shape::
+
+        {"tool_use_id": "toolu_xxx", "approved": true | false}
+
+    Claude's ``ExitPlanMode`` tool semantics: tool_result with
+    ``"User approved the plan. Proceed with execution."`` signals
+    accept; ``"User wants to keep planning."`` signals decline. We
+    keep that contract so claude's downstream logic stays unchanged.
+    """
+    del project_id
+    body = data or {}
+    tool_use_id = body.get("tool_use_id")
+    approved = body.get("approved")
+    if not tool_use_id or approved is None:
+        raise ClientException(
+            detail="tool_use_id and approved are required"
+        )
+
+    decision_text = (
+        "User approved the plan. Proceed with execution."
+        if approved
+        else "User wants to keep planning. Do not execute yet."
+    )
+
+    # Persist the user's decision so the chat panel rehydrates it
+    # as a user bubble on next session click.
+    try:
+        from app.db.grd import append_session_message
+
+        append_session_message(
+            session_id,
+            "user",
+            f"**Plan decision** → {'Approved' if approved else 'Keep planning'}",
+        )
+    except Exception:
+        logger.warning(
+            "answer-plan: failed to persist user decision for %s",
+            session_id,
+            exc_info=True,
+        )
+
+    if not ProjectSessionManager.is_stream_json(session_id):
+        raise ClientException(
+            detail="Session is not in stream-json mode; cannot answer."
+        )
+
+    import json as _json
+
+    envelope = {
+        "type": "user",
+        "session_id": "",
+        "message": {
+            "role": "user",
+            "content": [
+                {
+                    "type": "tool_result",
+                    "tool_use_id": tool_use_id,
+                    "content": decision_text,
+                }
+            ],
+        },
+        "parent_tool_use_id": None,
+    }
+    payload = _json.dumps(envelope, ensure_ascii=False)
+    if not ProjectSessionManager.send_input(session_id, payload):
+        raise NotFoundException(detail="Session not found or not active")
+    return {"message": "Plan decision sent", "session_id": session_id}
+
+
 @get("/{project_id:str}/sessions/{session_id:str}/messages", sync_to_thread=False)
 def session_messages(project_id: str, session_id: str) -> dict[str, Any]:
     """Return persisted chat messages for a session.
@@ -941,6 +1019,7 @@ grd_router = Router(
         session_output,
         session_messages,
         session_answer_question,
+        session_answer_plan,
         list_allowed_accounts_endpoint,
         add_allowed_account_endpoint,
         remove_allowed_account_endpoint,
