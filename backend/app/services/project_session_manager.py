@@ -49,6 +49,35 @@ _MD_FENCE_RE = re.compile(
     re.DOTALL | re.IGNORECASE,
 )
 
+# Matches a stray opening backtick that immediately precedes a
+# markdown ATX header. Anchored to a non-whitespace character on the
+# left so we don't accidentally match a legitimate fenced code block
+# (``\n`` then text + backtick) or an isolated header. Captures the
+# leading non-space so the replacement preserves it.
+_STRAY_BACKTICK_BEFORE_HEADING_RE = re.compile(
+    r"(\S)[ \t]*`[ \t]*(?=#{1,6}[ \t])"
+)
+
+
+def _heal_stray_backtick_before_heading(text: str) -> str:
+    """Recover marked-renderable structure when claude inlines a file
+    or block under a single (never-closed) backtick.
+
+    Concrete case the user hit (v0.7.64):
+
+        "Here's the full file (99 lines):`# Coding Behavior Contract..."
+
+    Marked sees the lone ````` as the opening of an inline code
+    span, but with no close it treats the backtick as a literal and
+    consumes the rest of the text as one paragraph. The ``#`` is no
+    longer at line-start, so no heading renders. Convert that to
+
+        "Here's the full file (99 lines):\\n\\n# Coding Behavior..."
+
+    so the heading lands cleanly on its own line.
+    """
+    return _STRAY_BACKTICK_BEFORE_HEADING_RE.sub(r"\1\n\n", text)
+
 
 def _unwrap_markdown_fences(text: str) -> str:
     """Replace ``` ```markdown\\n…\\n``` ``` blocks with their inner content.
@@ -267,7 +296,13 @@ def _extract_stream_json_events(line: str) -> list[tuple[str, dict]]:
         for block in msg.get("content", []):
             block_type = block.get("type")
             if block_type == "text":
-                text_buffer.append(_unwrap_markdown_fences(block["text"]))
+                # Two normalization passes:
+                # 1. Lift ``markdown``-tagged fences so .md files render
+                #    as the source intends (headings, lists, paragraphs).
+                # 2. Heal stray opening backticks that swallow a
+                #    following ATX header — see v0.7.64.
+                healed = _heal_stray_backtick_before_heading(block["text"])
+                text_buffer.append(_unwrap_markdown_fences(healed))
             elif block_type == "tool_use":
                 name = block.get("name")
                 if name == "AskUserQuestion":

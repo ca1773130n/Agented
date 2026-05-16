@@ -14,6 +14,7 @@ from app.services.project_session_manager import (
     SessionInfo,
     _extract_stream_json_events,
     _extract_stream_json_text,
+    _heal_stray_backtick_before_heading,
     _render_tool_use,
     _unwrap_markdown_fences,
 )
@@ -209,6 +210,51 @@ class TestExtractStreamJsonEvents:
     def test_non_json_line_passes_through(self):
         events = _extract_stream_json_events("plain text line")
         assert events == [("output", {"line": "plain text line"})]
+
+
+class TestHealStrayBacktickBeforeHeading:
+    r"""v0.7.64 — claude sometimes inlines a file or block of code
+    under a single (never-closed) backtick:
+
+        "Here's the file:`# Heading\\n..."
+
+    Marked treats the lone ` as a literal and the rest as one
+    paragraph; ``#`` is no longer at line-start so no h1 renders.
+    ``_heal_stray_backtick_before_heading`` recovers the structure
+    by replacing the backtick with a paragraph break."""
+
+    def test_replaces_backtick_immediately_before_h1(self):
+        text = "Here's the file (99 lines):`# Title\nbody"
+        out = _heal_stray_backtick_before_heading(text)
+        assert out == "Here's the file (99 lines):\n\n# Title\nbody"
+
+    def test_replaces_for_all_atx_levels(self):
+        for hashes in ("#", "##", "###", "####", "#####", "######"):
+            text = f"intro:`{hashes} Heading\nbody"
+            out = _heal_stray_backtick_before_heading(text)
+            assert out == f"intro:\n\n{hashes} Heading\nbody"
+
+    def test_preserves_balanced_inline_code(self):
+        """A backtick that's followed by non-header text is a real
+        inline code span — leave it alone."""
+        text = "Run `npm install` to install"
+        assert _heal_stray_backtick_before_heading(text) == text
+
+    def test_preserves_fenced_code_blocks(self):
+        """Triple-backtick fences shouldn't be touched."""
+        text = "Some text\n```bash\n# This is a comment\necho hi\n```"
+        assert _heal_stray_backtick_before_heading(text) == text
+
+    def test_no_change_when_no_backtick(self):
+        text = "intro\n\n# Title\nbody"
+        assert _heal_stray_backtick_before_heading(text) == text
+
+    def test_at_line_start_no_match(self):
+        """The pattern requires a non-whitespace char before the
+        backtick — ``\\n`# Title`` shouldn't match (that's likely
+        a real fence-open with stray whitespace)."""
+        text = "\n`# Title\nbody"
+        assert _heal_stray_backtick_before_heading(text) == text
 
 
 class TestUnwrapMarkdownFences:
