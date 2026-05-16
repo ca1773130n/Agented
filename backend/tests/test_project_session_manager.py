@@ -376,6 +376,57 @@ class TestExtractStreamJsonEvents:
         events = _extract_stream_json_events(json.dumps(event))
         assert events == [("output", {"line": "Hello"})]
 
+    def test_thinking_block_emits_dedicated_event(self):
+        """v0.7.68 — extended-thinking ``thinking`` content blocks
+        emit as ``thinking`` SSE events, not text output."""
+        event = {
+            "type": "assistant",
+            "message": {
+                "content": [
+                    {"type": "thinking", "thinking": "Let me reason..."},
+                    {"type": "text", "text": "The answer is 42."},
+                ]
+            },
+        }
+        events = _extract_stream_json_events(json.dumps(event))
+        # Two events: thinking (first), then output with the text.
+        assert len(events) == 2
+        assert events[0] == ("thinking", {"text": "Let me reason..."})
+        assert events[1] == ("output", {"line": "The answer is 42."})
+
+    def test_thinking_block_preserves_chronological_order(self):
+        """A thinking block AFTER text flushes pending text first so
+        the chat renders text → thinking → following text in order."""
+        event = {
+            "type": "assistant",
+            "message": {
+                "content": [
+                    {"type": "text", "text": "Quick answer:"},
+                    {"type": "thinking", "thinking": "actually let me reconsider"},
+                    {"type": "text", "text": "Final answer: 42"},
+                ]
+            },
+        }
+        events = _extract_stream_json_events(json.dumps(event))
+        assert len(events) == 3
+        assert events[0] == ("output", {"line": "Quick answer:"})
+        assert events[1] == ("thinking", {"text": "actually let me reconsider"})
+        assert events[2] == ("output", {"line": "Final answer: 42"})
+
+    def test_empty_thinking_is_filtered(self):
+        """No ``thinking`` event for an empty/missing thinking body."""
+        event = {
+            "type": "assistant",
+            "message": {
+                "content": [
+                    {"type": "thinking", "thinking": ""},
+                    {"type": "text", "text": "Hello"},
+                ]
+            },
+        }
+        events = _extract_stream_json_events(json.dumps(event))
+        assert events == [("output", {"line": "Hello"})]
+
     def test_hook_response_with_deny_decision(self):
         hook_event = {
             "type": "system",

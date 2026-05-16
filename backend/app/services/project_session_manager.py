@@ -317,6 +317,22 @@ def _extract_stream_json_events(
         skip_text = session_info is not None and session_info.had_recent_delta
         for block in msg.get("content", []):
             block_type = block.get("type")
+            if block_type == "thinking":
+                # v0.7.68 — extended-thinking reasoning text.
+                # Surface as its own SSE event so the frontend can
+                # render a distinct collapsible block rather than
+                # treating the reasoning as regular prose.
+                thinking_text = block.get("thinking", "")
+                if thinking_text:
+                    if text_buffer:
+                        events.append(
+                            ("output", {"line": "\n".join(text_buffer)})
+                        )
+                        text_buffer = []
+                    events.append(
+                        ("thinking", {"text": thinking_text}),
+                    )
+                continue
             if block_type == "text":
                 if skip_text:
                     continue

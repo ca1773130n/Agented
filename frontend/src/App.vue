@@ -1974,6 +1974,61 @@ body.tour-active .modal-overlay {
 }
 
 /* ───────────────────────────────────────────────────────────────────
+   Extended-thinking blocks (v0.7.68)
+
+   Claude with extended thinking emits a ``thinking`` content block
+   that carries its reasoning. The backend lifts it into a dedicated
+   SSE event; the frontend pushes a system-role message containing
+   a ``<details class="thinking-block">`` widget. These styles live
+   here (global, unscoped) so they cross ``v-html`` into the
+   ChatBubble subtree.
+   ─────────────────────────────────────────────────────────────────── */
+.thinking-block {
+  margin: 8px 0;
+  border: 1px dashed var(--border-default);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.02);
+  color: var(--text-muted);
+  font-style: italic;
+}
+.thinking-block > summary {
+  cursor: pointer;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  list-style: none;
+  color: var(--text-secondary);
+  font-style: normal;
+  user-select: none;
+}
+.thinking-block > summary::-webkit-details-marker {
+  display: none;
+}
+.thinking-block > summary::after {
+  content: ' ▾';
+  font-size: 10px;
+  color: var(--text-muted);
+}
+.thinking-block[open] > summary::after {
+  content: ' ▴';
+}
+.thinking-block > summary:hover {
+  color: var(--text-primary);
+}
+.thinking-block .thinking-body {
+  margin: 0;
+  padding: 10px 14px;
+  border-top: 1px dashed var(--border-default);
+  font-family: 'Geist Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--text-secondary);
+  font-style: normal;
+}
+
+/* ───────────────────────────────────────────────────────────────────
    Hook decision badges (v0.7.66)
 
    ``ProjectSessionPanel`` emits a system-role message with embedded

@@ -94,6 +94,11 @@ export function useProjectSession(projectId: Ref<string>) {
   let onHookDecisionCb:
     | ((payload: HookDecisionPayload) => void)
     | undefined;
+  // v0.7.68 — extended-thinking content blocks. Claude exposes its
+  // reasoning when extended thinking is enabled; the panel renders
+  // each as a collapsible disclosure rather than mixing it into
+  // the visible assistant prose.
+  let onThinkingCb: ((text: string) => void) | undefined;
 
   // SSE lifecycle managed by useEventSource.
   // sourceFactory will be set dynamically via connect() calls.
@@ -167,6 +172,18 @@ export function useProjectSession(projectId: Ref<string>) {
         } catch (e) {
           console.warn(
             '[useProjectSession] Failed to parse hook_decision event:',
+            e,
+            event.data,
+          );
+        }
+      },
+      thinking: (event: MessageEvent) => {
+        try {
+          const data = JSON.parse(event.data);
+          onThinkingCb?.(data.text ?? '');
+        } catch (e) {
+          console.warn(
+            '[useProjectSession] Failed to parse thinking event:',
             e,
             event.data,
           );
@@ -463,6 +480,10 @@ export function useProjectSession(projectId: Ref<string>) {
     onHookDecisionCb = cb;
   }
 
+  function onThinking(cb: (text: string) => void) {
+    onThinkingCb = cb;
+  }
+
   // SSE connection cleanup is handled by useEventSource's onUnmounted.
   // This separate onUnmounted resets streaming/ralph/team state on unmount.
   onUnmounted(() => {
@@ -500,5 +521,6 @@ export function useProjectSession(projectId: Ref<string>) {
     onAskUserQuestion,
     onExitPlanMode,
     onHookDecision,
+    onThinking,
   };
 }
