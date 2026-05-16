@@ -98,6 +98,26 @@ def _unwrap_markdown_fences(text: str) -> str:
     return _MD_FENCE_RE.sub(lambda m: m.group(1), text)
 
 
+def _resolve_admin_api_key() -> Optional[str]:
+    """Look up an admin API key from ``user_roles`` for the
+    permission hook to authenticate against the backend.
+
+    Returns ``None`` if no admin key exists; the overlay setup will
+    log a warning and the hook will fall back to ``ask`` (claude's
+    default permission flow).
+    """
+    try:
+        with get_connection() as conn:
+            row = conn.execute(
+                "SELECT api_key FROM user_roles WHERE role='admin' LIMIT 1"
+            ).fetchone()
+        if row and row["api_key"]:
+            return row["api_key"]
+    except Exception:
+        logger.warning("permission hook: failed to resolve admin API key", exc_info=True)
+    return None
+
+
 def _render_tool_use(block: dict) -> str:
     """Render a ``tool_use`` block as a collapsible HTML widget.
 
@@ -553,6 +573,7 @@ class ProjectSessionManager:
         env: dict = None,
         stream_json: bool = False,
         use_pty: bool = True,
+        yolo_mode: bool = False,
     ) -> str:
         """Create a persistent session.
 
@@ -590,6 +611,7 @@ class ProjectSessionManager:
 
         # Auto-inject CLAUDE_CONFIG_DIR for claude CLI sessions so the spawned
         # process inherits the user's auth and plugins (e.g. GRD skill provider).
+        user_config_dir: Optional[str] = None
         if cmd and cmd[0] == "claude" and not (env or {}).get("CLAUDE_CONFIG_DIR"):
             try:
                 accounts = get_accounts_for_backend_type("claude")
@@ -598,6 +620,7 @@ class ProjectSessionManager:
                         env = {}
                     expanded = os.path.expanduser(accounts[0]["config_path"])
                     env["CLAUDE_CONFIG_DIR"] = expanded
+                    user_config_dir = expanded
                     logger.info("Auto-injecting CLAUDE_CONFIG_DIR=%s for claude session", expanded)
                 else:
                     logger.warning(
@@ -607,6 +630,44 @@ class ProjectSessionManager:
             except Exception:
                 logger.warning(
                     "Could not resolve CLAUDE_CONFIG_DIR from backend accounts", exc_info=True
+                )
+
+        # v0.7.69 — for non-yolo stream-json chat sessions, install a
+        # session-scoped overlay that adds our PreToolUse permission
+        # hook on top of the user's existing claude config. Symlinks
+        # everything else (plugins/, mcp.json, projects/, …) so the
+        # subprocess still sees the user's skills + MCP servers. The
+        # user's real ~/.claude is never mutated.
+        if (
+            cmd
+            and cmd[0] == "claude"
+            and stream_json
+            and not yolo_mode
+            and user_config_dir
+        ):
+            try:
+                from .claude_config_overlay import prepare_session_overlay
+
+                overlay = prepare_session_overlay(session_id, user_config_dir)
+                if overlay:
+                    if env is None:
+                        env = {}
+                    env["CLAUDE_CONFIG_DIR"] = overlay
+                    env["AGENTED_PERMISSION_HOOK_ACTIVE"] = "1"
+                    env["AGENTED_PROJECT_ID"] = project_id
+                    env["AGENTED_SESSION_ID"] = session_id
+                    env["AGENTED_BACKEND_URL"] = os.environ.get(
+                        "AGENTED_BACKEND_URL", "http://127.0.0.1:20000"
+                    )
+                    api_key = _resolve_admin_api_key()
+                    if api_key:
+                        env["AGENTED_API_KEY"] = api_key
+            except Exception:
+                logger.warning(
+                    "Failed to prepare claude config overlay for %s — "
+                    "interactive permission prompts will be inactive",
+                    session_id,
+                    exc_info=True,
                 )
 
         popen: Optional[subprocess.Popen] = None
@@ -1012,6 +1073,21 @@ class ProjectSessionManager:
                     GrdSyncService.sync_on_session_complete(project_id, session_id)
         except Exception as e:
             logger.warning("GRD sync on session complete failed: %s", e)
+
+        # v0.7.69 — drop any in-flight permission requests for this
+        # session and remove the session-scoped config overlay dir.
+        try:
+            from .claude_config_overlay import cleanup_session_overlay
+            from .permission_prompt_service import PermissionPromptRegistry
+
+            PermissionPromptRegistry.cancel_session(session_id)
+            cleanup_session_overlay(session_id)
+        except Exception:
+            logger.warning(
+                "session_exit: overlay/permission cleanup failed for %s",
+                session_id,
+                exc_info=True,
+            )
 
         # Broadcast completion
         cls._broadcast(

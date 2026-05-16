@@ -11,7 +11,11 @@ import SessionControls from './SessionControls.vue';
 import SessionStartDialog from './SessionStartDialog.vue';
 import InteractiveQuestionCard from './InteractiveQuestionCard.vue';
 import PlanModeCard from './PlanModeCard.vue';
-import type { AskUserQuestionItem } from '../../composables/useProjectSession';
+import PermissionPromptCard from './PermissionPromptCard.vue';
+import type {
+  AskUserQuestionItem,
+  PermissionRequestPayload,
+} from '../../composables/useProjectSession';
 
 interface ChatMsg {
   role: 'user' | 'assistant' | 'system';
@@ -60,6 +64,13 @@ const pendingQuestion = ref<{
 // pendingQuestion because the UX is approve/decline rather than
 // multi-option selection.
 const pendingPlan = ref<{ tool_use_id: string; plan: string } | null>(null);
+
+// v0.7.69 — interactive PreToolUse permission prompt. The hook
+// inside the claude subprocess is blocked waiting for our
+// answer-permission-prompt endpoint. Different prompts can queue
+// up if claude's tool calls are dispatched faster than the user
+// can click, so this is an array, not a single ref.
+const pendingPermissions = ref<PermissionRequestPayload[]>([]);
 
 // Soft diagnostic shown if no output arrives within 8s of sending a
 // message. Most claude responses begin streaming within 2-3s, so 8s
@@ -178,6 +189,45 @@ session.onExitPlanMode((payload) => {
   awaitingResponse.value = false;
   clearDiagnostic();
 });
+
+session.onPermissionRequest((payload) => {
+  // Park the request in the queue. The card renders the first
+  // entry; once the user clicks Allow/Deny we shift it off and the
+  // next one (if any) becomes visible.
+  pendingPermissions.value = [...pendingPermissions.value, payload];
+  // Don't ``awaitingResponse = false`` here — claude IS technically
+  // still working (its hook is blocked on us). Spinner stays.
+});
+
+async function resolvePermission(decision: 'allow' | 'deny') {
+  const head = pendingPermissions.value[0];
+  if (!head) return;
+  // Drop the request from the queue optimistically; the parked hook
+  // will unblock on the server side once the POST lands.
+  pendingPermissions.value = pendingPermissions.value.slice(1);
+  // Push a small system bubble so the chat reflects the decision.
+  messages.value.push({
+    role: 'system',
+    content:
+      decision === 'allow'
+        ? `<div class="hook-badge hook-badge--allow"><span class="hook-icon">🛡</span> <span class="hook-event">APPROVED</span> <span class="hook-tool">${head.tool_name}</span></div>`
+        : `<div class="hook-badge hook-badge--deny"><span class="hook-icon">🛡</span> <span class="hook-event">DENIED</span> <span class="hook-tool">${head.tool_name}</span></div>`,
+    timestamp: new Date().toISOString(),
+  });
+  try {
+    await grdApi.answerPermissionPrompt(
+      props.projectId,
+      session.activeSessionId.value ?? '',
+      head.request_id,
+      decision,
+    );
+  } catch (err) {
+    showToast(
+      err instanceof Error ? err.message : 'Failed to send permission decision',
+      'error',
+    );
+  }
+}
 
 session.onThinking((text: string) => {
   // v0.7.68 — surface claude's extended-thinking reasoning as a
@@ -366,6 +416,7 @@ async function onDialogConfirm(payload: {
   hydratedEmpty.value = false;
   pendingQuestion.value = null;
   pendingPlan.value = null;
+  pendingPermissions.value = [];
   clearDiagnostic();
 
   const isDirect = payload.executionType === 'direct';
@@ -476,6 +527,7 @@ async function handleSessionClick(sessionId: string) {
   awaitingResponse.value = false;
   pendingQuestion.value = null;
   pendingPlan.value = null;
+  pendingPermissions.value = [];
   session.switchSession(sessionId);
 
   // Hydrate chat history from the backend's persisted ``log_json``
@@ -633,6 +685,16 @@ onMounted(() => {
             :plan="pendingPlan.plan"
             @approve="onPlanApprove"
             @keep-planning="onPlanKeepPlanning"
+          />
+
+          <!-- v0.7.69 — interactive permission prompt. Claude's
+               PreToolUse hook is blocked on our backend until the
+               user clicks Approve / Deny. Queue head renders here. -->
+          <PermissionPromptCard
+            v-if="pendingPermissions.length > 0 && isDirectMode"
+            :request="pendingPermissions[0]"
+            @allow="resolvePermission('allow')"
+            @deny="resolvePermission('deny')"
           />
           <!-- Ralph loops / team spawn keep the monospace terminal so
                structured progress events (iteration counters, team

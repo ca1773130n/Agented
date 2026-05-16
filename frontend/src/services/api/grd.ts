@@ -301,6 +301,27 @@ export const grdApi = {
       },
     ),
 
+  // v0.7.69 — user's decision on an Agented permission prompt. The
+  // backend resolves the pending request, the parked hook script
+  // unblocks, and claude proceeds (or skips) based on the decision.
+  answerPermissionPrompt: (
+    projectId: string,
+    sessionId: string,
+    requestId: string,
+    decision: 'allow' | 'deny',
+  ) =>
+    apiFetch<{
+      request_id: string;
+      decision: string;
+      resolved: boolean;
+    }>(
+      `/api/projects/${projectId}/sessions/${sessionId}/permission-decision`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ request_id: requestId, decision }),
+      },
+    ),
+
   // v0.7.58 — per-project AI backend account whitelist.
   // Sessions started without yolo_mode require an account_id from
   // this list. Managed on the project settings page.

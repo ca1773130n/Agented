@@ -34,6 +34,16 @@ export interface HookDecisionPayload {
   outcome: string | null; // success | failure
 }
 
+// v0.7.69 — interactive permission prompt: pause-and-ask the user
+// before claude runs a tool. ``request_id`` is the registry key
+// used when calling ``answerPermissionPrompt``.
+export interface PermissionRequestPayload {
+  request_id: string;
+  tool_name: string;
+  tool_input: Record<string, unknown>;
+  cwd: string | null;
+}
+
 /**
  * Composable for managing project session lifecycle, SSE streaming,
  * and session CRUD operations.
@@ -99,6 +109,13 @@ export function useProjectSession(projectId: Ref<string>) {
   // each as a collapsible disclosure rather than mixing it into
   // the visible assistant prose.
   let onThinkingCb: ((text: string) => void) | undefined;
+  // v0.7.69 — interactive permission prompt. Backend pushes when the
+  // Agented hook intercepts a PreToolUse; user clicks Approve / Deny
+  // in the chat, the answer endpoint unblocks the hook, claude
+  // continues.
+  let onPermissionRequestCb:
+    | ((payload: PermissionRequestPayload) => void)
+    | undefined;
 
   // SSE lifecycle managed by useEventSource.
   // sourceFactory will be set dynamically via connect() calls.
@@ -184,6 +201,23 @@ export function useProjectSession(projectId: Ref<string>) {
         } catch (e) {
           console.warn(
             '[useProjectSession] Failed to parse thinking event:',
+            e,
+            event.data,
+          );
+        }
+      },
+      permission_request: (event: MessageEvent) => {
+        try {
+          const data = JSON.parse(event.data);
+          onPermissionRequestCb?.({
+            request_id: data.request_id ?? '',
+            tool_name: data.tool_name ?? '',
+            tool_input: data.tool_input ?? {},
+            cwd: data.cwd ?? null,
+          });
+        } catch (e) {
+          console.warn(
+            '[useProjectSession] Failed to parse permission_request event:',
             e,
             event.data,
           );
@@ -484,6 +518,12 @@ export function useProjectSession(projectId: Ref<string>) {
     onThinkingCb = cb;
   }
 
+  function onPermissionRequest(
+    cb: (payload: PermissionRequestPayload) => void,
+  ) {
+    onPermissionRequestCb = cb;
+  }
+
   // SSE connection cleanup is handled by useEventSource's onUnmounted.
   // This separate onUnmounted resets streaming/ralph/team state on unmount.
   onUnmounted(() => {
@@ -522,5 +562,6 @@ export function useProjectSession(projectId: Ref<string>) {
     onExitPlanMode,
     onHookDecision,
     onThinking,
+    onPermissionRequest,
   };
 }
