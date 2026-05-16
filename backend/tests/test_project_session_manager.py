@@ -287,6 +287,95 @@ class TestExtractStreamJsonEvents:
         hook_event["output"] = ""
         assert _extract_stream_json_events(json.dumps(hook_event)) == []
 
+    def test_delta_emits_output_delta_event(self):
+        """v0.7.67 — ``content_block_delta`` text events now go out
+        as ``output_delta`` (no separator) instead of ``output``."""
+        event = {
+            "type": "content_block_delta",
+            "delta": {"type": "text_delta", "text": "Hello"},
+        }
+        events = _extract_stream_json_events(json.dumps(event))
+        assert events == [("output_delta", {"text": "Hello"})]
+
+    def test_assistant_text_skipped_after_delta_when_state_carried(self):
+        """When the session has seen recent deltas, the trailing
+        ``assistant`` event's text block is dropped (deltas already
+        streamed it). Tool_use blocks still come through."""
+        si = _make_session_info(stream_json=True)
+        si.had_recent_delta = True
+
+        event = {
+            "type": "assistant",
+            "message": {
+                "content": [
+                    {"type": "text", "text": "Hello world"},
+                    {
+                        "type": "tool_use",
+                        "id": "toolu_x",
+                        "name": "Read",
+                        "input": {"file_path": "/etc/hosts"},
+                    },
+                ]
+            },
+        }
+        events = _extract_stream_json_events(json.dumps(event), session_info=si)
+        # No output with "Hello world" — only the tool chip.
+        assert len(events) == 1
+        ev_type, ev_data = events[0]
+        assert ev_type == "output"
+        assert "Hello world" not in ev_data["line"]
+        assert "tool-call--file" in ev_data["line"]
+        # State reset for the next turn.
+        assert si.had_recent_delta is False
+
+    def test_delta_then_assistant_state_flow(self):
+        """End-to-end: a delta sets state, the assistant event consumes
+        it and resets, the next delta starts a fresh streaming turn."""
+        si = _make_session_info(stream_json=True)
+        # Turn 1
+        _extract_stream_json_events(
+            json.dumps(
+                {
+                    "type": "content_block_delta",
+                    "delta": {"type": "text_delta", "text": "Hi"},
+                }
+            ),
+            session_info=si,
+        )
+        assert si.had_recent_delta is True
+        _extract_stream_json_events(
+            json.dumps(
+                {
+                    "type": "assistant",
+                    "message": {"content": [{"type": "text", "text": "Hi"}]},
+                }
+            ),
+            session_info=si,
+        )
+        assert si.had_recent_delta is False  # reset
+
+        # Turn 2: a fresh delta should set it again
+        _extract_stream_json_events(
+            json.dumps(
+                {
+                    "type": "content_block_delta",
+                    "delta": {"type": "text_delta", "text": "Sec"},
+                }
+            ),
+            session_info=si,
+        )
+        assert si.had_recent_delta is True
+
+    def test_assistant_text_kept_when_no_state(self):
+        """Without ``session_info`` (existing tests, back-compat), text
+        blocks are always preserved."""
+        event = {
+            "type": "assistant",
+            "message": {"content": [{"type": "text", "text": "Hello"}]},
+        }
+        events = _extract_stream_json_events(json.dumps(event))
+        assert events == [("output", {"line": "Hello"})]
+
     def test_hook_response_with_deny_decision(self):
         hook_event = {
             "type": "system",

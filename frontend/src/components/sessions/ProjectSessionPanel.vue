@@ -116,6 +116,28 @@ session.onOutput((line: string) => {
   }
 });
 
+// v0.7.67 — token-level streaming. ``output_delta`` events arrive
+// per-token from claude's ``--include-partial-messages`` mode and
+// should append to the live assistant bubble without any separator
+// (otherwise "Hello world" becomes "Hello\n\nworld"). Backend
+// guarantees the trailing ``assistant`` event's text is suppressed
+// so we never double-render.
+session.onOutputDelta((delta: string) => {
+  if (!isDirectMode.value) return;
+  const last = messages.value[messages.value.length - 1];
+  if (last && last.role === 'assistant') {
+    last.content = last.content + delta;
+  } else {
+    messages.value.push({
+      role: 'assistant',
+      content: delta,
+      timestamp: new Date().toISOString(),
+    });
+  }
+  awaitingResponse.value = false;
+  clearDiagnostic();
+});
+
 session.onComplete((status: string, _exitCode: number) => {
   awaitingResponse.value = false;
   clearDiagnostic();
@@ -350,6 +372,11 @@ async function onDialogConfirm(payload: {
           // structured ``hook_decision`` event when a hook returns
           // a permission decision.
           '--include-hook-events',
+          // v0.7.67 — stream text token-by-token so the chat bubble
+          // fills in live. Backend dedups: when deltas have
+          // streamed, the trailing ``assistant`` event's text
+          // blocks are dropped so we don't double-render.
+          '--include-partial-messages',
         ],
         execution_type: 'direct',
         execution_mode: 'interactive',
