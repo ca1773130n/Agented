@@ -58,6 +58,14 @@ PLAN_ID_LENGTH = 6
 PROJECT_SESSION_ID_PREFIX = "psess-"
 PROJECT_SESSION_ID_LENGTH = 8
 
+# v0.7.85 — GRD v0.3.24 Ouroboros artifacts
+REFLECTION_ID_PREFIX = "refl-"
+REFLECTION_ID_LENGTH = 8
+DEAD_END_ID_PREFIX = "dead-"
+DEAD_END_ID_LENGTH = 8
+GENOME_SNAPSHOT_ID_PREFIX = "geno-"
+GENOME_SNAPSHOT_ID_LENGTH = 8
+
 ROTATION_EVENT_ID_PREFIX = "rot-"
 ROTATION_EVENT_ID_LENGTH = 8
 
@@ -393,6 +401,48 @@ def generate_plan_id() -> str:
 def generate_project_session_id() -> str:
     """Generate a unique project session ID like 'psess-abc12345'."""
     return generate_id(PROJECT_SESSION_ID_PREFIX, PROJECT_SESSION_ID_LENGTH)
+
+
+# v0.7.85 — Ouroboros artifact IDs
+def generate_reflection_id() -> str:
+    """Generate a unique reflection ID like 'refl-abc12345'."""
+    return generate_id(REFLECTION_ID_PREFIX, REFLECTION_ID_LENGTH)
+
+
+def generate_dead_end_id() -> str:
+    """Generate a unique dead-end ID like 'dead-abc12345'."""
+    return generate_id(DEAD_END_ID_PREFIX, DEAD_END_ID_LENGTH)
+
+
+def generate_genome_snapshot_id() -> str:
+    """Generate a unique genome snapshot ID like 'geno-abc12345'."""
+    return generate_id(GENOME_SNAPSHOT_ID_PREFIX, GENOME_SNAPSHOT_ID_LENGTH)
+
+
+def _get_unique_reflection_id(conn) -> str:
+    while True:
+        rid = generate_reflection_id()
+        cursor = conn.execute("SELECT id FROM phase_reflections WHERE id = ?", (rid,))
+        if cursor.fetchone() is None:
+            return rid
+
+
+def _get_unique_dead_end_id(conn) -> str:
+    while True:
+        did = generate_dead_end_id()
+        cursor = conn.execute("SELECT id FROM project_dead_ends WHERE id = ?", (did,))
+        if cursor.fetchone() is None:
+            return did
+
+
+def _get_unique_genome_snapshot_id(conn) -> str:
+    while True:
+        gid = generate_genome_snapshot_id()
+        cursor = conn.execute(
+            "SELECT id FROM project_genome_snapshots WHERE id = ?", (gid,)
+        )
+        if cursor.fetchone() is None:
+            return gid
 
 
 def generate_rotation_event_id() -> str:

@@ -1421,6 +1421,76 @@ def monitor_session(project_id: str, session_id: str) -> dict[str, Any]:
     return result
 
 
+# ---------------------------------------------------------------------------
+# v0.7.85 — Ouroboros DB-mirror read endpoints (Layer B)
+# ---------------------------------------------------------------------------
+
+
+@get("/{project_id:str}/grd/phases/{phase_id:str}/reflections", sync_to_thread=False)
+def list_phase_reflections(project_id: str, phase_id: str) -> dict[str, Any]:
+    """v0.7.85 — Reflections (hypothesis → verdict) for a phase, newest
+    first. Backed by the ``phase_reflections`` table which the sync
+    layer populates from per-phase VERIFICATION.md ``## Reflection``
+    sections. Pure DB read — no GRD CLI hop.
+    """
+    _ensure_project(project_id)
+    from app.database import get_phase_reflections
+
+    return {"reflections": get_phase_reflections(phase_id)}
+
+
+@get("/{project_id:str}/grd/verdict-counts", sync_to_thread=False)
+def grd_verdict_counts(project_id: str) -> dict[str, Any]:
+    """v0.7.85 — Aggregate ``{verdict: count}`` across the project's
+    phases. Backs the project overview card without round-tripping
+    through ``gd think``.
+    """
+    _ensure_project(project_id)
+    from app.database import count_reflections_by_verdict
+
+    return {"verdicts": count_reflections_by_verdict(project_id)}
+
+
+@get("/{project_id:str}/grd/dead-ends", sync_to_thread=False)
+def list_grd_dead_ends(
+    project_id: str, limit: int = 200
+) -> dict[str, Any]:
+    """v0.7.85 — read DEAD-ENDS.md mirror from the DB. Faster than the
+    CLI shell-out and unaffected by missing ``gd.js``.
+    """
+    _ensure_project(project_id)
+    from app.database import list_dead_ends
+
+    return {"dead_ends": list_dead_ends(project_id, limit=limit)}
+
+
+@get("/{project_id:str}/grd/genome/snapshots", sync_to_thread=False)
+def list_grd_genome_snapshots(
+    project_id: str, limit: int = 50
+) -> dict[str, Any]:
+    """v0.7.85 — historical GENOME.md snapshots for the project,
+    newest first. The latest snapshot's ``content`` is the full
+    markdown body so the frontend can render a diff against
+    ``content`` of the previous entry.
+    """
+    _ensure_project(project_id)
+    from app.database import list_genome_snapshots
+
+    return {"snapshots": list_genome_snapshots(project_id, limit=limit)}
+
+
+@get("/{project_id:str}/grd/genome/latest", sync_to_thread=False)
+def latest_grd_genome_snapshot(project_id: str) -> dict[str, Any]:
+    """v0.7.85 — most-recent GENOME.md snapshot only. Convenience
+    endpoint so the planning header doesn't have to fetch + slice a
+    full history list on every page load.
+    """
+    _ensure_project(project_id)
+    from app.database import get_latest_genome_snapshot
+
+    return get_latest_genome_snapshot(project_id) or {"exists": False}
+
+
 grd_router = Router(
     path="/api/projects",
     route_handlers=[
@@ -1434,6 +1504,12 @@ grd_router = Router(
         grd_genome,
         grd_genome_snapshot,
         grd_verify_mechanical,
+        # v0.7.85 — Ouroboros DB-mirror read endpoints
+        list_phase_reflections,
+        grd_verdict_counts,
+        list_grd_dead_ends,
+        list_grd_genome_snapshots,
+        latest_grd_genome_snapshot,
         list_milestones,
         list_phases,
         create_phase,

@@ -36,6 +36,14 @@ from app.database import (
     update_project_plan,
     upsert_project_sync_state,
 )
+from app.db.grd_ouroboros import (
+    add_dead_end,
+    add_genome_snapshot,
+    delete_dead_ends_for_project,
+    max_genome_sequence,
+    update_plan_ouroboros_fields,
+    upsert_phase_reflection,
+)
 from app.services.project_workspace_service import ProjectWorkspaceService
 from app.utils.plugin_format import parse_yaml_frontmatter
 
@@ -113,6 +121,21 @@ class GrdSyncService:
                 if not re.match(r"^\d+-(.+)$", phase_dir.name):
                     continue
                 cls._sync_phase_dir(project_id, phase_dir, milestone_id, results)
+
+        # Step 3 (v0.7.85) — sync the project-scoped Ouroboros artifacts.
+        # Errors here don't fail the whole sync — these are
+        # supplementary surfaces; phases/plans remain the source of
+        # truth for the planning UI.
+        try:
+            cls._sync_dead_ends(project_id, planning_path / "DEAD-ENDS.md", results)
+        except Exception as e:
+            logger.error("Error syncing DEAD-ENDS.md: %s", e, exc_info=True)
+            results["errors"].append(f"DEAD-ENDS.md: {e}")
+        try:
+            cls._sync_genome(project_id, planning_path / "GENOME.md", results)
+        except Exception as e:
+            logger.error("Error syncing GENOME.md: %s", e, exc_info=True)
+            results["errors"].append(f"GENOME.md: {e}")
 
         return results
 
@@ -257,6 +280,25 @@ class GrdSyncService:
         for summary_file in summary_files:
             cls._sync_summary_file(project_id, summary_file, phase_id, results)
 
+        # v0.7.85 — extract the ``## Reflection`` table from
+        # VERIFICATION.md and mirror it into ``phase_reflections``.
+        # The verifier agent writes one reflection per phase per
+        # iteration; we upsert by source_path so a re-verification
+        # updates the row in place.
+        for verification_file in sorted(phase_dir.glob("*VERIFICATION.md")):
+            try:
+                cls._sync_phase_reflection(
+                    project_id, verification_file, phase_id, results
+                )
+            except Exception as e:
+                logger.error(
+                    "Error extracting reflection from %s: %s",
+                    verification_file,
+                    e,
+                    exc_info=True,
+                )
+                results["errors"].append(f"{verification_file.name}: {e}")
+
     @classmethod
     def _sync_plan_file(
         cls, project_id: str, plan_file: Path, phase_id: str, results: dict
@@ -321,6 +363,22 @@ class GrdSyncService:
                 )
 
             if plan_id:
+                # v0.7.85 — capture the v0.3.24 Ouroboros frontmatter
+                # scalars into typed columns so the UI doesn't have to
+                # parse tasks_json. ``verdict`` is rarely on PLAN.md
+                # itself (the verifier writes it post-execution), but
+                # the planner may pre-fill ``hypothesis`` and
+                # ``predicted_outcome`` per the Ouroboros pattern.
+                hypothesis = frontmatter.get("hypothesis")
+                predicted_outcome = frontmatter.get("predicted_outcome")
+                verdict = frontmatter.get("verdict")
+                if any(v is not None for v in (hypothesis, predicted_outcome, verdict)):
+                    update_plan_ouroboros_fields(
+                        plan_id,
+                        hypothesis=hypothesis,
+                        predicted_outcome=predicted_outcome,
+                        verdict=verdict,
+                    )
                 upsert_project_sync_state(
                     project_id,
                     str(plan_file),
@@ -406,6 +464,192 @@ class GrdSyncService:
         except Exception as e:
             logger.error(f"Error syncing summary file {summary_file}: {e}", exc_info=True)
             results["errors"].append(f"{summary_file.name}: {e}")
+
+    # -----------------------------------------------------------------
+    # v0.7.85 — Ouroboros artifact sync (REFLECTION / DEAD-ENDS / GENOME)
+    # -----------------------------------------------------------------
+
+    # Match a markdown ``## Reflection`` section in VERIFICATION.md and
+    # extract the ``| field | value |`` table beneath it. Mirrors the
+    # parser GRD itself uses (lib/dead-ends.ts:parseReflectionSection).
+    _REFLECTION_HEADING = "## Reflection"
+    _REFLECTION_ROW_RE = re.compile(r"^\|\s*([^|]+?)\s*\|\s*([\s\S]*?)\s*\|\s*$", re.MULTILINE)
+
+    @classmethod
+    def _sync_phase_reflection(
+        cls, project_id: str, verification_file: Path, phase_id: str, results: dict
+    ) -> None:
+        """Extract the ``## Reflection`` table from a VERIFICATION.md
+        and upsert into ``phase_reflections``. Silently no-ops when
+        the file doesn't contain a reflection section (early phases /
+        legacy verifications).
+        """
+        content = verification_file.read_text(encoding="utf-8")
+        file_hash = _sha256(content)
+        # We do NOT short-circuit on cached hash here — VERIFICATION.md
+        # is already cached by the existing summary/plan sync paths
+        # for its own purposes. We track our own cache key suffixed
+        # with ``#reflection`` so a re-sync after planner edits
+        # picks up reflection changes without forcing a full
+        # VERIFICATION.md re-import.
+        cache_key = f"{verification_file}#reflection"
+        cached = get_project_sync_state(project_id, cache_key)
+        if cached and cached["content_hash"] == file_hash:
+            results["skipped"] += 1
+            return
+
+        idx = content.find(cls._REFLECTION_HEADING)
+        if idx == -1:
+            return  # No reflection in this verification, nothing to do.
+        section_start = idx + len(cls._REFLECTION_HEADING)
+        # Next H2 ends the section (or EOF).
+        next_h2 = content.find("\n## ", section_start)
+        section = content[section_start:] if next_h2 == -1 else content[section_start:next_h2]
+
+        fields: dict[str, str] = {}
+        for m in cls._REFLECTION_ROW_RE.finditer(section):
+            key = m.group(1).strip().lower()
+            value = m.group(2).strip()
+            # Skip the header row ``| Field | Value |`` and the
+            # ``| --- | --- |`` separator that markdown tables emit.
+            if re.fullmatch(r"[-:|]+", key):
+                continue
+            if key == "field" and value.lower() == "value":
+                continue
+            fields[key] = value
+
+        hypothesis = fields.get("hypothesis")
+        verdict = fields.get("verdict")
+        if not hypothesis or not verdict:
+            return  # Required fields missing; not a real reflection.
+
+        upsert_phase_reflection(
+            phase_id=phase_id,
+            hypothesis=hypothesis,
+            predicted_outcome=fields.get("predicted_outcome"),
+            actual_outcome=fields.get("actual_outcome"),
+            verdict=verdict,
+            evidence=fields.get("evidence"),
+            source_path=str(verification_file),
+            content_hash=file_hash,
+            recorded_at=datetime.datetime.utcnow().isoformat(),
+        )
+        upsert_project_sync_state(
+            project_id,
+            cache_key,
+            file_hash,
+            entity_type="reflection",
+            entity_id=phase_id,
+        )
+        results["synced"] += 1
+
+    # DEAD-ENDS.md format from lib/dead-ends.ts:parseDeadEndsFile —
+    # ``## <slug>\n\n```yaml\n...\n``` `` blocks. We extract the
+    # ``approach`` and ``status`` keys from the YAML body and keep
+    # ``tried_in_phases`` for the ``phase_label`` column. Reverse-
+    # engineered from the parser since GRD doesn't expose a JSON
+    # endpoint for the file.
+    _DEAD_END_BLOCK_RE = re.compile(
+        r"^## (\S+)\s*\n+```yaml\n([\s\S]+?)\n```", re.MULTILINE
+    )
+    _DEAD_END_FIELD_RE = re.compile(r"^([a-z_]+):\s*(.*)$", re.MULTILINE)
+
+    @classmethod
+    def _sync_dead_ends(
+        cls, project_id: str, dead_ends_file: Path, results: dict
+    ) -> None:
+        """Reimport ``.planning/DEAD-ENDS.md`` into ``project_dead_ends``.
+
+        Wipe-and-reload semantics: the file is the source of truth
+        and entries lack stable per-row ids in the markdown format,
+        so a re-sync replaces the project's rows wholesale. The
+        per-file content hash short-circuits no-op syncs.
+        """
+        if not dead_ends_file.exists():
+            return
+        content = dead_ends_file.read_text(encoding="utf-8")
+        file_hash = _sha256(content)
+        cached = get_project_sync_state(project_id, str(dead_ends_file))
+        if cached and cached["content_hash"] == file_hash:
+            results["skipped"] += 1
+            return
+
+        entries: list[dict] = []
+        for m in cls._DEAD_END_BLOCK_RE.finditer(content):
+            slug = m.group(1).strip()
+            body = m.group(2)
+            fields = {}
+            for kv in cls._DEAD_END_FIELD_RE.finditer(body):
+                key = kv.group(1).strip()
+                val = kv.group(2).strip().strip('"').strip("'")
+                fields[key] = val
+            approach = fields.get("approach")
+            if not approach:
+                continue
+            entries.append(
+                {
+                    "approach": approach,
+                    "reason": fields.get("notes") or fields.get("verdict") or "falsified",
+                    "phase_label": fields.get("tried_in_phases") or None,
+                    "slug": slug,
+                }
+            )
+
+        delete_dead_ends_for_project(project_id)
+        for e in entries:
+            add_dead_end(
+                project_id=project_id,
+                approach=e["approach"],
+                reason=e["reason"],
+                phase_label=e["phase_label"],
+                source="manual",
+            )
+        upsert_project_sync_state(
+            project_id,
+            str(dead_ends_file),
+            file_hash,
+            entity_type="dead_ends",
+            entity_id=None,
+        )
+        results["synced"] += 1
+
+    @classmethod
+    def _sync_genome(
+        cls, project_id: str, genome_file: Path, results: dict
+    ) -> None:
+        """Append a new snapshot to ``project_genome_snapshots`` if the
+        on-disk file's hash differs from the latest stored snapshot.
+
+        We don't parse out individual snapshots within GENOME.md —
+        the file is short and the UI wants the whole thing for diffs.
+        Sequence number monotonically increments per project to
+        preserve ordering even if the file is overwritten in place.
+        """
+        if not genome_file.exists():
+            return
+        content = genome_file.read_text(encoding="utf-8")
+        file_hash = _sha256(content)
+        cached = get_project_sync_state(project_id, str(genome_file))
+        if cached and cached["content_hash"] == file_hash:
+            results["skipped"] += 1
+            return
+
+        next_seq = max_genome_sequence(project_id) + 1
+        add_genome_snapshot(
+            project_id=project_id,
+            sequence_number=next_seq,
+            content=content,
+            content_hash=file_hash,
+            captured_at=datetime.datetime.utcnow().isoformat(),
+        )
+        upsert_project_sync_state(
+            project_id,
+            str(genome_file),
+            file_hash,
+            entity_type="genome",
+            entity_id=None,
+        )
+        results["synced"] += 1
 
     @classmethod
     def sync_on_session_complete(cls, project_id: str, session_id: str) -> None:

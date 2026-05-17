@@ -360,6 +360,98 @@ def _migrate_126_plugin_conversations(conn) -> None:
     )
 
 
+def _migrate_127_grd_ouroboros_artifacts(conn) -> None:
+    """v0.7.85 — DB-side mirror for the v0.3.24 Ouroboros artifacts.
+
+    GRD v0.3.24 writes three new artifact families that Agented now
+    surfaces in the planning UI:
+      * Per-phase ``REFLECTION.md`` — hypothesis → predicted →
+        actual → verdict (per the Ouroboros hypothesis loop).
+      * Per-project ``DEAD-ENDS.md`` — falsified approaches with
+        provenance (manual entry vs. promoted from a phase reflection).
+      * Per-project ``GENOME.md`` — append-only strategy snapshots.
+
+    Three new tables, parallel to the existing GRD tables in
+    layout (TEXT PK with prefix, FK back to project / phase). Plus
+    three additive columns on ``project_plans`` to capture the
+    ``hypothesis`` / ``predicted_outcome`` / ``verdict`` frontmatter
+    scalars the v0.3.24 planner emits — the parser tolerates extra
+    keys, but we type the columns so the UI doesn't have to round-
+    trip through ``tasks_json``.
+    """
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS phase_reflections (
+            id                  TEXT PRIMARY KEY,
+            phase_id            TEXT NOT NULL REFERENCES project_phases(id) ON DELETE CASCADE,
+            hypothesis          TEXT,
+            predicted_outcome   TEXT,
+            actual_outcome      TEXT,
+            verdict             TEXT,
+            evidence            TEXT,
+            source_path         TEXT,
+            content_hash        TEXT,
+            recorded_at         TIMESTAMP,
+            created_at          TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at          TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_phase_reflections_phase "
+        "ON phase_reflections(phase_id, recorded_at DESC)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_phase_reflections_verdict "
+        "ON phase_reflections(verdict)"
+    )
+
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS project_dead_ends (
+            id                  TEXT PRIMARY KEY,
+            project_id          TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+            approach            TEXT NOT NULL,
+            reason              TEXT NOT NULL,
+            phase_label         TEXT,
+            source              TEXT NOT NULL DEFAULT 'manual',
+            recorded_at         TIMESTAMP,
+            created_at          TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_project_dead_ends_project "
+        "ON project_dead_ends(project_id, recorded_at DESC)"
+    )
+
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS project_genome_snapshots (
+            id                  TEXT PRIMARY KEY,
+            project_id          TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+            sequence_number     INTEGER NOT NULL,
+            content             TEXT NOT NULL,
+            content_hash        TEXT,
+            captured_at         TIMESTAMP,
+            created_at          TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_genome_snapshots_project "
+        "ON project_genome_snapshots(project_id, sequence_number DESC)"
+    )
+
+    # Additive columns on project_plans for the v0.3.24 frontmatter
+    # scalars. ``PRAGMA table_info`` keeps the migration idempotent.
+    cursor = conn.execute("PRAGMA table_info(project_plans)")
+    cols = {row[1] for row in cursor.fetchall()}
+    for col in ("hypothesis", "predicted_outcome", "verdict"):
+        if col not in cols:
+            conn.execute(f"ALTER TABLE project_plans ADD COLUMN {col} TEXT")
+
+
 V07_MIGRATIONS: list = [
     # v0.7.7: super-agent activity inspector — timeline + rollup.
     (116, "super_agent_activity", _migrate_116_super_agent_activity),
@@ -392,4 +484,9 @@ V07_MIGRATIONS: list = [
     (124, "design_conversations_user_id", _migrate_124_design_conversations_user_id),
     (125, "agent_conversations_user_id", _migrate_125_agent_conversations_user_id),
     (126, "plugin_conversations", _migrate_126_plugin_conversations),
+    # v0.7.85: GRD v0.3.24 Ouroboros artifact mirror — phase
+    # reflections (hypothesis/verdict), project-scoped dead-ends,
+    # genome snapshots, plus hypothesis/predicted_outcome/verdict
+    # columns on project_plans.
+    (127, "grd_ouroboros_artifacts", _migrate_127_grd_ouroboros_artifacts),
 ]
