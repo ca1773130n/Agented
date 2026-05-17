@@ -10,11 +10,13 @@ import SessionInput from './SessionInput.vue';
 import SessionControls from './SessionControls.vue';
 import SessionStartDialog from './SessionStartDialog.vue';
 import SessionContextTray from './SessionContextTray.vue';
+import GoalLoopStatusBanner from './GoalLoopStatusBanner.vue';
 import InteractiveQuestionCard from './InteractiveQuestionCard.vue';
 import PlanModeCard from './PlanModeCard.vue';
 import PermissionPromptCard from './PermissionPromptCard.vue';
 import type {
   AskUserQuestionItem,
+  GoalIterationCompletedPayload,
   PermissionRequestPayload,
 } from '../../composables/useProjectSession';
 import type { ForgeAttachment } from '../../services/api/projects';
@@ -33,7 +35,9 @@ const showToast = useToast();
 const session = useProjectSession(toRef(props, 'projectId'));
 
 const outputRef = ref<InstanceType<typeof SessionOutput> | null>(null);
-const executionType = ref<'direct' | 'ralph_loop' | 'team_spawn'>('direct');
+const executionType = ref<
+  'direct' | 'ralph_loop' | 'team_spawn' | 'goal_loop'
+>('direct');
 
 // Direct-mode chat state. ``direct`` runs claude in stream-json so
 // each ``onOutput`` line is already a complete assistant turn — render
@@ -41,7 +45,14 @@ const executionType = ref<'direct' | 'ralph_loop' | 'team_spawn'>('direct');
 // the terminal block. Ralph / team-spawn keep ``SessionOutput`` because
 // their structured progress (iterations, team membership) reads
 // better in monospace.
-const isDirectMode = computed(() => executionType.value === 'direct');
+// v0.7.74 — true when the session uses the chat-style UI (chat
+// bubbles + tray + AskUserQuestion card), as opposed to the
+// monospace terminal output used by ralph/team. Both direct and
+// goal_loop are stream-json chat sessions that should render the
+// chat panel.
+const isDirectMode = computed(
+  () => executionType.value === 'direct' || executionType.value === 'goal_loop',
+);
 const messages = ref<ChatMsg[]>([]);
 const inputMessage = ref('');
 // v0.7.70 — per-prompt attachments (files / snippets / URLs /
@@ -79,6 +90,21 @@ const pendingPlan = ref<{ tool_use_id: string; plan: string } | null>(null);
 // up if claude's tool calls are dispatched faster than the user
 // can click, so this is an array, not a single ref.
 const pendingPermissions = ref<PermissionRequestPayload[]>([]);
+
+// v0.7.74 — goal-loop live state. Populated by SSE handlers fed
+// from useProjectSession. Reset on session switch / start.
+const goalLoopState = ref<{
+  goal: string;
+  iteration: number;
+  maxIterations: number;
+  lastVerdict: GoalIterationCompletedPayload | null;
+  endedReason: string | null;
+  endedDetail: string | null;
+  judging: boolean;
+} | null>(null);
+const isGoalLoopMode = computed(
+  () => executionType.value === 'goal_loop' && goalLoopState.value !== null,
+);
 
 // Soft diagnostic shown if no output arrives within 8s of sending a
 // message. Most claude responses begin streaming within 2-3s, so 8s
@@ -302,6 +328,44 @@ session.onHookDecision((payload) => {
   });
 });
 
+// v0.7.74 — goal-loop SSE handlers. Banner state lives on the panel
+// so it survives across session switches via reset-on-confirm.
+session.onGoalIterationStarted((payload) => {
+  if (!goalLoopState.value) return;
+  goalLoopState.value.iteration = payload.iteration;
+  goalLoopState.value.maxIterations = payload.max_iterations;
+  goalLoopState.value.judging = true;
+});
+
+session.onGoalIterationCompleted((payload) => {
+  if (!goalLoopState.value) return;
+  goalLoopState.value.lastVerdict = payload;
+  goalLoopState.value.judging = false;
+});
+
+session.onGoalLoopEnded((payload) => {
+  if (!goalLoopState.value) return;
+  goalLoopState.value.endedReason = payload.reason;
+  goalLoopState.value.endedDetail = payload.detail;
+  goalLoopState.value.judging = false;
+});
+
+session.onGoalCheckDisagreement((payload) => {
+  // Surface as a system message so the operator sees the warning
+  // inline — the loop continues, so no banner state change.
+  messages.value.push({
+    role: 'system',
+    content:
+      `**Goal check disagreement** at iter ${payload.iteration} ` +
+      `(streak ${payload.streak}): ` +
+      `deterministic says not met (${payload.deterministic_reason}); ` +
+      `LLM sanity check says met (${payload.llm_reason}). ` +
+      `Loop continuing on deterministic verdict — stop manually if ` +
+      `the LLM is right.`,
+    timestamp: new Date().toISOString(),
+  });
+});
+
 async function onPlanApprove() {
   const pending = pendingPlan.value;
   if (!pending) return;
@@ -411,7 +475,7 @@ async function onDialogConfirm(payload: {
   name: string | null;
   autoTitle: boolean;
   yoloMode: boolean;
-  executionType: 'direct' | 'ralph_loop' | 'team_spawn';
+  executionType: 'direct' | 'ralph_loop' | 'team_spawn' | 'goal_loop';
   accountId: string | null;
   // v0.7.73 — dialog payload now carries Forge picks too.
   forgeOverrides?: {
@@ -423,6 +487,15 @@ async function onDialogConfirm(payload: {
     }>;
   };
   firstPromptAttachments?: ForgeAttachment[];
+  // v0.7.74 — only populated when executionType === 'goal_loop'.
+  goalLoopConfig?: {
+    goal: string;
+    checkCmd: string | null;
+    maxIterations: number;
+    maxWallSeconds: number;
+    judgeBackendKind: 'claude' | 'codex' | 'gemini' | 'opencode';
+    judgeModelOverride: string | null;
+  } | null;
 }) {
   showStartDialog.value = false;
   executionType.value = payload.executionType;
@@ -445,7 +518,29 @@ async function onDialogConfirm(payload: {
   // the spawn argv).
   pendingAttachments.value = payload.firstPromptAttachments ?? [];
 
-  const isDirect = payload.executionType === 'direct';
+  // v0.7.74 — seed the goal-loop banner state when a goal_loop
+  // session is starting; clear it otherwise. The state is the
+  // banner's source of truth, fed live by SSE handlers as the
+  // runner iterates.
+  goalLoopState.value =
+    payload.executionType === 'goal_loop' && payload.goalLoopConfig
+      ? {
+          goal: payload.goalLoopConfig.goal,
+          iteration: 0,
+          maxIterations: payload.goalLoopConfig.maxIterations,
+          lastVerdict: null,
+          endedReason: null,
+          endedDetail: null,
+          judging: false,
+        }
+      : null;
+
+  // v0.7.74 — goal_loop uses the same stream-json command shape as
+  // direct (the handler pumps continue prompts via the existing
+  // input route, which requires --input-format stream-json). Treat
+  // both as "chat-style" for cmd-building purposes.
+  const isDirect =
+    payload.executionType === 'direct' || payload.executionType === 'goal_loop';
   const baseFields = {
     name: payload.name,
     auto_title: payload.autoTitle,
@@ -466,6 +561,22 @@ async function onDialogConfirm(payload: {
       ? {
           forge_context: {
             session_overrides: payload.forgeOverrides,
+          },
+        }
+      : {}),
+    // v0.7.74 — goal loop only ships the config when the dialog
+    // actually picked the goal_loop type. Server-side handler
+    // routing is based on execution_type alone, so this is just
+    // payload tidiness.
+    ...(payload.executionType === 'goal_loop' && payload.goalLoopConfig
+      ? {
+          goal_loop_config: {
+            goal: payload.goalLoopConfig.goal,
+            check_cmd: payload.goalLoopConfig.checkCmd,
+            max_iterations: payload.goalLoopConfig.maxIterations,
+            max_wall_seconds: payload.goalLoopConfig.maxWallSeconds,
+            judge_backend_kind: payload.goalLoopConfig.judgeBackendKind,
+            judge_model_override: payload.goalLoopConfig.judgeModelOverride,
           },
         }
       : {}),
@@ -493,7 +604,10 @@ async function onDialogConfirm(payload: {
           // blocks are dropped so we don't double-render.
           '--include-partial-messages',
         ],
-        execution_type: 'direct',
+        // ``execution_type`` MUST reflect the user's pick so the
+        // server routes to the right handler — direct vs goal_loop
+        // differ only in the loop driver, not the cmd shape.
+        execution_type: payload.executionType,
         execution_mode: 'interactive',
         stream_json: true,
         use_pty: false,
@@ -716,6 +830,21 @@ onMounted(() => {
               </div>
             </template>
           </AiChatPanelManaged>
+
+          <!-- v0.7.74 — live banner for goal-loop sessions. Shows
+               goal text, iteration counter, and the last judge
+               verdict. Hides once the loop ends with a terminal
+               status. -->
+          <GoalLoopStatusBanner
+            v-if="isGoalLoopMode && goalLoopState"
+            :goal="goalLoopState.goal"
+            :iteration="goalLoopState.iteration"
+            :max-iterations="goalLoopState.maxIterations"
+            :last-verdict="goalLoopState.lastVerdict"
+            :ended-reason="goalLoopState.endedReason"
+            :ended-detail="goalLoopState.endedDetail"
+            :judging="goalLoopState.judging"
+          />
 
           <!-- v0.7.63 — interactive ``AskUserQuestion`` widget. Shows
                only when claude is waiting on a structured answer;

@@ -64,7 +64,7 @@ export interface GrdSession {
   pid: number | null;
   pgid: number | null;
   worktree_path: string | null;
-  execution_type: 'direct' | 'ralph_loop' | 'team_spawn';
+  execution_type: 'direct' | 'ralph_loop' | 'team_spawn' | 'goal_loop';
   execution_mode: 'autonomous' | 'interactive';
   idle_timeout_seconds: number;
   max_lifetime_seconds: number;
@@ -84,7 +84,7 @@ export interface CreateSessionRequest {
   plan_id?: string;
   agent_id?: string;
   worktree_path?: string;
-  execution_type?: 'direct' | 'ralph_loop' | 'team_spawn';
+  execution_type?: 'direct' | 'ralph_loop' | 'team_spawn' | 'goal_loop';
   execution_mode?: 'autonomous' | 'interactive';
   // When true, the backend parses claude's ``--output-format stream-json``
   // events and the input endpoint wraps user text in the SDK envelope
@@ -124,6 +124,54 @@ export interface CreateSessionRequest {
     };
     attachments?: Array<Record<string, unknown>>;
   };
+  // v0.7.74 — goal-loop config. Only consumed by the ``goal_loop``
+  // execution-type handler; other types ignore it. Empty when not
+  // creating a goal-loop session.
+  goal_loop_config?: {
+    goal: string;
+    check_cmd?: string | null;
+    max_iterations?: number;
+    max_wall_seconds?: number;
+    judge_backend_kind?: 'claude' | 'codex' | 'gemini' | 'opencode';
+    judge_model_override?: string | null;
+  };
+}
+
+// v0.7.74 — goal-loop iteration audit row + container response.
+export interface GoalLoopIteration {
+  id: number;
+  session_id: string;
+  iteration: number;
+  started_at: string;
+  ended_at: string | null;
+  verdict: 'met' | 'not_met' | null;
+  // ``'stopped'`` is written when the operator stops the session
+  // while the judge is mid-run (v0.7.74 codex fix #4). The row is
+  // finalized but the verdict was never broadcast to subscribers.
+  judge_source:
+    | 'pending'
+    | 'deterministic'
+    | 'llm'
+    | 'cap'
+    | 'stopped';
+  judge_reason: string | null;
+  judge_stdout: string | null;
+  tokens_in: number | null;
+  tokens_out: number | null;
+  cost_usd: number | null;
+}
+
+export interface GoalLoopAudit {
+  session_id: string;
+  config: {
+    goal: string;
+    check_cmd?: string | null;
+    max_iterations: number;
+    max_wall_seconds: number;
+    judge_backend_kind: string;
+    judge_model_override?: string | null;
+  } | null;
+  iterations: GoalLoopIteration[];
 }
 
 export interface CreateSessionResponse {
@@ -410,6 +458,12 @@ export const grdApi = {
     apiFetch<{ session_id: string; pid: number; status: string; team_name: string }>(
       `/api/projects/${projectId}/sessions/team`,
       { method: 'POST', body: JSON.stringify(request) }
+    ),
+
+  // v0.7.74 — iteration audit for goal_loop sessions.
+  listGoalIterations: (projectId: string, sessionId: string) =>
+    apiFetch<GoalLoopAudit>(
+      `/api/projects/${projectId}/sessions/${sessionId}/goal-iterations`,
     ),
 
   getSessionMonitor: (projectId: string, sessionId: string) =>

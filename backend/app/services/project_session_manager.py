@@ -566,10 +566,41 @@ def _extract_stream_json_events(
                     text_buffer.append(content[:500])
         if text_buffer:
             events.append(("output", {"line": "\n".join(text_buffer)}))
+        # v0.7.74 — synthesize a ``turn_done`` event at the end of
+        # EVERY assistant event so in-process consumers (e.g.
+        # ``GoalLoopRunner``) have a reliable turn-boundary signal.
+        # ``text`` aggregates everything the judge needs to assess
+        # the turn:
+        #   * ``output`` event lines (text + non-AUQ tool chips)
+        #   * accumulated ``content_block_delta`` text (the
+        #     ``skip_text`` path swallowed the trailing assistant
+        #     text blocks, but the deltas are the canonical record)
+        #   * the ``ExitPlanMode`` plan body (side-channel event;
+        #     missing it would hide a turn's primary content from
+        #     the judge)
+        # ``AskUserQuestion`` is intentionally NOT included — it's
+        # an operator-facing widget the judge can't evaluate.
+        # ALWAYS emit, even when text is empty, so tool-use-only
+        # turns (or AskUserQuestion-only turns) still tick the
+        # runner's iteration counter. The runner's judge handles
+        # empty text gracefully.
+        text_parts: list[str] = [
+            ev_data["line"]
+            for ev_type, ev_data in events
+            if ev_type == "output" and ev_data.get("line")
+        ]
+        if session_info is not None and session_info.pending_turn_text:
+            text_parts.append(session_info.pending_turn_text)
+        for ev_type, ev_data in events:
+            if ev_type == "exit_plan_mode" and ev_data.get("plan"):
+                text_parts.append(f"[plan proposed]\n{ev_data['plan']}")
+        turn_text = "\n".join(p for p in text_parts if p).strip()
+        events.append(("turn_done", {"text": turn_text}))
         # Reset streaming state at the end of an assistant event —
         # the next delta would belong to a new turn.
         if session_info is not None:
             session_info.had_recent_delta = False
+            session_info.pending_turn_text = ""
         return events
 
     # Streaming delta events (partial text during long responses).
@@ -582,6 +613,12 @@ def _extract_stream_json_events(
             text = delta.get("text", "")
             if text and session_info is not None:
                 session_info.had_recent_delta = True
+                # v0.7.74 — accumulate the streamed text for
+                # ``turn_done``. The trailing assistant event will
+                # skip its own text blocks (``skip_text``) so this
+                # accumulator is the only record of what the user
+                # saw during the streaming portion of the turn.
+                session_info.pending_turn_text += text
             return [("output_delta", {"text": text})] if text else []
         return []
 
@@ -695,6 +732,14 @@ class SessionInfo:
     # (they'd duplicate what already streamed live). Reset to False
     # at the end of each ``assistant`` event.
     had_recent_delta: bool = False
+    # v0.7.74 — accumulator for text streamed via
+    # ``content_block_delta`` so the trailing ``assistant`` event's
+    # ``turn_done`` synthetic event carries the full text the
+    # operator saw (and the goal-loop judge needs to assess), even
+    # when ``--include-partial-messages`` is on and the assistant's
+    # text blocks were dropped to avoid double-rendering. Cleared
+    # at the end of each assistant turn.
+    pending_turn_text: str = ""
 
 
 class ProjectSessionManager:
@@ -706,8 +751,18 @@ class ProjectSessionManager:
 
     # In-memory session tracking: {session_id: SessionInfo}
     _sessions: Dict[str, SessionInfo] = {}
-    # SSE subscribers: {session_id: [Queue]}
+    # SSE subscribers: {session_id: [Queue]} — queues receive
+    # SSE-formatted strings ("event: ...\ndata: {...}\n\n"). Used by
+    # the HTTP /stream endpoint.
     _subscribers: Dict[str, List[Queue]] = {}
+    # v0.7.74 — in-process raw subscribers: {session_id: [Queue]}.
+    # Queues receive ``(event_type, data_dict)`` tuples — no SSE
+    # framing — for consumers like ``GoalLoopRunner`` that need to
+    # react to events programmatically instead of forwarding them to
+    # a browser. Separate from ``_subscribers`` because mixing the
+    # two payload shapes on one queue would force every consumer to
+    # parse SSE strings, defeating the point.
+    _raw_subscribers: Dict[str, List[Queue]] = {}
     _lock = threading.Lock()
 
     @classmethod
@@ -1279,6 +1334,12 @@ class ProjectSessionManager:
                 for q in cls._subscribers[session_id]:
                     q.put(None)  # Signal end of stream
                 del cls._subscribers[session_id]
+            # v0.7.74 — raw consumers get the ``__end__`` sentinel
+            # so they can break their drain loop and unsubscribe.
+            if session_id in cls._raw_subscribers:
+                for q in cls._raw_subscribers[session_id]:
+                    q.put(("__end__", {"status": status, "exit_code": exit_code}))
+                del cls._raw_subscribers[session_id]
 
         logger.info(f"Session {session_id} exited (status={status}, exit_code={exit_code})")
 
@@ -1554,12 +1615,49 @@ class ProjectSessionManager:
             session_id: Target session.
             event_type: SSE event type (e.g., "output", "complete").
             data: Event payload dict (will be JSON-serialized).
+
+        Dual-channel: pushes the SSE-formatted string to
+        ``_subscribers`` (browser-bound) AND the raw
+        ``(event_type, data)`` tuple to ``_raw_subscribers``
+        (in-process consumers like ``GoalLoopRunner``).
         """
         message = cls._format_sse(event_type, data)
         with cls._lock:
-            if session_id in cls._subscribers:
-                for q in cls._subscribers[session_id]:
-                    q.put(message)
+            for q in cls._subscribers.get(session_id, []):
+                q.put(message)
+            for q in cls._raw_subscribers.get(session_id, []):
+                q.put((event_type, data))
+
+    @classmethod
+    def subscribe_raw(cls, session_id: str) -> Queue:
+        """Register an in-process raw-event consumer. v0.7.74.
+
+        Returns a ``Queue`` that will receive ``(event_type,
+        data_dict)`` tuples for every event broadcast for
+        ``session_id``, plus a final ``("__end__", {})`` sentinel
+        when the session completes. Caller is expected to call
+        ``unsubscribe_raw`` when done.
+
+        Unlike the SSE ``subscribe`` generator, this does NOT
+        replay ring-buffer history — raw subscribers only see
+        events emitted after they registered. Goal-loop runners
+        register before the first turn, so they catch everything.
+        """
+        queue: Queue = Queue()
+        with cls._lock:
+            cls._raw_subscribers.setdefault(session_id, []).append(queue)
+        return queue
+
+    @classmethod
+    def unsubscribe_raw(cls, session_id: str, queue: Queue) -> None:
+        with cls._lock:
+            subs = cls._raw_subscribers.get(session_id, [])
+            try:
+                subs.remove(queue)
+            except ValueError:
+                pass
+            if not subs and session_id in cls._raw_subscribers:
+                del cls._raw_subscribers[session_id]
 
     @staticmethod
     def _format_sse(event_type: str, data: dict) -> str:

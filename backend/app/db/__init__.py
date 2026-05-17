@@ -537,6 +537,15 @@ from .project_forge_bindings import (  # noqa: F401
     replace_for_project as replace_project_forge_bindings,
 )
 
+# Goal-loop execution type (v0.7.74 — per-session config + iteration audit)
+from .goal_loop import (  # noqa: F401
+    get_goal_loop_config,
+    list_iterations as list_goal_loop_iterations,
+    record_iteration_complete as record_goal_loop_iteration_complete,
+    record_iteration_start as record_goal_loop_iteration_start,
+    set_goal_loop_config,
+)
+
 # Prompt snippets (reusable prompt fragments)
 from .prompt_snippets import (  # noqa: F401
     create_snippet,

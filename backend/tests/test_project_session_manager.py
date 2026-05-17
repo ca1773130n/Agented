@@ -126,19 +126,147 @@ class TestExtractStreamJsonText:
         assert _extract_stream_json_text(json.dumps(event)) == "hi"
 
 
+def _strip_turn_done(events: list) -> list:
+    """v0.7.74 — filter out the synthetic ``turn_done`` event the
+    parser now appends to assistant turns. The event is a
+    boundary marker for in-process consumers (goal-loop runner);
+    it doesn't change what the chat UI sees. Tests that predate
+    v0.7.74 assert on the user-visible events only, so they wrap
+    the call with this helper."""
+    return [e for e in events if e[0] != "turn_done"]
+
+
 class TestExtractStreamJsonEvents:
     """v0.7.63 — ``_extract_stream_json_events`` returns an ordered list
     of ``(event_type, data)`` tuples so the reader thread can broadcast
     side-channel events (like ``AskUserQuestion``) alongside the
     text/tool-use bubble content."""
 
-    def test_assistant_text_only_yields_single_output(self):
+    def test_streaming_turn_emits_turn_done_with_accumulated_deltas(self):
+        """v0.7.74 Codex blocker #2: when ``--include-partial-messages``
+        streams text through ``content_block_delta`` and the
+        trailing ``assistant`` event drops the text blocks
+        (``skip_text``), the ``turn_done`` text must still carry
+        what the user actually saw — pulled from the per-session
+        delta accumulator.
+        """
+        si = _make_session_info(stream_json=True)
+        # Stream two delta chunks.
+        _extract_stream_json_events(
+            json.dumps(
+                {
+                    "type": "content_block_delta",
+                    "delta": {"type": "text_delta", "text": "Hello "},
+                }
+            ),
+            session_info=si,
+        )
+        _extract_stream_json_events(
+            json.dumps(
+                {
+                    "type": "content_block_delta",
+                    "delta": {"type": "text_delta", "text": "world."},
+                }
+            ),
+            session_info=si,
+        )
+        # Trailing assistant event with the same text — should be
+        # skipped on the output side, but turn_done picks up the
+        # accumulated delta text.
+        events = _extract_stream_json_events(
+            json.dumps(
+                {
+                    "type": "assistant",
+                    "message": {
+                        "content": [{"type": "text", "text": "Hello world."}]
+                    },
+                }
+            ),
+            session_info=si,
+        )
+        turn_done = [e for e in events if e[0] == "turn_done"]
+        assert turn_done, "turn_done must always fire at end of assistant event"
+        assert turn_done[0][1]["text"] == "Hello world."
+        # Accumulator was reset.
+        assert si.pending_turn_text == ""
+
+    def test_tool_use_only_turn_still_emits_turn_done(self):
+        """v0.7.74 Codex blocker #3: a turn containing only a side-
+        channel tool_use (AskUserQuestion / ExitPlanMode) must
+        still tick the goal-loop runner's iteration counter, so
+        ``turn_done`` fires even with empty text.
+        """
+        event = {
+            "type": "assistant",
+            "message": {
+                "content": [
+                    {
+                        "type": "tool_use",
+                        "id": "toolu_q",
+                        "name": "AskUserQuestion",
+                        "input": {
+                            "questions": [
+                                {
+                                    "question": "ok?",
+                                    "options": [{"label": "yes"}],
+                                }
+                            ]
+                        },
+                    }
+                ]
+            },
+        }
+        events = _extract_stream_json_events(json.dumps(event))
+        # ask_user_question event AND a turn_done (empty text is fine).
+        kinds = [e[0] for e in events]
+        assert "ask_user_question" in kinds
+        assert "turn_done" in kinds
+        turn_done = next(e for e in events if e[0] == "turn_done")
+        assert turn_done[1]["text"] == ""
+
+    def test_exit_plan_mode_text_flows_into_turn_done(self):
+        """v0.7.74 Codex nit: the ExitPlanMode plan body is part
+        of what the judge needs to assess. ``turn_done.text``
+        must include the plan content so the judge sees the
+        proposal alongside any prose.
+        """
+        event = {
+            "type": "assistant",
+            "message": {
+                "content": [
+                    {"type": "text", "text": "Here's the plan:"},
+                    {
+                        "type": "tool_use",
+                        "id": "toolu_plan",
+                        "name": "ExitPlanMode",
+                        "input": {"plan": "## Step 1\nFoo\n\n## Step 2\nBar"},
+                    },
+                ]
+            },
+        }
+        events = _extract_stream_json_events(json.dumps(event))
+        turn_done = next(e for e in events if e[0] == "turn_done")
+        assert "Here's the plan:" in turn_done[1]["text"]
+        assert "[plan proposed]" in turn_done[1]["text"]
+        assert "## Step 1" in turn_done[1]["text"]
+        assert "## Step 2" in turn_done[1]["text"]
+
+    def test_assistant_text_only_yields_output_then_turn_done(self):
+        # v0.7.74 — the assistant turn parser now appends a
+        # synthetic ``turn_done`` event after the user-visible
+        # output events so in-process consumers (goal-loop runner)
+        # have a clean turn-boundary signal. Browser-bound SSE
+        # subscribers see both (turn_done is harmless on the
+        # frontend's existing handler map — it falls through).
         event = {
             "type": "assistant",
             "message": {"content": [{"type": "text", "text": "hello"}]},
         }
         events = _extract_stream_json_events(json.dumps(event))
-        assert events == [("output", {"line": "hello"})]
+        assert events == [
+            ("output", {"line": "hello"}),
+            ("turn_done", {"text": "hello"}),
+        ]
 
     def test_exit_plan_mode_split_off_as_dedicated_event(self):
         """v0.7.65 — ``ExitPlanMode`` tool_use emits its own
@@ -161,7 +289,7 @@ class TestExtractStreamJsonEvents:
                 ]
             },
         }
-        events = _extract_stream_json_events(json.dumps(event))
+        events = _strip_turn_done(_extract_stream_json_events(json.dumps(event)))
         assert len(events) == 2
         assert events[0] == ("output", {"line": "Here's my plan:"})
         assert events[1][0] == "exit_plan_mode"
@@ -195,7 +323,7 @@ class TestExtractStreamJsonEvents:
                 ]
             },
         }
-        events = _extract_stream_json_events(json.dumps(event))
+        events = _strip_turn_done(_extract_stream_json_events(json.dumps(event)))
         # 3 events, chronological order preserved
         assert len(events) == 3
         assert events[0] == ("output", {"line": "Need your input:"})
@@ -221,7 +349,7 @@ class TestExtractStreamJsonEvents:
                 ]
             },
         }
-        events = _extract_stream_json_events(json.dumps(event))
+        events = _strip_turn_done(_extract_stream_json_events(json.dumps(event)))
         assert len(events) == 1
         ev_type, ev_data = events[0]
         assert ev_type == "output"
@@ -318,7 +446,9 @@ class TestExtractStreamJsonEvents:
                 ]
             },
         }
-        events = _extract_stream_json_events(json.dumps(event), session_info=si)
+        events = _strip_turn_done(
+            _extract_stream_json_events(json.dumps(event), session_info=si)
+        )
         # No output with "Hello world" — only the tool chip.
         assert len(events) == 1
         ev_type, ev_data = events[0]
@@ -373,7 +503,7 @@ class TestExtractStreamJsonEvents:
             "type": "assistant",
             "message": {"content": [{"type": "text", "text": "Hello"}]},
         }
-        events = _extract_stream_json_events(json.dumps(event))
+        events = _strip_turn_done(_extract_stream_json_events(json.dumps(event)))
         assert events == [("output", {"line": "Hello"})]
 
     def test_thinking_block_emits_dedicated_event(self):
@@ -388,7 +518,7 @@ class TestExtractStreamJsonEvents:
                 ]
             },
         }
-        events = _extract_stream_json_events(json.dumps(event))
+        events = _strip_turn_done(_extract_stream_json_events(json.dumps(event)))
         # Two events: thinking (first), then output with the text.
         assert len(events) == 2
         assert events[0] == ("thinking", {"text": "Let me reason..."})
@@ -407,7 +537,7 @@ class TestExtractStreamJsonEvents:
                 ]
             },
         }
-        events = _extract_stream_json_events(json.dumps(event))
+        events = _strip_turn_done(_extract_stream_json_events(json.dumps(event)))
         assert len(events) == 3
         assert events[0] == ("output", {"line": "Quick answer:"})
         assert events[1] == ("thinking", {"text": "actually let me reconsider"})
@@ -424,7 +554,7 @@ class TestExtractStreamJsonEvents:
                 ]
             },
         }
-        events = _extract_stream_json_events(json.dumps(event))
+        events = _strip_turn_done(_extract_stream_json_events(json.dumps(event)))
         assert events == [("output", {"line": "Hello"})]
 
     def test_hook_response_with_deny_decision(self):

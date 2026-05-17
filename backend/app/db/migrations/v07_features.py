@@ -204,6 +204,47 @@ def _migrate_121_project_forge_bindings(conn) -> None:
     )
 
 
+def _migrate_122_goal_loop(conn) -> None:
+    """v0.7.74 — goal-loop execution type.
+
+    Adds ``project_sessions.goal_loop_config`` (JSON, nullable) and a
+    new ``goal_loop_iterations`` audit table. The config column is
+    JSON-shaped so adding fields (e.g. ``judge_temperature``) doesn't
+    require another migration. The iteration table is the operator's
+    "why did it stop on turn 7?" trail — each iteration captures the
+    judge's verdict + reason + judging cost so a goal loop's behavior
+    is fully reconstructible after the fact.
+    """
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(project_sessions)").fetchall()}
+    if "goal_loop_config" not in cols:
+        conn.execute(
+            "ALTER TABLE project_sessions ADD COLUMN goal_loop_config TEXT"
+        )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS goal_loop_iterations (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            session_id      TEXT NOT NULL,
+            iteration       INTEGER NOT NULL,
+            started_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            ended_at        TIMESTAMP,
+            verdict         TEXT,
+            judge_source    TEXT NOT NULL,
+            judge_reason    TEXT,
+            judge_stdout    TEXT,
+            tokens_in       INTEGER,
+            tokens_out      INTEGER,
+            cost_usd        REAL,
+            UNIQUE(session_id, iteration)
+        )
+        """
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_goal_iter_session "
+        "ON goal_loop_iterations(session_id, iteration)"
+    )
+
+
 V07_MIGRATIONS: list = [
     # v0.7.7: super-agent activity inspector — timeline + rollup.
     (116, "super_agent_activity", _migrate_116_super_agent_activity),
@@ -222,4 +263,7 @@ V07_MIGRATIONS: list = [
     (120, "project_allowed_accounts", _migrate_120_project_allowed_accounts),
     # v0.7.70: per-project Forge context bindings.
     (121, "project_forge_bindings", _migrate_121_project_forge_bindings),
+    # v0.7.74: goal-loop execution type — per-session config blob +
+    # iteration audit table.
+    (122, "goal_loop", _migrate_122_goal_loop),
 ]
