@@ -215,6 +215,13 @@ async function finalizeCommand() {
   }
 }
 
+// v0.7.82 — tooltip mirrors the visible hint when disabled.
+const finalizeTooltip = computed(() =>
+  conversation.canFinalize.value
+    ? 'Create the command'
+    : "Keep chatting — Claude needs more details before the command can be created. Tell it the command name, what it does, and the body.",
+);
+
 </script>
 
 <template>
@@ -227,17 +234,32 @@ async function finalizeCommand() {
         <p v-if="designMode === 'form'">{{ isEditMode ? 'Edit an existing slash command' : 'Create a new slash command with a form' }}</p>
         <p v-else>Chat with Claude to design your slash command</p>
       </div>
-      <button
-        v-if="designMode === 'chat' && conversation.canFinalize.value"
-        class="btn btn-primary btn-finalize"
-        :disabled="conversation.isFinalizing.value"
-        @click="finalizeCommand"
-      >
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M20 6L9 17l-5-5"/>
-        </svg>
-        {{ conversation.isFinalizing.value ? 'Creating...' : 'Create Command' }}
-      </button>
+      <!-- v0.7.82 — always-visible disabled Create button in chat
+           mode so a new operator can see the target action.
+           Form mode has its own submit button below; this button
+           is intentionally chat-mode only. -->
+      <div v-if="designMode === 'chat'" class="finalize-control">
+        <button
+          class="btn btn-primary btn-finalize"
+          :disabled="!conversation.canFinalize.value || conversation.isFinalizing.value"
+          :title="finalizeTooltip"
+          :aria-describedby="conversation.canFinalize.value ? undefined : 'finalize-hint'"
+          @click="finalizeCommand"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M20 6L9 17l-5-5"/>
+          </svg>
+          {{ conversation.isFinalizing.value ? 'Creating...' : 'Create Command' }}
+        </button>
+        <p
+          v-if="!conversation.canFinalize.value"
+          id="finalize-hint"
+          class="finalize-hint"
+        >
+          Keep chatting — once Claude has the command name, what
+          it does, and the body, this button activates.
+        </p>
+      </div>
     </div>
 
     <!-- ==================== FORM MODE ==================== -->
@@ -437,8 +459,30 @@ Describe what this command should do...
 <style scoped>
 /* Design-page scoped overrides (violet-themed buttons, centered modal) */
 .btn-primary { background: var(--accent-violet); color: #fff; }
-.btn-primary:hover { background: #9966ff; }
+.btn-primary:hover:not(:disabled) { background: #9966ff; }
 .btn-primary svg { width: 16px; height: 16px; }
+.btn-primary:disabled {
+  background: var(--bg-tertiary, #2a2a30);
+  color: var(--text-tertiary, #8a8a92);
+  cursor: not-allowed;
+  opacity: 0.85;
+}
+
+/* v0.7.82 — always-visible disabled Create button with hint */
+.finalize-control {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  max-width: 320px;
+}
+.finalize-hint {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-tertiary);
+  text-align: right;
+}
 .modal { padding: 32px; text-align: center; }
 
 /* Command-specific: form preview */
