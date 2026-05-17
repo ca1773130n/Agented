@@ -7,8 +7,8 @@
  * resolves after mount.
  */
 import { defineComponent, h, ref } from 'vue';
-import { mount } from '@vue/test-utils';
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { mount, VueWrapper } from '@vue/test-utils';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
 // Mock useAuth so the test controls when ``currentUser`` resolves.
 const currentUser = ref<{ id: string } | null>(null);
@@ -49,6 +49,13 @@ function makeApi(activeIds: string[] = []): FakeApi {
   };
 }
 
+// v0.7.83 (codex WARN E.2 / 3rd pass) — track wrappers and
+// unmount in afterEach. The composable installs a watcher on
+// the shared ``currentUser`` ref; without unmount, stale
+// watchers from earlier tests would react to ``currentUser``
+// changes in later tests and corrupt localStorage assertions.
+const wrappers: VueWrapper<any>[] = [];
+
 function mountHarness(conv: FakeConv, api: FakeApi, keyPrefix: string) {
   const Harness = defineComponent({
     setup() {
@@ -56,7 +63,9 @@ function mountHarness(conv: FakeConv, api: FakeApi, keyPrefix: string) {
       return () => h('div');
     },
   });
-  return mount(Harness);
+  const w = mount(Harness);
+  wrappers.push(w);
+  return w;
 }
 
 describe('useWizardAutoResume', () => {
@@ -64,6 +73,10 @@ describe('useWizardAutoResume', () => {
     localStorage.clear();
     currentUser.value = null;
     vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    while (wrappers.length) wrappers.pop()?.unmount();
   });
 
   it('falls back to startConversation when nothing is cached', async () => {

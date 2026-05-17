@@ -453,21 +453,49 @@ class PluginConversationService:
         if owner_err is not None:
             return owner_err
 
-        # v0.7.83 (codex WARN 3 / 2nd pass) — refuse finalize
-        # while an LLM response is mid-stream; otherwise we'd
-        # try to extract a config block while claude is still
-        # writing it. The operator should wait for the response
-        # to land, then retry.
+        # v0.7.83 (codex WARN 3 / 3rd pass) — atomic check-and-set
+        # of ``processing`` under the lock. The 2nd-pass fix only
+        # *read* the flag inside the lock and then released it,
+        # which let a concurrent ``send_message`` fire a new LLM
+        # turn between the check and the actual finalize work.
+        # Setting the flag ourselves blocks send_message until
+        # finalize finishes (or errors out). Also re-fetches the
+        # conv inside the lock so a concurrent ``abandon_conversation``
+        # that already removed it gets a 404 here instead of a
+        # KeyError later (codex WARN C.2 / 3rd pass).
         with cls._lock:
-            if cls._conversations[conv_id].get("processing"):
+            conv = cls._conversations.get(conv_id)
+            if conv is None:
+                return error_response(
+                    "NOT_FOUND", "Conversation not found", HTTPStatus.NOT_FOUND
+                )
+            if conv.get("processing"):
                 return error_response(
                     "CONFLICT",
                     "Conversation is processing — wait for the current response to finish.",
                     HTTPStatus.CONFLICT,
                 )
+            conv["processing"] = True
 
-        conv = cls._conversations[conv_id]
+        try:
+            return cls._do_finalize_plugin(conv_id, conv)
+        finally:
+            # Reset processing on any exit that left the conv
+            # in memory (success path calls _cleanup_conversation
+            # which pops the entry, so this is a no-op there).
+            with cls._lock:
+                if conv_id in cls._conversations:
+                    cls._conversations[conv_id]["processing"] = False
 
+    @classmethod
+    def _do_finalize_plugin(
+        cls, conv_id: str, conv: dict
+    ) -> Tuple[dict, HTTPStatus]:
+        """v0.7.83 (codex WARN C / 3rd pass) — extracted body of
+        ``finalize_plugin`` so the wrapper can hold the
+        ``processing`` flag across the whole call and reset it
+        on every exit path via ``finally``.
+        """
         # Find the plugin config in the last assistant message
         plugin_config = None
         for msg in reversed(conv["messages"]):
