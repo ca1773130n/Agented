@@ -527,6 +527,16 @@ from .projects import (  # noqa: F401
     update_project_team_topology_config,
 )
 
+# Project Forge bindings (v0.7.70 — sticky per-project context defaults)
+from .project_forge_bindings import (  # noqa: F401
+    VALID_KINDS as VALID_FORGE_BINDING_KINDS,
+    add_binding as add_project_forge_binding,
+    get_binding as get_project_forge_binding,
+    list_bindings as list_project_forge_bindings,
+    remove_binding as remove_project_forge_binding,
+    replace_for_project as replace_project_forge_bindings,
+)
+
 # Prompt snippets (reusable prompt fragments)
 from .prompt_snippets import (  # noqa: F401
     create_snippet,

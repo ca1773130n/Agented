@@ -13,6 +13,53 @@ import type {
   ProjectTeamEdge,
 } from './types';
 
+// v0.7.70 — Forge context bindings + per-prompt attachments. The
+// frontend mirrors the server's ``project_forge_bindings`` row shape
+// and the ``ContextCompilerService.compile()`` contract one-to-one.
+export type ForgeBindingKind =
+  | 'rule'
+  | 'skill'
+  | 'hook'
+  | 'command'
+  | 'mcp_server'
+  | 'plugin';
+
+export interface ForgeBinding {
+  id: number;
+  project_id: string;
+  kind: ForgeBindingKind;
+  asset_id: string;
+  role: string | null;
+  enabled: boolean;
+  position: number;
+  created_at: string;
+}
+
+export interface ForgeSessionOverrides {
+  disabled_binding_ids?: number[];
+  additions?: Array<{
+    kind: ForgeBindingKind;
+    asset_id: string;
+    role?: string | null;
+  }>;
+}
+
+export type ForgeAttachment =
+  | { kind: 'file'; path: string }
+  | { kind: 'snippet'; label?: string; text: string }
+  | { kind: 'url'; url: string; summary?: string }
+  | { kind: 'entity'; ref: string; payload: unknown };
+
+export interface ForgeBundlePreview {
+  system_prompt_text: string;
+  prompt_prepend: string;
+  overlay_files: string[];
+  overlay_symlinks: string[];
+  mcp_servers: string[];
+  resolved_bindings: Array<Record<string, unknown>>;
+  skipped_bindings: Array<Record<string, unknown>>;
+}
+
 // Project API
 export const projectApi = {
   list: (params?: { limit?: number; offset?: number }) => {
@@ -172,6 +219,62 @@ export const projectApi = {
 
   getOrCreateManager: (projectId: string) =>
     apiFetch<{ super_agent_id: string; created: boolean }>(`/admin/projects/${projectId}/manager`),
+
+  // -----------------------------------------------------------------
+  // v0.7.70 — Forge context bindings (per-project sticky defaults
+  // for which rules/skills/hooks/commands/MCP/plugins get injected
+  // into every session of this project).
+  // -----------------------------------------------------------------
+  listForgeBindings: (projectId: string) =>
+    apiFetch<{ bindings: ForgeBinding[] }>(
+      `/admin/projects/${projectId}/forge-bindings`,
+    ),
+
+  replaceForgeBindings: (
+    projectId: string,
+    bindings: Array<{
+      kind: ForgeBindingKind;
+      asset_id: string;
+      role?: string | null;
+      enabled?: boolean;
+    }>,
+  ) =>
+    apiFetch<{ bindings: ForgeBinding[] }>(
+      `/admin/projects/${projectId}/forge-bindings`,
+      { method: 'PUT', body: JSON.stringify({ bindings }) },
+    ),
+
+  addForgeBinding: (
+    projectId: string,
+    binding: {
+      kind: ForgeBindingKind;
+      asset_id: string;
+      role?: string | null;
+      enabled?: boolean;
+    },
+  ) =>
+    apiFetch<{ binding: ForgeBinding }>(
+      `/admin/projects/${projectId}/forge-bindings`,
+      { method: 'POST', body: JSON.stringify(binding) },
+    ),
+
+  removeForgeBinding: (projectId: string, bindingId: number) =>
+    apiFetch<void>(
+      `/admin/projects/${projectId}/forge-bindings/${bindingId}`,
+      { method: 'DELETE' },
+    ),
+
+  previewForgeContext: (
+    projectId: string,
+    payload: {
+      session_overrides?: ForgeSessionOverrides;
+      attachments?: ForgeAttachment[];
+    } = {},
+  ) =>
+    apiFetch<{ bundle: ForgeBundlePreview }>(
+      `/admin/projects/${projectId}/forge-context/preview`,
+      { method: 'POST', body: JSON.stringify(payload) },
+    ),
 
   /**
    * List SuperAgent sessions tied to this project (as opposed to the

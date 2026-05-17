@@ -450,6 +450,7 @@ async function retryClone() {
         </div>
       </div>
 
+
       <!-- Actions -->
       <div class="actions-row">
         <button class="btn btn-secondary" @click="router.push({ name: 'project-dashboard', params: { projectId: projectId } })">

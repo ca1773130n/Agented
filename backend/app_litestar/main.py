@@ -133,6 +133,7 @@ from .routes.mcp_servers import mcp_servers_router, project_mcp_router
 from .routes.payload_transformers import payload_transformers_router
 from .routes.product_owner import product_owner_router
 from .routes.projects import projects_router
+from .routes.project_forge_bindings import forge_bindings_router
 from .routes.quality_ratings import quality_ratings_router
 from .routes.rules_plugins_hooks_commands import (
     commands_router,
@@ -234,6 +235,7 @@ def create_app() -> Litestar:
             payload_transformers_router,
             teams_router,
             projects_router,
+            forge_bindings_router,
             product_owner_router,
             mcp_servers_router,
             project_mcp_router,

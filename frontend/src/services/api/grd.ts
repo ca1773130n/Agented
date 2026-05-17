@@ -108,6 +108,22 @@ export interface CreateSessionRequest {
   // v0.7.58 — required when yolo_mode is false; backend enforces it
   // is in the project's allowed-accounts whitelist.
   account_id?: string;
+  // v0.7.70 — optional Forge context wiring. ``session_overrides``
+  // lets the dialog opt out of project bindings or add session-only
+  // bindings. ``attachments`` here are the FIRST prompt's
+  // attachments (rarely used at session-create time; usually they
+  // arrive via ``sendInput``).
+  forge_context?: {
+    session_overrides?: {
+      disabled_binding_ids?: number[];
+      additions?: Array<{
+        kind: 'rule' | 'skill' | 'hook' | 'command' | 'mcp_server' | 'plugin';
+        asset_id: string;
+        role?: string | null;
+      }>;
+    };
+    attachments?: Array<Record<string, unknown>>;
+  };
 }
 
 export interface CreateSessionResponse {
@@ -363,11 +379,25 @@ export const grdApi = {
       { method: 'POST' }
     ),
 
-  sendInput: (projectId: string, sessionId: string, text: string) =>
-    apiFetch<{ message: string; session_id: string }>(
+  sendInput: (
+    projectId: string,
+    sessionId: string,
+    text: string,
+    attachments?: Array<Record<string, unknown>>,
+  ) => {
+    // v0.7.70 — per-prompt attachments. Backend compiles a context
+    // bundle from the attachments + project bindings and prepends
+    // the rendered ``Operator Context`` block to ``text`` before
+    // forwarding to the CLI.
+    const payload: Record<string, unknown> = { text };
+    if (attachments && attachments.length > 0) {
+      payload.attachments = attachments;
+    }
+    return apiFetch<{ message: string; session_id: string }>(
       `/api/projects/${projectId}/sessions/${sessionId}/input`,
-      { method: 'POST', body: JSON.stringify({ text }) }
-    ),
+      { method: 'POST', body: JSON.stringify(payload) },
+    );
+  },
 
   // Ralph/Team session creation
   createRalphSession: (projectId: string, request: CreateRalphSessionRequest) =>

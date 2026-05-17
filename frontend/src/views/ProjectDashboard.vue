@@ -9,6 +9,7 @@ import ProjectStatusCard from '../components/projects/ProjectStatusCard.vue';
 import ProjectTeamsSection from '../components/projects/ProjectTeamsSection.vue';
 import ProjectTeamCanvas from '../components/projects/ProjectTeamCanvas.vue';
 import ProjectLibraryTabs from '../components/projects/ProjectLibraryTabs.vue';
+import ProjectForgeBindingsPanel from '../components/project/ProjectForgeBindingsPanel.vue';
 import HarnessStatusSection from '../components/projects/HarnessStatusSection.vue';
 import { useToast } from '../composables/useToast';
 import { useFocusTrap } from '../composables/useFocusTrap';
@@ -645,6 +646,19 @@ function onSetupCompleted() {
         @toggleCommand="toggleCommandForProject"
         @toggleRule="toggleRuleForProject"
       />
+
+      <!-- v0.7.70 — Forge context bindings surfaced on the dashboard
+           too (not just settings) so the operator can see what's
+           inherited into sessions without leaving the project's
+           landing page. -->
+      <div class="card forge-bindings-card">
+        <div class="card-header-sessions">
+          <h3>Forge context bindings</h3>
+        </div>
+        <div class="card-body-padded">
+          <ProjectForgeBindingsPanel :projectId="projectId" />
+        </div>
+      </div>
     </template>
 
     <!-- Add Skill Modal -->
@@ -734,6 +748,11 @@ function onSetupCompleted() {
 .instance-chat-btn:hover { border-color: var(--accent-cyan, #00d4ff); }
 /* Sessions Section */
 .sessions-card { padding: 0; }
+/* v0.7.70 — Forge bindings card; same chrome as sessions-card so
+   the heading sits at the top with a separator and the body has
+   real breathing room. */
+.forge-bindings-card { padding: 0; margin-top: 16px; }
+.card-body-padded { padding: 16px 20px; }
 .card-header-sessions { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; border-bottom: 1px solid var(--border-subtle); }
 .card-header-sessions h3 { font-size: 0.95rem; font-weight: 600; color: var(--text-primary); margin: 0; }
 .card-count { font-size: 0.75rem; color: var(--text-tertiary); background: var(--bg-tertiary); padding: 4px 8px; border-radius: 4px; }

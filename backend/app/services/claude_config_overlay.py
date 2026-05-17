@@ -24,6 +24,7 @@ import json
 import logging
 import os
 import shutil
+import stat
 from pathlib import Path
 from typing import Optional
 
@@ -168,6 +169,181 @@ def prepare_session_overlay(
         session_id,
     )
     return str(overlay)
+
+
+def apply_forge_bundle(overlay_dir: str, bundle: dict) -> None:
+    """Materialize a serialized ``ContextBundle`` into an overlay dir.
+
+    Called by ProjectSessionManager *after* its own
+    ``prepare_session_overlay`` creates the dir so the bundle's
+    files layer on top of the user's existing config (skills,
+    plugins, MCP servers) and our PreToolUse permission hook.
+
+    Three things get written:
+
+    1. Plain overlay files (``overlay_files`` dict) — slash commands
+       under ``commands/`` for example. Path-escape attempts are
+       refused and logged.
+    2. Symlinks (``overlay_symlinks`` dict) — same path-confinement
+       rules.
+    3. MCP server entries merged into ``mcp.json``'s ``mcpServers``
+       map (existing entries preserved unless the bundle overrides
+       by name).
+    4. Hook entries (the ``_agented_hooks.json`` sidecar) — each
+       hook's content is spilled to ``hooks/<name>.sh`` and
+       registered in the overlay's ``settings.json`` under the
+       declared event (default ``PreToolUse``). Hooks merge with
+       any existing entries rather than overwriting.
+
+    Empty bundle is a no-op. Errors are logged but never raised:
+    a bad binding shouldn't take down the operator's session.
+    """
+    if not bundle:
+        return
+    base = Path(overlay_dir)
+    if not base.exists():
+        logger.warning(
+            "apply_forge_bundle: overlay dir %s missing, skipping", overlay_dir
+        )
+        return
+
+    _write_overlay_files(base, bundle.get("overlay_files") or {})
+    _write_overlay_symlinks(base, bundle.get("overlay_symlinks") or {})
+    _merge_mcp_json(base, bundle.get("mcp_servers") or {})
+    _materialize_hooks(base, bundle.get("overlay_files") or {})
+
+
+def _write_overlay_files(base: Path, overlay_files: dict) -> None:
+    base_resolved = base.resolve()
+    for rel, content in overlay_files.items():
+        # Hook sidecars are handled separately by ``_materialize_hooks``.
+        if rel == "_agented_hooks.json":
+            continue
+        try:
+            target = (base / rel).resolve()
+            target.relative_to(base_resolved)
+        except (ValueError, OSError):
+            logger.warning(
+                "apply_forge_bundle: refusing to write outside overlay (%s)", rel
+            )
+            continue
+        target.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            target.write_text(content, encoding="utf-8")
+        except OSError as exc:
+            logger.warning(
+                "apply_forge_bundle: failed to write %s: %s", rel, exc
+            )
+
+
+def _write_overlay_symlinks(base: Path, overlay_symlinks: dict) -> None:
+    base_resolved = base.resolve()
+    for rel, src in overlay_symlinks.items():
+        try:
+            target = (base / rel).resolve()
+            target.relative_to(base_resolved)
+        except (ValueError, OSError):
+            continue
+        if target.exists() or target.is_symlink():
+            try:
+                target.unlink()
+            except OSError:
+                continue
+        try:
+            os.symlink(src, target)
+        except OSError as exc:
+            logger.warning(
+                "apply_forge_bundle: failed to symlink %s -> %s: %s",
+                rel,
+                src,
+                exc,
+            )
+
+
+def _merge_mcp_json(base: Path, mcp_servers: dict) -> None:
+    if not mcp_servers:
+        return
+    mcp_path = base / "mcp.json"
+    existing: dict = {}
+    if mcp_path.exists():
+        try:
+            existing = json.loads(mcp_path.read_text())
+        except (json.JSONDecodeError, OSError):
+            logger.warning(
+                "apply_forge_bundle: existing mcp.json invalid, overwriting"
+            )
+            existing = {}
+    servers = existing.setdefault("mcpServers", {})
+    if not isinstance(servers, dict):
+        servers = {}
+    servers.update(mcp_servers)
+    existing["mcpServers"] = servers
+    mcp_path.write_text(json.dumps(existing, indent=2, ensure_ascii=False))
+
+
+def _materialize_hooks(base: Path, overlay_files: dict) -> None:
+    """Spill ``_agented_hooks.json`` entries into ``hooks/`` scripts +
+    ``settings.json`` registrations.
+    """
+    raw = overlay_files.get("_agented_hooks.json")
+    if not raw:
+        return
+    try:
+        entries = json.loads(raw)
+    except json.JSONDecodeError:
+        logger.warning("apply_forge_bundle: _agented_hooks.json invalid; skipping")
+        return
+    if not entries:
+        return
+    hooks_dir = base / "hooks"
+    hooks_dir.mkdir(parents=True, exist_ok=True)
+    settings_path = base / "settings.json"
+    settings: dict = {}
+    if settings_path.exists():
+        try:
+            settings = json.loads(settings_path.read_text())
+        except (json.JSONDecodeError, OSError):
+            settings = {}
+    hooks_block = settings.setdefault("hooks", {})
+
+    for entry in entries:
+        event = entry.get("event") or "PreToolUse"
+        name = entry.get("name") or "agented-hook"
+        safe = "".join(c if c.isalnum() or c in "-_" else "-" for c in name)
+        script_path = hooks_dir / f"{safe}.sh"
+        content = entry.get("content") or ""
+        if not content.startswith("#!"):
+            content = "#!/bin/sh\n" + content
+        try:
+            script_path.write_text(content, encoding="utf-8")
+            mode = script_path.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP
+            script_path.chmod(mode)
+        except OSError as exc:
+            logger.warning(
+                "apply_forge_bundle: failed to write hook %s: %s", name, exc
+            )
+            continue
+        event_block = hooks_block.setdefault(event, [])
+        if not isinstance(event_block, list):
+            event_block = []
+            hooks_block[event] = event_block
+        event_block.append(
+            {
+                "matcher": entry.get("matcher") or ".*",
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": str(script_path),
+                    }
+                ],
+            }
+        )
+    try:
+        settings_path.write_text(json.dumps(settings, indent=2, ensure_ascii=False))
+    except OSError as exc:
+        logger.warning(
+            "apply_forge_bundle: failed to write merged settings.json: %s", exc
+        )
 
 
 def cleanup_session_overlay(session_id: str) -> None:

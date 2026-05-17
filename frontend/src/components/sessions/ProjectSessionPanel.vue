@@ -9,6 +9,7 @@ import SessionOutput from './SessionOutput.vue';
 import SessionInput from './SessionInput.vue';
 import SessionControls from './SessionControls.vue';
 import SessionStartDialog from './SessionStartDialog.vue';
+import SessionContextTray from './SessionContextTray.vue';
 import InteractiveQuestionCard from './InteractiveQuestionCard.vue';
 import PlanModeCard from './PlanModeCard.vue';
 import PermissionPromptCard from './PermissionPromptCard.vue';
@@ -16,6 +17,7 @@ import type {
   AskUserQuestionItem,
   PermissionRequestPayload,
 } from '../../composables/useProjectSession';
+import type { ForgeAttachment } from '../../services/api/projects';
 
 interface ChatMsg {
   role: 'user' | 'assistant' | 'system';
@@ -42,6 +44,12 @@ const executionType = ref<'direct' | 'ralph_loop' | 'team_spawn'>('direct');
 const isDirectMode = computed(() => executionType.value === 'direct');
 const messages = ref<ChatMsg[]>([]);
 const inputMessage = ref('');
+// v0.7.70 — per-prompt attachments (files / snippets / URLs /
+// entity refs) collected by SessionContextTray. Sent alongside
+// ``text`` on the next ``sendInput`` call, then cleared. Sticky
+// across re-edits of the same draft, cleared on send or on session
+// switch.
+const pendingAttachments = ref<ForgeAttachment[]>([]);
 const awaitingResponse = ref(false);
 
 // ``hydratedEmpty`` distinguishes "you clicked an old session that
@@ -405,6 +413,16 @@ async function onDialogConfirm(payload: {
   yoloMode: boolean;
   executionType: 'direct' | 'ralph_loop' | 'team_spawn';
   accountId: string | null;
+  // v0.7.73 — dialog payload now carries Forge picks too.
+  forgeOverrides?: {
+    disabled_binding_ids: number[];
+    additions: Array<{
+      kind: 'rule' | 'skill' | 'hook' | 'command' | 'mcp_server' | 'plugin';
+      asset_id: string;
+      role?: string | null;
+    }>;
+  };
+  firstPromptAttachments?: ForgeAttachment[];
 }) {
   showStartDialog.value = false;
   executionType.value = payload.executionType;
@@ -419,6 +437,14 @@ async function onDialogConfirm(payload: {
   pendingPermissions.value = [];
   clearDiagnostic();
 
+  // v0.7.73 — first-prompt attachments wait in pendingAttachments
+  // until the operator types the first message and hits send. The
+  // server-side compile happens then via /sessions/{sid}/input,
+  // not at create_session (chat sessions read user content from
+  // stdin in stream-json mode, so per-prompt context can't ride
+  // the spawn argv).
+  pendingAttachments.value = payload.firstPromptAttachments ?? [];
+
   const isDirect = payload.executionType === 'direct';
   const baseFields = {
     name: payload.name,
@@ -428,6 +454,21 @@ async function onDialogConfirm(payload: {
     // null/omitted in yolo is fine because the backend short-circuits
     // the whitelist check.
     ...(payload.accountId ? { account_id: payload.accountId } : {}),
+    // v0.7.73 — Forge bindings opt-outs + session-only additions.
+    // The bundle compiles into --append-system-prompt for claude
+    // and the overlay materialization for hooks/commands/MCP. We
+    // only forward when there's at least one override so the
+    // request body stays empty in the common "use project defaults
+    // as-is" case.
+    ...(payload.forgeOverrides &&
+    (payload.forgeOverrides.disabled_binding_ids.length > 0 ||
+      payload.forgeOverrides.additions.length > 0)
+      ? {
+          forge_context: {
+            session_overrides: payload.forgeOverrides,
+          },
+        }
+      : {}),
   };
   const request: CreateSessionRequest = isDirect
     ? {
@@ -468,6 +509,11 @@ async function onDialogConfirm(payload: {
 }
 
 function handleSend(text: string) {
+  // v0.7.70 — capture the current attachments at submit time so the
+  // chips clear after the send (operator's mental model: "I attach,
+  // I send, the tray empties for the next turn"). Re-editing the
+  // input is fine; the chips stay until send.
+  const attachments = pendingAttachments.value.slice();
   if (isDirectMode.value) {
     // Echo the user's message into the chat as a user bubble before
     // we ship it. The previous behavior only rendered claude's
@@ -493,7 +539,11 @@ function handleSend(text: string) {
       }
     }, 8000);
   }
-  session.sendInput(text);
+  session.sendInput(
+    text,
+    attachments.length > 0 ? (attachments as unknown as Array<Record<string, unknown>>) : undefined,
+  );
+  pendingAttachments.value = [];
 }
 
 // AiChatPanelManaged emits ``send`` with no args — it uses the
@@ -696,6 +746,25 @@ onMounted(() => {
             @allow="resolvePermission('allow')"
             @deny="resolvePermission('deny')"
           />
+
+          <!-- v0.7.70 — per-prompt context tray. Sits above the chat
+               input in direct mode so the operator can attach files /
+               snippets / URLs / entity refs before sending. Tray
+               clears on send. For ralph/team sessions we don't
+               render it because the autonomous loop owns its own
+               turn structure. -->
+          <!-- Disabled only when there's no active session at all.
+               During the idle "waiting for next prompt" window the
+               tray must remain enabled so the operator can prep
+               attachments before clicking send. ``isStreaming`` would
+               be the wrong guard here: chips are local state and
+               don't talk to the stream until send time. -->
+          <SessionContextTray
+            v-if="isDirectMode"
+            v-model:attachments="pendingAttachments"
+            :disabled="!session.activeSessionId.value"
+          />
+
           <!-- Ralph loops / team spawn keep the monospace terminal so
                structured progress events (iteration counters, team
                membership tables) read cleanly. -->
