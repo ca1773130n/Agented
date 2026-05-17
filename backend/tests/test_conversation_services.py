@@ -156,13 +156,115 @@ class TestBaseConversationServiceViaCommand:
 
     @patch.object(CommandConversationService, "_process_with_claude")
     def test_start_conversation(self, mock_process):
+        """v0.7.81 (issue #124 / WARN 3) — ``start_conversation``
+        no longer fires the LLM thread directly. It seeds the
+        conv with the kickoff user message, persists, and sets
+        ``needs_kickoff=True``; the actual LLM call is deferred
+        until a subscriber attaches. This test pins that contract
+        so a future revert to eager firing fails loudly.
+        """
         result, status = CommandConversationService.start_conversation()
         assert status == HTTPStatus.CREATED
-        assert "conversation_id" in result
         conv_id = result["conversation_id"]
         assert conv_id.startswith("cmd_")
         assert conv_id in CommandConversationService._conversations
-        mock_process.assert_called_once()
+
+        conv = CommandConversationService._conversations[conv_id]
+        # Kickoff user message must be present in memory.
+        user_msgs = [m for m in conv["messages"] if m.role == "user"]
+        assert len(user_msgs) == 1
+        assert user_msgs[0].content.strip()
+        # Deferred-fire flag must be set.
+        assert conv.get("needs_kickoff") is True
+        # LLM call must NOT have been spawned yet.
+        mock_process.assert_not_called()
+
+    @patch.object(CommandConversationService, "_process_with_claude")
+    def test_start_conversation_persists_kickoff(self, mock_process):
+        """v0.7.81 (issue #124 / WARN 1) — the kickoff must hit
+        the DB before ``start_conversation`` returns so a crash
+        in the brief window before the LLM call finishes doesn't
+        leave the resume path with only the system prompt.
+        """
+        from app.database import get_design_conversation
+
+        result, _ = CommandConversationService.start_conversation()
+        conv_id = result["conversation_id"]
+        row = get_design_conversation(conv_id)
+        assert row is not None
+        messages = json.loads(row["messages"] or "[]")
+        roles = [m["role"] for m in messages]
+        assert "user" in roles, (
+            "Kickoff user message must be persisted before start_conversation returns"
+        )
+        mock_process.assert_not_called()
+
+    @patch.object(CommandConversationService, "_process_with_claude")
+    def test_subscribe_fires_deferred_kickoff(self, mock_process):
+        """v0.7.81 (issue #124 / WARN 3) — the first ``subscribe``
+        call after ``start_conversation`` triggers the LLM thread
+        and atomically clears ``needs_kickoff``. We drive the
+        generator far enough to enter the streaming loop (which
+        is where the kickoff is fired) and then close it.
+        """
+        result, _ = CommandConversationService.start_conversation()
+        conv_id = result["conversation_id"]
+        assert mock_process.call_count == 0
+
+        gen = CommandConversationService.subscribe(conv_id)
+        # First yield emits the kickoff user message that
+        # ``start_conversation`` seeded; consuming it forces the
+        # generator past the ``_maybe_fire_kickoff`` call.
+        next(gen)
+        gen.close()
+
+        # Wait briefly for the spawned thread to register itself;
+        # the patch on _process_with_claude makes the thread
+        # return immediately, but we still need a join to be
+        # deterministic. Threads spawned in _maybe_fire_kickoff
+        # are not tracked, so we poll the call count.
+        for _ in range(50):
+            if mock_process.call_count >= 1:
+                break
+            threading.Event().wait(0.01)
+        assert mock_process.call_count == 1, (
+            "subscribe() must fire the deferred kickoff on first attach"
+        )
+        # Flag must be cleared so a second subscriber doesn't
+        # double-spawn.
+        assert (
+            CommandConversationService._conversations[conv_id].get("needs_kickoff")
+            is False
+        )
+
+    @patch.object(CommandConversationService, "_process_with_claude")
+    def test_second_subscribe_does_not_double_fire(self, mock_process):
+        """v0.7.81 (issue #124 / WARN 3) — a second subscriber
+        attaching after the first must NOT re-fire the kickoff.
+        Without the atomic check-and-clear, two browser tabs
+        opening the wizard simultaneously would each spawn a
+        full LLM round-trip.
+        """
+        result, _ = CommandConversationService.start_conversation()
+        conv_id = result["conversation_id"]
+
+        gen1 = CommandConversationService.subscribe(conv_id)
+        next(gen1)
+        for _ in range(50):
+            if mock_process.call_count >= 1:
+                break
+            threading.Event().wait(0.01)
+        assert mock_process.call_count == 1
+
+        gen2 = CommandConversationService.subscribe(conv_id)
+        next(gen2)
+        # Give the would-be second spawn a chance to land.
+        threading.Event().wait(0.05)
+        assert mock_process.call_count == 1, (
+            "Second subscribe must not re-fire the kickoff"
+        )
+        gen1.close()
+        gen2.close()
 
     def test_get_conversation_in_memory(self):
         conv_id = _seed_conversation(CommandConversationService)

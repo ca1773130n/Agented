@@ -122,24 +122,48 @@ class PluginConversationService:
         initial_messages.append(kickoff)
 
         with cls._lock:
-            cls._conversations[conv_id] = {"messages": initial_messages, "processing": False}
+            cls._conversations[conv_id] = {
+                "messages": initial_messages,
+                "processing": False,
+                # v0.7.81 (issue #124 / WARN 3) — defer the
+                # kickoff LLM call until the first SSE subscriber
+                # connects so early frames aren't broadcast into
+                # an empty subscriber set.
+                "needs_kickoff": True,
+            }
             cls._subscribers[conv_id] = []
             cls._start_times[conv_id] = datetime.datetime.now()
-
-        # v0.7.80 — spawn the initial LLM call in a daemon thread
-        # so the HTTP request returns immediately. Previously
-        # blocked the request for the full LLM round-trip, making
-        # the wizard hang on /plugins/new.
-        threading.Thread(
-            target=cls._process_with_claude,
-            args=(conv_id, kickoff.content),
-            daemon=True,
-        ).start()
 
         return {
             "conversation_id": conv_id,
             "message": "Plugin creation conversation started",
         }, HTTPStatus.CREATED
+
+    @classmethod
+    def _maybe_fire_kickoff(cls, conv_id: str) -> None:
+        """v0.7.81 (issue #124 / WARN 2+3) — atomic check-and-clear
+        of ``needs_kickoff``; on success, spawn the LLM call on a
+        non-daemon thread to match ``send_message``.
+        """
+        with cls._lock:
+            conv = cls._conversations.get(conv_id)
+            if not conv or not conv.get("needs_kickoff"):
+                return
+            conv["needs_kickoff"] = False
+            kickoff_msg = next(
+                (m for m in reversed(conv["messages"]) if m.role == "user"),
+                None,
+            )
+        if kickoff_msg is None:
+            logger.error(
+                "plugin_conv: needs_kickoff=True but no user message in %s",
+                conv_id,
+            )
+            return
+        threading.Thread(
+            target=cls._process_with_claude,
+            args=(conv_id, kickoff_msg.content),
+        ).start()
 
     @classmethod
     def get_conversation(cls, conv_id: str) -> Tuple[dict, HTTPStatus]:
@@ -201,6 +225,11 @@ class PluginConversationService:
         with cls._lock:
             if conv_id in cls._subscribers:
                 cls._subscribers[conv_id].append(queue)
+
+        # v0.7.81 (issue #124 / WARN 3) — fire the deferred
+        # kickoff after the queue is registered so any broadcast
+        # the thread produces lands in this subscriber's queue.
+        cls._maybe_fire_kickoff(conv_id)
 
         try:
             conv = cls._conversations.get(conv_id)
