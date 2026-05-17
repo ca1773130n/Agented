@@ -138,6 +138,24 @@ class BaseConversationService(abc.ABC):
             )
         ]
 
+        # v0.7.80 — append the kickoff user message BEFORE
+        # ``_process_with_claude`` runs. The prior implementation
+        # passed the kickoff string as a parameter that was never
+        # added to ``conv["messages"]``; the LLM call then saw
+        # only the system prompt with no user message, and the
+        # upstream rejected with "text content blocks must be
+        # non-empty" (no user message → empty user content block
+        # in CLIProxyAPI's OpenAI-format translation). Fixed for
+        # SkillConversationService in v0.7.76; this carries the
+        # same fix to every BaseConversationService subclass
+        # (commands / hooks / rules) which all hit the same bug.
+        kickoff = ConversationMessage(
+            role="user",
+            content="Hello, I'd like to get started.",
+            timestamp=datetime.datetime.now().isoformat(),
+        )
+        initial_messages.append(kickoff)
+
         with cls._lock:
             cls._conversations[conv_id] = {"messages": initial_messages, "processing": False}
             cls._subscribers[conv_id] = []
@@ -146,8 +164,16 @@ class BaseConversationService(abc.ABC):
         # Persist to DB
         create_design_conversation(conv_id, cls._get_entity_type())
 
-        # Trigger initial assistant greeting
-        cls._process_with_claude(conv_id, "Hello, I'd like to get started.")
+        # v0.7.80 — spawn the initial LLM call in a daemon thread
+        # so the HTTP request returns immediately; the response
+        # streams back over SSE just like ``send_message``. The
+        # prior synchronous call blocked the request for the full
+        # LLM round-trip, making the wizard hang on its first load.
+        threading.Thread(
+            target=cls._process_with_claude,
+            args=(conv_id, kickoff.content),
+            daemon=True,
+        ).start()
 
         return {
             "conversation_id": conv_id,
@@ -394,8 +420,31 @@ class BaseConversationService(abc.ABC):
                 conv_id, "response_start", {"timestamp": datetime.datetime.now().isoformat()}
             )
 
-            # Build messages from conversation history
-            messages = [{"role": msg.role, "content": msg.content} for msg in conv["messages"]]
+            # Build messages from conversation history.
+            #
+            # v0.7.80 — defense in depth against the same proxy
+            # error v0.7.76 fixed for skills: drop any message
+            # whose content is missing or whitespace-only, since
+            # CLIProxyAPI's OpenAI translation rejects empty
+            # text content blocks. If after filtering there's no
+            # user message at all, bail out with a broadcast
+            # error instead of issuing a doomed LLM call.
+            messages = [
+                {"role": msg.role, "content": msg.content}
+                for msg in conv["messages"]
+                if msg.content and msg.content.strip()
+            ]
+            if not any(m["role"] == "user" for m in messages):
+                logger.error(
+                    "skipping LLM call for %s: no non-empty user message in history",
+                    conv_id,
+                )
+                cls._broadcast(
+                    conv_id,
+                    "error",
+                    {"error": "Cannot send to LLM: no user message in conversation."},
+                )
+                return
 
             response = cls._stream_and_accumulate(
                 conv_id, messages, model, backend, account_id, use_cli_agent=use_cli_agent
