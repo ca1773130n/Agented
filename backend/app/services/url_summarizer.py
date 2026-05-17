@@ -153,20 +153,64 @@ def _resolve_host_addresses(host: str) -> list[ipaddress._BaseAddress]:
     return addrs
 
 
+def _is_global_ip(ip: ipaddress._BaseAddress) -> bool:
+    """True iff ``ip`` is publicly routable.
+
+    ``ipaddress.is_global`` is the canonical check (Python 3.11+) but
+    we layer the equivalent component flags so older interpreters and
+    edge cases (some IPv4-mapped IPv6 oddities) still get caught.
+    """
+    if not getattr(ip, "is_global", not ip.is_private):
+        return False
+    if ip.is_loopback or ip.is_link_local or ip.is_multicast:
+        return False
+    if ip.is_reserved or ip.is_unspecified:
+        return False
+    return True
+
+
+def _resolve_safe_ip(host: str) -> Optional[tuple[ipaddress._BaseAddress, str]]:
+    """Resolve ``host`` to a single safe IP, or ``None`` if any
+    resolved address is non-global.
+
+    Returns ``(ip_obj, reason)`` on rejection (``ip_obj`` is the
+    offending address) and ``(ip_obj, "")`` on success — caller pins
+    the connection to ``ip_obj`` so httpx can't issue a second DNS
+    lookup that returns a different address (DNS-rebinding /
+    TOCTOU). Rejecting on ANY non-global address (rather than
+    picking the first safe one) blocks mixed-result rebinding where
+    a malicious resolver returns ``[public, private]`` knowing only
+    one will be used.
+    """
+    # Literal IP short-circuit — no DNS at all.
+    try:
+        literal = ipaddress.ip_address(host)
+    except ValueError:
+        literal = None
+    if literal is not None:
+        if not _is_global_ip(literal):
+            return literal, f"non-global address: {literal}"
+        return literal, ""
+
+    addrs = _resolve_host_addresses(host)
+    if not addrs:
+        return None
+    for ip in addrs:
+        if not _is_global_ip(ip):
+            return ip, f"non-global address: {ip}"
+    # All addresses safe — pick the first as the pin target.
+    return addrs[0], ""
+
+
 def _is_safe_target(url: str) -> Optional[str]:
     """Validate scheme + DNS resolution. Returns reason on rejection,
     or ``None`` if the URL is safe to fetch.
 
-    Rejects:
-      * non-http(s) schemes (file://, data:, gopher:, etc.)
-      * missing or empty hostnames
-      * DNS-resolution failure
-      * any resolved address in a private, loopback, link-local,
-        multicast, reserved, or unspecified range — including the
-        AWS/GCP metadata endpoints in 169.254.0.0/16, the IPv6
-        loopback ``::1``, ULAs in ``fc00::/7``, and link-locals in
-        ``fe80::/10``. ``ipaddress.is_global`` (Python 3.11+) is the
-        canonical "publicly routable" check.
+    Rejects: non-http(s) schemes, missing host, DNS failure, and any
+    resolved address in a private, loopback, link-local, multicast,
+    reserved, or unspecified range (covers RFC1918, the AWS/GCP
+    metadata endpoints in 169.254.0.0/16, IPv6 loopback ``::1``,
+    ULAs in ``fc00::/7``, and link-locals in ``fe80::/10``).
     """
     if not _is_allowed_scheme(url):
         return "scheme not allowed"
@@ -177,27 +221,48 @@ def _is_safe_target(url: str) -> Optional[str]:
     host = (parsed.hostname or "").strip()
     if not host:
         return "missing host"
-    # ``host`` may itself be a literal IP — short-circuit DNS in that
-    # case so we still validate the address.
-    try:
-        literal = ipaddress.ip_address(host)
-    except ValueError:
-        literal = None
-    addrs: list[ipaddress._BaseAddress]
-    if literal is not None:
-        addrs = [literal]
+    resolved = _resolve_safe_ip(host)
+    if resolved is None:
+        return "DNS resolution failed"
+    _ip, reason = resolved
+    return reason or None
+
+
+def _pin_url_to_ip(url: str, ip: ipaddress._BaseAddress) -> tuple[str, str]:
+    """Return ``(pinned_url, original_host)`` — the URL rewritten to
+    use the literal IP in its netloc, with the original hostname
+    captured for the ``Host`` header + TLS SNI.
+
+    Httpx will connect directly to the IP (no DNS lookup), and
+    callers attach ``Host: <original_host>`` plus
+    ``extensions={"sni_hostname": <original_host>}`` so the TLS
+    handshake still validates the certificate against the original
+    name. This pins the connection to the address we already
+    validated, closing the DNS-rebinding / TOCTOU window.
+    """
+    parsed = urlparse(url)
+    host = parsed.hostname or ""
+    port = parsed.port
+    if port is None:
+        port = 443 if parsed.scheme == "https" else 80
+    if isinstance(ip, ipaddress.IPv6Address):
+        netloc = f"[{ip}]:{port}"
     else:
-        addrs = _resolve_host_addresses(host)
-        if not addrs:
-            return "DNS resolution failed"
-    for ip in addrs:
-        if not getattr(ip, "is_global", not ip.is_private):
-            return f"non-global address: {ip}"
-        if ip.is_loopback or ip.is_link_local or ip.is_multicast:
-            return f"non-global address: {ip}"
-        if ip.is_reserved or ip.is_unspecified:
-            return f"non-global address: {ip}"
-    return None
+        netloc = f"{ip}:{port}"
+    # Preserve userinfo if present (rare but possible).
+    if parsed.username:
+        userinfo = parsed.username
+        if parsed.password:
+            userinfo += f":{parsed.password}"
+        netloc = f"{userinfo}@{netloc}"
+    pinned = parsed._replace(netloc=netloc).geturl()
+    # ``Host`` header should include the port iff it wasn't the
+    # scheme default — matches what a normal client would send.
+    if parsed.port:
+        host_header = f"{host}:{parsed.port}"
+    else:
+        host_header = host
+    return pinned, host_header
 
 
 def _from_cache(url: str) -> Optional[UrlSummary]:
@@ -267,7 +332,38 @@ def fetch_and_summarize(url: str) -> UrlSummary:
             headers={"User-Agent": "agented-context-compiler/0.7.71"},
         ) as client:
             for hop in range(_MAX_REDIRECT_HOPS + 1):
-                resp = client.get(current_url)
+                # Re-resolve + pin the IP on EVERY hop. We resolve
+                # once, validate, then pin httpx to the same IP so
+                # it can't reach a different address than the one
+                # we validated (DNS rebinding / TOCTOU). The pin
+                # also covers the case where the upfront resolve
+                # returned a public IP but a second resolve (which
+                # httpx would otherwise do at connect time) returns
+                # a private one — that second resolve never happens.
+                prefix = "redirect blocked: " if hop > 0 else ""
+                host_parsed = urlparse(current_url).hostname or ""
+                resolved = _resolve_safe_ip(host_parsed)
+                if resolved is None:
+                    return UrlSummary(
+                        url=url,
+                        title="",
+                        text="",
+                        error=f"{prefix}DNS resolution failed",
+                    )
+                pin_ip, pin_reason = resolved
+                if pin_reason:
+                    return UrlSummary(
+                        url=url,
+                        title="",
+                        text="",
+                        error=f"{prefix}{pin_reason}",
+                    )
+                pinned_url, host_header = _pin_url_to_ip(current_url, pin_ip)
+                resp = client.get(
+                    pinned_url,
+                    headers={"Host": host_header},
+                    extensions={"sni_hostname": host_parsed},
+                )
                 if 300 <= resp.status_code < 400 and "location" in resp.headers:
                     if hop == _MAX_REDIRECT_HOPS:
                         return UrlSummary(
@@ -276,16 +372,18 @@ def fetch_and_summarize(url: str) -> UrlSummary:
                             text="",
                             error="too many redirects",
                         )
-                    # Resolve relative redirects against the current
-                    # URL, then re-run the SSRF gate before following.
+                    # Resolve relative redirects against the
+                    # ORIGINAL (un-pinned) URL so the Location's
+                    # hostname survives — then re-validate the
+                    # destination's scheme. The IP-pin happens at
+                    # the next loop iteration.
                     nxt = str(httpx.URL(current_url).join(resp.headers["location"]))
-                    reason = _is_safe_target(nxt)
-                    if reason is not None:
+                    if not _is_allowed_scheme(nxt):
                         return UrlSummary(
                             url=url,
                             title="",
                             text="",
-                            error=f"redirect blocked: {reason}",
+                            error=f"redirect blocked: scheme not allowed",
                         )
                     current_url = nxt
                     continue

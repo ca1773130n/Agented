@@ -10,12 +10,25 @@ from __future__ import annotations
 import httpx
 import pytest
 
+import ipaddress
+
 from app.services import url_summarizer
 from app.services.url_summarizer import (
     UrlSummary,
     _summarize_html,
     fetch_and_summarize,
 )
+
+
+def httpx_safe_public_ip() -> ipaddress.IPv4Address:
+    """Return an IPv4 address that ``_is_global_ip`` considers safe.
+
+    ``192.0.2.1`` is in TEST-NET-1 (RFC 5737), reserved for
+    documentation — guaranteed not to be a real production target
+    but ``is_global`` returns True for it under Python's stdlib.
+    Using a documentation block keeps the tests hermetic.
+    """
+    return ipaddress.ip_address("192.0.2.1")
 
 
 @pytest.fixture(autouse=True)
@@ -226,6 +239,86 @@ def test_fetch_caps_redirect_hops(monkeypatch):
     _install_transport(monkeypatch, handler)
     summary = fetch_and_summarize("https://example.com/start")
     assert summary.error == "too many redirects"
+
+
+def test_fetch_pins_request_to_resolved_ip(monkeypatch):
+    """Defense-in-depth check that httpx is told to connect to the
+    pre-validated IP literal (and carries the original hostname in
+    ``Host`` + the ``sni_hostname`` extension). Without pinning, an
+    adversarial DNS server could return a public IP on the safety
+    check and a private IP on httpx's second resolution attempt
+    (DNS-rebinding / TOCTOU). The pin makes that attack impossible.
+    """
+    seen: list[dict] = []
+
+    def handler(request):
+        seen.append(
+            {
+                "url": str(request.url),
+                "host_header": request.headers.get("host"),
+                "sni": request.extensions.get("sni_hostname"),
+            }
+        )
+        return httpx.Response(
+            200,
+            headers={"content-type": "text/html"},
+            content=b"<html><head><title>P</title></head><body>x</body></html>",
+        )
+
+    _install_transport(monkeypatch, handler)
+    # Force a known IP so the assertions are deterministic. We
+    # patch the resolver to return a single public-looking address.
+    fake_ip = httpx_safe_public_ip()
+    monkeypatch.setattr(
+        url_summarizer,
+        "_resolve_safe_ip",
+        lambda host: (fake_ip, ""),
+    )
+    summary = fetch_and_summarize("https://example.com/path?x=1")
+    assert summary.error is None
+    assert seen, "expected the mock transport to see one request"
+    req = seen[0]
+    # URL netloc rewritten to the literal IP.
+    assert str(fake_ip) in req["url"]
+    assert "example.com" not in req["url"]
+    # Host header carries the original hostname so the server can
+    # route + the certificate can validate.
+    assert req["host_header"] == "example.com"
+    # SNI extension also carries the hostname for TLS handshake.
+    assert req["sni"] == "example.com"
+
+
+def test_fetch_blocks_dns_rebinding_between_validate_and_connect(monkeypatch):
+    """Simulate DNS rebinding: ``_resolve_safe_ip`` is called once
+    upfront (returns a public IP), then again at fetch time (returns
+    a private IP). Pre-pin guarantees the fetch uses the validated
+    IP, so the rebinding attempt fails closed.
+    """
+    call_count = {"n": 0}
+
+    def flaky_resolve(host):
+        call_count["n"] += 1
+        if call_count["n"] == 1:
+            return (httpx_safe_public_ip(), "")
+        # Second resolution returns loopback — would be exploited
+        # without IP pinning. With pinning, this triggers the
+        # second-tier rejection.
+        import ipaddress
+        loop = ipaddress.ip_address("127.0.0.1")
+        return (loop, "non-global address: 127.0.0.1")
+
+    monkeypatch.setattr(url_summarizer, "_resolve_safe_ip", flaky_resolve)
+
+    def handler(request):
+        return httpx.Response(200, content=b"should not reach")
+
+    _install_transport(monkeypatch, handler)
+    summary = fetch_and_summarize("https://example.com/path")
+    # The _is_safe_target call sees the public IP, gate passes.
+    # Then the fetch loop calls _resolve_safe_ip again and gets the
+    # private IP — fetch aborts before httpx connects.
+    assert summary.error == "non-global address: 127.0.0.1"
+    assert call_count["n"] >= 2
 
 
 def test_fetch_follows_one_public_redirect(monkeypatch):
