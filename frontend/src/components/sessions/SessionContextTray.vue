@@ -23,6 +23,11 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: 'update:attachments', value: ForgeAttachment[]): void;
+  // v0.7.75 — opening the preview drawer is the parent's
+  // responsibility (the drawer needs ``projectId`` + access to
+  // session-level overrides, which only the parent knows). The
+  // tray just signals intent.
+  (e: 'previewContext'): void;
 }>();
 
 const showSnippetEditor = ref(false);
@@ -193,6 +198,18 @@ function chipLabel(att: ForgeAttachment): string {
       >
         @ Entity
       </button>
+      <!-- v0.7.75 — slide-over showing what claude will actually see:
+           compiled system prompt + prepend + overlay file keys +
+           resolved/skipped bindings. Always enabled; the drawer
+           handles empty state when there's nothing to preview. -->
+      <button
+        type="button"
+        class="action-btn action-btn-secondary"
+        title="Preview the compiled context that will be sent to claude"
+        @click="emit('previewContext')"
+      >
+        👁 Preview
+      </button>
     </div>
 
     <div v-if="showFileEditor" class="editor" data-testid="file-editor">
@@ -324,6 +341,11 @@ function chipLabel(att: ForgeAttachment): string {
 .action-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+/* v0.7.75 — preview button stands apart from the attach actions
+   because it's read-only and operates on what's already queued. */
+.action-btn-secondary {
+  margin-left: auto;
 }
 
 .editor {

@@ -21,13 +21,33 @@
  *
  * v0.7.70.
  */
-import { ref, computed, onMounted } from 'vue';
-import { projectApi, ApiError } from '../../services/api';
+import { ref, computed, onMounted, watch } from 'vue';
+import {
+  projectApi,
+  ruleApi,
+  hookApi,
+  commandApi,
+  skillsApi,
+  mcpServerApi,
+  pluginApi,
+  ApiError,
+} from '../../services/api';
 import type {
   ForgeBinding,
   ForgeBindingKind,
 } from '../../services/api/projects';
 import { useToast } from '../../composables/useToast';
+
+// v0.7.75 — per-kind library item shape after normalization. We
+// flatten each backend's list response into ``{asset_id, label}``
+// so the dropdown can render a consistent option list across
+// rules / skills / hooks / commands / mcp_servers / plugins —
+// each of which uses a different primary-key convention server-
+// side (int row id vs string id vs name).
+interface LibraryItem {
+  asset_id: string;
+  label: string;
+}
 
 const props = defineProps<{
   projectId: string;
@@ -41,6 +61,16 @@ const errorMessage = ref<string | null>(null);
 const newKind = ref<ForgeBindingKind>('rule');
 const newAssetId = ref('');
 const isSubmitting = ref(false);
+
+// v0.7.75 — per-kind library cache + load state. Populated on
+// kind change so the dropdown for the currently-selected kind
+// reflects what the operator can actually pick. Fallback to a
+// free-text input remains for cases where the library is empty
+// or the fetch errors (no API for that kind on a fresh install,
+// network blip, etc.).
+const libraryByKind = ref<Partial<Record<ForgeBindingKind, LibraryItem[]>>>({});
+const libraryLoadingByKind = ref<Partial<Record<ForgeBindingKind, boolean>>>({});
+const libraryErrorByKind = ref<Partial<Record<ForgeBindingKind, string>>>({});
 
 const KIND_LABELS: Record<ForgeBindingKind, string> = {
   rule: 'Rule',
@@ -76,6 +106,135 @@ async function load() {
   } finally {
     isLoading.value = false;
   }
+}
+
+async function loadLibrary(kind: ForgeBindingKind) {
+  // v0.7.75 (codex NIT 4) — only short-circuit on a real prior
+  // success. Previously a transient failure cached ``[]`` for the
+  // panel's lifetime; the operator had to remount to retry.
+  // Successful loads (including empty libraries — server says
+  // there are zero of this kind) still get cached so a kind
+  // toggle doesn't re-fetch unnecessarily.
+  const cached = libraryByKind.value[kind];
+  const hadError = libraryErrorByKind.value[kind];
+  if (cached !== undefined && !hadError) return;
+  libraryLoadingByKind.value = { ...libraryLoadingByKind.value, [kind]: true };
+  libraryErrorByKind.value = { ...libraryErrorByKind.value, [kind]: undefined };
+  try {
+    const items = await fetchLibraryForKind(kind);
+    libraryByKind.value = { ...libraryByKind.value, [kind]: items };
+  } catch (err) {
+    libraryErrorByKind.value = {
+      ...libraryErrorByKind.value,
+      [kind]: err instanceof Error ? err.message : 'load failed',
+    };
+    // Do NOT cache a sentinel on error — the next kind toggle
+    // back into this kind retries. The fallback text input still
+    // renders because ``useLibraryDropdown`` keys off the error +
+    // empty-library state, not on a cached empty.
+    libraryByKind.value = { ...libraryByKind.value, [kind]: undefined };
+  } finally {
+    libraryLoadingByKind.value = { ...libraryLoadingByKind.value, [kind]: false };
+  }
+}
+
+async function fetchLibraryForKind(kind: ForgeBindingKind): Promise<LibraryItem[]> {
+  // Each backend list returns a different array shape; normalize
+  // into ``LibraryItem`` here so the rest of the component doesn't
+  // care. Asset id is whichever field the bindings table uses as
+  // the foreign key for that kind (see ``ContextCompilerService``
+  // resolution paths).
+  switch (kind) {
+    case 'rule': {
+      const res = await ruleApi.list(props.projectId);
+      return (res.rules || []).map((r) => ({
+        asset_id: String(r.id),
+        label: r.name || `rule ${r.id}`,
+      }));
+    }
+    case 'hook': {
+      const res = await hookApi.list(props.projectId);
+      return (res.hooks || []).map((h) => ({
+        asset_id: String(h.id),
+        label: `${h.name || 'hook'} · ${h.event}`,
+      }));
+    }
+    case 'command': {
+      const res = await commandApi.list(props.projectId);
+      return (res.commands || []).map((c) => ({
+        asset_id: String(c.id),
+        label: c.name || `command ${c.id}`,
+      }));
+    }
+    case 'skill': {
+      const res = await skillsApi.list();
+      return (res.skills || []).map((s) => ({
+        asset_id: s.name,
+        label: s.name,
+      }));
+    }
+    case 'mcp_server': {
+      const res = await mcpServerApi.list();
+      return (res.servers || []).map((m) => ({
+        asset_id: m.id,
+        label: m.name || m.id,
+      }));
+    }
+    case 'plugin': {
+      const res = await pluginApi.list();
+      return (res.plugins || []).map((p) => ({
+        asset_id: p.id,
+        label: p.name || p.id,
+      }));
+    }
+  }
+}
+
+watch(newKind, (kind) => {
+  loadLibrary(kind);
+  newAssetId.value = '';
+});
+
+const currentLibrary = computed<LibraryItem[]>(
+  () => libraryByKind.value[newKind.value] ?? [],
+);
+const currentLibraryLoading = computed(
+  () => libraryLoadingByKind.value[newKind.value] === true,
+);
+const currentLibraryError = computed(
+  () => libraryErrorByKind.value[newKind.value] ?? null,
+);
+// Filter out items already bound for the selected kind so the
+// dropdown only shows what can actually be added; the binding
+// row list above shows the rest.
+const availableLibrary = computed<LibraryItem[]>(() => {
+  const bound = new Set(
+    bindings.value
+      .filter((b) => b.kind === newKind.value)
+      .map((b) => b.asset_id),
+  );
+  return currentLibrary.value.filter((item) => !bound.has(item.asset_id));
+});
+const useLibraryDropdown = computed(
+  () =>
+    !currentLibraryLoading.value &&
+    !currentLibraryError.value &&
+    currentLibrary.value.length > 0,
+);
+
+function optionLabel(item: LibraryItem): string {
+  // Server-side names occasionally arrive empty (rule rows where
+  // ``name`` was never set; mcp servers registered by id only).
+  // Coalesce so the dropdown text is always meaningful instead of
+  // a leading-blank " (asset_id)" string.
+  // (codex 3rd-pass nit) — if even ``asset_id`` is blank /
+  // whitespace, fall back to ``(unnamed)`` so the option still
+  // has visible text. Server should validate IDs, but the
+  // sentinel costs nothing and removes a footgun.
+  const id = (item.asset_id || '').trim() || '(unnamed)';
+  const label = (item.label || '').trim() || id;
+  if (label === id) return label;
+  return `${label} (${id})`;
 }
 
 async function addBinding() {
@@ -115,7 +274,12 @@ async function removeBinding(b: ForgeBinding) {
   }
 }
 
-onMounted(load);
+onMounted(() => {
+  load();
+  // Preload the default kind's library so the dropdown is
+  // populated the moment the operator opens the form.
+  loadLibrary(newKind.value);
+});
 </script>
 
 <template>
@@ -172,22 +336,67 @@ onMounted(load);
           {{ label }}
         </option>
       </select>
+
+      <!-- v0.7.75 — library dropdown is the primary path. When the
+           kind's library is empty / failed to load / still
+           loading, fall back to the original free-text input so
+           the operator can still bind by typing the asset id
+           (useful for plugins not yet installed locally, or for
+           mcp_servers added out-of-band). -->
+      <select
+        v-if="useLibraryDropdown"
+        v-model="newAssetId"
+        class="asset-select"
+        :disabled="isSubmitting"
+      >
+        <option value="" disabled>
+          {{ availableLibrary.length === 0
+            ? `All ${KIND_LABELS[newKind].toLowerCase()}s already bound`
+            : `Pick a ${KIND_LABELS[newKind].toLowerCase()}…` }}
+        </option>
+        <!-- v0.7.75 (codex NIT 5) — option label is a single
+             string, not text+span. Native ``<option>`` strips
+             child elements in most browsers, so the original
+             ``<span>(id)</span>`` only rendered in some chromes.
+             (codex Q5 follow-up) — coalesce empty/missing label
+             to asset_id so a server-side row with empty ``name``
+             doesn't render as a leading-blank " (asset_id)". -->
+        <option
+          v-for="item in availableLibrary"
+          :key="item.asset_id"
+          :value="item.asset_id"
+        >
+          {{ optionLabel(item) }}
+        </option>
+      </select>
       <input
+        v-else
         v-model="newAssetId"
         type="text"
-        placeholder="asset id (e.g. 42, skill-name, mcp-server-id)"
-        :disabled="isSubmitting"
+        :placeholder="
+          currentLibraryLoading
+            ? 'Loading library…'
+            : currentLibraryError
+              ? `Library load failed — type the asset id manually`
+              : `No ${KIND_LABELS[newKind].toLowerCase()}s in your library — type an asset id`
+        "
+        :disabled="isSubmitting || currentLibraryLoading"
         @keydown.enter.prevent="addBinding"
       />
+
       <button
         type="button"
         class="btn btn-primary"
-        :disabled="isSubmitting"
+        :disabled="isSubmitting || !newAssetId"
         @click="addBinding"
       >
         Add binding
       </button>
     </div>
+    <p v-if="currentLibraryError" class="form-hint form-hint-warn">
+      Couldn't load {{ KIND_LABELS[newKind] }} library: {{ currentLibraryError }}.
+      Type the asset id manually.
+    </p>
   </div>
 </template>
 
@@ -284,6 +493,18 @@ onMounted(load);
 .add-row input {
   flex: 1;
   font-family: 'Geist Mono', monospace;
+}
+.add-row .asset-select {
+  flex: 1;
+  font-family: inherit;
+}
+.form-hint {
+  margin: 4px 0 0 0;
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+.form-hint-warn {
+  color: var(--accent-amber, #ffb454);
 }
 .add-row select:focus,
 .add-row input:focus {
