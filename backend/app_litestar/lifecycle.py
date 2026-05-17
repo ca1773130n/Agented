@@ -89,13 +89,25 @@ def _detect_backends() -> None:
         if not installed:
             _startup_warnings.append(f"cli_missing:{backend_type}")
 
-    grd_path = GrdCliService.detect_binary()
-    if grd_path:
-        logger.info("GRD binary detected: %s", grd_path)
+    # v0.7.84 — probe both ``grd-tools.js`` (legacy write ops) and
+    # ``gd.js`` (v0.3.24 Ouroboros surface). The Litestar app keeps
+    # running either way; routes that need a binary check
+    # ``GrdCliService.available()`` and degrade gracefully.
+    GrdCliService.detect_binaries()
+    avail = GrdCliService.available()
+    if avail["grd_tools_available"]:
+        logger.info("GRD grd-tools binary detected: %s", avail["grd_tools_path"])
     else:
         logger.warning(
-            "GRD binary not found — GRD CLI write operations will be unavailable. "
+            "GRD grd-tools binary not found — write operations will be unavailable. "
             "Configure grd_binary_path in Agented settings or set CLAUDE_PLUGIN_ROOT env var."
+        )
+    if avail["gd_available"]:
+        logger.info("GRD gd binary detected: %s", avail["gd_path"])
+    else:
+        logger.warning(
+            "GRD gd binary not found — v0.3.24 Ouroboros commands "
+            "(think / health / dead-end / genome / verify mechanical) unavailable."
         )
 
 

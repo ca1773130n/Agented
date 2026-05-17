@@ -71,10 +71,16 @@ def _ensure_project(project_id: str) -> dict:
 def sync_status(project_id: str) -> dict[str, Any]:
     project = _ensure_project(project_id)
     states = get_project_sync_states(project_id)
+    # v0.7.84 — surface both binary detections so the frontend can
+    # gate Ouroboros-only features (think / health / dead-end /
+    # genome) on ``gd_available`` separately from the legacy
+    # ``grd-tools`` write surface.
+    avail = GrdCliService.available()
     return {
         "last_synced_at": project.get("grd_sync_at"),
         "file_count": len(states),
-        "grd_available": GrdCliService._binary_available,
+        "grd_available": avail["grd_tools_available"],
+        "gd_available": avail["gd_available"],
     }
 
 
@@ -92,6 +98,196 @@ def trigger_sync(project_id: str) -> dict[str, Any]:
         "synced": result["synced"],
         "skipped": result["skipped"],
         "errors": result["errors"],
+    }
+
+
+# ---------------------------------------------------------------------------
+# v0.7.84 — Ouroboros surface (GRD v0.3.24)
+#
+# Thin pass-through to the gd / grd-tools CLIs. Storage / parsing of
+# the resulting artifacts (DEAD-ENDS.md, GENOME.md, REFLECTION.md) is
+# handled by the sync layer in a follow-up PR; these routes are the
+# write/read primitives the frontend needs to drive the loop.
+# ---------------------------------------------------------------------------
+
+
+def _project_cwd(project_id: str) -> str:
+    """Resolve the on-disk working directory for a project, raising the
+    standard 400 client exception on misconfiguration.
+    """
+    try:
+        return ProjectWorkspaceService.resolve_working_directory(project_id)
+    except ValueError as e:
+        raise ClientException(detail=str(e)) from e
+
+
+@get("/{project_id:str}/grd/health", sync_to_thread=False)
+def grd_health(project_id: str) -> dict[str, Any]:
+    """v0.7.84 — ``gd health`` weighted drift score + blockers.
+
+    Returns the GRD JSON payload verbatim under ``raw`` for forward
+    compatibility, plus a small set of normalized top-level fields the
+    frontend reads directly.
+    """
+    _ensure_project(project_id)
+    cwd = _project_cwd(project_id)
+    result = GrdCliService.get_health(cwd)
+    if not result["success"]:
+        # GRD missing or non-JSON output — surface as 503 so the
+        # frontend can show "GRD unavailable" instead of a generic 5xx.
+        from litestar.exceptions import HTTPException
+
+        raise HTTPException(
+            status_code=503,
+            detail=result.get("error") or "gd health unavailable",
+        )
+    data = result.get("data") or {}
+    return {
+        "drift_weighted": data.get("drift_weighted"),
+        "drift_exceeded": data.get("drift_exceeded"),
+        "blocker_count": data.get("blocker_count"),
+        "blockers": data.get("blockers", []),
+        "deferred_validations": data.get("deferred_validations", []),
+        "raw": data,
+    }
+
+
+@post("/{project_id:str}/grd/think", sync_to_thread=False)
+def grd_think(project_id: str) -> dict[str, Any]:
+    """v0.7.84 — ``gd think`` one-shot project briefing.
+
+    Writes a markdown briefing under ``.planning/thoughts/<ts>-thinking.md``
+    and returns the JSON snapshot. Useful as a context primer before
+    spawning a Claude Code session (planned wire-up in PR C).
+    """
+    _ensure_project(project_id)
+    cwd = _project_cwd(project_id)
+    result = GrdCliService.think(cwd)
+    if not result["success"]:
+        from litestar.exceptions import HTTPException
+
+        raise HTTPException(
+            status_code=503,
+            detail=result.get("error") or "gd think unavailable",
+        )
+    return result["data"] or {}
+
+
+@post("/{project_id:str}/grd/dead-ends", status_code=201, sync_to_thread=False)
+def grd_add_dead_end(project_id: str, data: dict) -> dict[str, Any]:
+    """v0.7.84 — append an entry to ``.planning/DEAD-ENDS.md``.
+
+    Body shape:
+        {"approach": str, "reason": str, "phase": str|null}
+
+    Returns the raw CLI output plus the inputs echoed back so the
+    frontend can render the new entry without a separate read.
+    """
+    _ensure_project(project_id)
+    body = data or {}
+    approach = (body.get("approach") or "").strip()
+    reason = (body.get("reason") or "").strip()
+    phase = body.get("phase")
+    if not approach or not reason:
+        raise ClientException(detail="approach and reason are required")
+    cwd = _project_cwd(project_id)
+    result = GrdCliService.add_dead_end(
+        cwd, approach=approach, reason=reason, phase=str(phase) if phase else None
+    )
+    if not result["success"]:
+        from litestar.exceptions import HTTPException
+
+        raise HTTPException(
+            status_code=503,
+            detail=result.get("error") or "dead-end add failed",
+        )
+    return {
+        "approach": approach,
+        "reason": reason,
+        "phase": phase,
+        "output": result.get("output"),
+    }
+
+
+@post(
+    "/{project_id:str}/grd/dead-ends/promote-from-phase/{phase:str}",
+    sync_to_thread=False,
+)
+def grd_promote_dead_ends(project_id: str, phase: str) -> dict[str, Any]:
+    """v0.7.84 — promote ``verdict: falsified`` reflections from a
+    phase into ``.planning/DEAD-ENDS.md``.
+    """
+    _ensure_project(project_id)
+    cwd = _project_cwd(project_id)
+    result = GrdCliService.promote_dead_ends_from_phase(cwd, phase)
+    if not result["success"]:
+        from litestar.exceptions import HTTPException
+
+        raise HTTPException(
+            status_code=503,
+            detail=result.get("error") or "dead-end promotion failed",
+        )
+    return {"phase": phase, "output": result.get("output")}
+
+
+@get("/{project_id:str}/grd/genome", sync_to_thread=False)
+def grd_genome(project_id: str) -> dict[str, Any]:
+    """v0.7.84 — read ``.planning/GENOME.md`` via ``gd-tools genome show``.
+
+    Returns ``{exists: bool, content: str|null}``. Missing GENOME.md
+    is a 200 with ``exists=false`` rather than a 404 because the file
+    is genuinely optional.
+    """
+    _ensure_project(project_id)
+    cwd = _project_cwd(project_id)
+    result = GrdCliService.genome_show(cwd)
+    if not result["success"]:
+        from litestar.exceptions import HTTPException
+
+        raise HTTPException(
+            status_code=503,
+            detail=result.get("error") or "genome show unavailable",
+        )
+    data = result.get("data") or {}
+    return {
+        "exists": bool(data.get("exists")),
+        "content": data.get("content"),
+        "raw": data,
+    }
+
+
+@post("/{project_id:str}/grd/genome/snapshot", sync_to_thread=False)
+def grd_genome_snapshot(project_id: str) -> dict[str, Any]:
+    """v0.7.84 — append a snapshot to ``.planning/GENOME.md`` via
+    ``gd-tools genome snapshot``.
+    """
+    _ensure_project(project_id)
+    cwd = _project_cwd(project_id)
+    result = GrdCliService.genome_snapshot(cwd)
+    if not result["success"]:
+        from litestar.exceptions import HTTPException
+
+        raise HTTPException(
+            status_code=503,
+            detail=result.get("error") or "genome snapshot failed",
+        )
+    return {"output": result.get("output")}
+
+
+@post("/{project_id:str}/grd/verify/mechanical/{phase:str}", sync_to_thread=False)
+def grd_verify_mechanical(project_id: str, phase: str) -> dict[str, Any]:
+    """v0.7.84 — bundle the four PLAN.md mechanical checks via
+    ``gd-tools verify mechanical --phase <N>``. Faster than the full
+    ``/grd:verify-phase`` agent flow; intended as a pre-gate.
+    """
+    _ensure_project(project_id)
+    cwd = _project_cwd(project_id)
+    result = GrdCliService.verify_mechanical(cwd, phase)
+    return {
+        "success": result["success"],
+        "output": result.get("output"),
+        "error": result.get("error"),
+        "phase": phase,
     }
 
 
@@ -1230,6 +1426,14 @@ grd_router = Router(
     route_handlers=[
         sync_status,
         trigger_sync,
+        # v0.7.84 — Ouroboros surface (GRD v0.3.24)
+        grd_health,
+        grd_think,
+        grd_add_dead_end,
+        grd_promote_dead_ends,
+        grd_genome,
+        grd_genome_snapshot,
+        grd_verify_mechanical,
         list_milestones,
         list_phases,
         create_phase,

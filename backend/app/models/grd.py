@@ -328,3 +328,89 @@ class TeamMonitorResponse(BaseModel):
     tasks: List[dict] = Field(default_factory=list)
     alive: bool = True
     status: str = "active"
+
+
+# ---------------------------------------------------------------------
+# v0.7.84 — Ouroboros surface (GRD v0.3.24)
+# ---------------------------------------------------------------------
+
+
+class GrdVerdict(str, Enum):
+    """v0.7.84 — phase reflection verdict per Ouroboros pattern.
+
+    Mirrors the four-state verdict the GRD verifier writes into
+    ``REFLECTION.md`` after comparing a plan's ``predicted_outcome``
+    against actual results.
+    """
+
+    CONFIRMED = "confirmed"
+    PARTIAL = "partial"
+    FALSIFIED = "falsified"
+    UNKNOWN = "unknown"
+
+
+class GrdHealthReport(BaseModel):
+    """v0.7.84 — parsed payload from ``gd health --json``.
+
+    The CLI returns a free-form JSON object; we keep the model
+    permissive (extra fields allowed) so adopting future GRD
+    additions doesn't require an Agented release.
+    """
+
+    drift_weighted: Optional[float] = None
+    drift_exceeded: Optional[bool] = None
+    blocker_count: Optional[int] = None
+    blockers: List[dict] = Field(default_factory=list)
+    deferred_validations: List[dict] = Field(default_factory=list)
+    raw: Optional[dict] = None  # full JSON for fields we don't model yet
+
+
+class GrdThinkResponse(BaseModel):
+    """v0.7.84 — response from ``gd think``.
+
+    ``output_path`` points at the markdown briefing written under
+    ``.planning/thoughts/``; the snapshot + counts are the briefing's
+    front-of-document JSON header.
+    """
+
+    generated_at: Optional[str] = None
+    output_path: Optional[str] = None
+    snapshot: dict = Field(default_factory=dict)
+    verdict_counts: dict = Field(default_factory=dict)
+    recent_dead_ends: List[dict] = Field(default_factory=list)
+    open_questions: List[dict] = Field(default_factory=list)
+    product_idea_collisions: List[dict] = Field(default_factory=list)
+
+
+class GrdDeadEndEntry(BaseModel):
+    """v0.7.84 — single entry in ``.planning/DEAD-ENDS.md``."""
+
+    approach: str
+    reason: str
+    phase: Optional[str] = None
+    recorded_at: Optional[str] = None
+
+
+class CreateDeadEndRequest(BaseModel):
+    """v0.7.84 — request body for ``POST /api/projects/{id}/grd/dead-ends``."""
+
+    approach: str = Field(..., min_length=1)
+    reason: str = Field(..., min_length=1)
+    phase: Optional[str] = None
+
+
+class GrdGenomeSnapshot(BaseModel):
+    """v0.7.84 — response from ``gd-tools genome show``."""
+
+    exists: bool = False
+    content: Optional[str] = None
+    raw: Optional[dict] = None  # full JSON for forward compat
+
+
+class GrdMechanicalVerifyResponse(BaseModel):
+    """v0.7.84 — bundled output from ``gd-tools verify mechanical``."""
+
+    success: bool
+    output: Optional[str] = None
+    error: Optional[str] = None
+    phase: str
