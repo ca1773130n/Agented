@@ -158,6 +158,52 @@ def _migrate_120_project_allowed_accounts(conn) -> None:
     )
 
 
+def _migrate_121_project_forge_bindings(conn) -> None:
+    """v0.7.70 — per-project sticky Forge bindings.
+
+    Materializes the "Forge assets I want every session of this
+    project to inherit" set. The compiler (``ContextCompilerService``)
+    reads these, layers session-level overrides + per-prompt
+    attachments on top, and produces a backend-specific
+    ``ContextBundle`` (system-prompt text + overlay files + MCP
+    config + per-prompt prepend).
+
+    ``kind`` is a free TEXT column whose currently-defined values are
+    ``rule|skill|hook|command|mcp_server|plugin``. New kinds (e.g.
+    ``persona``) can be added without a schema change.
+
+    ``asset_id`` is also free TEXT because the referenced asset
+    tables use heterogeneous PK shapes (rules use ``INTEGER`` PKs,
+    skills key by ``name``, MCP servers by ``id`` TEXT). The
+    compiler resolves the reference; an unresolved binding is
+    skipped with a warning rather than failing the whole compile.
+
+    ``role`` is reserved for kind-specific fanout (e.g. a rule may
+    play ``system_prompt`` vs ``always_on`` roles). v1 leaves it
+    NULL.
+    """
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS project_forge_bindings (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            project_id  TEXT NOT NULL
+              REFERENCES projects(id) ON DELETE CASCADE,
+            kind        TEXT NOT NULL,
+            asset_id    TEXT NOT NULL,
+            role        TEXT,
+            enabled     INTEGER NOT NULL DEFAULT 1,
+            position    INTEGER NOT NULL DEFAULT 0,
+            created_at  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(project_id, kind, asset_id)
+        )
+        """
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_pfb_project_enabled "
+        "ON project_forge_bindings(project_id, enabled)"
+    )
+
+
 V07_MIGRATIONS: list = [
     # v0.7.7: super-agent activity inspector — timeline + rollup.
     (116, "super_agent_activity", _migrate_116_super_agent_activity),
@@ -174,4 +220,6 @@ V07_MIGRATIONS: list = [
     (119, "session_name_and_yolo", _migrate_119_session_name_and_yolo),
     # v0.7.58: per-project AI backend account whitelist.
     (120, "project_allowed_accounts", _migrate_120_project_allowed_accounts),
+    # v0.7.70: per-project Forge context bindings.
+    (121, "project_forge_bindings", _migrate_121_project_forge_bindings),
 ]

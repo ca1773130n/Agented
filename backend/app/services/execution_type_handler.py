@@ -97,6 +97,7 @@ class DirectExecutionHandler(ExecutionTypeHandler):
             stream_json=session_config.get("stream_json", False),
             use_pty=session_config.get("use_pty", True),
             yolo_mode=session_config.get("yolo_mode", False),
+            forge_bundle=session_config.get("forge_bundle"),
         )
         info = ProjectSessionManager.get_session_info(session_id)
         return {

@@ -6,6 +6,7 @@ import { projectApi, teamApi, productApi, ApiError } from '../services/api';
 import PageHeader from '../components/base/PageHeader.vue';
 import ProjectMcpPanel from '../components/project/ProjectMcpPanel.vue';
 import ProjectAllowedAccountsPanel from '../components/project/ProjectAllowedAccountsPanel.vue';
+import ProjectForgeBindingsPanel from '../components/project/ProjectForgeBindingsPanel.vue';
 import EntityLayout from '../layouts/EntityLayout.vue';
 import { useToast } from '../composables/useToast';
 import { handleApiError } from '../services/api/error-handler';
@@ -449,6 +450,10 @@ async function retryClone() {
           <ProjectAllowedAccountsPanel :projectId="projectId" />
         </div>
       </div>
+
+      <!-- v0.7.70 — Forge context bindings (sticky per-project
+           context injected into every session of this project). -->
+      <ProjectForgeBindingsPanel v-if="project" :projectId="projectId" />
 
       <!-- Actions -->
       <div class="actions-row">

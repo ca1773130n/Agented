@@ -405,11 +405,28 @@ export function useProjectSession(projectId: Ref<string>) {
 
   /**
    * Send text input to the active session's PTY stdin.
+   *
+   * v0.7.70 — ``attachments`` is an optional bag of per-prompt
+   * context bits (files, snippets, URLs, entity refs). When
+   * present, the backend compiles them through
+   * ``ContextCompilerService`` and prepends a rendered
+   * ``=== Operator Context ===`` block to ``text`` before
+   * forwarding to the CLI. Pass ``undefined`` (or omit) for the
+   * legacy "no extra context" behavior — payload + bytes on the
+   * wire are identical to pre-v0.7.70.
    */
-  async function sendInput(text: string) {
+  async function sendInput(
+    text: string,
+    attachments?: Array<Record<string, unknown>>,
+  ) {
     if (!activeSessionId.value) return;
     try {
-      await grdApi.sendInput(projectId.value, activeSessionId.value, text);
+      await grdApi.sendInput(
+        projectId.value,
+        activeSessionId.value,
+        text,
+        attachments,
+      );
     } catch (e) {
       error.value = e instanceof Error ? e.message : 'Failed to send input';
     }

@@ -233,7 +233,16 @@ describe('useProjectSession', () => {
 
       await session.sendInput('hello');
 
-      expect(mockSendInput).toHaveBeenCalledWith('proj-abc', 'sess-1', 'hello');
+      // v0.7.70 — sendInput now forwards an optional ``attachments``
+      // array. When no attachments are supplied, the 4th arg is
+      // ``undefined`` so the wire payload stays byte-identical to
+      // pre-v0.7.70 (grdApi.sendInput omits the field on empty).
+      expect(mockSendInput).toHaveBeenCalledWith(
+        'proj-abc',
+        'sess-1',
+        'hello',
+        undefined,
+      );
     });
 
     it('sets error on failure', async () => {

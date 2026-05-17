@@ -79,6 +79,137 @@ def _heal_stray_backtick_before_heading(text: str) -> str:
     return _STRAY_BACKTICK_BEFORE_HEADING_RE.sub(r"\1\n\n", text)
 
 
+# v0.7.72 — AskUserQuestion JSON-in-text detector. Matches both an
+# inline JSON object ``{"questions":[...]}`` and a fenced ``` ```json
+# {...} ``` ``` block whose payload has that shape. Both forms appear
+# when claude lacks the structured tool (or hallucinates the call as
+# text); we lift them into the same ``ask_user_question`` SSE event
+# the structured ``tool_use`` path emits.
+#
+# A regex can't reliably bracket-match nested JSON (the options array
+# itself contains brace-rich objects), so we use a brace-counting
+# scanner anchored at each ``"questions"`` keyword. Cheap enough at
+# the sizes claude emits.
+_AUQ_FENCE_RE = re.compile(
+    r"```(?:json)?\s*\n(\{[\s\S]*?\"questions\"[\s\S]*?\})\s*\n```",
+    re.MULTILINE,
+)
+_AUQ_KEYWORD_RE = re.compile(r"\"questions\"\s*:\s*\[")
+
+
+def _scan_balanced_object(text: str, anchor: int) -> Optional[tuple[int, int]]:
+    """Find the JSON object whose body contains ``anchor``.
+
+    Walks left from ``anchor`` to the nearest ``{`` (the candidate
+    object start), then forward counting braces (honoring strings +
+    escapes) until balance returns to 0. Returns ``(start, end)`` of
+    the substring on success, ``None`` otherwise.
+    """
+    start = text.rfind("{", 0, anchor)
+    if start < 0:
+        return None
+    depth = 0
+    in_string = False
+    escape = False
+    for i in range(start, len(text)):
+        ch = text[i]
+        if escape:
+            escape = False
+            continue
+        if ch == "\\" and in_string:
+            escape = True
+            continue
+        if ch == '"':
+            in_string = not in_string
+            continue
+        if in_string:
+            continue
+        if ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0:
+                return start, i + 1
+    return None
+
+
+def _looks_like_ask_user_question(payload: dict) -> bool:
+    """True iff ``payload`` has the AskUserQuestion-input shape.
+
+    Required: ``questions`` is a non-empty list of dicts, each with
+    ``question`` (str) and ``options`` (list). Other AskUserQuestion
+    fields (``header``, ``multiSelect``, option ``description``) are
+    optional so we don't reject minor formatting variants.
+    """
+    if not isinstance(payload, dict):
+        return False
+    questions = payload.get("questions")
+    if not isinstance(questions, list) or not questions:
+        return False
+    for q in questions:
+        if not isinstance(q, dict):
+            return False
+        if not isinstance(q.get("question"), str):
+            return False
+        opts = q.get("options")
+        if not isinstance(opts, list) or not opts:
+            return False
+        if not all(isinstance(o, dict) and "label" in o for o in opts):
+            return False
+    return True
+
+
+def _extract_text_ask_question(text: str) -> tuple[str, Optional[dict]]:
+    """Scan ``text`` for an AskUserQuestion JSON payload.
+
+    Returns ``(stripped_text, payload_dict)`` where:
+      * ``stripped_text`` has the matched JSON (and surrounding
+        fence, if any) replaced by an empty string so the operator
+        doesn't see both the raw JSON and the button card.
+      * ``payload_dict`` is ``{"tool_use_id": "", "questions": [...]}``
+        ready to be broadcast as an ``ask_user_question`` SSE event,
+        or ``None`` if no AskUserQuestion shape was found.
+
+    Fenced ``` ```json ``` ``` blocks are tried first because their
+    boundaries are unambiguous. The unfenced scan anchors on the
+    ``"questions"`` keyword and uses a brace-balanced walk to find
+    the enclosing JSON object.
+    """
+    for m in _AUQ_FENCE_RE.finditer(text):
+        blob = m.group(1)
+        try:
+            payload = json.loads(blob)
+        except (json.JSONDecodeError, ValueError):
+            continue
+        if not _looks_like_ask_user_question(payload):
+            continue
+        stripped = text[: m.start()] + text[m.end() :]
+        return (
+            stripped,
+            {"tool_use_id": "", "questions": payload["questions"]},
+        )
+
+    for km in _AUQ_KEYWORD_RE.finditer(text):
+        bounds = _scan_balanced_object(text, km.start())
+        if bounds is None:
+            continue
+        start, end = bounds
+        blob = text[start:end]
+        try:
+            payload = json.loads(blob)
+        except (json.JSONDecodeError, ValueError):
+            continue
+        if not _looks_like_ask_user_question(payload):
+            continue
+        stripped = text[:start] + text[end:]
+        return (
+            stripped,
+            {"tool_use_id": "", "questions": payload["questions"]},
+        )
+
+    return text, None
+
+
 def _unwrap_markdown_fences(text: str) -> str:
     """Replace ``` ```markdown\\n…\\n``` ``` blocks with their inner content.
 
@@ -362,7 +493,28 @@ def _extract_stream_json_events(
                 # 2. Heal stray opening backticks that swallow a
                 #    following ATX header — see v0.7.64.
                 healed = _heal_stray_backtick_before_heading(block["text"])
-                text_buffer.append(_unwrap_markdown_fences(healed))
+                normalized = _unwrap_markdown_fences(healed)
+
+                # v0.7.72 — defensive AskUserQuestion detection.
+                # When claude doesn't have the structured tool
+                # available (or hallucinates the call as a JSON
+                # payload inside a text block), the operator sees
+                # raw JSON instead of clickable options. Lift any
+                # such payload into a real ``ask_user_question``
+                # event so InteractiveQuestionCard fires the same
+                # way it does for the structured tool_use path.
+                stripped_text, synthetic_q = _extract_text_ask_question(
+                    normalized
+                )
+                if stripped_text.strip():
+                    text_buffer.append(stripped_text)
+                if synthetic_q is not None:
+                    if text_buffer:
+                        events.append(
+                            ("output", {"line": "\n".join(text_buffer)})
+                        )
+                        text_buffer = []
+                    events.append(("ask_user_question", synthetic_q))
             elif block_type == "tool_use":
                 name = block.get("name")
                 if name == "AskUserQuestion":
@@ -574,6 +726,7 @@ class ProjectSessionManager:
         stream_json: bool = False,
         use_pty: bool = True,
         yolo_mode: bool = False,
+        forge_bundle: Optional[dict] = None,
     ) -> str:
         """Create a persistent session.
 
@@ -669,6 +822,30 @@ class ProjectSessionManager:
                     session_id,
                     exc_info=True,
                 )
+
+        # v0.7.71 — apply the Forge ContextBundle into whichever
+        # claude overlay is in effect (the permission-hook overlay
+        # we just built above, or one supplied via env). When the
+        # overlay dir doesn't exist, the apply silently skips —
+        # the system-prompt flag already added to ``cmd`` is the
+        # other half of the bundle's effect and it doesn't need the
+        # overlay. yolo_mode sessions can still benefit by setting
+        # CLAUDE_CONFIG_DIR ahead of time; otherwise the bundle's
+        # overlay-only portions (hooks / commands / MCP) silently
+        # don't take effect, which matches the yolo philosophy.
+        if forge_bundle and cmd and cmd[0] == "claude":
+            overlay_path = (env or {}).get("CLAUDE_CONFIG_DIR")
+            if overlay_path:
+                try:
+                    from .claude_config_overlay import apply_forge_bundle
+
+                    apply_forge_bundle(overlay_path, forge_bundle)
+                except Exception:
+                    logger.warning(
+                        "Failed to apply Forge context bundle to %s",
+                        session_id,
+                        exc_info=True,
+                    )
 
         popen: Optional[subprocess.Popen] = None
         if use_pty:

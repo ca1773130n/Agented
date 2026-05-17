@@ -531,6 +531,49 @@ def create_session(project_id: str, data: dict) -> dict[str, Any]:
     ):
         cmd = [*cmd, "--dangerously-skip-permissions"]
 
+    # v0.7.70 — compile the project's Forge context bundle and apply
+    # it to the cmd before the handler spawns the subprocess. Empty
+    # bundle (no bindings, no overrides, no attachments) is a no-op
+    # so existing sessions stay byte-identical.
+    forge_context = body.get("forge_context") or {}
+    forge_bundle_dict: dict | None = None
+    try:
+        from app.services.context_compiler_service import ContextCompilerService
+        from app.services.context_renderers import renderer_for
+
+        bundle = ContextCompilerService.compile(
+            project_id,
+            session_overrides=forge_context.get("session_overrides"),
+            attachments=forge_context.get("attachments"),
+            project_root=cwd,
+        )
+        renderer = renderer_for(cmd[0]) if cmd else None
+        if renderer is not None and not bundle.is_empty():
+            # Renderer mutates argv (e.g. appends --append-system-prompt).
+            # The overlay-side of the bundle (hooks/commands/mcp_servers)
+            # is materialized later by PSM via
+            # ``claude_config_overlay.apply_forge_bundle`` so it can
+            # layer on top of the permission-hook overlay PSM creates
+            # for non-yolo stream-json sessions.
+            cmd, _renderer_env = renderer.apply(
+                cmd, dict(body.get("env") or {}), bundle, session_id="pending"
+            )
+            # Carry the bundle through to PSM for overlay
+            # materialization. Skip if the bundle has nothing
+            # overlay-relevant to add (keeps the session_config
+            # payload tight in the common empty case).
+            if (
+                bundle.overlay_files
+                or bundle.overlay_symlinks
+                or bundle.mcp_servers
+            ):
+                forge_bundle_dict = bundle.to_dict()
+    except Exception:
+        logger.warning(
+            "create_session: forge context compile failed; spawning with raw cmd",
+            exc_info=True,
+        )
+
     result = handler.start(
         {
             "project_id": project_id,
@@ -557,6 +600,9 @@ def create_session(project_id: str, data: dict) -> dict[str, Any]:
             # to read from a tty.
             "use_pty": bool(body.get("use_pty", True)),
             "yolo_mode": yolo_mode,
+            # v0.7.71 — overlay portion of the compiled Forge bundle
+            # (None when there's nothing for PSM to materialize).
+            "forge_bundle": forge_bundle_dict,
         }
     )
 
@@ -671,12 +717,16 @@ def session_answer_question(
     """
     del project_id
     body = data or {}
-    tool_use_id = body.get("tool_use_id")
+    # ``tool_use_id`` is optional now (v0.7.72) — when PSM
+    # synthesizes an ``ask_user_question`` event from a text-block
+    # AskUserQuestion (claude rendered the call inline instead of
+    # emitting a real ``tool_use``), there's no id to reference.
+    # We still accept the answer and forward it as a plain user
+    # message so claude's conversation can continue.
+    tool_use_id = body.get("tool_use_id") or ""
     answers = body.get("answers")
-    if not tool_use_id or answers is None:
-        raise ClientException(
-            detail="tool_use_id and answers are required"
-        )
+    if answers is None:
+        raise ClientException(detail="answers is required")
 
     # Persist the user side so the chat panel re-renders the chosen
     # option as a user bubble on next hydration. Render it as a
@@ -707,20 +757,34 @@ def session_answer_question(
 
     import json as _json
 
+    if tool_use_id:
+        # Real tool_use path — wrap as the tool_result claude is
+        # blocked waiting for.
+        content_block: dict = {
+            "type": "tool_result",
+            "tool_use_id": tool_use_id,
+            "content": _json.dumps({"answers": answers}, ensure_ascii=False),
+        }
+    else:
+        # Synthetic path — claude rendered the AskUserQuestion as
+        # text and isn't waiting on a tool_result; ship the answer
+        # as a normal user text message so the next turn picks it up.
+        if isinstance(answers, dict) and answers:
+            lines = []
+            for q, a in answers.items():
+                shown = a if isinstance(a, str) else ", ".join(a or [])
+                lines.append(f"{q} -> {shown}")
+            text = "\n".join(lines)
+        else:
+            text = _json.dumps({"answers": answers}, ensure_ascii=False)
+        content_block = {"type": "text", "text": text}
+
     envelope = {
         "type": "user",
         "session_id": "",
         "message": {
             "role": "user",
-            "content": [
-                {
-                    "type": "tool_result",
-                    "tool_use_id": tool_use_id,
-                    "content": _json.dumps(
-                        {"answers": answers}, ensure_ascii=False
-                    ),
-                }
-            ],
+            "content": [content_block],
         },
         "parent_tool_use_id": None,
     }
@@ -946,10 +1010,45 @@ def resume_session(project_id: str, session_id: str) -> dict[str, Any]:
 
 @post("/{project_id:str}/sessions/{session_id:str}/input", sync_to_thread=False)
 def session_input(project_id: str, session_id: str, data: dict) -> dict[str, Any]:
-    del project_id
-    text = (data or {}).get("text")
+    body = data or {}
+    text = body.get("text")
     if text is None:
         raise ClientException(detail="text is required")
+
+    # v0.7.70 — per-prompt attachments: if the operator attached
+    # files/snippets/URLs/entity refs in the SessionContextTray, the
+    # frontend forwards them as ``attachments``. Re-compile a
+    # bundle (cheap — empty bindings + only this prompt's
+    # attachments) and prepend the rendered text. The result is a
+    # single user message containing the Operator Context block
+    # above the operator's question.
+    attachments = body.get("attachments") or []
+    if attachments:
+        try:
+            from app.services.context_compiler_service import ContextCompilerService
+            from app.services.project_workspace_service import ProjectWorkspaceService
+
+            project_root = None
+            try:
+                project_root = ProjectWorkspaceService.resolve_working_directory(
+                    project_id
+                )
+            except Exception:
+                project_root = None
+            bundle = ContextCompilerService.compile(
+                project_id,
+                attachments=attachments,
+                project_root=project_root,
+            )
+            if bundle.prompt_prepend:
+                text = f"{bundle.prompt_prepend}\n\n{text}"
+        except Exception:
+            logger.warning(
+                "session_input: failed to render attachments for %s",
+                session_id,
+                exc_info=True,
+            )
+    del project_id
 
     # Persist the user's message into ``project_sessions.log_json``
     # before forwarding to claude — so even if the subprocess crashes
