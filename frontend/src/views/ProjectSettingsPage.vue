@@ -6,7 +6,6 @@ import { projectApi, teamApi, productApi, ApiError } from '../services/api';
 import PageHeader from '../components/base/PageHeader.vue';
 import ProjectMcpPanel from '../components/project/ProjectMcpPanel.vue';
 import ProjectAllowedAccountsPanel from '../components/project/ProjectAllowedAccountsPanel.vue';
-import ProjectForgeBindingsPanel from '../components/project/ProjectForgeBindingsPanel.vue';
 import EntityLayout from '../layouts/EntityLayout.vue';
 import { useToast } from '../composables/useToast';
 import { handleApiError } from '../services/api/error-handler';
@@ -451,16 +450,6 @@ async function retryClone() {
         </div>
       </div>
 
-      <!-- v0.7.70 — Forge context bindings (sticky per-project
-           context injected into every session of this project). -->
-      <div v-if="project" class="card">
-        <div class="card-header">
-          <h3>Forge context bindings</h3>
-        </div>
-        <div class="card-body">
-          <ProjectForgeBindingsPanel :projectId="projectId" />
-        </div>
-      </div>
 
       <!-- Actions -->
       <div class="actions-row">
