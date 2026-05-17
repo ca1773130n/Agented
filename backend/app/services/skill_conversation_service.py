@@ -96,13 +96,36 @@ class SkillConversationService:
             )
         ]
 
+        # v0.7.76 — append the kickoff user message BEFORE
+        # ``_process_with_claude`` runs. The prior implementation
+        # passed the kickoff string as a parameter that was never
+        # added to ``conv["messages"]``; the LLM call then saw
+        # only the system prompt with no user message, and the
+        # upstream rejected with "text content blocks must be
+        # non-empty" (no user message → empty user content block
+        # in the OpenAI-format translation).
+        kickoff = ConversationMessage(
+            role="user",
+            content="Hello, I'd like to create a new skill.",
+            timestamp=datetime.datetime.now().isoformat(),
+        )
+        initial_messages.append(kickoff)
+
         with cls._lock:
             cls._conversations[conv_id] = {"messages": initial_messages, "processing": False}
             cls._subscribers[conv_id] = []
             cls._start_times[conv_id] = datetime.datetime.now()
 
-        # Trigger initial assistant greeting
-        cls._process_with_claude(conv_id, "Hello, I'd like to create a new skill.")
+        # v0.7.76 — spawn the LLM call in a background thread so
+        # the HTTP request returns immediately; the response
+        # streams back over SSE just like ``send_message``. The
+        # prior synchronous call blocked the request for the full
+        # LLM round-trip, making the wizard hang on /skills/new.
+        threading.Thread(
+            target=cls._process_with_claude,
+            args=(conv_id, kickoff.content),
+            daemon=True,
+        ).start()
 
         return {
             "conversation_id": conv_id,
