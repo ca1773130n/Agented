@@ -350,17 +350,26 @@ class SkillConversationService:
         playground = get_playground_working_dir()
         abs_skill_dir = os.path.join(playground, skill_dir_rel)
 
-        # v0.7.77 (codex BLOCK 6 + 2nd-pass fix) — stage the whole
-        # package in a temp dir on the SAME FILESYSTEM as the
-        # destination, then atomic-rename. ``tempfile.mkdtemp()``
-        # without ``dir=`` defaults to ``/tmp`` (tmpfs on Linux);
-        # ``os.replace`` across filesystems raises ``EXDEV``. By
-        # passing ``dir=staging_parent`` we guarantee both ends
-        # live on the same mount so the rename is atomic.
-        staging_parent = os.path.join(playground, ".claude", "skills")
+        # v0.7.77 (codex BLOCK 6 + 2nd-pass + 3rd-pass fix) —
+        # stage the whole package in a temp dir on the SAME
+        # FILESYSTEM as the destination (so ``os.replace`` is
+        # atomic and doesn't raise ``EXDEV`` across mounts), but
+        # OUTSIDE the ``.claude/skills/`` tree so the discovery
+        # scanners (``SkillDiscoveryService``,
+        # ``HarnessLoaderService._import_skills``) can't pick up
+        # a half-baked staging dir as a skill during the rename
+        # window. The dot-prefix from the 2nd-pass fix wasn't
+        # enough — those scanners don't filter dot-prefixed
+        # entries. Staging in a sibling root dir under the
+        # playground keeps both invariants.
+        staging_parent = os.path.join(playground, ".agented-skill-staging")
         os.makedirs(staging_parent, exist_ok=True)
+        # Ensure the final ``.claude/skills/`` parent exists too,
+        # since we removed the implicit ``makedirs`` from the
+        # staging_parent path.
+        os.makedirs(os.path.dirname(abs_skill_dir), exist_ok=True)
         staging_dir = tempfile.mkdtemp(
-            prefix=f".agented-skill-staging-{skill_name}-",
+            prefix=f"{skill_name}-",
             dir=staging_parent,
         )
         try:
