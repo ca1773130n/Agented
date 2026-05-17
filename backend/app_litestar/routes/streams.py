@@ -33,6 +33,7 @@ from app.services.project_session_manager import ProjectSessionManager
 from app.services.rule_conversation_service import RuleConversationService
 from app.services.setup_execution_service import SetupExecutionService
 from app.services.team_generation_service import TeamGenerationService
+from app_litestar.auth import Caller
 
 
 SSE_HEADERS = {
@@ -75,7 +76,13 @@ execution_stream_router = Router(
 
 
 def _make_conversation_stream(name: str, service: Any) -> Router:
-    """Build a stream router for one conversation namespace."""
+    """Build a stream router for one conversation namespace.
+
+    v0.7.83 — precheck ownership via the service's
+    ``can_subscribe`` so an unauthorized caller gets a real HTTP
+    404 instead of a 200 SSE stream with an in-band error event.
+    Same shape as the skill stream route (codex WARN B / v0.7.78).
+    """
 
     @get(
         "/{conv_id:str}/stream",
@@ -83,9 +90,20 @@ def _make_conversation_stream(name: str, service: Any) -> Router:
         sync_to_thread=False,
         name=f"{name}_stream",
     )
-    def stream_conversation(conv_id: str) -> Stream:
+    def stream_conversation(conv_id: str, caller: Caller) -> Stream:
+        user_id = getattr(caller, "user_id", None) if caller else None
+        if hasattr(service, "can_subscribe") and not service.can_subscribe(
+            conv_id, user_id
+        ):
+            raise NotFoundException(detail="Conversation not found")
+
         def generate():
-            for event in service.subscribe(conv_id):
+            sub = (
+                service.subscribe(conv_id, caller_user_id=user_id)
+                if hasattr(service, "can_subscribe")
+                else service.subscribe(conv_id)
+            )
+            for event in sub:
                 yield event
 
         return _sse_response(generate())

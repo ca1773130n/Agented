@@ -9,7 +9,7 @@ across all conversation streams in one pass.
 
 from __future__ import annotations
 
-from typing import Any, Callable
+from typing import Any, Callable, Optional
 
 from litestar import Router, get, post
 from litestar.exceptions import (
@@ -22,6 +22,14 @@ from app.services.command_conversation_service import CommandConversationService
 from app.services.hook_conversation_service import HookConversationService
 from app.services.plugin_conversation_service import PluginConversationService
 from app.services.rule_conversation_service import RuleConversationService
+from app_litestar.auth import Caller
+
+
+def _caller_user_id(caller: Caller | None) -> Optional[str]:
+    """v0.7.83 — single accessor so every conversation route
+    uses the same source of truth for the operator id.
+    """
+    return getattr(caller, "user_id", None) if caller else None
 
 
 def _result_or_raise(payload: tuple[Any, int]) -> Any:
@@ -52,15 +60,19 @@ def _make_conversation_router(
     finalize: Callable = getattr(service, finalize_method)
 
     @post("/start", sync_to_thread=False, name=f"{name_prefix}_start")
-    def start_conversation() -> Any:
-        return _result_or_raise(service.start_conversation())
+    def start_conversation(caller: Caller) -> Any:
+        return _result_or_raise(
+            service.start_conversation(user_id=_caller_user_id(caller))
+        )
 
     @get("/{conv_id:str}", sync_to_thread=False, name=f"{name_prefix}_get")
-    def get_conversation(conv_id: str) -> Any:
-        return _result_or_raise(service.get_conversation(conv_id))
+    def get_conversation(conv_id: str, caller: Caller) -> Any:
+        return _result_or_raise(
+            service.get_conversation(conv_id, caller_user_id=_caller_user_id(caller))
+        )
 
     @post("/{conv_id:str}/message", sync_to_thread=False, name=f"{name_prefix}_message")
-    def send_message(conv_id: str, data: dict) -> Any:
+    def send_message(conv_id: str, data: dict, caller: Caller) -> Any:
         body = data or {}
         if not body.get("message"):
             raise ClientException(detail="message is required")
@@ -69,24 +81,49 @@ def _make_conversation_router(
         # global YOLO setting.
         raw_override = body.get("use_cli_agent")
         use_cli_agent = raw_override if isinstance(raw_override, bool) else None
+        # v0.7.83 — Plugin's send_message doesn't accept
+        # ``use_cli_agent`` (no CLI runner toggle on /plugins/new);
+        # base service does. Pass conditionally.
+        send_kwargs = {
+            "backend": body.get("backend"),
+            "account_id": body.get("account_id"),
+            "model": body.get("model"),
+            "caller_user_id": _caller_user_id(caller),
+        }
+        if service is not PluginConversationService:
+            send_kwargs["use_cli_agent"] = use_cli_agent
         return _result_or_raise(
-            service.send_message(
-                conv_id,
-                body["message"],
-                backend=body.get("backend"),
-                account_id=body.get("account_id"),
-                model=body.get("model"),
-                use_cli_agent=use_cli_agent,
-            )
+            service.send_message(conv_id, body["message"], **send_kwargs)
         )
 
     @post("/{conv_id:str}/finalize", sync_to_thread=False, name=f"{name_prefix}_finalize")
-    def finalize_endpoint(conv_id: str) -> Any:
+    def finalize_endpoint(conv_id: str, caller: Caller) -> Any:
+        # v0.7.83 — base finalize via ``_finalize_entity`` doesn't
+        # accept caller_user_id (it's protected by start/send
+        # ownership checks); plugin's ``finalize_plugin`` does.
+        if service is PluginConversationService:
+            return _result_or_raise(
+                finalize(conv_id, caller_user_id=_caller_user_id(caller))
+            )
         return _result_or_raise(finalize(conv_id))
 
     @post("/{conv_id:str}/abandon", sync_to_thread=False, name=f"{name_prefix}_abandon")
-    def abandon_conversation(conv_id: str) -> Any:
-        return _result_or_raise(service.abandon_conversation(conv_id))
+    def abandon_conversation(conv_id: str, caller: Caller) -> Any:
+        return _result_or_raise(
+            service.abandon_conversation(
+                conv_id, caller_user_id=_caller_user_id(caller)
+            )
+        )
+
+    @get("/active", sync_to_thread=False, name=f"{name_prefix}_active")
+    def list_active(caller: Caller) -> Any:
+        """v0.7.83 — list this entity-type's active conversations
+        for the calling user. Powers the wizard's auto-resume on
+        cold-cache loads.
+        """
+        return _result_or_raise(
+            service.list_active(user_id=_caller_user_id(caller))
+        )
 
     handlers: list = [
         start_conversation,
@@ -94,19 +131,26 @@ def _make_conversation_router(
         send_message,
         finalize_endpoint,
         abandon_conversation,
+        list_active,
     ]
 
     if include_list:
         @get("/", sync_to_thread=False, name=f"{name_prefix}_list")
-        def list_conversations() -> Any:
-            return _result_or_raise(service.list_conversations())
+        def list_conversations(caller: Caller) -> Any:
+            return _result_or_raise(
+                service.list_conversations(user_id=_caller_user_id(caller))
+            )
 
         handlers.append(list_conversations)
 
     if include_resume:
         @post("/{conv_id:str}/resume", sync_to_thread=False, name=f"{name_prefix}_resume")
-        def resume_conversation(conv_id: str) -> Any:
-            return _result_or_raise(service.resume_conversation(conv_id))
+        def resume_conversation(conv_id: str, caller: Caller) -> Any:
+            return _result_or_raise(
+                service.resume_conversation(
+                    conv_id, caller_user_id=_caller_user_id(caller)
+                )
+            )
 
         handlers.append(resume_conversation)
 

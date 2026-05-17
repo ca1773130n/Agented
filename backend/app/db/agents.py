@@ -260,16 +260,20 @@ def get_enabled_agents() -> List[dict]:
 # =============================================================================
 
 
-def create_agent_conversation() -> str:
-    """Create a new agent conversation. Returns conversation_id."""
+def create_agent_conversation(user_id: str | None = None) -> str:
+    """Create a new agent conversation. Returns conversation_id.
+
+    v0.7.83 — accepts an optional ``user_id`` for multi-tenant
+    scoping. None means bootstrap mode.
+    """
     with get_connection() as conn:
         conv_id = _get_unique_conversation_id(conn)
         conn.execute(
             """
-            INSERT INTO agent_conversations (id, status, messages)
-            VALUES (?, 'active', '[]')
-        """,
-            (conv_id,),
+            INSERT INTO agent_conversations (id, status, messages, user_id)
+            VALUES (?, 'active', '[]', ?)
+            """,
+            (conv_id, user_id),
         )
         conn.commit()
         return conv_id
@@ -322,12 +326,27 @@ def delete_agent_conversation(conv_id: str) -> bool:
         return cursor.rowcount > 0
 
 
-def get_active_conversations() -> List[dict]:
-    """Get all active conversations."""
+def get_active_conversations(user_id: str | None = None) -> List[dict]:
+    """Get all active agent conversations.
+
+    v0.7.83 — accepts an optional ``user_id`` filter. ``user_id``
+    None scopes to ``user_id IS NULL`` (legacy/bootstrap) so a
+    no-auth caller doesn't see every operator's active convs.
+    """
     with get_connection() as conn:
-        cursor = conn.execute(
-            "SELECT * FROM agent_conversations WHERE status = 'active' ORDER BY updated_at DESC"
-        )
+        if user_id:
+            cursor = conn.execute(
+                "SELECT * FROM agent_conversations "
+                "WHERE status = 'active' AND user_id = ? "
+                "ORDER BY updated_at DESC",
+                (user_id,),
+            )
+        else:
+            cursor = conn.execute(
+                "SELECT * FROM agent_conversations "
+                "WHERE status = 'active' AND user_id IS NULL "
+                "ORDER BY updated_at DESC"
+            )
         return [dict(row) for row in cursor.fetchall()]
 
 
@@ -336,13 +355,23 @@ def get_active_conversations() -> List[dict]:
 # =============================================================================
 
 
-def create_design_conversation(conv_id: str, entity_type: str) -> bool:
-    """Create a new design conversation record. Returns True on success."""
+def create_design_conversation(
+    conv_id: str, entity_type: str, user_id: str | None = None
+) -> bool:
+    """Create a new design conversation record. Returns True on success.
+
+    v0.7.83 — accepts an optional ``user_id`` so multi-tenant
+    list/ownership semantics work. ``None`` is allowed for
+    bootstrap-mode callers (no auth configured), in which case
+    the row is visible to other userless callers only via the
+    IS NULL filter in ``list_design_conversations``.
+    """
     with get_connection() as conn:
         try:
             conn.execute(
-                "INSERT INTO design_conversations (id, entity_type) VALUES (?, ?)",
-                (conv_id, entity_type),
+                "INSERT INTO design_conversations (id, entity_type, user_id) "
+                "VALUES (?, ?, ?)",
+                (conv_id, entity_type, user_id),
             )
             conn.commit()
             return True
@@ -355,7 +384,8 @@ def get_design_conversation(conv_id: str) -> dict | None:
     """Get a design conversation by ID."""
     with get_connection() as conn:
         row = conn.execute(
-            "SELECT id, entity_type, entity_id, status, messages, config, created_at, updated_at "
+            "SELECT id, entity_type, entity_id, status, messages, config, "
+            "created_at, updated_at, user_id "
             "FROM design_conversations WHERE id = ?",
             (conv_id,),
         ).fetchone()
@@ -370,6 +400,7 @@ def get_design_conversation(conv_id: str) -> dict | None:
             "config": row[5],
             "created_at": row[6],
             "updated_at": row[7],
+            "user_id": row[8],
         }
 
 
@@ -395,15 +426,38 @@ def update_design_conversation(conv_id: str, **kwargs) -> bool:
         return True
 
 
-def list_design_conversations(entity_type: str, status: str = "active") -> list:
-    """List design conversations by entity type and status."""
+def list_design_conversations(
+    entity_type: str,
+    status: str = "active",
+    user_id: str | None = None,
+) -> list:
+    """List design conversations by entity type and status.
+
+    v0.7.83 — accepts an optional ``user_id`` filter. Semantics
+    mirror ``list_active_skill_conversations``:
+      * ``user_id`` set → only rows owned by that user.
+      * ``user_id`` None → only rows with ``user_id IS NULL``
+        (legacy / bootstrap mode). The previous "return everything
+        when None" behaviour leaked every operator's active
+        wizards to anonymous callers.
+    """
     with get_connection() as conn:
-        rows = conn.execute(
-            "SELECT id, entity_type, entity_id, status, created_at, updated_at "
-            "FROM design_conversations WHERE entity_type = ? AND status = ? "
-            "ORDER BY updated_at DESC LIMIT 20",
-            (entity_type, status),
-        ).fetchall()
+        if user_id:
+            rows = conn.execute(
+                "SELECT id, entity_type, entity_id, status, created_at, updated_at, user_id "
+                "FROM design_conversations "
+                "WHERE entity_type = ? AND status = ? AND user_id = ? "
+                "ORDER BY updated_at DESC LIMIT 20",
+                (entity_type, status, user_id),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT id, entity_type, entity_id, status, created_at, updated_at, user_id "
+                "FROM design_conversations "
+                "WHERE entity_type = ? AND status = ? AND user_id IS NULL "
+                "ORDER BY updated_at DESC LIMIT 20",
+                (entity_type, status),
+            ).fetchall()
         return [
             {
                 "id": r[0],
@@ -412,6 +466,7 @@ def list_design_conversations(entity_type: str, status: str = "active") -> list:
                 "status": r[3],
                 "created_at": r[4],
                 "updated_at": r[5],
+                "user_id": r[6],
             }
             for r in rows
         ]

@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { agentConversationApi } from '../services/api';
 import { useConversation, createConfigParser } from '../composables/useConversation';
+import { useWizardAutoResume } from '../composables/useWizardAutoResume';
 import { AiChatPanelManaged as AiChatPanel } from '@ai-accounts/vue-styled';
 import { useToast } from '../composables/useToast';
 import { useWebMcpTool } from '../composables/useWebMcpTool';
@@ -64,9 +64,10 @@ async function finalizeAgent() {
   }
 }
 
-onMounted(() => {
-  conversation.startConversation();
-});
+// v0.7.83 — auto-resume from localStorage / backend list_active
+// before falling back to startConversation. Survives page refresh
+// and backend restart. Same shape as /skills/new (v0.7.78).
+useWizardAutoResume(conversation, agentConversationApi, 'agented_agent_conv_id');
 </script>
 
 <template>

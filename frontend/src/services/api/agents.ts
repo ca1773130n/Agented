@@ -77,6 +77,17 @@ export const agentConversationApi = {
     method: 'POST',
   }),
 
+  // v0.7.83 — auto-resume on cold-cache loads.
+  listActive: () =>
+    apiFetch<{
+      active_conversations: Array<{
+        id: string;
+        status: string;
+        updated_at: string;
+        message_count: number;
+      }>;
+    }>('/api/agents/conversations/active'),
+
   get: (convId: string) => apiFetch<AgentConversation>(`/api/agents/conversations/${convId}`),
 
   sendMessage: (convId: string, message: string, options?: { backend?: string; account_id?: string; model?: string }) =>

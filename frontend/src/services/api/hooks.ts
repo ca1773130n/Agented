@@ -63,6 +63,16 @@ export const hookApi = {
 // Hook Conversation API
 export const hookConversationApi = {
   list: () => apiFetch<{ conversations: DesignConversationSummary[] }>('/api/hooks/conversations/'),
+  // v0.7.83 — auto-resume on cold-cache loads
+  listActive: () =>
+    apiFetch<{
+      active_conversations: Array<{
+        id: string;
+        status: string;
+        updated_at: string;
+        message_count: number;
+      }>;
+    }>('/api/hooks/conversations/active'),
   start: () => apiFetch<{ conversation_id: string; message: string }>('/api/hooks/conversations/start', { method: 'POST' }),
   get: (convId: string) => apiFetch<HookConversation>(`/api/hooks/conversations/${convId}`),
   sendMessage: (convId: string, message: string, options?: { backend?: string; account_id?: string; model?: string; use_cli_agent?: boolean }) => apiFetch<{ message_id: string; status: string }>(`/api/hooks/conversations/${convId}/message`, { method: 'POST', body: JSON.stringify({ message, ...options }) }),

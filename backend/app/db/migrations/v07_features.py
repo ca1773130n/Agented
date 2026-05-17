@@ -289,6 +289,77 @@ def _migrate_123_skill_conversations(conn) -> None:
     )
 
 
+def _migrate_124_design_conversations_user_id(conn) -> None:
+    """v0.7.83 — multi-tenant safety: add ``user_id`` to
+    ``design_conversations`` so the wizard auto-resume + list
+    endpoints can scope to the calling operator instead of
+    leaking every active conv across users.
+
+    Mirrors the v0.7.78 skill_conversations.user_id pattern. The
+    column is nullable for backwards compat (legacy rows from
+    pre-multi-tenant builds get NULL and are visible to
+    bootstrap callers only, via the same IS NULL semantics the
+    skill_conversations list helper uses).
+    """
+    cursor = conn.execute("PRAGMA table_info(design_conversations)")
+    cols = {row[1] for row in cursor.fetchall()}
+    if "user_id" not in cols:
+        conn.execute(
+            "ALTER TABLE design_conversations ADD COLUMN user_id TEXT REFERENCES users(id)"
+        )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_dc_user_status "
+        "ON design_conversations(user_id, status, updated_at DESC)"
+    )
+
+
+def _migrate_125_agent_conversations_user_id(conn) -> None:
+    """v0.7.83 — same as v124 but for ``agent_conversations``.
+    AgentConversationService doesn't trigger an LLM call at
+    start so it doesn't have the kickoff race, but it still
+    needs per-user scoping for list / ownership checks.
+    """
+    cursor = conn.execute("PRAGMA table_info(agent_conversations)")
+    cols = {row[1] for row in cursor.fetchall()}
+    if "user_id" not in cols:
+        conn.execute(
+            "ALTER TABLE agent_conversations ADD COLUMN user_id TEXT REFERENCES users(id)"
+        )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_agent_conv_user_status "
+        "ON agent_conversations(user_id, status, updated_at DESC)"
+    )
+
+
+def _migrate_126_plugin_conversations(conn) -> None:
+    """v0.7.83 — new ``plugin_conversations`` table mirroring the
+    v0.7.78 skill_conversations schema. PluginConversationService
+    previously had only an in-memory dict; this gives /plugins/new
+    survival across page refresh + backend restart, with the same
+    user_id-scoped resume + ownership semantics skill enjoys.
+    """
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS plugin_conversations (
+            id              TEXT PRIMARY KEY,
+            user_id         TEXT REFERENCES users(id),
+            status          TEXT NOT NULL DEFAULT 'active',
+            messages_json   TEXT NOT NULL,
+            created_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_plugin_conv_user_status "
+        "ON plugin_conversations(user_id, status, updated_at DESC)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_plugin_conv_updated_at "
+        "ON plugin_conversations(updated_at DESC)"
+    )
+
+
 V07_MIGRATIONS: list = [
     # v0.7.7: super-agent activity inspector — timeline + rollup.
     (116, "super_agent_activity", _migrate_116_super_agent_activity),
@@ -313,4 +384,12 @@ V07_MIGRATIONS: list = [
     # v0.7.78: persist skill-creation conversations so /skills/new
     # survives page refresh + backend restart.
     (123, "skill_conversations", _migrate_123_skill_conversations),
+    # v0.7.83: multi-tenant safety + persistence sweep for the
+    # remaining wizards. Adds user_id scoping to design_conversations
+    # (commands/hooks/rules) and agent_conversations, and introduces
+    # plugin_conversations with the v0.7.78 skill schema so /plugins/new
+    # survives refresh + restart.
+    (124, "design_conversations_user_id", _migrate_124_design_conversations_user_id),
+    (125, "agent_conversations_user_id", _migrate_125_agent_conversations_user_id),
+    (126, "plugin_conversations", _migrate_126_plugin_conversations),
 ]
