@@ -145,7 +145,15 @@ export interface GoalLoopIteration {
   started_at: string;
   ended_at: string | null;
   verdict: 'met' | 'not_met' | null;
-  judge_source: 'pending' | 'deterministic' | 'llm' | 'cap';
+  // ``'stopped'`` is written when the operator stops the session
+  // while the judge is mid-run (v0.7.74 codex fix #4). The row is
+  // finalized but the verdict was never broadcast to subscribers.
+  judge_source:
+    | 'pending'
+    | 'deterministic'
+    | 'llm'
+    | 'cap'
+    | 'stopped';
   judge_reason: string | null;
   judge_stdout: string | null;
   tokens_in: number | null;
