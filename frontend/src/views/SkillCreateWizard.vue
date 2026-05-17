@@ -79,8 +79,14 @@ function openPreview() {
   showPreview.value = true;
 }
 
-async function commitFinalize() {
-  const result = await conversation.finalize();
+async function commitFinalize(expectedConfigHash: string) {
+  // v0.7.77 (codex BLOCK 4) — the drawer passes the hash of the
+  // config it rendered; backend 409s if claude has emitted a
+  // newer one since. On mismatch, useConversation's toast
+  // already surfaces the 409 message; the drawer stays open so
+  // the operator can re-preview (the watcher on messageCount
+  // will have already re-fetched).
+  const result = await conversation.finalize(expectedConfigHash);
   if (result) {
     showPreview.value = false;
     showToast(
@@ -153,6 +159,7 @@ onMounted(() => {
       :open="showPreview"
       :conversation-id="conversation.conversationId.value"
       :is-finalizing="conversation.isFinalizing.value"
+      :message-count="conversation.messages.value.length"
       @close="showPreview = false"
       @create="commitFinalize"
     />

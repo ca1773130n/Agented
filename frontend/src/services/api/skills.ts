@@ -35,6 +35,11 @@ export interface SkillPackagePreview {
   frontmatter: SkillPackageFrontmatter;
   files: SkillPackageFile[];
   warnings: string[];
+  // v0.7.77 (codex BLOCK 4) — content fingerprint of the config
+  // claude emitted. The drawer passes this back to ``finalize``
+  // so a mid-preview update from claude doesn't get silently
+  // committed.
+  config_hash: string;
 }
 
 // Skills API
@@ -169,11 +174,18 @@ export const skillConversationApi = {
       { method: 'POST' },
     ),
 
-  finalize: (convId: string) =>
-    apiFetch<{ message: string; skill_id: number; skill: UserSkill; files_written: string[] }>(
-      `/api/skills/conversations/${convId}/finalize`,
-      { method: 'POST' },
-    ),
+  finalize: (convId: string, expectedConfigHash?: string) =>
+    apiFetch<{
+      message: string;
+      skill_id: number;
+      skill: UserSkill;
+      files_written: string[];
+    }>(`/api/skills/conversations/${convId}/finalize`, {
+      method: 'POST',
+      body: JSON.stringify(
+        expectedConfigHash ? { expected_config_hash: expectedConfigHash } : {},
+      ),
+    }),
 
   abandon: (convId: string) =>
     apiFetch<{ message: string }>(`/api/skills/conversations/${convId}/abandon`, {

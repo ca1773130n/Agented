@@ -254,6 +254,149 @@ def test_finalize_writes_full_package_to_disk(
         SkillConversationService._subscribers.pop(conv_id, None)
 
 
+def test_preview_returns_stable_config_hash():
+    """v0.7.77 codex BLOCK 4 — the hash is a content fingerprint
+    of the extracted SKILL_CONFIG JSON. Same input → same hash;
+    different content → different hash.
+    """
+    p1 = SkillConversationService._build_package_preview(_conv_with(_GOOD))
+    p2 = SkillConversationService._build_package_preview(_conv_with(_GOOD))
+    assert p1["config_hash"] == p2["config_hash"]
+    assert len(p1["config_hash"]) == 64  # sha256 hex
+
+    mutated = {**_GOOD, "skill_name": "different-name"}
+    p3 = SkillConversationService._build_package_preview(_conv_with(mutated))
+    assert p3["config_hash"] != p1["config_hash"]
+
+
+def test_finalize_rejects_stale_config_hash(
+    isolated_db, tmp_path, monkeypatch
+):
+    """v0.7.77 codex BLOCK 4 — when the operator passes a hash
+    that doesn't match the latest config in the conversation,
+    finalize returns 409 instead of silently writing a config the
+    operator never reviewed.
+    """
+    del isolated_db
+    monkeypatch.setattr(svc, "get_playground_working_dir", lambda: str(tmp_path))
+    conv_id = "skill_stalehashstaleha"
+    SkillConversationService._conversations[conv_id] = {
+        "messages": [
+            ConversationMessage(role="assistant",
+                                content="---SKILL_CONFIG---\n" + json.dumps(_GOOD) + "\n---END_CONFIG---",
+                                timestamp="t"),
+        ],
+    }
+    SkillConversationService._subscribers[conv_id] = []
+    try:
+        result, status = SkillConversationService.finalize_skill(
+            conv_id, expected_config_hash="deadbeef" * 8
+        )
+        assert status == 409
+        # error_response shape: {"code": ..., "message": ..., "error": <msg>}
+        assert "changed since you opened the preview" in result["message"]
+        assert result["code"] == "CONFIG_HASH_MISMATCH"
+        # Nothing should have been written to disk.
+        assert not (tmp_path / ".claude" / "skills" / "data-explorer").exists()
+    finally:
+        SkillConversationService._conversations.pop(conv_id, None)
+        SkillConversationService._subscribers.pop(conv_id, None)
+
+
+def test_finalize_refuses_to_overwrite_existing_skill(
+    isolated_db, tmp_path, monkeypatch
+):
+    """v0.7.77 codex BLOCK 6 spinoff — if a skill of the same
+    name already exists, finalize 409s rather than silently
+    merging or overwriting. Operator must delete the existing
+    package first."""
+    del isolated_db
+    monkeypatch.setattr(svc, "get_playground_working_dir", lambda: str(tmp_path))
+    existing_dir = tmp_path / ".claude" / "skills" / "data-explorer"
+    existing_dir.mkdir(parents=True)
+    (existing_dir / "preserved.txt").write_text("operator put this here")
+
+    conv_id = "skill_existskillexists"
+    SkillConversationService._conversations[conv_id] = {
+        "messages": [
+            ConversationMessage(role="assistant",
+                                content="---SKILL_CONFIG---\n" + json.dumps(_GOOD) + "\n---END_CONFIG---",
+                                timestamp="t"),
+        ],
+    }
+    SkillConversationService._subscribers[conv_id] = []
+    try:
+        result, status = SkillConversationService.finalize_skill(conv_id)
+        assert status == 409
+        assert "already exists" in result["message"]
+        assert result["code"] == "SKILL_EXISTS"
+        # Pre-existing files are untouched.
+        assert (existing_dir / "preserved.txt").exists()
+    finally:
+        SkillConversationService._conversations.pop(conv_id, None)
+        SkillConversationService._subscribers.pop(conv_id, None)
+
+
+def test_extract_distinguishes_no_block_from_malformed_block():
+    """v0.7.77 codex NIT 3 — different error codes for the two
+    distinct operator-facing states: "no SKILL_CONFIG markers
+    yet" (keep chatting) vs "markers present but JSON malformed"
+    (ask the assistant to re-emit).
+    """
+    no_markers = {
+        "messages": [ConversationMessage(role="assistant", content="just text", timestamp="t")],
+    }
+    with pytest.raises(_SkillConfigError) as exc:
+        SkillConversationService._build_package_preview(no_markers)
+    assert exc.value.code == "NO_CONFIG_BLOCK"
+
+    bad_json = {
+        "messages": [
+            ConversationMessage(
+                role="assistant",
+                content="---SKILL_CONFIG---\n{bad json,,}\n---END_CONFIG---",
+                timestamp="t",
+            )
+        ],
+    }
+    with pytest.raises(_SkillConfigError) as exc:
+        SkillConversationService._build_package_preview(bad_json)
+    assert exc.value.code == "INVALID_CONFIG_JSON"
+    assert "malformed" in exc.value.message.lower()
+
+
+def test_finalize_metadata_omits_skill_md_content(
+    isolated_db, tmp_path, monkeypatch
+):
+    """v0.7.77 codex NIT 5 — the user_skills metadata row stores
+    paths + frontmatter only, not the full SKILL.md body
+    (consumers read from disk). Avoids fat DB rows when SKILL.md
+    is large.
+    """
+    del isolated_db
+    monkeypatch.setattr(svc, "get_playground_working_dir", lambda: str(tmp_path))
+    conv_id = "skill_metadataomitsmd"
+    SkillConversationService._conversations[conv_id] = {
+        "messages": [
+            ConversationMessage(role="assistant",
+                                content="---SKILL_CONFIG---\n" + json.dumps(_GOOD) + "\n---END_CONFIG---",
+                                timestamp="t"),
+        ],
+    }
+    SkillConversationService._subscribers[conv_id] = []
+    try:
+        result, status = SkillConversationService.finalize_skill(conv_id)
+        assert status == 201
+        skill = result["skill"]
+        meta = json.loads(skill["metadata"]) if skill.get("metadata") else {}
+        assert "skill_md_content" not in meta
+        assert "frontmatter" in meta
+        assert "files" in meta
+    finally:
+        SkillConversationService._conversations.pop(conv_id, None)
+        SkillConversationService._subscribers.pop(conv_id, None)
+
+
 def test_finalize_rejects_bad_config_without_partial_write(
     isolated_db, tmp_path, monkeypatch
 ):

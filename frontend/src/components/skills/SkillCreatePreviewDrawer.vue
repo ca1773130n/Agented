@@ -26,11 +26,20 @@ const props = defineProps<{
   open: boolean;
   conversationId: string | null;
   isFinalizing: boolean;
+  // v0.7.77 (codex BLOCK 7) — the wizard passes
+  // ``conversation.messages.value.length`` so the drawer
+  // re-fetches the preview whenever claude finishes a new turn
+  // while the drawer is open. Otherwise the operator could
+  // commit a config that's no longer the latest one.
+  messageCount: number;
 }>();
 
 const emit = defineEmits<{
   (e: 'close'): void;
-  (e: 'create'): void;
+  // v0.7.77 (codex BLOCK 4) — pass the previewed config hash up
+  // so the wizard threads it into the finalize call. Backend
+  // re-extracts the latest config and 409s on mismatch.
+  (e: 'create', expectedConfigHash: string): void;
 }>();
 
 const preview = ref<SkillPackagePreview | null>(null);
@@ -64,12 +73,17 @@ async function load() {
   }
 }
 
+// v0.7.77 (codex BLOCK 7) — also watch ``messageCount``. When a
+// new assistant message lands while the drawer is open, re-fetch
+// the preview so the operator never commits a stale config.
+// Token guard handles the rapid case (multiple deltas → single
+// effective render).
 watch(
-  () => props.open,
-  (isOpen) => {
+  [() => props.open, () => props.messageCount],
+  ([isOpen], [wasOpen]) => {
     if (isOpen) {
       load();
-    } else {
+    } else if (wasOpen) {
       // Clear so the next open doesn't briefly flash the previous
       // preview, and invalidate any in-flight request.
       preview.value = null;
@@ -83,12 +97,18 @@ watch(
 const drawerEl = ref<HTMLElement | null>(null);
 useFocusTrap(drawerEl, toRef(props, 'open'));
 
-// Tree state: each path → expanded boolean. Defaults to all
-// collapsed except SKILL.md (the operator's primary check).
+// Tree state: each path → expanded boolean. SKILL.md defaults to
+// open (the operator's primary check); helpers/references default
+// to closed so the operator can scan the list first. The drawer
+// must respect operator collapse-clicks, so we resolve via a
+// computed default-by-path instead of the previous
+// ``|| true`` (which prevented SKILL.md from ever collapsing).
 const expanded = ref<Record<string, boolean>>({});
 
 function isExpanded(path: string): boolean {
-  return expanded.value[path] ?? false;
+  if (path in expanded.value) return expanded.value[path];
+  // Default: SKILL.md is open, everything else is closed.
+  return path.endsWith('/SKILL.md');
 }
 
 function toggle(path: string) {
@@ -120,7 +140,9 @@ function formatBytes(n: number): string {
 }
 
 function onCreate() {
-  emit('create');
+  if (preview.value) {
+    emit('create', preview.value.config_hash);
+  }
 }
 
 function onBackdropClick(e: MouseEvent) {
@@ -177,10 +199,14 @@ function onEscape(e: KeyboardEvent) {
             {{ errorMessage }}
           </div>
           <div v-else-if="preview" class="preview-tree">
-            <!-- SKILL.md is always present, always shown first -->
+            <!-- SKILL.md is always present, always shown first.
+                 Default-open via ``isExpanded`` (which knows
+                 SKILL.md special-cases to true) — NOT via
+                 ``|| true`` which would force the file to stay
+                 open and ignore the operator's collapse click. -->
             <details
               class="preview-file"
-              :open="isExpanded(preview.skill_md_path) || true"
+              :open="isExpanded(preview.skill_md_path)"
               @toggle.prevent="toggle(preview.skill_md_path)"
             >
               <summary class="preview-file-summary">

@@ -15,7 +15,15 @@ export interface ConversationApi {
   get?: (convId: string) => Promise<{ id: string; status: string; messages_parsed?: ConversationMessage[] }>;
   sendMessage: (convId: string, message: string, options?: { backend?: string; account_id?: string; model?: string; use_cli_agent?: boolean }) => Promise<{ message_id: string; status: string }>;
   stream: (convId: string) => import('../services/api/client').AuthenticatedEventSource;
-  finalize: (convId: string) => Promise<Record<string, unknown>>;
+  // v0.7.77 — optional ``expectedConfigHash`` lets the
+  // SkillCreatePreviewDrawer prevent committing a config the
+  // operator never reviewed (claude emitted a new SKILL_CONFIG
+  // block after the preview was rendered). Backends that don't
+  // need it accept the arg and ignore.
+  finalize: (
+    convId: string,
+    expectedConfigHash?: string,
+  ) => Promise<Record<string, unknown>>;
   resume?: (convId: string) => Promise<{ message: string; conversation_id: string }>;
   abandon: (convId: string) => Promise<{ message: string }>;
 }
@@ -241,12 +249,14 @@ export function useConversation<TConfig>(
     }
   }
 
-  async function finalize(): Promise<Record<string, unknown> | null> {
+  async function finalize(
+    expectedConfigHash?: string,
+  ): Promise<Record<string, unknown> | null> {
     if (!conversationId.value || isFinalizing.value) return null;
 
     isFinalizing.value = true;
     try {
-      const result = await api.finalize(conversationId.value);
+      const result = await api.finalize(conversationId.value, expectedConfigHash);
       return result;
     } catch (e) {
       if (e instanceof ApiError) {

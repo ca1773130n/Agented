@@ -420,9 +420,20 @@ def preview_finalize_skill(conv_id: str, caller: Caller) -> dict[str, Any]:
 
 
 @post("/{conv_id:str}/finalize", sync_to_thread=False)
-def finalize_skill(conv_id: str, caller: Caller) -> dict[str, Any]:
+def finalize_skill(
+    conv_id: str, data: dict | None, caller: Caller
+) -> dict[str, Any]:
+    """v0.7.77 — accepts optional ``expected_config_hash`` in the
+    body so the preview drawer can guarantee the finalized
+    package matches what the operator reviewed. Mismatch → 409.
+    """
     del caller
-    return _result_or_raise(SkillConversationService.finalize_skill(conv_id))
+    expected_hash = (data or {}).get("expected_config_hash") if data else None
+    return _result_or_raise(
+        SkillConversationService.finalize_skill(
+            conv_id, expected_config_hash=expected_hash
+        )
+    )
 
 
 @post("/{conv_id:str}/abandon", sync_to_thread=False)

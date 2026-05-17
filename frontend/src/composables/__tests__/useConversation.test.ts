@@ -184,7 +184,12 @@ describe('useConversation', () => {
     await conv.startConversation();
     const result = await conv.finalize();
 
-    expect(api.finalize).toHaveBeenCalledWith('conv-123');
+    // v0.7.77 — finalize now forwards an optional
+    // expectedConfigHash arg. When not supplied, the 2nd
+    // positional is undefined; the wire payload omits the
+    // field on the API side, so behavior for non-hash callers
+    // is unchanged.
+    expect(api.finalize).toHaveBeenCalledWith('conv-123', undefined);
     expect(result).toEqual({ result: 'done' });
   });
 

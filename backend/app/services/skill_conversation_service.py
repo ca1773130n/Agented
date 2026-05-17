@@ -1,16 +1,19 @@
 """Skill conversation service for interactive skill creation with SSE streaming."""
 
 import datetime
+import hashlib
 import json
 import logging
 import os
 import secrets
+import shutil
 import string
+import tempfile
 import threading
 from dataclasses import asdict, dataclass
 from http import HTTPStatus
 from queue import Empty, Queue
-from typing import Dict, Generator, List, Tuple
+from typing import Dict, Generator, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -294,17 +297,31 @@ class SkillConversationService:
         return preview, HTTPStatus.OK
 
     @classmethod
-    def finalize_skill(cls, conv_id: str) -> Tuple[dict, HTTPStatus]:
+    def finalize_skill(
+        cls,
+        conv_id: str,
+        expected_config_hash: Optional[str] = None,
+    ) -> Tuple[dict, HTTPStatus]:
         """Finalize the conversation and write the skill package to
         disk + DB.
 
         Uses the same validation as ``preview_finalize`` so the
         preview drawer's "Create Skill" button is guaranteed to
-        succeed if the preview rendered without an error. Atomic
-        per-file: writes each file to ``<path>.tmp`` then renames,
-        so a partial failure doesn't leave a half-written package
-        (best-effort — cross-file atomicity requires a transaction
-        the filesystem doesn't give us).
+        succeed if the preview rendered without an error.
+
+        v0.7.77 (codex BLOCK 4) — accepts an optional
+        ``expected_config_hash``. The drawer passes the hash from
+        the preview it rendered; if claude has since emitted a
+        newer config block, the re-extracted hash won't match and
+        we return 409 so the operator re-previews instead of
+        silently committing a config they never reviewed.
+
+        v0.7.77 (codex BLOCK 6) — package writes are now whole-
+        package atomic. We stage every file in a temp directory
+        under ``/tmp``, and only after every file is staged
+        successfully do we ``os.replace`` the whole tree into the
+        destination. Partial failures leave nothing behind in the
+        skill dir; the staging dir is cleaned up best-effort.
         """
         if conv_id not in cls._conversations:
             return error_response(
@@ -316,13 +333,31 @@ class SkillConversationService:
         except _SkillConfigError as exc:
             return error_response(exc.code, exc.message, exc.status)
 
+        if (
+            expected_config_hash
+            and expected_config_hash != preview["config_hash"]
+        ):
+            return error_response(
+                "CONFIG_HASH_MISMATCH",
+                "The skill config has changed since you opened the preview. "
+                "Please close the drawer and preview again before creating.",
+                HTTPStatus.CONFLICT,
+            )
+
         skill_name = preview["skill_name"]
         skill_dir_rel = f".claude/skills/{skill_name}"
         skill_md_rel = preview["skill_md_path"]
+        playground = get_playground_working_dir()
+        abs_skill_dir = os.path.join(playground, skill_dir_rel)
+
+        # v0.7.77 (codex BLOCK 6) — stage the whole package in a
+        # temp dir, then atomic-rename into the destination. Any
+        # failure mid-stage cleans up the temp dir and leaves the
+        # destination untouched.
+        staging_dir = tempfile.mkdtemp(
+            prefix=f"agented-skill-staging-{skill_name}-"
+        )
         try:
-            playground = get_playground_working_dir()
-            abs_skill_dir = os.path.join(playground, skill_dir_rel)
-            os.makedirs(abs_skill_dir, exist_ok=True)
             written: list[str] = []
             for entry in [
                 {"path": skill_md_rel, "content": preview["skill_md_content"]},
@@ -330,37 +365,56 @@ class SkillConversationService:
             ]:
                 rel = entry["path"]
                 # Validation already enforced safe paths; double-
-                # check via resolve() + relative_to() at write time
-                # so a bug in the validator can't silently land
-                # files outside the skill dir.
-                abs_target = os.path.join(playground, rel)
+                # check via realpath() containment at write time so
+                # a bug in the validator can't silently land files
+                # outside the staging dir.
+                in_pkg = rel.split(f"/{skill_name}/", 1)[-1]
+                if not in_pkg or in_pkg == rel:
+                    raise _SkillConfigError(
+                        "INVALID_PATH",
+                        f"Path does not live under the skill dir: {rel}",
+                        HTTPStatus.BAD_REQUEST,
+                    )
+                abs_target = os.path.join(staging_dir, in_pkg)
                 resolved = os.path.realpath(abs_target)
-                root = os.path.realpath(
-                    os.path.join(playground, ".claude", "skills", skill_name)
-                )
-                if not resolved.startswith(root + os.sep) and resolved != root:
+                root_resolved = os.path.realpath(staging_dir)
+                if not (
+                    resolved == root_resolved
+                    or resolved.startswith(root_resolved + os.sep)
+                ):
                     raise _SkillConfigError(
                         "INVALID_PATH",
                         f"Path escapes skill dir: {rel}",
                         HTTPStatus.BAD_REQUEST,
                     )
                 os.makedirs(os.path.dirname(abs_target), exist_ok=True)
-                tmp_path = f"{abs_target}.tmp"
-                with open(tmp_path, "w", encoding="utf-8") as f:
+                with open(abs_target, "w", encoding="utf-8") as f:
                     f.write(entry["content"])
                 # Make scripts/*.py and scripts/*.sh executable so
                 # claude can invoke them via Bash without an extra
-                # chmod step in the body. ``rel`` here is the full
-                # ``.claude/skills/<name>/scripts/foo.py`` path; we
-                # check the in-package portion (after the skill
-                # dir prefix) to detect the scripts subdir.
-                in_pkg = rel.split(f"/{skill_name}/", 1)[-1]
+                # chmod step in the body.
                 if in_pkg.startswith("scripts/") and any(
                     in_pkg.endswith(ext) for ext in (".py", ".sh", ".bash", ".zsh")
                 ):
-                    os.chmod(tmp_path, 0o755)
-                os.replace(tmp_path, abs_target)
+                    os.chmod(abs_target, 0o755)
                 written.append(rel)
+
+            # All files staged successfully. Atomic rename of the
+            # whole tree into the destination. If a previous
+            # package exists at the same skill_name, refuse rather
+            # than merging — overwriting silently would lose
+            # unrelated files the operator put there.
+            if os.path.exists(abs_skill_dir):
+                raise _SkillConfigError(
+                    "SKILL_EXISTS",
+                    f"A skill package already exists at "
+                    f".claude/skills/{skill_name}/. Pick a different name "
+                    f"or delete the existing package first.",
+                    HTTPStatus.CONFLICT,
+                )
+            os.makedirs(os.path.dirname(abs_skill_dir), exist_ok=True)
+            os.replace(staging_dir, abs_skill_dir)
+            staging_dir = None  # ownership transferred; don't cleanup
             logger.info(
                 "Wrote skill package %s with %d file(s) to %s",
                 skill_name,
@@ -378,6 +432,12 @@ class SkillConversationService:
                 f"Failed to write package to disk: {exc}",
                 HTTPStatus.INTERNAL_SERVER_ERROR,
             )
+        finally:
+            # Best-effort cleanup of the staging dir on any failure
+            # path. ``None`` means the rename succeeded and the
+            # tree is now at its destination.
+            if staging_dir and os.path.isdir(staging_dir):
+                shutil.rmtree(staging_dir, ignore_errors=True)
 
         try:
             skill_id = add_user_skill(
@@ -386,11 +446,15 @@ class SkillConversationService:
                 description=preview["frontmatter"].get("description", ""),
                 enabled=1,
                 selected_for_harness=0,
+                # v0.7.77 (codex NIT 5) — store paths + frontmatter
+                # only. Previously embedded ``skill_md_content``
+                # too, duplicating disk content in a SQLite row
+                # that could grow to hundreds of KB. Consumers
+                # read the file from disk via ``skill_path``.
                 metadata=json.dumps(
                     {
                         "frontmatter": preview["frontmatter"],
                         "files": [f["path"] for f in preview["files"]],
-                        "skill_md_content": preview["skill_md_content"],
                     }
                 ),
             )
@@ -517,6 +581,7 @@ class SkillConversationService:
     @classmethod
     def _build_package_preview(cls, conv: dict) -> dict:
         config = cls._extract_skill_config(conv)
+        config_hash = cls._hash_config(config)
         skill_name = (config.get("skill_name") or "").strip()
         if not _SKILL_NAME_RE.match(skill_name):
             raise _SkillConfigError(
@@ -566,31 +631,69 @@ class SkillConversationService:
             "frontmatter": frontmatter,
             "files": files,
             "warnings": warnings,
+            # v0.7.77 (codex BLOCK 4) — content fingerprint of the
+            # extracted config. Finalize accepts an optional
+            # ``expected_config_hash`` arg; mismatch means the
+            # operator's preview is stale (claude emitted a newer
+            # config block since they opened the drawer).
+            "config_hash": config_hash,
         }
 
     @staticmethod
     def _extract_skill_config(conv: dict) -> dict:
         """Pull the most recent valid SKILL_CONFIG JSON block from
         the conversation's assistant messages.
+
+        v0.7.77 (codex NIT 3) — distinguishes "no markers ever
+        seen" from "markers present but JSON malformed". The first
+        is a "keep chatting" hint; the second means claude emitted
+        a bad block and the operator needs to ask for a clean one.
         """
+        saw_markers = False
+        last_parse_error: Optional[str] = None
         for msg in reversed(conv["messages"]):
             if msg.role != "assistant" or "---SKILL_CONFIG---" not in msg.content:
                 continue
+            saw_markers = True
             try:
                 start = msg.content.index("---SKILL_CONFIG---") + len("---SKILL_CONFIG---")
                 end = msg.content.index("---END_CONFIG---")
             except ValueError:
+                last_parse_error = "missing ---END_CONFIG--- marker"
                 continue
             blob = msg.content[start:end].strip()
             try:
                 return json.loads(blob)
-            except json.JSONDecodeError:
+            except json.JSONDecodeError as exc:
+                last_parse_error = (
+                    f"invalid JSON at line {exc.lineno}, col {exc.colno}: {exc.msg}"
+                )
                 continue
+        if saw_markers:
+            raise _SkillConfigError(
+                "INVALID_CONFIG_JSON",
+                f"Skill configuration block exists but is malformed: "
+                f"{last_parse_error}. Ask the assistant to re-emit a clean "
+                f"---SKILL_CONFIG--- block.",
+                HTTPStatus.BAD_REQUEST,
+            )
         raise _SkillConfigError(
             "NO_CONFIG_BLOCK",
             "No skill configuration block found in the conversation yet.",
             HTTPStatus.BAD_REQUEST,
         )
+
+    @staticmethod
+    def _hash_config(config: dict) -> str:
+        """Stable SHA-256 hash of the config block.
+
+        Used as a content fingerprint so finalize can confirm the
+        operator is committing the same config they previewed. Any
+        whitespace/key-order variation is normalized via
+        ``sort_keys=True``.
+        """
+        canonical = json.dumps(config, sort_keys=True, separators=(",", ":"))
+        return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
     @staticmethod
     def _validate_frontmatter(
