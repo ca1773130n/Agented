@@ -493,6 +493,155 @@ class TestProcessWithClaude:
 
 
 # ---------------------------------------------------------------------------
+# Defense-guard parity for Plugin + Skill services. v0.7.80 duplicates
+# the empty-content-block filter into three services that don't share
+# a base class. Cover Plugin + Skill here so a future refactor that
+# drops the guard from one of them fails loudly.
+# ---------------------------------------------------------------------------
+
+
+class TestPluginDefenseGuard:
+    @patch("app.services.conversation_streaming.stream_llm_response")
+    def test_plugin_skips_llm_when_no_user_message(self, mock_stream):
+        from app.services.plugin_conversation_service import (
+            ConversationMessage as PluginMsg,
+        )
+        from app.services.plugin_conversation_service import (
+            PluginConversationService,
+        )
+
+        conv_id = "plugin_guardtest1"
+        PluginConversationService._conversations[conv_id] = {
+            "messages": [
+                PluginMsg(
+                    role="system",
+                    content="sys",
+                    timestamp=datetime.datetime.now().isoformat(),
+                ),
+            ],
+            "processing": False,
+        }
+        PluginConversationService._subscribers[conv_id] = []
+        PluginConversationService._start_times[conv_id] = datetime.datetime.now()
+
+        PluginConversationService._process_with_claude(conv_id, "hi")
+
+        mock_stream.assert_not_called()
+        assert PluginConversationService._conversations[conv_id]["processing"] is False
+        # Cleanup so we don't leak between tests.
+        PluginConversationService._conversations.pop(conv_id, None)
+        PluginConversationService._subscribers.pop(conv_id, None)
+        PluginConversationService._start_times.pop(conv_id, None)
+
+    @patch("app.services.conversation_streaming.stream_llm_response")
+    def test_plugin_skips_llm_when_user_message_blank(self, mock_stream):
+        from app.services.plugin_conversation_service import (
+            ConversationMessage as PluginMsg,
+        )
+        from app.services.plugin_conversation_service import (
+            PluginConversationService,
+        )
+
+        conv_id = "plugin_guardtest2"
+        PluginConversationService._conversations[conv_id] = {
+            "messages": [
+                PluginMsg(
+                    role="system",
+                    content="sys",
+                    timestamp=datetime.datetime.now().isoformat(),
+                ),
+                PluginMsg(
+                    role="user",
+                    content="   \n\t",
+                    timestamp=datetime.datetime.now().isoformat(),
+                ),
+            ],
+            "processing": False,
+        }
+        PluginConversationService._subscribers[conv_id] = []
+        PluginConversationService._start_times[conv_id] = datetime.datetime.now()
+
+        PluginConversationService._process_with_claude(conv_id, "hi")
+
+        mock_stream.assert_not_called()
+        assert PluginConversationService._conversations[conv_id]["processing"] is False
+        PluginConversationService._conversations.pop(conv_id, None)
+        PluginConversationService._subscribers.pop(conv_id, None)
+        PluginConversationService._start_times.pop(conv_id, None)
+
+
+class TestSkillDefenseGuard:
+    @patch("app.services.conversation_streaming.stream_llm_response")
+    def test_skill_skips_llm_when_no_user_message(self, mock_stream):
+        from app.services.skill_conversation_service import (
+            ConversationMessage as SkillMsg,
+        )
+        from app.services.skill_conversation_service import (
+            SkillConversationService,
+        )
+
+        conv_id = "skill_guardtest111"
+        SkillConversationService._conversations[conv_id] = {
+            "messages": [
+                SkillMsg(
+                    role="system",
+                    content="sys",
+                    timestamp=datetime.datetime.now().isoformat(),
+                ),
+            ],
+            "processing": False,
+            "user_id": None,
+        }
+        SkillConversationService._subscribers[conv_id] = []
+        SkillConversationService._start_times[conv_id] = datetime.datetime.now()
+
+        SkillConversationService._process_with_claude(conv_id, "hi")
+
+        mock_stream.assert_not_called()
+        assert SkillConversationService._conversations[conv_id]["processing"] is False
+        SkillConversationService._conversations.pop(conv_id, None)
+        SkillConversationService._subscribers.pop(conv_id, None)
+        SkillConversationService._start_times.pop(conv_id, None)
+
+    @patch("app.services.conversation_streaming.stream_llm_response")
+    def test_skill_skips_llm_when_user_message_blank(self, mock_stream):
+        from app.services.skill_conversation_service import (
+            ConversationMessage as SkillMsg,
+        )
+        from app.services.skill_conversation_service import (
+            SkillConversationService,
+        )
+
+        conv_id = "skill_guardtest222"
+        SkillConversationService._conversations[conv_id] = {
+            "messages": [
+                SkillMsg(
+                    role="system",
+                    content="sys",
+                    timestamp=datetime.datetime.now().isoformat(),
+                ),
+                SkillMsg(
+                    role="user",
+                    content=" \t\n ",
+                    timestamp=datetime.datetime.now().isoformat(),
+                ),
+            ],
+            "processing": False,
+            "user_id": None,
+        }
+        SkillConversationService._subscribers[conv_id] = []
+        SkillConversationService._start_times[conv_id] = datetime.datetime.now()
+
+        SkillConversationService._process_with_claude(conv_id, "hi")
+
+        mock_stream.assert_not_called()
+        assert SkillConversationService._conversations[conv_id]["processing"] is False
+        SkillConversationService._conversations.pop(conv_id, None)
+        SkillConversationService._subscribers.pop(conv_id, None)
+        SkillConversationService._start_times.pop(conv_id, None)
+
+
+# ---------------------------------------------------------------------------
 # _persist_messages
 # ---------------------------------------------------------------------------
 
