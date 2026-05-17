@@ -241,6 +241,29 @@ def test_fetch_caps_redirect_hops(monkeypatch):
     assert summary.error == "too many redirects"
 
 
+def test_pin_url_preserves_pathological_userinfo():
+    """Codex 3rd-pass NIT: ``_pin_url_to_ip`` should preserve
+    userinfo even when one half is empty. Falsy checks would drop
+    ``://:pass@host/`` and ``://user:@host/``; the explicit
+    ``is not None`` test we use keeps them.
+    """
+    import ipaddress
+    from app.services.url_summarizer import _pin_url_to_ip
+
+    ip = ipaddress.ip_address("192.0.2.5")
+    # password only, empty username
+    pinned, host_hdr = _pin_url_to_ip("http://:secret@example.com/p", ip)
+    assert ":secret@192.0.2.5" in pinned
+    assert host_hdr == "example.com"
+    # username only, empty password (with trailing colon)
+    pinned, _ = _pin_url_to_ip("http://user:@example.com/p", ip)
+    assert "user:@192.0.2.5" in pinned
+    # username only, no colon — no password component preserved
+    pinned, _ = _pin_url_to_ip("http://user@example.com/p", ip)
+    assert "user@192.0.2.5" in pinned
+    assert "user:" not in pinned  # no spurious colon
+
+
 def test_fetch_pins_request_to_resolved_ip(monkeypatch):
     """Defense-in-depth check that httpx is told to connect to the
     pre-validated IP literal (and carries the original hostname in

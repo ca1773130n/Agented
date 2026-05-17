@@ -249,11 +249,19 @@ def _pin_url_to_ip(url: str, ip: ipaddress._BaseAddress) -> tuple[str, str]:
         netloc = f"[{ip}]:{port}"
     else:
         netloc = f"{ip}:{port}"
-    # Preserve userinfo if present (rare but possible).
-    if parsed.username:
-        userinfo = parsed.username
-        if parsed.password:
-            userinfo += f":{parsed.password}"
+    # Preserve userinfo if either half is present. Falsy checks
+    # silently drop pathological forms like ``://:pass@host/`` (empty
+    # username, present password) or ``://user:@host/`` (username,
+    # empty password); using ``is not None`` keeps them — the
+    # original URL's auth semantics are reconstructed faithfully on
+    # the pinned URL so HTTP Basic auth credentials still reach the
+    # intended server.
+    if parsed.username is not None or parsed.password is not None:
+        user = parsed.username or ""
+        if parsed.password is not None:
+            userinfo = f"{user}:{parsed.password}"
+        else:
+            userinfo = user
         netloc = f"{userinfo}@{netloc}"
     pinned = parsed._replace(netloc=netloc).geturl()
     # ``Host`` header should include the port iff it wasn't the
