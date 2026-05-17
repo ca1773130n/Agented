@@ -44,6 +44,21 @@ export interface PermissionRequestPayload {
   cwd: string | null;
 }
 
+// v0.7.74 — goal-loop SSE payloads.
+export interface GoalIterationCompletedPayload {
+  iteration: number;
+  verdict: 'met' | 'not_met';
+  reason: string;
+  source: 'deterministic' | 'llm' | 'cap';
+}
+
+export interface GoalCheckDisagreementPayload {
+  iteration: number;
+  deterministic_reason: string;
+  llm_reason: string;
+  streak: number;
+}
+
 /**
  * Composable for managing project session lifecycle, SSE streaming,
  * and session CRUD operations.
@@ -116,6 +131,26 @@ export function useProjectSession(projectId: Ref<string>) {
   let onPermissionRequestCb:
     | ((payload: PermissionRequestPayload) => void)
     | undefined;
+  // v0.7.74 — goal-loop SSE events. ``goal_iteration_started``
+  // fires before the judge runs, ``goal_iteration_completed``
+  // after the verdict lands, ``goal_loop_ended`` when the loop
+  // terminates (met / iteration_cap / wall_time_cap / stopped).
+  // ``goal_check_disagreement`` is informational — the
+  // deterministic check disagrees with the LLM sanity-layer
+  // verdict, but the loop continues based on the deterministic
+  // verdict.
+  let onGoalIterationStartedCb:
+    | ((payload: { iteration: number; max_iterations: number }) => void)
+    | undefined;
+  let onGoalIterationCompletedCb:
+    | ((payload: GoalIterationCompletedPayload) => void)
+    | undefined;
+  let onGoalLoopEndedCb:
+    | ((payload: { reason: string; detail: string }) => void)
+    | undefined;
+  let onGoalCheckDisagreementCb:
+    | ((payload: GoalCheckDisagreementPayload) => void)
+    | undefined;
 
   // SSE lifecycle managed by useEventSource.
   // sourceFactory will be set dynamically via connect() calls.
@@ -170,6 +205,70 @@ export function useProjectSession(projectId: Ref<string>) {
         } catch (e) {
           console.warn(
             '[useProjectSession] Failed to parse exit_plan_mode event:',
+            e,
+            event.data,
+          );
+        }
+      },
+      goal_iteration_started: (event: MessageEvent) => {
+        try {
+          const data = JSON.parse(event.data);
+          onGoalIterationStartedCb?.({
+            iteration: data.iteration ?? 0,
+            max_iterations: data.max_iterations ?? 0,
+          });
+        } catch (e) {
+          console.warn(
+            '[useProjectSession] Failed to parse goal_iteration_started event:',
+            e,
+            event.data,
+          );
+        }
+      },
+      goal_iteration_completed: (event: MessageEvent) => {
+        try {
+          const data = JSON.parse(event.data);
+          onGoalIterationCompletedCb?.({
+            iteration: data.iteration ?? 0,
+            verdict: data.verdict ?? 'not_met',
+            reason: data.reason ?? '',
+            source: data.source ?? 'llm',
+          });
+        } catch (e) {
+          console.warn(
+            '[useProjectSession] Failed to parse goal_iteration_completed event:',
+            e,
+            event.data,
+          );
+        }
+      },
+      goal_loop_ended: (event: MessageEvent) => {
+        try {
+          const data = JSON.parse(event.data);
+          onGoalLoopEndedCb?.({
+            reason: data.reason ?? 'stopped',
+            detail: data.detail ?? '',
+          });
+        } catch (e) {
+          console.warn(
+            '[useProjectSession] Failed to parse goal_loop_ended event:',
+            e,
+            event.data,
+          );
+        }
+      },
+      goal_check_disagreement: (event: MessageEvent) => {
+        try {
+          const data = JSON.parse(event.data);
+          onGoalCheckDisagreementCb?.({
+            iteration: data.iteration ?? 0,
+            deterministic_reason: data.deterministic_reason ?? '',
+            llm_reason: data.llm_reason ?? '',
+            streak: data.streak ?? 0,
+          });
+        } catch (e) {
+          console.warn(
+            '[useProjectSession] Failed to parse goal_check_disagreement event:',
             e,
             event.data,
           );
@@ -541,6 +640,31 @@ export function useProjectSession(projectId: Ref<string>) {
     onPermissionRequestCb = cb;
   }
 
+  // v0.7.74 — goal-loop event handler registration.
+  function onGoalIterationStarted(
+    cb: (payload: { iteration: number; max_iterations: number }) => void,
+  ) {
+    onGoalIterationStartedCb = cb;
+  }
+
+  function onGoalIterationCompleted(
+    cb: (payload: GoalIterationCompletedPayload) => void,
+  ) {
+    onGoalIterationCompletedCb = cb;
+  }
+
+  function onGoalLoopEnded(
+    cb: (payload: { reason: string; detail: string }) => void,
+  ) {
+    onGoalLoopEndedCb = cb;
+  }
+
+  function onGoalCheckDisagreement(
+    cb: (payload: GoalCheckDisagreementPayload) => void,
+  ) {
+    onGoalCheckDisagreementCb = cb;
+  }
+
   // SSE connection cleanup is handled by useEventSource's onUnmounted.
   // This separate onUnmounted resets streaming/ralph/team state on unmount.
   onUnmounted(() => {
@@ -580,5 +704,9 @@ export function useProjectSession(projectId: Ref<string>) {
     onHookDecision,
     onThinking,
     onPermissionRequest,
+    onGoalIterationStarted,
+    onGoalIterationCompleted,
+    onGoalLoopEnded,
+    onGoalCheckDisagreement,
   };
 }

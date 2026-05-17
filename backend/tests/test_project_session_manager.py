@@ -126,19 +126,38 @@ class TestExtractStreamJsonText:
         assert _extract_stream_json_text(json.dumps(event)) == "hi"
 
 
+def _strip_turn_done(events: list) -> list:
+    """v0.7.74 — filter out the synthetic ``turn_done`` event the
+    parser now appends to assistant turns. The event is a
+    boundary marker for in-process consumers (goal-loop runner);
+    it doesn't change what the chat UI sees. Tests that predate
+    v0.7.74 assert on the user-visible events only, so they wrap
+    the call with this helper."""
+    return [e for e in events if e[0] != "turn_done"]
+
+
 class TestExtractStreamJsonEvents:
     """v0.7.63 — ``_extract_stream_json_events`` returns an ordered list
     of ``(event_type, data)`` tuples so the reader thread can broadcast
     side-channel events (like ``AskUserQuestion``) alongside the
     text/tool-use bubble content."""
 
-    def test_assistant_text_only_yields_single_output(self):
+    def test_assistant_text_only_yields_output_then_turn_done(self):
+        # v0.7.74 — the assistant turn parser now appends a
+        # synthetic ``turn_done`` event after the user-visible
+        # output events so in-process consumers (goal-loop runner)
+        # have a clean turn-boundary signal. Browser-bound SSE
+        # subscribers see both (turn_done is harmless on the
+        # frontend's existing handler map — it falls through).
         event = {
             "type": "assistant",
             "message": {"content": [{"type": "text", "text": "hello"}]},
         }
         events = _extract_stream_json_events(json.dumps(event))
-        assert events == [("output", {"line": "hello"})]
+        assert events == [
+            ("output", {"line": "hello"}),
+            ("turn_done", {"text": "hello"}),
+        ]
 
     def test_exit_plan_mode_split_off_as_dedicated_event(self):
         """v0.7.65 — ``ExitPlanMode`` tool_use emits its own
@@ -161,7 +180,7 @@ class TestExtractStreamJsonEvents:
                 ]
             },
         }
-        events = _extract_stream_json_events(json.dumps(event))
+        events = _strip_turn_done(_extract_stream_json_events(json.dumps(event)))
         assert len(events) == 2
         assert events[0] == ("output", {"line": "Here's my plan:"})
         assert events[1][0] == "exit_plan_mode"
@@ -195,7 +214,7 @@ class TestExtractStreamJsonEvents:
                 ]
             },
         }
-        events = _extract_stream_json_events(json.dumps(event))
+        events = _strip_turn_done(_extract_stream_json_events(json.dumps(event)))
         # 3 events, chronological order preserved
         assert len(events) == 3
         assert events[0] == ("output", {"line": "Need your input:"})
@@ -221,7 +240,7 @@ class TestExtractStreamJsonEvents:
                 ]
             },
         }
-        events = _extract_stream_json_events(json.dumps(event))
+        events = _strip_turn_done(_extract_stream_json_events(json.dumps(event)))
         assert len(events) == 1
         ev_type, ev_data = events[0]
         assert ev_type == "output"
@@ -318,7 +337,9 @@ class TestExtractStreamJsonEvents:
                 ]
             },
         }
-        events = _extract_stream_json_events(json.dumps(event), session_info=si)
+        events = _strip_turn_done(
+            _extract_stream_json_events(json.dumps(event), session_info=si)
+        )
         # No output with "Hello world" — only the tool chip.
         assert len(events) == 1
         ev_type, ev_data = events[0]
@@ -373,7 +394,7 @@ class TestExtractStreamJsonEvents:
             "type": "assistant",
             "message": {"content": [{"type": "text", "text": "Hello"}]},
         }
-        events = _extract_stream_json_events(json.dumps(event))
+        events = _strip_turn_done(_extract_stream_json_events(json.dumps(event)))
         assert events == [("output", {"line": "Hello"})]
 
     def test_thinking_block_emits_dedicated_event(self):
@@ -388,7 +409,7 @@ class TestExtractStreamJsonEvents:
                 ]
             },
         }
-        events = _extract_stream_json_events(json.dumps(event))
+        events = _strip_turn_done(_extract_stream_json_events(json.dumps(event)))
         # Two events: thinking (first), then output with the text.
         assert len(events) == 2
         assert events[0] == ("thinking", {"text": "Let me reason..."})
@@ -407,7 +428,7 @@ class TestExtractStreamJsonEvents:
                 ]
             },
         }
-        events = _extract_stream_json_events(json.dumps(event))
+        events = _strip_turn_done(_extract_stream_json_events(json.dumps(event)))
         assert len(events) == 3
         assert events[0] == ("output", {"line": "Quick answer:"})
         assert events[1] == ("thinking", {"text": "actually let me reconsider"})
@@ -424,7 +445,7 @@ class TestExtractStreamJsonEvents:
                 ]
             },
         }
-        events = _extract_stream_json_events(json.dumps(event))
+        events = _strip_turn_done(_extract_stream_json_events(json.dumps(event)))
         assert events == [("output", {"line": "Hello"})]
 
     def test_hook_response_with_deny_decision(self):

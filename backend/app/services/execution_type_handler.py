@@ -417,6 +417,105 @@ class TeamSpawnHandler(ExecutionTypeHandler):
         return ProjectSessionManager.get_output(session_id, last_n=last_n)
 
 
+class GoalLoopSessionHandler(ExecutionTypeHandler):
+    """Handler for goal-loop autonomous sessions (v0.7.74).
+
+    Spawns an underlying claude stream-json session (same shape as
+    ``direct``), persists the goal config onto the row, and starts
+    a ``GoalLoopRunner`` thread that watches turn boundaries and
+    decides whether to continue. The runner owns termination
+    (iteration cap, wall-time cap, judge says met); this handler
+    just wires the start + stop + monitor surface.
+    """
+
+    def start(self, session_config: dict) -> dict:
+        goal_config = session_config.get("goal_loop_config") or {}
+        if not goal_config.get("goal", "").strip():
+            return {"error": "goal_loop_config.goal is required"}
+
+        # Reuse the direct-session command shape — chat-mode claude
+        # with stream-json + hook/partial events. The runner pumps
+        # user messages via the existing input route.
+        cmd = session_config.get("cmd") or [
+            "claude",
+            "--print",
+            "--input-format",
+            "stream-json",
+            "--output-format",
+            "stream-json",
+            "--verbose",
+            "--include-hook-events",
+            "--include-partial-messages",
+        ]
+        session_id = ProjectSessionManager.create_session(
+            project_id=session_config["project_id"],
+            cmd=cmd,
+            cwd=session_config["cwd"],
+            phase_id=session_config.get("phase_id"),
+            plan_id=session_config.get("plan_id"),
+            agent_id=session_config.get("agent_id"),
+            worktree_path=session_config.get("worktree_path"),
+            execution_type="goal_loop",
+            execution_mode=session_config.get("execution_mode", "autonomous"),
+            stream_json=True,
+            use_pty=False,
+            yolo_mode=session_config.get("yolo_mode", False),
+            forge_bundle=session_config.get("forge_bundle"),
+        )
+
+        # Persist config + spawn the driver thread.
+        from app.db import set_goal_loop_config
+        from .goal_loop_runner import start_runner
+
+        try:
+            set_goal_loop_config(session_id, goal_config)
+        except Exception:
+            logger.warning(
+                "goal_loop: failed to persist config for %s", session_id, exc_info=True
+            )
+        start_runner(session_id, goal_config, cwd=session_config.get("cwd"))
+
+        info = ProjectSessionManager.get_session_info(session_id)
+        return {
+            "session_id": session_id,
+            "pid": info["pid"] if info else None,
+            "status": "active",
+        }
+
+    def monitor(self, session_id: str) -> dict:
+        from .goal_loop_runner import get_runner_state
+
+        info = ProjectSessionManager.get_session_info(session_id)
+        base = (
+            {
+                "alive": info["status"] == "active",
+                "status": info["status"],
+                "output_lines": info.get("output_lines", 0),
+                "last_activity_at": info.get("last_activity_at"),
+            }
+            if info
+            else {
+                "alive": False,
+                "status": "unknown",
+                "output_lines": 0,
+                "last_activity_at": None,
+            }
+        )
+        runner = get_runner_state(session_id)
+        if runner:
+            base.update(runner)
+        return base
+
+    def stop(self, session_id: str) -> bool:
+        from .goal_loop_runner import stop_runner
+
+        stop_runner(session_id)
+        return ProjectSessionManager.stop_session(session_id)
+
+    def get_output(self, session_id: str, last_n: int = 100) -> list[str]:
+        return ProjectSessionManager.get_output(session_id, last_n=last_n)
+
+
 # =============================================================================
 # Handler Registry
 # =============================================================================
@@ -426,6 +525,7 @@ HANDLER_REGISTRY: dict[str, ExecutionTypeHandler] = {
     "direct": DirectExecutionHandler(),
     "ralph_loop": RalphSessionHandler(),
     "team_spawn": TeamSpawnHandler(),
+    "goal_loop": GoalLoopSessionHandler(),
 }
 
 

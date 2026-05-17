@@ -50,7 +50,7 @@ const emit = defineEmits<{
       name: string | null;
       autoTitle: boolean;
       yoloMode: boolean;
-      executionType: 'direct' | 'ralph_loop' | 'team_spawn';
+      executionType: 'direct' | 'ralph_loop' | 'team_spawn' | 'goal_loop';
       accountId: string | null;
       // v0.7.73 — Forge context picks. ``forgeOverrides`` rides
       // into ``create_session`` via ``request.forge_context`` so
@@ -69,6 +69,15 @@ const emit = defineEmits<{
         }>;
       };
       firstPromptAttachments: ForgeAttachment[];
+      // v0.7.74 — only populated when executionType === 'goal_loop'.
+      goalLoopConfig: {
+        goal: string;
+        checkCmd: string | null;
+        maxIterations: number;
+        maxWallSeconds: number;
+        judgeBackendKind: 'claude' | 'codex' | 'gemini' | 'opencode';
+        judgeModelOverride: string | null;
+      } | null;
     },
   ): void;
 }>();
@@ -80,7 +89,26 @@ useFocusTrap(dialogRef, isOpen);
 const name = ref('');
 const autoTitle = ref(true);
 const yoloMode = ref(false);
-const executionType = ref<'direct' | 'ralph_loop' | 'team_spawn'>('direct');
+const executionType = ref<'direct' | 'ralph_loop' | 'team_spawn' | 'goal_loop'>('direct');
+
+// v0.7.74 — goal-loop config. Defaults match the spec; only sent
+// when execution type is ``goal_loop`` (other types ignore the
+// field server-side, but we omit it client-side for tidiness).
+const goalText = ref('');
+const goalCheckCmd = ref('');
+const goalMaxIterations = ref(20);
+const goalMaxWallMinutes = ref(30);
+const goalJudgeBackend = ref<'claude' | 'codex' | 'gemini' | 'opencode'>('claude');
+const goalJudgeModelOverride = ref('');
+
+const isGoalLoop = computed(() => executionType.value === 'goal_loop');
+const goalCanSubmit = computed(() => {
+  if (!isGoalLoop.value) return true;
+  if (goalText.value.trim().length < 5) return false;
+  if (goalMaxIterations.value < 1 || goalMaxIterations.value > 100) return false;
+  if (goalMaxWallMinutes.value < 1 || goalMaxWallMinutes.value > 240) return false;
+  return true;
+});
 const userDefaultYolo = ref(false);
 const isLoadingDefaults = ref(false);
 
@@ -181,6 +209,9 @@ const canSubmit = computed(() => {
   // race where the whitelist becomes empty mid-flight would leave
   // accountId empty).
   if (!yoloMode.value && !accountId.value) return false;
+  // v0.7.74 — goal-loop validation gates Start until the goal is
+  // non-empty and the caps are in range.
+  if (!goalCanSubmit.value) return false;
   return true;
 });
 
@@ -259,6 +290,12 @@ watch(
       firstPromptAttachments.value = [];
       addBindingKind.value = 'rule';
       addBindingAssetId.value = '';
+      goalText.value = '';
+      goalCheckCmd.value = '';
+      goalMaxIterations.value = 20;
+      goalMaxWallMinutes.value = 30;
+      goalJudgeBackend.value = 'claude';
+      goalJudgeModelOverride.value = '';
       hydrateDefaults().then(() => {
         yoloMode.value = userDefaultYolo.value;
       });
@@ -294,6 +331,16 @@ function onSubmit() {
       additions: sessionOnlyAdditions.value.slice(),
     },
     firstPromptAttachments: firstPromptAttachments.value.slice(),
+    goalLoopConfig: isGoalLoop.value
+      ? {
+          goal: goalText.value.trim(),
+          checkCmd: goalCheckCmd.value.trim() || null,
+          maxIterations: goalMaxIterations.value,
+          maxWallSeconds: goalMaxWallMinutes.value * 60,
+          judgeBackendKind: goalJudgeBackend.value,
+          judgeModelOverride: goalJudgeModelOverride.value.trim() || null,
+        }
+      : null,
   });
 }
 </script>
@@ -359,6 +406,7 @@ function onSubmit() {
             <option value="direct">Direct — interactive claude chat</option>
             <option value="ralph_loop">Ralph loop — autonomous iteration</option>
             <option value="team_spawn">Team spawn — multi-agent</option>
+            <option value="goal_loop">Goal loop — run until goal met</option>
           </select>
           <p v-if="executionType === 'ralph_loop'" class="form-hint">
             Requires <code>ralph-wiggum</code> plugin.
@@ -366,6 +414,88 @@ function onSubmit() {
           <p v-else-if="executionType === 'team_spawn'" class="form-hint">
             Requires
             <code>CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1</code> in the environment.
+          </p>
+          <p v-else-if="executionType === 'goal_loop'" class="form-hint">
+            Autonomous loop. Each turn is judged against your goal;
+            session continues until the goal is met, the iteration
+            cap is reached, or the wall-time cap elapses.
+          </p>
+        </div>
+
+        <!-- v0.7.74 — Goal-loop config. Reveals when the execution
+             type is ``goal_loop``; collapses otherwise so the
+             dialog stays compact for the common direct case. -->
+        <div v-if="isGoalLoop" class="form-group goal-loop-config">
+          <label for="goal-text">Goal</label>
+          <textarea
+            id="goal-text"
+            v-model="goalText"
+            class="goal-textarea"
+            placeholder="Describe what success looks like in 1–3 sentences."
+            rows="3"
+          ></textarea>
+          <p v-if="goalText.trim().length > 0 && goalText.trim().length < 5"
+             class="form-hint goal-error">
+            Goal must be at least 5 characters.
+          </p>
+
+          <label for="goal-check-cmd" class="goal-secondary-label">
+            Check command (optional)
+          </label>
+          <input
+            id="goal-check-cmd"
+            v-model="goalCheckCmd"
+            class="goal-mono-input"
+            type="text"
+            placeholder="e.g. pytest -x  (exit 0 = goal met)"
+          />
+          <p class="form-hint">
+            If set, run after each turn — exit 0 means met. Otherwise
+            the LLM judge evaluates the latest assistant turn against
+            the goal.
+          </p>
+
+          <div class="goal-caps-row">
+            <div class="goal-cap-field">
+              <label for="goal-max-iter">Max iterations</label>
+              <input
+                id="goal-max-iter"
+                v-model.number="goalMaxIterations"
+                type="number"
+                min="1"
+                max="100"
+              />
+            </div>
+            <div class="goal-cap-field">
+              <label for="goal-max-wall">Max wall time (min)</label>
+              <input
+                id="goal-max-wall"
+                v-model.number="goalMaxWallMinutes"
+                type="number"
+                min="1"
+                max="240"
+              />
+            </div>
+          </div>
+
+          <label for="goal-judge-backend" class="goal-secondary-label">
+            Judge backend
+          </label>
+          <select id="goal-judge-backend" v-model="goalJudgeBackend">
+            <option value="claude">Claude (claude-haiku-4-5)</option>
+            <option value="codex">Codex (o4-mini)</option>
+            <option value="gemini">Gemini (gemini-2.5-flash)</option>
+            <option value="opencode">OpenCode (auto)</option>
+          </select>
+          <input
+            v-model="goalJudgeModelOverride"
+            class="goal-mono-input goal-model-override"
+            type="text"
+            placeholder="Override model name (optional)"
+          />
+          <p class="form-hint">
+            Defaults to a small/cheap model per backend — the judge
+            only answers yes/no, so the cheapest available is enough.
           </p>
         </div>
 
@@ -865,5 +995,80 @@ form {
 }
 .forge-hint {
   margin-top: 6px;
+}
+
+/* v0.7.74 — goal-loop config */
+.goal-loop-config {
+  border-left: 2px solid var(--accent-cyan);
+  padding-left: 12px;
+}
+.goal-textarea {
+  width: 100%;
+  font-family: inherit;
+  font-size: 13px;
+  padding: 8px 10px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-default);
+  border-radius: 6px;
+  color: var(--text-primary);
+  resize: vertical;
+}
+.goal-textarea:focus {
+  outline: none;
+  border-color: var(--accent-cyan);
+}
+.goal-mono-input {
+  width: 100%;
+  font-family: 'Geist Mono', monospace;
+  font-size: 12px;
+  padding: 6px 10px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-default);
+  border-radius: 6px;
+  color: var(--text-primary);
+}
+.goal-mono-input:focus {
+  outline: none;
+  border-color: var(--accent-cyan);
+}
+.goal-secondary-label {
+  display: block;
+  margin-top: 10px;
+  margin-bottom: 4px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.goal-caps-row {
+  display: flex;
+  gap: 12px;
+  margin-top: 10px;
+}
+.goal-cap-field {
+  flex: 1;
+}
+.goal-cap-field label {
+  display: block;
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-bottom: 4px;
+}
+.goal-cap-field input {
+  width: 100%;
+  padding: 6px 10px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-default);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-size: 13px;
+}
+.goal-cap-field input:focus {
+  outline: none;
+  border-color: var(--accent-cyan);
+}
+.goal-model-override {
+  margin-top: 6px;
+}
+.goal-error {
+  color: var(--accent-red, #ff6464);
 }
 </style>

@@ -603,6 +603,10 @@ def create_session(project_id: str, data: dict) -> dict[str, Any]:
             # v0.7.71 — overlay portion of the compiled Forge bundle
             # (None when there's nothing for PSM to materialize).
             "forge_bundle": forge_bundle_dict,
+            # v0.7.74 — goal-loop config; only consumed by the
+            # ``goal_loop`` execution-type handler. Other handlers
+            # ignore the field.
+            "goal_loop_config": body.get("goal_loop_config"),
         }
     )
 
@@ -1165,6 +1169,34 @@ def create_team_session(project_id: str, data: dict) -> dict[str, Any]:
     return result
 
 
+@get(
+    "/{project_id:str}/sessions/{session_id:str}/goal-iterations",
+    sync_to_thread=False,
+)
+def list_session_goal_iterations(
+    project_id: str, session_id: str
+) -> dict[str, Any]:
+    """v0.7.74 — iteration audit trail for a goal_loop session.
+
+    Returns every iteration row with its verdict + reason + judging
+    cost. The operator inspects this when figuring out "why did it
+    stop on turn 7?" The list is empty (not 404) for non-goal_loop
+    sessions so the frontend can render the same component
+    unconditionally; the panel just shows nothing when there are
+    no rows.
+    """
+    del project_id
+    from app.db import get_goal_loop_config, list_goal_loop_iterations
+
+    iterations = list_goal_loop_iterations(session_id)
+    config = get_goal_loop_config(session_id)
+    return {
+        "session_id": session_id,
+        "config": config,
+        "iterations": iterations,
+    }
+
+
 @get("/{project_id:str}/sessions/{session_id:str}/monitor", sync_to_thread=False)
 def monitor_session(project_id: str, session_id: str) -> dict[str, Any]:
     del project_id
@@ -1227,5 +1259,6 @@ grd_router = Router(
         create_ralph_session,
         create_team_session,
         monitor_session,
+        list_session_goal_iterations,
     ],
 )
