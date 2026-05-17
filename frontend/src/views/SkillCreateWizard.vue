@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref, watch } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { skillConversationApi } from '../services/api';
 import { useConversation, createConfigParser } from '../composables/useConversation';
@@ -79,6 +79,17 @@ function openPreview() {
   // Create button runs ``commitFinalize`` below.
   showPreview.value = true;
 }
+
+// v0.7.79 — native ``title`` tooltip mirrored from the visible
+// hint underneath the button, so a screen reader or hover lands
+// the same explanation. We branch on ``canFinalize`` instead of
+// always showing the long copy so a ready-to-create operator
+// doesn't see a no-op nag tooltip.
+const finalizeTooltip = computed(() =>
+  conversation.canFinalize.value
+    ? 'Open the preview to review and create your skill'
+    : "Keep chatting — Claude needs more details before the skill can be created. Tell it the skill's name, what triggers it, and what it should do.",
+);
 
 async function commitFinalize(expectedConfigHash: string) {
   // v0.7.77 (codex BLOCK 4) — the drawer passes the hash of the
@@ -260,17 +271,36 @@ onMounted(async () => {
         <h1>Design a Skill</h1>
         <p>Chat with Claude to design your custom skill</p>
       </div>
-      <button
-        v-if="conversation.canFinalize.value"
-        class="btn btn-primary btn-finalize"
-        :disabled="conversation.isFinalizing.value"
-        @click="openPreview"
-      >
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M20 6L9 17l-5-5"/>
-        </svg>
-        {{ conversation.isFinalizing.value ? 'Creating...' : 'Create Skill' }}
-      </button>
+      <!-- v0.7.79 — the Create button is always visible. When the
+           conversation isn't ready yet (Claude hasn't emitted the
+           SKILL_CONFIG block that ``createConfigParser`` watches
+           for), it's disabled and the hint underneath tells the
+           operator exactly what's missing. Previously the button
+           was ``v-if``'d out, so newcomers couldn't tell whether
+           it was missing, broken, or just not ready. -->
+      <div class="finalize-control">
+        <button
+          class="btn btn-primary btn-finalize"
+          :disabled="!conversation.canFinalize.value || conversation.isFinalizing.value"
+          :title="finalizeTooltip"
+          :aria-describedby="conversation.canFinalize.value ? undefined : 'finalize-hint'"
+          @click="openPreview"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M20 6L9 17l-5-5"/>
+          </svg>
+          {{ conversation.isFinalizing.value ? 'Creating...' : 'Create Skill' }}
+        </button>
+        <p
+          v-if="!conversation.canFinalize.value"
+          id="finalize-hint"
+          class="finalize-hint"
+        >
+          Keep chatting — once Claude has the name, description, and
+          behavior locked in, this button activates and opens a
+          preview before anything is written.
+        </p>
+      </div>
     </div>
 
     <AiChatPanel
@@ -351,6 +381,22 @@ onMounted(async () => {
   color: var(--text-tertiary);
 }
 
+.finalize-control {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  max-width: 320px;
+}
+
+.finalize-hint {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-tertiary);
+  text-align: right;
+}
+
 .btn-finalize {
   padding: 10px 20px;
 }
@@ -360,8 +406,15 @@ onMounted(async () => {
   color: #fff;
 }
 
-.btn-primary:hover {
+.btn-primary:hover:not(:disabled) {
   background: #9966ff;
+}
+
+.btn-primary:disabled {
+  background: var(--bg-tertiary, #2a2a30);
+  color: var(--text-tertiary, #8a8a92);
+  cursor: not-allowed;
+  opacity: 0.85;
 }
 
 .btn-primary svg {
