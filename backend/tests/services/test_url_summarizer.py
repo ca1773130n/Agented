@@ -136,3 +136,119 @@ def test_fetch_truncates_large_bodies(monkeypatch):
     summary = fetch_and_summarize("https://example.com/big")
     assert len(summary.text) <= 5000  # cap is 4 KB + truncation marker
     assert "truncated" in summary.text
+
+
+# -----------------------------------------------------------------
+# SSRF gate — direct IPs, AWS metadata, redirect chains
+# -----------------------------------------------------------------
+
+
+def test_fetch_blocks_literal_loopback_ipv4():
+    summary = fetch_and_summarize("http://127.0.0.1/admin")
+    assert summary.error and "non-global address" in summary.error
+
+
+def test_fetch_blocks_literal_loopback_ipv6():
+    summary = fetch_and_summarize("http://[::1]/admin")
+    assert summary.error and "non-global address" in summary.error
+
+
+def test_fetch_blocks_private_rfc1918():
+    summary = fetch_and_summarize("http://10.0.0.1/")
+    assert summary.error and "non-global address" in summary.error
+    summary = fetch_and_summarize("http://192.168.1.1/")
+    assert summary.error and "non-global address" in summary.error
+
+
+def test_fetch_blocks_aws_metadata_endpoint():
+    summary = fetch_and_summarize("http://169.254.169.254/latest/meta-data/")
+    assert summary.error and "non-global address" in summary.error
+
+
+def test_fetch_blocks_redirect_to_loopback(monkeypatch):
+    """The SSRF gate runs on the original URL AND every redirect hop —
+    a 302 to a private IP must be rejected, not followed.
+    """
+
+    def handler(request):
+        return httpx.Response(
+            302,
+            headers={"location": "http://127.0.0.1/admin"},
+        )
+
+    _install_transport(monkeypatch, handler)
+    summary = fetch_and_summarize("https://example.com/safe")
+    assert summary.error and "redirect blocked" in summary.error
+    assert "non-global address" in summary.error
+
+
+def test_fetch_blocks_redirect_to_aws_metadata(monkeypatch):
+    def handler(request):
+        return httpx.Response(
+            301,
+            headers={"location": "http://169.254.169.254/latest/meta-data/"},
+        )
+
+    _install_transport(monkeypatch, handler)
+    summary = fetch_and_summarize("https://example.com/innocent")
+    assert summary.error and "redirect blocked" in summary.error
+
+
+def test_fetch_blocks_redirect_to_file_scheme(monkeypatch):
+    def handler(request):
+        return httpx.Response(
+            302,
+            headers={"location": "file:///etc/passwd"},
+        )
+
+    _install_transport(monkeypatch, handler)
+    summary = fetch_and_summarize("https://example.com/safe")
+    assert summary.error and "redirect blocked" in summary.error
+    assert "scheme" in summary.error
+
+
+def test_fetch_caps_redirect_hops(monkeypatch):
+    """A redirect loop that stays within public IPs (or non-validating
+    hops via relative URLs) still has to terminate — otherwise the
+    fetch could hang the chat turn. ``_MAX_REDIRECT_HOPS`` enforces it.
+    """
+    counter = {"n": 0}
+
+    def handler(request):
+        counter["n"] += 1
+        # Bounce to a fresh public-looking URL each hop so the SSRF
+        # gate doesn't reject — we want to test the hop counter.
+        return httpx.Response(
+            302,
+            headers={"location": f"https://example.com/hop{counter['n']}"},
+        )
+
+    _install_transport(monkeypatch, handler)
+    summary = fetch_and_summarize("https://example.com/start")
+    assert summary.error == "too many redirects"
+
+
+def test_fetch_follows_one_public_redirect(monkeypatch):
+    """A single safe redirect lands on the real content — verify the
+    happy path through the manual hop loop still resolves.
+    """
+    hop = {"step": 0}
+
+    def handler(request):
+        hop["step"] += 1
+        if hop["step"] == 1:
+            return httpx.Response(
+                302,
+                headers={"location": "https://example.com/final"},
+            )
+        return httpx.Response(
+            200,
+            headers={"content-type": "text/html"},
+            content=b"<html><head><title>Final</title></head><body>landed</body></html>",
+        )
+
+    _install_transport(monkeypatch, handler)
+    summary = fetch_and_summarize("https://example.com/start")
+    assert summary.error is None
+    assert summary.title == "Final"
+    assert "landed" in summary.text

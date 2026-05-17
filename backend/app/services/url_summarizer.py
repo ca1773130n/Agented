@@ -23,8 +23,10 @@ Design:
 
 from __future__ import annotations
 
+import ipaddress
 import logging
 import re
+import socket
 import threading
 import time
 from dataclasses import dataclass
@@ -49,6 +51,13 @@ _CACHE_TTL_SECONDS = 60 * 60
 # leak local files via the attachment channel; data: URIs are
 # essentially inline content and should use the snippet kind.
 _ALLOWED_SCHEMES = {"http", "https"}
+
+# Cap on redirect hops. ``follow_redirects=True`` on the httpx client
+# would short-circuit our per-hop SSRF guard, so we follow them
+# manually and re-validate the host on every step. Most legitimate
+# URLs settle in 1–2 hops; a chain longer than this is either
+# misconfigured or hostile.
+_MAX_REDIRECT_HOPS = 5
 
 
 @dataclass
@@ -109,12 +118,86 @@ class _TitleAndTextExtractor(HTMLParser):
         return title, text
 
 
-def _is_allowed(url: str) -> bool:
+def _is_allowed_scheme(url: str) -> bool:
     try:
         scheme = urlparse(url).scheme.lower()
     except Exception:
         return False
     return scheme in _ALLOWED_SCHEMES
+
+
+def _resolve_host_addresses(host: str) -> list[ipaddress._BaseAddress]:
+    """Return every A/AAAA record for ``host``.
+
+    A single host can resolve to multiple addresses (round-robin DNS,
+    happy-eyeballs IPv4+IPv6). We must validate ALL of them or an
+    attacker can use a DNS record where one IP is public and another
+    is private — ``socket.gethostbyname`` would return whichever the
+    resolver felt like, leaving the validation outcome unstable.
+    """
+    addrs: list[ipaddress._BaseAddress] = []
+    try:
+        infos = socket.getaddrinfo(host, None, type=socket.SOCK_STREAM)
+    except (socket.gaierror, UnicodeError):
+        return addrs
+    seen: set[str] = set()
+    for info in infos:
+        ip_str = info[4][0]
+        if ip_str in seen:
+            continue
+        seen.add(ip_str)
+        try:
+            addrs.append(ipaddress.ip_address(ip_str))
+        except ValueError:
+            continue
+    return addrs
+
+
+def _is_safe_target(url: str) -> Optional[str]:
+    """Validate scheme + DNS resolution. Returns reason on rejection,
+    or ``None`` if the URL is safe to fetch.
+
+    Rejects:
+      * non-http(s) schemes (file://, data:, gopher:, etc.)
+      * missing or empty hostnames
+      * DNS-resolution failure
+      * any resolved address in a private, loopback, link-local,
+        multicast, reserved, or unspecified range — including the
+        AWS/GCP metadata endpoints in 169.254.0.0/16, the IPv6
+        loopback ``::1``, ULAs in ``fc00::/7``, and link-locals in
+        ``fe80::/10``. ``ipaddress.is_global`` (Python 3.11+) is the
+        canonical "publicly routable" check.
+    """
+    if not _is_allowed_scheme(url):
+        return "scheme not allowed"
+    try:
+        parsed = urlparse(url)
+    except Exception:
+        return "invalid URL"
+    host = (parsed.hostname or "").strip()
+    if not host:
+        return "missing host"
+    # ``host`` may itself be a literal IP — short-circuit DNS in that
+    # case so we still validate the address.
+    try:
+        literal = ipaddress.ip_address(host)
+    except ValueError:
+        literal = None
+    addrs: list[ipaddress._BaseAddress]
+    if literal is not None:
+        addrs = [literal]
+    else:
+        addrs = _resolve_host_addresses(host)
+        if not addrs:
+            return "DNS resolution failed"
+    for ip in addrs:
+        if not getattr(ip, "is_global", not ip.is_private):
+            return f"non-global address: {ip}"
+        if ip.is_loopback or ip.is_link_local or ip.is_multicast:
+            return f"non-global address: {ip}"
+        if ip.is_reserved or ip.is_unspecified:
+            return f"non-global address: {ip}"
+    return None
 
 
 def _from_cache(url: str) -> Optional[UrlSummary]:
@@ -158,27 +241,58 @@ def _summarize_html(body: bytes) -> tuple[str, str]:
 def fetch_and_summarize(url: str) -> UrlSummary:
     """Return a ``UrlSummary`` for ``url`` (cached for 1h).
 
-    Never raises. On any failure returns a ``UrlSummary`` whose
-    ``error`` is set and ``text`` is empty — the caller renders
-    "[fetch failed: <error>]" so the prompt remains coherent.
+    Follows redirects manually so we re-validate the destination
+    host on every hop — ``httpx.Client(follow_redirects=True)`` would
+    transparently chase a 302 to a private IP and defeat the
+    upfront ``_is_safe_target`` check (CVE-class SSRF). On any
+    failure returns a ``UrlSummary`` whose ``error`` is set and
+    ``text`` is empty so the caller can still render the URL with a
+    ``[fetch failed: ...]`` trailer.
     """
-    if not _is_allowed(url):
-        return UrlSummary(url=url, title="", text="", error="scheme not allowed")
+    reason = _is_safe_target(url)
+    if reason is not None:
+        return UrlSummary(url=url, title="", text="", error=reason)
 
     cached = _from_cache(url)
     if cached is not None:
         return cached
 
+    current_url = url
+    content_type = ""
+    body = b""
     try:
         with httpx.Client(
             timeout=_FETCH_TIMEOUT_SECONDS,
-            follow_redirects=True,
+            follow_redirects=False,
             headers={"User-Agent": "agented-context-compiler/0.7.71"},
         ) as client:
-            resp = client.get(url)
-            resp.raise_for_status()
-            content_type = (resp.headers.get("content-type") or "").lower()
-            body = resp.content[:_MAX_BYTES]
+            for hop in range(_MAX_REDIRECT_HOPS + 1):
+                resp = client.get(current_url)
+                if 300 <= resp.status_code < 400 and "location" in resp.headers:
+                    if hop == _MAX_REDIRECT_HOPS:
+                        return UrlSummary(
+                            url=url,
+                            title="",
+                            text="",
+                            error="too many redirects",
+                        )
+                    # Resolve relative redirects against the current
+                    # URL, then re-run the SSRF gate before following.
+                    nxt = str(httpx.URL(current_url).join(resp.headers["location"]))
+                    reason = _is_safe_target(nxt)
+                    if reason is not None:
+                        return UrlSummary(
+                            url=url,
+                            title="",
+                            text="",
+                            error=f"redirect blocked: {reason}",
+                        )
+                    current_url = nxt
+                    continue
+                resp.raise_for_status()
+                content_type = (resp.headers.get("content-type") or "").lower()
+                body = resp.content[:_MAX_BYTES]
+                break
     except httpx.HTTPStatusError as exc:
         summary = UrlSummary(
             url=url, title="", text="", error=f"HTTP {exc.response.status_code}"
