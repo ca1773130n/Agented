@@ -222,6 +222,21 @@ from .grd import (  # noqa: F401
     upsert_project_sync_state,
 )
 
+# v0.7.85 — GRD v0.3.24 Ouroboros artifact mirror
+from .grd_ouroboros import (  # noqa: F401
+    add_dead_end,
+    add_genome_snapshot,
+    count_reflections_by_verdict,
+    delete_dead_ends_for_project,
+    get_latest_genome_snapshot,
+    get_phase_reflections,
+    list_dead_ends,
+    list_genome_snapshots,
+    max_genome_sequence,
+    update_plan_ouroboros_fields,
+    upsert_phase_reflection,
+)
+
 # Health alerts
 from .health_alerts import (  # noqa: F401
     acknowledge_alert,
