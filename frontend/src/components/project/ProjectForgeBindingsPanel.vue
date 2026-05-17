@@ -222,6 +222,16 @@ const useLibraryDropdown = computed(
     currentLibrary.value.length > 0,
 );
 
+function optionLabel(item: LibraryItem): string {
+  // Server-side names occasionally arrive empty (rule rows where
+  // ``name`` was never set; mcp servers registered by id only).
+  // Coalesce so the dropdown text is always meaningful instead of
+  // a leading-blank " (asset_id)" string.
+  const label = (item.label || '').trim() || item.asset_id;
+  if (label === item.asset_id) return label;
+  return `${label} (${item.asset_id})`;
+}
+
 async function addBinding() {
   const asset = newAssetId.value.trim();
   if (!asset) {
@@ -342,17 +352,16 @@ onMounted(() => {
         <!-- v0.7.75 (codex NIT 5) — option label is a single
              string, not text+span. Native ``<option>`` strips
              child elements in most browsers, so the original
-             ``<span>(id)</span>`` only rendered in some chromes. -->
+             ``<span>(id)</span>`` only rendered in some chromes.
+             (codex Q5 follow-up) — coalesce empty/missing label
+             to asset_id so a server-side row with empty ``name``
+             doesn't render as a leading-blank " (asset_id)". -->
         <option
           v-for="item in availableLibrary"
           :key="item.asset_id"
           :value="item.asset_id"
         >
-          {{
-            item.asset_id !== item.label
-              ? `${item.label} (${item.asset_id})`
-              : item.label
-          }}
+          {{ optionLabel(item) }}
         </option>
       </select>
       <input

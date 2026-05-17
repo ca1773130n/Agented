@@ -76,21 +76,38 @@ async function load() {
   }
 }
 
+// v0.7.75 (codex Q1-c) — also re-fetch when the operator
+// mutates ``attachments`` or ``sessionOverrides`` while the
+// drawer is open. Otherwise the preview is locked to whatever
+// was set at first open even though those props are part of the
+// rendered preview's truth. The ``loadToken`` guard ensures
+// rapid changes don't produce stale-write races; only the
+// freshest token's response lands.
+//
+// (codex Q6) ``immediate: true`` restored so a drawer mounted
+// with ``open=true`` already (e.g. route-restored state) still
+// fires ``load()``. The guard at the top of ``load()`` makes
+// this safe when open=false on mount.
 watch(
-  () => props.open,
-  (isOpen) => {
+  [
+    () => props.open,
+    () => props.attachments,
+    () => props.sessionOverrides,
+  ],
+  ([isOpen], [wasOpen]) => {
     if (isOpen) {
       load();
-    } else {
-      // Drawer hygiene: clear state on close so the next open
-      // doesn't briefly flash the previous bundle.
+    } else if (wasOpen) {
+      // Transitioned open → closed. Clear state so the next
+      // open doesn't briefly flash the previous bundle, and
+      // invalidate any in-flight request whose late response
+      // would otherwise repopulate the cleared state.
       bundle.value = null;
       errorMessage.value = null;
-      // Invalidate any in-flight request whose late response
-      // would otherwise repopulate the cleared state.
       loadToken += 1;
     }
   },
+  { immediate: true, deep: true },
 );
 
 // v0.7.75 (codex BLOCK 2) — focus trap. Matches what
