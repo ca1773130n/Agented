@@ -109,7 +109,15 @@ async function load() {
 }
 
 async function loadLibrary(kind: ForgeBindingKind) {
-  if (libraryByKind.value[kind] !== undefined) return; // already cached
+  // v0.7.75 (codex NIT 4) — only short-circuit on a real prior
+  // success. Previously a transient failure cached ``[]`` for the
+  // panel's lifetime; the operator had to remount to retry.
+  // Successful loads (including empty libraries — server says
+  // there are zero of this kind) still get cached so a kind
+  // toggle doesn't re-fetch unnecessarily.
+  const cached = libraryByKind.value[kind];
+  const hadError = libraryErrorByKind.value[kind];
+  if (cached !== undefined && !hadError) return;
   libraryLoadingByKind.value = { ...libraryLoadingByKind.value, [kind]: true };
   libraryErrorByKind.value = { ...libraryErrorByKind.value, [kind]: undefined };
   try {
@@ -120,9 +128,11 @@ async function loadLibrary(kind: ForgeBindingKind) {
       ...libraryErrorByKind.value,
       [kind]: err instanceof Error ? err.message : 'load failed',
     };
-    // Cache an empty array so the dropdown shows the fallback text
-    // input without re-fetching on every kind toggle.
-    libraryByKind.value = { ...libraryByKind.value, [kind]: [] };
+    // Do NOT cache a sentinel on error — the next kind toggle
+    // back into this kind retries. The fallback text input still
+    // renders because ``useLibraryDropdown`` keys off the error +
+    // empty-library state, not on a cached empty.
+    libraryByKind.value = { ...libraryByKind.value, [kind]: undefined };
   } finally {
     libraryLoadingByKind.value = { ...libraryLoadingByKind.value, [kind]: false };
   }
@@ -329,13 +339,20 @@ onMounted(() => {
             ? `All ${KIND_LABELS[newKind].toLowerCase()}s already bound`
             : `Pick a ${KIND_LABELS[newKind].toLowerCase()}…` }}
         </option>
+        <!-- v0.7.75 (codex NIT 5) — option label is a single
+             string, not text+span. Native ``<option>`` strips
+             child elements in most browsers, so the original
+             ``<span>(id)</span>`` only rendered in some chromes. -->
         <option
           v-for="item in availableLibrary"
           :key="item.asset_id"
           :value="item.asset_id"
         >
-          {{ item.label }}
-          <span v-if="item.asset_id !== item.label">({{ item.asset_id }})</span>
+          {{
+            item.asset_id !== item.label
+              ? `${item.label} (${item.asset_id})`
+              : item.label
+          }}
         </option>
       </select>
       <input

@@ -954,7 +954,7 @@ onMounted(() => {
     <ContextPreviewDrawer
       :open="showContextPreview"
       :project-id="projectId"
-      :attachments="(pendingAttachments as unknown as ForgeAttachment[])"
+      :attachments="pendingAttachments"
       @close="showContextPreview = false"
     />
   </div>

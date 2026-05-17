@@ -18,13 +18,14 @@
  *
  * v0.7.75.
  */
-import { ref, watch } from 'vue';
+import { ref, toRef, watch } from 'vue';
 import { projectApi } from '../../services/api';
 import type {
   ForgeAttachment,
   ForgeBundlePreview,
   ForgeSessionOverrides,
 } from '../../services/api/projects';
+import { useFocusTrap } from '../../composables/useFocusTrap';
 
 const props = defineProps<{
   open: boolean;
@@ -44,7 +45,18 @@ const bundle = ref<ForgeBundlePreview | null>(null);
 const loading = ref(false);
 const errorMessage = ref<string | null>(null);
 
+// v0.7.75 (codex BLOCK 1) — token-guarded fetch. Rapid
+// open → close → open used to let a slow earlier response land
+// after a fresh one, overwriting the new state. Each ``load()``
+// stamps a monotonically increasing id; the response writes only
+// if its id is still current AND ``props.open`` is still true.
+// AbortController would also work but the route is cheap and a
+// stale-write guard is the smaller patch.
+let loadToken = 0;
+
 async function load() {
+  loadToken += 1;
+  const token = loadToken;
   loading.value = true;
   errorMessage.value = null;
   bundle.value = null;
@@ -53,22 +65,40 @@ async function load() {
       session_overrides: props.sessionOverrides,
       attachments: props.attachments,
     });
+    if (token !== loadToken || !props.open) return;
     bundle.value = res.bundle;
   } catch (err) {
+    if (token !== loadToken || !props.open) return;
     errorMessage.value =
       err instanceof Error ? err.message : 'Failed to load preview';
   } finally {
-    loading.value = false;
+    if (token === loadToken) loading.value = false;
   }
 }
 
 watch(
   () => props.open,
   (isOpen) => {
-    if (isOpen) load();
+    if (isOpen) {
+      load();
+    } else {
+      // Drawer hygiene: clear state on close so the next open
+      // doesn't briefly flash the previous bundle.
+      bundle.value = null;
+      errorMessage.value = null;
+      // Invalidate any in-flight request whose late response
+      // would otherwise repopulate the cleared state.
+      loadToken += 1;
+    }
   },
-  { immediate: true },
 );
+
+// v0.7.75 (codex BLOCK 2) — focus trap. Matches what
+// SessionStartDialog and other modal-overlay components do; the
+// composable handles initial focus, restore-on-close, and tab
+// cycling so keyboard users aren't dropped behind the drawer.
+const drawerEl = ref<HTMLElement | null>(null);
+useFocusTrap(drawerEl, toRef(props, 'open'));
 
 function onBackdropClick(e: MouseEvent) {
   if (e.target === e.currentTarget) emit('close');
@@ -91,7 +121,12 @@ function onEscape(e: KeyboardEvent) {
       @click="onBackdropClick"
       @keydown="onEscape"
     >
-      <aside class="preview-drawer" @click.stop>
+      <aside
+        ref="drawerEl"
+        class="preview-drawer"
+        tabindex="-1"
+        @click.stop
+      >
         <header class="preview-header">
           <div>
             <h3 id="preview-title">Context preview</h3>
