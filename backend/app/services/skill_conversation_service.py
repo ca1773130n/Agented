@@ -21,7 +21,12 @@ from app.models.common import error_response
 
 from ..database import (
     add_user_skill,
+    create_skill_conversation,
+    delete_skill_conversation,
+    get_skill_conversation,
     get_user_skill,
+    list_active_skill_conversations,
+    upsert_skill_conversation,
 )
 from .skill_discovery_service import get_playground_working_dir
 
@@ -140,8 +145,15 @@ class SkillConversationService:
         return "skill_" + "".join(secrets.choice(chars) for _ in range(16))
 
     @classmethod
-    def start_conversation(cls) -> Tuple[dict, HTTPStatus]:
-        """Start a new skill creation conversation."""
+    def start_conversation(
+        cls, user_id: Optional[str] = None
+    ) -> Tuple[dict, HTTPStatus]:
+        """Start a new skill creation conversation.
+
+        v0.7.78 (codex BLOCK 1+2) — captures caller's ``user_id``
+        so subsequent conv-id operations can enforce ownership and
+        ``/active`` can scope to the operator's own conversations.
+        """
         conv_id = cls._generate_conv_id()
 
         # Initialize in-memory state
@@ -169,9 +181,33 @@ class SkillConversationService:
         initial_messages.append(kickoff)
 
         with cls._lock:
-            cls._conversations[conv_id] = {"messages": initial_messages, "processing": False}
+            cls._conversations[conv_id] = {
+                "messages": initial_messages,
+                "processing": False,
+                # v0.7.78 (codex BLOCK 2) — ownership stamped on
+                # the in-memory cache so the ownership check on
+                # every conv-id endpoint doesn't need a DB read.
+                "user_id": user_id,
+            }
             cls._subscribers[conv_id] = []
             cls._start_times[conv_id] = datetime.datetime.now()
+
+        # v0.7.78 — write through to DB so refresh / backend
+        # restart can resume. Failures are logged but don't block
+        # the start: the operator can still chat in-process, just
+        # without survival across restarts.
+        try:
+            create_skill_conversation(
+                conv_id,
+                [asdict(m) for m in initial_messages],
+                user_id=user_id,
+            )
+        except Exception:
+            logger.warning(
+                "skill_conv: failed to persist new conversation %s",
+                conv_id,
+                exc_info=True,
+            )
 
         # v0.7.76 — spawn the LLM call in a background thread so
         # the HTTP request returns immediately; the response
@@ -190,10 +226,153 @@ class SkillConversationService:
         }, HTTPStatus.CREATED
 
     @classmethod
-    def get_conversation(cls, conv_id: str) -> Tuple[dict, HTTPStatus]:
+    def _ensure_loaded(cls, conv_id: str) -> bool:
+        """v0.7.78 — make sure the conversation is in the in-memory
+        cache before it's consumed. If the wizard refreshed (new
+        browser process) or the backend restarted (lost the dict),
+        rehydrate from the DB.
+
+        Returns True iff the conversation is loaded after the call.
+        Doesn't raise — caller checks the return value and emits
+        the right error_response.
+
+        v0.7.78 (codex WARN 1) — the cache check + DB read + cache
+        write happen under ``_lock`` so two concurrent rehydrates
+        don't both read the same DB snapshot and stomp each other
+        on write. Per-conversation locking would scale better but
+        the single global lock is fine for the wizard's QPS.
+        """
+        with cls._lock:
+            if conv_id in cls._conversations:
+                return True
+        try:
+            row = get_skill_conversation(conv_id)
+        except Exception:
+            logger.warning(
+                "skill_conv: DB lookup failed for %s", conv_id, exc_info=True
+            )
+            return False
+        if not row or row["status"] != "active":
+            return False
+        messages = [
+            ConversationMessage(
+                role=m["role"], content=m["content"], timestamp=m["timestamp"]
+            )
+            for m in row["messages"]
+        ]
+        with cls._lock:
+            # Re-check inside the lock — another thread may have
+            # rehydrated while we were reading the DB.
+            if conv_id in cls._conversations:
+                return True
+            cls._conversations[conv_id] = {
+                "messages": messages,
+                "processing": False,
+                "user_id": row.get("user_id"),
+            }
+            cls._subscribers.setdefault(conv_id, [])
+            cls._start_times[conv_id] = datetime.datetime.now()
+        logger.info(
+            "skill_conv: rehydrated %s from DB (%d messages)",
+            conv_id,
+            len(messages),
+        )
+        return True
+
+    @classmethod
+    def _check_owner(
+        cls, conv_id: str, caller_user_id: Optional[str]
+    ) -> Optional[Tuple[dict, HTTPStatus]]:
+        """v0.7.78 (codex BLOCK 2) — verify the calling user owns
+        the conversation. Returns ``None`` when authorized, or an
+        ``error_response`` tuple when not.
+
+        Allowed:
+          * ``conv.user_id is None`` (legacy/dev conversations
+            created before ownership was enforced) — anyone can
+            access. This is intentional dev-mode compat; production
+            should always provide a caller user.
+          * ``conv.user_id == caller_user_id`` — owner match.
+        Otherwise 404 (not 403, to avoid leaking the existence of
+        another user's conv to a probing caller).
+        """
+        conv = cls._conversations.get(conv_id)
+        if not conv:
+            return error_response(
+                "NOT_FOUND", "Conversation not found", HTTPStatus.NOT_FOUND
+            )
+        owner = conv.get("user_id")
+        if owner is None:
+            return None
+        if caller_user_id == owner:
+            return None
+        return error_response(
+            "NOT_FOUND", "Conversation not found", HTTPStatus.NOT_FOUND
+        )
+
+    @classmethod
+    def _persist(
+        cls,
+        conv_id: str,
+        *,
+        status: Optional[str] = None,
+    ) -> None:
+        """Write the in-memory conversation through to the DB.
+
+        Called after every mutation (send_message, finalize,
+        abandon) so a refresh / restart sees the latest state.
+        Failures are logged but never raised — DB outage shouldn't
+        crash the chat hot path.
+        """
+        conv = cls._conversations.get(conv_id)
+        if not conv:
+            return
+        try:
+            upsert_skill_conversation(
+                conv_id,
+                [asdict(m) for m in conv["messages"]],
+                status=status,
+            )
+        except Exception:
+            logger.warning(
+                "skill_conv: failed to persist conversation %s",
+                conv_id,
+                exc_info=True,
+            )
+
+    @classmethod
+    def list_active(cls, user_id: Optional[str] = None) -> Tuple[dict, HTTPStatus]:
+        """v0.7.78 — list the operator's recent active conversations
+        so the wizard can resume when localStorage is empty (e.g.
+        new browser, different machine) but the DB has a row.
+        """
+        try:
+            convs = list_active_skill_conversations(user_id=user_id, limit=10)
+        except Exception:
+            logger.warning("skill_conv: DB list failed", exc_info=True)
+            convs = []
+        return {
+            "active_conversations": [
+                {
+                    "id": c["id"],
+                    "status": c["status"],
+                    "updated_at": c["updated_at"],
+                    "message_count": len(c.get("messages") or []),
+                }
+                for c in convs
+            ],
+        }, HTTPStatus.OK
+
+    @classmethod
+    def get_conversation(
+        cls, conv_id: str, caller_user_id: Optional[str] = None
+    ) -> Tuple[dict, HTTPStatus]:
         """Get conversation details and messages."""
-        if conv_id not in cls._conversations:
+        if not cls._ensure_loaded(conv_id):
             return error_response("NOT_FOUND", "Conversation not found", HTTPStatus.NOT_FOUND)
+        owner_err = cls._check_owner(conv_id, caller_user_id)
+        if owner_err is not None:
+            return owner_err
 
         conv = cls._conversations[conv_id]
         messages = [asdict(m) for m in conv["messages"] if m.role != "system"]
@@ -212,39 +391,114 @@ class SkillConversationService:
         backend: str | None = None,
         account_id: str | None = None,
         model: str | None = None,
+        caller_user_id: Optional[str] = None,
     ) -> Tuple[dict, HTTPStatus]:
         """Send a user message and process with Claude."""
-        if conv_id not in cls._conversations:
+        if not cls._ensure_loaded(conv_id):
             return error_response("NOT_FOUND", "Conversation not found", HTTPStatus.NOT_FOUND)
+        owner_err = cls._check_owner(conv_id, caller_user_id)
+        if owner_err is not None:
+            return owner_err
 
-        conv = cls._conversations[conv_id]
-        if conv.get("processing"):
-            return error_response("CONFLICT", "Conversation is processing", HTTPStatus.CONFLICT)
+        # v0.7.78 (codex WARN 2) — serialize the processing-check
+        # + user-msg append + processing-set under one lock so a
+        # second concurrent send_message can't pass the check
+        # AND append AND spawn a second LLM call before the first
+        # has marked itself processing. Without this we get
+        # interleaved [u1, u2, a1, a2] when the wire order was
+        # [u1, send u2 → race]; with this the second call gets a
+        # 409 CONFLICT and the operator retries.
+        with cls._lock:
+            conv = cls._conversations[conv_id]
+            if conv.get("processing"):
+                return error_response(
+                    "CONFLICT", "Conversation is processing", HTTPStatus.CONFLICT
+                )
+            conv["processing"] = True
+            user_msg = ConversationMessage(
+                role="user",
+                content=message,
+                timestamp=datetime.datetime.now().isoformat(),
+            )
+            conv["messages"].append(user_msg)
 
-        # Add user message
-        user_msg = ConversationMessage(
-            role="user",
-            content=message,
-            timestamp=datetime.datetime.now().isoformat(),
-        )
-        conv["messages"].append(user_msg)
+        # v0.7.78 (codex WARN D / 2nd pass) — between the lock
+        # release above and ``Thread.start()`` below we hand off
+        # to ``_process_with_claude`` to ultimately reset
+        # ``processing`` in its ``finally``. If anything in the
+        # interim raises (``_broadcast`` getting a bad queue,
+        # ``Thread.start`` OS failure, etc.) we'd leave the conv
+        # stuck at ``processing=True`` forever. Wrap and reset on
+        # failure so the operator can retry.
+        try:
+            # v0.7.78 — write through after the user message; the
+            # assistant reply is persisted again at the end of
+            # ``_process_with_claude`` once the full response is in
+            # the in-memory list.
+            cls._persist(conv_id)
 
-        # Broadcast to subscribers
-        cls._broadcast(conv_id, "user_message", asdict(user_msg))
+            # Broadcast to subscribers
+            cls._broadcast(conv_id, "user_message", asdict(user_msg))
 
-        # Process with Claude in background
-        threading.Thread(
-            target=cls._process_with_claude,
-            args=(conv_id, message),
-            kwargs={"backend": backend, "account_id": account_id, "model": model},
-        ).start()
+            # Process with Claude in background
+            threading.Thread(
+                target=cls._process_with_claude,
+                args=(conv_id, message),
+                kwargs={"backend": backend, "account_id": account_id, "model": model},
+            ).start()
+        except Exception:
+            # Reset processing under the lock so a follow-up
+            # ``send_message`` isn't permanently 409'd. The user
+            # message is intentionally left in the history (and
+            # persisted) — re-emitting it would feel surprising
+            # and the operator can decide whether to retry.
+            logger.error(
+                "skill_conv: failed to start LLM thread for %s; "
+                "resetting processing flag",
+                conv_id,
+                exc_info=True,
+            )
+            with cls._lock:
+                if conv_id in cls._conversations:
+                    cls._conversations[conv_id]["processing"] = False
+            raise
 
         return {"message_id": conv_id, "status": "processing"}, HTTPStatus.OK
 
     @classmethod
-    def subscribe(cls, conv_id: str) -> Generator[str, None, None]:
+    def can_subscribe(
+        cls, conv_id: str, caller_user_id: Optional[str]
+    ) -> bool:
+        """v0.7.78 (codex WARN B / 2nd pass) — precheck used by the
+        SSE route so an unauthorized subscriber gets a real HTTP
+        404 instead of a 200 with an ``event: error`` body. Returns
+        True iff ``subscribe`` would actually start streaming for
+        this caller.
+        """
+        if not cls._ensure_loaded(conv_id):
+            return False
+        return cls._check_owner(conv_id, caller_user_id) is None
+
+    @classmethod
+    def subscribe(
+        cls, conv_id: str, caller_user_id: Optional[str] = None
+    ) -> Generator[str, None, None]:
         """Subscribe to SSE events for a conversation."""
-        if conv_id not in cls._conversations:
+        # v0.7.78 — rehydrate from DB before subscribing so a
+        # refreshed wizard's SSE stream resumes for a conversation
+        # the in-memory dict doesn't know about yet. The route is
+        # expected to call ``can_subscribe`` first and 404 on
+        # failure (codex WARN B / 2nd pass), but we keep the
+        # defensive in-stream error branch in case ``subscribe``
+        # is invoked directly.
+        if not cls._ensure_loaded(conv_id):
+            yield f"event: error\ndata: {json.dumps({'error': 'Conversation not found'})}\n\n"
+            return
+        # v0.7.78 (codex BLOCK 2) — gate SSE on ownership so a
+        # probing caller can't tail another operator's
+        # conversation. Same 404-not-403 disclosure rule as the
+        # other endpoints.
+        if cls._check_owner(conv_id, caller_user_id) is not None:
             yield f"event: error\ndata: {json.dumps({'error': 'Conversation not found'})}\n\n"
             return
 
@@ -276,7 +530,9 @@ class SkillConversationService:
                     cls._subscribers[conv_id].remove(queue)
 
     @classmethod
-    def preview_finalize(cls, conv_id: str) -> Tuple[dict, HTTPStatus]:
+    def preview_finalize(
+        cls, conv_id: str, caller_user_id: Optional[str] = None
+    ) -> Tuple[dict, HTTPStatus]:
         """Return the rendered package tree without writing anything.
 
         Used by ``SkillCreatePreviewDrawer`` to show the operator
@@ -285,10 +541,13 @@ class SkillConversationService:
         commit. Warnings (non-fatal nudges like missing license)
         are surfaced for UI display.
         """
-        if conv_id not in cls._conversations:
+        if not cls._ensure_loaded(conv_id):
             return error_response(
                 "NOT_FOUND", "Conversation not found", HTTPStatus.NOT_FOUND
             )
+        owner_err = cls._check_owner(conv_id, caller_user_id)
+        if owner_err is not None:
+            return owner_err
         conv = cls._conversations[conv_id]
         try:
             preview = cls._build_package_preview(conv)
@@ -301,6 +560,7 @@ class SkillConversationService:
         cls,
         conv_id: str,
         expected_config_hash: Optional[str] = None,
+        caller_user_id: Optional[str] = None,
     ) -> Tuple[dict, HTTPStatus]:
         """Finalize the conversation and write the skill package to
         disk + DB.
@@ -323,10 +583,13 @@ class SkillConversationService:
         destination. Partial failures leave nothing behind in the
         skill dir; the staging dir is cleaned up best-effort.
         """
-        if conv_id not in cls._conversations:
+        if not cls._ensure_loaded(conv_id):
             return error_response(
                 "NOT_FOUND", "Conversation not found", HTTPStatus.NOT_FOUND
             )
+        owner_err = cls._check_owner(conv_id, caller_user_id)
+        if owner_err is not None:
+            return owner_err
         conv = cls._conversations[conv_id]
         try:
             preview = cls._build_package_preview(conv)
@@ -480,6 +743,13 @@ class SkillConversationService:
                     HTTPStatus.INTERNAL_SERVER_ERROR,
                 )
             conv["finalized"] = True
+            # v0.7.78 — mark the DB row finalized so it's
+            # excluded from the resume-on-load list, then drop
+            # the in-memory entry. We keep the row (instead of
+            # deleting) so the operator's history page can show
+            # past conversations even after the skill was
+            # created.
+            cls._persist(conv_id, status="finalized")
             cls._cleanup_conversation(conv_id)
             skill = get_user_skill(skill_id)
             return {
@@ -497,11 +767,43 @@ class SkillConversationService:
             )
 
     @classmethod
-    def abandon_conversation(cls, conv_id: str) -> Tuple[dict, HTTPStatus]:
+    def abandon_conversation(
+        cls, conv_id: str, caller_user_id: Optional[str] = None
+    ) -> Tuple[dict, HTTPStatus]:
         """Abandon a conversation without creating a skill."""
-        if conv_id not in cls._conversations:
+        # v0.7.78 — load from DB if needed (operator might be
+        # abandoning a conv that was rehydrated for inspection or
+        # came from a different browser tab).
+        if not cls._ensure_loaded(conv_id):
+            # Even if not in memory, try to mark abandoned in DB
+            # so the resume list stops surfacing it. v0.7.78
+            # (codex BLOCK 2) — also gate on ownership in the
+            # cold path: read the DB row once and compare its
+            # ``user_id`` to the caller before flipping status.
+            try:
+                row = get_skill_conversation(conv_id)
+                if row:
+                    owner = row.get("user_id")
+                    if owner is not None and owner != caller_user_id:
+                        return error_response(
+                            "NOT_FOUND",
+                            "Conversation not found",
+                            HTTPStatus.NOT_FOUND,
+                        )
+                    upsert_skill_conversation(
+                        conv_id,
+                        row["messages"],
+                        status="abandoned",
+                    )
+                    return {"message": "Conversation abandoned"}, HTTPStatus.OK
+            except Exception:
+                pass
             return error_response("NOT_FOUND", "Conversation not found", HTTPStatus.NOT_FOUND)
 
+        owner_err = cls._check_owner(conv_id, caller_user_id)
+        if owner_err is not None:
+            return owner_err
+        cls._persist(conv_id, status="abandoned")
         cls._cleanup_conversation(conv_id)
         return {"message": "Conversation abandoned"}, HTTPStatus.OK
 
@@ -563,6 +865,12 @@ class SkillConversationService:
                 timestamp=datetime.datetime.now().isoformat(),
             )
             conv["messages"].append(assistant_msg)
+
+            # v0.7.78 — persist after the assistant reply lands so
+            # a refresh between turns can see the full
+            # conversation, including the SKILL_CONFIG block if
+            # claude just emitted one.
+            cls._persist(conv_id)
 
             cls._broadcast(
                 conv_id,

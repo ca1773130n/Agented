@@ -354,23 +354,34 @@ skill_sets_router = Router(
 # ===========================================================================
 
 
+def _caller_user_id(caller: Caller | None) -> Optional[str]:
+    """v0.7.78 (codex BLOCK 1+2) — single accessor so every
+    conversation route uses the same source of truth for the
+    operator id. ``None`` means bootstrap / unowned.
+    """
+    return getattr(caller, "user_id", None) if caller else None
+
+
 @post("/start", sync_to_thread=False)
 def start_conversation(caller: Caller) -> dict[str, Any]:
-    del caller
-    return _result_or_raise(SkillConversationService.start_conversation())
+    return _result_or_raise(
+        SkillConversationService.start_conversation(user_id=_caller_user_id(caller))
+    )
 
 
 @get("/{conv_id:str}", sync_to_thread=False)
 def get_conversation(conv_id: str, caller: Caller) -> dict[str, Any]:
-    del caller
-    return _result_or_raise(SkillConversationService.get_conversation(conv_id))
+    return _result_or_raise(
+        SkillConversationService.get_conversation(
+            conv_id, caller_user_id=_caller_user_id(caller)
+        )
+    )
 
 
 @post("/{conv_id:str}/message", sync_to_thread=False)
 def send_message(
     conv_id: str, data: dict, caller: Caller
 ) -> dict[str, Any]:
-    del caller
     if not data or not data.get("message"):
         raise ClientException(detail="message is required")
     return _result_or_raise(
@@ -380,6 +391,7 @@ def send_message(
             backend=data.get("backend"),
             account_id=data.get("account_id"),
             model=data.get("model"),
+            caller_user_id=_caller_user_id(caller),
         )
     )
 
@@ -390,10 +402,19 @@ def send_message(
     sync_to_thread=False,
 )
 def stream_conversation(conv_id: str, caller: Caller) -> Stream:
-    del caller
+    user_id = _caller_user_id(caller)
+    # v0.7.78 (codex WARN B / 2nd pass) — precheck so a missing
+    # conv or a cross-user probe gets a real HTTP 404 instead of
+    # a 200 SSE stream whose first frame is an ``event: error``.
+    # The earlier impl violated the 404-not-403 consistency rule
+    # the other conv-id endpoints follow.
+    if not SkillConversationService.can_subscribe(conv_id, user_id):
+        raise NotFoundException(detail="Conversation not found")
 
     def generate():
-        for event in SkillConversationService.subscribe(conv_id):
+        for event in SkillConversationService.subscribe(
+            conv_id, caller_user_id=user_id
+        ):
             yield event
 
     return Stream(
@@ -407,6 +428,24 @@ def stream_conversation(conv_id: str, caller: Caller) -> Stream:
     )
 
 
+@get("/active", sync_to_thread=False)
+def list_active_skill_conversations_endpoint(caller: Caller) -> dict[str, Any]:
+    """v0.7.78 — list the operator's recent active skill-creation
+    conversations so ``/skills/new`` can auto-resume when
+    ``localStorage`` is empty (new browser, different machine)
+    but the DB has a row from a prior session.
+
+    v0.7.78 (codex BLOCK 1) — the DB helper now scopes a missing
+    ``user_id`` to ``user_id IS NULL`` instead of "all rows", so
+    bootstrap-mode callers see only legacy/unowned conversations
+    and an unauthenticated user can no longer enumerate every
+    operator's in-flight wizard sessions.
+    """
+    return _result_or_raise(
+        SkillConversationService.list_active(user_id=_caller_user_id(caller))
+    )
+
+
 @post("/{conv_id:str}/preview-finalize", sync_to_thread=False)
 def preview_finalize_skill(conv_id: str, caller: Caller) -> dict[str, Any]:
     """v0.7.77 — return the rendered skill package tree without
@@ -415,8 +454,11 @@ def preview_finalize_skill(conv_id: str, caller: Caller) -> dict[str, Any]:
     finalize lands them. Same validation as ``finalize_skill``: a
     preview that returns 200 is guaranteed to commit.
     """
-    del caller
-    return _result_or_raise(SkillConversationService.preview_finalize(conv_id))
+    return _result_or_raise(
+        SkillConversationService.preview_finalize(
+            conv_id, caller_user_id=_caller_user_id(caller)
+        )
+    )
 
 
 @post("/{conv_id:str}/finalize", sync_to_thread=False)
@@ -427,25 +469,30 @@ def finalize_skill(
     body so the preview drawer can guarantee the finalized
     package matches what the operator reviewed. Mismatch → 409.
     """
-    del caller
     expected_hash = (data or {}).get("expected_config_hash") if data else None
     return _result_or_raise(
         SkillConversationService.finalize_skill(
-            conv_id, expected_config_hash=expected_hash
+            conv_id,
+            expected_config_hash=expected_hash,
+            caller_user_id=_caller_user_id(caller),
         )
     )
 
 
 @post("/{conv_id:str}/abandon", sync_to_thread=False)
 def abandon_conversation(conv_id: str, caller: Caller) -> dict[str, Any]:
-    del caller
-    return _result_or_raise(SkillConversationService.abandon_conversation(conv_id))
+    return _result_or_raise(
+        SkillConversationService.abandon_conversation(
+            conv_id, caller_user_id=_caller_user_id(caller)
+        )
+    )
 
 
 skill_conversations_router = Router(
     path="/api/skills/conversations",
     route_handlers=[
         start_conversation,
+        list_active_skill_conversations_endpoint,
         get_conversation,
         send_message,
         stream_conversation,

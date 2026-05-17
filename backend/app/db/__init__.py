@@ -546,6 +546,16 @@ from .goal_loop import (  # noqa: F401
     set_goal_loop_config,
 )
 
+# Skill-creation conversations (v0.7.78 — persist /skills/new chat
+# so refresh / backend restart doesn't lose progress)
+from .skill_conversations import (  # noqa: F401
+    create_skill_conversation,
+    delete_skill_conversation,
+    get_skill_conversation,
+    list_active_skill_conversations,
+    upsert_skill_conversation,
+)
+
 # Prompt snippets (reusable prompt fragments)
 from .prompt_snippets import (  # noqa: F401
     create_snippet,

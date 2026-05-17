@@ -151,6 +151,19 @@ export const skillConversationApi = {
     method: 'POST',
   }),
 
+  // v0.7.78 — list the operator's recent active conversations so
+  // the wizard can auto-resume on cold load when localStorage is
+  // empty but the DB has a row from a prior session / machine.
+  listActive: () =>
+    apiFetch<{
+      active_conversations: Array<{
+        id: string;
+        status: string;
+        updated_at: string;
+        message_count: number;
+      }>;
+    }>('/api/skills/conversations/active'),
+
   get: (convId: string) => apiFetch<SkillConversation>(`/api/skills/conversations/${convId}`),
 
   sendMessage: (convId: string, message: string, options?: { backend?: string; account_id?: string; model?: string }) =>
