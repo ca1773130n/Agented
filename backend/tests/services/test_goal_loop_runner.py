@@ -9,6 +9,7 @@ snapshot. Uses a fake PSM (`subscribe_raw` / `send_input` /
 from __future__ import annotations
 
 import json
+import threading
 import time
 from queue import Queue
 
@@ -39,6 +40,19 @@ def test_continue_prompt_stable_across_calls():
     assert a == b
 
 
+def test_initial_prompt_includes_goal_and_start_verb():
+    """Codex blocker #1: the runner sends an initial kickoff prompt
+    before entering the polling loop, otherwise claude has nothing
+    to respond to. The wording should make the start verb obvious
+    so the model doesn't treat it as a status update.
+    """
+    p = goal_loop_runner._initial_prompt("ship X")
+    assert "Goal: ship X" in p
+    assert "Start working toward the goal" in p
+    # Should NOT carry a 'Last check' line — there is no prior turn.
+    assert "Last check" not in p
+
+
 # -----------------------------------------------------------------
 # Runner integration with a fake PSM
 # -----------------------------------------------------------------
@@ -47,6 +61,14 @@ def test_continue_prompt_stable_across_calls():
 class _FakePSM:
     """Minimal stand-in for ``ProjectSessionManager`` exposing
     only the surface ``GoalLoopRunner`` consumes.
+
+    By default ``send_input`` only records the call. Tests that
+    want auto-echo (the fake PSM responds to each prompt with a
+    new turn_done) can set ``auto_echo = True`` — this is the
+    "drive the loop without per-iteration test pushes" mode.
+    Without it the runner sends its initial / continue prompts
+    and then idles on ``queue.get`` until the test pushes more
+    events or stops the runner.
     """
 
     def __init__(self):
@@ -54,6 +76,8 @@ class _FakePSM:
         self.sent_inputs: list[str] = []
         self.broadcasts: list[tuple[str, str, dict]] = []
         self.stopped: list[str] = []
+        self.auto_echo = False
+        self.auto_echo_counter = 0
 
     def subscribe_raw(self, session_id: str) -> Queue:
         return self.queue
@@ -63,9 +87,11 @@ class _FakePSM:
 
     def send_input(self, session_id: str, payload: str) -> bool:
         self.sent_inputs.append(payload)
-        # Echo a turn_done back so the runner can chain iterations.
-        # The text is a marker we can inspect.
-        self.queue.put(("turn_done", {"text": f"echo turn for {session_id}"}))
+        if self.auto_echo:
+            self.auto_echo_counter += 1
+            self.queue.put(
+                ("turn_done", {"text": f"echo turn {self.auto_echo_counter}"})
+            )
         return True
 
     def _broadcast(self, session_id: str, event_type: str, data: dict) -> None:
@@ -82,7 +108,26 @@ class _FakePSM:
 def fake_psm(monkeypatch):
     psm = _FakePSM()
     monkeypatch.setattr(goal_loop_runner, "ProjectSessionManager", psm)
-    return psm
+    yield psm
+    # v0.7.74 — kill any runner threads this test left behind so
+    # they don't leak into the next test (their DB writes would
+    # hit the real DB after the per-test monkeypatch unwinds,
+    # causing spurious "no such table" crashes elsewhere).
+    with goal_loop_runner._runners_lock:
+        live_ids = list(goal_loop_runner._runners.keys())
+    for sid in live_ids:
+        goal_loop_runner.stop_runner(sid)
+        try:
+            psm.queue.put(("__end__", {}))
+        except Exception:
+            pass
+    # Give the threads up to 1s to exit cleanly.
+    deadline = __import__("time").monotonic() + 1.0
+    while __import__("time").monotonic() < deadline:
+        with goal_loop_runner._runners_lock:
+            if not goal_loop_runner._runners:
+                break
+        __import__("time").sleep(0.05)
 
 
 @pytest.fixture
@@ -144,8 +189,13 @@ def test_runner_stops_when_judge_says_met(fake_psm, stub_iteration_db, monkeypat
     assert _drive(_RunnerStateLookup("psess-met"))
     assert fake_psm.stopped == ["psess-met"]
     assert ("psess-met", "goal_loop_ended", {"reason": "met", "detail": "done"}) in fake_psm.broadcasts
-    # No continue prompt should have been written.
-    assert fake_psm.sent_inputs == []
+    # v0.7.74 — the runner sends the initial kickoff prompt before
+    # it ever sees a turn_done, so exactly ONE input is written.
+    # No continue prompt because the first verdict was 'met'.
+    assert len(fake_psm.sent_inputs) == 1
+    initial = json.loads(fake_psm.sent_inputs[0])
+    assert "Goal: do thing" in initial["message"]["content"][0]["text"]
+    assert "Start working toward the goal" in initial["message"]["content"][0]["text"]
 
 
 def test_runner_sends_continue_on_not_met_then_iteration_cap(
@@ -160,15 +210,15 @@ def test_runner_sends_continue_on_not_met_then_iteration_cap(
             )
         ),
     )
+    # Enable auto-echo so each continue prompt triggers the next
+    # turn_done; without it the runner would idle after the
+    # initial prompt waiting for events.
+    fake_psm.auto_echo = True
     goal_loop_runner.start_runner(
         "psess-cap",
         {"goal": "g", "max_iterations": 3, "max_wall_seconds": 60},
         cwd=None,
     )
-    # Kick the first turn; the fake PSM echoes each send_input as
-    # another turn_done so the loop will iterate 3 times then hit
-    # the cap.
-    fake_psm.queue.put(("turn_done", {"text": "turn 1"}))
     assert _drive(_RunnerStateLookup("psess-cap"))
     # Stopped due to iteration cap.
     assert fake_psm.stopped == ["psess-cap"]
@@ -176,12 +226,14 @@ def test_runner_sends_continue_on_not_met_then_iteration_cap(
         b for b in fake_psm.broadcasts if b[1] == "goal_loop_ended"
     ]
     assert end_event and end_event[0][2]["reason"] == "iteration_cap"
-    # First two continue prompts were sent (after iters 1 and 2);
-    # iter 3 hits the cap so no continue is synthesized.
-    assert len(fake_psm.sent_inputs) == 2
-    envelope = json.loads(fake_psm.sent_inputs[0])
-    assert envelope["type"] == "user"
-    assert "Address the gap and continue." in envelope["message"]["content"][0]["text"]
+    # Sends: initial kickoff + continue after iter 1 + continue
+    # after iter 2 = 3 writes. Iter 3 hits the cap so no further
+    # continue.
+    assert len(fake_psm.sent_inputs) == 3
+    initial = json.loads(fake_psm.sent_inputs[0])
+    assert "Start working toward the goal" in initial["message"]["content"][0]["text"]
+    second = json.loads(fake_psm.sent_inputs[1])
+    assert "Address the gap and continue." in second["message"]["content"][0]["text"]
 
 
 def test_runner_records_each_iteration(
@@ -196,12 +248,12 @@ def test_runner_records_each_iteration(
             )
         ),
     )
+    fake_psm.auto_echo = True
     goal_loop_runner.start_runner(
         "psess-audit",
         {"goal": "g", "max_iterations": 2, "max_wall_seconds": 60},
         cwd=None,
     )
-    fake_psm.queue.put(("turn_done", {"text": "turn"}))
     assert _drive(_RunnerStateLookup("psess-audit"))
     # Two iterations were recorded; each got a start + complete.
     assert len(stub_iteration_db["starts"]) == 2
@@ -273,6 +325,7 @@ def test_runner_stale_check_disagreement_event(
         "judge",
         classmethod(fake_judge),
     )
+    fake_psm.auto_echo = True
     goal_loop_runner.start_runner(
         "psess-stale",
         {
@@ -283,8 +336,6 @@ def test_runner_stale_check_disagreement_event(
         },
         cwd=None,
     )
-    # Feed enough turns to trip the streak.
-    fake_psm.queue.put(("turn_done", {"text": "turn 1"}))
     # The runner's send_input mock echoes a new turn_done per
     # iteration, so 5 iterations happen automatically.
     # Wait until either the disagreement event fires or the cap.
@@ -335,6 +386,95 @@ def test_get_runner_state_snapshot(fake_psm, stub_iteration_db, monkeypatch):
 # -----------------------------------------------------------------
 # Helpers
 # -----------------------------------------------------------------
+
+
+def test_runner_sends_initial_prompt_before_first_turn(
+    fake_psm, stub_iteration_db, monkeypatch
+):
+    """Codex blocker #1 regression test. Without the initial
+    kickoff send, the runner would block forever waiting for a
+    turn_done that never arrives because claude has nothing to
+    respond to.
+    """
+    # Block the judge so we can observe the runner's first action.
+    judge_calls = {"n": 0}
+
+    def slow_judge(cls, *a, **kw):
+        judge_calls["n"] += 1
+        time.sleep(10)  # long enough that the test finishes first
+        return JudgeVerdict(met=False, source="llm", reason="x")
+
+    monkeypatch.setattr(
+        goal_loop_runner.GoalJudgeService, "judge", classmethod(slow_judge)
+    )
+    goal_loop_runner.start_runner(
+        "psess-init",
+        {"goal": "the goal", "max_iterations": 5, "max_wall_seconds": 60},
+        cwd=None,
+    )
+    # Give the runner thread a beat to start + send the initial.
+    deadline = time.time() + 2
+    while time.time() < deadline and not fake_psm.sent_inputs:
+        time.sleep(0.05)
+    assert len(fake_psm.sent_inputs) == 1
+    payload = json.loads(fake_psm.sent_inputs[0])
+    assert payload["type"] == "user"
+    text = payload["message"]["content"][0]["text"]
+    assert "Goal: the goal" in text
+    assert "Start working" in text
+    # Cleanup (fixture's finalizer also covers this, but explicit
+    # stop here lets the slow judge return immediately).
+    goal_loop_runner.stop_runner("psess-init")
+    fake_psm.queue.put(("__end__", {}))
+
+
+def test_runner_stop_mid_iteration_avoids_misleading_audit(
+    fake_psm, stub_iteration_db, monkeypatch
+):
+    """Codex blocker #4: when the operator stops while the judge
+    is running, the runner must NOT broadcast a
+    ``goal_iteration_completed`` with the now-stale verdict. The
+    iteration row is still finalized (no orphan ``pending``) but
+    flagged ``stopped`` so the audit is faithful.
+    """
+    judge_returned = threading.Event()
+
+    def slow_judge(cls, goal, text, **kw):
+        # Wait briefly so the test can set the stop event during
+        # the judge call.
+        time.sleep(0.3)
+        judge_returned.set()
+        return JudgeVerdict(met=True, source="llm", reason="would have been met")
+
+    monkeypatch.setattr(
+        goal_loop_runner.GoalJudgeService, "judge", classmethod(slow_judge)
+    )
+    goal_loop_runner.start_runner(
+        "psess-mid",
+        {"goal": "g", "max_iterations": 5, "max_wall_seconds": 60},
+        cwd=None,
+    )
+    # Trigger iteration 1.
+    fake_psm.queue.put(("turn_done", {"text": "turn"}))
+    # While judge is running, signal stop.
+    time.sleep(0.1)
+    goal_loop_runner.stop_runner("psess-mid")
+    assert judge_returned.wait(timeout=2)
+    fake_psm.queue.put(("__end__", {}))
+    assert _drive(_RunnerStateLookup("psess-mid"))
+
+    # The COMPLETED broadcast must NOT include this iteration —
+    # only iteration_started should have fired.
+    completed_events = [
+        b for b in fake_psm.broadcasts if b[1] == "goal_iteration_completed"
+    ]
+    assert completed_events == []
+    # The audit row is finalized with judge_source='stopped' so
+    # an operator inspecting the trail sees the truth.
+    assert len(stub_iteration_db["completes"]) == 1
+    finalized = stub_iteration_db["completes"][0][1]
+    assert finalized["judge_source"] == "stopped"
+    assert "operator stopped" in (finalized["judge_reason"] or "")
 
 
 class _RunnerStateLookup:

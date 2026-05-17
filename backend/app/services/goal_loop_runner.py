@@ -62,6 +62,22 @@ def _continue_prompt(goal: str, reason: str) -> str:
     )
 
 
+def _initial_prompt(goal: str) -> str:
+    """First user message that kicks off the goal-loop session.
+
+    Without this, the runner subscribes and waits for a
+    ``turn_done`` event that never arrives — claude has nothing
+    to respond to. The initial prompt is shorter than the
+    continue prompt (no "last check" line yet) and uses an
+    explicit start verb so the model treats this as the
+    instruction, not a status update.
+    """
+    return (
+        f"Goal: {goal}\n\n"
+        f"Start working toward the goal. Make progress this turn."
+    )
+
+
 @dataclass
 class _RunnerState:
     session_id: str
@@ -152,6 +168,13 @@ def _run(state: _RunnerState, cwd: Optional[str]) -> None:
 
     queue = ProjectSessionManager.subscribe_raw(session_id)
     try:
+        # Kick off the first turn by sending the goal as the
+        # initial user message. Without this the runner would
+        # block on ``queue.get`` forever — claude has nothing to
+        # respond to until something hits its stdin. The reply
+        # will trigger the first ``turn_done`` and the normal
+        # judge-then-continue loop takes over from there.
+        _send_initial(session_id, goal)
         while not state.stop_event.is_set():
             if time.time() - state.started_at > max_wall_seconds:
                 _broadcast_end(
@@ -200,6 +223,22 @@ def _run(state: _RunnerState, cwd: Optional[str]) -> None:
                 backend_kind=backend_kind,
                 model_override=model_override,
             )
+
+            # If the operator clicked Stop while the judge was
+            # running, abort before we record a misleading
+            # ``completed`` audit row — the iteration didn't
+            # really finish from the operator's POV. Mark the
+            # iteration ``stopped`` so the row is still
+            # accounted for (no orphan ``pending`` row), but
+            # don't broadcast the completion event.
+            if state.stop_event.is_set():
+                record_goal_loop_iteration_complete(
+                    row_id,
+                    verdict="not_met",
+                    judge_source="stopped",
+                    judge_reason="operator stopped session mid-judge",
+                )
+                break
 
             record_goal_loop_iteration_complete(
                 row_id,
@@ -257,19 +296,40 @@ def _run(state: _RunnerState, cwd: Optional[str]) -> None:
 
 def _send_continue(session_id: str, goal: str, reason: str) -> None:
     """Write the synthetic continue prompt to claude's stdin."""
+    _send_user_text(session_id, _continue_prompt(goal, reason))
+
+
+def _send_initial(session_id: str, goal: str) -> None:
+    """Write the initial kickoff prompt to claude's stdin.
+
+    Called once per goal-loop session before the polling loop
+    begins so claude has something to respond to and the first
+    ``turn_done`` actually arrives.
+    """
+    _send_user_text(session_id, _initial_prompt(goal))
+
+
+def _send_user_text(session_id: str, text: str) -> None:
+    """Wrap ``text`` in the stream-json user envelope shape claude
+    expects with ``--input-format stream-json`` and write to stdin.
+
+    Shape mirrors ``grd_routes.session_input`` so the runner's
+    synthesized messages are indistinguishable from operator-typed
+    ones on the wire.
+    """
     envelope = {
         "type": "user",
         "session_id": "",
         "message": {
             "role": "user",
-            "content": [{"type": "text", "text": _continue_prompt(goal, reason)}],
+            "content": [{"type": "text", "text": text}],
         },
         "parent_tool_use_id": None,
     }
     payload = json.dumps(envelope, ensure_ascii=False)
     if not ProjectSessionManager.send_input(session_id, payload):
         logger.warning(
-            "goal_loop: failed to deliver continue prompt to %s "
+            "goal_loop: failed to deliver user text to %s "
             "(session not active); runner will exit on __end__",
             session_id,
         )
@@ -316,7 +376,14 @@ def _maybe_stale_check(
                 "streak": state.not_met_streak,
             },
         )
-    # Reset the streak so we don't fire the sanity layer every turn.
+    # Reset the streak whichever way the sanity layer landed.
+    # Resetting on disagreement is essential (we just told the
+    # operator; firing again next turn is noise). Resetting on
+    # agreement is also right: leaving the streak high would
+    # re-fire the LLM judge EVERY subsequent turn, wasting
+    # tokens worse than the once-per-5-turns cadence. The
+    # original code did this; the fixed cadence is the right
+    # tradeoff.
     state.not_met_streak = 0
 
 

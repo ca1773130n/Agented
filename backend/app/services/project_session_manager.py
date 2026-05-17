@@ -566,27 +566,41 @@ def _extract_stream_json_events(
                     text_buffer.append(content[:500])
         if text_buffer:
             events.append(("output", {"line": "\n".join(text_buffer)}))
-        # v0.7.74 — synthesize a ``turn_done`` event with the
-        # accumulated assistant text. In-process consumers (e.g.
-        # ``GoalLoopRunner``) use this as the canonical "claude
-        # finished a turn" signal. ``text`` is the full assistant
-        # content the operator saw this turn, joined from text
-        # blocks; tool-use renderings and tool_result content are
-        # also included so the judge sees what claude actually
-        # produced. Empty text emits no event (a turn with only
-        # AskUserQuestion / ExitPlanMode tool_use produces no
-        # assistant prose for the judge to assess).
-        turn_text = "\n".join(
+        # v0.7.74 — synthesize a ``turn_done`` event at the end of
+        # EVERY assistant event so in-process consumers (e.g.
+        # ``GoalLoopRunner``) have a reliable turn-boundary signal.
+        # ``text`` aggregates everything the judge needs to assess
+        # the turn:
+        #   * ``output`` event lines (text + non-AUQ tool chips)
+        #   * accumulated ``content_block_delta`` text (the
+        #     ``skip_text`` path swallowed the trailing assistant
+        #     text blocks, but the deltas are the canonical record)
+        #   * the ``ExitPlanMode`` plan body (side-channel event;
+        #     missing it would hide a turn's primary content from
+        #     the judge)
+        # ``AskUserQuestion`` is intentionally NOT included — it's
+        # an operator-facing widget the judge can't evaluate.
+        # ALWAYS emit, even when text is empty, so tool-use-only
+        # turns (or AskUserQuestion-only turns) still tick the
+        # runner's iteration counter. The runner's judge handles
+        # empty text gracefully.
+        text_parts: list[str] = [
             ev_data["line"]
             for ev_type, ev_data in events
             if ev_type == "output" and ev_data.get("line")
-        ).strip()
-        if turn_text:
-            events.append(("turn_done", {"text": turn_text}))
+        ]
+        if session_info is not None and session_info.pending_turn_text:
+            text_parts.append(session_info.pending_turn_text)
+        for ev_type, ev_data in events:
+            if ev_type == "exit_plan_mode" and ev_data.get("plan"):
+                text_parts.append(f"[plan proposed]\n{ev_data['plan']}")
+        turn_text = "\n".join(p for p in text_parts if p).strip()
+        events.append(("turn_done", {"text": turn_text}))
         # Reset streaming state at the end of an assistant event —
         # the next delta would belong to a new turn.
         if session_info is not None:
             session_info.had_recent_delta = False
+            session_info.pending_turn_text = ""
         return events
 
     # Streaming delta events (partial text during long responses).
@@ -599,6 +613,12 @@ def _extract_stream_json_events(
             text = delta.get("text", "")
             if text and session_info is not None:
                 session_info.had_recent_delta = True
+                # v0.7.74 — accumulate the streamed text for
+                # ``turn_done``. The trailing assistant event will
+                # skip its own text blocks (``skip_text``) so this
+                # accumulator is the only record of what the user
+                # saw during the streaming portion of the turn.
+                session_info.pending_turn_text += text
             return [("output_delta", {"text": text})] if text else []
         return []
 
@@ -712,6 +732,14 @@ class SessionInfo:
     # (they'd duplicate what already streamed live). Reset to False
     # at the end of each ``assistant`` event.
     had_recent_delta: bool = False
+    # v0.7.74 — accumulator for text streamed via
+    # ``content_block_delta`` so the trailing ``assistant`` event's
+    # ``turn_done`` synthetic event carries the full text the
+    # operator saw (and the goal-loop judge needs to assess), even
+    # when ``--include-partial-messages`` is on and the assistant's
+    # text blocks were dropped to avoid double-rendering. Cleared
+    # at the end of each assistant turn.
+    pending_turn_text: str = ""
 
 
 class ProjectSessionManager:
