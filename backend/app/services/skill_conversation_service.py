@@ -350,12 +350,18 @@ class SkillConversationService:
         playground = get_playground_working_dir()
         abs_skill_dir = os.path.join(playground, skill_dir_rel)
 
-        # v0.7.77 (codex BLOCK 6) — stage the whole package in a
-        # temp dir, then atomic-rename into the destination. Any
-        # failure mid-stage cleans up the temp dir and leaves the
-        # destination untouched.
+        # v0.7.77 (codex BLOCK 6 + 2nd-pass fix) — stage the whole
+        # package in a temp dir on the SAME FILESYSTEM as the
+        # destination, then atomic-rename. ``tempfile.mkdtemp()``
+        # without ``dir=`` defaults to ``/tmp`` (tmpfs on Linux);
+        # ``os.replace`` across filesystems raises ``EXDEV``. By
+        # passing ``dir=staging_parent`` we guarantee both ends
+        # live on the same mount so the rename is atomic.
+        staging_parent = os.path.join(playground, ".claude", "skills")
+        os.makedirs(staging_parent, exist_ok=True)
         staging_dir = tempfile.mkdtemp(
-            prefix=f"agented-skill-staging-{skill_name}-"
+            prefix=f".agented-skill-staging-{skill_name}-",
+            dir=staging_parent,
         )
         try:
             written: list[str] = []
