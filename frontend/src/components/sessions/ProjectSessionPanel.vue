@@ -10,6 +10,7 @@ import SessionInput from './SessionInput.vue';
 import SessionControls from './SessionControls.vue';
 import SessionStartDialog from './SessionStartDialog.vue';
 import SessionContextTray from './SessionContextTray.vue';
+import ContextPreviewDrawer from './ContextPreviewDrawer.vue';
 import GoalLoopStatusBanner from './GoalLoopStatusBanner.vue';
 import InteractiveQuestionCard from './InteractiveQuestionCard.vue';
 import PlanModeCard from './PlanModeCard.vue';
@@ -466,9 +467,18 @@ function onQuestionSkipped() {
 // Start button) opens it; ``onDialogConfirm`` performs the actual
 // session create with the values the dialog collected.
 const showStartDialog = ref(false);
+// v0.7.75 — slide-over preview of the compiled forge context.
+// Operator clicks "Preview" in the tray; we pass the current
+// pending attachments through so the preview matches what would
+// actually go on the wire on send.
+const showContextPreview = ref(false);
 
 function handleStart() {
   showStartDialog.value = true;
+}
+
+function onPreviewContext() {
+  showContextPreview.value = true;
 }
 
 async function onDialogConfirm(payload: {
@@ -892,6 +902,7 @@ onMounted(() => {
             v-if="isDirectMode"
             v-model:attachments="pendingAttachments"
             :disabled="!session.activeSessionId.value"
+            @preview-context="onPreviewContext"
           />
 
           <!-- Ralph loops / team spawn keep the monospace terminal so
@@ -934,6 +945,17 @@ onMounted(() => {
       :project-id="projectId"
       @close="showStartDialog = false"
       @confirm="onDialogConfirm"
+    />
+
+    <!-- v0.7.75 — slide-over preview of the compiled forge
+         context. Reads the same backend endpoint
+         (``/forge-context/preview``) the session would hit on
+         send, so what the operator sees is what claude gets. -->
+    <ContextPreviewDrawer
+      :open="showContextPreview"
+      :project-id="projectId"
+      :attachments="(pendingAttachments as unknown as ForgeAttachment[])"
+      @close="showContextPreview = false"
     />
   </div>
 </template>
