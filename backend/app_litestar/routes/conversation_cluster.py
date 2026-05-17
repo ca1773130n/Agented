@@ -98,14 +98,15 @@ def _make_conversation_router(
 
     @post("/{conv_id:str}/finalize", sync_to_thread=False, name=f"{name_prefix}_finalize")
     def finalize_endpoint(conv_id: str, caller: Caller) -> Any:
-        # v0.7.83 — base finalize via ``_finalize_entity`` doesn't
-        # accept caller_user_id (it's protected by start/send
-        # ownership checks); plugin's ``finalize_plugin`` does.
-        if service is PluginConversationService:
-            return _result_or_raise(
-                finalize(conv_id, caller_user_id=_caller_user_id(caller))
-            )
-        return _result_or_raise(finalize(conv_id))
+        # v0.7.83 (codex BLOCK / 2nd pass) — every finalize now
+        # gates ownership. Plugin's ``finalize_plugin`` does it
+        # in-method; base subclasses use the new public
+        # ``finalize_entity`` wrapper which gates ownership +
+        # flips the DB status before/after calling the abstract
+        # ``_finalize_entity``.
+        return _result_or_raise(
+            finalize(conv_id, caller_user_id=_caller_user_id(caller))
+        )
 
     @post("/{conv_id:str}/abandon", sync_to_thread=False, name=f"{name_prefix}_abandon")
     def abandon_conversation(conv_id: str, caller: Caller) -> Any:
@@ -169,7 +170,11 @@ plugin_conversations_router = _make_conversation_router(
 command_conversations_router = _make_conversation_router(
     path="/api/commands/conversations",
     service=CommandConversationService,
-    finalize_method="_finalize_entity",
+    # v0.7.83 — switched from _finalize_entity (abstract,
+    # no ownership check) to finalize_entity (public wrapper
+    # that gates ownership + flips DB status). Same for hook
+    # and rule below.
+    finalize_method="finalize_entity",
     include_list=True,
     include_resume=True,
     name_prefix="command_conv",
@@ -178,7 +183,7 @@ command_conversations_router = _make_conversation_router(
 hook_conversations_router = _make_conversation_router(
     path="/api/hooks/conversations",
     service=HookConversationService,
-    finalize_method="_finalize_entity",
+    finalize_method="finalize_entity",
     include_list=True,
     include_resume=True,
     name_prefix="hook_conv",
@@ -187,7 +192,7 @@ hook_conversations_router = _make_conversation_router(
 rule_conversations_router = _make_conversation_router(
     path="/api/rules/conversations",
     service=RuleConversationService,
-    finalize_method="_finalize_entity",
+    finalize_method="finalize_entity",
     include_list=True,
     include_resume=True,
     name_prefix="rule_conv",

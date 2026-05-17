@@ -113,8 +113,60 @@ class BaseConversationService(abc.ABC):
 
     @abc.abstractmethod
     def _finalize_entity(cls, conv_id: str) -> Tuple[dict, HTTPStatus]:
-        """Extract config and persist the entity to the DB. Return (response_dict, status)."""
+        """Extract config and persist the entity to the DB. Return (response_dict, status).
+
+        Direct callers from routes should use ``finalize_entity``
+        (the public wrapper) so the ownership check and the DB
+        status flip both run. Subclasses implement the abstract
+        body; the wrapper handles cross-cutting concerns.
+        """
         ...
+
+    @classmethod
+    def finalize_entity(
+        cls, conv_id: str, caller_user_id: Optional[str] = None
+    ) -> Tuple[dict, HTTPStatus]:
+        """v0.7.83 (codex BLOCK + WARN 1) — public finalize wrapper.
+
+        Gates ownership BEFORE calling the abstract ``_finalize_entity``
+        so a known conv_id can't be finalized into a stranger's
+        account, and flips the DB row status to ``finalized``
+        on success so completed wizards stop showing up in the
+        auto-resume list.
+
+        The pre-v0.7.83 route called ``_finalize_entity`` directly,
+        which only checked in-memory presence — anyone with a
+        guessed conv_id could finalize someone else's wizard.
+        """
+        # Load from DB if needed so cross-user probes that didn't
+        # warm the in-memory cache still get a real 404.
+        if conv_id not in cls._conversations:
+            resumed, status = cls.resume_conversation(
+                conv_id, caller_user_id=caller_user_id
+            )
+            if status != HTTPStatus.OK:
+                return error_response(
+                    "NOT_FOUND", "Conversation not found", HTTPStatus.NOT_FOUND
+                )
+        owner_err = cls._check_owner(conv_id, caller_user_id)
+        if owner_err is not None:
+            return owner_err
+
+        result, status = cls._finalize_entity(conv_id)
+        # Only flip the DB row status when finalize actually
+        # succeeded; an error path (config not found, etc.)
+        # should leave the conv ``active`` so the operator can
+        # continue chatting.
+        if status in (HTTPStatus.OK, HTTPStatus.CREATED):
+            try:
+                update_design_conversation(conv_id, status="finalized")
+            except Exception:
+                logger.warning(
+                    "base_conv: failed to flip status=finalized for %s",
+                    conv_id,
+                    exc_info=True,
+                )
+        return result, status
 
     @classmethod
     def _generate_conv_id(cls) -> str:
@@ -194,14 +246,26 @@ class BaseConversationService(abc.ABC):
     ) -> Optional[Tuple[dict, HTTPStatus]]:
         """v0.7.83 — verify the calling user owns the conversation.
         Returns ``None`` when authorized, or an ``error_response``
-        tuple when not. 404-not-403 to avoid existence disclosure,
-        matching the skill-conversation pattern from v0.7.78.
+        tuple when not. 404-not-403 to avoid existence disclosure.
 
         Allowed:
-          * ``conv.user_id is None`` — legacy / bootstrap-mode
-            rows are open to anyone. Production setups should
-            always pass a caller user.
-          * ``conv.user_id == caller_user_id`` — owner match.
+          * ``owner is None`` AND ``caller_user_id is None`` —
+            bootstrap-mode rows accessed by a bootstrap-mode
+            caller. Authenticated callers CANNOT touch
+            NULL-owner rows; this matches the IS NULL filter
+            ``list_active_*_conversations`` uses for bootstrap
+            scoping. v0.7.83 (codex WARN 2 / 2nd pass) —
+            previous shape ("NULL = open to anyone") let any
+            authenticated caller access legacy migration rows
+            and the comment about bootstrap-only was misleading.
+          * ``caller_user_id == owner`` — owner match.
+
+        Note: a side effect of tightening this is that any
+        pre-v0.7.83 ``design_conversations`` rows (which all have
+        NULL owner from the migration's default) become
+        inaccessible to authenticated callers. That's intentional
+        — the alternative was leaving a cross-user back door
+        open indefinitely.
         """
         conv = cls._conversations.get(conv_id)
         if not conv:
@@ -209,8 +273,6 @@ class BaseConversationService(abc.ABC):
                 "NOT_FOUND", "Conversation not found", HTTPStatus.NOT_FOUND
             )
         owner = conv.get("user_id")
-        if owner is None:
-            return None
         if caller_user_id == owner:
             return None
         return error_response(
@@ -295,7 +357,7 @@ class BaseConversationService(abc.ABC):
         # v0.7.83 — cold-path ownership check before exposing
         # messages from a different operator.
         owner = db_conv.get("user_id")
-        if owner is not None and owner != caller_user_id:
+        if owner != caller_user_id:  # v0.7.83 (codex WARN 2) — NULL owner only matches NULL caller
             return error_response(
                 "NOT_FOUND", "Conversation not found", HTTPStatus.NOT_FOUND
             )
@@ -428,7 +490,7 @@ class BaseConversationService(abc.ABC):
             if not db_conv:
                 return error_response("NOT_FOUND", "Conversation not found", HTTPStatus.NOT_FOUND)
             owner = db_conv.get("user_id")
-            if owner is not None and owner != caller_user_id:
+            if owner != caller_user_id:  # v0.7.83 (codex WARN 2) — NULL owner only matches NULL caller
                 return error_response(
                     "NOT_FOUND", "Conversation not found", HTTPStatus.NOT_FOUND
                 )
@@ -458,7 +520,7 @@ class BaseConversationService(abc.ABC):
             if not db_conv:
                 return False
             owner = db_conv.get("user_id")
-            return owner is None or owner == caller_user_id
+            return owner == caller_user_id  # v0.7.83 (codex WARN 2) — NULL owner only matches NULL caller
         return cls._check_owner(conv_id, caller_user_id) is None
 
     @classmethod
@@ -680,7 +742,7 @@ class BaseConversationService(abc.ABC):
             return error_response("NOT_FOUND", "Conversation not found", HTTPStatus.NOT_FOUND)
 
         owner = db_conv.get("user_id")
-        if owner is not None and owner != caller_user_id:
+        if owner != caller_user_id:  # v0.7.83 (codex WARN 2) — NULL owner only matches NULL caller
             return error_response(
                 "NOT_FOUND", "Conversation not found", HTTPStatus.NOT_FOUND
             )

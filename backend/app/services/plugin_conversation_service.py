@@ -224,7 +224,10 @@ class PluginConversationService:
                 "NOT_FOUND", "Conversation not found", HTTPStatus.NOT_FOUND
             )
         owner = conv.get("user_id")
-        if owner is None or owner == caller_user_id:
+        # v0.7.83 (codex WARN 2 / 2nd pass) — strict match including
+        # ``None == None``. Authenticated callers cannot touch
+        # NULL-owner (legacy) rows.
+        if owner == caller_user_id:
             return None
         return error_response(
             "NOT_FOUND", "Conversation not found", HTTPStatus.NOT_FOUND
@@ -350,27 +353,50 @@ class PluginConversationService:
         if owner_err is not None:
             return owner_err
 
-        conv = cls._conversations[conv_id]
-        if conv.get("processing"):
-            return error_response("CONFLICT", "Conversation is processing", HTTPStatus.CONFLICT)
+        # v0.7.83 (codex WARN 3 / 2nd pass) — serialize the
+        # processing check + user-msg append + processing-set
+        # under one lock so a second concurrent send_message
+        # can't pass the check, append, and spawn a second
+        # LLM thread that interleaves. Mirrors the skill v0.7.78
+        # WARN 2 fix.
+        with cls._lock:
+            conv = cls._conversations[conv_id]
+            if conv.get("processing"):
+                return error_response(
+                    "CONFLICT", "Conversation is processing", HTTPStatus.CONFLICT
+                )
+            conv["processing"] = True
+            user_msg = ConversationMessage(
+                role="user",
+                content=message,
+                timestamp=datetime.datetime.now().isoformat(),
+            )
+            conv["messages"].append(user_msg)
 
-        user_msg = ConversationMessage(
-            role="user",
-            content=message,
-            timestamp=datetime.datetime.now().isoformat(),
-        )
-        conv["messages"].append(user_msg)
-        # v0.7.83 — write-through after every user message so a
-        # refresh between turns sees the full history.
-        cls._persist(conv_id)
-
-        cls._broadcast(conv_id, "user_message", asdict(user_msg))
-
-        threading.Thread(
-            target=cls._process_with_claude,
-            args=(conv_id, message),
-            kwargs={"backend": backend, "account_id": account_id, "model": model},
-        ).start()
+        # If any pre-thread step fails, reset the processing
+        # flag so the operator can retry (mirrors skill WARN D
+        # from v0.7.78 codex 2nd pass).
+        try:
+            # v0.7.83 — write-through after every user message so a
+            # refresh between turns sees the full history.
+            cls._persist(conv_id)
+            cls._broadcast(conv_id, "user_message", asdict(user_msg))
+            threading.Thread(
+                target=cls._process_with_claude,
+                args=(conv_id, message),
+                kwargs={"backend": backend, "account_id": account_id, "model": model},
+            ).start()
+        except Exception:
+            logger.error(
+                "plugin_conv: failed to start LLM thread for %s; "
+                "resetting processing flag",
+                conv_id,
+                exc_info=True,
+            )
+            with cls._lock:
+                if conv_id in cls._conversations:
+                    cls._conversations[conv_id]["processing"] = False
+            raise
 
         return {"message_id": conv_id, "status": "processing"}, HTTPStatus.OK
 
@@ -426,6 +452,19 @@ class PluginConversationService:
         owner_err = cls._check_owner(conv_id, caller_user_id)
         if owner_err is not None:
             return owner_err
+
+        # v0.7.83 (codex WARN 3 / 2nd pass) — refuse finalize
+        # while an LLM response is mid-stream; otherwise we'd
+        # try to extract a config block while claude is still
+        # writing it. The operator should wait for the response
+        # to land, then retry.
+        with cls._lock:
+            if cls._conversations[conv_id].get("processing"):
+                return error_response(
+                    "CONFLICT",
+                    "Conversation is processing — wait for the current response to finish.",
+                    HTTPStatus.CONFLICT,
+                )
 
         conv = cls._conversations[conv_id]
 
@@ -512,7 +551,7 @@ class PluginConversationService:
                 row = get_plugin_conversation(conv_id)
                 if row:
                     owner = row.get("user_id")
-                    if owner is not None and owner != caller_user_id:
+                    if owner != caller_user_id:  # v0.7.83 (codex WARN 2) — NULL owner only matches NULL caller
                         return error_response(
                             "NOT_FOUND",
                             "Conversation not found",

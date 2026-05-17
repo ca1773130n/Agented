@@ -145,7 +145,7 @@ class AgentConversationService:
             return error_response("NOT_FOUND", "Conversation not found", HTTPStatus.NOT_FOUND)
 
         owner = conv.get("user_id")
-        if owner is not None and owner != caller_user_id:
+        if owner != caller_user_id:  # v0.7.83 (codex WARN 2) — NULL owner only matches NULL caller
             return error_response("NOT_FOUND", "Conversation not found", HTTPStatus.NOT_FOUND)
 
         if conv.get("status") != "active":
@@ -345,7 +345,7 @@ class AgentConversationService:
         # probes (defensive — route is expected to call
         # ``can_subscribe`` first).
         owner = conv.get("user_id")
-        if owner is not None and owner != caller_user_id:
+        if owner != caller_user_id:  # v0.7.83 (codex WARN 2) — NULL owner only matches NULL caller
             yield cls._format_sse("error", {"error": "Conversation not found"})
             return
 
@@ -403,7 +403,7 @@ class AgentConversationService:
             return error_response("NOT_FOUND", "Conversation not found", HTTPStatus.NOT_FOUND)
         # v0.7.83 — ownership gate.
         owner = conv.get("user_id")
-        if owner is not None and owner != caller_user_id:
+        if owner != caller_user_id:  # v0.7.83 (codex WARN 2) — NULL owner only matches NULL caller
             return error_response("NOT_FOUND", "Conversation not found", HTTPStatus.NOT_FOUND)
 
         # Get messages
@@ -486,7 +486,7 @@ class AgentConversationService:
             return error_response("NOT_FOUND", "Conversation not found", HTTPStatus.NOT_FOUND)
         # v0.7.83 — ownership gate.
         owner = conv.get("user_id")
-        if owner is not None and owner != caller_user_id:
+        if owner != caller_user_id:  # v0.7.83 (codex WARN 2) — NULL owner only matches NULL caller
             return error_response("NOT_FOUND", "Conversation not found", HTTPStatus.NOT_FOUND)
 
         update_agent_conversation(conv_id, status="abandoned")
@@ -504,7 +504,7 @@ class AgentConversationService:
             return error_response("NOT_FOUND", "Conversation not found", HTTPStatus.NOT_FOUND)
         # v0.7.83 — ownership gate.
         owner = conv.get("user_id")
-        if owner is not None and owner != caller_user_id:
+        if owner != caller_user_id:  # v0.7.83 (codex WARN 2) — NULL owner only matches NULL caller
             return error_response("NOT_FOUND", "Conversation not found", HTTPStatus.NOT_FOUND)
 
         # Parse messages
@@ -529,7 +529,7 @@ class AgentConversationService:
         if not conv:
             return False
         owner = conv.get("user_id")
-        return owner is None or owner == caller_user_id
+        return owner == caller_user_id  # v0.7.83 (codex WARN 2) — NULL owner only matches NULL caller
 
     @classmethod
     def _broadcast(cls, conv_id: str, event_type: str, data: dict) -> None:
