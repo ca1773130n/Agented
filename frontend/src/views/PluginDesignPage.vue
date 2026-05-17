@@ -115,6 +115,13 @@ async function finalizePlugin() {
 // before falling back to startConversation. Survives page refresh
 // and backend restart. Same pattern as /skills/new (v0.7.78).
 useWizardAutoResume(conversation, pluginConversationApi, 'agented_plugin_conv_id');
+
+// v0.7.82 — tooltip mirrors the visible hint when disabled.
+const finalizeTooltip = computed(() =>
+  conversation.canFinalize.value
+    ? 'Create the plugin'
+    : "Keep chatting — Claude needs more details before the plugin can be created. Tell it the plugin's name, what it does, and at least one component (skill / command / hook / rule).",
+);
 </script>
 
 <template>
@@ -125,17 +132,31 @@ useWizardAutoResume(conversation, pluginConversationApi, 'agented_plugin_conv_id
         <h1>Design a Plugin</h1>
         <p>Chat with Claude to design your plugin with multiple components</p>
       </div>
-      <button
-        v-if="conversation.canFinalize.value"
-        class="btn btn-primary btn-finalize"
-        :disabled="conversation.isFinalizing.value"
-        @click="finalizePlugin"
-      >
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M20 6L9 17l-5-5"/>
-        </svg>
-        {{ conversation.isFinalizing.value ? 'Creating...' : 'Create Plugin' }}
-      </button>
+      <!-- v0.7.82 — always-visible disabled Create button with
+           explicit hint. Same pattern as v0.7.79 for /skills/new. -->
+      <div class="finalize-control">
+        <button
+          class="btn btn-primary btn-finalize"
+          :disabled="!conversation.canFinalize.value || conversation.isFinalizing.value"
+          :title="finalizeTooltip"
+          :aria-describedby="conversation.canFinalize.value ? undefined : 'finalize-hint'"
+          @click="finalizePlugin"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M20 6L9 17l-5-5"/>
+          </svg>
+          {{ conversation.isFinalizing.value ? 'Creating...' : 'Create Plugin' }}
+        </button>
+        <p
+          v-if="!conversation.canFinalize.value"
+          id="finalize-hint"
+          class="finalize-hint"
+        >
+          Keep chatting — once Claude has the plugin's name,
+          purpose, and at least one component (skill / command /
+          hook / rule), this button activates.
+        </p>
+      </div>
     </div>
 
     <div class="design-body">
@@ -247,8 +268,30 @@ useWizardAutoResume(conversation, pluginConversationApi, 'agented_plugin_conv_id
 <style scoped>
 /* Design-page scoped overrides (violet-themed buttons) */
 .btn-primary { background: var(--accent-violet); color: #fff; }
-.btn-primary:hover { background: #9966ff; }
+.btn-primary:hover:not(:disabled) { background: #9966ff; }
 .btn-primary svg { width: 16px; height: 16px; }
+.btn-primary:disabled {
+  background: var(--bg-tertiary, #2a2a30);
+  color: var(--text-tertiary, #8a8a92);
+  cursor: not-allowed;
+  opacity: 0.85;
+}
+
+/* v0.7.82 — always-visible disabled Create button with hint */
+.finalize-control {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  max-width: 320px;
+}
+.finalize-hint {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-tertiary);
+  text-align: right;
+}
 
 /* Plugin-specific: left sidebar with component tree */
 .sidebar-left {

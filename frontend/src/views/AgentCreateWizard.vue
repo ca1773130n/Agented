@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed } from 'vue';
 import { useRouter } from 'vue-router';
 import { agentConversationApi } from '../services/api';
 import { useConversation, createConfigParser } from '../composables/useConversation';
@@ -68,6 +69,14 @@ async function finalizeAgent() {
 // before falling back to startConversation. Survives page refresh
 // and backend restart. Same shape as /skills/new (v0.7.78).
 useWizardAutoResume(conversation, agentConversationApi, 'agented_agent_conv_id');
+
+// v0.7.82 — tooltip mirrors the visible hint when disabled and
+// switches to the action description once enabled.
+const finalizeTooltip = computed(() =>
+  conversation.canFinalize.value
+    ? 'Create the agent'
+    : "Keep chatting — Claude needs more details before the agent can be created. Tell it the agent's name, what it does, and how it should behave.",
+);
 </script>
 
 <template>
@@ -77,17 +86,33 @@ useWizardAutoResume(conversation, agentConversationApi, 'agented_agent_conv_id')
         <h1>Design Agent</h1>
         <p>Chat with Claude to design your AI agent</p>
       </div>
-      <button
-        v-if="conversation.canFinalize.value"
-        class="btn btn-primary btn-finalize"
-        :disabled="conversation.isFinalizing.value"
-        @click="finalizeAgent"
-      >
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M20 6L9 17l-5-5"/>
-        </svg>
-        {{ conversation.isFinalizing.value ? 'Creating...' : 'Create Agent' }}
-      </button>
+      <!-- v0.7.82 — always-visible disabled Create button with
+           an explicit hint, so a new operator can see the
+           target action and what's needed to enable it. Same
+           pattern as v0.7.79 for /skills/new. -->
+      <div class="finalize-control">
+        <button
+          class="btn btn-primary btn-finalize"
+          :disabled="!conversation.canFinalize.value || conversation.isFinalizing.value"
+          :title="finalizeTooltip"
+          :aria-describedby="conversation.canFinalize.value ? undefined : 'finalize-hint'"
+          @click="finalizeAgent"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M20 6L9 17l-5-5"/>
+          </svg>
+          {{ conversation.isFinalizing.value ? 'Creating...' : 'Create Agent' }}
+        </button>
+        <p
+          v-if="!conversation.canFinalize.value"
+          id="finalize-hint"
+          class="finalize-hint"
+        >
+          Keep chatting — once Claude has the agent's name,
+          purpose, and behavior locked in, this button activates
+          and creates the agent.
+        </p>
+      </div>
     </div>
 
     <AiChatPanel
@@ -155,8 +180,31 @@ useWizardAutoResume(conversation, agentConversationApi, 'agented_agent_conv_id')
   color: var(--text-tertiary);
 }
 
+.finalize-control {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  max-width: 320px;
+}
+
+.finalize-hint {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-tertiary);
+  text-align: right;
+}
+
 .btn-finalize {
   padding: 10px 20px;
+}
+
+.btn-primary:disabled {
+  background: var(--bg-tertiary, #2a2a30);
+  color: var(--text-tertiary, #8a8a92);
+  cursor: not-allowed;
+  opacity: 0.85;
 }
 
 .btn-primary svg {
