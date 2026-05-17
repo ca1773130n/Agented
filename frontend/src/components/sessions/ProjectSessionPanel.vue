@@ -413,6 +413,16 @@ async function onDialogConfirm(payload: {
   yoloMode: boolean;
   executionType: 'direct' | 'ralph_loop' | 'team_spawn';
   accountId: string | null;
+  // v0.7.73 — dialog payload now carries Forge picks too.
+  forgeOverrides?: {
+    disabled_binding_ids: number[];
+    additions: Array<{
+      kind: 'rule' | 'skill' | 'hook' | 'command' | 'mcp_server' | 'plugin';
+      asset_id: string;
+      role?: string | null;
+    }>;
+  };
+  firstPromptAttachments?: ForgeAttachment[];
 }) {
   showStartDialog.value = false;
   executionType.value = payload.executionType;
@@ -427,6 +437,14 @@ async function onDialogConfirm(payload: {
   pendingPermissions.value = [];
   clearDiagnostic();
 
+  // v0.7.73 — first-prompt attachments wait in pendingAttachments
+  // until the operator types the first message and hits send. The
+  // server-side compile happens then via /sessions/{sid}/input,
+  // not at create_session (chat sessions read user content from
+  // stdin in stream-json mode, so per-prompt context can't ride
+  // the spawn argv).
+  pendingAttachments.value = payload.firstPromptAttachments ?? [];
+
   const isDirect = payload.executionType === 'direct';
   const baseFields = {
     name: payload.name,
@@ -436,6 +454,21 @@ async function onDialogConfirm(payload: {
     // null/omitted in yolo is fine because the backend short-circuits
     // the whitelist check.
     ...(payload.accountId ? { account_id: payload.accountId } : {}),
+    // v0.7.73 — Forge bindings opt-outs + session-only additions.
+    // The bundle compiles into --append-system-prompt for claude
+    // and the overlay materialization for hooks/commands/MCP. We
+    // only forward when there's at least one override so the
+    // request body stays empty in the common "use project defaults
+    // as-is" case.
+    ...(payload.forgeOverrides &&
+    (payload.forgeOverrides.disabled_binding_ids.length > 0 ||
+      payload.forgeOverrides.additions.length > 0)
+      ? {
+          forge_context: {
+            session_overrides: payload.forgeOverrides,
+          },
+        }
+      : {}),
   };
   const request: CreateSessionRequest = isDirect
     ? {

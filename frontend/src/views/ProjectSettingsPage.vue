@@ -453,7 +453,14 @@ async function retryClone() {
 
       <!-- v0.7.70 — Forge context bindings (sticky per-project
            context injected into every session of this project). -->
-      <ProjectForgeBindingsPanel v-if="project" :projectId="projectId" />
+      <div v-if="project" class="card">
+        <div class="card-header">
+          <h3>Forge context bindings</h3>
+        </div>
+        <div class="card-body">
+          <ProjectForgeBindingsPanel :projectId="projectId" />
+        </div>
+      </div>
 
       <!-- Actions -->
       <div class="actions-row">

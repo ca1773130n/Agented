@@ -26,9 +26,16 @@ import { useFocusTrap } from '../../composables/useFocusTrap';
 import {
   settingsApi,
   grdApi,
+  projectApi,
   listGroupedBackends,
   getGroupedBackend,
 } from '../../services/api';
+import type {
+  ForgeAttachment,
+  ForgeBinding,
+  ForgeBindingKind,
+} from '../../services/api/projects';
+import SessionContextTray from './SessionContextTray.vue';
 
 const props = defineProps<{
   visible: boolean;
@@ -45,6 +52,23 @@ const emit = defineEmits<{
       yoloMode: boolean;
       executionType: 'direct' | 'ralph_loop' | 'team_spawn';
       accountId: string | null;
+      // v0.7.73 — Forge context picks. ``forgeOverrides`` rides
+      // into ``create_session`` via ``request.forge_context`` so
+      // bindings compile into ``--append-system-prompt`` + overlay
+      // for the first turn. ``firstPromptAttachments`` flows into
+      // the panel's ``pendingAttachments`` so they prepend the
+      // first user message — claude's chat session is stream-json
+      // over stdin, so per-prompt context must arrive via the
+      // input route, not via the spawn argv.
+      forgeOverrides: {
+        disabled_binding_ids: number[];
+        additions: Array<{
+          kind: ForgeBindingKind;
+          asset_id: string;
+          role?: string | null;
+        }>;
+      };
+      firstPromptAttachments: ForgeAttachment[];
     },
   ): void;
 }>();
@@ -78,6 +102,77 @@ const allowedAccountOptions = computed<AccountOption[]>(() => {
   const idSet = new Set(allowedAccountIds.value);
   return allAccounts.value.filter((a) => idSet.has(a.id));
 });
+
+// v0.7.73 — Forge context state. Sticky project bindings are
+// loaded fresh on each open; the operator can opt out per-binding
+// (the toggle flips the binding ID into ``disabledBindingIds``)
+// and can add session-only extras (kept in ``sessionOnlyAdditions``,
+// never persisted). First-prompt attachments use the same shape as
+// the per-prompt tray so the operator sees one consistent UX.
+const inheritedBindings = ref<ForgeBinding[]>([]);
+const isLoadingBindings = ref(false);
+const disabledBindingIds = ref<Set<number>>(new Set());
+const sessionOnlyAdditions = ref<
+  Array<{ kind: ForgeBindingKind; asset_id: string; role?: string | null }>
+>([]);
+const firstPromptAttachments = ref<ForgeAttachment[]>([]);
+const addBindingKind = ref<ForgeBindingKind>('rule');
+const addBindingAssetId = ref('');
+
+const FORGE_KIND_LABELS: Record<ForgeBindingKind, string> = {
+  rule: 'Rule',
+  skill: 'Skill',
+  hook: 'Hook',
+  command: 'Command',
+  mcp_server: 'MCP Server',
+  plugin: 'Plugin',
+};
+
+const hasAnyForgeState = computed(
+  () =>
+    inheritedBindings.value.length > 0 ||
+    sessionOnlyAdditions.value.length > 0 ||
+    firstPromptAttachments.value.length > 0,
+);
+
+function toggleBinding(b: ForgeBinding) {
+  const next = new Set(disabledBindingIds.value);
+  if (next.has(b.id)) next.delete(b.id);
+  else next.add(b.id);
+  disabledBindingIds.value = next;
+}
+
+function isBindingEnabled(b: ForgeBinding) {
+  return !disabledBindingIds.value.has(b.id);
+}
+
+function addSessionOnlyBinding() {
+  const asset = addBindingAssetId.value.trim();
+  if (!asset) return;
+  sessionOnlyAdditions.value = [
+    ...sessionOnlyAdditions.value,
+    { kind: addBindingKind.value, asset_id: asset },
+  ];
+  addBindingAssetId.value = '';
+}
+
+function removeSessionOnlyAt(idx: number) {
+  const next = sessionOnlyAdditions.value.slice();
+  next.splice(idx, 1);
+  sessionOnlyAdditions.value = next;
+}
+
+async function loadForgeBindings() {
+  isLoadingBindings.value = true;
+  try {
+    const res = await projectApi.listForgeBindings(props.projectId);
+    inheritedBindings.value = res.bindings;
+  } catch {
+    inheritedBindings.value = [];
+  } finally {
+    isLoadingBindings.value = false;
+  }
+}
 
 const canSubmit = computed(() => {
   if (isLoadingDefaults.value || isLoadingAccounts.value) return false;
@@ -159,19 +254,26 @@ watch(
       autoTitle.value = true;
       executionType.value = 'direct';
       accountId.value = '';
+      disabledBindingIds.value = new Set();
+      sessionOnlyAdditions.value = [];
+      firstPromptAttachments.value = [];
+      addBindingKind.value = 'rule';
+      addBindingAssetId.value = '';
       hydrateDefaults().then(() => {
         yoloMode.value = userDefaultYolo.value;
       });
       loadAccounts();
+      loadForgeBindings();
     }
   },
 );
 
 onMounted(() => {
   // Prefetch so the first time the dialog opens we already know the
-  // yolo default + the project's whitelist.
+  // yolo default + the project's whitelist + the inherited bindings.
   hydrateDefaults();
   loadAccounts();
+  loadForgeBindings();
 });
 
 function onSubmit() {
@@ -187,6 +289,11 @@ function onSubmit() {
     // Yolo bypasses the whitelist on the server too — no need to
     // send account_id; backend will auto-pick.
     accountId: yoloMode.value ? null : accountId.value || null,
+    forgeOverrides: {
+      disabled_binding_ids: Array.from(disabledBindingIds.value),
+      additions: sessionOnlyAdditions.value.slice(),
+    },
+    firstPromptAttachments: firstPromptAttachments.value.slice(),
   });
 }
 </script>
@@ -301,6 +408,116 @@ function onSubmit() {
             Sessions must use a whitelisted account unless Yolo is on. Manage the
             whitelist on the project's settings page.
           </p>
+        </div>
+
+        <!-- v0.7.73 — Forge context wire-up. Inherited bindings from
+             the project (toggleable, per-session opt-out), session-
+             only additions (volatile), and first-prompt attachments
+             that ride into the first user message. Empty inherited
+             list + no extras renders as a compact empty state so
+             the dialog doesn't grow for projects without bindings. -->
+        <div class="form-group forge-section">
+          <label>Forge context</label>
+
+          <details class="forge-disclosure" :open="hasAnyForgeState">
+            <summary class="forge-summary">
+              <span v-if="isLoadingBindings">Loading bindings…</span>
+              <span v-else-if="!hasAnyForgeState">
+                No project bindings or first-prompt attachments.
+                Click to add session-only context.
+              </span>
+              <span v-else>
+                {{ inheritedBindings.length }} inherited
+                · {{ sessionOnlyAdditions.length }} session-only
+                · {{ firstPromptAttachments.length }} attachments
+              </span>
+            </summary>
+
+            <div v-if="inheritedBindings.length" class="forge-block">
+              <h4 class="forge-heading">Inherited from project</h4>
+              <ul class="forge-binding-list">
+                <li
+                  v-for="b in inheritedBindings"
+                  :key="b.id"
+                  class="forge-binding-row"
+                >
+                  <label class="inline-toggle">
+                    <input
+                      type="checkbox"
+                      :checked="isBindingEnabled(b)"
+                      @change="toggleBinding(b)"
+                    />
+                    <span class="forge-binding-kind">
+                      {{ FORGE_KIND_LABELS[b.kind] }}
+                    </span>
+                    <code class="forge-binding-id">{{ b.asset_id }}</code>
+                  </label>
+                </li>
+              </ul>
+            </div>
+
+            <div class="forge-block">
+              <h4 class="forge-heading">Add session-only binding</h4>
+              <div class="forge-add-row">
+                <select v-model="addBindingKind" class="forge-add-kind">
+                  <option
+                    v-for="(label, kind) in FORGE_KIND_LABELS"
+                    :key="kind"
+                    :value="kind"
+                  >
+                    {{ label }}
+                  </option>
+                </select>
+                <input
+                  v-model="addBindingAssetId"
+                  type="text"
+                  class="forge-add-asset"
+                  placeholder="asset id (e.g. 42, skill-name)"
+                  @keydown.enter.prevent="addSessionOnlyBinding"
+                />
+                <button
+                  type="button"
+                  class="btn btn-secondary forge-add-btn"
+                  @click="addSessionOnlyBinding"
+                >
+                  Add
+                </button>
+              </div>
+              <ul v-if="sessionOnlyAdditions.length" class="forge-binding-list">
+                <li
+                  v-for="(b, idx) in sessionOnlyAdditions"
+                  :key="`session-${idx}`"
+                  class="forge-binding-row session-only"
+                >
+                  <span class="forge-binding-kind">
+                    {{ FORGE_KIND_LABELS[b.kind] }}
+                  </span>
+                  <code class="forge-binding-id">{{ b.asset_id }}</code>
+                  <span class="forge-session-flag">session only</span>
+                  <button
+                    type="button"
+                    class="forge-binding-remove"
+                    aria-label="Remove session-only binding"
+                    @click="removeSessionOnlyAt(idx)"
+                  >
+                    ×
+                  </button>
+                </li>
+              </ul>
+            </div>
+
+            <div class="forge-block">
+              <h4 class="forge-heading">First-prompt attachments</h4>
+              <SessionContextTray
+                v-model:attachments="firstPromptAttachments"
+              />
+              <p class="form-hint forge-hint">
+                These attach to the first message you send. After
+                that, use the tray above the chat input for
+                subsequent turns.
+              </p>
+            </div>
+          </details>
         </div>
 
         <div class="modal-actions">
@@ -537,5 +754,116 @@ form {
 }
 .btn-secondary:hover {
   background: var(--bg-secondary);
+}
+
+/* v0.7.73 — Forge context section */
+.forge-disclosure {
+  border: 1px solid var(--border-default);
+  border-radius: 6px;
+  background: var(--bg-tertiary);
+  padding: 8px 12px;
+  font-size: 12px;
+}
+.forge-summary {
+  cursor: pointer;
+  list-style: none;
+  color: var(--text-secondary);
+  padding: 4px 0;
+}
+.forge-summary::-webkit-details-marker {
+  display: none;
+}
+.forge-block {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-default);
+}
+.forge-heading {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-tertiary);
+  margin: 0 0 6px 0;
+  font-weight: 500;
+}
+.forge-binding-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.forge-binding-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px;
+  border-radius: 4px;
+  background: var(--bg-primary);
+  font-family: 'Geist Mono', monospace;
+  font-size: 12px;
+}
+.forge-binding-row.session-only {
+  background: var(--bg-secondary);
+  opacity: 0.95;
+}
+.forge-binding-kind {
+  color: var(--text-tertiary);
+  min-width: 70px;
+}
+.forge-binding-id {
+  color: var(--text-primary);
+  background: transparent;
+  padding: 0;
+  flex: 1;
+}
+.forge-session-flag {
+  font-size: 10px;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.forge-binding-remove {
+  background: transparent;
+  border: none;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  padding: 0 4px;
+}
+.forge-binding-remove:hover {
+  color: var(--accent-red);
+}
+.forge-add-row {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+.forge-add-kind {
+  flex: 0 0 auto;
+  padding: 4px 8px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-default);
+  color: var(--text-primary);
+  border-radius: 4px;
+}
+.forge-add-asset {
+  flex: 1;
+  padding: 4px 8px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-default);
+  color: var(--text-primary);
+  border-radius: 4px;
+  font-family: 'Geist Mono', monospace;
+}
+.forge-add-btn {
+  flex: 0 0 auto;
+  padding: 4px 12px;
+  font-size: 12px;
+}
+.forge-hint {
+  margin-top: 6px;
 }
 </style>
