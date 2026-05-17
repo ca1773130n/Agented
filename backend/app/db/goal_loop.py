@@ -85,8 +85,17 @@ def record_iteration_complete(
     tokens_in: int = 0,
     tokens_out: int = 0,
     cost_usd: float = 0.0,
+    hypothesis: Optional[str] = None,
+    predicted_outcome: Optional[str] = None,
+    ouroboros_verdict: Optional[str] = None,
 ) -> None:
-    """Fill in the verdict + cost telemetry on a pending iteration row."""
+    """Fill in the verdict + cost telemetry on a pending iteration row.
+
+    v0.7.86 — adds three Ouroboros fields (hypothesis,
+    predicted_outcome, ouroboros_verdict). All optional so the
+    pre-Ouroboros call shape still works for callers that don't
+    opt in.
+    """
     with get_connection() as conn:
         conn.execute(
             """
@@ -98,7 +107,10 @@ def record_iteration_complete(
                 judge_stdout = ?,
                 tokens_in = ?,
                 tokens_out = ?,
-                cost_usd = ?
+                cost_usd = ?,
+                hypothesis = ?,
+                predicted_outcome = ?,
+                ouroboros_verdict = ?
             WHERE id = ?
             """,
             (
@@ -109,10 +121,109 @@ def record_iteration_complete(
                 tokens_in,
                 tokens_out,
                 cost_usd,
+                hypothesis,
+                predicted_outcome,
+                ouroboros_verdict,
                 row_id,
             ),
         )
         conn.commit()
+
+
+# ---------------------------------------------------------------------
+# v0.7.86 — goal_loop_dead_ends (session-scoped Ouroboros registry)
+# ---------------------------------------------------------------------
+
+
+def add_goal_loop_dead_end(
+    *,
+    session_id: str,
+    iteration: int,
+    approach: str,
+    reason: str,
+    evidence: Optional[str] = None,
+    approach_hash: str,
+) -> Optional[int]:
+    """Record a falsified approach for this session. Idempotent —
+    duplicate ``(session_id, approach_hash)`` is silently dropped
+    via the schema's UNIQUE constraint so the runner doesn't have
+    to dedupe before calling.
+
+    Returns the row id on insert, or ``None`` when the row already
+    existed (duplicate hash).
+    """
+    with get_connection() as conn:
+        try:
+            cur = conn.execute(
+                """
+                INSERT INTO goal_loop_dead_ends
+                    (session_id, iteration, approach, reason, evidence, approach_hash)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (session_id, iteration, approach, reason, evidence, approach_hash),
+            )
+            conn.commit()
+            return cur.lastrowid
+        except Exception as exc:
+            # IntegrityError on the UNIQUE constraint is the expected
+            # case — log and swallow so the caller doesn't have to.
+            logger.debug(
+                "goal_loop: duplicate dead-end for session %s (%s)",
+                session_id,
+                exc,
+            )
+            return None
+
+
+def list_goal_loop_dead_ends(session_id: str) -> List[dict]:
+    """Return all dead-ends for a session, newest first. Used by the
+    runner to inject prior dead-ends into subsequent prompts.
+    """
+    with get_connection() as conn:
+        cur = conn.execute(
+            """
+            SELECT id, session_id, iteration, approach, reason, evidence,
+                   approach_hash, recorded_at
+            FROM goal_loop_dead_ends
+            WHERE session_id = ?
+            ORDER BY recorded_at DESC
+            """,
+            (session_id,),
+        )
+        return [
+            {
+                "id": r[0],
+                "session_id": r[1],
+                "iteration": r[2],
+                "approach": r[3],
+                "reason": r[4],
+                "evidence": r[5],
+                "approach_hash": r[6],
+                "recorded_at": r[7],
+            }
+            for r in cur.fetchall()
+        ]
+
+
+def recent_iteration_verdicts(session_id: str, limit: int = 3) -> List[str]:
+    """Return the last N completed iterations' ``ouroboros_verdict``
+    values, oldest first within the window. Used by the runner to
+    detect convergence (e.g., 3 consecutive ``falsified`` →
+    ontology-convergence termination).
+    """
+    with get_connection() as conn:
+        cur = conn.execute(
+            """
+            SELECT ouroboros_verdict
+            FROM goal_loop_iterations
+            WHERE session_id = ? AND ouroboros_verdict IS NOT NULL
+            ORDER BY iteration DESC
+            LIMIT ?
+            """,
+            (session_id, limit),
+        )
+        rows = [r[0] for r in cur.fetchall()]
+        return list(reversed(rows))
 
 
 def list_iterations(session_id: str) -> List[dict]:
