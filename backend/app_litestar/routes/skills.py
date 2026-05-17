@@ -407,10 +407,33 @@ def stream_conversation(conv_id: str, caller: Caller) -> Stream:
     )
 
 
-@post("/{conv_id:str}/finalize", sync_to_thread=False)
-def finalize_skill(conv_id: str, caller: Caller) -> dict[str, Any]:
+@post("/{conv_id:str}/preview-finalize", sync_to_thread=False)
+def preview_finalize_skill(conv_id: str, caller: Caller) -> dict[str, Any]:
+    """v0.7.77 — return the rendered skill package tree without
+    writing to disk. Used by ``SkillCreatePreviewDrawer`` so the
+    operator can inspect SKILL.md + helpers/references before
+    finalize lands them. Same validation as ``finalize_skill``: a
+    preview that returns 200 is guaranteed to commit.
+    """
     del caller
-    return _result_or_raise(SkillConversationService.finalize_skill(conv_id))
+    return _result_or_raise(SkillConversationService.preview_finalize(conv_id))
+
+
+@post("/{conv_id:str}/finalize", sync_to_thread=False)
+def finalize_skill(
+    conv_id: str, data: dict | None, caller: Caller
+) -> dict[str, Any]:
+    """v0.7.77 — accepts optional ``expected_config_hash`` in the
+    body so the preview drawer can guarantee the finalized
+    package matches what the operator reviewed. Mismatch → 409.
+    """
+    del caller
+    expected_hash = (data or {}).get("expected_config_hash") if data else None
+    return _result_or_raise(
+        SkillConversationService.finalize_skill(
+            conv_id, expected_config_hash=expected_hash
+        )
+    )
 
 
 @post("/{conv_id:str}/abandon", sync_to_thread=False)
@@ -426,6 +449,7 @@ skill_conversations_router = Router(
         get_conversation,
         send_message,
         stream_conversation,
+        preview_finalize_skill,
         finalize_skill,
         abandon_conversation,
     ],

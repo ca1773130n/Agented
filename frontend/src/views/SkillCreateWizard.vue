@@ -1,30 +1,48 @@
 <script setup lang="ts">
-import { onMounted } from 'vue';
+import { onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { skillConversationApi } from '../services/api';
 import { useConversation, createConfigParser } from '../composables/useConversation';
 import { AiChatPanelManaged as AiChatPanel } from '@ai-accounts/vue-styled';
 import { useToast } from '../composables/useToast';
 import { useWebMcpTool } from '../composables/useWebMcpTool';
+import SkillCreatePreviewDrawer from '../components/skills/SkillCreatePreviewDrawer.vue';
 
 const router = useRouter();
 const showToast = useToast();
 
-// ---------------------------------------------------------------------------
-// Config interface matching the backend's ---SKILL_CONFIG--- JSON shape
-// ---------------------------------------------------------------------------
+// v0.7.77 — config shape now matches the multi-file Anthropic
+// Skills schema the backend emits via SKILL_CREATION_SYSTEM_PROMPT.
+// Only ``skill_name`` is read by the wizard UI (for the detected-
+// entity banner); the rest is opaque pass-through to finalize.
 interface SkillConfig {
   skill_name: string;
-  description: string;
-  triggers: string[];
-  instructions: string;
-  examples: string[];
+  frontmatter?: {
+    description?: string;
+    license?: string;
+    allowed_tools?: string[];
+    tags?: string[];
+  };
+  body?: string;
+  files?: Array<{ path: string; content: string }>;
+  // Legacy fields kept on the type so a mid-flight conversation
+  // emitting the v0.7.75 schema doesn't break parsing.
+  description?: string;
+  triggers?: string[];
+  instructions?: string;
+  examples?: string[];
 }
 
 const conversation = useConversation<SkillConfig>(
   skillConversationApi,
   createConfigParser<SkillConfig>('---SKILL_CONFIG---'),
 );
+
+// v0.7.77 — preview drawer state. Clicking the Create button no
+// longer finalizes directly; it opens the drawer which renders the
+// rendered tree via ``preview-finalize`` and lets the operator
+// inspect each file before committing.
+const showPreview = ref(false);
 
 useWebMcpTool({
   name: 'agented_skill_create_get_state',
@@ -54,10 +72,27 @@ const SKILL_ICON_PATHS = [
   'M2 12l10 5 10-5',
 ];
 
-async function finalizeSkill() {
-  const result = await conversation.finalize();
+function openPreview() {
+  // v0.7.77 — the wizard's Create button now opens the preview
+  // drawer instead of finalizing directly. The drawer's own
+  // Create button runs ``commitFinalize`` below.
+  showPreview.value = true;
+}
+
+async function commitFinalize(expectedConfigHash: string) {
+  // v0.7.77 (codex BLOCK 4) — the drawer passes the hash of the
+  // config it rendered; backend 409s if claude has emitted a
+  // newer one since. On mismatch, useConversation's toast
+  // already surfaces the 409 message; the drawer stays open so
+  // the operator can re-preview (the watcher on messageCount
+  // will have already re-fetched).
+  const result = await conversation.finalize(expectedConfigHash);
   if (result) {
-    showToast(`Skill "${(result.skill as { skill_name: string }).skill_name}" created successfully!`, 'success');
+    showPreview.value = false;
+    showToast(
+      `Skill "${(result.skill as { skill_name: string }).skill_name}" created successfully!`,
+      'success',
+    );
     router.push({ name: 'skill-detail', params: { skillId: result.skill_id as string } });
   }
 }
@@ -78,7 +113,7 @@ onMounted(() => {
         v-if="conversation.canFinalize.value"
         class="btn btn-primary btn-finalize"
         :disabled="conversation.isFinalizing.value"
-        @click="finalizeSkill"
+        @click="openPreview"
       >
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M20 6L9 17l-5-5"/>
@@ -113,7 +148,20 @@ onMounted(() => {
       @update:selected-model="conversation.setModel($event)"
       @send="conversation.sendMessage"
       @keydown="conversation.handleKeyDown"
-      @finalize="finalizeSkill"
+      @finalize="openPreview"
+    />
+
+    <!-- v0.7.77 — slide-over preview of the rendered skill
+         package (SKILL.md + helpers/references). Operator
+         inspects each file before clicking Create, which
+         triggers the actual ``finalize`` POST. -->
+    <SkillCreatePreviewDrawer
+      :open="showPreview"
+      :conversation-id="conversation.conversationId.value"
+      :is-finalizing="conversation.isFinalizing.value"
+      :message-count="conversation.messages.value.length"
+      @close="showPreview = false"
+      @create="commitFinalize"
     />
   </div>
 </template>
