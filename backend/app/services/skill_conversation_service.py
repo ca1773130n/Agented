@@ -188,12 +188,22 @@ class SkillConversationService:
                 # the in-memory cache so the ownership check on
                 # every conv-id endpoint doesn't need a DB read.
                 "user_id": user_id,
+                # v0.7.81 (issue #124 / WARN 3) — defer the
+                # kickoff LLM call until the first SSE subscriber
+                # connects so early frames aren't broadcast into
+                # an empty subscriber set.
+                "needs_kickoff": True,
             }
             cls._subscribers[conv_id] = []
             cls._start_times[conv_id] = datetime.datetime.now()
 
         # v0.7.78 — write through to DB so refresh / backend
-        # restart can resume. Failures are logged but don't block
+        # restart can resume. The kickoff is included in
+        # ``initial_messages`` so a resumed conversation (post-
+        # crash, post-restart) already has the user turn needed
+        # for the next LLM call (closes issue #124 / WARN 1 for
+        # this service; skill was already persisting the kickoff
+        # via this call). Failures are logged but don't block
         # the start: the operator can still chat in-process, just
         # without survival across restarts.
         try:
@@ -209,21 +219,36 @@ class SkillConversationService:
                 exc_info=True,
             )
 
-        # v0.7.76 — spawn the LLM call in a background thread so
-        # the HTTP request returns immediately; the response
-        # streams back over SSE just like ``send_message``. The
-        # prior synchronous call blocked the request for the full
-        # LLM round-trip, making the wizard hang on /skills/new.
-        threading.Thread(
-            target=cls._process_with_claude,
-            args=(conv_id, kickoff.content),
-            daemon=True,
-        ).start()
-
         return {
             "conversation_id": conv_id,
             "message": "Skill creation conversation started",
         }, HTTPStatus.CREATED
+
+    @classmethod
+    def _maybe_fire_kickoff(cls, conv_id: str) -> None:
+        """v0.7.81 (issue #124 / WARN 2+3) — atomic check-and-clear
+        of ``needs_kickoff``; on success, spawn the LLM call on a
+        non-daemon thread (matches ``send_message``).
+        """
+        with cls._lock:
+            conv = cls._conversations.get(conv_id)
+            if not conv or not conv.get("needs_kickoff"):
+                return
+            conv["needs_kickoff"] = False
+            kickoff_msg = next(
+                (m for m in reversed(conv["messages"]) if m.role == "user"),
+                None,
+            )
+        if kickoff_msg is None:
+            logger.error(
+                "skill_conv: needs_kickoff=True but no user message in %s",
+                conv_id,
+            )
+            return
+        threading.Thread(
+            target=cls._process_with_claude,
+            args=(conv_id, kickoff_msg.content),
+        ).start()
 
     @classmethod
     def _ensure_loaded(cls, conv_id: str) -> bool:
@@ -506,6 +531,13 @@ class SkillConversationService:
         with cls._lock:
             if conv_id in cls._subscribers:
                 cls._subscribers[conv_id].append(queue)
+
+        # v0.7.81 (issue #124 / WARN 3) — fire the deferred
+        # kickoff after the queue is registered so any broadcast
+        # the thread produces lands in this subscriber's queue.
+        # Atomically clears ``needs_kickoff`` so a concurrent
+        # second-tab subscribe can't double-spawn.
+        cls._maybe_fire_kickoff(conv_id)
 
         try:
             # Send existing messages

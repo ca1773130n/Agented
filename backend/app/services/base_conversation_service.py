@@ -138,17 +138,11 @@ class BaseConversationService(abc.ABC):
             )
         ]
 
-        # v0.7.80 — append the kickoff user message BEFORE
-        # ``_process_with_claude`` runs. The prior implementation
-        # passed the kickoff string as a parameter that was never
-        # added to ``conv["messages"]``; the LLM call then saw
-        # only the system prompt with no user message, and the
-        # upstream rejected with "text content blocks must be
-        # non-empty" (no user message → empty user content block
-        # in CLIProxyAPI's OpenAI-format translation). Fixed for
-        # SkillConversationService in v0.7.76; this carries the
-        # same fix to every BaseConversationService subclass
-        # (commands / hooks / rules) which all hit the same bug.
+        # v0.7.80 — append the kickoff user message BEFORE the
+        # LLM call. Prior implementation passed the kickoff as a
+        # parameter that was never added to ``conv["messages"]``;
+        # the LLM saw only the system prompt and the upstream
+        # rejected with "text content blocks must be non-empty".
         kickoff = ConversationMessage(
             role="user",
             content="Hello, I'd like to get started.",
@@ -157,28 +151,69 @@ class BaseConversationService(abc.ABC):
         initial_messages.append(kickoff)
 
         with cls._lock:
-            cls._conversations[conv_id] = {"messages": initial_messages, "processing": False}
+            cls._conversations[conv_id] = {
+                "messages": initial_messages,
+                "processing": False,
+                # v0.7.81 (issue #124 / WARN 3) — defer the
+                # kickoff LLM call until the first SSE subscriber
+                # connects. Previously the call ran on a daemon
+                # thread spawned from this method, so
+                # ``response_start`` / first chunks could be
+                # broadcast into an empty subscriber set before
+                # the client opened its SSE stream.
+                "needs_kickoff": True,
+            }
             cls._subscribers[conv_id] = []
             cls._start_times[conv_id] = datetime.datetime.now()
 
-        # Persist to DB
+        # Persist to DB. Wave 72 wrote only id + entity_type here
+        # which is correct for the schema; we follow with a full
+        # ``_persist_messages`` so the kickoff round-trip is
+        # durable before we return to the client.
         create_design_conversation(conv_id, cls._get_entity_type())
-
-        # v0.7.80 — spawn the initial LLM call in a daemon thread
-        # so the HTTP request returns immediately; the response
-        # streams back over SSE just like ``send_message``. The
-        # prior synchronous call blocked the request for the full
-        # LLM round-trip, making the wizard hang on its first load.
-        threading.Thread(
-            target=cls._process_with_claude,
-            args=(conv_id, kickoff.content),
-            daemon=True,
-        ).start()
+        # v0.7.81 (issue #124 / WARN 1) — persist the kickoff
+        # immediately so a backend crash between this method
+        # returning and ``_process_with_claude`` finishing
+        # doesn't leave the resume path with only the system
+        # prompt (recreating the v0.7.76 empty-user-message bug
+        # on every resumed conversation).
+        cls._persist_messages(conv_id)
 
         return {
             "conversation_id": conv_id,
             "message": "Conversation started",
         }, HTTPStatus.CREATED
+
+    @classmethod
+    def _maybe_fire_kickoff(cls, conv_id: str) -> None:
+        """v0.7.81 (issue #124 / WARN 2+3) — spawn the deferred
+        kickoff LLM call on a non-daemon thread iff this
+        conversation is still flagged ``needs_kickoff``. Caller
+        must hold ``cls._lock`` when reading the flag; this
+        method re-acquires the lock to atomically clear the flag.
+        Non-daemon to match ``send_message``'s thread; daemon
+        threads can be killed mid-persist during gunicorn
+        graceful shutdown.
+        """
+        with cls._lock:
+            conv = cls._conversations.get(conv_id)
+            if not conv or not conv.get("needs_kickoff"):
+                return
+            conv["needs_kickoff"] = False
+            kickoff_msg = next(
+                (m for m in reversed(conv["messages"]) if m.role == "user"),
+                None,
+            )
+        if kickoff_msg is None:
+            logger.error(
+                "skill_conv: needs_kickoff=True but no user message in %s",
+                conv_id,
+            )
+            return
+        threading.Thread(
+            target=cls._process_with_claude,
+            args=(conv_id, kickoff_msg.content),
+        ).start()
 
     @classmethod
     def get_conversation(cls, conv_id: str) -> Tuple[dict, HTTPStatus]:
@@ -269,6 +304,13 @@ class BaseConversationService(abc.ABC):
         with cls._lock:
             if conv_id in cls._subscribers:
                 cls._subscribers[conv_id].append(queue)
+
+        # v0.7.81 (issue #124 / WARN 3) — fire the deferred
+        # kickoff after the queue is registered so any broadcast
+        # the thread produces lands in this subscriber's queue.
+        # Atomically clears ``needs_kickoff`` so a concurrent
+        # second-tab subscribe can't double-spawn.
+        cls._maybe_fire_kickoff(conv_id)
 
         try:
             conv = cls._conversations.get(conv_id)
