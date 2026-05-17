@@ -296,9 +296,9 @@ onMounted(async () => {
           id="finalize-hint"
           class="finalize-hint"
         >
-          Keep chatting — once Claude has the name, description, and
-          behavior locked in, this button activates and opens a
-          preview before anything is written.
+          Keep chatting — once Claude has the skill's name, what
+          triggers it, and what it should do, this button activates
+          and opens a preview before anything is written.
         </p>
       </div>
     </div>
