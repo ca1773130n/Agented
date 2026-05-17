@@ -200,7 +200,15 @@ function migrateFromAnon(userId: string) {
 watch(
   () => currentUser.value?.id,
   (uid, prev) => {
-    if (uid && !prev) migrateFromAnon(uid);
+    if (uid && !prev) {
+      // v0.7.78 (codex WARN C / 3rd pass) — also retry the
+      // legacy-key migration here. ``onMounted`` may have
+      // skipped it because ``currentUser`` was still resolving;
+      // without this branch the legacy unnamespaced key stays
+      // on disk and gets shadowed by future user-keyed entries.
+      migrateLegacyKey();
+      migrateFromAnon(uid);
+    }
   },
   { immediate: true },
 );
