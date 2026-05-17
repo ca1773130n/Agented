@@ -452,6 +452,56 @@ def _migrate_127_grd_ouroboros_artifacts(conn) -> None:
             conn.execute(f"ALTER TABLE project_plans ADD COLUMN {col} TEXT")
 
 
+def _migrate_128_goal_loop_ouroboros(conn) -> None:
+    """v0.7.86 — Ouroboros adaptation in ``GoalLoopRunner`` (Layer C
+    of the GRD v0.3.24 migration).
+
+    Adds three additive columns to ``goal_loop_iterations`` so the
+    runner can persist the per-iteration hypothesis loop alongside
+    the existing binary met/not-met verdict:
+
+      * ``hypothesis`` — what the iteration's agent claimed it
+        would do
+      * ``predicted_outcome`` — the testable prediction
+      * ``ouroboros_verdict`` — 4-state verdict
+        (``confirmed`` / ``partial`` / ``falsified`` / ``unknown``)
+        as judged after the iteration completes; lives alongside
+        the legacy ``verdict`` column rather than replacing it so
+        pre-v0.7.86 rows don't need backfill.
+
+    Plus a new ``goal_loop_dead_ends`` table — session-scoped
+    record of falsified approaches so the runner can inject them
+    into subsequent iteration prompts. Modeled on GRD's
+    ``DEAD-ENDS.md`` registry but unique per ``session_id`` rather
+    than per project (a goal loop owns its own attempt history).
+    """
+    cursor = conn.execute("PRAGMA table_info(goal_loop_iterations)")
+    cols = {row[1] for row in cursor.fetchall()}
+    for col in ("hypothesis", "predicted_outcome", "ouroboros_verdict"):
+        if col not in cols:
+            conn.execute(f"ALTER TABLE goal_loop_iterations ADD COLUMN {col} TEXT")
+
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS goal_loop_dead_ends (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            session_id      TEXT NOT NULL,
+            iteration       INTEGER NOT NULL,
+            approach        TEXT NOT NULL,
+            reason          TEXT NOT NULL,
+            evidence        TEXT,
+            approach_hash   TEXT NOT NULL,
+            recorded_at     TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(session_id, approach_hash)
+        )
+        """
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_gl_dead_ends_session "
+        "ON goal_loop_dead_ends(session_id, recorded_at DESC)"
+    )
+
+
 V07_MIGRATIONS: list = [
     # v0.7.7: super-agent activity inspector — timeline + rollup.
     (116, "super_agent_activity", _migrate_116_super_agent_activity),
@@ -489,4 +539,8 @@ V07_MIGRATIONS: list = [
     # genome snapshots, plus hypothesis/predicted_outcome/verdict
     # columns on project_plans.
     (127, "grd_ouroboros_artifacts", _migrate_127_grd_ouroboros_artifacts),
+    # v0.7.86: Ouroboros adaptation in GoalLoopRunner — adds
+    # hypothesis / predicted_outcome / ouroboros_verdict columns
+    # to goal_loop_iterations, plus per-session dead-ends table.
+    (128, "goal_loop_ouroboros", _migrate_128_goal_loop_ouroboros),
 ]

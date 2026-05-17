@@ -79,6 +79,33 @@ _JUDGE_USER_TEMPLATE = (
 )
 
 
+# v0.7.86 — Ouroboros-mode judge prompt. Used when the iteration
+# emitted a hypothesis + predicted outcome the judge can score
+# against. Output adds a 4-state verdict alongside the legacy
+# met/not-met so the runner doesn't have to change shape — the
+# extra field is opt-in for callers that read it.
+_OUROBOROS_JUDGE_SYSTEM = (
+    "You are a strict goal-judging assistant operating under the "
+    "Ouroboros pattern. Compare the agent's actual outcome against "
+    "its stated hypothesis and predicted outcome. Reply ONLY with a "
+    "JSON object: {\"met\": true|false, \"verdict\": "
+    "\"confirmed\"|\"partial\"|\"falsified\"|\"unknown\", "
+    "\"reason\": \"...\"}. "
+    "Use \"confirmed\" when actual matches predicted; \"partial\" "
+    "when some but not all predictions held; \"falsified\" when the "
+    "hypothesis was tested and failed; \"unknown\" when the agent "
+    "didn't produce enough evidence to score. Reason is one sentence."
+)
+
+_OUROBOROS_JUDGE_USER_TEMPLATE = (
+    "Goal: {goal}\n\n"
+    "Hypothesis: {hypothesis}\n"
+    "Predicted outcome: {predicted_outcome}\n\n"
+    "Latest agent turn:\n---\n{turn}\n---\n\n"
+    "Score the hypothesis against the actual turn."
+)
+
+
 @dataclass
 class JudgeVerdict:
     """Outcome of one judging round.
@@ -87,6 +114,13 @@ class JudgeVerdict:
     cap-driven termination so the iteration row in
     ``goal_loop_iterations`` faithfully records which path decided
     the iteration's fate.
+
+    v0.7.86 — ``ouroboros_verdict`` is the 4-state verdict
+    (``confirmed`` / ``partial`` / ``falsified`` / ``unknown``)
+    populated when the judge runs in Ouroboros mode (a hypothesis +
+    predicted outcome were supplied). ``None`` when the judge ran
+    in the legacy binary mode so existing callers don't see the
+    field unless they opted in.
     """
 
     met: bool
@@ -96,6 +130,7 @@ class JudgeVerdict:
     tokens_in: int = 0
     tokens_out: int = 0
     cost_usd: float = 0.0
+    ouroboros_verdict: Optional[str] = None
 
 
 class GoalJudgeService:
@@ -111,10 +146,23 @@ class GoalJudgeService:
         cwd: Optional[str] = None,
         backend_kind: str = "claude",
         model_override: Optional[str] = None,
+        hypothesis: Optional[str] = None,
+        predicted_outcome: Optional[str] = None,
     ) -> JudgeVerdict:
+        """v0.7.86 — when both ``hypothesis`` and ``predicted_outcome``
+        are supplied, the LLM judge runs in Ouroboros mode and
+        returns a 4-state ``ouroboros_verdict`` alongside the
+        binary ``met``. Deterministic checks ignore Ouroboros
+        inputs — the operator's shell command is the source of
+        truth there.
+        """
         if check_cmd:
             return cls._run_deterministic(check_cmd, cwd)
         model = model_override or DEFAULT_JUDGE_MODEL.get(backend_kind, "auto")
+        if hypothesis and predicted_outcome:
+            return cls._run_ouroboros_judge(
+                goal, last_assistant_text, hypothesis, predicted_outcome, backend_kind, model
+            )
         return cls._run_llm_judge(goal, last_assistant_text, backend_kind, model)
 
     # -----------------------------------------------------------------
@@ -248,6 +296,120 @@ class GoalJudgeService:
             tokens_out=usage.get("completion_tokens", 0),
         )
 
+    # -----------------------------------------------------------------
+    # v0.7.86 — Ouroboros LLM judge
+    # -----------------------------------------------------------------
+
+    @classmethod
+    def _run_ouroboros_judge(
+        cls,
+        goal: str,
+        last_assistant_text: str,
+        hypothesis: str,
+        predicted_outcome: str,
+        backend_kind: str,
+        model: str,
+    ) -> JudgeVerdict:
+        """Score the agent's turn against its own hypothesis +
+        predicted outcome. Returns a verdict with the 4-state
+        ``ouroboros_verdict`` populated; ``met`` is derived from
+        the verdict (``confirmed`` → True, others → False).
+        """
+        url_and_key = CLIProxyManager.get_url_and_key()
+        if not url_and_key:
+            return JudgeVerdict(
+                met=False,
+                source="llm",
+                reason="CLIProxyAPI not reachable; cannot judge",
+                ouroboros_verdict="unknown",
+            )
+        base_url, _api_key = url_and_key
+        turn_text = (last_assistant_text or "")[-_MAX_TURN_TEXT_CHARS:]
+        payload = {
+            "model": model,
+            "messages": [
+                {"role": "system", "content": _OUROBOROS_JUDGE_SYSTEM},
+                {
+                    "role": "user",
+                    "content": _OUROBOROS_JUDGE_USER_TEMPLATE.format(
+                        goal=goal.strip(),
+                        hypothesis=hypothesis.strip(),
+                        predicted_outcome=predicted_outcome.strip(),
+                        turn=turn_text.strip(),
+                    ),
+                },
+            ],
+            "stream": False,
+            "metadata": {"backend_kind": backend_kind},
+        }
+        try:
+            resp = httpx.post(
+                f"{base_url}/chat/completions",
+                json=payload,
+                headers={
+                    "Authorization": "Bearer not-needed",
+                    "Content-Type": "application/json",
+                },
+                timeout=60,
+            )
+        except httpx.RequestError as exc:
+            return JudgeVerdict(
+                met=False,
+                source="llm",
+                reason=f"judge request failed: {exc}",
+                ouroboros_verdict="unknown",
+            )
+        if resp.status_code != 200:
+            return JudgeVerdict(
+                met=False,
+                source="llm",
+                reason=f"judge HTTP {resp.status_code}",
+                ouroboros_verdict="unknown",
+            )
+        try:
+            body = resp.json()
+            content = body["choices"][0]["message"]["content"]
+            usage = body.get("usage") or {}
+        except (ValueError, KeyError, IndexError) as exc:
+            return JudgeVerdict(
+                met=False,
+                source="llm",
+                reason=f"judge response malformed: {exc}",
+                ouroboros_verdict="unknown",
+            )
+        parsed = _parse_ouroboros_judge_json(content)
+        if parsed is None:
+            # Fall back to the binary parser so we still get a
+            # ``met``/``reason`` from a non-Ouroboros-shaped reply.
+            fallback = _parse_judge_json(content)
+            if fallback is None:
+                return JudgeVerdict(
+                    met=False,
+                    source="llm",
+                    reason="judge output unparseable (treated as not_met)",
+                    tokens_in=usage.get("prompt_tokens", 0),
+                    tokens_out=usage.get("completion_tokens", 0),
+                    ouroboros_verdict="unknown",
+                )
+            met_fb, reason_fb = fallback
+            return JudgeVerdict(
+                met=met_fb,
+                source="llm",
+                reason=reason_fb,
+                tokens_in=usage.get("prompt_tokens", 0),
+                tokens_out=usage.get("completion_tokens", 0),
+                ouroboros_verdict="confirmed" if met_fb else "unknown",
+            )
+        met, verdict, reason = parsed
+        return JudgeVerdict(
+            met=met,
+            source="llm",
+            reason=reason,
+            tokens_in=usage.get("prompt_tokens", 0),
+            tokens_out=usage.get("completion_tokens", 0),
+            ouroboros_verdict=verdict,
+        )
+
 
 _JSON_BLOB_RE = re.compile(r"\{[\s\S]*?\}")
 
@@ -272,4 +434,38 @@ def _parse_judge_json(content: str) -> Optional[tuple[bool, str]]:
         met = bool(blob.get("met"))
         reason = str(blob.get("reason") or "").strip() or "(no reason given)"
         return met, reason
+    return None
+
+
+_VALID_OUROBOROS_VERDICTS = {"confirmed", "partial", "falsified", "unknown"}
+
+
+def _parse_ouroboros_judge_json(content: str) -> Optional[tuple[bool, str, str]]:
+    """v0.7.86 — parse an Ouroboros judge JSON envelope. Returns
+    ``(met, verdict, reason)`` or ``None`` if no valid blob found.
+    Unknown ``verdict`` values are coerced to ``unknown`` rather
+    than rejected so a slightly-off model reply still produces a
+    usable iteration record.
+    """
+    if not isinstance(content, str):
+        return None
+    for match in _JSON_BLOB_RE.finditer(content):
+        try:
+            blob = json.loads(match.group(0))
+        except (json.JSONDecodeError, ValueError):
+            continue
+        if not isinstance(blob, dict):
+            continue
+        if "met" not in blob and "verdict" not in blob:
+            continue
+        verdict = str(blob.get("verdict") or "").strip().lower()
+        if verdict not in _VALID_OUROBOROS_VERDICTS:
+            verdict = "unknown"
+        met_value = blob.get("met")
+        if met_value is None:
+            met = verdict == "confirmed"
+        else:
+            met = bool(met_value)
+        reason = str(blob.get("reason") or "").strip() or "(no reason given)"
+        return met, verdict, reason
     return None

@@ -552,10 +552,14 @@ from .project_forge_bindings import (  # noqa: F401
     replace_for_project as replace_project_forge_bindings,
 )
 
-# Goal-loop execution type (v0.7.74 — per-session config + iteration audit)
+# Goal-loop execution type (v0.7.74 — per-session config + iteration audit;
+# v0.7.86 — Ouroboros dead-ends + convergence helpers)
 from .goal_loop import (  # noqa: F401
+    add_goal_loop_dead_end,
     get_goal_loop_config,
+    list_goal_loop_dead_ends,
     list_iterations as list_goal_loop_iterations,
+    recent_iteration_verdicts,
     record_iteration_complete as record_goal_loop_iteration_complete,
     record_iteration_start as record_goal_loop_iteration_start,
     set_goal_loop_config,

@@ -13,8 +13,10 @@ ralph_loop execution type.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
+import re
 import threading
 import time
 from dataclasses import dataclass, field
@@ -22,6 +24,9 @@ from queue import Empty
 from typing import Optional
 
 from app.db import (
+    add_goal_loop_dead_end,
+    list_goal_loop_dead_ends,
+    recent_iteration_verdicts,
     record_goal_loop_iteration_complete,
     record_goal_loop_iteration_start,
 )
@@ -45,37 +50,116 @@ _STALE_CHECK_STREAK = 5
 # interval keeps the cap responsive without burning CPU.
 _QUEUE_POLL_SECONDS = 1.0
 
+# v0.7.86 — Ouroboros convergence threshold. When the last
+# ``_OUROBOROS_CONVERGENCE_WINDOW`` Ouroboros verdicts are all the
+# same value (typically ``falsified``), the runner terminates with
+# ``reason=ouroboros_convergence`` instead of grinding to the
+# iteration cap. Mirrors GRD's ontology-similarity termination
+# (Tier-3 #10 in the integration proposal) at a smaller scale —
+# we don't compute embedding similarity, just track verdict
+# stagnation as a coarse proxy.
+_OUROBOROS_CONVERGENCE_WINDOW = 3
 
-def _continue_prompt(goal: str, reason: str) -> str:
+# Capture the agent's hypothesis + predicted outcome from the
+# turn text. Permissive regex — accepts ``**Hypothesis:**`` or
+# ``Hypothesis:`` and similar variations; stops at the next blank
+# line so multi-paragraph values stay inside one field.
+_HYPOTHESIS_RE = re.compile(
+    r"(?:^|\n)\**\s*Hypothesis\s*[:\-]\s*\**\s*(.+?)(?:\n\n|\n\**\s*Predicted|\Z)",
+    re.IGNORECASE | re.DOTALL,
+)
+_PREDICTED_RE = re.compile(
+    r"(?:^|\n)\**\s*Predicted(?:\s+outcome)?\s*[:\-]\s*\**\s*(.+?)(?:\n\n|\Z)",
+    re.IGNORECASE | re.DOTALL,
+)
+
+
+def _extract_hypothesis(turn_text: str) -> tuple[Optional[str], Optional[str]]:
+    """Parse ``Hypothesis:`` and ``Predicted outcome:`` from an
+    agent turn. Returns ``(hypothesis, predicted_outcome)``; either
+    can be None when the agent didn't follow the Ouroboros prompt
+    shape (which is fine — we just fall back to the binary judge).
+    """
+    if not turn_text:
+        return None, None
+    hyp_match = _HYPOTHESIS_RE.search(turn_text)
+    pred_match = _PREDICTED_RE.search(turn_text)
+    hypothesis = hyp_match.group(1).strip() if hyp_match else None
+    predicted = pred_match.group(1).strip() if pred_match else None
+    return hypothesis, predicted
+
+
+def _approach_hash(hypothesis: str) -> str:
+    """Stable hash of a hypothesis for the dead-end UNIQUE
+    constraint. SHA-1 truncated to 16 hex chars — short enough to
+    fit in the UI and collision-resistant for the few hundred
+    iterations a long-running goal loop might produce.
+    """
+    return hashlib.sha1(hypothesis.lower().strip().encode("utf-8")).hexdigest()[:16]
+
+
+def _dead_ends_context(session_id: str, limit: int = 5) -> str:
+    """Render the last few dead-ends as a bullet list the agent can
+    read in its next prompt. Returns empty string when the registry
+    is empty so the prompt assembler can no-op cleanly.
+    """
+    rows = list_goal_loop_dead_ends(session_id)
+    if not rows:
+        return ""
+    lines = ["Previously falsified approaches (do NOT retry these):"]
+    for row in rows[:limit]:
+        lines.append(f"- {row['approach']} — {row['reason']}")
+    return "\n".join(lines)
+
+
+def _continue_prompt(
+    goal: str,
+    reason: str,
+    *,
+    ouroboros: bool = False,
+    dead_ends_block: str = "",
+) -> str:
     """Synthesize the user message that drives the next turn.
 
-    Wording is fixed per the spec — short, neutral, imperative.
-    Leading with ``Goal:`` keeps the constraint visible across
-    turns; ``Last check:`` works for both deterministic and LLM
-    judge sources without revealing which one fired. No iteration
-    counter — the model shouldn't bias toward giving up.
+    v0.7.86 — in Ouroboros mode, asks the agent to state its next
+    ``Hypothesis:`` and ``Predicted outcome:`` so the judge can
+    score them. Also injects the session's dead-end registry so
+    the agent can avoid known-bad approaches.
     """
-    return (
+    base = (
         f"Goal: {goal}\n\n"
         f"Last check: {reason}\n\n"
-        f"Address the gap and continue."
     )
+    if ouroboros:
+        oboros_tail = (
+            "Address the gap and continue. Begin your turn with:\n"
+            "**Hypothesis:** <one-line claim about what will work>\n"
+            "**Predicted outcome:** <one-line testable prediction>\n\n"
+            "Then implement and verify."
+        )
+        if dead_ends_block:
+            return f"{base}{dead_ends_block}\n\n{oboros_tail}"
+        return f"{base}{oboros_tail}"
+    return f"{base}Address the gap and continue."
 
 
-def _initial_prompt(goal: str) -> str:
+def _initial_prompt(goal: str, *, ouroboros: bool = False) -> str:
     """First user message that kicks off the goal-loop session.
 
-    Without this, the runner subscribes and waits for a
-    ``turn_done`` event that never arrives — claude has nothing
-    to respond to. The initial prompt is shorter than the
-    continue prompt (no "last check" line yet) and uses an
-    explicit start verb so the model treats this as the
-    instruction, not a status update.
+    v0.7.86 — in Ouroboros mode, requests the first iteration's
+    hypothesis + predicted outcome so the judge can score from
+    turn one.
     """
-    return (
-        f"Goal: {goal}\n\n"
-        f"Start working toward the goal. Make progress this turn."
-    )
+    base = f"Goal: {goal}\n\n"
+    if ouroboros:
+        return (
+            f"{base}"
+            "Start working toward the goal. Begin your turn with:\n"
+            "**Hypothesis:** <one-line claim about what will work>\n"
+            "**Predicted outcome:** <one-line testable prediction>\n\n"
+            "Then implement and verify."
+        )
+    return f"{base}Start working toward the goal. Make progress this turn."
 
 
 @dataclass
@@ -165,6 +249,13 @@ def _run(state: _RunnerState, cwd: Optional[str]) -> None:
     model_override = config.get("judge_model_override")
     max_iterations = int(config.get("max_iterations") or 20)
     max_wall_seconds = int(config.get("max_wall_seconds") or 1800)
+    # v0.7.86 — opt-in Ouroboros mode. When enabled, the runner
+    # asks the agent for a per-iteration hypothesis + predicted
+    # outcome, judges them in 4-state mode, records falsified
+    # approaches into ``goal_loop_dead_ends``, and terminates on
+    # verdict-stagnation convergence instead of grinding to the
+    # iteration cap.
+    ouroboros = bool(config.get("ouroboros"))
 
     queue = ProjectSessionManager.subscribe_raw(session_id)
     try:
@@ -174,7 +265,7 @@ def _run(state: _RunnerState, cwd: Optional[str]) -> None:
         # respond to until something hits its stdin. The reply
         # will trigger the first ``turn_done`` and the normal
         # judge-then-continue loop takes over from there.
-        _send_initial(session_id, goal)
+        _send_initial(session_id, goal, ouroboros=ouroboros)
         while not state.stop_event.is_set():
             if time.time() - state.started_at > max_wall_seconds:
                 _broadcast_end(
@@ -215,6 +306,12 @@ def _run(state: _RunnerState, cwd: Optional[str]) -> None:
                 {"iteration": iteration_no, "max_iterations": max_iterations},
             )
 
+            # v0.7.86 — Ouroboros mode: extract this turn's
+            # hypothesis + predicted outcome so the judge can
+            # score the agent's own claim, not just goal vs. turn.
+            hypothesis, predicted_outcome = (
+                _extract_hypothesis(turn_text) if ouroboros else (None, None)
+            )
             verdict = GoalJudgeService.judge(
                 goal,
                 turn_text,
@@ -222,6 +319,8 @@ def _run(state: _RunnerState, cwd: Optional[str]) -> None:
                 cwd=cwd,
                 backend_kind=backend_kind,
                 model_override=model_override,
+                hypothesis=hypothesis,
+                predicted_outcome=predicted_outcome,
             )
 
             # If the operator clicked Stop while the judge was
@@ -249,6 +348,9 @@ def _run(state: _RunnerState, cwd: Optional[str]) -> None:
                 tokens_in=verdict.tokens_in,
                 tokens_out=verdict.tokens_out,
                 cost_usd=verdict.cost_usd,
+                hypothesis=hypothesis,
+                predicted_outcome=predicted_outcome,
+                ouroboros_verdict=verdict.ouroboros_verdict,
             )
             ProjectSessionManager._broadcast(
                 session_id,
@@ -258,6 +360,7 @@ def _run(state: _RunnerState, cwd: Optional[str]) -> None:
                     "verdict": "met" if verdict.met else "not_met",
                     "reason": verdict.reason,
                     "source": verdict.source,
+                    "ouroboros_verdict": verdict.ouroboros_verdict,
                 },
             )
 
@@ -265,6 +368,25 @@ def _run(state: _RunnerState, cwd: Optional[str]) -> None:
                 _broadcast_end(session_id, reason="met", detail=verdict.reason)
                 ProjectSessionManager.stop_session(session_id)
                 break
+
+            # v0.7.86 — Ouroboros: record falsified hypotheses
+            # into the session's dead-end registry. The UNIQUE
+            # constraint on (session_id, approach_hash) keeps
+            # repeat attempts of the same approach from
+            # multiplying rows.
+            if (
+                ouroboros
+                and hypothesis
+                and verdict.ouroboros_verdict == "falsified"
+            ):
+                add_goal_loop_dead_end(
+                    session_id=session_id,
+                    iteration=iteration_no,
+                    approach=hypothesis,
+                    reason=verdict.reason,
+                    evidence=(turn_text or "")[-1024:] or None,
+                    approach_hash=_approach_hash(hypothesis),
+                )
 
             state.not_met_streak += 1
             _maybe_stale_check(
@@ -286,7 +408,40 @@ def _run(state: _RunnerState, cwd: Optional[str]) -> None:
                 ProjectSessionManager.stop_session(session_id)
                 break
 
-            _send_continue(session_id, goal, verdict.reason)
+            # v0.7.86 — convergence termination. If the last N
+            # Ouroboros verdicts are identical (and not
+            # ``confirmed``), the agent is stuck in a stagnation
+            # pattern; bail out with a distinct reason rather than
+            # burning the rest of the iteration cap.
+            if ouroboros and verdict.ouroboros_verdict:
+                recent = recent_iteration_verdicts(
+                    session_id, limit=_OUROBOROS_CONVERGENCE_WINDOW
+                )
+                if (
+                    len(recent) >= _OUROBOROS_CONVERGENCE_WINDOW
+                    and len(set(recent)) == 1
+                    and recent[0] != "confirmed"
+                ):
+                    _broadcast_end(
+                        session_id,
+                        reason="ouroboros_convergence",
+                        detail=(
+                            f"last {_OUROBOROS_CONVERGENCE_WINDOW} iterations "
+                            f"converged on '{recent[0]}' — stopping to avoid "
+                            f"further wasted attempts"
+                        ),
+                    )
+                    ProjectSessionManager.stop_session(session_id)
+                    break
+
+            dead_ends_block = _dead_ends_context(session_id) if ouroboros else ""
+            _send_continue(
+                session_id,
+                goal,
+                verdict.reason,
+                ouroboros=ouroboros,
+                dead_ends_block=dead_ends_block,
+            )
     except Exception:
         logger.error("goal_loop runner crashed for %s", session_id, exc_info=True)
     finally:
@@ -294,19 +449,31 @@ def _run(state: _RunnerState, cwd: Optional[str]) -> None:
         _cleanup(session_id)
 
 
-def _send_continue(session_id: str, goal: str, reason: str) -> None:
+def _send_continue(
+    session_id: str,
+    goal: str,
+    reason: str,
+    *,
+    ouroboros: bool = False,
+    dead_ends_block: str = "",
+) -> None:
     """Write the synthetic continue prompt to claude's stdin."""
-    _send_user_text(session_id, _continue_prompt(goal, reason))
+    _send_user_text(
+        session_id,
+        _continue_prompt(
+            goal, reason, ouroboros=ouroboros, dead_ends_block=dead_ends_block
+        ),
+    )
 
 
-def _send_initial(session_id: str, goal: str) -> None:
+def _send_initial(session_id: str, goal: str, *, ouroboros: bool = False) -> None:
     """Write the initial kickoff prompt to claude's stdin.
 
     Called once per goal-loop session before the polling loop
     begins so claude has something to respond to and the first
     ``turn_done`` actually arrives.
     """
-    _send_user_text(session_id, _initial_prompt(goal))
+    _send_user_text(session_id, _initial_prompt(goal, ouroboros=ouroboros))
 
 
 def _send_user_text(session_id: str, text: str) -> None:
