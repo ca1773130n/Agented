@@ -245,6 +245,50 @@ def _migrate_122_goal_loop(conn) -> None:
     )
 
 
+def _migrate_123_skill_conversations(conn) -> None:
+    """v0.7.78 — persist skill-creation conversations to DB so
+    ``/skills/new`` survives page refresh + backend restart.
+
+    Previously the ``SkillConversationService._conversations`` dict
+    was the only store; refreshing the wizard or restarting the
+    backend silently lost every in-flight conversation. The new
+    table is the durable record; the in-memory dict is now a hot
+    cache for the live SSE stream plus a write-through buffer
+    that flushes after each message append.
+
+    ``messages_json`` is the full ``ConversationMessage[]`` array
+    serialized as JSON — same shape the in-memory dict held —
+    so rehydration is a direct ``json.loads``. We don't normalize
+    into a per-message rows table because the wizard always
+    consumes the whole list and per-row joins would add latency
+    to the chat hot path with no read benefit.
+
+    ``user_id`` mirrors the pattern from other owned-entity tables
+    (rules, hooks, etc.); ``legacy@local`` fills the column when
+    auth isn't surfaced.
+    """
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS skill_conversations (
+            id              TEXT PRIMARY KEY,
+            user_id         TEXT REFERENCES users(id),
+            status          TEXT NOT NULL DEFAULT 'active',
+            messages_json   TEXT NOT NULL,
+            created_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_skill_conv_user_status "
+        "ON skill_conversations(user_id, status, updated_at DESC)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_skill_conv_updated_at "
+        "ON skill_conversations(updated_at DESC)"
+    )
+
+
 V07_MIGRATIONS: list = [
     # v0.7.7: super-agent activity inspector — timeline + rollup.
     (116, "super_agent_activity", _migrate_116_super_agent_activity),
@@ -266,4 +310,7 @@ V07_MIGRATIONS: list = [
     # v0.7.74: goal-loop execution type — per-session config blob +
     # iteration audit table.
     (122, "goal_loop", _migrate_122_goal_loop),
+    # v0.7.78: persist skill-creation conversations so /skills/new
+    # survives page refresh + backend restart.
+    (123, "skill_conversations", _migrate_123_skill_conversations),
 ]

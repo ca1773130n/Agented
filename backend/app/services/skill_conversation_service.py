@@ -21,7 +21,12 @@ from app.models.common import error_response
 
 from ..database import (
     add_user_skill,
+    create_skill_conversation,
+    delete_skill_conversation,
+    get_skill_conversation,
     get_user_skill,
+    list_active_skill_conversations,
+    upsert_skill_conversation,
 )
 from .skill_discovery_service import get_playground_working_dir
 
@@ -173,6 +178,22 @@ class SkillConversationService:
             cls._subscribers[conv_id] = []
             cls._start_times[conv_id] = datetime.datetime.now()
 
+        # v0.7.78 — write through to DB so refresh / backend
+        # restart can resume. Failures are logged but don't block
+        # the start: the operator can still chat in-process, just
+        # without survival across restarts.
+        try:
+            create_skill_conversation(
+                conv_id,
+                [asdict(m) for m in initial_messages],
+            )
+        except Exception:
+            logger.warning(
+                "skill_conv: failed to persist new conversation %s",
+                conv_id,
+                exc_info=True,
+            )
+
         # v0.7.76 — spawn the LLM call in a background thread so
         # the HTTP request returns immediately; the response
         # streams back over SSE just like ``send_message``. The
@@ -190,9 +211,110 @@ class SkillConversationService:
         }, HTTPStatus.CREATED
 
     @classmethod
+    def _ensure_loaded(cls, conv_id: str) -> bool:
+        """v0.7.78 — make sure the conversation is in the in-memory
+        cache before it's consumed. If the wizard refreshed (new
+        browser process) or the backend restarted (lost the dict),
+        rehydrate from the DB.
+
+        Returns True iff the conversation is loaded after the call.
+        Doesn't raise — caller checks the return value and emits
+        the right error_response.
+        """
+        if conv_id in cls._conversations:
+            return True
+        try:
+            row = get_skill_conversation(conv_id)
+        except Exception:
+            logger.warning(
+                "skill_conv: DB lookup failed for %s", conv_id, exc_info=True
+            )
+            return False
+        if not row:
+            return False
+        # Rebuild the in-memory shape from the JSON column. Only
+        # ``active`` conversations are eligible to resume; a
+        # finalized/abandoned one was already torn down and the
+        # operator should be starting fresh.
+        if row["status"] != "active":
+            return False
+        messages = [
+            ConversationMessage(
+                role=m["role"], content=m["content"], timestamp=m["timestamp"]
+            )
+            for m in row["messages"]
+        ]
+        with cls._lock:
+            cls._conversations[conv_id] = {
+                "messages": messages,
+                "processing": False,
+            }
+            cls._subscribers.setdefault(conv_id, [])
+            cls._start_times[conv_id] = datetime.datetime.now()
+        logger.info(
+            "skill_conv: rehydrated %s from DB (%d messages)",
+            conv_id,
+            len(messages),
+        )
+        return True
+
+    @classmethod
+    def _persist(
+        cls,
+        conv_id: str,
+        *,
+        status: Optional[str] = None,
+    ) -> None:
+        """Write the in-memory conversation through to the DB.
+
+        Called after every mutation (send_message, finalize,
+        abandon) so a refresh / restart sees the latest state.
+        Failures are logged but never raised — DB outage shouldn't
+        crash the chat hot path.
+        """
+        conv = cls._conversations.get(conv_id)
+        if not conv:
+            return
+        try:
+            upsert_skill_conversation(
+                conv_id,
+                [asdict(m) for m in conv["messages"]],
+                status=status,
+            )
+        except Exception:
+            logger.warning(
+                "skill_conv: failed to persist conversation %s",
+                conv_id,
+                exc_info=True,
+            )
+
+    @classmethod
+    def list_active(cls, user_id: Optional[str] = None) -> Tuple[dict, HTTPStatus]:
+        """v0.7.78 — list the operator's recent active conversations
+        so the wizard can resume when localStorage is empty (e.g.
+        new browser, different machine) but the DB has a row.
+        """
+        try:
+            convs = list_active_skill_conversations(user_id=user_id, limit=10)
+        except Exception:
+            logger.warning("skill_conv: DB list failed", exc_info=True)
+            convs = []
+        return {
+            "active_conversations": [
+                {
+                    "id": c["id"],
+                    "status": c["status"],
+                    "updated_at": c["updated_at"],
+                    "message_count": len(c.get("messages") or []),
+                }
+                for c in convs
+            ],
+        }, HTTPStatus.OK
+
+    @classmethod
     def get_conversation(cls, conv_id: str) -> Tuple[dict, HTTPStatus]:
         """Get conversation details and messages."""
-        if conv_id not in cls._conversations:
+        if not cls._ensure_loaded(conv_id):
             return error_response("NOT_FOUND", "Conversation not found", HTTPStatus.NOT_FOUND)
 
         conv = cls._conversations[conv_id]
@@ -214,7 +336,7 @@ class SkillConversationService:
         model: str | None = None,
     ) -> Tuple[dict, HTTPStatus]:
         """Send a user message and process with Claude."""
-        if conv_id not in cls._conversations:
+        if not cls._ensure_loaded(conv_id):
             return error_response("NOT_FOUND", "Conversation not found", HTTPStatus.NOT_FOUND)
 
         conv = cls._conversations[conv_id]
@@ -228,6 +350,12 @@ class SkillConversationService:
             timestamp=datetime.datetime.now().isoformat(),
         )
         conv["messages"].append(user_msg)
+
+        # v0.7.78 — write through after the user message; the
+        # assistant reply is persisted again at the end of
+        # ``_process_with_claude`` once the full response is in
+        # the in-memory list.
+        cls._persist(conv_id)
 
         # Broadcast to subscribers
         cls._broadcast(conv_id, "user_message", asdict(user_msg))
@@ -244,7 +372,10 @@ class SkillConversationService:
     @classmethod
     def subscribe(cls, conv_id: str) -> Generator[str, None, None]:
         """Subscribe to SSE events for a conversation."""
-        if conv_id not in cls._conversations:
+        # v0.7.78 — rehydrate from DB before subscribing so a
+        # refreshed wizard's SSE stream resumes for a conversation
+        # the in-memory dict doesn't know about yet.
+        if not cls._ensure_loaded(conv_id):
             yield f"event: error\ndata: {json.dumps({'error': 'Conversation not found'})}\n\n"
             return
 
@@ -285,7 +416,7 @@ class SkillConversationService:
         commit. Warnings (non-fatal nudges like missing license)
         are surfaced for UI display.
         """
-        if conv_id not in cls._conversations:
+        if not cls._ensure_loaded(conv_id):
             return error_response(
                 "NOT_FOUND", "Conversation not found", HTTPStatus.NOT_FOUND
             )
@@ -323,7 +454,7 @@ class SkillConversationService:
         destination. Partial failures leave nothing behind in the
         skill dir; the staging dir is cleaned up best-effort.
         """
-        if conv_id not in cls._conversations:
+        if not cls._ensure_loaded(conv_id):
             return error_response(
                 "NOT_FOUND", "Conversation not found", HTTPStatus.NOT_FOUND
             )
@@ -480,6 +611,13 @@ class SkillConversationService:
                     HTTPStatus.INTERNAL_SERVER_ERROR,
                 )
             conv["finalized"] = True
+            # v0.7.78 — mark the DB row finalized so it's
+            # excluded from the resume-on-load list, then drop
+            # the in-memory entry. We keep the row (instead of
+            # deleting) so the operator's history page can show
+            # past conversations even after the skill was
+            # created.
+            cls._persist(conv_id, status="finalized")
             cls._cleanup_conversation(conv_id)
             skill = get_user_skill(skill_id)
             return {
@@ -499,9 +637,25 @@ class SkillConversationService:
     @classmethod
     def abandon_conversation(cls, conv_id: str) -> Tuple[dict, HTTPStatus]:
         """Abandon a conversation without creating a skill."""
-        if conv_id not in cls._conversations:
+        # v0.7.78 — load from DB if needed (operator might be
+        # abandoning a conv that was rehydrated for inspection or
+        # came from a different browser tab).
+        if not cls._ensure_loaded(conv_id):
+            # Even if not in memory, try to mark abandoned in DB
+            # so the resume list stops surfacing it.
+            try:
+                if get_skill_conversation(conv_id):
+                    upsert_skill_conversation(
+                        conv_id,
+                        get_skill_conversation(conv_id)["messages"],
+                        status="abandoned",
+                    )
+                    return {"message": "Conversation abandoned"}, HTTPStatus.OK
+            except Exception:
+                pass
             return error_response("NOT_FOUND", "Conversation not found", HTTPStatus.NOT_FOUND)
 
+        cls._persist(conv_id, status="abandoned")
         cls._cleanup_conversation(conv_id)
         return {"message": "Conversation abandoned"}, HTTPStatus.OK
 
@@ -563,6 +717,12 @@ class SkillConversationService:
                 timestamp=datetime.datetime.now().isoformat(),
             )
             conv["messages"].append(assistant_msg)
+
+            # v0.7.78 — persist after the assistant reply lands so
+            # a refresh between turns can see the full
+            # conversation, including the SKILL_CONFIG block if
+            # claude just emitted one.
+            cls._persist(conv_id)
 
             cls._broadcast(
                 conv_id,

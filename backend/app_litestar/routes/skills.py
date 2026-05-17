@@ -407,6 +407,19 @@ def stream_conversation(conv_id: str, caller: Caller) -> Stream:
     )
 
 
+@get("/active", sync_to_thread=False)
+def list_active_skill_conversations_endpoint(caller: Caller) -> dict[str, Any]:
+    """v0.7.78 — list the operator's recent active skill-creation
+    conversations so ``/skills/new`` can auto-resume when
+    ``localStorage`` is empty (new browser, different machine)
+    but the DB has a row from a prior session.
+    """
+    user_id = getattr(caller, "user_id", None) if caller else None
+    return _result_or_raise(
+        SkillConversationService.list_active(user_id=user_id)
+    )
+
+
 @post("/{conv_id:str}/preview-finalize", sync_to_thread=False)
 def preview_finalize_skill(conv_id: str, caller: Caller) -> dict[str, Any]:
     """v0.7.77 — return the rendered skill package tree without
@@ -446,6 +459,7 @@ skill_conversations_router = Router(
     path="/api/skills/conversations",
     route_handlers=[
         start_conversation,
+        list_active_skill_conversations_endpoint,
         get_conversation,
         send_message,
         stream_conversation,

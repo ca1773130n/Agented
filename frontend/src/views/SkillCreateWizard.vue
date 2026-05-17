@@ -89,6 +89,10 @@ async function commitFinalize(expectedConfigHash: string) {
   const result = await conversation.finalize(expectedConfigHash);
   if (result) {
     showPreview.value = false;
+    // v0.7.78 — conv is finalized; clear localStorage so the
+    // next visit starts fresh instead of trying to resume a
+    // dead conv.
+    rememberConvId(null);
     showToast(
       `Skill "${(result.skill as { skill_name: string }).skill_name}" created successfully!`,
       'success',
@@ -97,8 +101,65 @@ async function commitFinalize(expectedConfigHash: string) {
   }
 }
 
-onMounted(() => {
-  conversation.startConversation();
+// v0.7.78 — auto-resume the wizard's chat after page refresh /
+// backend restart. Resolution order:
+//   1. localStorage ``agented_skill_conv_id`` (per-browser ref) —
+//      try to resume that conv. 404 means the row was finalized
+//      or stale-purged; fall through.
+//   2. Server's most-recent active conv (``listActive``). Lets a
+//      different browser / fresh-cache load still pick up an
+//      in-flight conversation the operator started elsewhere.
+//   3. Brand-new conversation via ``startConversation``.
+// localStorage is updated whenever the conversation_id changes
+// (start success or resume), and cleared on finalize / abandon
+// so the next page load doesn't try to resume a finalized conv.
+const SKILL_CONV_LOCALSTORAGE_KEY = 'agented_skill_conv_id';
+
+function rememberConvId(id: string | null) {
+  try {
+    if (id) localStorage.setItem(SKILL_CONV_LOCALSTORAGE_KEY, id);
+    else localStorage.removeItem(SKILL_CONV_LOCALSTORAGE_KEY);
+  } catch {
+    // localStorage may be disabled in private mode; tolerate it.
+  }
+}
+
+async function tryResume(convId: string): Promise<boolean> {
+  try {
+    await conversation.resumeConversation(convId);
+    return !!conversation.conversationId.value;
+  } catch {
+    return false;
+  }
+}
+
+onMounted(async () => {
+  // (1) localStorage
+  let cached: string | null = null;
+  try {
+    cached = localStorage.getItem(SKILL_CONV_LOCALSTORAGE_KEY);
+  } catch {
+    cached = null;
+  }
+  if (cached && (await tryResume(cached))) {
+    rememberConvId(cached);
+    return;
+  }
+  // (2) server's most-recent active
+  try {
+    const res = await skillConversationApi.listActive();
+    const newest = res.active_conversations?.[0];
+    if (newest && (await tryResume(newest.id))) {
+      rememberConvId(newest.id);
+      return;
+    }
+  } catch {
+    // Auth or network failure — fall through to fresh start.
+  }
+  // (3) fresh start
+  rememberConvId(null);
+  await conversation.startConversation();
+  rememberConvId(conversation.conversationId.value);
 });
 </script>
 
