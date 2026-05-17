@@ -14,6 +14,29 @@ import type {
   SkillConversation,
 } from './types';
 
+// v0.7.77 — preview shape returned by the new ``preview-finalize``
+// route. Mirrors backend ``SkillConversationService._build_package_preview``
+// so the drawer can render the file tree before committing.
+export interface SkillPackageFile {
+  path: string;
+  content: string;
+  size_bytes: number;
+}
+export interface SkillPackageFrontmatter {
+  description: string;
+  license?: string;
+  allowed_tools?: string[];
+  tags?: string[];
+}
+export interface SkillPackagePreview {
+  skill_name: string;
+  skill_md_path: string;
+  skill_md_content: string;
+  frontmatter: SkillPackageFrontmatter;
+  files: SkillPackageFile[];
+  warnings: string[];
+}
+
 // Skills API
 export const skillsApi = {
   // Discover skills from .claude/skills directories
@@ -135,10 +158,22 @@ export const skillConversationApi = {
     return createAuthenticatedEventSource(`${API_BASE}/api/skills/conversations/${convId}/stream`);
   },
 
+  // v0.7.77 — dry-run that returns the rendered package tree
+  // without writing. Drives ``SkillCreatePreviewDrawer`` so the
+  // operator can inspect SKILL.md + helpers/references before
+  // hitting Create. Same validation as ``finalize``, so a preview
+  // that returns 200 is guaranteed to commit.
+  previewFinalize: (convId: string) =>
+    apiFetch<SkillPackagePreview>(
+      `/api/skills/conversations/${convId}/preview-finalize`,
+      { method: 'POST' },
+    ),
+
   finalize: (convId: string) =>
-    apiFetch<{ message: string; skill_id: number; skill: UserSkill }>(`/api/skills/conversations/${convId}/finalize`, {
-      method: 'POST',
-    }),
+    apiFetch<{ message: string; skill_id: number; skill: UserSkill; files_written: string[] }>(
+      `/api/skills/conversations/${convId}/finalize`,
+      { method: 'POST' },
+    ),
 
   abandon: (convId: string) =>
     apiFetch<{ message: string }>(`/api/skills/conversations/${convId}/abandon`, {
