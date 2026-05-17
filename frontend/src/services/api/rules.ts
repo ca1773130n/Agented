@@ -67,6 +67,16 @@ export const ruleApi = {
 // Rule Conversation API
 export const ruleConversationApi = {
   list: () => apiFetch<{ conversations: DesignConversationSummary[] }>('/api/rules/conversations/'),
+  // v0.7.83 — auto-resume on cold-cache loads
+  listActive: () =>
+    apiFetch<{
+      active_conversations: Array<{
+        id: string;
+        status: string;
+        updated_at: string;
+        message_count: number;
+      }>;
+    }>('/api/rules/conversations/active'),
   start: () => apiFetch<{ conversation_id: string; message: string }>('/api/rules/conversations/start', { method: 'POST' }),
   get: (convId: string) => apiFetch<RuleConversation>(`/api/rules/conversations/${convId}`),
   sendMessage: (convId: string, message: string, options?: { backend?: string; account_id?: string; model?: string; use_cli_agent?: boolean }) => apiFetch<{ message_id: string; status: string }>(`/api/rules/conversations/${convId}/message`, { method: 'POST', body: JSON.stringify({ message, ...options }) }),

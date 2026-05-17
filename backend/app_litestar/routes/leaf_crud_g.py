@@ -33,6 +33,7 @@ from app.db.sketches import (
 from app.db.sketches import create_sketch as db_create_sketch
 from app.logging_config import current_user_var
 from app.services.agent_conversation_service import AgentConversationService
+from app_litestar.auth import Caller
 from app.services.sketch_execution_service import execute_sketch, find_team_super_agent
 
 from ..auth import Caller
@@ -210,18 +211,33 @@ sketches_router = Router(
 # ===========================================================================
 
 
+def _agent_caller_user_id(caller: Caller | None) -> Optional[str]:
+    """v0.7.83 — local accessor mirroring the conversation_cluster
+    helper. None means bootstrap mode.
+    """
+    return getattr(caller, "user_id", None) if caller else None
+
+
 @post("/start", sync_to_thread=False)
-def start_conversation() -> Any:
-    return _result_or_raise(AgentConversationService.start_conversation())
+def start_conversation(caller: Caller) -> Any:
+    return _result_or_raise(
+        AgentConversationService.start_conversation(
+            user_id=_agent_caller_user_id(caller)
+        )
+    )
 
 
 @get("/{conv_id:str}", sync_to_thread=False)
-def get_conversation(conv_id: str) -> Any:
-    return _result_or_raise(AgentConversationService.get_conversation(conv_id))
+def get_conversation(conv_id: str, caller: Caller) -> Any:
+    return _result_or_raise(
+        AgentConversationService.get_conversation(
+            conv_id, caller_user_id=_agent_caller_user_id(caller)
+        )
+    )
 
 
 @post("/{conv_id:str}/message", sync_to_thread=False)
-def send_message(conv_id: str, data: dict) -> Any:
+def send_message(conv_id: str, data: dict, caller: Caller) -> Any:
     body = data or {}
     if not body.get("message"):
         raise ClientException(detail="message is required")
@@ -232,18 +248,39 @@ def send_message(conv_id: str, data: dict) -> Any:
             backend=body.get("backend"),
             account_id=body.get("account_id"),
             model=body.get("model"),
+            caller_user_id=_agent_caller_user_id(caller),
         )
     )
 
 
 @post("/{conv_id:str}/finalize", sync_to_thread=False)
-def finalize_agent(conv_id: str) -> Any:
-    return _result_or_raise(AgentConversationService.finalize_agent(conv_id))
+def finalize_agent(conv_id: str, caller: Caller) -> Any:
+    return _result_or_raise(
+        AgentConversationService.finalize_agent(
+            conv_id, caller_user_id=_agent_caller_user_id(caller)
+        )
+    )
 
 
 @post("/{conv_id:str}/abandon", sync_to_thread=False)
-def abandon_conversation(conv_id: str) -> Any:
-    return _result_or_raise(AgentConversationService.abandon_conversation(conv_id))
+def abandon_conversation(conv_id: str, caller: Caller) -> Any:
+    return _result_or_raise(
+        AgentConversationService.abandon_conversation(
+            conv_id, caller_user_id=_agent_caller_user_id(caller)
+        )
+    )
+
+
+@get("/active", sync_to_thread=False)
+def list_active_agent_conversations(caller: Caller) -> Any:
+    """v0.7.83 — list the operator's active agent conversations
+    so /agents/new can auto-resume on cold-cache loads.
+    """
+    return _result_or_raise(
+        AgentConversationService.list_active(
+            user_id=_agent_caller_user_id(caller)
+        )
+    )
 
 
 agent_conversations_router = Router(
@@ -254,6 +291,7 @@ agent_conversations_router = Router(
         send_message,
         finalize_agent,
         abandon_conversation,
+        list_active_agent_conversations,
     ],
 )
 

@@ -55,9 +55,24 @@ export const commandApi = {
     apiFetch<{ commands: Command[]; project_id: string }>(`/admin/commands/project/${projectId}`),
 };
 
+// v0.7.83 — shape returned by the /active endpoint each
+// conversation service now exposes. The wizard uses this to
+// auto-resume on cold-cache loads (new browser / fresh machine)
+// when localStorage doesn't already have a conv id.
+export interface ActiveConversationSummary {
+  id: string;
+  status: string;
+  updated_at: string;
+  message_count: number;
+}
+
 // Command Conversation API
 export const commandConversationApi = {
   list: () => apiFetch<{ conversations: DesignConversationSummary[] }>('/api/commands/conversations/'),
+  listActive: () =>
+    apiFetch<{ active_conversations: ActiveConversationSummary[] }>(
+      '/api/commands/conversations/active',
+    ),
   start: () => apiFetch<{ conversation_id: string; message: string }>('/api/commands/conversations/start', { method: 'POST' }),
   get: (convId: string) => apiFetch<CommandConversation>(`/api/commands/conversations/${convId}`),
   sendMessage: (convId: string, message: string, options?: { backend?: string; account_id?: string; model?: string; use_cli_agent?: boolean }) => apiFetch<{ message_id: string; status: string }>(`/api/commands/conversations/${convId}/message`, { method: 'POST', body: JSON.stringify({ message, ...options }) }),

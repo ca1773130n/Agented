@@ -10,7 +10,7 @@ import threading
 from dataclasses import asdict, dataclass
 from http import HTTPStatus
 from queue import Empty, Queue
-from typing import Dict, Generator, List, Tuple
+from typing import Dict, Generator, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -19,6 +19,7 @@ from app.models.common import error_response
 from ..database import (
     create_agent,
     create_agent_conversation,
+    get_active_conversations,
     get_agent_conversation,
     update_agent_conversation,
 )
@@ -91,12 +92,22 @@ class AgentConversationService:
         return {"messages": initial_messages, "processing": False}
 
     @classmethod
-    def _initialize_conversation_record(cls, context: dict) -> str:
-        """Create the DB record and in-memory state, returns conv_id."""
-        conv_id = create_agent_conversation()
+    def _initialize_conversation_record(
+        cls, context: dict, user_id: Optional[str] = None
+    ) -> str:
+        """Create the DB record and in-memory state, returns conv_id.
+
+        v0.7.83 — passes ``user_id`` through to the DB so list and
+        ownership scoping work for /agents/new the same way they
+        work for the other wizards.
+        """
+        conv_id = create_agent_conversation(user_id=user_id)
         initial_messages = context["messages"]
 
         with cls._lock:
+            # v0.7.83 — stamp ownership on the in-memory cache so
+            # subsequent ownership checks don't need a DB read.
+            context = {**context, "user_id": user_id}
             cls._conversations[conv_id] = context
             cls._subscribers[conv_id] = []
             cls._start_times[conv_id] = datetime.datetime.now()
@@ -107,10 +118,12 @@ class AgentConversationService:
         return conv_id
 
     @classmethod
-    def start_conversation(cls) -> Tuple[dict, HTTPStatus]:
+    def start_conversation(
+        cls, user_id: Optional[str] = None
+    ) -> Tuple[dict, HTTPStatus]:
         """Start a new agent creation conversation."""
         context = cls._prepare_conversation_context()
-        conv_id = cls._initialize_conversation_record(context)
+        conv_id = cls._initialize_conversation_record(context, user_id=user_id)
 
         return {
             "conversation_id": conv_id,
@@ -118,10 +131,21 @@ class AgentConversationService:
         }, HTTPStatus.CREATED
 
     @classmethod
-    def _validate_conversation(cls, conv_id: str) -> Tuple[dict, HTTPStatus]:
-        """Validate conversation exists and is active. Returns (conv, None) or (error, status)."""
+    def _validate_conversation(
+        cls, conv_id: str, caller_user_id: Optional[str] = None
+    ) -> Tuple[dict, HTTPStatus]:
+        """Validate conversation exists, is active, and is owned
+        by the calling user. Returns (conv, None) or (error, status).
+
+        v0.7.83 — added ``caller_user_id`` for ownership scoping.
+        404-not-403 disclosure rule mirrors the other wizards.
+        """
         conv = get_agent_conversation(conv_id)
         if not conv:
+            return error_response("NOT_FOUND", "Conversation not found", HTTPStatus.NOT_FOUND)
+
+        owner = conv.get("user_id")
+        if owner != caller_user_id:  # v0.7.83 (codex WARN 2) — NULL owner only matches NULL caller
             return error_response("NOT_FOUND", "Conversation not found", HTTPStatus.NOT_FOUND)
 
         if conv.get("status") != "active":
@@ -129,6 +153,30 @@ class AgentConversationService:
                 "BAD_REQUEST", "Conversation is not active", HTTPStatus.BAD_REQUEST
             )
         return conv, None
+
+    @classmethod
+    def list_active(
+        cls, user_id: Optional[str] = None
+    ) -> Tuple[dict, HTTPStatus]:
+        """v0.7.83 — list the operator's recent active agent
+        conversations so the wizard can resume on cold-cache loads.
+        """
+        try:
+            convs = get_active_conversations(user_id=user_id)
+        except Exception:
+            logger.warning("agent_conv: DB list failed", exc_info=True)
+            convs = []
+        return {
+            "active_conversations": [
+                {
+                    "id": c["id"],
+                    "status": c.get("status", "active"),
+                    "updated_at": c.get("updated_at"),
+                    "message_count": 0,
+                }
+                for c in convs[:10]
+            ],
+        }, HTTPStatus.OK
 
     @classmethod
     def _build_message_payload(cls, conv_id: str, conv: dict, message: str) -> Tuple[dict, str]:
@@ -166,9 +214,10 @@ class AgentConversationService:
         backend: str | None = None,
         account_id: str | None = None,
         model: str | None = None,
+        caller_user_id: Optional[str] = None,
     ) -> Tuple[dict, HTTPStatus]:
         """Send a user message to the conversation and trigger Claude response."""
-        conv, err = cls._validate_conversation(conv_id)
+        conv, err = cls._validate_conversation(conv_id, caller_user_id=caller_user_id)
         if err is not None:
             return conv, err
 
@@ -281,13 +330,22 @@ class AgentConversationService:
             cls._broadcast(conv_id, "error", {"msg_id": msg_id, "error": str(e)})
 
     @classmethod
-    def subscribe(cls, conv_id: str) -> Generator[str, None, None]:
+    def subscribe(
+        cls, conv_id: str, caller_user_id: Optional[str] = None
+    ) -> Generator[str, None, None]:
         """SSE generator for real-time conversation streaming."""
         queue: Queue = Queue()
 
-        # Check if conversation exists
+        # Check if conversation exists + ownership gate.
         conv = get_agent_conversation(conv_id)
         if not conv:
+            yield cls._format_sse("error", {"error": "Conversation not found"})
+            return
+        # v0.7.83 — 404-not-403 disclosure rule for cross-user
+        # probes (defensive — route is expected to call
+        # ``can_subscribe`` first).
+        owner = conv.get("user_id")
+        if owner != caller_user_id:  # v0.7.83 (codex WARN 2) — NULL owner only matches NULL caller
             yield cls._format_sse("error", {"error": "Conversation not found"})
             return
 
@@ -336,10 +394,16 @@ class AgentConversationService:
                         pass  # Intentionally silenced: invalid value handled gracefully
 
     @classmethod
-    def finalize_agent(cls, conv_id: str) -> Tuple[dict, HTTPStatus]:
+    def finalize_agent(
+        cls, conv_id: str, caller_user_id: Optional[str] = None
+    ) -> Tuple[dict, HTTPStatus]:
         """Parse conversation to create an agent and return it."""
         conv = get_agent_conversation(conv_id)
         if not conv:
+            return error_response("NOT_FOUND", "Conversation not found", HTTPStatus.NOT_FOUND)
+        # v0.7.83 — ownership gate.
+        owner = conv.get("user_id")
+        if owner != caller_user_id:  # v0.7.83 (codex WARN 2) — NULL owner only matches NULL caller
             return error_response("NOT_FOUND", "Conversation not found", HTTPStatus.NOT_FOUND)
 
         # Get messages
@@ -413,10 +477,16 @@ class AgentConversationService:
         }, HTTPStatus.CREATED
 
     @classmethod
-    def abandon_conversation(cls, conv_id: str) -> Tuple[dict, HTTPStatus]:
+    def abandon_conversation(
+        cls, conv_id: str, caller_user_id: Optional[str] = None
+    ) -> Tuple[dict, HTTPStatus]:
         """Abandon a conversation without creating an agent."""
         conv = get_agent_conversation(conv_id)
         if not conv:
+            return error_response("NOT_FOUND", "Conversation not found", HTTPStatus.NOT_FOUND)
+        # v0.7.83 — ownership gate.
+        owner = conv.get("user_id")
+        if owner != caller_user_id:  # v0.7.83 (codex WARN 2) — NULL owner only matches NULL caller
             return error_response("NOT_FOUND", "Conversation not found", HTTPStatus.NOT_FOUND)
 
         update_agent_conversation(conv_id, status="abandoned")
@@ -425,10 +495,16 @@ class AgentConversationService:
         return {"message": "Conversation abandoned"}, HTTPStatus.OK
 
     @classmethod
-    def get_conversation(cls, conv_id: str) -> Tuple[dict, HTTPStatus]:
+    def get_conversation(
+        cls, conv_id: str, caller_user_id: Optional[str] = None
+    ) -> Tuple[dict, HTTPStatus]:
         """Get a conversation with its messages."""
         conv = get_agent_conversation(conv_id)
         if not conv:
+            return error_response("NOT_FOUND", "Conversation not found", HTTPStatus.NOT_FOUND)
+        # v0.7.83 — ownership gate.
+        owner = conv.get("user_id")
+        if owner != caller_user_id:  # v0.7.83 (codex WARN 2) — NULL owner only matches NULL caller
             return error_response("NOT_FOUND", "Conversation not found", HTTPStatus.NOT_FOUND)
 
         # Parse messages
@@ -441,6 +517,19 @@ class AgentConversationService:
 
         conv["messages_parsed"] = messages
         return conv, HTTPStatus.OK
+
+    @classmethod
+    def can_subscribe(
+        cls, conv_id: str, caller_user_id: Optional[str]
+    ) -> bool:
+        """v0.7.83 — precheck for the SSE route so unauthorized
+        subscribers get a real HTTP 404.
+        """
+        conv = get_agent_conversation(conv_id)
+        if not conv:
+            return False
+        owner = conv.get("user_id")
+        return owner == caller_user_id  # v0.7.83 (codex WARN 2) — NULL owner only matches NULL caller
 
     @classmethod
     def _broadcast(cls, conv_id: str, event_type: str, data: dict) -> None:

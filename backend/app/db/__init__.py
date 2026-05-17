@@ -556,6 +556,17 @@ from .skill_conversations import (  # noqa: F401
     upsert_skill_conversation,
 )
 
+# Plugin-creation conversations (v0.7.83 — same shape as skill
+# above; gives /plugins/new survival across page refresh + backend
+# restart with per-user scoping)
+from .plugin_conversations import (  # noqa: F401
+    create_plugin_conversation,
+    delete_plugin_conversation,
+    get_plugin_conversation,
+    list_active_plugin_conversations,
+    upsert_plugin_conversation,
+)
+
 # Prompt snippets (reusable prompt fragments)
 from .prompt_snippets import (  # noqa: F401
     create_snippet,

@@ -146,6 +146,19 @@ export const pluginConversationApi = {
     method: 'POST',
   }),
 
+  // v0.7.83 — auto-resume on cold-cache loads. Powers the
+  // /plugins/new wizard's auto-resume on fresh browser / new
+  // machine where localStorage doesn't hold a conv id yet.
+  listActive: () =>
+    apiFetch<{
+      active_conversations: Array<{
+        id: string;
+        status: string;
+        updated_at: string;
+        message_count: number;
+      }>;
+    }>('/api/plugins/conversations/active'),
+
   get: (convId: string) => apiFetch<PluginConversation>(`/api/plugins/conversations/${convId}`),
 
   sendMessage: (convId: string, message: string, options?: { backend?: string; account_id?: string; model?: string; use_cli_agent?: boolean }) =>

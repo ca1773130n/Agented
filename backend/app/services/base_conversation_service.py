@@ -113,8 +113,60 @@ class BaseConversationService(abc.ABC):
 
     @abc.abstractmethod
     def _finalize_entity(cls, conv_id: str) -> Tuple[dict, HTTPStatus]:
-        """Extract config and persist the entity to the DB. Return (response_dict, status)."""
+        """Extract config and persist the entity to the DB. Return (response_dict, status).
+
+        Direct callers from routes should use ``finalize_entity``
+        (the public wrapper) so the ownership check and the DB
+        status flip both run. Subclasses implement the abstract
+        body; the wrapper handles cross-cutting concerns.
+        """
         ...
+
+    @classmethod
+    def finalize_entity(
+        cls, conv_id: str, caller_user_id: Optional[str] = None
+    ) -> Tuple[dict, HTTPStatus]:
+        """v0.7.83 (codex BLOCK + WARN 1) — public finalize wrapper.
+
+        Gates ownership BEFORE calling the abstract ``_finalize_entity``
+        so a known conv_id can't be finalized into a stranger's
+        account, and flips the DB row status to ``finalized``
+        on success so completed wizards stop showing up in the
+        auto-resume list.
+
+        The pre-v0.7.83 route called ``_finalize_entity`` directly,
+        which only checked in-memory presence — anyone with a
+        guessed conv_id could finalize someone else's wizard.
+        """
+        # Load from DB if needed so cross-user probes that didn't
+        # warm the in-memory cache still get a real 404.
+        if conv_id not in cls._conversations:
+            resumed, status = cls.resume_conversation(
+                conv_id, caller_user_id=caller_user_id
+            )
+            if status != HTTPStatus.OK:
+                return error_response(
+                    "NOT_FOUND", "Conversation not found", HTTPStatus.NOT_FOUND
+                )
+        owner_err = cls._check_owner(conv_id, caller_user_id)
+        if owner_err is not None:
+            return owner_err
+
+        result, status = cls._finalize_entity(conv_id)
+        # Only flip the DB row status when finalize actually
+        # succeeded; an error path (config not found, etc.)
+        # should leave the conv ``active`` so the operator can
+        # continue chatting.
+        if status in (HTTPStatus.OK, HTTPStatus.CREATED):
+            try:
+                update_design_conversation(conv_id, status="finalized")
+            except Exception:
+                logger.warning(
+                    "base_conv: failed to flip status=finalized for %s",
+                    conv_id,
+                    exc_info=True,
+                )
+        return result, status
 
     @classmethod
     def _generate_conv_id(cls) -> str:
@@ -123,8 +175,15 @@ class BaseConversationService(abc.ABC):
         return cls._get_conv_id_prefix() + "".join(secrets.choice(chars) for _ in range(16))
 
     @classmethod
-    def start_conversation(cls) -> Tuple[dict, HTTPStatus]:
-        """Start a new entity creation conversation."""
+    def start_conversation(
+        cls, user_id: Optional[str] = None
+    ) -> Tuple[dict, HTTPStatus]:
+        """Start a new entity creation conversation.
+
+        v0.7.83 — accepts an optional ``user_id`` from the route so
+        the conv row is owned by the calling operator; ownership
+        is enforced on every conv-id endpoint via ``_check_owner``.
+        """
         # Clean up stale conversations first
         cls._cleanup_stale_conversations()
 
@@ -156,33 +215,92 @@ class BaseConversationService(abc.ABC):
                 "processing": False,
                 # v0.7.81 (issue #124 / WARN 3) — defer the
                 # kickoff LLM call until the first SSE subscriber
-                # connects. Previously the call ran on a daemon
-                # thread spawned from this method, so
-                # ``response_start`` / first chunks could be
-                # broadcast into an empty subscriber set before
-                # the client opened its SSE stream.
+                # connects so early frames don't broadcast into
+                # an empty subscriber set.
                 "needs_kickoff": True,
+                # v0.7.83 — ownership stamped on the in-memory
+                # cache so subsequent ownership checks don't need
+                # a DB round-trip.
+                "user_id": user_id,
             }
             cls._subscribers[conv_id] = []
             cls._start_times[conv_id] = datetime.datetime.now()
 
-        # Persist to DB. Wave 72 wrote only id + entity_type here
-        # which is correct for the schema; we follow with a full
-        # ``_persist_messages`` so the kickoff round-trip is
-        # durable before we return to the client.
-        create_design_conversation(conv_id, cls._get_entity_type())
+        # Persist to DB with user_id so list/ownership scoping
+        # works post-restart.
+        create_design_conversation(conv_id, cls._get_entity_type(), user_id=user_id)
         # v0.7.81 (issue #124 / WARN 1) — persist the kickoff
-        # immediately so a backend crash between this method
-        # returning and ``_process_with_claude`` finishing
-        # doesn't leave the resume path with only the system
-        # prompt (recreating the v0.7.76 empty-user-message bug
-        # on every resumed conversation).
+        # immediately so a backend crash before the LLM call
+        # finishes doesn't leave the resume path with only the
+        # system prompt.
         cls._persist_messages(conv_id)
 
         return {
             "conversation_id": conv_id,
             "message": "Conversation started",
         }, HTTPStatus.CREATED
+
+    @classmethod
+    def _check_owner(
+        cls, conv_id: str, caller_user_id: Optional[str]
+    ) -> Optional[Tuple[dict, HTTPStatus]]:
+        """v0.7.83 — verify the calling user owns the conversation.
+        Returns ``None`` when authorized, or an ``error_response``
+        tuple when not. 404-not-403 to avoid existence disclosure.
+
+        Allowed:
+          * ``owner is None`` AND ``caller_user_id is None`` —
+            bootstrap-mode rows accessed by a bootstrap-mode
+            caller. Authenticated callers CANNOT touch
+            NULL-owner rows; this matches the IS NULL filter
+            ``list_active_*_conversations`` uses for bootstrap
+            scoping. v0.7.83 (codex WARN 2 / 2nd pass) —
+            previous shape ("NULL = open to anyone") let any
+            authenticated caller access legacy migration rows
+            and the comment about bootstrap-only was misleading.
+          * ``caller_user_id == owner`` — owner match.
+
+        Note: a side effect of tightening this is that any
+        pre-v0.7.83 ``design_conversations`` rows (which all have
+        NULL owner from the migration's default) become
+        inaccessible to authenticated callers. That's intentional
+        — the alternative was leaving a cross-user back door
+        open indefinitely.
+        """
+        conv = cls._conversations.get(conv_id)
+        if not conv:
+            return error_response(
+                "NOT_FOUND", "Conversation not found", HTTPStatus.NOT_FOUND
+            )
+        owner = conv.get("user_id")
+        if caller_user_id == owner:
+            return None
+        return error_response(
+            "NOT_FOUND", "Conversation not found", HTTPStatus.NOT_FOUND
+        )
+
+    @classmethod
+    def list_active(cls, user_id: Optional[str] = None) -> Tuple[dict, HTTPStatus]:
+        """v0.7.83 — list this entity-type's recent active
+        conversations for the calling user. Powers the wizard's
+        auto-resume on cold-cache loads (new browser / fresh
+        machine). Returns the same shape skill's ``list_active``
+        returns so the frontend can share the resume helper.
+        """
+        from app.database import list_design_conversations as _list
+
+        convs = _list(cls._get_entity_type(), "active", user_id=user_id)
+        return {
+            "active_conversations": [
+                {
+                    "id": c["id"],
+                    "status": c["status"],
+                    "updated_at": c["updated_at"],
+                    "message_count": 0,
+                }
+                for c in convs
+            ],
+        }, HTTPStatus.OK
 
     @classmethod
     def _maybe_fire_kickoff(cls, conv_id: str) -> None:
@@ -216,9 +334,14 @@ class BaseConversationService(abc.ABC):
         ).start()
 
     @classmethod
-    def get_conversation(cls, conv_id: str) -> Tuple[dict, HTTPStatus]:
+    def get_conversation(
+        cls, conv_id: str, caller_user_id: Optional[str] = None
+    ) -> Tuple[dict, HTTPStatus]:
         """Get conversation details and messages. Falls back to DB if not in memory."""
         if conv_id in cls._conversations:
+            owner_err = cls._check_owner(conv_id, caller_user_id)
+            if owner_err is not None:
+                return owner_err
             conv = cls._conversations[conv_id]
             messages = [asdict(m) for m in conv["messages"] if m.role != "system"]
             return {
@@ -231,6 +354,13 @@ class BaseConversationService(abc.ABC):
         db_conv = get_design_conversation(conv_id)
         if not db_conv:
             return error_response("NOT_FOUND", "Conversation not found", HTTPStatus.NOT_FOUND)
+        # v0.7.83 — cold-path ownership check before exposing
+        # messages from a different operator.
+        owner = db_conv.get("user_id")
+        if owner != caller_user_id:  # v0.7.83 (codex WARN 2) — NULL owner only matches NULL caller
+            return error_response(
+                "NOT_FOUND", "Conversation not found", HTTPStatus.NOT_FOUND
+            )
 
         try:
             messages_raw = json.loads(db_conv["messages"] or "[]")
@@ -253,6 +383,7 @@ class BaseConversationService(abc.ABC):
         account_id: str | None = None,
         model: str | None = None,
         use_cli_agent: bool | None = None,
+        caller_user_id: Optional[str] = None,
     ) -> Tuple[dict, HTTPStatus]:
         """Send a user message and process with the selected backend CLI.
 
@@ -263,9 +394,13 @@ class BaseConversationService(abc.ABC):
         """
         if conv_id not in cls._conversations:
             # Try to resume from DB first
-            resumed, status = cls.resume_conversation(conv_id)
+            resumed, status = cls.resume_conversation(conv_id, caller_user_id=caller_user_id)
             if status != HTTPStatus.OK:
                 return error_response("NOT_FOUND", "Conversation not found", HTTPStatus.NOT_FOUND)
+
+        owner_err = cls._check_owner(conv_id, caller_user_id)
+        if owner_err is not None:
+            return owner_err
 
         conv = cls._conversations[conv_id]
         if conv.get("processing"):
@@ -294,9 +429,18 @@ class BaseConversationService(abc.ABC):
         return {"message_id": conv_id, "status": "processing"}, HTTPStatus.OK
 
     @classmethod
-    def subscribe(cls, conv_id: str) -> Generator[str, None, None]:
+    def subscribe(
+        cls, conv_id: str, caller_user_id: Optional[str] = None
+    ) -> Generator[str, None, None]:
         """Subscribe to SSE events for a conversation."""
         if conv_id not in cls._conversations:
+            yield (f"event: error\ndata: {json.dumps({'error': 'Conversation not found'})}\n\n")
+            return
+        # v0.7.83 — ownership gate. Defensive in-stream fallback
+        # mirrors the skill service; routes should precheck via
+        # ``can_subscribe`` so unauthorized callers see an HTTP
+        # 404 instead of a 200 with an in-band error event.
+        if cls._check_owner(conv_id, caller_user_id) is not None:
             yield (f"event: error\ndata: {json.dumps({'error': 'Conversation not found'})}\n\n")
             return
 
@@ -336,17 +480,48 @@ class BaseConversationService(abc.ABC):
                     cls._subscribers[conv_id].remove(queue)
 
     @classmethod
-    def abandon_conversation(cls, conv_id: str) -> Tuple[dict, HTTPStatus]:
+    def abandon_conversation(
+        cls, conv_id: str, caller_user_id: Optional[str] = None
+    ) -> Tuple[dict, HTTPStatus]:
         """Abandon a conversation without creating an entity."""
         if conv_id not in cls._conversations:
-            # Check DB
+            # Check DB; also ownership-gate via the DB row's user_id
             db_conv = get_design_conversation(conv_id)
             if not db_conv:
                 return error_response("NOT_FOUND", "Conversation not found", HTTPStatus.NOT_FOUND)
+            owner = db_conv.get("user_id")
+            if owner != caller_user_id:  # v0.7.83 (codex WARN 2) — NULL owner only matches NULL caller
+                return error_response(
+                    "NOT_FOUND", "Conversation not found", HTTPStatus.NOT_FOUND
+                )
+        else:
+            owner_err = cls._check_owner(conv_id, caller_user_id)
+            if owner_err is not None:
+                return owner_err
 
         update_design_conversation(conv_id, status="abandoned")
         cls._cleanup_conversation(conv_id)
         return {"message": "Conversation abandoned"}, HTTPStatus.OK
+
+    @classmethod
+    def can_subscribe(
+        cls, conv_id: str, caller_user_id: Optional[str]
+    ) -> bool:
+        """v0.7.83 — precheck used by SSE routes so an unauthorized
+        subscriber gets a real HTTP 404 instead of a 200 + in-band
+        error event. Mirrors skill's ``can_subscribe``.
+        """
+        if conv_id not in cls._conversations:
+            # Try DB rehydrate via resume_conversation so a refreshed
+            # wizard can subscribe to a persisted conv. We don't
+            # actually call resume here (it loads into memory); we
+            # just verify the DB row exists + ownership matches.
+            db_conv = get_design_conversation(conv_id)
+            if not db_conv:
+                return False
+            owner = db_conv.get("user_id")
+            return owner == caller_user_id  # v0.7.83 (codex WARN 2) — NULL owner only matches NULL caller
+        return cls._check_owner(conv_id, caller_user_id) is None
 
     @classmethod
     def _broadcast(cls, conv_id: str, event_type: str, data: dict) -> None:
@@ -547,14 +722,30 @@ class BaseConversationService(abc.ABC):
         update_design_conversation(conv_id, messages=messages_json)
 
     @classmethod
-    def resume_conversation(cls, conv_id: str) -> Tuple[dict, HTTPStatus]:
-        """Resume a conversation from the database into memory."""
+    def resume_conversation(
+        cls, conv_id: str, caller_user_id: Optional[str] = None
+    ) -> Tuple[dict, HTTPStatus]:
+        """Resume a conversation from the database into memory.
+
+        v0.7.83 — gates on ``user_id`` so a probing caller can't
+        rehydrate another operator's conv. Same 404-not-403
+        disclosure rule.
+        """
         if conv_id in cls._conversations:
+            owner_err = cls._check_owner(conv_id, caller_user_id)
+            if owner_err is not None:
+                return owner_err
             return {"message": "Conversation already active"}, HTTPStatus.OK
 
         db_conv = get_design_conversation(conv_id)
         if not db_conv:
             return error_response("NOT_FOUND", "Conversation not found", HTTPStatus.NOT_FOUND)
+
+        owner = db_conv.get("user_id")
+        if owner != caller_user_id:  # v0.7.83 (codex WARN 2) — NULL owner only matches NULL caller
+            return error_response(
+                "NOT_FOUND", "Conversation not found", HTTPStatus.NOT_FOUND
+            )
 
         if db_conv["status"] != "active":
             return error_response(
@@ -589,7 +780,14 @@ class BaseConversationService(abc.ABC):
             )
 
         with cls._lock:
-            cls._conversations[conv_id] = {"messages": messages, "processing": False}
+            cls._conversations[conv_id] = {
+                "messages": messages,
+                "processing": False,
+                # v0.7.83 — carry ownership forward from the DB
+                # row so subsequent ownership checks against the
+                # in-memory cache succeed for the original owner.
+                "user_id": owner,
+            }
             cls._subscribers[conv_id] = []
             cls._start_times[conv_id] = datetime.datetime.now()
 
@@ -599,9 +797,15 @@ class BaseConversationService(abc.ABC):
         }, HTTPStatus.OK
 
     @classmethod
-    def list_conversations(cls) -> Tuple[dict, HTTPStatus]:
-        """List active/recent conversations of this entity type."""
-        convs = list_design_conversations(cls._get_entity_type(), "active")
+    def list_conversations(
+        cls, user_id: Optional[str] = None
+    ) -> Tuple[dict, HTTPStatus]:
+        """List active/recent conversations of this entity type.
+
+        v0.7.83 — scopes by ``user_id`` so a list call doesn't
+        return convs from other operators.
+        """
+        convs = list_design_conversations(cls._get_entity_type(), "active", user_id=user_id)
         return {"conversations": convs}, HTTPStatus.OK
 
     @classmethod
