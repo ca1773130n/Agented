@@ -842,10 +842,29 @@ class SkillConversationService:
         try:
             from .conversation_streaming import stream_llm_response
 
-            # Build messages from conversation history
+            # Build messages from conversation history.
+            #
+            # v0.7.80 — defense in depth: drop empty-content
+            # messages and bail if no user message remains, so
+            # a future regression that re-introduces the v0.7.76
+            # "missing kickoff" pattern (or a buggy resume path
+            # that loses the user turn) can't trigger the
+            # CLIProxyAPI "empty text content blocks" error.
             messages = []
             for msg in conv["messages"]:
-                messages.append({"role": msg.role, "content": msg.content})
+                if msg.content and msg.content.strip():
+                    messages.append({"role": msg.role, "content": msg.content})
+            if not any(m["role"] == "user" for m in messages):
+                logger.error(
+                    "skipping LLM call for %s: no non-empty user message in history",
+                    conv_id,
+                )
+                cls._broadcast(
+                    conv_id,
+                    "error",
+                    {"error": "Cannot send to LLM: no user message in conversation."},
+                )
+                return
 
             # Stream response chunks in real-time
             full_response_parts = []

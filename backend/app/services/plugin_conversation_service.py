@@ -107,13 +107,34 @@ class PluginConversationService:
             )
         ]
 
+        # v0.7.80 — append the kickoff user message BEFORE
+        # ``_process_with_claude`` runs. Same bug as the one
+        # SkillConversationService had pre-v0.7.76: the kickoff
+        # string was passed as a parameter that ``_process_with_claude``
+        # never appended to ``conv["messages"]``, so the LLM call
+        # saw only the system prompt and the upstream rejected
+        # with "text content blocks must be non-empty".
+        kickoff = ConversationMessage(
+            role="user",
+            content="Hello, I'd like to create a new plugin.",
+            timestamp=datetime.datetime.now().isoformat(),
+        )
+        initial_messages.append(kickoff)
+
         with cls._lock:
             cls._conversations[conv_id] = {"messages": initial_messages, "processing": False}
             cls._subscribers[conv_id] = []
             cls._start_times[conv_id] = datetime.datetime.now()
 
-        # Trigger initial assistant greeting
-        cls._process_with_claude(conv_id, "Hello, I'd like to create a new plugin.")
+        # v0.7.80 — spawn the initial LLM call in a daemon thread
+        # so the HTTP request returns immediately. Previously
+        # blocked the request for the full LLM round-trip, making
+        # the wizard hang on /plugins/new.
+        threading.Thread(
+            target=cls._process_with_claude,
+            args=(conv_id, kickoff.content),
+            daemon=True,
+        ).start()
 
         return {
             "conversation_id": conv_id,
@@ -320,10 +341,28 @@ class PluginConversationService:
         try:
             from .conversation_streaming import stream_llm_response
 
-            # Build messages from conversation history
+            # Build messages from conversation history.
+            #
+            # v0.7.80 — defense in depth against the same proxy
+            # error v0.7.76 fixed for skills: drop empty-content
+            # messages and bail if no user message remains, so
+            # we don't issue a doomed LLM call with only the
+            # system prompt.
             messages = []
             for msg in conv["messages"]:
-                messages.append({"role": msg.role, "content": msg.content})
+                if msg.content and msg.content.strip():
+                    messages.append({"role": msg.role, "content": msg.content})
+            if not any(m["role"] == "user" for m in messages):
+                logger.error(
+                    "skipping LLM call for %s: no non-empty user message in history",
+                    conv_id,
+                )
+                cls._broadcast(
+                    conv_id,
+                    "error",
+                    {"error": "Cannot send to LLM: no user message in conversation."},
+                )
+                return
 
             # Stream response chunks in real-time
             full_response_parts = []
