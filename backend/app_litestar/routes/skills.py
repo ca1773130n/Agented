@@ -403,6 +403,13 @@ def send_message(
 )
 def stream_conversation(conv_id: str, caller: Caller) -> Stream:
     user_id = _caller_user_id(caller)
+    # v0.7.78 (codex WARN B / 2nd pass) — precheck so a missing
+    # conv or a cross-user probe gets a real HTTP 404 instead of
+    # a 200 SSE stream whose first frame is an ``event: error``.
+    # The earlier impl violated the 404-not-403 consistency rule
+    # the other conv-id endpoints follow.
+    if not SkillConversationService.can_subscribe(conv_id, user_id):
+        raise NotFoundException(detail="Conversation not found")
 
     def generate():
         for event in SkillConversationService.subscribe(

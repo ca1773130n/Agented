@@ -422,23 +422,62 @@ class SkillConversationService:
             )
             conv["messages"].append(user_msg)
 
-        # v0.7.78 — write through after the user message; the
-        # assistant reply is persisted again at the end of
-        # ``_process_with_claude`` once the full response is in
-        # the in-memory list.
-        cls._persist(conv_id)
+        # v0.7.78 (codex WARN D / 2nd pass) — between the lock
+        # release above and ``Thread.start()`` below we hand off
+        # to ``_process_with_claude`` to ultimately reset
+        # ``processing`` in its ``finally``. If anything in the
+        # interim raises (``_broadcast`` getting a bad queue,
+        # ``Thread.start`` OS failure, etc.) we'd leave the conv
+        # stuck at ``processing=True`` forever. Wrap and reset on
+        # failure so the operator can retry.
+        try:
+            # v0.7.78 — write through after the user message; the
+            # assistant reply is persisted again at the end of
+            # ``_process_with_claude`` once the full response is in
+            # the in-memory list.
+            cls._persist(conv_id)
 
-        # Broadcast to subscribers
-        cls._broadcast(conv_id, "user_message", asdict(user_msg))
+            # Broadcast to subscribers
+            cls._broadcast(conv_id, "user_message", asdict(user_msg))
 
-        # Process with Claude in background
-        threading.Thread(
-            target=cls._process_with_claude,
-            args=(conv_id, message),
-            kwargs={"backend": backend, "account_id": account_id, "model": model},
-        ).start()
+            # Process with Claude in background
+            threading.Thread(
+                target=cls._process_with_claude,
+                args=(conv_id, message),
+                kwargs={"backend": backend, "account_id": account_id, "model": model},
+            ).start()
+        except Exception:
+            # Reset processing under the lock so a follow-up
+            # ``send_message`` isn't permanently 409'd. The user
+            # message is intentionally left in the history (and
+            # persisted) — re-emitting it would feel surprising
+            # and the operator can decide whether to retry.
+            logger.error(
+                "skill_conv: failed to start LLM thread for %s; "
+                "resetting processing flag",
+                conv_id,
+                exc_info=True,
+            )
+            with cls._lock:
+                if conv_id in cls._conversations:
+                    cls._conversations[conv_id]["processing"] = False
+            raise
 
         return {"message_id": conv_id, "status": "processing"}, HTTPStatus.OK
+
+    @classmethod
+    def can_subscribe(
+        cls, conv_id: str, caller_user_id: Optional[str]
+    ) -> bool:
+        """v0.7.78 (codex WARN B / 2nd pass) — precheck used by the
+        SSE route so an unauthorized subscriber gets a real HTTP
+        404 instead of a 200 with an ``event: error`` body. Returns
+        True iff ``subscribe`` would actually start streaming for
+        this caller.
+        """
+        if not cls._ensure_loaded(conv_id):
+            return False
+        return cls._check_owner(conv_id, caller_user_id) is None
 
     @classmethod
     def subscribe(
@@ -447,7 +486,11 @@ class SkillConversationService:
         """Subscribe to SSE events for a conversation."""
         # v0.7.78 — rehydrate from DB before subscribing so a
         # refreshed wizard's SSE stream resumes for a conversation
-        # the in-memory dict doesn't know about yet.
+        # the in-memory dict doesn't know about yet. The route is
+        # expected to call ``can_subscribe`` first and 404 on
+        # failure (codex WARN B / 2nd pass), but we keep the
+        # defensive in-stream error branch in case ``subscribe``
+        # is invoked directly.
         if not cls._ensure_loaded(conv_id):
             yield f"event: error\ndata: {json.dumps({'error': 'Conversation not found'})}\n\n"
             return

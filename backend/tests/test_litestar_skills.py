@@ -225,6 +225,28 @@ def test_abandon_rejects_cross_user(isolated_db):
     assert row["status"] == "active"
 
 
+def test_stream_rejects_cross_user_with_404(isolated_db):
+    """v0.7.78 (codex WARN B / 2nd pass) — the SSE stream route
+    must return a real 404 for a cross-user probe, not a 200 with
+    an in-band ``event: error`` body. Without the precheck the
+    error rule was inconsistent with the other conv-id endpoints.
+    """
+    _seed_two_users()
+    from app.db import create_skill_conversation
+
+    create_skill_conversation(
+        "skill_alicestreamssss",
+        [{"role": "system", "content": "s", "timestamp": "t"}],
+        user_id="user-alice",
+    )
+    with _client() as c:
+        resp = c.get(
+            "/api/skills/conversations/skill_alicestreamssss/stream",
+            headers={"X-API-Key": "key-bob"},
+        )
+    assert resp.status_code == 404
+
+
 def test_active_userless_caller_only_sees_null_owned(isolated_db):
     """No-auth (bootstrap) caller must NOT see user-owned convs.
 

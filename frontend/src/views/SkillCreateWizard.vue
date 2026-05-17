@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
+import { onMounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { skillConversationApi } from '../services/api';
 import { useConversation, createConfigParser } from '../composables/useConversation';
@@ -150,6 +150,16 @@ function migrateLegacyKey(): string | null {
   // so a logged-in operator doesn't lose their in-flight conv,
   // then delete the legacy entry so a later login as a different
   // user can't inherit it.
+  //
+  // v0.7.78 (codex WARN C / 2nd pass) — only migrate when we
+  // actually know who the user is. Migrating into the ``anon``
+  // namespace would strand the conv there: the next mount with
+  // a resolved ``currentUser`` looks under ``:<user_id>``, not
+  // ``:anon``, and the legacy key has already been deleted so we
+  // can't try again. The deferred ``watch(currentUser)`` below
+  // picks up the resolution and migrates from the anon namespace
+  // when login completes.
+  if (!currentUser.value?.id) return null;
   try {
     const legacy = localStorage.getItem(SKILL_CONV_LOCALSTORAGE_PREFIX);
     if (legacy) {
@@ -162,6 +172,38 @@ function migrateLegacyKey(): string | null {
   }
   return null;
 }
+
+function migrateFromAnon(userId: string) {
+  // v0.7.78 (codex WARN C / 2nd pass) — when ``currentUser``
+  // resolves AFTER mount (auth restore raced the wizard), the
+  // legacy migration may have parked a conv under ``:anon`` OR
+  // the wizard itself wrote a ``:anon`` entry before the user
+  // id arrived. Move that conv under the resolved user key so
+  // a subsequent mount picks it up. The anon entry is deleted
+  // so the next anon visitor can't inherit it.
+  const anonKey = `${SKILL_CONV_LOCALSTORAGE_PREFIX}:anon`;
+  const userKey = `${SKILL_CONV_LOCALSTORAGE_PREFIX}:${userId}`;
+  try {
+    const cached = localStorage.getItem(anonKey);
+    if (!cached) return;
+    // Don't overwrite a real value that the user namespace
+    // already holds; just drop the anon entry.
+    if (!localStorage.getItem(userKey)) {
+      localStorage.setItem(userKey, cached);
+    }
+    localStorage.removeItem(anonKey);
+  } catch {
+    // Best-effort.
+  }
+}
+
+watch(
+  () => currentUser.value?.id,
+  (uid, prev) => {
+    if (uid && !prev) migrateFromAnon(uid);
+  },
+  { immediate: true },
+);
 
 async function tryResume(convId: string): Promise<boolean> {
   try {
