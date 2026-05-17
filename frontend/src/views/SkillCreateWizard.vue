@@ -6,6 +6,7 @@ import { useConversation, createConfigParser } from '../composables/useConversat
 import { AiChatPanelManaged as AiChatPanel } from '@ai-accounts/vue-styled';
 import { useToast } from '../composables/useToast';
 import { useWebMcpTool } from '../composables/useWebMcpTool';
+import { useAuth } from '../composables/useAuth';
 import SkillCreatePreviewDrawer from '../components/skills/SkillCreatePreviewDrawer.vue';
 
 const router = useRouter();
@@ -103,9 +104,9 @@ async function commitFinalize(expectedConfigHash: string) {
 
 // v0.7.78 — auto-resume the wizard's chat after page refresh /
 // backend restart. Resolution order:
-//   1. localStorage ``agented_skill_conv_id`` (per-browser ref) —
-//      try to resume that conv. 404 means the row was finalized
-//      or stale-purged; fall through.
+//   1. localStorage ``agented_skill_conv_id:<user>`` (per-browser
+//      + per-user ref) — try to resume that conv. 404 means the
+//      row was finalized or stale-purged; fall through.
 //   2. Server's most-recent active conv (``listActive``). Lets a
 //      different browser / fresh-cache load still pick up an
 //      in-flight conversation the operator started elsewhere.
@@ -113,15 +114,53 @@ async function commitFinalize(expectedConfigHash: string) {
 // localStorage is updated whenever the conversation_id changes
 // (start success or resume), and cleared on finalize / abandon
 // so the next page load doesn't try to resume a finalized conv.
-const SKILL_CONV_LOCALSTORAGE_KEY = 'agented_skill_conv_id';
+//
+// v0.7.78 (codex BLOCK 3) — the storage key is namespaced by the
+// authenticated user id (or "anon" when unauthenticated) so a
+// shared-browser logout/login swap doesn't try to resume the
+// previous operator's wizard conv (which the backend now also
+// refuses via ownership check, but the client shouldn't even ask).
+const SKILL_CONV_LOCALSTORAGE_PREFIX = 'agented_skill_conv_id';
+
+const { currentUser } = useAuth();
+
+function namespacedKey(): string {
+  // Use the authenticated user id when available; fall back to
+  // ``anon`` for bootstrap / unauthenticated mode. Reading
+  // ``currentUser`` here (not at module load) means we pick up
+  // the id as soon as ``useAuth.restore()`` resolves it — which
+  // happens during app boot before SkillCreateWizard mounts.
+  const uid = currentUser.value?.id;
+  return `${SKILL_CONV_LOCALSTORAGE_PREFIX}:${uid ?? 'anon'}`;
+}
 
 function rememberConvId(id: string | null) {
+  const key = namespacedKey();
   try {
-    if (id) localStorage.setItem(SKILL_CONV_LOCALSTORAGE_KEY, id);
-    else localStorage.removeItem(SKILL_CONV_LOCALSTORAGE_KEY);
+    if (id) localStorage.setItem(key, id);
+    else localStorage.removeItem(key);
   } catch {
     // localStorage may be disabled in private mode; tolerate it.
   }
+}
+
+function migrateLegacyKey(): string | null {
+  // v0.7.78 — one-time migration of the unnamespaced key written
+  // by 0.7.78-pre. We move it under the current user's namespace
+  // so a logged-in operator doesn't lose their in-flight conv,
+  // then delete the legacy entry so a later login as a different
+  // user can't inherit it.
+  try {
+    const legacy = localStorage.getItem(SKILL_CONV_LOCALSTORAGE_PREFIX);
+    if (legacy) {
+      localStorage.setItem(namespacedKey(), legacy);
+      localStorage.removeItem(SKILL_CONV_LOCALSTORAGE_PREFIX);
+      return legacy;
+    }
+  } catch {
+    // Best-effort migration; if storage throws, just skip.
+  }
+  return null;
 }
 
 async function tryResume(convId: string): Promise<boolean> {
@@ -134,10 +173,11 @@ async function tryResume(convId: string): Promise<boolean> {
 }
 
 onMounted(async () => {
-  // (1) localStorage
+  // (1) localStorage (per-user key) — falling back to migrating
+  // a legacy unnamespaced key written by an earlier build.
   let cached: string | null = null;
   try {
-    cached = localStorage.getItem(SKILL_CONV_LOCALSTORAGE_KEY);
+    cached = localStorage.getItem(namespacedKey()) ?? migrateLegacyKey();
   } catch {
     cached = null;
   }

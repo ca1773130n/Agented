@@ -109,9 +109,18 @@ def get_skill_conversation(conv_id: str) -> Optional[dict]:
 def list_active_skill_conversations(
     user_id: Optional[str] = None, limit: int = 10
 ) -> List[dict]:
-    """Most-recent ``active`` conversations, optionally filtered
-    by user_id. Used by the wizard's auto-resume to find an
-    in-flight conv when localStorage is stale.
+    """Most-recent ``active`` conversations.
+
+    Filter semantics (v0.7.78 — codex BLOCK 1):
+
+      * ``user_id`` set → only rows whose ``user_id`` matches.
+      * ``user_id is None`` → only rows whose ``user_id IS NULL``
+        (legacy / bootstrap-mode conversations). The previous
+        "no filter → return everything" behaviour leaked every
+        operator's active convs to anonymous callers.
+
+    Callers that genuinely want every row (e.g. admin sweepers)
+    must query the table directly.
     """
     with get_connection() as conn:
         if user_id:
@@ -128,7 +137,7 @@ def list_active_skill_conversations(
             cursor = conn.execute(
                 """
                 SELECT * FROM skill_conversations
-                WHERE status = 'active'
+                WHERE status = 'active' AND user_id IS NULL
                 ORDER BY updated_at DESC
                 LIMIT ?
                 """,
