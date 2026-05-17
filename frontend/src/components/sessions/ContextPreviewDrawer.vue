@@ -88,6 +88,24 @@ async function load() {
 // with ``open=true`` already (e.g. route-restored state) still
 // fires ``load()``. The guard at the top of ``load()`` makes
 // this safe when open=false on mount.
+// v0.7.75 (codex 3rd-pass nit) — debounce re-loads on the
+// open/attachments/overrides watcher. Without it, rapid chip
+// edits on the parent tray (operator adding/removing several
+// attachments in quick succession) fire a request per mutation;
+// the loadToken guard makes them race-safe but the network +
+// backend chatter is wasteful. 150 ms is short enough to feel
+// instant + long enough to coalesce a batch of edits.
+let loadDebounceHandle: ReturnType<typeof setTimeout> | null = null;
+const LOAD_DEBOUNCE_MS = 150;
+
+function scheduleLoad() {
+  if (loadDebounceHandle) clearTimeout(loadDebounceHandle);
+  loadDebounceHandle = setTimeout(() => {
+    loadDebounceHandle = null;
+    load();
+  }, LOAD_DEBOUNCE_MS);
+}
+
 watch(
   [
     () => props.open,
@@ -96,12 +114,18 @@ watch(
   ],
   ([isOpen], [wasOpen]) => {
     if (isOpen) {
-      load();
+      scheduleLoad();
     } else if (wasOpen) {
       // Transitioned open → closed. Clear state so the next
       // open doesn't briefly flash the previous bundle, and
       // invalidate any in-flight request whose late response
-      // would otherwise repopulate the cleared state.
+      // would otherwise repopulate the cleared state. Cancel
+      // any pending debounce so a stale schedule from before
+      // close doesn't fire after.
+      if (loadDebounceHandle) {
+        clearTimeout(loadDebounceHandle);
+        loadDebounceHandle = null;
+      }
       bundle.value = null;
       errorMessage.value = null;
       loadToken += 1;

@@ -227,9 +227,14 @@ function optionLabel(item: LibraryItem): string {
   // ``name`` was never set; mcp servers registered by id only).
   // Coalesce so the dropdown text is always meaningful instead of
   // a leading-blank " (asset_id)" string.
-  const label = (item.label || '').trim() || item.asset_id;
-  if (label === item.asset_id) return label;
-  return `${label} (${item.asset_id})`;
+  // (codex 3rd-pass nit) — if even ``asset_id`` is blank /
+  // whitespace, fall back to ``(unnamed)`` so the option still
+  // has visible text. Server should validate IDs, but the
+  // sentinel costs nothing and removes a footgun.
+  const id = (item.asset_id || '').trim() || '(unnamed)';
+  const label = (item.label || '').trim() || id;
+  if (label === id) return label;
+  return `${label} (${id})`;
 }
 
 async function addBinding() {
