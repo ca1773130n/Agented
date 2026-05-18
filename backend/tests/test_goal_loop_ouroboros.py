@@ -1,8 +1,11 @@
-"""Tests for v0.7.86 Ouroboros adaptation in GoalLoopRunner.
+"""Tests for the GoalLoopRunner Ouroboros adaptation
+(v0.7.86 introduced as opt-in; v0.7.87 flipped the default to on).
 
 Covers:
   * Migration v128 created the schema additions.
   * Hypothesis/predicted extraction from agent turn text.
+  * Prompt helpers: default-on Ouroboros shape vs explicit opt-out
+    via ``ouroboros=False``.
   * GoalJudgeService ouroboros mode (mocked HTTP) returning a
     4-state verdict.
   * Dead-end registry idempotency.
