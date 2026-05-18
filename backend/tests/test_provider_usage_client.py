@@ -480,9 +480,11 @@ class TestIterKeychainEntries:
     """
 
     def _make_fake_run(self, by_args: dict):
-        """Return a fake subprocess.run that maps (sorted cmd args
-        tuple) → (returncode, stdout). Anything not in the map is
-        treated as "no such entry" (returncode 44).
+        """Return a fake subprocess.run that maps the cmd argv
+        tuple (in order, exactly as passed to subprocess.run) →
+        (returncode, stdout). Anything not in the map is treated
+        as "no such entry" (returncode 44 — what ``security``
+        returns for "item not found").
         """
         from types import SimpleNamespace
 
