@@ -472,6 +472,121 @@ class TestKeychainEntryShadowing:
         assert token is None
 
 
+class TestIterKeychainEntries:
+    """Direct tests for the ``_iter_keychain_entries`` command-builder
+    layer — separate from ``_read_keychain`` so we cover the actual
+    shadowing-fix mechanics (command order, ``-a`` arg, getpass
+    fallback, dedup) without invoking the real ``security`` binary.
+    """
+
+    def _make_fake_run(self, by_args: dict):
+        """Return a fake subprocess.run that maps (sorted cmd args
+        tuple) → (returncode, stdout). Anything not in the map is
+        treated as "no such entry" (returncode 44).
+        """
+        from types import SimpleNamespace
+
+        def fake_run(cmd, **_kwargs):
+            key = tuple(cmd)
+            if key in by_args:
+                rc, out = by_args[key]
+                return SimpleNamespace(returncode=rc, stdout=out, stderr="")
+            return SimpleNamespace(returncode=44, stdout="", stderr="not found")
+
+        return fake_run
+
+    def test_iter_tries_os_user_first_then_default_then_unknown(self, monkeypatch):
+        from app.services import provider_usage_client as puc
+
+        monkeypatch.setattr("getpass.getuser", lambda: "neo")
+        svc = "Claude Code-credentials-d552d744"
+        by_args = {
+            ("security", "find-generic-password", "-s", svc, "-a", "neo", "-w"): (
+                0,
+                "blob-from-neo",
+            ),
+            ("security", "find-generic-password", "-s", svc, "-w"): (
+                0,
+                "blob-default",
+            ),
+            ("security", "find-generic-password", "-s", svc, "-a", "unknown", "-w"): (
+                0,
+                "blob-from-unknown",
+            ),
+        }
+        monkeypatch.setattr(puc.subprocess, "run", self._make_fake_run(by_args))
+        blobs = list(puc._iter_keychain_entries(svc))
+        # All three distinct blobs yielded, OS-user first.
+        assert blobs == ["blob-from-neo", "blob-default", "blob-from-unknown"]
+
+    def test_iter_dedups_identical_blobs(self, monkeypatch):
+        from app.services import provider_usage_client as puc
+
+        monkeypatch.setattr("getpass.getuser", lambda: "neo")
+        svc = "svc-dup"
+        # Same blob returned by both -a neo and the default lookup
+        # (operator has only one entry; security finds the same one
+        # both ways).
+        same = "the-same-blob"
+        by_args = {
+            ("security", "find-generic-password", "-s", svc, "-a", "neo", "-w"): (
+                0,
+                same,
+            ),
+            ("security", "find-generic-password", "-s", svc, "-w"): (0, same),
+        }
+        monkeypatch.setattr(puc.subprocess, "run", self._make_fake_run(by_args))
+        blobs = list(puc._iter_keychain_entries(svc))
+        assert blobs == [same], "duplicate blobs must be filtered"
+
+    def test_iter_skips_os_user_probe_when_getpass_raises(self, monkeypatch):
+        from app.services import provider_usage_client as puc
+
+        def raises():
+            raise OSError("no user available")
+
+        monkeypatch.setattr("getpass.getuser", raises)
+        svc = "svc-no-user"
+        by_args = {
+            ("security", "find-generic-password", "-s", svc, "-w"): (
+                0,
+                "blob-default",
+            ),
+        }
+        monkeypatch.setattr(puc.subprocess, "run", self._make_fake_run(by_args))
+        blobs = list(puc._iter_keychain_entries(svc))
+        # Got the default-lookup blob, no exception leaked from getpass.
+        assert blobs == ["blob-default"]
+
+    def test_iter_yields_nothing_when_security_returns_non_zero(self, monkeypatch):
+        from app.services import provider_usage_client as puc
+
+        monkeypatch.setattr("getpass.getuser", lambda: "neo")
+        # by_args empty → fake_run returns rc=44 for everything.
+        monkeypatch.setattr(puc.subprocess, "run", self._make_fake_run({}))
+        assert list(puc._iter_keychain_entries("svc-missing")) == []
+
+    def test_iter_tolerates_security_binary_missing(self, monkeypatch):
+        import subprocess as real_subprocess
+
+        from app.services import provider_usage_client as puc
+
+        monkeypatch.setattr("getpass.getuser", lambda: "neo")
+
+        def boom(*_args, **_kwargs):
+            raise FileNotFoundError("security not installed")
+
+        monkeypatch.setattr(puc.subprocess, "run", boom)
+        # Must not raise even though every subprocess.run blows up.
+        assert list(puc._iter_keychain_entries("anything")) == []
+        # Confirm we'd also tolerate TimeoutExpired/OSError variants.
+        def slow(*_args, **_kwargs):
+            raise real_subprocess.TimeoutExpired(cmd="security", timeout=5)
+
+        monkeypatch.setattr(puc.subprocess, "run", slow)
+        assert list(puc._iter_keychain_entries("anything")) == []
+
+
 class TestCheckCredentials:
     """Tests for CredentialResolver.check_credentials — the UI-hint
     helper used by GET /admin/monitoring/credentials.

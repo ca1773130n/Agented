@@ -756,21 +756,33 @@ def _read_keychain_raw(service: str) -> Optional[str]:
 
 
 def _iter_keychain_entries(service: str):
-    """Yield raw password blobs for every Keychain entry under ``service``.
+    """Yield raw password blobs for KNOWN ACCOUNT VARIANTS under ``service``.
 
-    ``security find-generic-password -s <svce>`` returns only ONE entry
-    when duplicates exist, picking the first by Keychain order — which
-    is fine when the operator only has one (acct, svce) row but broken
-    when a plugin has pre-created a competing entry. This helper queries
-    each known account variant so the caller can pick the entry whose
-    payload contains the field they actually need.
+    NOT a true enumeration of every (acct, svce) row — macOS's ``security``
+    CLI doesn't expose one for generic-passwords. Instead we probe the
+    short list of ``acct`` values we've actually observed in the wild, and
+    let the caller pick the entry whose payload contains the field they
+    need.
 
-    The set of accounts we try:
+    Why this exists: ``security find-generic-password -s <svce>`` returns
+    only ONE entry when duplicates exist, picking the first by Keychain
+    order — fine when the operator only has one ``(acct, svce)`` row but
+    broken when a plugin has pre-created a competing entry under the same
+    svce. Real-world miss: ``~/.claude-personal2`` had both
+    ``acct="unknown"`` (Sentry MCP plugin, mcpOAuth only) and
+    ``acct="<user>"`` (Claude Code, claudeAiOauth) under
+    ``Claude Code-credentials-d552d744``.
+
+    Accounts tried, in order:
       1. The current OS user (``getpass.getuser()``) — Claude Code stores
-         creds under the OS username.
+         creds under the OS username. Skipped if ``getpass`` raises.
       2. The literal default match (no ``-a``) — first-by-keychain-order.
-      3. The well-known ``unknown`` account some plugins use.
-    Order is OS-user first so the legitimate Claude Code entry wins.
+      3. ``"unknown"`` — empirical: MCP plugins create entries under this
+         account name. NOT a documented macOS Keychain convention.
+
+    Same-account duplicates are out of scope — if a future failure mode
+    needs them, drop down to a lower-level enumeration (e.g. parsing
+    ``security dump-keychain`` output) here.
 
     Deduplicates returned blobs so callers don't process the same payload twice.
     """
