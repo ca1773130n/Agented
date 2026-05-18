@@ -44,6 +44,46 @@ export const superAgentApi = {
     }),
   delete: (id: string) =>
     apiFetch<{ message: string }>(`/admin/super-agents/${id}`, { method: 'DELETE' }),
+  // v0.7.92 — Ouroboros bridge (PR #138 backend + this PR frontend).
+  // Spawns a goal_loop project session that inherits the SA's
+  // backend/model and runs in Ouroboros mode (hypothesis → verdict
+  // → dead-end → convergence). The returned session_id can be
+  // streamed via the standard project-session SSE endpoint.
+  startOuroborosRun: (
+    id: string,
+    body: {
+      project_id?: string;
+      goal: string;
+      max_iterations?: number;
+      max_wall_seconds?: number;
+      check_cmd?: string | null;
+      yolo_mode?: boolean;
+    },
+  ) =>
+    apiFetch<{
+      session_id: string;
+      project_id: string;
+      super_agent_id: string;
+      status: string;
+      system_prompt_applied: boolean;
+      pid?: number;
+    }>(`/admin/super-agents/${id}/ouroboros-runs`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  listOuroborosRuns: (id: string, limit = 20) =>
+    apiFetch<{
+      runs: Array<{
+        session_id: string;
+        project_id: string;
+        status: string;
+        execution_type: string;
+        started_at: string | null;
+        ended_at: string | null;
+        last_activity_at: string | null;
+        iteration_count: number;
+      }>;
+    }>(`/admin/super-agents/${id}/ouroboros-runs?limit=${limit}`),
 };
 
 export const superAgentDocumentApi = {
