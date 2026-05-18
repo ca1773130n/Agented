@@ -28,7 +28,12 @@ def test_continue_prompt_includes_goal_and_reason():
     p = goal_loop_runner._continue_prompt("ship feature X", "tests still fail")
     assert "Goal: ship feature X" in p
     assert "Last check: tests still fail" in p
-    assert "Address the gap and continue." in p
+    # v0.7.87 — Ouroboros is default; the continue prompt asks
+    # for hypothesis markers instead of the legacy
+    # "Address the gap and continue." tail. The presence of the
+    # markers is what the agent uses to score itself next turn.
+    assert "**Hypothesis:**" in p
+    assert "**Predicted outcome:**" in p
     # No iteration counter — spec calls this out explicitly.
     assert "iteration" not in p.lower()
     assert "iter" not in p.lower()
@@ -233,7 +238,9 @@ def test_runner_sends_continue_on_not_met_then_iteration_cap(
     initial = json.loads(fake_psm.sent_inputs[0])
     assert "Start working toward the goal" in initial["message"]["content"][0]["text"]
     second = json.loads(fake_psm.sent_inputs[1])
-    assert "Address the gap and continue." in second["message"]["content"][0]["text"]
+    # v0.7.87 — Ouroboros is the default continue shape; the
+    # legacy "Address the gap and continue." tail was removed.
+    assert "**Hypothesis:**" in second["message"]["content"][0]["text"]
 
 
 def test_runner_records_each_iteration(
