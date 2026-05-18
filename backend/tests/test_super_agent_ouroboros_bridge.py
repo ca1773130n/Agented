@@ -225,8 +225,10 @@ def test_ouroboros_run_falls_back_to_recent_project(client, isolated_db):
 def test_ouroboros_run_forwards_assembled_system_prompt(client, isolated_db):
     """v0.7.92 — the SA's assembled system prompt (from SOUL /
     IDENTITY / ROLE docs) flows through as
-    ``system_prompt_override`` so the spawned claude CLI is
-    given the SA's identity via ``--system-prompt``.
+    ``system_prompt_override`` so the spawned claude CLI gets
+    the SA's identity via ``--append-system-prompt`` (the actual
+    flag the claude-cli renderer uses — ``--system-prompt`` is
+    a different, overriding flag and a silent-wrong-runs bug).
     """
     del isolated_db
     _seed_admin_key()
@@ -349,3 +351,142 @@ def test_list_ouroboros_runs_returns_super_agent_sessions(client, isolated_db):
     # All listed runs include the iteration_count aggregate.
     for r in runs:
         assert "iteration_count" in r
+
+
+# --- v0.7.92 review fixes (PR #139 codex feedback) -----------------
+
+
+def test_goal_loop_handler_uses_append_system_prompt_flag(isolated_db):
+    """Regression guard for the silent-wrong-runs bug: the goal_loop
+    handler MUST emit ``--append-system-prompt`` (not the lookalike
+    ``--system-prompt`` flag, which means something different in
+    claude-cli and produces a silently-broken run).
+
+    The mocked-handler bridge tests can't catch this — they swap
+    ``handler.start`` out entirely. So construct a session_config
+    manually and intercept ``ProjectSessionManager.create_session``
+    to capture the cmd that the handler hands down.
+    """
+    del isolated_db
+    from app.services.execution_type_handler import GoalLoopSessionHandler
+
+    captured: dict = {}
+
+    def fake_create(**kwargs):
+        captured.update(kwargs)
+        return "psess-flagchk1"
+
+    with patch(
+        "app.services.execution_type_handler.ProjectSessionManager.create_session",
+        new=fake_create,
+    ):
+        GoalLoopSessionHandler().start(
+            {
+                "project_id": "proj-x",
+                "cwd": "/tmp",
+                "execution_mode": "autonomous",
+                "yolo_mode": False,
+                "system_prompt_override": "## ROLE\n\nYou are X.",
+                "goal_loop_config": {
+                    "goal": "g",
+                    "max_iterations": 1,
+                    "max_wall_seconds": 60,
+                },
+            }
+        )
+
+    cmd = captured.get("cmd") or []
+    assert "--append-system-prompt" in cmd, (
+        f"goal_loop handler must use --append-system-prompt; got cmd={cmd}"
+    )
+    assert "--system-prompt" not in cmd, (
+        "the bare --system-prompt flag is a silent-wrong-runs bug — "
+        "the renderer must use the append variant"
+    )
+
+
+def test_super_agent_delete_does_not_break_with_history(client, isolated_db):
+    """v0.7.92 — migration v130 adds ``ON DELETE SET NULL`` on the
+    project_sessions.super_agent_id FK so deleting a SuperAgent that
+    has historical Ouroboros runs is still allowed; the run history
+    is preserved (with the SA pointer nulled out).
+    """
+    del isolated_db
+    _seed_admin_key()
+    pid, sa_id = _seed_project_and_sa()
+
+    from app.db.ids import _get_unique_project_session_id
+
+    with get_connection() as conn:
+        # FK enforcement is per-connection in SQLite; enable it
+        # explicitly so the test reflects production behaviour.
+        conn.execute("PRAGMA foreign_keys = ON")
+        psess_id = _get_unique_project_session_id(conn)
+        conn.execute(
+            """
+            INSERT INTO project_sessions
+                (id, project_id, super_agent_id, execution_type, status)
+            VALUES (?, ?, ?, 'goal_loop', 'completed')
+            """,
+            (psess_id, pid, sa_id),
+        )
+        conn.commit()
+
+        # Delete the SA — must succeed, history must survive.
+        conn.execute("PRAGMA foreign_keys = ON")
+        conn.execute("DELETE FROM super_agents WHERE id = ?", (sa_id,))
+        conn.commit()
+
+        row = conn.execute(
+            "SELECT super_agent_id FROM project_sessions WHERE id = ?",
+            (psess_id,),
+        ).fetchone()
+
+    assert row is not None, "session row should survive SA deletion"
+    assert row[0] is None, "super_agent_id should be nulled, not cascaded"
+
+
+def test_ouroboros_run_scoped_to_caller_user_id(client, isolated_db):
+    """v0.7.92 — when the caller has a ``user_id``, they can only
+    spawn runs against SuperAgents they own. Other-owner SAs return
+    404 (not 403, to avoid leaking existence).
+    """
+    del isolated_db
+    # Seed two real users so the FK on user_roles.user_id holds.
+    with get_connection() as conn:
+        conn.execute(
+            "INSERT INTO users (id, email) VALUES (?, ?)",
+            ("user-alice-id", "alice@test"),
+        )
+        conn.execute(
+            "INSERT INTO users (id, email) VALUES (?, ?)",
+            ("user-mallory-id", "mallory@test"),
+        )
+        conn.commit()
+
+    # Seed a keyed editor (NOT the legacy admin path used by the
+    # other tests — those use admin-bridge which has no user_id).
+    create_user_role("user-alice", "Alice", "editor", user_id="user-alice-id")
+
+    with get_connection() as conn:
+        pid = _get_unique_project_id(conn)
+        conn.execute(
+            "INSERT INTO projects (id, name, local_path, user_id) "
+            "VALUES (?, ?, ?, ?)",
+            (pid, "alice-proj", "/tmp/alice", "user-alice-id"),
+        )
+        # SA owned by a DIFFERENT user.
+        conn.execute(
+            "INSERT INTO super_agents (id, name, backend_type, user_id) "
+            "VALUES ('sa-mallory12', 'Mallory SA', 'claude', 'user-mallory-id')"
+        )
+        conn.commit()
+
+    resp = client.post(
+        "/admin/super-agents/sa-mallory12/ouroboros-runs",
+        headers={"X-API-Key": "user-alice"},
+        json={"project_id": pid, "goal": "exfil"},
+    )
+    assert resp.status_code == 404, (
+        "scope check must hide other users' SAs as 404 (not 403/200)"
+    )

@@ -627,6 +627,7 @@ def _resolve_default_project_for_sa(super_agent_id: str) -> Optional[str]:
             """
             SELECT project_id FROM project_sessions
             WHERE super_agent_id = ?
+              AND execution_type = 'goal_loop'
             ORDER BY started_at DESC
             LIMIT 1
             """,
@@ -680,9 +681,17 @@ def start_ouroboros_run(
 
     Returns ``{session_id, super_agent_id, pid, status}``.
     """
-    del caller
     sa = get_super_agent(super_agent_id)
     if not sa:
+        raise NotFoundException(detail="SuperAgent not found")
+    # v0.7.92 — when the caller is scoped to a user, the SA must
+    # belong to that user (or be legacy/null-owner). The bridge
+    # spawns a long-lived subprocess that inherits the SA's
+    # backend identity and runs in the project's cwd, so it has
+    # more blast radius than a read endpoint — tighten access
+    # here even though sibling routes don't.
+    sa_owner = sa.get("user_id")
+    if caller.user_id and sa_owner and sa_owner != caller.user_id:
         raise NotFoundException(detail="SuperAgent not found")
 
     body = data or {}
@@ -708,6 +717,11 @@ def start_ouroboros_run(
     project = get_project(project_id)
     if not project:
         raise NotFoundException(detail="Project not found")
+    # Same scope check as above — keyed users can only target
+    # their own projects (or legacy unowned ones).
+    proj_owner = project.get("user_id")
+    if caller.user_id and proj_owner and proj_owner != caller.user_id:
+        raise NotFoundException(detail="Project not found")
 
     try:
         cwd = ProjectWorkspaceService.resolve_working_directory(project_id)
@@ -729,14 +743,17 @@ def start_ouroboros_run(
     preferred_model = sa.get("preferred_model")
 
     # v0.7.92 — assemble the SA's system prompt from its document
-    # set (SOUL / IDENTITY / MEMORY / ROLE). The helper tolerates
-    # a synthetic session_id placeholder — it only needs one for
-    # the session-state slice (summary + recent conversation),
-    # which we don't have at this point in the flow.
+    # set (SOUL / IDENTITY / MEMORY / ROLE). ``session_id=None``
+    # because no session exists yet at this point in the flow —
+    # only the document / instance slices contribute.
+    # ``consume_pending=False`` so this short-lived bridge call
+    # doesn't drain the SA's inbox (those messages are for the
+    # SA's main session loop, not for one-off Ouroboros runs;
+    # and a spawn failure below would otherwise lose them).
     system_prompt: Optional[str] = None
     try:
         prompt = SuperAgentSessionService.assemble_system_prompt(
-            super_agent_id, session_id="__bridge_pre_start__"
+            super_agent_id, consume_pending=False
         )
         # Only forward when there's actual document content —
         # an empty prompt from an SA with no docs adds noise.
@@ -791,9 +808,13 @@ def list_ouroboros_runs(
     pulled in from the existing ``goal_loop_iterations``
     machinery.
     """
-    del caller
     sa = get_super_agent(super_agent_id)
     if not sa:
+        raise NotFoundException(detail="SuperAgent not found")
+    # Same scope check as the POST sibling — keyed callers can
+    # only inspect runs of their own SAs.
+    sa_owner = sa.get("user_id")
+    if caller and caller.user_id and sa_owner and sa_owner != caller.user_id:
         raise NotFoundException(detail="SuperAgent not found")
 
     from app.db.connection import get_connection

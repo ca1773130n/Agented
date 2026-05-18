@@ -450,12 +450,21 @@ class GoalLoopSessionHandler(ExecutionTypeHandler):
         # v0.7.92 — when ``session_config["system_prompt_override"]``
         # is set (e.g. the SA Ouroboros bridge injecting the SA's
         # assembled SOUL/IDENTITY/ROLE prompt), append it to the
-        # claude CLI via ``--system-prompt``. Skipped when the
-        # caller supplied an explicit ``cmd`` so we don't
-        # double-stack a prompt the caller already encoded.
+        # claude CLI via ``--append-system-prompt`` (the same flag
+        # the ``context_renderers.claude`` renderer uses — NOT the
+        # lookalike ``--system-prompt``, which in claude-cli
+        # overrides rather than appends and produces silently-wrong
+        # runs here). Idempotent: if a prior layer already added
+        # the flag we skip. Skipped entirely when the caller
+        # supplied an explicit ``cmd`` so we don't double-stack a
+        # prompt the caller already encoded.
         system_prompt = session_config.get("system_prompt_override")
-        if system_prompt and not session_config.get("cmd"):
-            cmd = cmd + ["--system-prompt", system_prompt]
+        if (
+            system_prompt
+            and not session_config.get("cmd")
+            and "--append-system-prompt" not in cmd
+        ):
+            cmd = [*cmd, "--append-system-prompt", system_prompt]
         session_id = ProjectSessionManager.create_session(
             project_id=session_config["project_id"],
             cmd=cmd,

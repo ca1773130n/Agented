@@ -412,9 +412,10 @@ class SuperAgentSessionService:
     def assemble_system_prompt(
         cls,
         super_agent_id: str,
-        session_id: str,
+        session_id: Optional[str] = None,
         chat_mode: Optional[str] = None,
         instance_id: Optional[str] = None,
+        consume_pending: bool = True,
     ) -> str:
         """Assemble a system prompt from identity documents and session state.
 
@@ -423,6 +424,18 @@ class SuperAgentSessionService:
 
         When instance_id is provided, appends project context (name, description,
         repository, working directory, chat mode).
+
+        ``session_id`` is optional: when omitted, only the document /
+        instance / project-context sections are produced (no session
+        summary, no recent-history slice). The bridge route uses this
+        before a session exists.
+
+        ``consume_pending`` (default True for back-compat) controls
+        whether inbox messages from other agents get marked as
+        delivered. Set False from contexts (e.g. the Ouroboros bridge)
+        where the assembled prompt may be discarded if the downstream
+        spawn fails — otherwise inbox messages get "lost" (marked
+        delivered but never reaching the SA).
         """
         # If super_agent_id is a psa- instance, resolve the template SA
         effective_sa_id = super_agent_id
@@ -486,7 +499,8 @@ class SuperAgentSessionService:
                 content = msg["content"]
                 priority = msg["priority"]
                 msg_lines.append(f"- [{priority.upper()}] From {from_id}: {subject}\n  {content}")
-                update_message_status(msg["id"], "delivered")
+                if consume_pending:
+                    update_message_status(msg["id"], "delivered")
             parts.append("## Pending Messages\n\n" + "\n".join(msg_lines) + "\n")
 
         # Append project context when associated with an instance

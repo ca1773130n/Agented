@@ -568,9 +568,15 @@ def _migrate_130_project_sessions_super_agent_link(conn) -> None:
     cursor = conn.execute("PRAGMA table_info(project_sessions)")
     cols = {row[1] for row in cursor.fetchall()}
     if "super_agent_id" not in cols:
+        # ``ON DELETE SET NULL`` so deleting a SuperAgent doesn't
+        # cascade-delete the project_sessions row (the run still
+        # happened — its history shouldn't disappear) and doesn't
+        # block the SA delete entirely (the default ``NO ACTION``
+        # behaviour would, once FK enforcement is on for this
+        # connection).
         conn.execute(
             "ALTER TABLE project_sessions ADD COLUMN super_agent_id TEXT "
-            "REFERENCES super_agents(id)"
+            "REFERENCES super_agents(id) ON DELETE SET NULL"
         )
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_project_sessions_super_agent "
