@@ -423,3 +423,163 @@ class TestFetchCodex:
     @patch.object(CredentialResolver, "get_codex_token", return_value=(None, None))
     def test_no_token_returns_empty(self, mock_cred, mock_pty):
         assert ProviderUsageClient._fetch_codex({"id": "a1"}) == []
+
+
+class TestCheckCredentials:
+    """Tests for CredentialResolver.check_credentials — the UI-hint
+    helper used by GET /admin/monitoring/credentials.
+    """
+
+    def test_claude_ok_when_token_resolvable(self, tmp_path, monkeypatch):
+        config_dir = tmp_path / "claude-p2"
+        config_dir.mkdir()
+        (config_dir / ".credentials.json").write_text(
+            json.dumps({"claudeAiOauth": {"accessToken": "tok-ok"}})
+        )
+        monkeypatch.setattr(Path, "home", lambda: tmp_path / "elsewhere")
+        monkeypatch.setattr(
+            "app.services.provider_usage_client.platform.system", lambda: "Linux"
+        )
+        status = CredentialResolver.check_credentials(
+            {"id": 2, "config_path": str(config_dir)}, "claude"
+        )
+        assert status["status"] == "ok"
+
+    def test_claude_missing_includes_remediation_and_keychain_hint(
+        self, tmp_path, monkeypatch
+    ):
+        # No file, no keychain — must report missing + give the
+        # operator a copy-pasteable ``CLAUDE_CONFIG_DIR=... claude``
+        # command and the keychain entry that was checked.
+        monkeypatch.setattr(Path, "home", lambda: tmp_path / "home")
+        monkeypatch.setattr(
+            "app.services.provider_usage_client.platform.system", lambda: "Linux"
+        )
+        config_path = "~/.claude-personal2"
+        status = CredentialResolver.check_credentials(
+            {"id": 2, "config_path": config_path}, "claude"
+        )
+        assert status["status"] == "missing"
+        assert config_path in status["remediation"]
+        assert "claude" in status["remediation"].lower()
+        # The keychain service hint must include the hash suffix
+        # we'd actually look up.
+        assert status["expected_location"].startswith("Claude Code-credentials-")
+        assert len(status["expected_location"]) > len("Claude Code-credentials-")
+
+    def test_codex_missing_uses_codex_home_hint(self, tmp_path, monkeypatch):
+        # ``Path.home`` returns a path that doesn't exist; pin the
+        # JSON reader too so a real ~/.codex/auth.json on the dev
+        # machine can't leak in and produce a false-OK.
+        monkeypatch.setattr(Path, "home", lambda: tmp_path / "home")
+        monkeypatch.setattr(
+            "app.services.provider_usage_client._read_json_field",
+            lambda *_a, **_k: None,
+        )
+        status = CredentialResolver.check_credentials(
+            {"id": 3, "config_path": "~/.codex-p1"}, "codex"
+        )
+        assert status["status"] == "missing"
+        assert "CODEX_HOME" in status["remediation"]
+        assert "auth.json" in status["expected_location"]
+
+    def test_codex_requires_account_id(self, tmp_path, monkeypatch):
+        # auth.json has an access_token but no account_id — the
+        # real ``_fetch_codex`` poll would fail because the
+        # ``chatgpt-account-id`` header has nothing to populate.
+        # check_credentials must report "missing" to mirror that,
+        # not falsely "ok".
+        config_dir = tmp_path / "codex-broken"
+        config_dir.mkdir()
+        (config_dir / "auth.json").write_text(
+            json.dumps({"tokens": {"access_token": "tok-only", "account_id": None}})
+        )
+        monkeypatch.setattr(Path, "home", lambda: tmp_path / "elsewhere")
+        status = CredentialResolver.check_credentials(
+            {"id": 3, "config_path": str(config_dir)}, "codex"
+        )
+        assert status["status"] == "missing", (
+            "codex token without account_id must be reported missing"
+        )
+
+    def test_codex_accepts_falsy_but_valid_account_id_zero(
+        self, tmp_path, monkeypatch
+    ):
+        # Regression guard for the "not account_id" → "is None"
+        # fix (PR #140 codex re-review). A JSON integer 0 is a
+        # falsy-but-valid id; the check must accept it, AND the
+        # underlying _read_json_field must not collapse 0 to None.
+        config_dir = tmp_path / "codex-zero"
+        config_dir.mkdir()
+        (config_dir / "auth.json").write_text(
+            json.dumps({"tokens": {"access_token": "tok-x", "account_id": 0}})
+        )
+        monkeypatch.setattr(Path, "home", lambda: tmp_path / "elsewhere")
+        status = CredentialResolver.check_credentials(
+            {"id": 3, "config_path": str(config_dir)}, "codex"
+        )
+        assert status["status"] == "ok", (
+            "codex account_id=0 is falsy-but-valid; check must accept it"
+        )
+
+    def test_gemini_missing_uses_gemini_dir_hint(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(Path, "home", lambda: tmp_path / "home")
+        monkeypatch.setattr(
+            "app.services.provider_usage_client.platform.system", lambda: "Linux"
+        )
+        # Stub out every fallback path the gemini resolver checks so
+        # the test stays hermetic regardless of dev-machine state
+        # (a real ~/.gemini/oauth_creds.json would otherwise leak).
+        monkeypatch.setattr(
+            "app.services.provider_usage_client._read_keychain_raw",
+            lambda *_a, **_k: None,
+        )
+        monkeypatch.setattr(
+            "app.services.provider_usage_client._read_json_file",
+            lambda *_a, **_k: None,
+        )
+        status = CredentialResolver.check_credentials(
+            {"id": 5, "config_path": "~/.gemini-p1"}, "gemini"
+        )
+        assert status["status"] == "missing"
+        assert "GEMINI_DIR" in status["remediation"]
+        assert "oauth_creds.json" in status["expected_location"]
+
+    def test_unknown_backend_type_returns_unsupported(self):
+        status = CredentialResolver.check_credentials(
+            {"id": 99, "config_path": None}, "openrouter"
+        )
+        assert status["status"] == "unsupported"
+        assert status["remediation"] is None
+        assert status["expected_location"] is None
+
+    def test_gemini_expired_unrefreshable_token_reported_missing(
+        self, tmp_path, monkeypatch
+    ):
+        # oauth_creds.json has an access_token but it's expired and
+        # there's no refresh_token to recover with. The real poll
+        # would 401; check_credentials must mirror that as
+        # ``missing`` rather than reporting ``ok`` on the stale token.
+        config_dir = tmp_path / "gemini-expired"
+        config_dir.mkdir()
+        expired_ms = int(
+            (datetime.now(timezone.utc) - timedelta(hours=2)).timestamp() * 1000
+        )
+        (config_dir / "oauth_creds.json").write_text(
+            json.dumps(
+                {
+                    "access_token": "stale-tok",
+                    "refresh_token": None,
+                    "expiry_date": expired_ms,
+                }
+            )
+        )
+        monkeypatch.setattr(Path, "home", lambda: tmp_path / "elsewhere")
+        monkeypatch.setattr(
+            "app.services.provider_usage_client.platform.system", lambda: "Linux"
+        )
+        status = CredentialResolver.check_credentials(
+            {"id": 5, "config_path": str(config_dir)}, "gemini"
+        )
+        assert status["status"] == "missing"
+        assert "GEMINI_DIR" in status["remediation"]

@@ -35,6 +35,7 @@ export { orchestrationApi } from './orchestration';
 export { budgetApi } from './budgets';
 export { analyticsApi } from './analytics';
 export { monitoringApi } from './monitoring';
+export type { CredentialStatusRow } from './monitoring';
 export { triggerEventApi } from './trigger-events';
 export type {
   TriggerEvent,

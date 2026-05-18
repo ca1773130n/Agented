@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import type { UsageSummaryEntry, EntityUsageEntry, BudgetLimit, MonitoringStatus, SnapshotHistory, SessionStatsSummary, RotationDashboardStatus } from '../services/api';
+import CredentialStatusBanner from '../components/credentials/CredentialStatusBanner.vue';
 import { budgetApi, agentApi, teamApi, triggerApi, monitoringApi, rotationApi } from '../services/api';
 import TokenUsageChart from '../components/monitoring/TokenUsageChart.vue';
 import BudgetLimitForm from '../components/monitoring/BudgetLimitForm.vue';
@@ -420,6 +421,14 @@ onUnmounted(() => {
         </span>
       </div>
     </div>
+
+    <!-- v0.7.93 — surface accounts the poller can't resolve OAuth
+         tokens for. Without this, the dashboard silently drops
+         windows for credential-less accounts; operators had to
+         grep backend logs to see what happened. The banner self-
+         hides when there's nothing to show, so it can sit above
+         the loading state without flashing. -->
+    <CredentialStatusBanner />
 
     <LoadingState v-if="isLoading" message="Loading usage data..." />
 

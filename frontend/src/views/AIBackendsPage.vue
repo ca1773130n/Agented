@@ -16,6 +16,14 @@
       </template>
     </PageHeader>
 
+    <!-- v0.7.93 — flag accounts that have no OAuth token resolvable
+         from local keychain/config. Placed OUTSIDE the
+         loading/error/empty v-if chain (a v-if sibling between
+         v-if and v-else-if would orphan the rest of the chain and
+         prevent the grid from ever rendering). The banner self-
+         hides when there are no missing credentials. -->
+    <CredentialStatusBanner />
+
     <LoadingState v-if="isLoading" message="Loading backends..." />
 
     <ErrorState v-else-if="error" :message="error" @retry="loadBackends()" />
@@ -126,6 +134,7 @@ import PageHeader from '../components/base/PageHeader.vue';
 import LoadingState from '../components/base/LoadingState.vue';
 import ErrorState from '../components/base/ErrorState.vue';
 import EmptyState from '../components/base/EmptyState.vue';
+import CredentialStatusBanner from '../components/credentials/CredentialStatusBanner.vue';
 import { AiChatPanel } from '@ai-accounts/vue-styled';
 import { useToast } from '../composables/useToast';
 

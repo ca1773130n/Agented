@@ -85,6 +85,55 @@ class CredentialResolver:
 
         return None
 
+    @classmethod
+    def _gemini_token_is_expired(cls, account: dict) -> bool:
+        """Re-check the Gemini OAuth creds for freshness.
+
+        ``get_gemini_token`` falls back to returning the stale
+        access_token when a refresh fails — that's fine for the
+        poller (it'll just 401), but the credential-status UI
+        should treat "expired with no working refresh path" as
+        missing, not OK. This re-reads the creds file (without
+        attempting a refresh) and returns True only when we can
+        prove the stored token is past its expiry.
+        """
+        config_path = account.get("config_path")
+        cred_data = None
+        if config_path:
+            cred_path = Path(os.path.expanduser(config_path)) / "oauth_creds.json"
+            cred_data = _read_json_file(cred_path)
+        if not cred_data and platform.system() == "Darwin":
+            raw = _read_keychain_raw("gemini-cli-oauth")
+            if raw:
+                try:
+                    cred_data = json.loads(raw)
+                except (json.JSONDecodeError, TypeError):
+                    cred_data = None
+        if not cred_data:
+            cred_data = _read_json_file(Path.home() / ".gemini" / "oauth_creds.json")
+        if not cred_data:
+            return False  # Can't prove expiry — defer to the get_*_token result.
+
+        expiry_date = cred_data.get("expiry_date")
+        expiry = cred_data.get("expiry") or cred_data.get("token_expiry")
+        try:
+            if expiry_date:
+                exp_dt = datetime.fromtimestamp(int(expiry_date) / 1000, tz=timezone.utc)
+            elif expiry:
+                exp_dt = datetime.fromisoformat(str(expiry).replace("Z", "+00:00"))
+            else:
+                return False
+        except (ValueError, TypeError, OSError):
+            return False
+        if exp_dt >= datetime.now(timezone.utc):
+            return False
+        # Expired. If there's no refresh_token, it's definitely
+        # unusable. If there IS a refresh_token, get_gemini_token
+        # would have either succeeded (returning the refreshed
+        # token, never hitting this path) or failed silently — in
+        # which case treating it as missing is correct.
+        return True
+
     @staticmethod
     def get_token_fingerprint(account: dict, backend_type: str) -> Optional[str]:
         """Return a short hash fingerprint of the resolved token for deduplication.
@@ -101,6 +150,114 @@ class CredentialResolver:
         if not token:
             return None
         return hashlib.sha256(token.encode()).hexdigest()[:12]
+
+    @classmethod
+    def check_credentials(cls, account: dict, backend_type: str) -> dict:
+        """Return a structured per-account credential status for the UI.
+
+        The Token Usage Dashboard and AI Backends page use this to
+        show "this account has no OAuth token resolvable from the
+        local keychain / config dir" without making the user grep
+        backend logs. Reuses the same get_*_token resolvers that
+        ``MonitoringService`` would use during a real poll, so a
+        ``"status": "ok"`` here means the next poll will produce
+        snapshot data.
+
+        Returns::
+
+            {
+              "status": "ok" | "missing" | "unsupported",
+              "remediation": <CLI hint to run when missing>,
+              "expected_location": <keychain/file hint that was checked>
+            }
+        """
+        config_path = account.get("config_path")
+        # Branch per provider — same priority order as the
+        # corresponding ``get_<provider>_token`` method.
+        if backend_type == "claude":
+            token = CredentialResolver.get_claude_token(account)
+            if token:
+                return {"status": "ok"}
+            expanded = os.path.expanduser(config_path) if config_path else None
+            if expanded:
+                suffix = hashlib.sha256(expanded.encode()).hexdigest()[:8]
+                kc = f"Claude Code-credentials-{suffix}"
+                hint = (
+                    f"CLAUDE_CONFIG_DIR={config_path} claude  "
+                    f"# then /login inside that session"
+                )
+            else:
+                kc = "Claude Code-credentials"
+                hint = "claude  # then /login inside that session"
+            return {
+                "status": "missing",
+                "remediation": hint,
+                "expected_location": kc,
+            }
+
+        if backend_type == "codex":
+            token, codex_account_id = CredentialResolver.get_codex_token(account)
+            # The real poller's _fetch_codex needs BOTH the access
+            # token and the account_id (used as the
+            # ``chatgpt-account-id`` header). Reporting "ok" with
+            # only the token would mismatch what the poll sees.
+            # Use ``is None``/``== ""`` rather than truthiness so a
+            # falsy-but-valid id like ``0`` or numeric account_id
+            # isn't misread as missing (defensive; real codex ids
+            # are string UUIDs).
+            id_present = codex_account_id is not None and codex_account_id != ""
+            if token and id_present:
+                return {"status": "ok"}
+            expanded = os.path.expanduser(config_path) if config_path else None
+            loc = (
+                f"{expanded}/auth.json" if expanded else "~/.codex/auth.json"
+            )
+            hint = (
+                f"CODEX_HOME={config_path} codex  # then complete login"
+                if config_path
+                else "codex  # then complete login"
+            )
+            return {
+                "status": "missing",
+                "remediation": hint,
+                "expected_location": loc,
+            }
+
+        if backend_type == "gemini":
+            token = CredentialResolver.get_gemini_token(account)
+            # get_gemini_token attempts a refresh when the stored
+            # token is expired, but falls back to returning the
+            # stale ``access_token`` if refresh fails (no
+            # refresh_token, network error, revoked client, ...).
+            # The poll's HTTP call would then 401. Mirror that by
+            # re-checking expiry here on the raw creds file.
+            if token and not cls._gemini_token_is_expired(account):
+                return {"status": "ok"}
+            expanded = os.path.expanduser(config_path) if config_path else None
+            loc = (
+                f"{expanded}/oauth_creds.json"
+                if expanded
+                else "~/.gemini/oauth_creds.json"
+            )
+            hint = (
+                f"GEMINI_DIR={config_path} gemini auth"
+                if config_path
+                else "gemini auth"
+            )
+            return {
+                "status": "missing",
+                "remediation": hint,
+                "expected_location": loc,
+            }
+
+        # Unknown backend type — neither a poller nor a remediation
+        # path exists; surface that as ``unsupported`` so the UI can
+        # render a neutral state instead of pretending it's broken.
+        return {
+            "status": "unsupported",
+            "remediation": None,
+            "expected_location": None,
+        }
 
     @staticmethod
     def get_codex_token(account: dict) -> tuple[Optional[str], Optional[str]]:
@@ -595,14 +752,23 @@ def _read_json_file(path: Path) -> Optional[dict]:
 
 
 def _read_json_field(path: Path, field_path: list[str]) -> Optional[str]:
-    """Read a nested field from a JSON file. Returns None if not found."""
+    """Read a nested field from a JSON file. Returns None if not found.
+
+    Falsy-but-valid values like ``0`` or ``False`` are preserved
+    (stringified). Only literal ``None`` and empty-string are
+    collapsed to ``None`` — the empty-string case matches the
+    historical behaviour callers rely on (``if access_token:`` was
+    treating empty access tokens as missing).
+    """
     data = _read_json_file(path)
     if not data:
         return None
     try:
         for key in field_path:
             data = data[key]
-        return str(data) if data else None
+        if data is None or data == "":
+            return None
+        return str(data)
     except (KeyError, TypeError, IndexError):
         return None
 
