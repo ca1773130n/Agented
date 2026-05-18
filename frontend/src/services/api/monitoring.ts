@@ -23,4 +23,20 @@ export const monitoringApi = {
     apiFetch<SnapshotHistory>(
       `/admin/monitoring/history?account_id=${accountId}&window_type=${windowType}${minutes ? `&minutes=${minutes}` : ''}`
     ),
+  // Per-account OAuth credential status — used by the Token Usage
+  // Dashboard banner and the AI Backends row badge to flag accounts
+  // the poller can't resolve a token for (so the dashboard isn't
+  // silently missing rows).
+  getCredentials: () =>
+    apiFetch<{ accounts: CredentialStatusRow[] }>('/admin/monitoring/credentials'),
 };
+
+export interface CredentialStatusRow {
+  account_id: number;
+  account_name: string | null;
+  backend_type: string;
+  config_path: string | null;
+  credential_status: 'ok' | 'missing' | 'unsupported';
+  remediation: string | null;
+  expected_location: string | null;
+}

@@ -110,6 +110,45 @@ def monitoring_poll() -> Any:
     return MonitoringService.get_monitoring_status()
 
 
+@get("/credentials", sync_to_thread=False)
+def monitoring_credentials() -> dict[str, Any]:
+    """Per-account OAuth credential status for the Token Usage
+    Dashboard + AI Backends page.
+
+    Returns the same accounts ``/status`` enumerates, plus a
+    ``credential_status`` field per row. ``"missing"`` rows
+    include a copy-pasteable ``remediation`` shell command and
+    the ``expected_location`` that was checked (keychain entry
+    or file path), so operators don't need to grep the backend
+    log to figure out why an account isn't producing snapshots.
+    """
+    from app.database import get_all_accounts_with_health
+    from app.services.provider_usage_client import CredentialResolver
+
+    try:
+        accounts = get_all_accounts_with_health()
+    except Exception:
+        logger.warning("Credential status: account load failed", exc_info=True)
+        accounts = []
+
+    out = []
+    for a in accounts:
+        backend_type = a.get("backend_type") or "claude"
+        status = CredentialResolver.check_credentials(a, backend_type)
+        out.append(
+            {
+                "account_id": a.get("id"),
+                "account_name": a.get("account_name") or a.get("name"),
+                "backend_type": backend_type,
+                "config_path": a.get("config_path"),
+                "credential_status": status.get("status"),
+                "remediation": status.get("remediation"),
+                "expected_location": status.get("expected_location"),
+            }
+        )
+    return {"accounts": out}
+
+
 @get("/history", sync_to_thread=False)
 def monitoring_history(
     account_id: Optional[int] = None,
@@ -148,6 +187,7 @@ monitoring_router = Router(
         save_monitoring_config,
         monitoring_status,
         monitoring_poll,
+        monitoring_credentials,
         monitoring_history,
     ],
 )

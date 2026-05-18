@@ -103,6 +103,99 @@ class CredentialResolver:
         return hashlib.sha256(token.encode()).hexdigest()[:12]
 
     @staticmethod
+    def check_credentials(account: dict, backend_type: str) -> dict:
+        """Return a structured per-account credential status for the UI.
+
+        The Token Usage Dashboard and AI Backends page use this to
+        show "this account has no OAuth token resolvable from the
+        local keychain / config dir" without making the user grep
+        backend logs. Reuses the same get_*_token resolvers that
+        ``MonitoringService`` would use during a real poll, so a
+        ``"status": "ok"`` here means the next poll will produce
+        snapshot data.
+
+        Returns::
+
+            {
+              "status": "ok" | "missing" | "unsupported",
+              "remediation": <CLI hint to run when missing>,
+              "expected_location": <keychain/file hint that was checked>
+            }
+        """
+        config_path = account.get("config_path")
+        # Branch per provider — same priority order as the
+        # corresponding ``get_<provider>_token`` method.
+        if backend_type == "claude":
+            token = CredentialResolver.get_claude_token(account)
+            if token:
+                return {"status": "ok"}
+            expanded = os.path.expanduser(config_path) if config_path else None
+            if expanded:
+                suffix = hashlib.sha256(expanded.encode()).hexdigest()[:8]
+                kc = f"Claude Code-credentials-{suffix}"
+                hint = (
+                    f"CLAUDE_CONFIG_DIR={config_path} claude  "
+                    f"# then /login inside that session"
+                )
+            else:
+                kc = "Claude Code-credentials"
+                hint = "claude  # then /login inside that session"
+            return {
+                "status": "missing",
+                "remediation": hint,
+                "expected_location": kc,
+            }
+
+        if backend_type == "codex":
+            token, _ = CredentialResolver.get_codex_token(account)
+            if token:
+                return {"status": "ok"}
+            expanded = os.path.expanduser(config_path) if config_path else None
+            loc = (
+                f"{expanded}/auth.json" if expanded else "~/.codex/auth.json"
+            )
+            hint = (
+                f"CODEX_HOME={config_path} codex  # then complete login"
+                if config_path
+                else "codex  # then complete login"
+            )
+            return {
+                "status": "missing",
+                "remediation": hint,
+                "expected_location": loc,
+            }
+
+        if backend_type == "gemini":
+            token = CredentialResolver.get_gemini_token(account)
+            if token:
+                return {"status": "ok"}
+            expanded = os.path.expanduser(config_path) if config_path else None
+            loc = (
+                f"{expanded}/oauth_creds.json"
+                if expanded
+                else "~/.gemini/oauth_creds.json"
+            )
+            hint = (
+                f"GEMINI_DIR={config_path} gemini auth"
+                if config_path
+                else "gemini auth"
+            )
+            return {
+                "status": "missing",
+                "remediation": hint,
+                "expected_location": loc,
+            }
+
+        # Unknown backend type — neither a poller nor a remediation
+        # path exists; surface that as ``unsupported`` so the UI can
+        # render a neutral state instead of pretending it's broken.
+        return {
+            "status": "unsupported",
+            "remediation": None,
+            "expected_location": None,
+        }
+
+    @staticmethod
     def get_codex_token(account: dict) -> tuple[Optional[str], Optional[str]]:
         """Read Codex OAuth token and account_id.
 

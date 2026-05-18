@@ -18,6 +18,12 @@
 
     <LoadingState v-if="isLoading" message="Loading backends..." />
 
+    <!-- v0.7.93 — flag accounts that have no OAuth token resolvable
+         from local keychain/config. This is the natural surface to
+         fix them: the operator is already looking at the AI Backends
+         list. -->
+    <CredentialStatusBanner v-if="!isLoading" />
+
     <ErrorState v-else-if="error" :message="error" @retry="loadBackends()" />
 
     <EmptyState v-else-if="backends.length === 0" title="No backends configured" description="AI backends will appear here once detected">
@@ -126,6 +132,7 @@ import PageHeader from '../components/base/PageHeader.vue';
 import LoadingState from '../components/base/LoadingState.vue';
 import ErrorState from '../components/base/ErrorState.vue';
 import EmptyState from '../components/base/EmptyState.vue';
+import CredentialStatusBanner from '../components/credentials/CredentialStatusBanner.vue';
 import { AiChatPanel } from '@ai-accounts/vue-styled';
 import { useToast } from '../composables/useToast';
 
