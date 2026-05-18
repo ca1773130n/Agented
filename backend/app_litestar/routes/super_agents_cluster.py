@@ -607,6 +607,105 @@ def delete_document_endpoint(
     return {"message": "Document deleted"}
 
 
+# ---------------------------------------------------------------------------
+# v0.7.91 — SuperAgent → goal_loop Ouroboros bridge
+# ---------------------------------------------------------------------------
+
+
+@post("/{super_agent_id:str}/ouroboros-runs", sync_to_thread=False)
+def start_ouroboros_run(
+    super_agent_id: str, data: dict, caller: Caller
+) -> dict[str, Any]:
+    """v0.7.91 — bridge: spawn a goal_loop project session that
+    inherits the SuperAgent's backend + model and runs in
+    Ouroboros mode.
+
+    The SA itself isn't rewritten — we just wire its identity
+    (backend_type, preferred_model) into the goal_loop config
+    so the judge calls land on the SA's backend rather than the
+    project default. Ownership / activity / dead-end semantics
+    are the goal_loop machinery's (see GoalLoopRunner v0.7.86–87).
+
+    Body:
+      * ``project_id`` (str, required) — the project providing
+        ``cwd`` for the spawned session. Required because
+        goal_loop sessions are project-scoped today.
+      * ``goal`` (str, required) — the natural-language objective
+        the SA should drive toward.
+      * ``max_iterations`` (int, default 20)
+      * ``max_wall_seconds`` (int, default 1800)
+      * ``check_cmd`` (str | null) — operator-supplied
+        deterministic check; goal_loop's judge prefers this
+        over the LLM judge when present.
+      * ``yolo_mode`` (bool, default false)
+
+    Returns ``{session_id, super_agent_id, pid, status}``.
+    """
+    del caller
+    sa = get_super_agent(super_agent_id)
+    if not sa:
+        raise NotFoundException(detail="SuperAgent not found")
+
+    body = data or {}
+    project_id = body.get("project_id")
+    goal = (body.get("goal") or "").strip()
+    if not project_id:
+        raise ClientException(detail="project_id is required")
+    if not goal:
+        raise ClientException(detail="goal is required")
+
+    from app.database import get_project
+    from app.services.execution_type_handler import get_handler
+    from app.services.project_workspace_service import ProjectWorkspaceService
+
+    project = get_project(project_id)
+    if not project:
+        raise NotFoundException(detail="Project not found")
+
+    try:
+        cwd = ProjectWorkspaceService.resolve_working_directory(project_id)
+    except ValueError as e:
+        raise ClientException(detail=str(e)) from e
+
+    handler = get_handler("goal_loop")
+    if not handler:
+        from litestar.exceptions import HTTPException
+
+        raise HTTPException(
+            status_code=500, detail="goal_loop handler is not registered"
+        )
+
+    # Mirror the SA's backend identity into the judge config so
+    # judge calls go to the same backend the SA itself would use
+    # (cost + behaviour parity).
+    backend_kind = sa.get("backend_type") or "claude"
+    preferred_model = sa.get("preferred_model")
+
+    session_config = {
+        "project_id": project_id,
+        "cwd": cwd,
+        "execution_mode": "autonomous",
+        "yolo_mode": bool(body.get("yolo_mode")),
+        "goal_loop_config": {
+            "goal": goal,
+            "check_cmd": body.get("check_cmd"),
+            "max_iterations": int(body.get("max_iterations") or 20),
+            "max_wall_seconds": int(body.get("max_wall_seconds") or 1800),
+            "judge_backend_kind": backend_kind,
+            "judge_model_override": preferred_model,
+            # v0.7.87 default — explicit here for the audit trail.
+            "ouroboros": True,
+        },
+    }
+    result = handler.start(session_config)
+    if "error" in result:
+        from litestar.exceptions import HTTPException
+
+        raise HTTPException(status_code=503, detail=result["error"])
+    result["super_agent_id"] = super_agent_id
+    return result
+
+
 super_agents_router = Router(
     path="/admin/super-agents",
     route_handlers=[
@@ -623,6 +722,8 @@ super_agents_router = Router(
         end_session,
         stream_session,
         git_action,
+        # v0.7.91 — SA → goal_loop Ouroboros bridge
+        start_ouroboros_run,
         list_documents,
         create_document,
         get_document_endpoint,
