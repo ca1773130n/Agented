@@ -505,6 +505,12 @@ async function onDialogConfirm(payload: {
     maxWallSeconds: number;
     judgeBackendKind: 'claude' | 'codex' | 'gemini' | 'opencode';
     judgeModelOverride: string | null;
+    // v0.7.87 — Ouroboros mode flag. Defaults to ``true`` on the
+    // backend (per goal_loop_runner.py:264). The dialog exposes
+    // it as an explicit toggle so the operator can opt out for
+    // sessions where the agent backend is a poor fit for
+    // structured hypothesis emission.
+    ouroboros?: boolean;
   } | null;
 }) {
   showStartDialog.value = false;
@@ -587,6 +593,16 @@ async function onDialogConfirm(payload: {
             max_wall_seconds: payload.goalLoopConfig.maxWallSeconds,
             judge_backend_kind: payload.goalLoopConfig.judgeBackendKind,
             judge_model_override: payload.goalLoopConfig.judgeModelOverride,
+            // v0.7.87 (codex WARN A) — forward the Ouroboros flag
+            // when the dialog set it (true or false). Omitting
+            // the key entirely also yields the backend default
+            // (true), so an undefined value here doesn't change
+            // behaviour — but sending the explicit value keeps
+            // the audit trail clear when reading the session's
+            // ``goal_loop_config`` JSON.
+            ...(payload.goalLoopConfig.ouroboros !== undefined
+              ? { ouroboros: payload.goalLoopConfig.ouroboros }
+              : {}),
           },
         }
       : {}),

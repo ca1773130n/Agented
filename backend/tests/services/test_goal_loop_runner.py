@@ -28,7 +28,12 @@ def test_continue_prompt_includes_goal_and_reason():
     p = goal_loop_runner._continue_prompt("ship feature X", "tests still fail")
     assert "Goal: ship feature X" in p
     assert "Last check: tests still fail" in p
-    assert "Address the gap and continue." in p
+    # v0.7.87 — Ouroboros is default; the continue prompt asks
+    # for hypothesis markers instead of the legacy
+    # "Address the gap and continue." tail. The presence of the
+    # markers is what the agent uses to score itself next turn.
+    assert "**Hypothesis:**" in p
+    assert "**Predicted outcome:**" in p
     # No iteration counter — spec calls this out explicitly.
     assert "iteration" not in p.lower()
     assert "iter" not in p.lower()
@@ -233,7 +238,101 @@ def test_runner_sends_continue_on_not_met_then_iteration_cap(
     initial = json.loads(fake_psm.sent_inputs[0])
     assert "Start working toward the goal" in initial["message"]["content"][0]["text"]
     second = json.loads(fake_psm.sent_inputs[1])
-    assert "Address the gap and continue." in second["message"]["content"][0]["text"]
+    # v0.7.87 — Ouroboros is the default continue shape; the
+    # legacy "Address the gap and continue." tail was removed.
+    assert "**Hypothesis:**" in second["message"]["content"][0]["text"]
+
+
+def test_runner_opt_out_uses_legacy_prompts_and_skips_ouroboros_machinery(
+    fake_psm, stub_iteration_db, monkeypatch
+):
+    """v0.7.87 (codex WARN F) — explicit ``ouroboros: false`` in
+    the config must restore the legacy plain-continue shape AND
+    skip every Ouroboros side effect end-to-end:
+
+      * Initial + continue prompts do NOT include the hypothesis
+        markers (regression-test against the default flip).
+      * ``_extract_hypothesis`` is not called → no per-iteration
+        hypothesis row data.
+      * Dead-end recording is gated off (no
+        ``add_goal_loop_dead_end`` calls).
+      * Convergence termination cannot fire because
+        ``recent_iteration_verdicts`` is gated by ``ouroboros`` too.
+
+    Confirms the opt-out is a real escape hatch end-to-end, not
+    just at the prompt-helper layer.
+    """
+    # Judge always returns met=False with a fake binary verdict so
+    # the runner enters the continue branch (where the prompt
+    # shape divergence lives).
+    monkeypatch.setattr(
+        goal_loop_runner.GoalJudgeService,
+        "judge",
+        classmethod(
+            lambda cls, goal, text, **kw: JudgeVerdict(
+                met=False, source="llm", reason="not yet"
+            )
+        ),
+    )
+    # Spy on the Ouroboros side-effect helpers; opt-out must not
+    # call them.
+    extract_calls: list = []
+    monkeypatch.setattr(
+        goal_loop_runner,
+        "_extract_hypothesis",
+        lambda text: (extract_calls.append(text) or (None, None)),
+    )
+    dead_end_calls: list = []
+    monkeypatch.setattr(
+        goal_loop_runner,
+        "add_goal_loop_dead_end",
+        lambda **kw: dead_end_calls.append(kw),
+    )
+    convergence_calls: list = []
+    monkeypatch.setattr(
+        goal_loop_runner,
+        "recent_iteration_verdicts",
+        lambda session_id, limit=3: (
+            convergence_calls.append((session_id, limit)) or []
+        ),
+    )
+
+    fake_psm.auto_echo = True
+    goal_loop_runner.start_runner(
+        "psess-optout",
+        {
+            "goal": "g",
+            "max_iterations": 3,
+            "max_wall_seconds": 60,
+            # The explicit opt-out we're regression-testing.
+            "ouroboros": False,
+        },
+        cwd=None,
+    )
+    assert _drive(_RunnerStateLookup("psess-optout"))
+    assert fake_psm.stopped == ["psess-optout"]
+
+    # Prompts: legacy shape, no hypothesis markers.
+    initial = json.loads(fake_psm.sent_inputs[0])
+    initial_text = initial["message"]["content"][0]["text"]
+    assert "Make progress this turn" in initial_text
+    assert "Hypothesis" not in initial_text
+    second = json.loads(fake_psm.sent_inputs[1])
+    second_text = second["message"]["content"][0]["text"]
+    assert "Address the gap and continue." in second_text
+    assert "Hypothesis" not in second_text
+
+    # No Ouroboros side-effects fired.
+    assert extract_calls == [], "opt-out must not call _extract_hypothesis"
+    assert dead_end_calls == [], "opt-out must not record dead-ends"
+    assert convergence_calls == [], "opt-out must not check convergence"
+
+    # The completed iteration rows must NOT carry an
+    # ouroboros_verdict (the binary-mode judge returns None there).
+    for _row_id, kwargs in stub_iteration_db["completes"]:
+        assert kwargs.get("hypothesis") is None
+        assert kwargs.get("predicted_outcome") is None
+        assert kwargs.get("ouroboros_verdict") is None
 
 
 def test_runner_records_each_iteration(

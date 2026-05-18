@@ -1,8 +1,11 @@
-"""Tests for v0.7.86 Ouroboros adaptation in GoalLoopRunner.
+"""Tests for the GoalLoopRunner Ouroboros adaptation
+(v0.7.86 introduced as opt-in; v0.7.87 flipped the default to on).
 
 Covers:
   * Migration v128 created the schema additions.
   * Hypothesis/predicted extraction from agent turn text.
+  * Prompt helpers: default-on Ouroboros shape vs explicit opt-out
+    via ``ouroboros=False``.
   * GoalJudgeService ouroboros mode (mocked HTTP) returning a
     4-state verdict.
   * Dead-end registry idempotency.
@@ -93,21 +96,37 @@ def test_extract_hypothesis_returns_none_when_missing():
 # ---------------------------------------------------------------------
 
 
-def test_initial_prompt_ouroboros_asks_for_hypothesis():
-    out = _initial_prompt("ship feature", ouroboros=True)
+def test_initial_prompt_default_asks_for_hypothesis():
+    """v0.7.87 — ``ouroboros`` defaults to ``True``; calling the
+    helper with no kwargs still asks for the markers.
+    """
+    out = _initial_prompt("ship feature")
     assert "**Hypothesis:**" in out
     assert "**Predicted outcome:**" in out
 
 
-def test_initial_prompt_legacy_shape_unchanged():
+def test_initial_prompt_opt_out_skips_hypothesis():
+    """Operators can still disable Ouroboros explicitly."""
     out = _initial_prompt("ship feature", ouroboros=False)
     assert "Hypothesis" not in out
     assert "Make progress this turn" in out
 
 
+def test_continue_prompt_default_asks_for_hypothesis():
+    out = _continue_prompt("ship feature", "missing tests")
+    assert "**Hypothesis:**" in out
+    assert "**Predicted outcome:**" in out
+
+
+def test_continue_prompt_opt_out_uses_legacy_tail():
+    out = _continue_prompt("ship feature", "missing tests", ouroboros=False)
+    assert "Hypothesis" not in out
+    assert "Address the gap and continue." in out
+
+
 def test_continue_prompt_injects_dead_ends_block():
     block = "Previously falsified approaches (do NOT retry these):\n- A — fail\n- B — fail"
-    out = _continue_prompt("ship feature", "missing tests", ouroboros=True, dead_ends_block=block)
+    out = _continue_prompt("ship feature", "missing tests", dead_ends_block=block)
     assert "Previously falsified" in out
     assert "**Hypothesis:**" in out
 

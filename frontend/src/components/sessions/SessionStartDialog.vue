@@ -77,6 +77,10 @@ const emit = defineEmits<{
         maxWallSeconds: number;
         judgeBackendKind: 'claude' | 'codex' | 'gemini' | 'opencode';
         judgeModelOverride: string | null;
+        // v0.7.87 — Ouroboros mode. Default true (matches the
+        // backend default); operator can untick to fall back to
+        // the legacy plain-continue judge.
+        ouroboros: boolean;
       } | null;
     },
   ): void;
@@ -100,6 +104,12 @@ const goalMaxIterations = ref(20);
 const goalMaxWallMinutes = ref(30);
 const goalJudgeBackend = ref<'claude' | 'codex' | 'gemini' | 'opencode'>('claude');
 const goalJudgeModelOverride = ref('');
+// v0.7.87 — Ouroboros mode toggle. Default true so newly-created
+// goal-loop sessions inherit the hypothesis-driven judge loop.
+// Operators can untick to fall back to the legacy binary judge
+// (useful when the agent backend doesn't follow markdown markers
+// reliably).
+const goalOuroboros = ref(true);
 
 const isGoalLoop = computed(() => executionType.value === 'goal_loop');
 const goalCanSubmit = computed(() => {
@@ -296,6 +306,7 @@ watch(
       goalMaxWallMinutes.value = 30;
       goalJudgeBackend.value = 'claude';
       goalJudgeModelOverride.value = '';
+      goalOuroboros.value = true;
       hydrateDefaults().then(() => {
         yoloMode.value = userDefaultYolo.value;
       });
@@ -339,6 +350,7 @@ function onSubmit() {
           maxWallSeconds: goalMaxWallMinutes.value * 60,
           judgeBackendKind: goalJudgeBackend.value,
           judgeModelOverride: goalJudgeModelOverride.value.trim() || null,
+          ouroboros: goalOuroboros.value,
         }
       : null,
   });
@@ -497,6 +509,28 @@ function onSubmit() {
             Defaults to a small/cheap model per backend — the judge
             only answers yes/no, so the cheapest available is enough.
           </p>
+        </div>
+
+        <!-- v0.7.87 — Ouroboros mode toggle. Default-on so the
+             frontend-created session matches the backend's
+             v0.7.87 default; operator can untick to fall back to
+             the legacy binary judge. -->
+        <div class="form-group toggle-group">
+          <label class="row-toggle">
+            <input type="checkbox" v-model="goalOuroboros" />
+            <span class="toggle-body">
+              <span class="toggle-title">Ouroboros mode (recommended)</span>
+              <span class="toggle-sub">
+                Each turn must lead with
+                <code>**Hypothesis:**</code> +
+                <code>**Predicted outcome:**</code> markers; the
+                judge scores them in 4-state mode and falsified
+                approaches are recorded as session dead-ends so
+                the agent doesn't re-walk known failures.
+                Untick to fall back to the legacy binary judge.
+              </span>
+            </span>
+          </label>
         </div>
 
         <div class="form-group toggle-group">
