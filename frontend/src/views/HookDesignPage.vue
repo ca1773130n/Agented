@@ -25,7 +25,8 @@ const isLoadingEdit = ref(false);
 // ---------------------------------------------------------------------------
 // Mode toggle
 // ---------------------------------------------------------------------------
-const designMode = ref<'form' | 'chat'>('form');
+// v0.7.90 — chat is the default design mode (see CommandDesignPage).
+const designMode = ref<'form' | 'chat'>('chat');
 
 // ---------------------------------------------------------------------------
 // Form mode state
@@ -241,11 +242,29 @@ const finalizeTooltip = computed(() =>
     : "Keep chatting — Claude needs more details before the hook can be created. Tell it which event to hook (PreToolUse, PostToolUse, …), the matcher pattern, and the command to run.",
 );
 
+// v0.7.90 — extracted so the initial-mount path (now that chat is
+// the default) and the form→chat transition use the same start-
+// or-resume logic.
+function ensureChatStarted() {
+  if (conversation.chatStarted.value) return;
+  if (conversation.activeConversations.value.length > 0) {
+    conversation.resumeConversation(conversation.activeConversations.value[0].id);
+  } else {
+    conversation.startConversation();
+  }
+}
+
 // Check for active conversations on mount and load existing hook for edit mode
-onMounted(() => {
-  conversation.checkActiveConversations();
+onMounted(async () => {
+  await conversation.checkActiveConversations();
   if (isEditMode.value) {
     loadExistingHook();
+  }
+  // v0.7.90 — chat is the default mode; kick off the chat after
+  // active-conversation discovery resolves so we resume an
+  // in-flight conv instead of always starting fresh.
+  if (designMode.value === 'chat') {
+    ensureChatStarted();
   }
 });
 

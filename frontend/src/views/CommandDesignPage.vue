@@ -22,7 +22,11 @@ const isEditMode = computed(() => !!commandId.value);
 const isLoadingEdit = ref(false);
 
 // --------------- Mode toggle ---------------
-const designMode = ref<'form' | 'chat'>('form');
+// v0.7.90 — chat is the default design mode. Form stays as a
+// secondary path for operators who already know the entity shape
+// and want to fill it directly, but the AI-driven flow is the
+// recommended way to bootstrap a new command from a description.
+const designMode = ref<'form' | 'chat'>('chat');
 
 // --------------- Form mode state ---------------
 const formData = ref({
@@ -92,20 +96,31 @@ const COMMAND_ICON_PATHS = [
 ];
 
 // --------------- Mode switching ---------------
-onMounted(() => {
-  conversation.checkActiveConversations();
+// v0.7.90 — chat is the default mode; shared start-or-resume
+// helper so onMounted and the form→chat transition use the same
+// flow.
+function ensureChatStarted() {
+  if (conversation.chatStarted.value) return;
+  if (conversation.activeConversations.value.length > 0) {
+    conversation.resumeConversation(conversation.activeConversations.value[0].id);
+  } else {
+    conversation.startConversation();
+  }
+}
+
+onMounted(async () => {
+  await conversation.checkActiveConversations();
   if (isEditMode.value) {
     loadExistingCommand();
+  }
+  if (designMode.value === 'chat') {
+    ensureChatStarted();
   }
 });
 
 watch(designMode, (newMode) => {
-  if (newMode === 'chat' && !conversation.chatStarted.value) {
-    if (conversation.activeConversations.value.length > 0) {
-      conversation.resumeConversation(conversation.activeConversations.value[0].id);
-    } else {
-      conversation.startConversation();
-    }
+  if (newMode === 'chat') {
+    ensureChatStarted();
   }
 });
 

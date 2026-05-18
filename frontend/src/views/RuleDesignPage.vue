@@ -23,7 +23,8 @@ const isEditMode = computed(() => !!ruleId.value);
 const isLoadingEdit = ref(false);
 
 // Mode Toggle
-const designMode = ref<'form' | 'chat'>('form');
+// v0.7.90 — chat is the default design mode (see CommandDesignPage).
+const designMode = ref<'form' | 'chat'>('chat');
 
 // Form Mode State
 const formData = ref({
@@ -226,22 +227,31 @@ const finalizeTooltip = computed(() =>
     : "Keep chatting — Claude needs more details before the rule can be created. Tell it the rule name, what it validates, and the validation logic.",
 );
 
-// Check for active conversations on mount and load existing rule for edit mode
-onMounted(() => {
-  conversation.checkActiveConversations();
+// v0.7.90 — chat is the default mode; shared start-or-resume
+// helper so onMounted and the form→chat transition use the same
+// flow.
+function ensureChatStarted() {
+  if (conversation.chatStarted.value) return;
+  if (conversation.activeConversations.value.length > 0) {
+    conversation.resumeConversation(conversation.activeConversations.value[0].id);
+  } else {
+    conversation.startConversation();
+  }
+}
+
+onMounted(async () => {
+  await conversation.checkActiveConversations();
   if (isEditMode.value) {
     loadExistingRule();
   }
+  if (designMode.value === 'chat') {
+    ensureChatStarted();
+  }
 });
 
-// Start conversation only when switching to chat mode
 watch(designMode, (newMode) => {
-  if (newMode === 'chat' && !conversation.chatStarted.value) {
-    if (conversation.activeConversations.value.length > 0) {
-      conversation.resumeConversation(conversation.activeConversations.value[0].id);
-    } else {
-      conversation.startConversation();
-    }
+  if (newMode === 'chat') {
+    ensureChatStarted();
   }
 });
 
