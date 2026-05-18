@@ -490,6 +490,36 @@ def _stream_via_proxy(
                 raw = response.read()
                 error_detail = _extract_proxy_error(raw, response.status_code)
                 logger.error("Proxy error %d: %s", response.status_code, error_detail)
+                # v0.7.89 — dump the request shape on the
+                # "text content blocks must be non-empty" class
+                # of errors so we can locate the empty-content
+                # bug at its source. The v0.7.80 defense filter
+                # excludes None/whitespace content, but a payload
+                # with whitespace-only content nested inside an
+                # array would still slip past. Logged once per
+                # occurrence at WARNING so it shows up in deploy
+                # logs without spamming production.
+                if "content block" in error_detail.lower():
+                    debug_messages = []
+                    for i, m in enumerate(payload.get("messages") or []):
+                        content = m.get("content")
+                        debug_messages.append(
+                            {
+                                "idx": i,
+                                "role": m.get("role"),
+                                "content_type": type(content).__name__,
+                                "content_len": (
+                                    len(content) if isinstance(content, (str, list)) else None
+                                ),
+                                "content_repr": repr(content)[:240],
+                            }
+                        )
+                    logger.warning(
+                        "Empty-content-block proxy error — request shape: model=%s, "
+                        "messages=%s",
+                        payload.get("model"),
+                        debug_messages,
+                    )
 
                 # Account-level errors — raise so caller can try another account
                 if response.status_code in (429, 401, 403) or "rate" in error_detail.lower():
