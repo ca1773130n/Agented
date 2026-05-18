@@ -32,7 +32,11 @@ function makeConv(): FakeConv {
   return {
     conversationId: ref<string | null>(null),
     startConversation: vi.fn(async () => {}),
-    resumeConversation: vi.fn(async (id: string) => {}),
+    // ``id`` parameter is intentionally unused — the mock just
+    // records that resume was called; individual tests override
+    // the implementation when they need conversationId set.
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    resumeConversation: vi.fn(async (_id: string) => {}),
   } as unknown as FakeConv;
 }
 
@@ -59,7 +63,13 @@ const wrappers: VueWrapper<any>[] = [];
 function mountHarness(conv: FakeConv, api: FakeApi, keyPrefix: string) {
   const Harness = defineComponent({
     setup() {
-      useWizardAutoResume(conv, api, keyPrefix);
+      // Cast to ``any`` to bridge vitest's ``vi.fn`` mock type
+      // (which doesn't structurally match the strict
+      // ``AutoResumeConversation`` signature under
+      // ``strictFunctionTypes``) to the composable's expected
+      // shape. We've already type-narrowed the test inputs via
+      // the ``FakeConv`` / ``FakeApi`` interfaces above.
+      useWizardAutoResume(conv as any, api as any, keyPrefix);
       return () => h('div');
     },
   });
