@@ -85,6 +85,55 @@ class CredentialResolver:
 
         return None
 
+    @classmethod
+    def _gemini_token_is_expired(cls, account: dict) -> bool:
+        """Re-check the Gemini OAuth creds for freshness.
+
+        ``get_gemini_token`` falls back to returning the stale
+        access_token when a refresh fails — that's fine for the
+        poller (it'll just 401), but the credential-status UI
+        should treat "expired with no working refresh path" as
+        missing, not OK. This re-reads the creds file (without
+        attempting a refresh) and returns True only when we can
+        prove the stored token is past its expiry.
+        """
+        config_path = account.get("config_path")
+        cred_data = None
+        if config_path:
+            cred_path = Path(os.path.expanduser(config_path)) / "oauth_creds.json"
+            cred_data = _read_json_file(cred_path)
+        if not cred_data and platform.system() == "Darwin":
+            raw = _read_keychain_raw("gemini-cli-oauth")
+            if raw:
+                try:
+                    cred_data = json.loads(raw)
+                except (json.JSONDecodeError, TypeError):
+                    cred_data = None
+        if not cred_data:
+            cred_data = _read_json_file(Path.home() / ".gemini" / "oauth_creds.json")
+        if not cred_data:
+            return False  # Can't prove expiry — defer to the get_*_token result.
+
+        expiry_date = cred_data.get("expiry_date")
+        expiry = cred_data.get("expiry") or cred_data.get("token_expiry")
+        try:
+            if expiry_date:
+                exp_dt = datetime.fromtimestamp(int(expiry_date) / 1000, tz=timezone.utc)
+            elif expiry:
+                exp_dt = datetime.fromisoformat(str(expiry).replace("Z", "+00:00"))
+            else:
+                return False
+        except (ValueError, TypeError, OSError):
+            return False
+        if exp_dt >= datetime.now(timezone.utc):
+            return False
+        # Expired. If there's no refresh_token, it's definitely
+        # unusable. If there IS a refresh_token, get_gemini_token
+        # would have either succeeded (returning the refreshed
+        # token, never hitting this path) or failed silently — in
+        # which case treating it as missing is correct.
+        return True
+
     @staticmethod
     def get_token_fingerprint(account: dict, backend_type: str) -> Optional[str]:
         """Return a short hash fingerprint of the resolved token for deduplication.
@@ -102,8 +151,8 @@ class CredentialResolver:
             return None
         return hashlib.sha256(token.encode()).hexdigest()[:12]
 
-    @staticmethod
-    def check_credentials(account: dict, backend_type: str) -> dict:
+    @classmethod
+    def check_credentials(cls, account: dict, backend_type: str) -> dict:
         """Return a structured per-account credential status for the UI.
 
         The Token Usage Dashboard and AI Backends page use this to
@@ -147,8 +196,12 @@ class CredentialResolver:
             }
 
         if backend_type == "codex":
-            token, _ = CredentialResolver.get_codex_token(account)
-            if token:
+            token, codex_account_id = CredentialResolver.get_codex_token(account)
+            # The real poller's _fetch_codex needs BOTH the access
+            # token and the account_id (used as the
+            # ``chatgpt-account-id`` header). Reporting "ok" with
+            # only the token would mismatch what the poll sees.
+            if token and codex_account_id:
                 return {"status": "ok"}
             expanded = os.path.expanduser(config_path) if config_path else None
             loc = (
@@ -167,7 +220,13 @@ class CredentialResolver:
 
         if backend_type == "gemini":
             token = CredentialResolver.get_gemini_token(account)
-            if token:
+            # get_gemini_token attempts a refresh when the stored
+            # token is expired, but falls back to returning the
+            # stale ``access_token`` if refresh fails (no
+            # refresh_token, network error, revoked client, ...).
+            # The poll's HTTP call would then 401. Mirror that by
+            # re-checking expiry here on the raw creds file.
+            if token and not cls._gemini_token_is_expired(account):
                 return {"status": "ok"}
             expanded = os.path.expanduser(config_path) if config_path else None
             loc = (

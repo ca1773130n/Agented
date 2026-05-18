@@ -104,4 +104,41 @@ describe('CredentialStatusBanner', () => {
     expect(warnSpy).toHaveBeenCalled();
     warnSpy.mockRestore();
   });
+
+  it('Copy button falls back to execCommand when clipboard API is unavailable', async () => {
+    (monitoringApi.getCredentials as ReturnType<typeof vi.fn>).mockResolvedValue({
+      accounts: [missingClaude],
+    });
+    // Simulate an http:// origin: secure context off + clipboard
+    // undefined. The component must reach for the textarea +
+    // execCommand fallback rather than throwing.
+    Object.defineProperty(window, 'isSecureContext', {
+      value: false,
+      configurable: true,
+    });
+    const origClipboard = navigator.clipboard;
+    Object.defineProperty(navigator, 'clipboard', {
+      value: undefined,
+      configurable: true,
+    });
+    // happy-dom doesn't define execCommand by default — install
+    // a stub before spying.
+    if (typeof document.execCommand !== 'function') {
+      (document as Document & { execCommand: (cmd: string) => boolean }).execCommand =
+        () => false;
+    }
+    const execSpy = vi
+      .spyOn(document, 'execCommand')
+      .mockReturnValue(true);
+    const w = mount(CredentialStatusBanner);
+    await flushPromises();
+    await w.find('.cred-copy').trigger('click');
+    expect(execSpy).toHaveBeenCalledWith('copy');
+    // Restore.
+    Object.defineProperty(navigator, 'clipboard', {
+      value: origClipboard,
+      configurable: true,
+    });
+    execSpy.mockRestore();
+  });
 });

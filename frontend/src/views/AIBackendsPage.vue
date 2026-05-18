@@ -16,13 +16,15 @@
       </template>
     </PageHeader>
 
-    <LoadingState v-if="isLoading" message="Loading backends..." />
-
     <!-- v0.7.93 — flag accounts that have no OAuth token resolvable
-         from local keychain/config. This is the natural surface to
-         fix them: the operator is already looking at the AI Backends
-         list. -->
-    <CredentialStatusBanner v-if="!isLoading" />
+         from local keychain/config. Placed OUTSIDE the
+         loading/error/empty v-if chain (a v-if sibling between
+         v-if and v-else-if would orphan the rest of the chain and
+         prevent the grid from ever rendering). The banner self-
+         hides when there are no missing credentials. -->
+    <CredentialStatusBanner />
+
+    <LoadingState v-if="isLoading" message="Loading backends..." />
 
     <ErrorState v-else-if="error" :message="error" @retry="loadBackends()" />
 

@@ -483,6 +483,25 @@ class TestCheckCredentials:
         assert "CODEX_HOME" in status["remediation"]
         assert "auth.json" in status["expected_location"]
 
+    def test_codex_requires_account_id(self, tmp_path, monkeypatch):
+        # auth.json has an access_token but no account_id — the
+        # real ``_fetch_codex`` poll would fail because the
+        # ``chatgpt-account-id`` header has nothing to populate.
+        # check_credentials must report "missing" to mirror that,
+        # not falsely "ok".
+        config_dir = tmp_path / "codex-broken"
+        config_dir.mkdir()
+        (config_dir / "auth.json").write_text(
+            json.dumps({"tokens": {"access_token": "tok-only", "account_id": None}})
+        )
+        monkeypatch.setattr(Path, "home", lambda: tmp_path / "elsewhere")
+        status = CredentialResolver.check_credentials(
+            {"id": 3, "config_path": str(config_dir)}, "codex"
+        )
+        assert status["status"] == "missing", (
+            "codex token without account_id must be reported missing"
+        )
+
     def test_gemini_missing_uses_gemini_dir_hint(self, tmp_path, monkeypatch):
         monkeypatch.setattr(Path, "home", lambda: tmp_path / "home")
         monkeypatch.setattr(
@@ -513,3 +532,34 @@ class TestCheckCredentials:
         assert status["status"] == "unsupported"
         assert status["remediation"] is None
         assert status["expected_location"] is None
+
+    def test_gemini_expired_unrefreshable_token_reported_missing(
+        self, tmp_path, monkeypatch
+    ):
+        # oauth_creds.json has an access_token but it's expired and
+        # there's no refresh_token to recover with. The real poll
+        # would 401; check_credentials must mirror that as
+        # ``missing`` rather than reporting ``ok`` on the stale token.
+        config_dir = tmp_path / "gemini-expired"
+        config_dir.mkdir()
+        expired_ms = int(
+            (datetime.now(timezone.utc) - timedelta(hours=2)).timestamp() * 1000
+        )
+        (config_dir / "oauth_creds.json").write_text(
+            json.dumps(
+                {
+                    "access_token": "stale-tok",
+                    "refresh_token": None,
+                    "expiry_date": expired_ms,
+                }
+            )
+        )
+        monkeypatch.setattr(Path, "home", lambda: tmp_path / "elsewhere")
+        monkeypatch.setattr(
+            "app.services.provider_usage_client.platform.system", lambda: "Linux"
+        )
+        status = CredentialResolver.check_credentials(
+            {"id": 5, "config_path": str(config_dir)}, "gemini"
+        )
+        assert status["status"] == "missing"
+        assert "GEMINI_DIR" in status["remediation"]

@@ -62,12 +62,40 @@ async function load() {
 onMounted(load);
 
 async function copy(text: string) {
+  // ``navigator.clipboard`` is undefined on insecure (http://)
+  // origins and on some browsers when the window isn't focused.
+  // Use the deprecated ``execCommand('copy')`` via a hidden
+  // textarea as a fallback so the Copy button still works in
+  // local-dev HTTP setups.
   try {
-    await navigator.clipboard.writeText(text);
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text);
+    } else if (!fallbackCopy(text)) {
+      throw new Error('clipboard unavailable');
+    }
     showToast('Command copied to clipboard', 'success');
   } catch {
     showToast('Copy failed — select and copy manually', 'error');
   }
+}
+
+function fallbackCopy(text: string): boolean {
+  const ta = document.createElement('textarea');
+  ta.value = text;
+  ta.setAttribute('readonly', '');
+  ta.style.position = 'fixed';
+  ta.style.top = '-1000px';
+  ta.style.opacity = '0';
+  document.body.appendChild(ta);
+  ta.select();
+  let ok = false;
+  try {
+    ok = document.execCommand('copy');
+  } catch {
+    ok = false;
+  }
+  document.body.removeChild(ta);
+  return ok;
 }
 </script>
 

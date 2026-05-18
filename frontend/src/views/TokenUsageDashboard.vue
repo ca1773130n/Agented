@@ -422,13 +422,15 @@ onUnmounted(() => {
       </div>
     </div>
 
-    <LoadingState v-if="isLoading" message="Loading usage data..." />
-
     <!-- v0.7.93 — surface accounts the poller can't resolve OAuth
          tokens for. Without this, the dashboard silently drops
          windows for credential-less accounts; operators had to
-         grep backend logs to see what happened. -->
-    <CredentialStatusBanner v-show="!isLoading" />
+         grep backend logs to see what happened. The banner self-
+         hides when there's nothing to show, so it can sit above
+         the loading state without flashing. -->
+    <CredentialStatusBanner />
+
+    <LoadingState v-if="isLoading" message="Loading usage data..." />
 
     <TokenBreakdownCard v-show="!isLoading" :total-input-tokens="totalInputTokens" :total-output-tokens="totalOutputTokens" :total-cache-read-tokens="totalCacheReadTokens" :total-cache-creation-tokens="totalCacheCreationTokens" :total-all-tokens="totalAllTokens" :cache-hit-rate="cacheHitRate" :period-label="periodLabel" :total-spend="totalSpend" :total-sessions="totalSessions" :total-turns="totalTurns" :total-executions="totalExecutions" :session-stats="sessionStats" :all-time-spend="allTimeSpend" />
     <MonitoringSection v-show="!isLoading" :monitoring-status="monitoringStatus" :monitoring-loading="monitoringLoading" :poll-now-loading="pollNowLoading" :monitoring-refreshing="monitoringRefreshing" :trend-histories="trendHistories" :expanded-cards="expandedCards" :selected-rate-windows="selectedRateWindows" :selected-projection-window="selectedProjectionWindow" :chart-time-range-start="chartTimeRangeStart" :chart-time-range-end="chartTimeRangeEnd" :rotation-sessions="rotationStatus?.sessions ?? []" :rotation-evaluator="rotationStatus?.evaluator ?? undefined" @poll-now="pollNow" @toggle-card="toggleCard" @update:selected-rate-windows="Object.assign(selectedRateWindows, $event)" @update:selected-projection-window="Object.assign(selectedProjectionWindow, $event)" />
