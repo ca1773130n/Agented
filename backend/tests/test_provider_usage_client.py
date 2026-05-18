@@ -425,6 +425,53 @@ class TestFetchCodex:
         assert ProviderUsageClient._fetch_codex({"id": "a1"}) == []
 
 
+class TestKeychainEntryShadowing:
+    """v0.7.94 — regression guard for the personal2 case where a
+    Sentry MCP plugin had created a Keychain entry under the same
+    ``svce`` as Claude Code's auth entry, but with ``acct="unknown"``.
+    ``security find-generic-password -s <svce>`` returned the
+    plugin's mcpOAuth-only blob first, hiding the real claudeAiOauth
+    entry from the poller. The fix iterates entries and picks the
+    one that actually contains the requested field.
+    """
+
+    def test_read_keychain_skips_shadowed_entry_without_field(self, monkeypatch):
+        from app.services import provider_usage_client as puc
+
+        plugin_blob = json.dumps(
+            {"mcpOAuth": {"some-server": {"accessToken": "mcp-tok"}}}
+        )
+        claude_blob = json.dumps(
+            {"claudeAiOauth": {"accessToken": "the-real-cc-token"}}
+        )
+
+        def fake_iter(service):
+            assert service == "Claude Code-credentials-deadbeef"
+            # Plugin entry comes first (the bug condition); claude
+            # entry second. The helper must skip the plugin one
+            # because it lacks ``claudeAiOauth.accessToken``.
+            yield plugin_blob
+            yield claude_blob
+
+        monkeypatch.setattr(puc, "_iter_keychain_entries", fake_iter)
+
+        token = puc._read_keychain(
+            "Claude Code-credentials-deadbeef", "claudeAiOauth.accessToken"
+        )
+        assert token == "the-real-cc-token"
+
+    def test_read_keychain_returns_none_when_no_entry_has_field(self, monkeypatch):
+        from app.services import provider_usage_client as puc
+
+        def fake_iter(_service):
+            yield json.dumps({"mcpOAuth": {"x": {"accessToken": "mcp"}}})
+            yield json.dumps({"someOther": {"thing": "yes"}})
+
+        monkeypatch.setattr(puc, "_iter_keychain_entries", fake_iter)
+        token = puc._read_keychain("svc", "claudeAiOauth.accessToken")
+        assert token is None
+
+
 class TestCheckCredentials:
     """Tests for CredentialResolver.check_credentials — the UI-hint
     helper used by GET /admin/monitoring/credentials.

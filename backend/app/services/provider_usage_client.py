@@ -711,22 +711,36 @@ def _read_keychain(service: str, json_field_path: str) -> Optional[str]:
 
     Runs: security find-generic-password -s <service> -w
     Then parses the JSON output and extracts the field at json_field_path (dot-separated).
+
+    Iterates over duplicate-svce entries (see ``_iter_keychain_entries``)
+    so plugin-created entries with the same service name but a different
+    ``acct`` can't shadow the real auth entry. This was a real-world
+    miss for personal2: a Sentry MCP plugin had written an mcpOAuth-only
+    blob under the same service name as Claude Code's claudeAiOauth
+    entry, and ``security`` returned the plugin's entry first.
     """
-    raw = _read_keychain_raw(service)
-    if not raw:
-        return None
-    try:
-        data = json.loads(raw)
-        parts = json_field_path.split(".")
-        for part in parts:
-            data = data[part]
-        return str(data) if data else None
-    except (json.JSONDecodeError, KeyError, TypeError, IndexError):
-        return None
+    parts = json_field_path.split(".")
+    for raw in _iter_keychain_entries(service):
+        try:
+            data = json.loads(raw)
+        except (json.JSONDecodeError, TypeError):
+            continue
+        try:
+            for part in parts:
+                data = data[part]
+        except (KeyError, TypeError, IndexError):
+            continue
+        if data:
+            return str(data)
+    return None
 
 
 def _read_keychain_raw(service: str) -> Optional[str]:
-    """Read raw password string from macOS Keychain."""
+    """Read raw password string from macOS Keychain — first matching entry.
+
+    Kept for callers (Gemini) that expect any blob under the service,
+    regardless of which ``acct`` wrote it.
+    """
     try:
         result = subprocess.run(
             ["security", "find-generic-password", "-s", service, "-w"],
@@ -739,6 +753,56 @@ def _read_keychain_raw(service: str) -> Optional[str]:
     except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
         pass  # Intentionally silenced: cleanup/IO operation is best-effort
     return None
+
+
+def _iter_keychain_entries(service: str):
+    """Yield raw password blobs for every Keychain entry under ``service``.
+
+    ``security find-generic-password -s <svce>`` returns only ONE entry
+    when duplicates exist, picking the first by Keychain order — which
+    is fine when the operator only has one (acct, svce) row but broken
+    when a plugin has pre-created a competing entry. This helper queries
+    each known account variant so the caller can pick the entry whose
+    payload contains the field they actually need.
+
+    The set of accounts we try:
+      1. The current OS user (``getpass.getuser()``) — Claude Code stores
+         creds under the OS username.
+      2. The literal default match (no ``-a``) — first-by-keychain-order.
+      3. The well-known ``unknown`` account some plugins use.
+    Order is OS-user first so the legitimate Claude Code entry wins.
+
+    Deduplicates returned blobs so callers don't process the same payload twice.
+    """
+    import getpass
+
+    seen: set[str] = set()
+    accounts: list[Optional[str]] = []
+    try:
+        accounts.append(getpass.getuser())
+    except Exception:
+        pass
+    accounts.append(None)  # default — no -a filter
+    accounts.append("unknown")
+
+    for acct in accounts:
+        cmd = ["security", "find-generic-password", "-s", service]
+        if acct:
+            cmd += ["-a", acct]
+        cmd.append("-w")
+        try:
+            result = subprocess.run(
+                cmd, capture_output=True, text=True, timeout=5
+            )
+        except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+            continue
+        if result.returncode != 0:
+            continue
+        raw = result.stdout.strip()
+        if not raw or raw in seen:
+            continue
+        seen.add(raw)
+        yield raw
 
 
 def _read_json_file(path: Path) -> Optional[dict]:
