@@ -516,6 +516,149 @@ class GoalLoopSessionHandler(ExecutionTypeHandler):
         return ProjectSessionManager.get_output(session_id, last_n=last_n)
 
 
+class GrdEvolveSessionHandler(ExecutionTypeHandler):
+    """Handler for ``gd evolve`` sessions (v0.7.88).
+
+    ``gd evolve`` is GRD's self-improvement loop: discover →
+    group → execute → review → repeat. Long-running (hours),
+    spawns its own Claude subprocesses internally — so we drive
+    it as a project session and let PSM broker stdout. The
+    companion ``GrdEvolveRunner`` thread polls
+    ``.planning/EVOLVE-STATE.json`` for live iteration progress.
+
+    Required ``session_config``:
+      * ``project_id`` / ``cwd`` (standard).
+      * ``evolve_config`` — ``{iterations, pick_pct, dry_run,
+        no_worktree, max_turns, timeout_minutes}``. All fields
+        optional; defaults match the CLI defaults
+        (``iterations=1, pick_pct=50``).
+    """
+
+    def start(self, session_config: dict) -> dict:
+        from .grd_cli_service import GrdCliService
+        from .grd_evolve_runner import start_evolve_state_sync
+        from app.db import create_evolve_run
+
+        gd_path = GrdCliService.gd_path()
+        if not gd_path:
+            return {
+                "error": (
+                    "gd binary not detected — install GRD v0.3.24+ or set "
+                    "CLAUDE_PLUGIN_ROOT so the binary detection finds it."
+                )
+            }
+
+        cwd = session_config["cwd"]
+        project_id = session_config["project_id"]
+        evolve_config = session_config.get("evolve_config") or {}
+        iterations = int(evolve_config.get("iterations") or 1)
+        pick_pct = int(evolve_config.get("pick_pct") or 50)
+
+        # Build the CLI invocation. We call ``gd evolve`` directly
+        # rather than ``grd-tools.js evolve run`` because ``gd`` is
+        # the v0.3.24+ unified entry point and emits the same
+        # JSON progress GRD's own commands consume.
+        cmd = [
+            "node",
+            gd_path,
+            "evolve",
+            "--iterations",
+            str(iterations),
+            "--pick-pct",
+            str(pick_pct),
+            "--json",
+        ]
+        if evolve_config.get("dry_run"):
+            cmd.append("--dry-run")
+        if evolve_config.get("no_worktree"):
+            cmd.append("--no-worktree")
+        if evolve_config.get("max_turns"):
+            cmd += ["--max-turns", str(int(evolve_config["max_turns"]))]
+        if evolve_config.get("timeout_minutes"):
+            cmd += ["--timeout", str(int(evolve_config["timeout_minutes"]))]
+
+        session_id = ProjectSessionManager.create_session(
+            project_id=project_id,
+            cmd=cmd,
+            cwd=cwd,
+            phase_id=session_config.get("phase_id"),
+            plan_id=session_config.get("plan_id"),
+            agent_id=session_config.get("agent_id"),
+            worktree_path=session_config.get("worktree_path"),
+            execution_type="grd_evolve",
+            execution_mode=session_config.get("execution_mode", "autonomous"),
+            stream_json=False,  # gd evolve emits its own JSON summary lines
+            use_pty=False,
+            yolo_mode=session_config.get("yolo_mode", False),
+        )
+
+        # Persist the run row first so the poller's UPDATE has
+        # something to write through to. Failures here are
+        # logged but don't kill the session — the operator still
+        # gets stdout via PSM.
+        try:
+            run_id = create_evolve_run(
+                project_id=project_id,
+                session_id=session_id,
+                config=evolve_config,
+                total_iterations=iterations,
+                pick_pct=pick_pct,
+            )
+        except Exception:
+            logger.warning(
+                "grd_evolve: failed to insert run row for %s", session_id, exc_info=True
+            )
+            run_id = None
+
+        planning_dir = str(Path(cwd).expanduser().resolve() / ".planning")
+        start_evolve_state_sync(session_id, planning_dir)
+
+        info = ProjectSessionManager.get_session_info(session_id)
+        return {
+            "session_id": session_id,
+            "evolve_run_id": run_id,
+            "pid": info["pid"] if info else None,
+            "status": "active",
+        }
+
+    def monitor(self, session_id: str) -> dict:
+        from app.db import get_evolve_run_by_session
+
+        info = ProjectSessionManager.get_session_info(session_id)
+        base = (
+            {
+                "alive": info["status"] == "active",
+                "status": info["status"],
+                "output_lines": info.get("output_lines", 0),
+                "last_activity_at": info.get("last_activity_at"),
+            }
+            if info
+            else {
+                "alive": False,
+                "status": "unknown",
+                "output_lines": 0,
+                "last_activity_at": None,
+            }
+        )
+        run = get_evolve_run_by_session(session_id)
+        if run:
+            base["evolve_run_id"] = run["id"]
+            base["iteration"] = run.get("iteration") or 0
+            base["total_iterations"] = run.get("total_iterations")
+            base["pick_pct"] = run.get("pick_pct")
+            base["last_state_synced_at"] = run.get("last_state_synced_at")
+        return base
+
+    def stop(self, session_id: str) -> bool:
+        from .grd_evolve_runner import stop_evolve_state_sync
+
+        stop_evolve_state_sync(session_id)
+        return ProjectSessionManager.stop_session(session_id)
+
+    def get_output(self, session_id: str, last_n: int = 100) -> list[str]:
+        return ProjectSessionManager.get_output(session_id, last_n=last_n)
+
+
 # =============================================================================
 # Handler Registry
 # =============================================================================
@@ -526,6 +669,7 @@ HANDLER_REGISTRY: dict[str, ExecutionTypeHandler] = {
     "ralph_loop": RalphSessionHandler(),
     "team_spawn": TeamSpawnHandler(),
     "goal_loop": GoalLoopSessionHandler(),
+    "grd_evolve": GrdEvolveSessionHandler(),
 }
 
 

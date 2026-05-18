@@ -237,6 +237,16 @@ from .grd_ouroboros import (  # noqa: F401
     upsert_phase_reflection,
 )
 
+# v0.7.88 — GRD evolve session runs
+from .grd_evolve import (  # noqa: F401
+    create_evolve_run,
+    finalize_evolve_run,
+    get_evolve_run,
+    get_evolve_run_by_session,
+    list_evolve_runs_for_project,
+    upsert_evolve_state,
+)
+
 # Health alerts
 from .health_alerts import (  # noqa: F401
     acknowledge_alert,

@@ -502,6 +502,56 @@ def _migrate_128_goal_loop_ouroboros(conn) -> None:
     )
 
 
+def _migrate_129_grd_evolve_runs(conn) -> None:
+    """v0.7.88 — track ``gd evolve`` sessions.
+
+    ``gd evolve`` is GRD's self-improvement loop: discover →
+    group → execute → review → repeat. Each run can last hours
+    and spawns multiple Claude subprocesses, so we can't treat
+    it as a single PSM session and call it a day — operators
+    need iteration progress visibility across page reloads, plus
+    a row to point a "stop" button at.
+
+    The schema mirrors ``goal_loop_iterations`` in shape but
+    keys on the parent ``session_id`` (one row per evolve run)
+    and stores the full ``EVOLVE-STATE.json`` payload as
+    ``last_state_json`` so the UI can render selected groups
+    and per-item status without a CLI hop. A periodic sync
+    thread (see ``app/services/grd_evolve_runner.py``) polls
+    the file on disk and writes through here every ~30s while
+    the session is active.
+    """
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS grd_evolve_runs (
+            id                      TEXT PRIMARY KEY,
+            project_id              TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+            session_id              TEXT NOT NULL UNIQUE,
+            status                  TEXT NOT NULL DEFAULT 'active',
+            config_json             TEXT,
+            iteration               INTEGER NOT NULL DEFAULT 0,
+            total_iterations        INTEGER,
+            pick_pct                INTEGER,
+            last_state_json         TEXT,
+            last_state_synced_at    TIMESTAMP,
+            started_at              TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            ended_at                TIMESTAMP,
+            error_message           TEXT,
+            created_at              TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at              TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_grd_evolve_runs_project "
+        "ON grd_evolve_runs(project_id, started_at DESC)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_grd_evolve_runs_session "
+        "ON grd_evolve_runs(session_id)"
+    )
+
+
 V07_MIGRATIONS: list = [
     # v0.7.7: super-agent activity inspector — timeline + rollup.
     (116, "super_agent_activity", _migrate_116_super_agent_activity),
@@ -543,4 +593,7 @@ V07_MIGRATIONS: list = [
     # hypothesis / predicted_outcome / ouroboros_verdict columns
     # to goal_loop_iterations, plus per-session dead-ends table.
     (128, "goal_loop_ouroboros", _migrate_128_goal_loop_ouroboros),
+    # v0.7.88: ``gd evolve`` integration — long-running session
+    # tracking with periodic EVOLVE-STATE.json sync.
+    (129, "grd_evolve_runs", _migrate_129_grd_evolve_runs),
 ]

@@ -66,6 +66,10 @@ DEAD_END_ID_LENGTH = 8
 GENOME_SNAPSHOT_ID_PREFIX = "geno-"
 GENOME_SNAPSHOT_ID_LENGTH = 8
 
+# v0.7.88 — GRD evolve runs
+EVOLVE_RUN_ID_PREFIX = "evol-"
+EVOLVE_RUN_ID_LENGTH = 8
+
 ROTATION_EVENT_ID_PREFIX = "rot-"
 ROTATION_EVENT_ID_LENGTH = 8
 
@@ -443,6 +447,22 @@ def _get_unique_genome_snapshot_id(conn) -> str:
         )
         if cursor.fetchone() is None:
             return gid
+
+
+# v0.7.88 — GRD evolve runs
+def generate_evolve_run_id() -> str:
+    """Generate a unique evolve-run ID like 'evol-abc12345'."""
+    return generate_id(EVOLVE_RUN_ID_PREFIX, EVOLVE_RUN_ID_LENGTH)
+
+
+def _get_unique_evolve_run_id(conn) -> str:
+    while True:
+        eid = generate_evolve_run_id()
+        cursor = conn.execute(
+            "SELECT id FROM grd_evolve_runs WHERE id = ?", (eid,)
+        )
+        if cursor.fetchone() is None:
+            return eid
 
 
 def generate_rotation_event_id() -> str:

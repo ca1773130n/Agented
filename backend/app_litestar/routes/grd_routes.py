@@ -1491,6 +1491,107 @@ def latest_grd_genome_snapshot(project_id: str) -> dict[str, Any]:
     return get_latest_genome_snapshot(project_id) or {"exists": False}
 
 
+# ---------------------------------------------------------------------------
+# v0.7.88 — gd evolve session runs
+# ---------------------------------------------------------------------------
+
+
+@post("/{project_id:str}/grd/evolve/start", sync_to_thread=False)
+def start_grd_evolve(project_id: str, data: dict | None) -> dict[str, Any]:
+    """v0.7.88 — start a ``gd evolve`` session for the project.
+
+    Spawns the ``grd_evolve`` execution type via the standard
+    handler registry so the session shows up in the project's
+    sessions list and the existing SSE/stop/output endpoints
+    work unchanged. Returns ``session_id`` + ``evolve_run_id``.
+    """
+    _ensure_project(project_id)
+    from app.services.execution_type_handler import get_handler
+
+    handler = get_handler("grd_evolve")
+    if not handler:
+        from litestar.exceptions import HTTPException
+
+        raise HTTPException(
+            status_code=500, detail="grd_evolve handler is not registered"
+        )
+    cwd = _project_cwd(project_id)
+    body = data or {}
+    session_config = {
+        "project_id": project_id,
+        "cwd": cwd,
+        "evolve_config": {
+            "iterations": body.get("iterations"),
+            "pick_pct": body.get("pick_pct"),
+            "dry_run": body.get("dry_run"),
+            "no_worktree": body.get("no_worktree"),
+            "max_turns": body.get("max_turns"),
+            "timeout_minutes": body.get("timeout_minutes"),
+        },
+        "execution_mode": body.get("execution_mode", "autonomous"),
+        "yolo_mode": bool(body.get("yolo_mode")),
+    }
+    result = handler.start(session_config)
+    if "error" in result:
+        from litestar.exceptions import HTTPException
+
+        raise HTTPException(status_code=503, detail=result["error"])
+    return result
+
+
+@get("/{project_id:str}/grd/evolve/runs", sync_to_thread=False)
+def list_grd_evolve_runs(
+    project_id: str, status: Optional[str] = None, limit: int = 20
+) -> dict[str, Any]:
+    """v0.7.88 — recent evolve runs for the project, newest first.
+    ``status`` filter (``active`` / ``completed`` / ``failed`` /
+    ``stopped``) is optional.
+    """
+    _ensure_project(project_id)
+    from app.database import list_evolve_runs_for_project
+
+    runs = list_evolve_runs_for_project(project_id, status=status, limit=limit)
+    return {"runs": runs}
+
+
+@get("/{project_id:str}/grd/evolve/runs/{run_id:str}", sync_to_thread=False)
+def get_grd_evolve_run(project_id: str, run_id: str) -> dict[str, Any]:
+    """v0.7.88 — single evolve-run detail including the parsed
+    ``last_state`` (EVOLVE-STATE.json snapshot) for UI rendering.
+    """
+    _ensure_project(project_id)
+    from app.database import get_evolve_run
+
+    run = get_evolve_run(run_id)
+    if not run or run["project_id"] != project_id:
+        raise NotFoundException(detail="Evolve run not found")
+    return run
+
+
+@post("/{project_id:str}/grd/evolve/runs/{run_id:str}/stop", sync_to_thread=False)
+def stop_grd_evolve_run(project_id: str, run_id: str) -> dict[str, Any]:
+    """v0.7.88 — terminate an active evolve run. Idempotent; safe
+    to call on already-terminal runs (returns the current status
+    without re-stopping).
+    """
+    _ensure_project(project_id)
+    from app.database import finalize_evolve_run, get_evolve_run
+    from app.services.execution_type_handler import get_handler
+
+    run = get_evolve_run(run_id)
+    if not run or run["project_id"] != project_id:
+        raise NotFoundException(detail="Evolve run not found")
+    if run["status"] != "active":
+        return {"status": run["status"], "already_terminal": True}
+    handler = get_handler("grd_evolve")
+    if handler:
+        handler.stop(run["session_id"])
+    # Mark terminal regardless of session-stop outcome so the UI
+    # doesn't get stuck on "stopping…" if PSM raced ahead.
+    finalize_evolve_run(session_id=run["session_id"], status="stopped")
+    return {"status": "stopped"}
+
+
 grd_router = Router(
     path="/api/projects",
     route_handlers=[
@@ -1510,6 +1611,11 @@ grd_router = Router(
         list_grd_dead_ends,
         list_grd_genome_snapshots,
         latest_grd_genome_snapshot,
+        # v0.7.88 — gd evolve session runs
+        start_grd_evolve,
+        list_grd_evolve_runs,
+        get_grd_evolve_run,
+        stop_grd_evolve_run,
         list_milestones,
         list_phases,
         create_phase,

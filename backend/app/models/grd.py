@@ -414,3 +414,56 @@ class GrdMechanicalVerifyResponse(BaseModel):
     output: Optional[str] = None
     error: Optional[str] = None
     phase: str
+
+
+# ---------------------------------------------------------------------
+# v0.7.88 — GRD evolve session runs
+# ---------------------------------------------------------------------
+
+
+class GrdEvolveStatus(str, Enum):
+    """Terminal-state vocabulary for ``grd_evolve_runs.status``."""
+
+    ACTIVE = "active"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    STOPPED = "stopped"
+
+
+class StartEvolveRequest(BaseModel):
+    """Request body for ``POST /api/projects/{id}/grd/evolve/start``.
+
+    All fields optional — sensible defaults at handler/DB so the
+    operator can fire-and-forget with ``{}``.
+    """
+
+    iterations: Optional[int] = Field(
+        default=1,
+        ge=0,
+        description="Iteration cap (0 = unlimited, runs until all groups done)",
+    )
+    pick_pct: Optional[int] = Field(
+        default=50, ge=1, le=100, description="Percentage of groups to pick per iteration"
+    )
+    dry_run: Optional[bool] = False
+    no_worktree: Optional[bool] = False
+    max_turns: Optional[int] = Field(default=None, ge=1)
+    timeout_minutes: Optional[int] = Field(default=None, ge=1)
+
+
+class GrdEvolveRun(BaseModel):
+    """Mirror of a ``grd_evolve_runs`` row for API responses."""
+
+    id: str
+    project_id: str
+    session_id: str
+    status: GrdEvolveStatus
+    iteration: int = 0
+    total_iterations: Optional[int] = None
+    pick_pct: Optional[int] = None
+    last_state: Optional[dict] = None
+    last_state_synced_at: Optional[str] = None
+    started_at: Optional[str] = None
+    ended_at: Optional[str] = None
+    error_message: Optional[str] = None
+    config: Optional[dict] = None
