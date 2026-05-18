@@ -502,6 +502,26 @@ class TestCheckCredentials:
             "codex token without account_id must be reported missing"
         )
 
+    def test_codex_accepts_falsy_but_valid_account_id_zero(
+        self, tmp_path, monkeypatch
+    ):
+        # Regression guard for the "not account_id" → "is None"
+        # fix (PR #140 codex re-review). A JSON integer 0 is a
+        # falsy-but-valid id; the check must accept it, AND the
+        # underlying _read_json_field must not collapse 0 to None.
+        config_dir = tmp_path / "codex-zero"
+        config_dir.mkdir()
+        (config_dir / "auth.json").write_text(
+            json.dumps({"tokens": {"access_token": "tok-x", "account_id": 0}})
+        )
+        monkeypatch.setattr(Path, "home", lambda: tmp_path / "elsewhere")
+        status = CredentialResolver.check_credentials(
+            {"id": 3, "config_path": str(config_dir)}, "codex"
+        )
+        assert status["status"] == "ok", (
+            "codex account_id=0 is falsy-but-valid; check must accept it"
+        )
+
     def test_gemini_missing_uses_gemini_dir_hint(self, tmp_path, monkeypatch):
         monkeypatch.setattr(Path, "home", lambda: tmp_path / "home")
         monkeypatch.setattr(

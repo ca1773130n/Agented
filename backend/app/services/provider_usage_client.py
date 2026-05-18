@@ -201,7 +201,12 @@ class CredentialResolver:
             # token and the account_id (used as the
             # ``chatgpt-account-id`` header). Reporting "ok" with
             # only the token would mismatch what the poll sees.
-            if token and codex_account_id:
+            # Use ``is None``/``== ""`` rather than truthiness so a
+            # falsy-but-valid id like ``0`` or numeric account_id
+            # isn't misread as missing (defensive; real codex ids
+            # are string UUIDs).
+            id_present = codex_account_id is not None and codex_account_id != ""
+            if token and id_present:
                 return {"status": "ok"}
             expanded = os.path.expanduser(config_path) if config_path else None
             loc = (
@@ -747,14 +752,23 @@ def _read_json_file(path: Path) -> Optional[dict]:
 
 
 def _read_json_field(path: Path, field_path: list[str]) -> Optional[str]:
-    """Read a nested field from a JSON file. Returns None if not found."""
+    """Read a nested field from a JSON file. Returns None if not found.
+
+    Falsy-but-valid values like ``0`` or ``False`` are preserved
+    (stringified). Only literal ``None`` and empty-string are
+    collapsed to ``None`` — the empty-string case matches the
+    historical behaviour callers rely on (``if access_token:`` was
+    treating empty access tokens as missing).
+    """
     data = _read_json_file(path)
     if not data:
         return None
     try:
         for key in field_path:
             data = data[key]
-        return str(data) if data else None
+        if data is None or data == "":
+            return None
+        return str(data)
     except (KeyError, TypeError, IndexError):
         return None
 
