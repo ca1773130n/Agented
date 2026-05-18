@@ -1306,6 +1306,35 @@ class ProjectSessionManager:
         except Exception as e:
             logger.warning("GRD sync on session complete failed: %s", e)
 
+        # v0.7.88 — flip any matching grd_evolve_runs row to its
+        # terminal status. No-op when the session wasn't a
+        # ``grd_evolve`` session (the runner row simply doesn't
+        # exist). Reads ``exit_code`` from the session info to
+        # distinguish ``completed`` vs ``failed``.
+        try:
+            from .grd_evolve_runner import finalize_on_session_exit
+
+            exit_code: Optional[int] = None
+            try:
+                with get_connection() as conn:
+                    row = conn.execute(
+                        "SELECT status FROM project_sessions WHERE id = ?",
+                        (session_id,),
+                    ).fetchone()
+                    if row and row["status"] == "completed":
+                        exit_code = 0
+                    elif row and row["status"] == "failed":
+                        exit_code = 1
+            except Exception:
+                pass  # Intentionally silenced — finalize() defaults to 'completed' on None.
+            finalize_on_session_exit(session_id, exit_code)
+        except Exception:
+            logger.warning(
+                "grd_evolve: finalize_on_session_exit failed for %s",
+                session_id,
+                exc_info=True,
+            )
+
         # v0.7.69 — drop any in-flight permission requests for this
         # session and remove the session-scoped config overlay dir.
         try:
