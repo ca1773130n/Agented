@@ -612,6 +612,31 @@ def delete_document_endpoint(
 # ---------------------------------------------------------------------------
 
 
+def _resolve_default_project_for_sa(super_agent_id: str) -> Optional[str]:
+    """v0.7.92 — pick a default ``project_id`` for an SA when the
+    operator didn't specify one. Strategy: most recent project
+    this SA has previously run an Ouroboros (or any goal_loop)
+    session against. Returns ``None`` when no history exists, in
+    which case the bridge returns a helpful 400 instead of
+    silently picking a wrong project.
+    """
+    from app.db.connection import get_connection
+
+    with get_connection() as conn:
+        row = conn.execute(
+            """
+            SELECT project_id FROM project_sessions
+            WHERE super_agent_id = ?
+            ORDER BY started_at DESC
+            LIMIT 1
+            """,
+            (super_agent_id,),
+        ).fetchone()
+    if row and row[0]:
+        return row[0]
+    return None
+
+
 @post("/{super_agent_id:str}/ouroboros-runs", sync_to_thread=False)
 def start_ouroboros_run(
     super_agent_id: str, data: dict, caller: Caller
@@ -620,18 +645,32 @@ def start_ouroboros_run(
     inherits the SuperAgent's backend + model and runs in
     Ouroboros mode.
 
-    The SA itself isn't rewritten — we just wire its identity
-    (backend_type, preferred_model) into the goal_loop config
-    so the judge calls land on the SA's backend rather than the
-    project default. Ownership / activity / dead-end semantics
-    are the goal_loop machinery's (see GoalLoopRunner v0.7.86–87).
+    v0.7.92 enhancements:
+      * ``project_id`` is now optional — falls back to the SA's
+        most recently used project (via ``project_sessions``
+        joined on ``super_agent_id``). When no history exists
+        and no body value is supplied, returns 400 with a
+        helpful message rather than silently picking a wrong
+        project.
+      * The SA's assembled system prompt (SOUL / IDENTITY /
+        MEMORY / ROLE documents via
+        ``SuperAgentSessionService.assemble_system_prompt``)
+        is forwarded as ``system_prompt_override`` so the
+        spawned claude CLI gets ``--system-prompt <prompt>``.
+        The SA's identity now actually shapes the run, not
+        just the backend choice.
+      * The spawned ``project_sessions`` row stores
+        ``super_agent_id`` so the SA's activity surface lists
+        its own Ouroboros runs (see new
+        ``GET /admin/super-agents/{id}/ouroboros-runs``).
 
     Body:
-      * ``project_id`` (str, required) — the project providing
-        ``cwd`` for the spawned session. Required because
-        goal_loop sessions are project-scoped today.
-      * ``goal`` (str, required) — the natural-language objective
-        the SA should drive toward.
+      * ``project_id`` (str, optional) — the project providing
+        ``cwd`` for the spawned session. Falls back to the SA's
+        most-recent project; returns 400 when no fallback
+        exists.
+      * ``goal`` (str, required) — the natural-language
+        objective the SA should drive toward.
       * ``max_iterations`` (int, default 20)
       * ``max_wall_seconds`` (int, default 1800)
       * ``check_cmd`` (str | null) — operator-supplied
@@ -647,16 +686,24 @@ def start_ouroboros_run(
         raise NotFoundException(detail="SuperAgent not found")
 
     body = data or {}
-    project_id = body.get("project_id")
+    project_id = body.get("project_id") or _resolve_default_project_for_sa(
+        super_agent_id
+    )
     goal = (body.get("goal") or "").strip()
     if not project_id:
-        raise ClientException(detail="project_id is required")
+        raise ClientException(
+            detail=(
+                "project_id is required (no prior Ouroboros run exists "
+                "for this SA to use as a default — pass one explicitly)"
+            )
+        )
     if not goal:
         raise ClientException(detail="goal is required")
 
     from app.database import get_project
     from app.services.execution_type_handler import get_handler
     from app.services.project_workspace_service import ProjectWorkspaceService
+    from app.services.super_agent_session_service import SuperAgentSessionService
 
     project = get_project(project_id)
     if not project:
@@ -681,11 +728,34 @@ def start_ouroboros_run(
     backend_kind = sa.get("backend_type") or "claude"
     preferred_model = sa.get("preferred_model")
 
+    # v0.7.92 — assemble the SA's system prompt from its document
+    # set (SOUL / IDENTITY / MEMORY / ROLE). The helper tolerates
+    # a synthetic session_id placeholder — it only needs one for
+    # the session-state slice (summary + recent conversation),
+    # which we don't have at this point in the flow.
+    system_prompt: Optional[str] = None
+    try:
+        prompt = SuperAgentSessionService.assemble_system_prompt(
+            super_agent_id, session_id="__bridge_pre_start__"
+        )
+        # Only forward when there's actual document content —
+        # an empty prompt from an SA with no docs adds noise.
+        if prompt and prompt.strip():
+            system_prompt = prompt
+    except Exception:
+        logger.warning(
+            "ouroboros-bridge: failed to assemble system prompt for SA %s",
+            super_agent_id,
+            exc_info=True,
+        )
+
     session_config = {
         "project_id": project_id,
         "cwd": cwd,
         "execution_mode": "autonomous",
         "yolo_mode": bool(body.get("yolo_mode")),
+        "super_agent_id": super_agent_id,
+        "system_prompt_override": system_prompt,
         "goal_loop_config": {
             "goal": goal,
             "check_cmd": body.get("check_cmd"),
@@ -703,7 +773,63 @@ def start_ouroboros_run(
 
         raise HTTPException(status_code=503, detail=result["error"])
     result["super_agent_id"] = super_agent_id
+    result["project_id"] = project_id
+    result["system_prompt_applied"] = system_prompt is not None
     return result
+
+
+@get("/{super_agent_id:str}/ouroboros-runs", sync_to_thread=False)
+def list_ouroboros_runs(
+    super_agent_id: str, limit: int = 20, caller: Caller = None
+) -> dict[str, Any]:
+    """v0.7.92 — list this SA's prior Ouroboros runs (spawned
+    via ``start_ouroboros_run``). Returns the project_sessions
+    rows with ``super_agent_id`` matching, newest first.
+
+    The frontend SA detail page uses this to show a
+    "Recent Ouroboros runs" panel with status + iteration count
+    pulled in from the existing ``goal_loop_iterations``
+    machinery.
+    """
+    del caller
+    sa = get_super_agent(super_agent_id)
+    if not sa:
+        raise NotFoundException(detail="SuperAgent not found")
+
+    from app.db.connection import get_connection
+
+    with get_connection() as conn:
+        cur = conn.execute(
+            """
+            SELECT
+                ps.id, ps.project_id, ps.status, ps.execution_type,
+                ps.started_at, ps.ended_at, ps.last_activity_at,
+                (SELECT COUNT(*) FROM goal_loop_iterations gli
+                 WHERE gli.session_id = ps.id) AS iteration_count
+            FROM project_sessions ps
+            WHERE ps.super_agent_id = ?
+              AND ps.execution_type = 'goal_loop'
+            ORDER BY ps.started_at DESC
+            LIMIT ?
+            """,
+            (super_agent_id, max(1, min(int(limit), 100))),
+        )
+        rows = cur.fetchall()
+    return {
+        "runs": [
+            {
+                "session_id": r[0],
+                "project_id": r[1],
+                "status": r[2],
+                "execution_type": r[3],
+                "started_at": r[4],
+                "ended_at": r[5],
+                "last_activity_at": r[6],
+                "iteration_count": r[7],
+            }
+            for r in rows
+        ]
+    }
 
 
 super_agents_router = Router(
@@ -724,6 +850,8 @@ super_agents_router = Router(
         git_action,
         # v0.7.91 — SA → goal_loop Ouroboros bridge
         start_ouroboros_run,
+        # v0.7.92 — list past Ouroboros runs for this SA
+        list_ouroboros_runs,
         list_documents,
         create_document,
         get_document_endpoint,

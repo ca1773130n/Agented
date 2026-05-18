@@ -552,6 +552,32 @@ def _migrate_129_grd_evolve_runs(conn) -> None:
     )
 
 
+def _migrate_130_project_sessions_super_agent_link(conn) -> None:
+    """v0.7.92 — link goal_loop sessions spawned from a SuperAgent
+    back to the originating SA.
+
+    The v0.7.91 bridge ``POST /admin/super-agents/{sa_id}/ouroboros-runs``
+    creates a ``project_sessions`` row but loses the SA pointer
+    immediately afterward — the run appears in the project's
+    session list but not on the SuperAgent's activity surface.
+    Adding ``super_agent_id`` as a nullable column lets the SA
+    detail page list its own Ouroboros runs without joining
+    against external state, and keeps existing project_sessions
+    rows valid (column defaults to NULL for non-SA-spawned runs).
+    """
+    cursor = conn.execute("PRAGMA table_info(project_sessions)")
+    cols = {row[1] for row in cursor.fetchall()}
+    if "super_agent_id" not in cols:
+        conn.execute(
+            "ALTER TABLE project_sessions ADD COLUMN super_agent_id TEXT "
+            "REFERENCES super_agents(id)"
+        )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_project_sessions_super_agent "
+        "ON project_sessions(super_agent_id, started_at DESC)"
+    )
+
+
 V07_MIGRATIONS: list = [
     # v0.7.7: super-agent activity inspector — timeline + rollup.
     (116, "super_agent_activity", _migrate_116_super_agent_activity),
@@ -596,4 +622,8 @@ V07_MIGRATIONS: list = [
     # v0.7.88: ``gd evolve`` integration — long-running session
     # tracking with periodic EVOLVE-STATE.json sync.
     (129, "grd_evolve_runs", _migrate_129_grd_evolve_runs),
+    # v0.7.92: link goal_loop sessions spawned from a SuperAgent
+    # back to the originating SA so the SA's activity surface
+    # can list its own Ouroboros runs.
+    (130, "project_sessions_super_agent_link", _migrate_130_project_sessions_super_agent_link),
 ]

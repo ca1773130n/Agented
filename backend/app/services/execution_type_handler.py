@@ -447,6 +447,15 @@ class GoalLoopSessionHandler(ExecutionTypeHandler):
             "--include-hook-events",
             "--include-partial-messages",
         ]
+        # v0.7.92 — when ``session_config["system_prompt_override"]``
+        # is set (e.g. the SA Ouroboros bridge injecting the SA's
+        # assembled SOUL/IDENTITY/ROLE prompt), append it to the
+        # claude CLI via ``--system-prompt``. Skipped when the
+        # caller supplied an explicit ``cmd`` so we don't
+        # double-stack a prompt the caller already encoded.
+        system_prompt = session_config.get("system_prompt_override")
+        if system_prompt and not session_config.get("cmd"):
+            cmd = cmd + ["--system-prompt", system_prompt]
         session_id = ProjectSessionManager.create_session(
             project_id=session_config["project_id"],
             cmd=cmd,
@@ -461,6 +470,7 @@ class GoalLoopSessionHandler(ExecutionTypeHandler):
             use_pty=False,
             yolo_mode=session_config.get("yolo_mode", False),
             forge_bundle=session_config.get("forge_bundle"),
+            super_agent_id=session_config.get("super_agent_id"),
         )
 
         # Persist config + spawn the driver thread.

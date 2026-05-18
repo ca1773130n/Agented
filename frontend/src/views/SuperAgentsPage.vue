@@ -10,6 +10,8 @@ import ErrorState from '../components/base/ErrorState.vue';
 import { useToast } from '../composables/useToast';
 import { useFocusTrap } from '../composables/useFocusTrap';
 import { useWebMcpPageTools } from '../composables/useWebMcpPageTools';
+// v0.7.92 — Ouroboros bridge dialog (PR #138 follow-up).
+import SuperAgentOuroborosDialog from '../components/super-agents/SuperAgentOuroborosDialog.vue';
 
 const router = useRouter();
 
@@ -25,6 +27,16 @@ const createModalRef = ref<HTMLElement | null>(null);
 const deleteModalRef = ref<HTMLElement | null>(null);
 const agentToDelete = ref<SuperAgent | null>(null);
 const createForm = ref({ name: '', description: '', backend_type: 'claude' });
+
+// v0.7.92 — Ouroboros bridge state.
+const ouroborosTarget = ref<SuperAgent | null>(null);
+const showOuroborosDialog = computed(() => ouroborosTarget.value !== null);
+function openOuroborosDialog(sa: SuperAgent) {
+  ouroborosTarget.value = sa;
+}
+function closeOuroborosDialog() {
+  ouroborosTarget.value = null;
+}
 
 useFocusTrap(createModalRef, showCreateModal);
 useFocusTrap(deleteModalRef, showDeleteConfirm);
@@ -334,6 +346,22 @@ onUnmounted(() => {
             </svg>
             Inspector
           </button>
+          <!-- v0.7.92 — Ouroboros bridge entry point. Opens a
+               dialog that POSTs to /admin/super-agents/{id}/ouroboros-runs
+               with the operator's goal and optional project /
+               iteration / check-cmd config; backend spawns a
+               goal_loop session in Ouroboros mode. -->
+          <button
+            class="btn btn-sm btn-secondary"
+            data-testid="ouroboros-button"
+            @click.stop="openOuroborosDialog(sa)"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+              <path d="M21 12a9 9 0 1 1-3.5-7.1"/>
+              <polyline points="21 4 21 9 16 9"/>
+            </svg>
+            Ouroboros
+          </button>
           <button class="btn btn-sm btn-danger" @click.stop="confirmDelete(sa)">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
@@ -398,6 +426,19 @@ onUnmounted(() => {
           </div>
         </div>
       </div>
+    </Teleport>
+
+    <!-- v0.7.92 — Ouroboros bridge dialog. Teleported so the
+         backdrop covers the whole viewport rather than sitting
+         inside the card. -->
+    <Teleport to="body">
+      <SuperAgentOuroborosDialog
+        v-if="ouroborosTarget"
+        :visible="showOuroborosDialog"
+        :super-agent-id="ouroborosTarget.id"
+        :super-agent-name="ouroborosTarget.name"
+        @close="closeOuroborosDialog"
+      />
     </Teleport>
   </div>
 </template>

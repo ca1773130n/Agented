@@ -782,6 +782,7 @@ class ProjectSessionManager:
         use_pty: bool = True,
         yolo_mode: bool = False,
         forge_bundle: Optional[dict] = None,
+        super_agent_id: Optional[str] = None,
     ) -> str:
         """Create a persistent session.
 
@@ -1011,6 +1012,10 @@ class ProjectSessionManager:
                 "execution_type": execution_type,
                 "execution_mode": execution_mode,
                 "last_activity_at": now.isoformat(),
+                # v0.7.92 — link back to the originating SA when
+                # spawned via the SA Ouroboros bridge so the SA
+                # detail page can list its own runs.
+                "super_agent_id": super_agent_id,
             }
             for col, val in optional_fields.items():
                 if val is not None:
