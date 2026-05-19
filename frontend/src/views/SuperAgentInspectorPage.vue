@@ -16,6 +16,9 @@ import type {
   SuperAgentRollup,
   SuperAgentStatusPill,
 } from '../services/api';
+// v0.7.95 — surfaces the SA's spawned goal_loop sessions (from the
+// v0.7.91/.92 Ouroboros bridge) on the inspector page.
+import SuperAgentOuroborosRunsPanel from '../components/super-agents/SuperAgentOuroborosRunsPanel.vue';
 
 const props = defineProps<{ superAgentId: string }>();
 
@@ -213,6 +216,12 @@ function fmtPayload(p: string): string {
           </div>
         </dl>
       </article>
+
+      <!-- v0.7.95 — Ouroboros runs spawned via the bridge appear
+           here. Panel self-fetches + polls only when an active run
+           exists, so it's effectively free when the SA isn't
+           running Ouroboros work. -->
+      <SuperAgentOuroborosRunsPanel :super-agent-id="superAgentId" />
 
       <div class="sa-inspector__filters">
         <fieldset class="sa-inspector__type-filter" data-testid="type-filter">

@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ref, toRef, onMounted, computed } from 'vue';
+import { ref, toRef, onMounted, computed, watch } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 import { AiChatPanelManaged } from '@ai-accounts/vue-styled';
 import { useProjectSession } from '../../composables/useProjectSession';
 import { useToast } from '../../composables/useToast';
@@ -726,10 +727,17 @@ async function handleSessionClick(sessionId: string) {
   // empty welcome screen). For sessions whose subprocess has already
   // exited, this is the ONLY way to recover the conversation —
   // the in-memory ring buffer is gone.
+  //
+  // Guard against rapid successive clicks (sidebar OR deep-link):
+  // capture the requested id and re-check after the async fetch.
+  // If the user (or another deep-link) switched sessions while
+  // we were waiting, the in-flight response is stale and must
+  // not overwrite the new session's state.
   if (isDirectMode.value) {
     hydratedEmpty.value = false;
     try {
       const result = await grdApi.getSessionMessages(props.projectId, sessionId);
+      if (session.activeSessionId.value !== sessionId) return;
       const raw = result.messages ?? [];
       // Collapse consecutive same-role entries into grouped bubbles
       // for the same reason as the live ``onOutput`` path. Without
@@ -777,9 +785,49 @@ function truncateId(id: string): string {
   return id.slice(0, 12) + '...';
 }
 
-onMounted(() => {
-  session.loadSessions();
+// v0.7.95 — when arriving via deep-link with ``?sessionId=…``
+// (currently used by the SA inspector's "Recent Ouroboros runs"
+// panel), select that session as soon as the list resolves so
+// the operator lands directly on the requested run instead of an
+// arbitrary default.
+const route = useRoute();
+const router = useRouter();
+
+// Guards the post-await steps in applyDeepLinkSession against
+// rapid successive navigations. If a second deep-link comes in
+// (A then B), the late-completing A must not strip B's query or
+// overwrite B's hydrated state. Compare-and-strip on this token
+// (the requested target) — only the most recent call's await
+// matches.
+async function applyDeepLinkSession() {
+  const target = route.query.sessionId;
+  if (typeof target !== 'string' || !target) return;
+  // Wait for the sessions list to include the deep-linked id —
+  // otherwise switchSession would try to attach to a session the
+  // composable hasn't loaded yet.
+  const exists = session.sessions.value.some(s => s.id === target);
+  if (!exists) return;
+  await handleSessionClick(target);
+  // After the await, only strip the query if it still matches
+  // OUR target. If a second deep-link fired during the await,
+  // route.query.sessionId now reflects that newer target — let
+  // the second call's own apply do its own strip.
+  if (route.query.sessionId !== target) return;
+  const { sessionId: _drop, ...rest } = route.query;
+  router.replace({ query: rest });
+}
+
+onMounted(async () => {
+  await session.loadSessions();
+  await applyDeepLinkSession();
 });
+
+watch(
+  () => route.query.sessionId,
+  () => {
+    applyDeepLinkSession();
+  },
+);
 </script>
 
 <template>
