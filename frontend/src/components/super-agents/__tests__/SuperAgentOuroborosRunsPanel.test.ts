@@ -143,4 +143,56 @@ describe('SuperAgentOuroborosRunsPanel', () => {
     await flushPromises();
     expect(mockList).toHaveBeenLastCalledWith('sa-y', undefined);
   });
+
+  it('discards a stale response when the SA id changed mid-flight', async () => {
+    // Regression for the PR #142 codex MAJOR: a slow in-flight
+    // request for sa-old must not overwrite ``runs.value`` after
+    // the prop changes to sa-new.
+    const stale = {
+      session_id: 'psess-stale',
+      project_id: 'proj-old',
+      status: 'completed',
+      execution_type: 'goal_loop',
+      started_at: null,
+      ended_at: null,
+      last_activity_at: null,
+      iteration_count: 99,
+    };
+    const fresh = {
+      ...runActive,
+      session_id: 'psess-fresh',
+      project_id: 'proj-new',
+    };
+
+    // First call (sa-old) hangs; second call (sa-new) resolves
+    // immediately. After both, manually resolve the first with
+    // stale data — the panel must IGNORE it.
+    let resolveStale: ((v: { runs: unknown[] }) => void) | null = null;
+    mockList
+      .mockImplementationOnce(
+        () => new Promise(res => {
+          resolveStale = res;
+        }),
+      )
+      .mockResolvedValueOnce({ runs: [fresh] });
+
+    const w = mount(SuperAgentOuroborosRunsPanel, {
+      props: { superAgentId: 'sa-old' },
+    });
+    await flushPromises();
+    expect(mockList).toHaveBeenCalledWith('sa-old', undefined);
+
+    await w.setProps({ superAgentId: 'sa-new' });
+    await flushPromises();
+    expect(mockList).toHaveBeenLastCalledWith('sa-new', undefined);
+    // Fresh data showing.
+    expect(w.html()).toContain('psess-fresh');
+
+    // Now the stale (sa-old) request finally resolves. The
+    // panel must NOT replace the fresh data.
+    resolveStale!({ runs: [stale] });
+    await flushPromises();
+    expect(w.html()).not.toContain('psess-stale');
+    expect(w.html()).toContain('psess-fresh');
+  });
 });

@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ref, toRef, onMounted, computed } from 'vue';
+import { ref, toRef, onMounted, computed, watch } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 import { AiChatPanelManaged } from '@ai-accounts/vue-styled';
 import { useProjectSession } from '../../composables/useProjectSession';
 import { useToast } from '../../composables/useToast';
@@ -777,9 +778,41 @@ function truncateId(id: string): string {
   return id.slice(0, 12) + '...';
 }
 
-onMounted(() => {
-  session.loadSessions();
+// v0.7.95 — when arriving via deep-link with ``?sessionId=…``
+// (currently used by the SA inspector's "Recent Ouroboros runs"
+// panel), select that session as soon as the list resolves so
+// the operator lands directly on the requested run instead of an
+// arbitrary default.
+const route = useRoute();
+const router = useRouter();
+
+async function applyDeepLinkSession() {
+  const target = route.query.sessionId;
+  if (typeof target !== 'string' || !target) return;
+  // Wait for the sessions list to include the deep-linked id —
+  // otherwise switchSession would try to attach to a session the
+  // composable hasn't loaded yet.
+  const exists = session.sessions.value.some(s => s.id === target);
+  if (!exists) return;
+  await handleSessionClick(target);
+  // Strip the query so a manual refresh doesn't keep re-selecting
+  // the same session forever (and so subsequent user clicks aren't
+  // overridden on every route nav).
+  const { sessionId: _drop, ...rest } = route.query;
+  router.replace({ query: rest });
+}
+
+onMounted(async () => {
+  await session.loadSessions();
+  await applyDeepLinkSession();
 });
+
+watch(
+  () => route.query.sessionId,
+  () => {
+    applyDeepLinkSession();
+  },
+);
 </script>
 
 <template>

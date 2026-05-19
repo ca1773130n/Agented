@@ -56,16 +56,26 @@ const hasActiveRun = computed(() =>
 async function load(showSpinner = true) {
   if (showSpinner) loading.value = true;
   error.value = null;
+  // Capture the SA id at call-start so a slow in-flight request
+  // from a previously-mounted SA can't overwrite ``runs.value``
+  // after the prop changes — that would mis-render the new SA's
+  // panel and also re-toggle ``hasActiveRun`` from stale data,
+  // restarting polling on the wrong account.
+  const requestedFor = props.superAgentId;
   try {
     const res = await superAgentApi.listOuroborosRuns(
-      props.superAgentId,
+      requestedFor,
       props.limit,
     );
+    if (requestedFor !== props.superAgentId) return;
     runs.value = res.runs;
   } catch (e: unknown) {
+    if (requestedFor !== props.superAgentId) return;
     error.value = e instanceof Error ? e.message : String(e);
   } finally {
-    if (showSpinner) loading.value = false;
+    if (showSpinner && requestedFor === props.superAgentId) {
+      loading.value = false;
+    }
   }
 }
 
@@ -84,7 +94,12 @@ function ensurePolling() {
 watch(hasActiveRun, ensurePolling);
 watch(
   () => props.superAgentId,
-  () => load(),
+  () => {
+    // Clear stale rows so the panel doesn't briefly show the
+    // previous SA's runs while the new fetch is in flight.
+    runs.value = [];
+    load();
+  },
 );
 
 onMounted(async () => {
