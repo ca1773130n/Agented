@@ -1493,7 +1493,7 @@ class ProjectSessionManager:
         pgid: int,
         popen: Optional[subprocess.Popen],
         sigterm_grace_seconds: float = 3.0,
-    ) -> None:
+    ) -> threading.Thread:
         """Spawn a daemon thread that waits briefly for SIGTERM to
         take effect, then escalates to SIGKILL if the process is
         still alive. Used by ``stop_session(wait=False)`` so the
@@ -1503,6 +1503,11 @@ class ProjectSessionManager:
         The thread closes over ``pid`` / ``pgid`` so it doesn't
         depend on ``_sessions[session_id]`` — by the time it runs
         the FK-cleanup branch has already dropped the entry.
+
+        Returns the spawned ``threading.Thread`` so tests can
+        ``join(timeout=...)`` it deterministically instead of
+        relying on sleep-poll. Production callers ignore the
+        return value.
         """
 
         def watch() -> None:
@@ -1549,11 +1554,13 @@ class ProjectSessionManager:
             except (subprocess.TimeoutExpired, ChildProcessError, OSError):
                 pass
 
-        threading.Thread(
+        watchdog_thread = threading.Thread(
             target=watch,
             name=f"psm-killwatchdog-{session_id}",
             daemon=True,
-        ).start()
+        )
+        watchdog_thread.start()
+        return watchdog_thread
 
     @classmethod
     def stop_session(cls, session_id: str, wait: bool = True) -> bool:
