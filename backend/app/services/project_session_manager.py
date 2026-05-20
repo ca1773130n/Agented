@@ -20,6 +20,7 @@ import pty
 import re
 import select
 import signal
+import sqlite3
 import subprocess
 import threading
 import time
@@ -695,6 +696,59 @@ def _extract_hook_decision_events(hook_event: dict) -> list[tuple[str, dict]]:
     ]
 
 
+def _extract_fk_hint(msg: str) -> Optional[str]:
+    """Best-effort: pluck the offending FK column name out of an
+    sqlite3 IntegrityError message.
+
+    SQLite's default message is "FOREIGN KEY constraint failed",
+    which doesn't name the column. Newer build flags (e.g.
+    ``SQLITE_ENABLE_API_ARMOR``) sometimes attach the column. When
+    we can't parse one out, return None — callers must treat the
+    hint as advisory, not authoritative.
+    """
+    lower = msg.lower()
+    for col in (
+        "super_agent_id",
+        "project_id",
+        "phase_id",
+        "plan_id",
+        "agent_id",
+    ):
+        if col in lower:
+            return col
+    return None
+
+
+class SessionPersistError(RuntimeError):
+    """Raised by ``ProjectSessionManager.create_session`` when the
+    post-spawn INSERT fails for a recoverable reason (e.g. FK to the
+    spawned session's parent resource — currently ``super_agent_id``,
+    ``project_id``, ``phase_id``, ``plan_id``, or ``agent_id`` — was
+    concurrently deleted). The PSM kills the just-spawned subprocess
+    and drops its ``_sessions`` entry before raising, so the caller
+    can return a structured error (typically 409) without leaving an
+    orphan process behind.
+
+    Structured attributes (added v0.7.97 codex review pass 2):
+      * ``session_id`` — the synthetic id the PSM had already
+        allocated for the doomed session.
+      * ``constraint_hint`` — best-effort extracted FK-column name
+        from the underlying ``sqlite3.IntegrityError`` message, or
+        ``None`` when the violated constraint can't be identified.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        session_id: Optional[str] = None,
+        constraint_hint: Optional[str] = None,
+    ) -> None:
+        super().__init__(message)
+        self.session_id = session_id
+        self.constraint_hint = constraint_hint
+
+
 @dataclass
 class SessionInfo:
     """In-memory state for an active session.
@@ -962,10 +1016,27 @@ class ProjectSessionManager:
             # thread's select() loop stays uniform across both transports.
             master_fd = popen.stdout.fileno()
 
-        try:
-            pgid = os.getpgid(pid)
-        except ProcessLookupError:
-            pgid = pid  # Fallback if process already exited
+        # v0.7.97 codex pass-3 MAJOR — both spawn paths above run
+        # ``setsid()`` in the child (PTY fork at L969, pipe popen
+        # via ``preexec_fn=os.setsid`` at L1009). After setsid()
+        # the child's pgid equals its pid by definition. The
+        # previous ``os.getpgid(pid)`` had a race window: if the
+        # parent ran it before the child's setsid() completed, it
+        # returned the parent's pgid — and ``os.killpg(pgid,
+        # SIGKILL)`` would then target the parent's group instead
+        # of the spawned session, killing unrelated processes
+        # (potentially including the Gunicorn worker itself).
+        #
+        # Setting ``pgid = pid`` by construction eliminates the
+        # race entirely. A guard against ``pid <= 0`` belt-and-
+        # suspenders against an impossible-in-practice popen
+        # return; if it ever triggers we'd rather not send
+        # killpg(0) (= kill every process in the caller's pgroup).
+        if pid <= 0:
+            raise RuntimeError(
+                f"create_session: spawn returned non-positive pid {pid}"
+            )
+        pgid = pid
 
         now = datetime.now()
         ring_buffer = deque(maxlen=10000)
@@ -1029,6 +1100,43 @@ class ProjectSessionManager:
                     values,
                 )
                 conn.commit()
+            except sqlite3.IntegrityError as exc:
+                # v0.7.97 — close the SA-bridge delete/start race
+                # codex flagged on PR #139. If a parent FK target
+                # (super_agent_id, project_id, phase_id, plan_id,
+                # agent_id) was concurrently deleted, the FK check
+                # fails here. The subprocess is already running;
+                # left in place it would be a permanent orphan
+                # (in-memory only, invisible to every DB-driven UI,
+                # never reaped by the crash-recovery path). Kill
+                # it and re-raise so the caller can return a 409.
+                #
+                # ``wait=False`` because the operator's POST is
+                # already on the wire — blocking 5s for SIGTERM to
+                # take effect would defeat the point of a fast 409.
+                # The periodic sweep + crash-recovery path collects
+                # any process that didn't honour SIGTERM.
+                hint = _extract_fk_hint(str(exc))
+                logger.warning(
+                    "FK-constrained INSERT failed for session %s "
+                    "(super_agent_id=%s, hint=%s) — likely parent "
+                    "deleted mid-spawn; cleaning up subprocess",
+                    session_id,
+                    super_agent_id,
+                    hint,
+                    exc_info=True,
+                )
+                # ``stop_session`` reads ``_sessions[session_id]``,
+                # so call it BEFORE we drop the entry below.
+                cls.stop_session(session_id, wait=False)
+                with cls._lock:
+                    cls._sessions.pop(session_id, None)
+                raise SessionPersistError(
+                    "Session persist failed: parent resource missing "
+                    "(likely deleted during spawn)",
+                    session_id=session_id,
+                    constraint_hint=hint,
+                ) from exc
             except Exception:
                 logger.warning(
                     f"Failed to persist session {session_id} to DB",
@@ -1378,10 +1486,93 @@ class ProjectSessionManager:
         logger.info(f"Session {session_id} exited (status={status}, exit_code={exit_code})")
 
     @classmethod
-    def stop_session(cls, session_id: str) -> bool:
+    def _spawn_kill_watchdog(
+        cls,
+        session_id: str,
+        pid: int,
+        pgid: int,
+        popen: Optional[subprocess.Popen],
+        sigterm_grace_seconds: float = 3.0,
+    ) -> threading.Thread:
+        """Spawn a daemon thread that waits briefly for SIGTERM to
+        take effect, then escalates to SIGKILL if the process is
+        still alive. Used by ``stop_session(wait=False)`` so the
+        FK-cleanup race path can return immediately without
+        orphaning a process that ignores SIGTERM.
+
+        The thread closes over ``pid`` / ``pgid`` so it doesn't
+        depend on ``_sessions[session_id]`` — by the time it runs
+        the FK-cleanup branch has already dropped the entry.
+
+        Returns the spawned ``threading.Thread`` so tests can
+        ``join(timeout=...)`` it deterministically instead of
+        relying on sleep-poll. Production callers ignore the
+        return value.
+        """
+
+        def watch() -> None:
+            deadline = time.monotonic() + sigterm_grace_seconds
+            while time.monotonic() < deadline:
+                if popen is not None:
+                    if popen.poll() is not None:
+                        return  # exited cleanly
+                else:
+                    try:
+                        result = os.waitpid(pid, os.WNOHANG)
+                        if result[0] != 0:
+                            return  # reaped
+                    except ChildProcessError:
+                        return  # already gone
+                    except OSError:
+                        return  # not our child / other failure → give up
+                time.sleep(0.1)
+            # Still alive past the grace window — SIGKILL the pgid.
+            try:
+                os.killpg(pgid, signal.SIGKILL)
+                logger.warning(
+                    "watchdog: SIGKILL'd session %s pgid %s (ignored SIGTERM)",
+                    session_id,
+                    pgid,
+                )
+            except ProcessLookupError:
+                pass  # raced with natural exit
+            except OSError as exc:
+                logger.error(
+                    "watchdog: SIGKILL to pgid %s failed: %s",
+                    pgid,
+                    exc,
+                    exc_info=True,
+                )
+            # Best-effort reap so a zombie doesn't linger. The
+            # popen-mode path waits on the Popen handle; the
+            # fork/PTY-mode path uses waitpid directly.
+            try:
+                if popen is not None:
+                    popen.wait(timeout=1.0)
+                else:
+                    os.waitpid(pid, 0)
+            except (subprocess.TimeoutExpired, ChildProcessError, OSError):
+                pass
+
+        watchdog_thread = threading.Thread(
+            target=watch,
+            name=f"psm-killwatchdog-{session_id}",
+            daemon=True,
+        )
+        watchdog_thread.start()
+        return watchdog_thread
+
+    @classmethod
+    def stop_session(cls, session_id: str, wait: bool = True) -> bool:
         """Stop a running session by terminating its process group.
 
-        Sends SIGTERM first, waits up to 5 seconds, then SIGKILL if still alive.
+        Sends SIGTERM first; if ``wait=True`` (default), waits up to
+        5 seconds for the process to exit then escalates to SIGKILL.
+        If ``wait=False``, skips the wait + SIGKILL escalation —
+        appropriate for "fire and forget" cleanup paths where the
+        caller can't afford to block (e.g. the FK-cleanup branch in
+        ``create_session``, which is invoked inline on a route the
+        operator is waiting on).
 
         Returns:
             True if session was stopped successfully, False if session not found.
@@ -1394,6 +1585,19 @@ class ProjectSessionManager:
         pid = session_info.pid
         pgid = session_info.pgid
         popen = session_info.popen
+
+        # v0.7.97 codex pass-3 belt-and-suspenders — even though
+        # create_session now sets ``pgid = pid`` by construction,
+        # guard against any historical SessionInfo with pgid <= 0
+        # (would broadcast SIGTERM to the caller's process group).
+        if pgid <= 0:
+            logger.error(
+                "stop_session: refusing to signal pgid=%s (session %s); "
+                "this would target the caller's process group",
+                pgid,
+                session_id,
+            )
+            return False
 
         # Closing stdin gives ``claude --print`` a graceful EOF to wind
         # down on. The killpg below is the fallback if it doesn't.
@@ -1410,6 +1614,18 @@ class ProjectSessionManager:
             pass  # Already dead
         except OSError as e:
             logger.warning(f"SIGTERM to pgid {pgid} failed: {e}")
+
+        if not wait:
+            # Fire-and-forget *for the caller*, but spawn a daemon
+            # watchdog so a SIGTERM-ignoring child still gets the
+            # SIGKILL escalation. Without this, ``_sessions.pop()``
+            # in the FK-cleanup branch would orphan the process —
+            # the periodic sweep + crash-recovery path key off the
+            # ``_sessions`` map and the DB row, both of which are
+            # gone by then. Capturing ``pid`` + ``pgid`` by closure
+            # keeps the watchdog independent of those structures.
+            cls._spawn_kill_watchdog(session_id, pid, pgid, popen)
+            return True
 
         # Wait up to 5 seconds for process to exit
         exited = False

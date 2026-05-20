@@ -6,7 +6,7 @@ from litestar import Litestar, get
 from litestar.config.cors import CORSConfig
 from litestar.testing import create_test_client
 
-from app_litestar.exception_handlers import EXCEPTION_HANDLERS
+from app_litestar.exception_handlers import build_exception_handlers
 from app_litestar.middleware import (
     ApiKeyMiddleware,
     RateLimitMiddleware,
@@ -59,7 +59,7 @@ def _client(force_https: bool = False):
             mw.RateLimitMiddleware(),
             mw.ApiKeyMiddleware(),
         ],
-        exception_handlers=EXCEPTION_HANDLERS,
+        exception_handlers=build_exception_handlers(),
         cors_config=CORSConfig(allow_origins=["*"]),
     )
 

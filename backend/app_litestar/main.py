@@ -14,7 +14,7 @@ from litestar.config.cors import CORSConfig
 from litestar.di import Provide
 
 from .auth import provide_caller
-from .exception_handlers import EXCEPTION_HANDLERS
+from .exception_handlers import build_exception_handlers
 from .lifecycle import on_shutdown, on_startup
 from .middleware import (
     ApiKeyMiddleware,
@@ -211,7 +211,7 @@ def create_app() -> Litestar:
             # Innermost-after-Performance so its timing matches.
             SlowRequestMiddleware(),
         ],
-        exception_handlers=EXCEPTION_HANDLERS,
+        exception_handlers=build_exception_handlers(),
         on_startup=[on_startup],
         on_shutdown=[on_shutdown],
         route_handlers=[

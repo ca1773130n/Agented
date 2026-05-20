@@ -784,7 +784,23 @@ def start_ouroboros_run(
             "ouroboros": True,
         },
     }
-    result = handler.start(session_config)
+    try:
+        result = handler.start(session_config)
+    except Exception as exc:
+        # v0.7.97 — surface the bridge delete/start race the FK
+        # check at PSM-INSERT time catches. ``SessionPersistError``
+        # is raised when the SA (or other FK target) was deleted
+        # between this route's validation and PSM's persist; the
+        # subprocess is already killed at that point. 409 conveys
+        # "you asked for a resource that's no longer here" more
+        # precisely than a generic 500.
+        from app.services.project_session_manager import SessionPersistError
+
+        if isinstance(exc, SessionPersistError):
+            from litestar.exceptions import HTTPException
+
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        raise
     if "error" in result:
         from litestar.exceptions import HTTPException
 

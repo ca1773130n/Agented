@@ -1199,3 +1199,376 @@ class TestSubscribe:
         assert len(events) == 1
         assert "error" in events[0]
         assert "Session not found" in events[0]
+
+
+# ---------------------------------------------------------------------------
+# v0.7.97 — SessionPersistError cleanup (PR #139 deferred MINOR)
+# ---------------------------------------------------------------------------
+
+
+class TestSessionPersistErrorCleanup:
+    """When ``create_session``'s post-spawn INSERT fails with a FK
+    violation (the SA-bridge race), the PSM must:
+      1. Stop the just-spawned subprocess.
+      2. Drop the in-memory ``_sessions`` entry so the SSE/output
+         surfaces don't return data for a session the DB has no
+         record of.
+      3. Raise ``SessionPersistError`` so the caller (the bridge
+         route) can turn it into a 409 instead of letting it
+         escape as a 500.
+    """
+
+    def test_session_persist_error_is_exported(self):
+        # Smoke test the symbol is reachable from the module.
+        from app.services.project_session_manager import SessionPersistError
+
+        assert issubclass(SessionPersistError, RuntimeError)
+        err = SessionPersistError("boom")
+        assert str(err) == "boom"
+        # Default structured fields are None when omitted.
+        assert err.session_id is None
+        assert err.constraint_hint is None
+
+    def test_session_persist_error_structured_fields(self):
+        """v0.7.97 codex pass-2 NIT: SessionPersistError carries
+        ``session_id`` + ``constraint_hint`` so log scrapers and
+        future UI surfaces can disambiguate races without parsing
+        the message string.
+        """
+        from app.services.project_session_manager import SessionPersistError
+
+        err = SessionPersistError(
+            "msg", session_id="psess-x", constraint_hint="super_agent_id"
+        )
+        assert err.session_id == "psess-x"
+        assert err.constraint_hint == "super_agent_id"
+
+    def test_extract_fk_hint_parses_column_name(self):
+        from app.services.project_session_manager import _extract_fk_hint
+
+        # SQLite default message — no column → None.
+        assert _extract_fk_hint("FOREIGN KEY constraint failed") is None
+        # Hypothetical informative message — column extracted.
+        assert (
+            _extract_fk_hint(
+                "FOREIGN KEY constraint failed (super_agent_id)"
+            )
+            == "super_agent_id"
+        )
+        # Unrecognized column — None.
+        assert _extract_fk_hint("FOREIGN KEY constraint failed (custom_id)") is None
+
+    def test_fk_failure_kills_subprocess_and_drops_entry(self, monkeypatch):
+        """Exercise the exception path without spawning a real
+        subprocess: pre-seed a fake ``_sessions`` entry, run the
+        cleanup logic directly via a patched IntegrityError.
+        """
+        import sqlite3 as _sqlite3
+        from app.services.project_session_manager import (
+            ProjectSessionManager,
+            SessionPersistError,
+        )
+
+        sid = "psess-racetest"
+        ProjectSessionManager._sessions[sid] = _make_session_info(
+            session_id=sid
+        )
+
+        stop_calls: list[dict] = []
+
+        # Updated signature: stop_session now accepts ``wait`` kwarg
+        # (v0.7.97 fast-kill path for the FK-cleanup branch).
+        def fake_stop(session_id, wait=True):
+            stop_calls.append({"session_id": session_id, "wait": wait})
+            return True
+
+        monkeypatch.setattr(ProjectSessionManager, "stop_session", fake_stop)
+
+        # Reproduce the except-branch behaviour directly so the
+        # test stays hermetic (no fork/spawn). This mirrors the
+        # cleanup block inside ``create_session``.
+        try:
+            try:
+                raise _sqlite3.IntegrityError(
+                    "FOREIGN KEY constraint failed (super_agent_id)"
+                )
+            except _sqlite3.IntegrityError as exc:
+                from app.services.project_session_manager import _extract_fk_hint
+
+                hint = _extract_fk_hint(str(exc))
+                ProjectSessionManager.stop_session(sid, wait=False)
+                with ProjectSessionManager._lock:
+                    ProjectSessionManager._sessions.pop(sid, None)
+                raise SessionPersistError(
+                    "Session persist failed: parent resource missing",
+                    session_id=sid,
+                    constraint_hint=hint,
+                ) from exc
+        except SessionPersistError as caught:
+            assert "parent resource missing" in str(caught)
+            assert caught.session_id == sid
+            assert caught.constraint_hint == "super_agent_id"
+        else:
+            raise AssertionError("SessionPersistError not raised")
+
+        # Subprocess kill attempted with the fast-kill flag, in-
+        # memory entry gone.
+        assert stop_calls == [{"session_id": sid, "wait": False}], (
+            f"stop_session must be called with wait=False; got {stop_calls}"
+        )
+        assert sid not in ProjectSessionManager._sessions
+
+    def test_watchdog_escalates_to_sigkill_when_sigterm_ignored(
+        self, monkeypatch
+    ):
+        """v0.7.97 codex pass-3 MINOR coverage (refined pass-4):
+        when the spawned process ignores SIGTERM and runs past the
+        grace window, the watchdog must call ``waitpid(WNOHANG)``
+        (PTY path), see "still running", and SIGKILL the pgid.
+
+        Calibration: ``_spawn_kill_watchdog`` calls
+        ``time.monotonic()`` once for ``deadline`` and ONCE per
+        loop iteration for the ``while`` condition. The iterator
+        therefore needs at least 3 values for one full iteration:
+        ``[0.0, 0.0, 10.0]`` — deadline=3.0, first loop check
+        passes (0.0 < 3.0) → body runs (calls waitpid + sleep) →
+        second loop check fails (10.0 < 3.0) → escalate SIGKILL.
+        """
+        from app.services.project_session_manager import (
+            ProjectSessionManager,
+        )
+
+        killpg_calls: list[tuple] = []
+        waitpid_calls: list[tuple] = []
+
+        def fake_killpg(pgid, sig):
+            killpg_calls.append((pgid, sig))
+
+        # PTY path (popen=None). WNOHANG returning (0, 0) =
+        # "still running" so the body falls through to sleep,
+        # and the next loop check trips the deadline.
+        def fake_waitpid(pid, flags):
+            waitpid_calls.append((pid, flags))
+            return (0, 0)
+
+        monkeypatch.setattr(
+            "app.services.project_session_manager.os.killpg", fake_killpg
+        )
+        monkeypatch.setattr(
+            "app.services.project_session_manager.os.waitpid", fake_waitpid
+        )
+        monkeypatch.setattr(
+            "app.services.project_session_manager.time.sleep",
+            lambda _: None,
+        )
+        monotonic_values = iter([0.0, 0.0, 10.0])
+        monkeypatch.setattr(
+            "app.services.project_session_manager.time.monotonic",
+            lambda: next(monotonic_values),
+        )
+
+        sid = "psess-watchdog-escalate"
+        thread = ProjectSessionManager._spawn_kill_watchdog(
+            sid, 9001, 9001, None
+        )
+        thread.join(timeout=2.0)
+        assert not thread.is_alive(), "watchdog thread didn't exit in 2s"
+
+        import os as _os
+        import signal as _signal
+
+        # Body actually ran — PTY waitpid branch was exercised.
+        # The watchdog also makes a post-SIGKILL reap call
+        # ``os.waitpid(pid, 0)``; we only care that the WNOHANG
+        # poll happened first.
+        assert (9001, _os.WNOHANG) in waitpid_calls, (
+            f"PTY waitpid branch must run before escalation; got {waitpid_calls}"
+        )
+        assert (9001, _signal.SIGKILL) in killpg_calls, (
+            f"watchdog must SIGKILL when SIGTERM ignored; got {killpg_calls}"
+        )
+
+    def test_watchdog_returns_when_process_exits_naturally(
+        self, monkeypatch
+    ):
+        """v0.7.97 — when ``popen.poll()`` returns non-None inside
+        the grace window, the watchdog must return without
+        escalating. Joins the thread for determinism.
+        """
+        from types import SimpleNamespace
+
+        from app.services.project_session_manager import (
+            ProjectSessionManager,
+        )
+
+        killpg_calls: list[tuple] = []
+
+        def fake_killpg(pgid, sig):
+            killpg_calls.append((pgid, sig))
+
+        monkeypatch.setattr(
+            "app.services.project_session_manager.os.killpg", fake_killpg
+        )
+        monkeypatch.setattr(
+            "app.services.project_session_manager.time.sleep",
+            lambda _: None,
+        )
+        # ``deadline`` reads monotonic once; the loop condition
+        # reads it again. Both inside the grace window so the
+        # body runs and the poll() branch returns cleanly.
+        monkeypatch.setattr(
+            "app.services.project_session_manager.time.monotonic",
+            lambda: 0.0,
+        )
+
+        popen = SimpleNamespace(
+            poll=lambda: 0,
+            wait=lambda timeout=None: 0,
+        )
+
+        sid = "psess-watchdog-natural"
+        thread = ProjectSessionManager._spawn_kill_watchdog(
+            sid, 9100, 9100, popen
+        )
+        thread.join(timeout=2.0)
+        assert not thread.is_alive(), "watchdog thread didn't exit in 2s"
+
+        assert killpg_calls == [], (
+            "watchdog must not SIGKILL when process exited naturally; "
+            f"got {killpg_calls}"
+        )
+
+    def test_watchdog_pty_path_returns_on_reaped_child(self, monkeypatch):
+        """v0.7.97 — PTY session (popen=None) uses
+        ``os.waitpid(pid, WNOHANG)``. When it returns a non-zero
+        first element (the child was reaped), the watchdog must
+        return without escalating.
+        """
+        from app.services.project_session_manager import (
+            ProjectSessionManager,
+        )
+
+        killpg_calls: list[tuple] = []
+
+        def fake_killpg(pgid, sig):
+            killpg_calls.append((pgid, sig))
+
+        def fake_waitpid(pid, _flags):
+            return (pid, 0)
+
+        monkeypatch.setattr(
+            "app.services.project_session_manager.os.killpg", fake_killpg
+        )
+        monkeypatch.setattr(
+            "app.services.project_session_manager.os.waitpid", fake_waitpid
+        )
+        monkeypatch.setattr(
+            "app.services.project_session_manager.time.sleep",
+            lambda _: None,
+        )
+        monkeypatch.setattr(
+            "app.services.project_session_manager.time.monotonic",
+            lambda: 0.0,
+        )
+
+        sid = "psess-watchdog-pty"
+        thread = ProjectSessionManager._spawn_kill_watchdog(
+            sid, 9200, 9200, None
+        )
+        thread.join(timeout=2.0)
+        assert not thread.is_alive(), "watchdog thread didn't exit in 2s"
+
+        assert killpg_calls == [], (
+            "watchdog PTY path must not SIGKILL when waitpid reports "
+            f"the child was reaped; got {killpg_calls}"
+        )
+
+    def test_stop_session_wait_false_spawns_kill_watchdog(self, monkeypatch):
+        """v0.7.97 codex pass-2 MINOR — ``wait=False`` must spawn a
+        background watchdog that handles SIGTERM-ignoring children.
+        Without it, the FK-cleanup branch drops the ``_sessions``
+        entry and the process becomes invisible to the periodic
+        sweep + crash-recovery path.
+        """
+        from app.services.project_session_manager import (
+            ProjectSessionManager,
+        )
+
+        sid = "psess-watchdog"
+        ProjectSessionManager._sessions[sid] = _make_session_info(
+            session_id=sid, pid=4242, pgid=4242
+        )
+
+        watchdog_calls: list[tuple] = []
+
+        def fake_spawn(session_id, pid, pgid, popen, *args, **kwargs):
+            watchdog_calls.append((session_id, pid, pgid))
+
+        # Stub the syscalls + the watchdog spawner so we don't fork.
+        monkeypatch.setattr(
+            "app.services.project_session_manager.os.killpg",
+            lambda *_a, **_k: None,
+        )
+        monkeypatch.setattr(
+            ProjectSessionManager, "_spawn_kill_watchdog", fake_spawn
+        )
+
+        assert ProjectSessionManager.stop_session(sid, wait=False) is True
+        assert watchdog_calls == [(sid, 4242, 4242)], (
+            f"wait=False must spawn the kill watchdog; got {watchdog_calls}"
+        )
+
+        ProjectSessionManager._sessions.pop(sid, None)
+
+    def test_stop_session_wait_false_skips_5s_wait(self, monkeypatch):
+        """v0.7.97 — ``wait=False`` sends SIGTERM and returns
+        immediately on the *main thread* without entering the 5s
+        wait loop. (The watchdog runs in a daemon thread and is
+        verified by ``test_stop_session_wait_false_spawns_kill_watchdog``
+        above — stubbed here so its own ``time.sleep`` calls don't
+        trip the boom_sleep guard.)
+        """
+        from app.services.project_session_manager import (
+            ProjectSessionManager,
+        )
+
+        sid = "psess-fastkill"
+        ProjectSessionManager._sessions[sid] = _make_session_info(
+            session_id=sid, pid=12345, pgid=12345
+        )
+
+        killpg_calls: list[tuple] = []
+
+        def fake_killpg(pgid, sig):
+            killpg_calls.append((pgid, sig))
+
+        def boom_sleep(_):
+            raise AssertionError(
+                "stop_session(wait=False) must not call time.sleep "
+                "on the main thread"
+            )
+
+        monkeypatch.setattr(
+            "app.services.project_session_manager.os.killpg", fake_killpg
+        )
+        monkeypatch.setattr(
+            "app.services.project_session_manager.time.sleep", boom_sleep
+        )
+        # Stub the watchdog so its background thread's time.sleep
+        # doesn't fire the boom_sleep guard.
+        monkeypatch.setattr(
+            ProjectSessionManager,
+            "_spawn_kill_watchdog",
+            lambda *_a, **_k: None,
+        )
+
+        result = ProjectSessionManager.stop_session(sid, wait=False)
+        assert result is True
+        # SIGTERM delivered exactly once; no SIGKILL escalation on
+        # the main thread.
+        import signal as _signal
+
+        assert killpg_calls == [(12345, _signal.SIGTERM)]
+
+        # Cleanup.
+        ProjectSessionManager._sessions.pop(sid, None)

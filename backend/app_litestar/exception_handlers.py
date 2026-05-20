@@ -127,6 +127,22 @@ def operational_error_handler(_: Request, exc: sqlite3.OperationalError) -> Resp
     )
 
 
+def session_persist_error_handler(_: Request, exc: Exception) -> Response:
+    """v0.7.97 — global 409 handler for the
+    ``ProjectSessionManager.SessionPersistError`` race fix.
+
+    Imported lazily so this module doesn't pull in the PSM (which
+    has its own subprocess + threading state) at import time.
+    Every caller of ``PSM.create_session`` (currently the SA
+    Ouroboros bridge + several ``grd_routes`` + ``grd_planning_service``
+    surfaces) now gets a clean ``409 SESSION_PERSIST_RACE`` body
+    when a parent FK target was deleted mid-spawn, instead of a
+    generic ``500 INTERNAL_SERVER_ERROR``.
+    """
+    detail = str(exc) or "Session persist failed"
+    return _json_response("SESSION_PERSIST_RACE", detail, HTTPStatus.CONFLICT)
+
+
 def unhandled_handler(_: Request, exc: Exception) -> Response:
     """Last-resort 500 handler — feeds error_capture and returns a generic body."""
     try:
@@ -143,15 +159,26 @@ def unhandled_handler(_: Request, exc: Exception) -> Response:
     )
 
 
-EXCEPTION_HANDLERS = {
-    NotAuthorizedException: not_authorized_handler,
-    PermissionDeniedException: permission_denied_handler,
-    NotFoundException: not_found_handler,
-    ValidationException: validation_handler,
-    HTTPException: http_exception_handler,
-    ValueError: value_error_handler,
-    PermissionError: permission_error_handler,
-    sqlite3.IntegrityError: integrity_error_handler,
-    sqlite3.OperationalError: operational_error_handler,
-    Exception: unhandled_handler,
-}
+def build_exception_handlers() -> dict:
+    """Factory — called by ``create_app`` at construction time so the
+    PSM import (subprocess + threading state) doesn't run at module
+    import. Tests that build a Litestar TestClient via ``create_app``
+    pick up the full handler registry; route-only test clients
+    (``create_test_client(route_handlers=...)``) can opt in by
+    passing the result as ``exception_handlers=...``.
+    """
+    from app.services.project_session_manager import SessionPersistError
+
+    return {
+        NotAuthorizedException: not_authorized_handler,
+        PermissionDeniedException: permission_denied_handler,
+        NotFoundException: not_found_handler,
+        ValidationException: validation_handler,
+        HTTPException: http_exception_handler,
+        ValueError: value_error_handler,
+        PermissionError: permission_error_handler,
+        sqlite3.IntegrityError: integrity_error_handler,
+        sqlite3.OperationalError: operational_error_handler,
+        SessionPersistError: session_persist_error_handler,
+        Exception: unhandled_handler,
+    }
