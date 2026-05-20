@@ -1318,6 +1318,158 @@ class TestSessionPersistErrorCleanup:
         )
         assert sid not in ProjectSessionManager._sessions
 
+    def test_watchdog_escalates_to_sigkill_when_sigterm_ignored(
+        self, monkeypatch
+    ):
+        """v0.7.97 codex pass-3 MINOR coverage: when the spawned
+        process ignores SIGTERM and runs past the grace window,
+        the watchdog must SIGKILL the pgid. PTY path (popen=None).
+        """
+        import threading as _threading
+
+        from app.services.project_session_manager import (
+            ProjectSessionManager,
+        )
+
+        killpg_calls: list[tuple] = []
+
+        def fake_killpg(pgid, sig):
+            killpg_calls.append((pgid, sig))
+
+        # popen=None simulates a PTY (fork-based) session. waitpid
+        # with WNOHANG returning (0, 0) means "still running" — the
+        # watchdog never sees an exit and escalates to SIGKILL.
+        def fake_waitpid(_pid, _flags):
+            return (0, 0)
+
+        monkeypatch.setattr(
+            "app.services.project_session_manager.os.killpg", fake_killpg
+        )
+        monkeypatch.setattr(
+            "app.services.project_session_manager.os.waitpid", fake_waitpid
+        )
+        # Collapse the grace window: sleep no-op + monotonic jumps
+        # past the deadline on the second call.
+        monkeypatch.setattr(
+            "app.services.project_session_manager.time.sleep",
+            lambda _: None,
+        )
+        monotonic_values = iter([0.0, 10.0])
+        monkeypatch.setattr(
+            "app.services.project_session_manager.time.monotonic",
+            lambda: next(monotonic_values),
+        )
+
+        sid = "psess-watchdog-escalate"
+        ProjectSessionManager._spawn_kill_watchdog(sid, 9001, 9001, None)
+
+        # Wait for the daemon thread to run.
+        for _ in range(50):
+            if killpg_calls:
+                break
+            _threading.Event().wait(0.02)
+
+        import signal as _signal
+
+        assert (9001, _signal.SIGKILL) in killpg_calls, (
+            f"watchdog must SIGKILL when SIGTERM ignored; got {killpg_calls}"
+        )
+
+    def test_watchdog_returns_when_process_exits_naturally(
+        self, monkeypatch
+    ):
+        """v0.7.97 — when the process exits inside the grace
+        window (popen.poll() returns non-None), the watchdog must
+        NOT send SIGKILL. Pop-mode path.
+        """
+        import threading as _threading
+        from types import SimpleNamespace
+
+        from app.services.project_session_manager import (
+            ProjectSessionManager,
+        )
+
+        killpg_calls: list[tuple] = []
+
+        def fake_killpg(pgid, sig):
+            killpg_calls.append((pgid, sig))
+
+        monkeypatch.setattr(
+            "app.services.project_session_manager.os.killpg", fake_killpg
+        )
+        monkeypatch.setattr(
+            "app.services.project_session_manager.time.sleep",
+            lambda _: None,
+        )
+        # Always within the grace window — loop polls poll() and
+        # exits naturally on the first iteration.
+        monkeypatch.setattr(
+            "app.services.project_session_manager.time.monotonic",
+            lambda: 0.0,
+        )
+
+        # popen.poll() returns 0 = exited cleanly.
+        popen = SimpleNamespace(
+            poll=lambda: 0,
+            wait=lambda timeout=None: 0,
+        )
+
+        sid = "psess-watchdog-natural"
+        ProjectSessionManager._spawn_kill_watchdog(sid, 9100, 9100, popen)
+
+        _threading.Event().wait(0.1)
+
+        assert killpg_calls == [], (
+            "watchdog must not SIGKILL when process exited naturally; "
+            f"got {killpg_calls}"
+        )
+
+    def test_watchdog_pty_path_returns_on_reaped_child(self, monkeypatch):
+        """v0.7.97 — PTY session (popen=None) uses
+        ``os.waitpid(pid, WNOHANG)``. When it returns a non-zero
+        first element (the child was reaped), the watchdog must
+        return without escalating to SIGKILL.
+        """
+        import threading as _threading
+
+        from app.services.project_session_manager import (
+            ProjectSessionManager,
+        )
+
+        killpg_calls: list[tuple] = []
+
+        def fake_killpg(pgid, sig):
+            killpg_calls.append((pgid, sig))
+
+        # Return (pid, exit_status) — child was reaped → return early.
+        def fake_waitpid(pid, _flags):
+            return (pid, 0)
+
+        monkeypatch.setattr(
+            "app.services.project_session_manager.os.killpg", fake_killpg
+        )
+        monkeypatch.setattr(
+            "app.services.project_session_manager.os.waitpid", fake_waitpid
+        )
+        monkeypatch.setattr(
+            "app.services.project_session_manager.time.sleep",
+            lambda _: None,
+        )
+        monkeypatch.setattr(
+            "app.services.project_session_manager.time.monotonic",
+            lambda: 0.0,
+        )
+
+        sid = "psess-watchdog-pty"
+        ProjectSessionManager._spawn_kill_watchdog(sid, 9200, 9200, None)
+
+        _threading.Event().wait(0.1)
+
+        assert killpg_calls == [], (
+            "watchdog PTY path must not SIGKILL when waitpid reports "
+            f"the child was reaped; got {killpg_calls}"
+        )
+
     def test_stop_session_wait_false_spawns_kill_watchdog(self, monkeypatch):
         """v0.7.97 codex pass-2 MINOR — ``wait=False`` must spawn a
         background watchdog that handles SIGTERM-ignoring children.

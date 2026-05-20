@@ -211,7 +211,7 @@ def create_app() -> Litestar:
             # Innermost-after-Performance so its timing matches.
             SlowRequestMiddleware(),
         ],
-        exception_handlers=EXCEPTION_HANDLERS,
+        exception_handlers=build_exception_handlers(),
         on_startup=[on_startup],
         on_shutdown=[on_shutdown],
         route_handlers=[

@@ -1016,10 +1016,27 @@ class ProjectSessionManager:
             # thread's select() loop stays uniform across both transports.
             master_fd = popen.stdout.fileno()
 
-        try:
-            pgid = os.getpgid(pid)
-        except ProcessLookupError:
-            pgid = pid  # Fallback if process already exited
+        # v0.7.97 codex pass-3 MAJOR — both spawn paths above run
+        # ``setsid()`` in the child (PTY fork at L969, pipe popen
+        # via ``preexec_fn=os.setsid`` at L1009). After setsid()
+        # the child's pgid equals its pid by definition. The
+        # previous ``os.getpgid(pid)`` had a race window: if the
+        # parent ran it before the child's setsid() completed, it
+        # returned the parent's pgid — and ``os.killpg(pgid,
+        # SIGKILL)`` would then target the parent's group instead
+        # of the spawned session, killing unrelated processes
+        # (potentially including the Gunicorn worker itself).
+        #
+        # Setting ``pgid = pid`` by construction eliminates the
+        # race entirely. A guard against ``pid <= 0`` belt-and-
+        # suspenders against an impossible-in-practice popen
+        # return; if it ever triggers we'd rather not send
+        # killpg(0) (= kill every process in the caller's pgroup).
+        if pid <= 0:
+            raise RuntimeError(
+                f"create_session: spawn returned non-positive pid {pid}"
+            )
+        pgid = pid
 
         now = datetime.now()
         ring_buffer = deque(maxlen=10000)
@@ -1561,6 +1578,19 @@ class ProjectSessionManager:
         pid = session_info.pid
         pgid = session_info.pgid
         popen = session_info.popen
+
+        # v0.7.97 codex pass-3 belt-and-suspenders — even though
+        # create_session now sets ``pgid = pid`` by construction,
+        # guard against any historical SessionInfo with pgid <= 0
+        # (would broadcast SIGTERM to the caller's process group).
+        if pgid <= 0:
+            logger.error(
+                "stop_session: refusing to signal pgid=%s (session %s); "
+                "this would target the caller's process group",
+                pgid,
+                session_id,
+            )
+            return False
 
         # Closing stdin gives ``claude --print`` a graceful EOF to wind
         # down on. The killpg below is the fallback if it doesn't.
