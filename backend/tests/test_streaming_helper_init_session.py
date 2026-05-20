@@ -88,3 +88,86 @@ def test_init_session_is_idempotent(isolated_db):
     assert any(entry.get("keep") for entry in log)
 
     ChatStateService.remove_session(session_id)
+
+
+def test_empty_content_turns_are_filtered_from_llm_messages(isolated_db):
+    """Regression for v0.7.97: the SuperAgent conversation_log
+    sometimes contains entries with empty or whitespace-only content
+    (interrupted assistant streams, tool-only turns where the
+    serializer produced no text payload, etc.).
+
+    Pre-fix, ``streaming_helper`` appended every entry verbatim to
+    the LLM payload. CLIProxyAPI's OpenAI translation then rejected
+    the request with "text content blocks must be non-empty" and
+    the whole turn 500'd. The other three conversation services
+    (base, plugin, skill) already filtered the same way — only this
+    code path was missing the guard.
+
+    This test asserts that the messages handed to
+    ``stream_llm_response`` contain ONLY non-empty user/assistant
+    turns, regardless of how many empty entries were in the
+    conversation_log.
+    """
+    session_id = "sess-empty-filter"
+    ChatStateService.remove_session(session_id)
+
+    # conversation_log with a mix of valid + empty/whitespace entries.
+    log = [
+        {"role": "user", "content": "hello"},
+        {"role": "assistant", "content": ""},        # empty → drop
+        {"role": "user", "content": "   \n\t  "},    # whitespace → drop
+        {"role": "assistant", "content": "world"},
+        {"role": "tool", "content": None},           # None → drop (no AttributeError)
+        {"role": "user", "content": "ok"},
+    ]
+
+    import threading
+
+    captured: dict = {}
+    captured_evt = threading.Event()
+
+    def capture_messages(messages, **_kwargs):
+        captured["messages"] = list(messages)
+        captured_evt.set()
+        return iter([])
+
+    with (
+        patch(
+            "app.services.super_agent_session_service.SuperAgentSessionService.assemble_system_prompt",
+            return_value="sys",
+        ),
+        patch(
+            "app.services.super_agent_session_service.SuperAgentSessionService.get_session_state",
+            return_value={"conversation_log": log},
+        ),
+        patch(
+            "app.services.conversation_streaming.stream_llm_response",
+            side_effect=capture_messages,
+        ),
+    ):
+        run_streaming_response(
+            session_id=session_id,
+            super_agent_id="sa-empty-filter",
+            backend="claude",
+            use_cli_agent=False,
+        )
+
+    # Streaming runs on a background thread; the side_effect signals
+    # the event as soon as it's been called. ``Event.wait`` is
+    # deterministic + faster than a sleep-poll loop, and the 2s
+    # ceiling is comfortable even on heavily loaded CI runners.
+    assert captured_evt.wait(timeout=2.0), (
+        "background thread didn't call stream_llm_response within 2s"
+    )
+
+    messages = captured["messages"]
+    # System prompt is always first; the rest must be non-empty content only.
+    assert messages[0]["role"] == "system"
+    payload_turns = messages[1:]
+    assert [m["content"] for m in payload_turns] == ["hello", "world", "ok"], (
+        f"empty/whitespace/None content must be filtered, got {payload_turns}"
+    )
+    for m in payload_turns:
+        assert m["content"] and m["content"].strip()
+
+    ChatStateService.remove_session(session_id)
