@@ -21,6 +21,7 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { superAgentApi } from '../../services/api';
+import { safeFormatRelative } from '../../utils/datetime';
 
 const props = defineProps<{
   superAgentId: string;
@@ -68,6 +69,11 @@ async function load(showSpinner = true) {
       props.limit,
     );
     if (requestedFor !== props.superAgentId) return;
+    // Skip the reassignment when the poll returned the same set
+    // we already have. Otherwise the 7s poll re-renders all rows
+    // (and re-runs ``formatRelative`` per row) on every cycle even
+    // when nothing actually changed.
+    if (!runsChanged(runs.value, res.runs)) return;
     runs.value = res.runs;
   } catch (e: unknown) {
     if (requestedFor !== props.superAgentId) return;
@@ -120,14 +126,25 @@ function statusClass(status: string): string {
 }
 
 function formatRelative(iso: string | null): string {
-  if (!iso) return '—';
-  const t = Date.parse(iso);
-  if (Number.isNaN(t)) return iso;
-  const deltaSec = Math.max(0, Math.floor((Date.now() - t) / 1000));
-  if (deltaSec < 60) return `${deltaSec}s ago`;
-  if (deltaSec < 3600) return `${Math.floor(deltaSec / 60)}m ago`;
-  if (deltaSec < 86_400) return `${Math.floor(deltaSec / 3600)}h ago`;
-  return `${Math.floor(deltaSec / 86_400)}d ago`;
+  return safeFormatRelative(iso, '—');
+}
+
+function runsChanged(prev: OuroborosRun[], next: OuroborosRun[]): boolean {
+  if (prev.length !== next.length) return true;
+  for (let i = 0; i < prev.length; i++) {
+    const a = prev[i];
+    const b = next[i];
+    if (
+      a.session_id !== b.session_id ||
+      a.status !== b.status ||
+      a.iteration_count !== b.iteration_count ||
+      a.last_activity_at !== b.last_activity_at ||
+      a.ended_at !== b.ended_at
+    ) {
+      return true;
+    }
+  }
+  return false;
 }
 
 function openRun(run: OuroborosRun) {

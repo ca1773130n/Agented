@@ -721,31 +721,26 @@ def _extract_fk_hint(msg: str) -> Optional[str]:
 
 class SessionPersistError(RuntimeError):
     """Raised by ``ProjectSessionManager.create_session`` when the
-    post-spawn INSERT fails for a recoverable reason (e.g. FK to the
-    spawned session's parent resource — currently ``super_agent_id``,
-    ``project_id``, ``phase_id``, ``plan_id``, or ``agent_id`` — was
-    concurrently deleted). The PSM kills the just-spawned subprocess
-    and drops its ``_sessions`` entry before raising, so the caller
-    can return a structured error (typically 409) without leaving an
-    orphan process behind.
+    post-spawn INSERT fails for a recoverable reason (parent FK
+    target was concurrently deleted). PSM kills the just-spawned
+    subprocess and drops its ``_sessions`` entry before raising so
+    the caller can render a structured error (the global Litestar
+    handler returns 409) without leaving an orphan process behind.
 
-    Structured attributes (added v0.7.97 codex review pass 2):
-      * ``session_id`` — the synthetic id the PSM had already
-        allocated for the doomed session.
-      * ``constraint_hint`` — best-effort extracted FK-column name
-        from the underlying ``sqlite3.IntegrityError`` message, or
-        ``None`` when the violated constraint can't be identified.
+    ``constraint_hint`` is the best-effort FK-column name extracted
+    from the underlying ``sqlite3.IntegrityError`` message, or
+    ``None`` when the column can't be identified. (SQLite's default
+    build returns ``"FOREIGN KEY constraint failed"`` without the
+    column.)
     """
 
     def __init__(
         self,
         message: str,
         *,
-        session_id: Optional[str] = None,
         constraint_hint: Optional[str] = None,
     ) -> None:
         super().__init__(message)
-        self.session_id = session_id
         self.constraint_hint = constraint_hint
 
 
@@ -1016,22 +1011,14 @@ class ProjectSessionManager:
             # thread's select() loop stays uniform across both transports.
             master_fd = popen.stdout.fileno()
 
-        # v0.7.97 codex pass-3 MAJOR — both spawn paths above run
-        # ``setsid()`` in the child (PTY fork at L969, pipe popen
-        # via ``preexec_fn=os.setsid`` at L1009). After setsid()
-        # the child's pgid equals its pid by definition. The
-        # previous ``os.getpgid(pid)`` had a race window: if the
-        # parent ran it before the child's setsid() completed, it
-        # returned the parent's pgid — and ``os.killpg(pgid,
-        # SIGKILL)`` would then target the parent's group instead
-        # of the spawned session, killing unrelated processes
-        # (potentially including the Gunicorn worker itself).
-        #
-        # Setting ``pgid = pid`` by construction eliminates the
-        # race entirely. A guard against ``pid <= 0`` belt-and-
-        # suspenders against an impossible-in-practice popen
-        # return; if it ever triggers we'd rather not send
-        # killpg(0) (= kill every process in the caller's pgroup).
+        # Both spawn paths run setsid() in the child (PTY fork +
+        # popen preexec_fn=os.setsid), so the child's pgid equals
+        # its pid by definition. Calling os.getpgid(pid) from the
+        # parent has a race: if the child hasn't reached setsid()
+        # yet, we'd record the parent's pgid and a subsequent
+        # killpg(pgid, SIGKILL) would target the gunicorn worker's
+        # process group. The pid > 0 guard prevents killpg(0) from
+        # broadcasting to the caller's whole pgroup.
         if pid <= 0:
             raise RuntimeError(
                 f"create_session: spawn returned non-positive pid {pid}"
@@ -1134,7 +1121,6 @@ class ProjectSessionManager:
                 raise SessionPersistError(
                     "Session persist failed: parent resource missing "
                     "(likely deleted during spawn)",
-                    session_id=session_id,
                     constraint_hint=hint,
                 ) from exc
             except Exception:
@@ -1586,10 +1572,10 @@ class ProjectSessionManager:
         pgid = session_info.pgid
         popen = session_info.popen
 
-        # v0.7.97 codex pass-3 belt-and-suspenders — even though
-        # create_session now sets ``pgid = pid`` by construction,
-        # guard against any historical SessionInfo with pgid <= 0
-        # (would broadcast SIGTERM to the caller's process group).
+        # killpg(0) broadcasts to the caller's pgroup, killpg(-1)
+        # to every process the signal sender can reach. Refuse
+        # both even though create_session now sets pgid = pid by
+        # construction.
         if pgid <= 0:
             logger.error(
                 "stop_session: refusing to signal pgid=%s (session %s); "

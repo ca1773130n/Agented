@@ -637,20 +637,14 @@ class BaseConversationService(abc.ABC):
                 conv_id, "response_start", {"timestamp": datetime.datetime.now().isoformat()}
             )
 
-            # Build messages from conversation history.
-            #
-            # v0.7.80 — defense in depth against the same proxy
-            # error v0.7.76 fixed for skills: drop any message
-            # whose content is missing or whitespace-only, since
-            # CLIProxyAPI's OpenAI translation rejects empty
-            # text content blocks. If after filtering there's no
-            # user message at all, bail out with a broadcast
-            # error instead of issuing a doomed LLM call.
-            messages = [
-                {"role": msg.role, "content": msg.content}
-                for msg in conv["messages"]
-                if msg.content and msg.content.strip()
-            ]
+            # Build messages from conversation history. Filter
+            # out empty/whitespace turns — CLIProxyAPI rejects
+            # them as "text content blocks must be non-empty".
+            # If nothing survives the filter we'd issue a doomed
+            # LLM call, so bail out with a broadcast error below.
+            from .conversation_filters import drop_empty_content_messages
+
+            messages = drop_empty_content_messages(conv["messages"])
             if not any(m["role"] == "user" for m in messages):
                 logger.error(
                     "skipping LLM call for %s: no non-empty user message in history",

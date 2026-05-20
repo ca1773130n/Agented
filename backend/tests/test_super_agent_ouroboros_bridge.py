@@ -17,14 +17,20 @@ from app.db.connection import get_connection
 from app.db.ids import _get_unique_project_id
 from app.db.rbac import create_user_role
 from app_litestar.auth import provide_caller
+from app_litestar.exception_handlers import build_exception_handlers
 from app_litestar.routes.super_agents_cluster import super_agents_router
 
 
 @pytest.fixture
 def client():
+    # Register the global exception handlers so SessionPersistError
+    # propagating from PSM becomes a 409 the same way it does in
+    # production. The route no longer has its own try/except (the
+    # global handler is the canonical surface).
     with create_test_client(
         route_handlers=[super_agents_router],
         dependencies={"caller": provide_caller},
+        exception_handlers=build_exception_handlers(),
     ) as c:
         yield c
 
