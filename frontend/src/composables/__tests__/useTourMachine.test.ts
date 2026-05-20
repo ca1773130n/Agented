@@ -842,8 +842,20 @@ describe('useTourMachine', () => {
   // a future regression that switches to Promise.all.
   describe('prefetchTourRoutes (OB-42)', () => {
     it('settles without throwing', async () => {
+      // v0.7.96 — mock the heavy view imports. The real ``import()``
+      // calls hit Vite's transform pipeline at test time, and under
+      // suite-wide parallel load this can blow past the default 5s
+      // per-test timeout (the test took ~5027ms in CI runs).
+      // The test's actual assertion is "the helper returns a
+      // resolvable promise" — not "these specific Vue files transform
+      // correctly", so stubbing the import target is the right
+      // factoring.
+      vi.doMock('../../views/SettingsPage.vue', () => ({ default: {} }))
+      vi.doMock('../../views/BackendDetailPage.vue', () => ({ default: {} }))
       const { prefetchTourRoutes } = await import('../useTourMachine')
       await expect(prefetchTourRoutes()).resolves.not.toThrow()
+      vi.doUnmock('../../views/SettingsPage.vue')
+      vi.doUnmock('../../views/BackendDetailPage.vue')
     })
   })
 
