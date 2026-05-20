@@ -1219,28 +1219,17 @@ class TestSessionPersistErrorCleanup:
     """
 
     def test_session_persist_error_is_exported(self):
-        # Smoke test the symbol is reachable from the module.
         from app.services.project_session_manager import SessionPersistError
 
         assert issubclass(SessionPersistError, RuntimeError)
         err = SessionPersistError("boom")
         assert str(err) == "boom"
-        # Default structured fields are None when omitted.
-        assert err.session_id is None
         assert err.constraint_hint is None
 
-    def test_session_persist_error_structured_fields(self):
-        """v0.7.97 codex pass-2 NIT: SessionPersistError carries
-        ``session_id`` + ``constraint_hint`` so log scrapers and
-        future UI surfaces can disambiguate races without parsing
-        the message string.
-        """
+    def test_session_persist_error_carries_constraint_hint(self):
         from app.services.project_session_manager import SessionPersistError
 
-        err = SessionPersistError(
-            "msg", session_id="psess-x", constraint_hint="super_agent_id"
-        )
-        assert err.session_id == "psess-x"
+        err = SessionPersistError("msg", constraint_hint="super_agent_id")
         assert err.constraint_hint == "super_agent_id"
 
     def test_extract_fk_hint_parses_column_name(self):
@@ -1301,12 +1290,10 @@ class TestSessionPersistErrorCleanup:
                     ProjectSessionManager._sessions.pop(sid, None)
                 raise SessionPersistError(
                     "Session persist failed: parent resource missing",
-                    session_id=sid,
                     constraint_hint=hint,
                 ) from exc
         except SessionPersistError as caught:
             assert "parent resource missing" in str(caught)
-            assert caught.session_id == sid
             assert caught.constraint_hint == "super_agent_id"
         else:
             raise AssertionError("SessionPersistError not raised")
@@ -1321,10 +1308,10 @@ class TestSessionPersistErrorCleanup:
     def test_watchdog_escalates_to_sigkill_when_sigterm_ignored(
         self, monkeypatch
     ):
-        """v0.7.97 codex pass-3 MINOR coverage (refined pass-4):
-        when the spawned process ignores SIGTERM and runs past the
-        grace window, the watchdog must call ``waitpid(WNOHANG)``
-        (PTY path), see "still running", and SIGKILL the pgid.
+        """When the spawned process ignores SIGTERM and runs past
+        the grace window, the watchdog must call
+        ``waitpid(WNOHANG)`` (PTY path), see "still running", and
+        SIGKILL the pgid.
 
         Calibration: ``_spawn_kill_watchdog`` calls
         ``time.monotonic()`` once for ``deadline`` and ONCE per
@@ -1484,10 +1471,10 @@ class TestSessionPersistErrorCleanup:
         )
 
     def test_stop_session_wait_false_spawns_kill_watchdog(self, monkeypatch):
-        """v0.7.97 codex pass-2 MINOR — ``wait=False`` must spawn a
-        background watchdog that handles SIGTERM-ignoring children.
-        Without it, the FK-cleanup branch drops the ``_sessions``
-        entry and the process becomes invisible to the periodic
+        """``wait=False`` must spawn a background watchdog that
+        handles SIGTERM-ignoring children. Without it, the FK-
+        cleanup branch drops the ``_sessions`` entry and the
+        process becomes invisible to the periodic
         sweep + crash-recovery path.
         """
         from app.services.project_session_manager import (

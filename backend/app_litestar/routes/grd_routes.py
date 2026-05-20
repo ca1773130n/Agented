@@ -583,19 +583,13 @@ def project_chat(project_id: str, data: dict) -> dict[str, Any]:
                 {"role": "system", "content": system_prompt}
             ]
             if state and state.get("conversation_log"):
-                # v0.7.97 — drop empty/whitespace-only entries before
-                # they reach CLIProxyAPI's OpenAI translation, which
-                # rejects empty text content blocks. Same filter as
-                # ``streaming_helper.py`` and the three
-                # ``*_conversation_service`` siblings — keeps the
-                # bug class fixed across all callers in one PR.
-                for msg in state["conversation_log"]:
-                    content = msg.get("content", "")
-                    if not content or not content.strip():
-                        continue
-                    llm_messages.append(
-                        {"role": msg.get("role", "user"), "content": content}
-                    )
+                from app.services.conversation_filters import (
+                    drop_empty_content_messages,
+                )
+
+                llm_messages.extend(
+                    drop_empty_content_messages(state["conversation_log"])
+                )
             accumulated: list[str] = []
             if should_route_via_cli_agent("claude", use_cli_agent):
                 stream_iter = stream_via_cli_agent(
