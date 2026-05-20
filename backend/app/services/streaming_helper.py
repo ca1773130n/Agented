@@ -93,9 +93,22 @@ def run_streaming_response(
             if system_prompt:
                 llm_messages.append({"role": "system", "content": system_prompt})
             if state and state.get("conversation_log"):
+                # v0.7.97 — drop any conversation_log entry whose
+                # content is missing or whitespace-only. CLIProxyAPI's
+                # OpenAI translation rejects empty text content blocks
+                # with "text content blocks must be non-empty", and
+                # SuperAgent conversation_logs sometimes contain
+                # empty-content turns (interrupted assistant streams,
+                # tool-only messages where the tool serializer produced
+                # no text payload, etc.). Mirrors the same defense the
+                # other 3 conversation services already apply
+                # (base/plugin/skill_conversation_service).
                 for msg in state["conversation_log"]:
+                    content = msg.get("content", "")
+                    if not content or not content.strip():
+                        continue
                     llm_messages.append(
-                        {"role": msg.get("role", "user"), "content": msg.get("content", "")}
+                        {"role": msg.get("role", "user"), "content": content}
                     )
 
             # Routing decision lives in `should_route_via_cli_agent` so the
