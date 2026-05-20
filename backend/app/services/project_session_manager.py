@@ -696,15 +696,57 @@ def _extract_hook_decision_events(hook_event: dict) -> list[tuple[str, dict]]:
     ]
 
 
+def _extract_fk_hint(msg: str) -> Optional[str]:
+    """Best-effort: pluck the offending FK column name out of an
+    sqlite3 IntegrityError message.
+
+    SQLite's default message is "FOREIGN KEY constraint failed",
+    which doesn't name the column. Newer build flags (e.g.
+    ``SQLITE_ENABLE_API_ARMOR``) sometimes attach the column. When
+    we can't parse one out, return None — callers must treat the
+    hint as advisory, not authoritative.
+    """
+    lower = msg.lower()
+    for col in (
+        "super_agent_id",
+        "project_id",
+        "phase_id",
+        "plan_id",
+        "agent_id",
+    ):
+        if col in lower:
+            return col
+    return None
+
+
 class SessionPersistError(RuntimeError):
     """Raised by ``ProjectSessionManager.create_session`` when the
     post-spawn INSERT fails for a recoverable reason (e.g. FK to the
-    spawned session's parent resource — currently ``super_agent_id``
-    — was concurrently deleted). The PSM kills the just-spawned
-    subprocess and drops its ``_sessions`` entry before raising, so
-    the caller can return a structured error (typically 409) without
-    leaving an orphan process behind.
+    spawned session's parent resource — currently ``super_agent_id``,
+    ``project_id``, ``phase_id``, ``plan_id``, or ``agent_id`` — was
+    concurrently deleted). The PSM kills the just-spawned subprocess
+    and drops its ``_sessions`` entry before raising, so the caller
+    can return a structured error (typically 409) without leaving an
+    orphan process behind.
+
+    Structured attributes (added v0.7.97 codex review pass 2):
+      * ``session_id`` — the synthetic id the PSM had already
+        allocated for the doomed session.
+      * ``constraint_hint`` — best-effort extracted FK-column name
+        from the underlying ``sqlite3.IntegrityError`` message, or
+        ``None`` when the violated constraint can't be identified.
     """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        session_id: Optional[str] = None,
+        constraint_hint: Optional[str] = None,
+    ) -> None:
+        super().__init__(message)
+        self.session_id = session_id
+        self.constraint_hint = constraint_hint
 
 
 @dataclass
@@ -1043,30 +1085,40 @@ class ProjectSessionManager:
                 conn.commit()
             except sqlite3.IntegrityError as exc:
                 # v0.7.97 — close the SA-bridge delete/start race
-                # codex flagged on PR #139. If the operator deleted
-                # the SA after the bridge route validated it but
-                # before this INSERT, the FK check fails here. The
-                # subprocess is already running; left in place
-                # it would be a permanent orphan (in-memory only,
-                # invisible to every DB-driven UI, never reaped by
-                # the crash-recovery path). Kill it and re-raise
-                # so the caller can return a 409.
+                # codex flagged on PR #139. If a parent FK target
+                # (super_agent_id, project_id, phase_id, plan_id,
+                # agent_id) was concurrently deleted, the FK check
+                # fails here. The subprocess is already running;
+                # left in place it would be a permanent orphan
+                # (in-memory only, invisible to every DB-driven UI,
+                # never reaped by the crash-recovery path). Kill
+                # it and re-raise so the caller can return a 409.
+                #
+                # ``wait=False`` because the operator's POST is
+                # already on the wire — blocking 5s for SIGTERM to
+                # take effect would defeat the point of a fast 409.
+                # The periodic sweep + crash-recovery path collects
+                # any process that didn't honour SIGTERM.
+                hint = _extract_fk_hint(str(exc))
                 logger.warning(
                     "FK-constrained INSERT failed for session %s "
-                    "(super_agent_id=%s) — likely parent deleted "
-                    "mid-spawn; cleaning up subprocess",
+                    "(super_agent_id=%s, hint=%s) — likely parent "
+                    "deleted mid-spawn; cleaning up subprocess",
                     session_id,
                     super_agent_id,
+                    hint,
                     exc_info=True,
                 )
                 # ``stop_session`` reads ``_sessions[session_id]``,
                 # so call it BEFORE we drop the entry below.
-                cls.stop_session(session_id)
+                cls.stop_session(session_id, wait=False)
                 with cls._lock:
                     cls._sessions.pop(session_id, None)
                 raise SessionPersistError(
                     "Session persist failed: parent resource missing "
-                    "(likely deleted during spawn)"
+                    "(likely deleted during spawn)",
+                    session_id=session_id,
+                    constraint_hint=hint,
                 ) from exc
             except Exception:
                 logger.warning(
@@ -1417,10 +1469,16 @@ class ProjectSessionManager:
         logger.info(f"Session {session_id} exited (status={status}, exit_code={exit_code})")
 
     @classmethod
-    def stop_session(cls, session_id: str) -> bool:
+    def stop_session(cls, session_id: str, wait: bool = True) -> bool:
         """Stop a running session by terminating its process group.
 
-        Sends SIGTERM first, waits up to 5 seconds, then SIGKILL if still alive.
+        Sends SIGTERM first; if ``wait=True`` (default), waits up to
+        5 seconds for the process to exit then escalates to SIGKILL.
+        If ``wait=False``, skips the wait + SIGKILL escalation —
+        appropriate for "fire and forget" cleanup paths where the
+        caller can't afford to block (e.g. the FK-cleanup branch in
+        ``create_session``, which is invoked inline on a route the
+        operator is waiting on).
 
         Returns:
             True if session was stopped successfully, False if session not found.
@@ -1449,6 +1507,13 @@ class ProjectSessionManager:
             pass  # Already dead
         except OSError as e:
             logger.warning(f"SIGTERM to pgid {pgid} failed: {e}")
+
+        if not wait:
+            # Fire-and-forget. The SIGTERM above has been delivered;
+            # the process group will either exit on its own or get
+            # reaped by the periodic sweep. Caller can't afford to
+            # block here (typically the FK-cleanup race path).
+            return True
 
         # Wait up to 5 seconds for process to exit
         exited = False

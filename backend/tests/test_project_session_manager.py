@@ -1225,6 +1225,38 @@ class TestSessionPersistErrorCleanup:
         assert issubclass(SessionPersistError, RuntimeError)
         err = SessionPersistError("boom")
         assert str(err) == "boom"
+        # Default structured fields are None when omitted.
+        assert err.session_id is None
+        assert err.constraint_hint is None
+
+    def test_session_persist_error_structured_fields(self):
+        """v0.7.97 codex pass-2 NIT: SessionPersistError carries
+        ``session_id`` + ``constraint_hint`` so log scrapers and
+        future UI surfaces can disambiguate races without parsing
+        the message string.
+        """
+        from app.services.project_session_manager import SessionPersistError
+
+        err = SessionPersistError(
+            "msg", session_id="psess-x", constraint_hint="super_agent_id"
+        )
+        assert err.session_id == "psess-x"
+        assert err.constraint_hint == "super_agent_id"
+
+    def test_extract_fk_hint_parses_column_name(self):
+        from app.services.project_session_manager import _extract_fk_hint
+
+        # SQLite default message — no column → None.
+        assert _extract_fk_hint("FOREIGN KEY constraint failed") is None
+        # Hypothetical informative message — column extracted.
+        assert (
+            _extract_fk_hint(
+                "FOREIGN KEY constraint failed (super_agent_id)"
+            )
+            == "super_agent_id"
+        )
+        # Unrecognized column — None.
+        assert _extract_fk_hint("FOREIGN KEY constraint failed (custom_id)") is None
 
     def test_fk_failure_kills_subprocess_and_drops_entry(self, monkeypatch):
         """Exercise the exception path without spawning a real
@@ -1242,10 +1274,12 @@ class TestSessionPersistErrorCleanup:
             session_id=sid
         )
 
-        stop_calls: list[str] = []
+        stop_calls: list[dict] = []
 
-        def fake_stop(session_id):
-            stop_calls.append(session_id)
+        # Updated signature: stop_session now accepts ``wait`` kwarg
+        # (v0.7.97 fast-kill path for the FK-cleanup branch).
+        def fake_stop(session_id, wait=True):
+            stop_calls.append({"session_id": session_id, "wait": wait})
             return True
 
         monkeypatch.setattr(ProjectSessionManager, "stop_session", fake_stop)
@@ -1255,19 +1289,74 @@ class TestSessionPersistErrorCleanup:
         # cleanup block inside ``create_session``.
         try:
             try:
-                raise _sqlite3.IntegrityError("FOREIGN KEY constraint failed")
+                raise _sqlite3.IntegrityError(
+                    "FOREIGN KEY constraint failed (super_agent_id)"
+                )
             except _sqlite3.IntegrityError as exc:
-                ProjectSessionManager.stop_session(sid)
+                from app.services.project_session_manager import _extract_fk_hint
+
+                hint = _extract_fk_hint(str(exc))
+                ProjectSessionManager.stop_session(sid, wait=False)
                 with ProjectSessionManager._lock:
                     ProjectSessionManager._sessions.pop(sid, None)
                 raise SessionPersistError(
-                    "Session persist failed: parent resource missing"
+                    "Session persist failed: parent resource missing",
+                    session_id=sid,
+                    constraint_hint=hint,
                 ) from exc
         except SessionPersistError as caught:
             assert "parent resource missing" in str(caught)
+            assert caught.session_id == sid
+            assert caught.constraint_hint == "super_agent_id"
         else:
             raise AssertionError("SessionPersistError not raised")
 
-        # Subprocess kill attempted, in-memory entry gone.
-        assert stop_calls == [sid]
+        # Subprocess kill attempted with the fast-kill flag, in-
+        # memory entry gone.
+        assert stop_calls == [{"session_id": sid, "wait": False}], (
+            f"stop_session must be called with wait=False; got {stop_calls}"
+        )
         assert sid not in ProjectSessionManager._sessions
+
+    def test_stop_session_wait_false_skips_5s_wait(self, monkeypatch):
+        """v0.7.97 — ``wait=False`` sends SIGTERM and returns
+        immediately without waiting up to 5s for the process to
+        exit. Verified by stubbing ``os.killpg`` (records the call)
+        + ``time.sleep`` (would raise if invoked, proving no wait
+        loop ran).
+        """
+        from app.services.project_session_manager import (
+            ProjectSessionManager,
+        )
+
+        sid = "psess-fastkill"
+        ProjectSessionManager._sessions[sid] = _make_session_info(
+            session_id=sid, pid=12345, pgid=12345
+        )
+
+        killpg_calls: list[tuple] = []
+
+        def fake_killpg(pgid, sig):
+            killpg_calls.append((pgid, sig))
+
+        def boom_sleep(_):
+            raise AssertionError(
+                "stop_session(wait=False) must not call time.sleep"
+            )
+
+        monkeypatch.setattr(
+            "app.services.project_session_manager.os.killpg", fake_killpg
+        )
+        monkeypatch.setattr(
+            "app.services.project_session_manager.time.sleep", boom_sleep
+        )
+
+        result = ProjectSessionManager.stop_session(sid, wait=False)
+        assert result is True
+        # SIGTERM delivered exactly once; no SIGKILL escalation.
+        import signal as _signal
+
+        assert killpg_calls == [(12345, _signal.SIGTERM)]
+
+        # Cleanup.
+        ProjectSessionManager._sessions.pop(sid, None)
