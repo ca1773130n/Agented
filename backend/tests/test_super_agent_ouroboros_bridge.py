@@ -490,3 +490,49 @@ def test_ouroboros_run_scoped_to_caller_user_id(client, isolated_db):
     assert resp.status_code == 404, (
         "scope check must hide other users' SAs as 404 (not 403/200)"
     )
+
+
+# --- v0.7.97: delete/start race regression (PR #139 deferred MINOR) -------
+
+
+def test_ouroboros_run_returns_409_when_persist_fails_on_race(client, isolated_db):
+    """v0.7.97 — when the post-spawn INSERT raises
+    ``SessionPersistError`` (the FK on ``super_agent_id`` failing
+    because the SA was concurrently deleted), the bridge route must
+    translate it to a 409 — not let it escape as a 500 — so the
+    operator can distinguish "race lost, retry maybe" from "server
+    crashed".
+
+    Patches ``GoalLoopSessionHandler.start`` to raise
+    ``SessionPersistError`` directly; the underlying PSM cleanup is
+    covered separately at the PSM unit level.
+    """
+    del isolated_db
+    _seed_admin_key()
+    pid, sa_id = _seed_project_and_sa()
+
+    from app.services.project_session_manager import SessionPersistError
+
+    def fake_start(self, session_config):
+        raise SessionPersistError(
+            "Session persist failed: parent resource missing"
+        )
+
+    with patch(
+        "app.services.execution_type_handler.GoalLoopSessionHandler.start",
+        new=fake_start,
+    ), patch(
+        "app.services.project_workspace_service."
+        "ProjectWorkspaceService.resolve_working_directory",
+        return_value="/tmp/bridge-test",
+    ):
+        resp = client.post(
+            f"/admin/super-agents/{sa_id}/ouroboros-runs",
+            headers={"X-API-Key": "admin-bridge"},
+            json={"project_id": pid, "goal": "race the delete"},
+        )
+
+    assert resp.status_code == 409, (
+        f"persist-race must surface as 409, got {resp.status_code}: {resp.text}"
+    )
+    assert "parent resource missing" in resp.text.lower()

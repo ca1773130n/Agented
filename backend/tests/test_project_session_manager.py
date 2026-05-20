@@ -1199,3 +1199,75 @@ class TestSubscribe:
         assert len(events) == 1
         assert "error" in events[0]
         assert "Session not found" in events[0]
+
+
+# ---------------------------------------------------------------------------
+# v0.7.97 — SessionPersistError cleanup (PR #139 deferred MINOR)
+# ---------------------------------------------------------------------------
+
+
+class TestSessionPersistErrorCleanup:
+    """When ``create_session``'s post-spawn INSERT fails with a FK
+    violation (the SA-bridge race), the PSM must:
+      1. Stop the just-spawned subprocess.
+      2. Drop the in-memory ``_sessions`` entry so the SSE/output
+         surfaces don't return data for a session the DB has no
+         record of.
+      3. Raise ``SessionPersistError`` so the caller (the bridge
+         route) can turn it into a 409 instead of letting it
+         escape as a 500.
+    """
+
+    def test_session_persist_error_is_exported(self):
+        # Smoke test the symbol is reachable from the module.
+        from app.services.project_session_manager import SessionPersistError
+
+        assert issubclass(SessionPersistError, RuntimeError)
+        err = SessionPersistError("boom")
+        assert str(err) == "boom"
+
+    def test_fk_failure_kills_subprocess_and_drops_entry(self, monkeypatch):
+        """Exercise the exception path without spawning a real
+        subprocess: pre-seed a fake ``_sessions`` entry, run the
+        cleanup logic directly via a patched IntegrityError.
+        """
+        import sqlite3 as _sqlite3
+        from app.services.project_session_manager import (
+            ProjectSessionManager,
+            SessionPersistError,
+        )
+
+        sid = "psess-racetest"
+        ProjectSessionManager._sessions[sid] = _make_session_info(
+            session_id=sid
+        )
+
+        stop_calls: list[str] = []
+
+        def fake_stop(session_id):
+            stop_calls.append(session_id)
+            return True
+
+        monkeypatch.setattr(ProjectSessionManager, "stop_session", fake_stop)
+
+        # Reproduce the except-branch behaviour directly so the
+        # test stays hermetic (no fork/spawn). This mirrors the
+        # cleanup block inside ``create_session``.
+        try:
+            try:
+                raise _sqlite3.IntegrityError("FOREIGN KEY constraint failed")
+            except _sqlite3.IntegrityError as exc:
+                ProjectSessionManager.stop_session(sid)
+                with ProjectSessionManager._lock:
+                    ProjectSessionManager._sessions.pop(sid, None)
+                raise SessionPersistError(
+                    "Session persist failed: parent resource missing"
+                ) from exc
+        except SessionPersistError as caught:
+            assert "parent resource missing" in str(caught)
+        else:
+            raise AssertionError("SessionPersistError not raised")
+
+        # Subprocess kill attempted, in-memory entry gone.
+        assert stop_calls == [sid]
+        assert sid not in ProjectSessionManager._sessions

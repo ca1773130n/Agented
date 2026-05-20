@@ -20,6 +20,7 @@ import pty
 import re
 import select
 import signal
+import sqlite3
 import subprocess
 import threading
 import time
@@ -695,6 +696,17 @@ def _extract_hook_decision_events(hook_event: dict) -> list[tuple[str, dict]]:
     ]
 
 
+class SessionPersistError(RuntimeError):
+    """Raised by ``ProjectSessionManager.create_session`` when the
+    post-spawn INSERT fails for a recoverable reason (e.g. FK to the
+    spawned session's parent resource — currently ``super_agent_id``
+    — was concurrently deleted). The PSM kills the just-spawned
+    subprocess and drops its ``_sessions`` entry before raising, so
+    the caller can return a structured error (typically 409) without
+    leaving an orphan process behind.
+    """
+
+
 @dataclass
 class SessionInfo:
     """In-memory state for an active session.
@@ -1029,6 +1041,33 @@ class ProjectSessionManager:
                     values,
                 )
                 conn.commit()
+            except sqlite3.IntegrityError as exc:
+                # v0.7.97 — close the SA-bridge delete/start race
+                # codex flagged on PR #139. If the operator deleted
+                # the SA after the bridge route validated it but
+                # before this INSERT, the FK check fails here. The
+                # subprocess is already running; left in place
+                # it would be a permanent orphan (in-memory only,
+                # invisible to every DB-driven UI, never reaped by
+                # the crash-recovery path). Kill it and re-raise
+                # so the caller can return a 409.
+                logger.warning(
+                    "FK-constrained INSERT failed for session %s "
+                    "(super_agent_id=%s) — likely parent deleted "
+                    "mid-spawn; cleaning up subprocess",
+                    session_id,
+                    super_agent_id,
+                    exc_info=True,
+                )
+                # ``stop_session`` reads ``_sessions[session_id]``,
+                # so call it BEFORE we drop the entry below.
+                cls.stop_session(session_id)
+                with cls._lock:
+                    cls._sessions.pop(session_id, None)
+                raise SessionPersistError(
+                    "Session persist failed: parent resource missing "
+                    "(likely deleted during spawn)"
+                ) from exc
             except Exception:
                 logger.warning(
                     f"Failed to persist session {session_id} to DB",
