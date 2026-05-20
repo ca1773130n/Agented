@@ -217,6 +217,18 @@ class AgentConversationService:
         caller_user_id: Optional[str] = None,
     ) -> Tuple[dict, HTTPStatus]:
         """Send a user message to the conversation and trigger Claude response."""
+        # v0.7.97 — reject empty/whitespace messages at the service
+        # boundary. They'd otherwise reach CLIProxyAPI as an empty
+        # text content block and 500. Defensive: matches the same
+        # filter ``streaming_helper`` / ``grd_routes`` /
+        # ``base_/skill_/plugin_conversation_service`` apply.
+        if not message or not message.strip():
+            return error_response(
+                "EMPTY_MESSAGE",
+                "Message content cannot be empty or whitespace-only.",
+                HTTPStatus.BAD_REQUEST,
+            )
+
         conv, err = cls._validate_conversation(conv_id, caller_user_id=caller_user_id)
         if err is not None:
             return conv, err

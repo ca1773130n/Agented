@@ -123,6 +123,19 @@ class BackendTestService:
         """Stream test via CLIProxyAPI for real-time token streaming."""
         from .conversation_streaming import stream_llm_response
 
+        # v0.7.97 — guard against empty/whitespace prompts. The proxy
+        # would otherwise reject with "text content blocks must be
+        # non-empty"; surface that as a clear test failure rather
+        # than a generic stream error.
+        if not prompt or not prompt.strip():
+            cls._broadcast_test(
+                test_id,
+                "error",
+                {"error": "Prompt cannot be empty or whitespace-only."},
+            )
+            cls._mark_test_complete(test_id)
+            return
+
         messages = [{"role": "user", "content": prompt}]
 
         for chunk in stream_llm_response(

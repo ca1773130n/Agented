@@ -121,10 +121,14 @@ def test_empty_content_turns_are_filtered_from_llm_messages(isolated_db):
         {"role": "user", "content": "ok"},
     ]
 
+    import threading
+
     captured: dict = {}
+    captured_evt = threading.Event()
 
     def capture_messages(messages, **_kwargs):
         captured["messages"] = list(messages)
+        captured_evt.set()
         return iter([])
 
     with (
@@ -148,15 +152,13 @@ def test_empty_content_turns_are_filtered_from_llm_messages(isolated_db):
             use_cli_agent=False,
         )
 
-    # Streaming runs on a background thread. Wait until it's actually
-    # consumed the iterator (capture_messages assigns to ``captured``).
-    import time
-
-    for _ in range(50):
-        if "messages" in captured:
-            break
-        time.sleep(0.02)
-    assert "messages" in captured, "background thread didn't call stream_llm_response"
+    # Streaming runs on a background thread; the side_effect signals
+    # the event as soon as it's been called. ``Event.wait`` is
+    # deterministic + faster than a sleep-poll loop, and the 2s
+    # ceiling is comfortable even on heavily loaded CI runners.
+    assert captured_evt.wait(timeout=2.0), (
+        "background thread didn't call stream_llm_response within 2s"
+    )
 
     messages = captured["messages"]
     # System prompt is always first; the rest must be non-empty content only.
