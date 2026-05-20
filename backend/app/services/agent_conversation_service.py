@@ -274,7 +274,18 @@ class AgentConversationService:
                     return
                 conv_messages = cls._conversations[conv_id]["messages"]
 
-            messages = [{"role": msg.role, "content": msg.content} for msg in conv_messages]
+            # v0.7.97 — apply the same empty-content filter the
+            # three sibling services + streaming_helper + grd_routes
+            # already do. The pass-1 fix added a boundary guard in
+            # ``send_message``, but legacy/corrupt/interrupted empty
+            # messages persisted before that guard landed would
+            # still get replayed straight into the LLM payload and
+            # trigger "text content blocks must be non-empty".
+            messages = [
+                {"role": msg.role, "content": msg.content}
+                for msg in conv_messages
+                if msg.content and msg.content.strip()
+            ]
 
             logger.info(f"Streaming LLM response for conversation {conv_id}")
 

@@ -128,12 +128,30 @@ class BackendTestService:
         # non-empty"; surface that as a clear test failure rather
         # than a generic stream error.
         if not prompt or not prompt.strip():
+            # v0.7.97 codex pass-2 LOW — DON'T call
+            # ``_mark_test_complete``: it hard-codes
+            # status=completed + exit_code=0 and would make the
+            # invalid-prompt failure indistinguishable from a
+            # successful test to anything reading the session
+            # state. Mark the session ``failed`` with a non-zero
+            # exit code and signal the SSE end explicitly.
             cls._broadcast_test(
                 test_id,
                 "error",
                 {"error": "Prompt cannot be empty or whitespace-only."},
             )
-            cls._mark_test_complete(test_id)
+            with cls._lock:
+                if test_id in cls._test_sessions:
+                    cls._test_sessions[test_id]["status"] = "failed"
+                    cls._test_sessions[test_id]["error"] = (
+                        "Prompt cannot be empty or whitespace-only."
+                    )
+                    cls._test_sessions[test_id]["exit_code"] = 1
+            cls._broadcast_test(
+                test_id,
+                "complete",
+                {"exit_code": 1, "status": "failed"},
+            )
             return
 
         messages = [{"role": "user", "content": prompt}]
