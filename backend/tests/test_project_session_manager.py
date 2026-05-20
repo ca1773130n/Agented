@@ -1318,12 +1318,50 @@ class TestSessionPersistErrorCleanup:
         )
         assert sid not in ProjectSessionManager._sessions
 
+    def test_stop_session_wait_false_spawns_kill_watchdog(self, monkeypatch):
+        """v0.7.97 codex pass-2 MINOR — ``wait=False`` must spawn a
+        background watchdog that handles SIGTERM-ignoring children.
+        Without it, the FK-cleanup branch drops the ``_sessions``
+        entry and the process becomes invisible to the periodic
+        sweep + crash-recovery path.
+        """
+        from app.services.project_session_manager import (
+            ProjectSessionManager,
+        )
+
+        sid = "psess-watchdog"
+        ProjectSessionManager._sessions[sid] = _make_session_info(
+            session_id=sid, pid=4242, pgid=4242
+        )
+
+        watchdog_calls: list[tuple] = []
+
+        def fake_spawn(session_id, pid, pgid, popen, *args, **kwargs):
+            watchdog_calls.append((session_id, pid, pgid))
+
+        # Stub the syscalls + the watchdog spawner so we don't fork.
+        monkeypatch.setattr(
+            "app.services.project_session_manager.os.killpg",
+            lambda *_a, **_k: None,
+        )
+        monkeypatch.setattr(
+            ProjectSessionManager, "_spawn_kill_watchdog", fake_spawn
+        )
+
+        assert ProjectSessionManager.stop_session(sid, wait=False) is True
+        assert watchdog_calls == [(sid, 4242, 4242)], (
+            f"wait=False must spawn the kill watchdog; got {watchdog_calls}"
+        )
+
+        ProjectSessionManager._sessions.pop(sid, None)
+
     def test_stop_session_wait_false_skips_5s_wait(self, monkeypatch):
         """v0.7.97 — ``wait=False`` sends SIGTERM and returns
-        immediately without waiting up to 5s for the process to
-        exit. Verified by stubbing ``os.killpg`` (records the call)
-        + ``time.sleep`` (would raise if invoked, proving no wait
-        loop ran).
+        immediately on the *main thread* without entering the 5s
+        wait loop. (The watchdog runs in a daemon thread and is
+        verified by ``test_stop_session_wait_false_spawns_kill_watchdog``
+        above — stubbed here so its own ``time.sleep`` calls don't
+        trip the boom_sleep guard.)
         """
         from app.services.project_session_manager import (
             ProjectSessionManager,
@@ -1341,7 +1379,8 @@ class TestSessionPersistErrorCleanup:
 
         def boom_sleep(_):
             raise AssertionError(
-                "stop_session(wait=False) must not call time.sleep"
+                "stop_session(wait=False) must not call time.sleep "
+                "on the main thread"
             )
 
         monkeypatch.setattr(
@@ -1350,10 +1389,18 @@ class TestSessionPersistErrorCleanup:
         monkeypatch.setattr(
             "app.services.project_session_manager.time.sleep", boom_sleep
         )
+        # Stub the watchdog so its background thread's time.sleep
+        # doesn't fire the boom_sleep guard.
+        monkeypatch.setattr(
+            ProjectSessionManager,
+            "_spawn_kill_watchdog",
+            lambda *_a, **_k: None,
+        )
 
         result = ProjectSessionManager.stop_session(sid, wait=False)
         assert result is True
-        # SIGTERM delivered exactly once; no SIGKILL escalation.
+        # SIGTERM delivered exactly once; no SIGKILL escalation on
+        # the main thread.
         import signal as _signal
 
         assert killpg_calls == [(12345, _signal.SIGTERM)]

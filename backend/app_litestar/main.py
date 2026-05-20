@@ -14,7 +14,7 @@ from litestar.config.cors import CORSConfig
 from litestar.di import Provide
 
 from .auth import provide_caller
-from .exception_handlers import EXCEPTION_HANDLERS
+from .exception_handlers import build_exception_handlers
 from .lifecycle import on_shutdown, on_startup
 from .middleware import (
     ApiKeyMiddleware,

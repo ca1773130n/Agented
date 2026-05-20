@@ -1469,6 +1469,76 @@ class ProjectSessionManager:
         logger.info(f"Session {session_id} exited (status={status}, exit_code={exit_code})")
 
     @classmethod
+    def _spawn_kill_watchdog(
+        cls,
+        session_id: str,
+        pid: int,
+        pgid: int,
+        popen: Optional[subprocess.Popen],
+        sigterm_grace_seconds: float = 3.0,
+    ) -> None:
+        """Spawn a daemon thread that waits briefly for SIGTERM to
+        take effect, then escalates to SIGKILL if the process is
+        still alive. Used by ``stop_session(wait=False)`` so the
+        FK-cleanup race path can return immediately without
+        orphaning a process that ignores SIGTERM.
+
+        The thread closes over ``pid`` / ``pgid`` so it doesn't
+        depend on ``_sessions[session_id]`` — by the time it runs
+        the FK-cleanup branch has already dropped the entry.
+        """
+
+        def watch() -> None:
+            deadline = time.monotonic() + sigterm_grace_seconds
+            while time.monotonic() < deadline:
+                if popen is not None:
+                    if popen.poll() is not None:
+                        return  # exited cleanly
+                else:
+                    try:
+                        result = os.waitpid(pid, os.WNOHANG)
+                        if result[0] != 0:
+                            return  # reaped
+                    except ChildProcessError:
+                        return  # already gone
+                    except OSError:
+                        return  # not our child / other failure → give up
+                time.sleep(0.1)
+            # Still alive past the grace window — SIGKILL the pgid.
+            try:
+                os.killpg(pgid, signal.SIGKILL)
+                logger.warning(
+                    "watchdog: SIGKILL'd session %s pgid %s (ignored SIGTERM)",
+                    session_id,
+                    pgid,
+                )
+            except ProcessLookupError:
+                pass  # raced with natural exit
+            except OSError as exc:
+                logger.error(
+                    "watchdog: SIGKILL to pgid %s failed: %s",
+                    pgid,
+                    exc,
+                    exc_info=True,
+                )
+            # Best-effort reap so a zombie doesn't linger. The
+            # popen-mode path waits on the Popen handle; the
+            # fork/PTY-mode path uses waitpid directly.
+            try:
+                if popen is not None:
+                    popen.wait(timeout=1.0)
+                else:
+                    os.waitpid(pid, 0)
+            except (subprocess.TimeoutExpired, ChildProcessError, OSError):
+                pass
+
+        threading.Thread(
+            target=watch,
+            name=f"psm-killwatchdog-{session_id}",
+            daemon=True,
+        ).start()
+
+    @classmethod
     def stop_session(cls, session_id: str, wait: bool = True) -> bool:
         """Stop a running session by terminating its process group.
 
@@ -1509,10 +1579,15 @@ class ProjectSessionManager:
             logger.warning(f"SIGTERM to pgid {pgid} failed: {e}")
 
         if not wait:
-            # Fire-and-forget. The SIGTERM above has been delivered;
-            # the process group will either exit on its own or get
-            # reaped by the periodic sweep. Caller can't afford to
-            # block here (typically the FK-cleanup race path).
+            # Fire-and-forget *for the caller*, but spawn a daemon
+            # watchdog so a SIGTERM-ignoring child still gets the
+            # SIGKILL escalation. Without this, ``_sessions.pop()``
+            # in the FK-cleanup branch would orphan the process —
+            # the periodic sweep + crash-recovery path key off the
+            # ``_sessions`` map and the DB row, both of which are
+            # gone by then. Capturing ``pid`` + ``pgid`` by closure
+            # keeps the watchdog independent of those structures.
+            cls._spawn_kill_watchdog(session_id, pid, pgid, popen)
             return True
 
         # Wait up to 5 seconds for process to exit

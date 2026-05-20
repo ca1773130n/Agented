@@ -159,9 +159,13 @@ def unhandled_handler(_: Request, exc: Exception) -> Response:
     )
 
 
-def _build_exception_handlers() -> dict:
-    """Lazy assembler — defers the PSM import so a module-level
-    side effect can't break test collection for unrelated suites.
+def build_exception_handlers() -> dict:
+    """Factory — called by ``create_app`` at construction time so the
+    PSM import (subprocess + threading state) doesn't run at module
+    import. Tests that build a Litestar TestClient via ``create_app``
+    pick up the full handler registry; route-only test clients
+    (``create_test_client(route_handlers=...)``) can opt in by
+    passing the result as ``exception_handlers=...``.
     """
     from app.services.project_session_manager import SessionPersistError
 
@@ -178,6 +182,3 @@ def _build_exception_handlers() -> dict:
         SessionPersistError: session_persist_error_handler,
         Exception: unhandled_handler,
     }
-
-
-EXCEPTION_HANDLERS = _build_exception_handlers()
