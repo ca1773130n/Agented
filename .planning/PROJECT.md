@@ -101,7 +101,7 @@ Agented is a brownfield project with a substantial existing codebase:
 - **Execution model:** Subprocess-based CLI invocation (`subprocess.Popen` + PTY fork). Per-session ring buffer + SSE fan-out.
 - **Key design choices:** No ORM (raw SQL via `get_connection()`), no state management library (component-local state), in-memory log buffers with SSE fan-out.
 
-The codebase has grown organically and has accumulated technical debt documented in `.planning/codebase/CONCERNS.md`. Several historical concerns are now resolved: ``ApiKeyMiddleware`` + bearer-session gate + per-user ``user_id`` scoping landed in the wave-80 Litestar migration (concurrent with the Flask retirement, not in the v0.6.x wave); the SuperAgent → goal_loop bridge (v0.7.91+) covers cross-session orchestration. Open concerns remain around in-memory state preventing horizontal scaling.
+The codebase has grown organically and has accumulated technical debt documented in `.planning/codebase/CONCERNS.md`. Several historical concerns are now resolved: ``ApiKeyMiddleware`` was introduced in the wave-80 Litestar migration (concurrent with the Flask retirement); bearer-session enforcement, role/rotation, and per-user principal scoping landed in a subsequent middleware-hardening commit. The SuperAgent → goal_loop bridge (v0.7.91+) covers cross-session orchestration. Open concerns remain around in-memory state preventing horizontal scaling.
 
 ## Constraints
 
