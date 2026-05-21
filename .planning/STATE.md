@@ -2,7 +2,7 @@
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-03-21)
+See: .planning/PROJECT.md (updated 2026-05-21)
 
 **Core value:** Enable engineering teams to orchestrate AI-powered automation through a unified dashboard
 **Current version:** v0.7.98 (last shipped via PR #146 on 2026-05-21)

@@ -78,17 +78,13 @@ Enable engineering teams to orchestrate AI-powered automation (bots, agents, wor
 
 ### Active
 
-#### v0.2.0 — Miscellaneous
-- [ ] Visual workflow builder and pipeline automation (DAG canvas, conditional triggers, approval gates)
-- [ ] Execution intelligence and replay (output diff, context injection, smart chunking, branching)
-- [ ] Bot authoring and template ecosystem (marketplace, NL creator, snippet library, version control)
-- [ ] Analytics and monitoring dashboards (cost tracking, effectiveness, trends, health, impact reports)
-- [ ] Enterprise integrations and governance (Slack/JIRA, RBAC, audit trail, secrets vault, GitOps)
-- [ ] Specialized automation bots (vulnerability triage, code tours, test coverage, postmortem, changelog)
-- [ ] Execution resilience and infrastructure (circuit breakers, retry, queue, persistence, cancellation)
-- [ ] API hardening and developer experience (dry-run, error models, pagination, rate limiting, cron)
-- [ ] Code consistency and standards (logging, error responses, return types, naming, frontend types)
-- [ ] Frontend quality and user experience (loading states, error boundaries, shared composables, docs)
+No formal "Active" list at the moment. Since v0.5.1 the project ships
+PR-driven (one merged PR per commit-message version tag), so feature
+selection happens at PR-open time rather than from a milestone backlog.
+The v0.2.0 line items above were partially absorbed into the v0.6.x and
+v0.7.x waves (workflow builder, analytics dashboards, RBAC, specialized
+bots, retention/secrets, frontend polish); see ``.planning/MILESTONES.md``
+for which arc covers which.
 
 ### Out of Scope
 
@@ -105,7 +101,7 @@ Agented is a brownfield project with a substantial existing codebase:
 - **Execution model:** Subprocess-based CLI invocation (`subprocess.Popen` + PTY fork). Per-session ring buffer + SSE fan-out.
 - **Key design choices:** No ORM (raw SQL via `get_connection()`), no state management library (component-local state), in-memory log buffers with SSE fan-out.
 
-The codebase has grown organically and has accumulated technical debt documented in `.planning/codebase/CONCERNS.md`. Several historical concerns are now resolved: per-user RBAC + ApiKey middleware shipped in the v0.6.x wave; the SuperAgent → goal_loop bridge (v0.7.91+) covers cross-session orchestration. Open concerns remain around in-memory state preventing horizontal scaling.
+The codebase has grown organically and has accumulated technical debt documented in `.planning/codebase/CONCERNS.md`. Several historical concerns are now resolved: ``ApiKeyMiddleware`` + bearer-session gate + per-user ``user_id`` scoping landed in the wave-80 Litestar migration (concurrent with the Flask retirement, not in the v0.6.x wave); the SuperAgent → goal_loop bridge (v0.7.91+) covers cross-session orchestration. Open concerns remain around in-memory state preventing horizontal scaling.
 
 ## Constraints
 
