@@ -157,7 +157,10 @@ function formatInstalls(n: number): string {
 }
 
 function goToRegistrySettings() {
-  router.push({ name: 'settings', query: { tab: 'marketplaces' } });
+  // SettingsPage reads the active tab from window.location.hash, not
+  // from route.query — use a hash fragment so we actually land on
+  // the marketplaces tab instead of falling back to the default.
+  router.push({ name: 'settings', hash: '#marketplaces' });
 }
 
 onMounted(async () => {
