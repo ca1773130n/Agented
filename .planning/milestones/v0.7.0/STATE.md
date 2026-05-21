@@ -10,7 +10,7 @@ classifies healthy / degraded / down / no_recent_runs using
 DEGRADED_SUCCESS_THRESHOLD=0.80 and LATENCY_ANOMALY_RATIO=5.0
 (p95/p50). Bots are queried via the triggers table (renamed from
 'bots' in v0.4) but the dataclass keeps bot_id/bot_name to preserve
-the operator-facing concept. Shipped as 9 sequential commits implementing the full slice.
+the operator-facing concept. Shipped as 10 sequential commits implementing the full slice.
 
 ## Key files touched
 
