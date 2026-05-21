@@ -1,41 +1,27 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
-import { useRouter } from 'vue-router';
-import type { MarketplaceSearchResult, Marketplace } from '../services/api';
-import { marketplaceApi, mcpServerApi, ApiError } from '../services/api';
-import PageHeader from '../components/base/PageHeader.vue';
-import LoadingState from '../components/base/LoadingState.vue';
-import EmptyState from '../components/base/EmptyState.vue';
-import { useToast } from '../composables/useToast';
-import { useFocusTrap } from '../composables/useFocusTrap';
-import { useWebMcpTool } from '../composables/useWebMcpTool';
-
-const router = useRouter();
+import type { MarketplaceSearchResult } from '../../services/api';
+import { marketplaceApi, mcpServerApi, ApiError } from '../../services/api';
+import LoadingState from '../../components/base/LoadingState.vue';
+import EmptyState from '../../components/base/EmptyState.vue';
+import { useToast } from '../../composables/useToast';
+import { useFocusTrap } from '../../composables/useFocusTrap';
+import { useWebMcpTool } from '../../composables/useWebMcpTool';
 
 const showToast = useToast();
 
-// Search state
 const searchQuery = ref('');
 const searchResults = ref<MarketplaceSearchResult[]>([]);
 const isSearching = ref(false);
 const isRefreshing = ref(false);
 
-// Marketplace management state
-const registeredMarketplaces = ref<Marketplace[]>([]);
-const showAddModal = ref(false);
-const newMarketplace = ref({ name: '', url: '', description: '' });
-
-// Detail panel state
 const selectedServer = ref<MarketplaceSearchResult | null>(null);
 const isInstalling = ref(false);
-const addModalRef = ref<HTMLElement | null>(null);
 const detailModalRef = ref<HTMLElement | null>(null);
 const hasSelectedServer = computed(() => !!selectedServer.value);
 
-useFocusTrap(addModalRef, showAddModal);
 useFocusTrap(detailModalRef, hasSelectedServer);
 
-// Install form state
 const showInstallForm = ref(false);
 const installForm = ref({
   server_type: 'stdio' as string,
@@ -47,14 +33,14 @@ const installForm = ref({
 });
 
 useWebMcpTool({
-  name: 'agented_explore_mcp_servers_get_state',
-  description: 'Returns the current state of the Explore MCP Servers page',
-  page: 'ExploreMcpServers',
+  name: 'agented_marketplace_mcp_servers_get_state',
+  description: 'Returns the current state of the Marketplace MCP Servers tab',
+  page: 'MarketplaceMcpServers',
   execute: async () => ({
     content: [{
       type: 'text' as const,
       text: JSON.stringify({
-        page: 'ExploreMcpServers',
+        page: 'MarketplaceMcpServers',
         availableServersCount: searchResults.value.length,
         isLoading: isSearching.value,
       }),
@@ -63,7 +49,6 @@ useWebMcpTool({
   deps: [searchResults, isSearching],
 });
 
-// Debounced search
 let debounceTimer: ReturnType<typeof setTimeout>;
 
 function debouncedSearch(query: string) {
@@ -76,7 +61,6 @@ function debouncedSearch(query: string) {
 async function performSearch(query: string) {
   isSearching.value = true;
   try {
-    // Use 'plugin' type as fallback since backend may not support 'mcp' yet
     const response = await marketplaceApi.search(query, 'plugin');
     searchResults.value = response.results;
   } catch (e) {
@@ -103,47 +87,6 @@ async function refreshCache() {
     showToast('Failed to refresh cache', 'error');
   } finally {
     isRefreshing.value = false;
-  }
-}
-
-async function loadMarketplaces() {
-  try {
-    const response = await marketplaceApi.list();
-    registeredMarketplaces.value = response.marketplaces;
-  } catch (e) {
-    // Silently fail - marketplace management is secondary
-  }
-}
-
-async function addMarketplace() {
-  if (!newMarketplace.value.name.trim() || !newMarketplace.value.url.trim()) {
-    showToast('Name and URL are required', 'error');
-    return;
-  }
-  try {
-    await marketplaceApi.create({
-      name: newMarketplace.value.name,
-      url: newMarketplace.value.url,
-      type: 'git',
-    });
-    showToast('Marketplace added', 'success');
-    showAddModal.value = false;
-    newMarketplace.value = { name: '', url: '', description: '' };
-    await loadMarketplaces();
-    await performSearch(searchQuery.value.trim());
-  } catch (e) {
-    showToast('Failed to add marketplace', 'error');
-  }
-}
-
-async function removeMarketplace(marketplaceId: string) {
-  try {
-    await marketplaceApi.delete(marketplaceId);
-    showToast('Marketplace removed', 'success');
-    await loadMarketplaces();
-    await performSearch(searchQuery.value.trim());
-  } catch (e) {
-    showToast('Failed to remove marketplace', 'error');
   }
 }
 
@@ -196,24 +139,12 @@ async function installServer(server: MarketplaceSearchResult) {
 }
 
 onMounted(async () => {
-  await loadMarketplaces();
   await performSearch('');
 });
 </script>
 
 <template>
-  <div class="explore-page">
-    <PageHeader title="Explore MCP Servers" subtitle="Search MCP servers across all registered marketplace registries">
-      <template #actions>
-        <button class="btn-back" @click="router.push({ name: 'mcp-servers' })">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M19 12H5M12 19l-7-7 7-7"/>
-          </svg>
-          Back to MCP Servers
-        </button>
-      </template>
-    </PageHeader>
-
+  <div class="marketplace-pane">
     <!-- Search Bar -->
     <div class="search-bar">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -252,7 +183,7 @@ onMounted(async () => {
       <EmptyState
         v-else-if="searchResults.length === 0"
         title="No servers found"
-        description="Try a different search term or add more marketplace registries."
+        description="Try a different search term or add more registries in Settings → Plugin Marketplaces."
       >
         <template #icon>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
@@ -262,7 +193,6 @@ onMounted(async () => {
         </template>
       </EmptyState>
 
-      <!-- Results Grid -->
       <div v-else class="results-grid">
         <div
           v-for="result in searchResults"
@@ -292,88 +222,19 @@ onMounted(async () => {
       </div>
     </div>
 
-    <!-- Manage Marketplace Registries -->
-    <div class="registries-section">
-      <div class="section-header">
-        <h2>Manage Marketplace Registries ({{ registeredMarketplaces.length }})</h2>
-        <button class="btn btn-primary" @click="showAddModal = true">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <line x1="12" y1="5" x2="12" y2="19"/>
-            <line x1="5" y1="12" x2="19" y2="12"/>
-          </svg>
-          Add Registry
-        </button>
-      </div>
-
-      <EmptyState
-        v-if="registeredMarketplaces.length === 0"
-        title="No registries"
-        description="No marketplace registries registered. Add a registry to start discovering servers."
-      />
-
-      <div v-else class="registries-list">
-        <div
-          v-for="marketplace in registeredMarketplaces"
-          :key="marketplace.id"
-          class="registry-row"
-        >
-          <div class="registry-icon">
-            <svg viewBox="0 0 24 24" fill="currentColor">
-              <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
-            </svg>
-          </div>
-          <div class="registry-info">
-            <span class="registry-name">{{ marketplace.name }}</span>
-            <span class="registry-url">{{ marketplace.url }}</span>
-          </div>
-          <button class="remove-btn" title="Remove registry" @click="removeMarketplace(marketplace.id)">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <line x1="18" y1="6" x2="6" y2="18"/>
-              <line x1="6" y1="6" x2="18" y2="18"/>
-            </svg>
-          </button>
-        </div>
-      </div>
-    </div>
-
-    <!-- Add Marketplace Modal -->
-    <Teleport to="body">
-      <div v-if="showAddModal" ref="addModalRef" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modal-title-add-mcp-marketplace" tabindex="-1" @click.self="showAddModal = false" @keydown.escape="showAddModal = false">
-        <div class="modal">
-          <h2 id="modal-title-add-mcp-marketplace">Add Marketplace Registry</h2>
-          <form @submit.prevent="addMarketplace">
-            <div class="form-group">
-              <label for="marketplace-name">Name *</label>
-              <input
-                id="marketplace-name"
-                v-model="newMarketplace.name"
-                type="text"
-                placeholder="My MCP Server Repository"
-                required
-              />
-            </div>
-            <div class="form-group">
-              <label for="marketplace-url">Git URL *</label>
-              <input
-                id="marketplace-url"
-                v-model="newMarketplace.url"
-                type="url"
-                placeholder="https://github.com/user/repo or enterprise URL"
-                required
-              />
-            </div>
-            <div class="modal-actions">
-              <button type="button" class="btn" @click="showAddModal = false">Cancel</button>
-              <button type="submit" class="btn btn-primary">Add Registry</button>
-            </div>
-          </form>
-        </div>
-      </div>
-    </Teleport>
-
     <!-- Server Detail Panel -->
     <Teleport to="body">
-      <div v-if="selectedServer" ref="detailModalRef" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modal-title-mcp-detail" tabindex="-1" @click.self="closeDetail" @keydown.escape="closeDetail">
+      <div
+        v-if="selectedServer"
+        ref="detailModalRef"
+        class="modal-overlay"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="modal-title-mcp-detail"
+        tabindex="-1"
+        @click.self="closeDetail"
+        @keydown.escape="closeDetail"
+      >
         <div class="detail-panel">
           <div class="detail-header">
             <div class="detail-icon">
@@ -409,7 +270,6 @@ onMounted(async () => {
               </div>
             </div>
 
-            <!-- Install Configuration Form -->
             <div v-if="showInstallForm && !selectedServer.installed" class="install-config">
               <h3 class="config-title">Configuration</h3>
               <div class="form-group">
@@ -472,31 +332,7 @@ onMounted(async () => {
 </template>
 
 <style scoped>
-.explore-page {
-}
-
-.btn-back {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 16px;
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border-default);
-  border-radius: 6px;
-  color: var(--text-secondary);
-  font-size: 14px;
-  cursor: pointer;
-  transition: all 0.15s;
-}
-
-.btn-back:hover {
-  background: var(--bg-elevated);
-  color: var(--text-primary);
-}
-
-.btn-back svg {
-  width: 16px;
-  height: 16px;
+.marketplace-pane {
 }
 
 .search-bar {
@@ -567,7 +403,6 @@ onMounted(async () => {
   animation: spin 1s linear infinite;
 }
 
-/* Results section */
 .results-section {
   background: var(--bg-secondary);
   border: 1px solid var(--border-default);
@@ -683,93 +518,6 @@ onMounted(async () => {
   font-weight: 500;
 }
 
-/* Registries section */
-.registries-section {
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-default);
-  border-radius: 12px;
-  padding: 20px;
-}
-
-.registries-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.registry-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 12px;
-  background: var(--bg-tertiary);
-  border-radius: 8px;
-}
-
-.registry-icon {
-  width: 32px;
-  height: 32px;
-  border-radius: 6px;
-  background: var(--accent-violet-dim, rgba(136, 85, 255, 0.1));
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  color: var(--accent-violet);
-}
-
-.registry-icon svg {
-  width: 16px;
-  height: 16px;
-}
-
-.registry-info {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.registry-name {
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--text-primary);
-}
-
-.registry-url {
-  font-size: 12px;
-  color: var(--text-tertiary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.remove-btn {
-  width: 28px;
-  height: 28px;
-  background: transparent;
-  border: none;
-  border-radius: 4px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  color: var(--text-tertiary);
-  transition: all 0.15s;
-}
-
-.remove-btn:hover {
-  background: var(--accent-crimson-dim);
-  color: var(--accent-crimson);
-}
-
-.remove-btn svg {
-  width: 14px;
-  height: 14px;
-}
-
-/* Buttons */
 .btn-primary {
   background: var(--accent-cyan);
   color: #000;
@@ -778,16 +526,6 @@ onMounted(async () => {
 .btn-primary:hover {
   background: #00c4ee;
   color: #000;
-}
-
-/* Modal styles */
-.modal {
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-default);
-  border-radius: 12px;
-  padding: 24px;
-  max-width: 450px;
-  width: 90%;
 }
 
 .form-group {
@@ -828,7 +566,6 @@ onMounted(async () => {
   font-size: 13px;
 }
 
-/* Install Configuration */
 .install-config {
   margin-top: 20px;
   padding-top: 16px;
@@ -842,7 +579,6 @@ onMounted(async () => {
   margin: 0 0 12px 0;
 }
 
-/* Server Detail Panel */
 .detail-panel {
   background: var(--bg-secondary);
   border: 1px solid var(--border-default);

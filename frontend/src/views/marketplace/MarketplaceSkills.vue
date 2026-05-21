@@ -1,17 +1,14 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
-import type { MarketplaceSearchResult, Marketplace, SkillsShResult } from '../services/api';
-import { marketplaceApi, skillsShApi, userSkillsApi, ApiError } from '../services/api';
-import PageHeader from '../components/base/PageHeader.vue';
-import LoadingState from '../components/base/LoadingState.vue';
-import EmptyState from '../components/base/EmptyState.vue';
-import { useToast } from '../composables/useToast';
-import { useFocusTrap } from '../composables/useFocusTrap';
-import { useWebMcpTool } from '../composables/useWebMcpTool';
+import type { MarketplaceSearchResult, SkillsShResult } from '../../services/api';
+import { marketplaceApi, skillsShApi, userSkillsApi, ApiError } from '../../services/api';
+import LoadingState from '../../components/base/LoadingState.vue';
+import EmptyState from '../../components/base/EmptyState.vue';
+import { useToast } from '../../composables/useToast';
+import { useWebMcpTool } from '../../composables/useWebMcpTool';
 
 const router = useRouter();
-
 const showToast = useToast();
 
 // Search state
@@ -26,23 +23,15 @@ const isSearchingSkillsSh = ref(false);
 const skillsShAvailable = ref(true);
 const installingSkill = ref<string | null>(null);
 
-// Marketplace management state
-const registeredMarketplaces = ref<Marketplace[]>([]);
-const showAddModal = ref(false);
-const newMarketplace = ref({ name: '', url: '' });
-
-const addModalRef = ref<HTMLElement | null>(null);
-useFocusTrap(addModalRef, showAddModal);
-
 useWebMcpTool({
-  name: 'agented_explore_skills_get_state',
-  description: 'Returns the current state of the Explore Skills page',
-  page: 'ExploreSkills',
+  name: 'agented_marketplace_skills_get_state',
+  description: 'Returns the current state of the Marketplace Skills tab',
+  page: 'MarketplaceSkills',
   execute: async () => ({
     content: [{
       type: 'text' as const,
       text: JSON.stringify({
-        page: 'ExploreSkills',
+        page: 'MarketplaceSkills',
         searchQuery: searchQuery.value,
         searchResultsCount: searchResults.value.length,
         isSearching: isSearching.value,
@@ -53,7 +42,6 @@ useWebMcpTool({
   deps: [searchQuery, searchResults, isSearching, skillsShAvailable],
 });
 
-// Debounced search
 let debounceTimer: ReturnType<typeof setTimeout>;
 
 function debouncedSearch(query: string) {
@@ -67,7 +55,6 @@ async function performSearch(query: string) {
   isSearching.value = true;
   isSearchingSkillsSh.value = true;
 
-  // Fetch marketplace and skills.sh results in parallel
   const [marketplacePromise, skillsShPromise] = [
     marketplaceApi.search(query, 'skill').catch(() => ({ results: [] as MarketplaceSearchResult[] })),
     skillsShApi.search(query).catch(() => ({ results: [] as SkillsShResult[], npx_available: true as boolean | undefined })),
@@ -115,47 +102,6 @@ async function refreshCache() {
   }
 }
 
-async function loadMarketplaces() {
-  try {
-    const response = await marketplaceApi.list();
-    registeredMarketplaces.value = response.marketplaces;
-  } catch (e) {
-    // Silently fail
-  }
-}
-
-async function addMarketplace() {
-  if (!newMarketplace.value.name.trim() || !newMarketplace.value.url.trim()) {
-    showToast('Name and URL are required', 'error');
-    return;
-  }
-  try {
-    await marketplaceApi.create({
-      name: newMarketplace.value.name,
-      url: newMarketplace.value.url,
-      type: 'git',
-    });
-    showToast('Marketplace added', 'success');
-    showAddModal.value = false;
-    newMarketplace.value = { name: '', url: '' };
-    await loadMarketplaces();
-    await performSearch(searchQuery.value.trim());
-  } catch (e) {
-    showToast('Failed to add marketplace', 'error');
-  }
-}
-
-async function removeMarketplace(marketplaceId: string) {
-  try {
-    await marketplaceApi.delete(marketplaceId);
-    showToast('Marketplace removed', 'success');
-    await loadMarketplaces();
-    await performSearch(searchQuery.value.trim());
-  } catch (e) {
-    showToast('Failed to remove marketplace', 'error');
-  }
-}
-
 async function installSkillsShSkill(skill: SkillsShResult) {
   if (!skill.install_cmd && !skill.source) {
     showToast('No install source available for this skill', 'error');
@@ -169,7 +115,6 @@ async function installSkillsShSkill(skill: SkillsShResult) {
     await skillsShApi.install(source);
     showToast(`Installed "${skill.name}" from skills.sh`, 'success');
     skill.installed = true;
-    // Refresh to update installed status
     await performSearch(searchQuery.value.trim());
   } catch (err) {
     const message = err instanceof ApiError ? err.message : 'Failed to install skill';
@@ -179,7 +124,6 @@ async function installSkillsShSkill(skill: SkillsShResult) {
   }
 }
 
-// Marketplace skill install
 const installingMarketplaceSkill = ref<string | null>(null);
 
 async function installMarketplaceSkill(skill: MarketplaceSearchResult) {
@@ -212,25 +156,20 @@ function formatInstalls(n: number): string {
   return String(n);
 }
 
+function goToRegistrySettings() {
+  // SettingsPage reads the active tab from window.location.hash, not
+  // from route.query — use a hash fragment so we actually land on
+  // the marketplaces tab instead of falling back to the default.
+  router.push({ name: 'settings', hash: '#marketplaces' });
+}
+
 onMounted(async () => {
-  await loadMarketplaces();
   await performSearch('');
 });
 </script>
 
 <template>
-  <div class="explore-page">
-    <PageHeader title="Explore Skills" subtitle="Search skills across marketplace registries and skills.sh">
-      <template #actions>
-        <button class="btn-back" @click="router.push({ name: 'my-skills' })">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M19 12H5M12 19l-7-7 7-7"/>
-          </svg>
-          Back to Skills
-        </button>
-      </template>
-    </PageHeader>
-
+  <div class="marketplace-pane">
     <!-- Search Bar -->
     <div class="search-bar">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -251,15 +190,15 @@ onMounted(async () => {
       </button>
     </div>
 
-    <!-- Search Results -->
+    <!-- Marketplace lane -->
     <div class="results-section">
       <div class="section-header">
         <h2>
           <template v-if="searchQuery.trim()">
-            Results for "{{ searchQuery }}" ({{ searchResults.length }})
+            From Marketplace — "{{ searchQuery }}" ({{ searchResults.length }})
           </template>
           <template v-else>
-            All Available Skills ({{ searchResults.length }})
+            From Marketplace ({{ searchResults.length }})
           </template>
         </h2>
       </div>
@@ -268,8 +207,8 @@ onMounted(async () => {
 
       <EmptyState
         v-else-if="searchResults.length === 0"
-        title="No skills found"
-        description="Try a different search term or add more marketplace registries."
+        title="No marketplace skills found"
+        description="Try a different search term or add more registries in Settings → Plugin Marketplaces."
       >
         <template #icon>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
@@ -279,7 +218,6 @@ onMounted(async () => {
         </template>
       </EmptyState>
 
-      <!-- Results Grid -->
       <div v-else class="results-grid">
         <div
           v-for="skill in searchResults"
@@ -317,7 +255,7 @@ onMounted(async () => {
       </div>
     </div>
 
-    <!-- Skills.sh Results -->
+    <!-- Skills.sh lane -->
     <div class="results-section skills-sh-section">
       <div class="section-header">
         <h2>
@@ -325,10 +263,10 @@ onMounted(async () => {
             <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
           </svg>
           <template v-if="searchQuery.trim()">
-            skills.sh Results for "{{ searchQuery }}" ({{ skillsShResults.length }})
+            From skills.sh — "{{ searchQuery }}" ({{ skillsShResults.length }})
           </template>
           <template v-else>
-            skills.sh Community Skills ({{ skillsShResults.length }})
+            From skills.sh ({{ skillsShResults.length }})
           </template>
         </h2>
         <span v-if="!skillsShAvailable" class="unavailable-badge">npx not available</span>
@@ -354,7 +292,6 @@ onMounted(async () => {
         </template>
       </EmptyState>
 
-      <!-- Results Grid -->
       <div v-else class="results-grid">
         <div
           v-for="skill in skillsShResults"
@@ -393,113 +330,18 @@ onMounted(async () => {
       </div>
     </div>
 
-    <!-- Manage Marketplace Registries -->
-    <div class="registries-section">
-      <div class="section-header">
-        <h2>Manage Marketplace Registries ({{ registeredMarketplaces.length }})</h2>
-        <button class="btn btn-primary" @click="showAddModal = true">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <line x1="12" y1="5" x2="12" y2="19"/>
-            <line x1="5" y1="12" x2="19" y2="12"/>
-          </svg>
-          Add Registry
-        </button>
-      </div>
-
-      <EmptyState
-        v-if="registeredMarketplaces.length === 0"
-        title="No registries"
-        description="No marketplace registries registered. Add a registry to start discovering skills."
-      />
-
-      <div v-else class="registries-list">
-        <div
-          v-for="marketplace in registeredMarketplaces"
-          :key="marketplace.id"
-          class="registry-row"
-        >
-          <div class="registry-icon">
-            <svg viewBox="0 0 24 24" fill="currentColor">
-              <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
-            </svg>
-          </div>
-          <div class="registry-info">
-            <span class="registry-name">{{ marketplace.name }}</span>
-            <span class="registry-url">{{ marketplace.url }}</span>
-          </div>
-          <button class="remove-btn" title="Remove registry" @click="removeMarketplace(marketplace.id)">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <line x1="18" y1="6" x2="6" y2="18"/>
-              <line x1="6" y1="6" x2="18" y2="18"/>
-            </svg>
-          </button>
-        </div>
-      </div>
+    <!-- Registry admin pointer (replaces the deleted inline panel) -->
+    <div class="registry-pointer">
+      <span>Add or manage marketplace registries in</span>
+      <button type="button" class="link-btn" @click="goToRegistrySettings">
+        Settings → Plugin Marketplaces
+      </button>
     </div>
-
-    <!-- Add Marketplace Modal -->
-    <Teleport to="body">
-      <div v-if="showAddModal" ref="addModalRef" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modal-title-add-skill-marketplace" tabindex="-1" @click.self="showAddModal = false" @keydown.escape="showAddModal = false">
-        <div class="modal">
-          <h2 id="modal-title-add-skill-marketplace">Add Marketplace Registry</h2>
-          <form @submit.prevent="addMarketplace">
-            <div class="form-group">
-              <label for="marketplace-name">Name *</label>
-              <input
-                id="marketplace-name"
-                v-model="newMarketplace.name"
-                type="text"
-                placeholder="My Skill Repository"
-                required
-              />
-            </div>
-            <div class="form-group">
-              <label for="marketplace-url">Git URL *</label>
-              <input
-                id="marketplace-url"
-                v-model="newMarketplace.url"
-                type="url"
-                placeholder="https://github.com/user/repo or enterprise URL"
-                required
-              />
-            </div>
-            <div class="modal-actions">
-              <button type="button" class="btn" @click="showAddModal = false">Cancel</button>
-              <button type="submit" class="btn btn-primary">Add Registry</button>
-            </div>
-          </form>
-        </div>
-      </div>
-    </Teleport>
   </div>
 </template>
 
 <style scoped>
-.explore-page {
-}
-
-.btn-back {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 16px;
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border-default);
-  border-radius: 6px;
-  color: var(--text-secondary);
-  font-size: 14px;
-  cursor: pointer;
-  transition: all 0.15s;
-}
-
-.btn-back:hover {
-  background: var(--bg-elevated);
-  color: var(--text-primary);
-}
-
-.btn-back svg {
-  width: 16px;
-  height: 16px;
+.marketplace-pane {
 }
 
 .search-bar {
@@ -570,7 +412,6 @@ onMounted(async () => {
   animation: spin 1s linear infinite;
 }
 
-/* Results section */
 .results-section {
   background: var(--bg-secondary);
   border: 1px solid var(--border-default);
@@ -699,113 +540,6 @@ onMounted(async () => {
   font-weight: 500;
 }
 
-/* Registries section */
-.registries-section {
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-default);
-  border-radius: 12px;
-  padding: 20px;
-}
-
-.registries-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.registry-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 12px;
-  background: var(--bg-tertiary);
-  border-radius: 8px;
-}
-
-.registry-icon {
-  width: 32px;
-  height: 32px;
-  border-radius: 6px;
-  background: var(--accent-violet-dim, rgba(136, 85, 255, 0.1));
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  color: var(--accent-violet);
-}
-
-.registry-icon svg {
-  width: 16px;
-  height: 16px;
-}
-
-.registry-info {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.registry-name {
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--text-primary);
-}
-
-.registry-url {
-  font-size: 12px;
-  color: var(--text-tertiary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.remove-btn {
-  width: 28px;
-  height: 28px;
-  background: transparent;
-  border: none;
-  border-radius: 4px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  color: var(--text-tertiary);
-  transition: all 0.15s;
-}
-
-.remove-btn:hover {
-  background: var(--accent-crimson-dim);
-  color: var(--accent-crimson);
-}
-
-.remove-btn svg {
-  width: 14px;
-  height: 14px;
-}
-
-/* Modal styles */
-.modal {
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-default);
-  border-radius: 12px;
-  padding: 24px;
-  max-width: 450px;
-  width: 90%;
-}
-
-.form-group input {
-  width: 100%;
-  padding: 10px 12px;
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border-default);
-  border-radius: 6px;
-  color: var(--text-primary);
-  font-size: 14px;
-}
-
-/* Skills.sh section */
 .skills-sh-section {
   border-color: var(--accent-amber-dim, rgba(255, 180, 0, 0.2));
 }
@@ -886,5 +620,32 @@ onMounted(async () => {
   color: var(--accent-emerald);
   font-weight: 500;
   white-space: nowrap;
+}
+
+.registry-pointer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 14px 16px;
+  background: var(--bg-secondary);
+  border: 1px dashed var(--border-default);
+  border-radius: 10px;
+  font-size: 13px;
+  color: var(--text-tertiary);
+}
+
+.link-btn {
+  background: none;
+  border: none;
+  color: var(--accent-cyan);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  padding: 0;
+}
+
+.link-btn:hover {
+  text-decoration: underline;
 }
 </style>

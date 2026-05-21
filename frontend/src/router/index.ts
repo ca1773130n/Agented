@@ -9,6 +9,7 @@ import { skillRoutes } from './routes/skills';
 import { workflowRoutes } from './routes/workflows';
 import { mcpServerRoutes } from './routes/mcpServers';
 import { superAgentRoutes } from './routes/superAgents';
+import { marketplaceRoutes } from './routes/marketplace';
 import { triggerRoutes } from './routes/triggers';
 import { settingsRoutes } from './routes/settings';
 import { miscRoutes } from './routes/misc';
@@ -55,6 +56,7 @@ export const router = createRouter({
     ...workflowRoutes,
     ...mcpServerRoutes,
     ...superAgentRoutes,
+    ...marketplaceRoutes,
     ...triggerRoutes,
     ...settingsRoutes,
     ...authRoutes,

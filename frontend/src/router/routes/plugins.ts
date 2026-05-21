@@ -14,10 +14,12 @@ export const pluginRoutes: RouteRecordRaw[] = [
     meta: { title: 'Plugin Design' },
   },
   {
+    // Redirect: replaced by unified Marketplace (PR-C).
+    // Kept so old links and any programmatic `router.push({ name:
+    // 'explore-plugins' })` continue to resolve.
     path: '/plugins/explore',
     name: 'explore-plugins',
-    component: () => import('../../views/ExplorePlugins.vue'),
-    meta: { title: 'Explore Plugins' },
+    redirect: () => ({ name: 'marketplace', query: { type: 'plugins' } }),
   },
   {
     path: '/plugins/:pluginId',

@@ -54,6 +54,12 @@ function buildRouter(): Router {
     'plugins', 'plugin-design', 'explore-plugins', 'harness-integration',
     'plugin-detail',
     'mcp-servers', 'explore-mcp-servers',
+    // PR-C: unified Marketplace replaces 4 Explore X pages + the
+    // orphan SkillMarketplace. The old explore-* names still resolve
+    // (they redirect to /marketplace?type=X), so keep them registered
+    // here for any push-by-name call sites; assertions below verify
+    // they no longer appear in the sidebar.
+    'marketplace',
     'skills-playground', 'skill-create', 'my-skills', 'explore-skills',
     'commands', 'command-design',
     'hooks', 'hook-design',
@@ -255,6 +261,58 @@ describe('AppSidebar — PR-B structure', () => {
     // Sanity: presence of "Triggers" header proves we're looking at the
     // new structure, not just a stub render.
     expect(allText).toContain('Triggers');
+  });
+
+  it('PR-C: Forge no longer renders the 4 "Explore X" submenu items (they live under the unified Marketplace now)', () => {
+    // Skills submenu: no "Explore" row.
+    const skillsTexts = submenuItems(wrapper, 'Skills').map(
+      (b) => b.textContent?.trim().replace(/\s+/g, ' ') ?? '',
+    );
+    expect(skillsTexts).not.toContain('Explore');
+
+    // Plugins submenu: no "Explore" row (the dynamic per-plugin items
+    // are user-named so we can't blanket-assert on those).
+    const pluginsRegion = submenuOf(wrapper, 'Plugins');
+    expect(pluginsRegion).not.toBeNull();
+    const pluginsStaticTexts = Array.from(
+      pluginsRegion!.querySelectorAll<HTMLElement>('button.submenu-item'),
+    )
+      .map((b) => b.textContent?.trim().replace(/\s+/g, ' ') ?? '')
+      .filter((t) =>
+        ['All Plugins', 'Design a Plugin', 'Explore', 'Harness Integration'].includes(t),
+      );
+    expect(pluginsStaticTexts).not.toContain('Explore');
+
+    // MCP Servers submenu: no "Explore" row.
+    const mcpTexts = submenuItems(wrapper, 'MCP Servers').map(
+      (b) => b.textContent?.trim().replace(/\s+/g, ' ') ?? '',
+    );
+    expect(mcpTexts).not.toContain('Explore');
+
+    // SuperAgents submenu: no "Explore" row.
+    const saTexts = submenuItems(wrapper, 'SuperAgents').map(
+      (b) => b.textContent?.trim().replace(/\s+/g, ' ') ?? '',
+    );
+    expect(saTexts).not.toContain('Explore');
+  });
+
+  it('PR-C: Forge renders a top-level "Marketplace" sidebar entry', () => {
+    // The Marketplace entry is a flat link (no chevron, no
+    // aria-expanded). We look for any top-level button whose .nav-text
+    // is "Marketplace" and assert it exists and is shaped like a flat
+    // link.
+    const allButtons = Array.from(
+      rootEl(wrapper).querySelectorAll<HTMLElement>('button'),
+    );
+    const marketplaceButtons = allButtons.filter(
+      (b) =>
+        b.querySelector<HTMLElement>('.nav-text')?.textContent?.trim() ===
+        'Marketplace',
+    );
+    expect(marketplaceButtons.length).toBe(1);
+    const btn = marketplaceButtons[0];
+    expect(btn.querySelector('.chevron-icon')).toBeNull();
+    expect(btn.hasAttribute('aria-expanded')).toBe(false);
   });
 
   it('"security-history" sidebar entry is absent (the route still exists, only the sidebar row is removed)', () => {
