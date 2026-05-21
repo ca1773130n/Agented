@@ -1,5 +1,11 @@
 # Roadmap: v0.5.0 — Production-Level Onboarding Experience
 
+> **Historical.** This is the v0.5.0 roadmap — the last GRD-planned
+> milestone (complete 2026-03-23). Post-v0.5.0 shipping is PR-driven, not
+> roadmap-driven. See ``.planning/MILESTONES.md`` for the chronological
+> summary of v0.5.1 → v0.7.98 work, and the per-version STATE.md files
+> under ``.planning/milestones/v0.7.N/`` for individual entries.
+
 ## Overview
 
 Replace the current flat-index tour system (`useTour.ts` + `TourOverlay.vue`) with a production-grade onboarding experience backed by XState v5, Floating UI, and custom Vue overlay components. The roadmap progresses from backend infrastructure and state machine foundation through visual components, step content, form guidance, navigation controls, accessibility, error handling, post-tour experience, and finally integration testing. A new user should complete workspace setup, register at least one AI backend account, and run their first bot in under 3 minutes.

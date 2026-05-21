@@ -42,9 +42,9 @@ Enable engineering teams to orchestrate AI-powered automation (bots, agents, wor
 
 | Repo | Stars | What It Does | Status |
 |------|-------|-------------|--------|
-| Flask | 69k+ | Backend web framework | In use |
+| Litestar | 5k+ | Backend web framework (since wave 80, replaced Flask) | In use |
 | Vue 3 | 48k+ | Frontend SPA framework | In use |
-| flask-openapi3 | 1k+ | OpenAPI spec generation for Flask | In use |
+| Pydantic v2 + msgspec | — | Request/response models on Litestar | In use |
 | APScheduler | 6k+ | Background job scheduling | In use |
 
 ### Datasets
@@ -99,16 +99,17 @@ Enable engineering teams to orchestrate AI-powered automation (bots, agents, wor
 ## Context
 
 Agented is a brownfield project with a substantial existing codebase:
-- **Backend:** Flask + flask-openapi3, raw SQLite, 90+ service classes, 44+ API blueprints
-- **Frontend:** Vue 3 + TypeScript SPA, Chart.js for monitoring, VueFlow for graph canvases
-- **Execution model:** Subprocess-based CLI invocation with threaded log streaming
-- **Key design choices:** No ORM (raw SQL), no state management library (component-local state), in-memory log buffers with SSE fan-out
+- **Backend:** Litestar served by gunicorn (UvicornWorker), Pydantic v2 + msgspec, raw SQLite, 90+ service classes. Flask was retired in wave 80 (v0.7.x window); Litestar is the canonical surface.
+- **ai-accounts sidecar:** Separate Litestar process on :20001 owning OAuth identity for Claude / Codex / Gemini / OpenCode accounts.
+- **Frontend:** Vue 3 + TypeScript SPA, Chart.js for monitoring, VueFlow for graph canvases.
+- **Execution model:** Subprocess-based CLI invocation (`subprocess.Popen` + PTY fork). Per-session ring buffer + SSE fan-out.
+- **Key design choices:** No ORM (raw SQL via `get_connection()`), no state management library (component-local state), in-memory log buffers with SSE fan-out.
 
-The codebase has grown organically and has accumulated technical debt documented in `.planning/codebase/CONCERNS.md`. The primary concerns are: no authentication, in-memory state incompatible with scaling, god modules, and no production deployment configuration.
+The codebase has grown organically and has accumulated technical debt documented in `.planning/codebase/CONCERNS.md`. Several historical concerns are now resolved: per-user RBAC + ApiKey middleware shipped in the v0.6.x wave; the SuperAgent → goal_loop bridge (v0.7.91+) covers cross-session orchestration. Open concerns remain around in-memory state preventing horizontal scaling.
 
 ## Constraints
 
-- **Tech stack**: Flask backend + Vue 3 frontend — established, not changing
+- **Tech stack**: Litestar backend (post-wave-80) + Vue 3 frontend — established, not changing
 - **Database**: SQLite — current choice, migration to PostgreSQL is a future possibility
 - **Execution**: Subprocess-based CLI tools — requires claude/opencode/gemini/codex installed on host
 - **Platform**: macOS/Linux only — PTY service uses POSIX fork
@@ -121,17 +122,18 @@ The codebase has grown organically and has accumulated technical debt documented
 | Raw SQLite, no ORM | Simplicity for rapid development | Good for now, revisit at scale |
 | Subprocess CLI execution | Reuse existing AI CLI tools without API integration | Good — supports multiple providers |
 | In-memory log streaming | Sub-millisecond SSE fan-out without infrastructure | Limits to single-process deployment |
-| No auth | Internal tool, local network only | Must address before any external exposure |
-| flask-openapi3 over Flask | Auto-generated OpenAPI spec + Swagger UI + Pydantic validation | Good |
+| ApiKey + bearer-session auth (wave 80+) | Middleware-level gate; per-user user_id scoping on owned-entity routes | Good — closes the original "no auth" concern |
+| Litestar over Flask (wave 80) | Native async, OpenAPI, msgspec validation; better SSE story than Flask | Good — full migration complete |
 | No frontend state library | Simplicity for data-fetch-display pattern | Good for current scale |
 
 ## Current Milestone
 
-**v0.2.0 — Miscellaneous**
+**v0.7.98** (last shipped 2026-05-21 via PR #146 `refactor(v0.7.98): simplify v0.7.95-.97 wave`)
 
-A broad milestone covering product ideation features, new backend capabilities, code consistency improvements, and frontend UX polish. Organized into 10 phases spanning workflow automation, execution intelligence, bot authoring, analytics, enterprise integrations, specialized bots, resilience, API quality, code standards, and frontend quality.
-
-**Source:** Discovered work groups from `/grd:evolve` analysis across product-ideation, new-features, consistency, and usability dimensions.
+Shipping cadence has been PR-driven since v0.5.1 — no formal GRD roadmap; each
+commit-message version tag corresponds to one merged PR. Per-version STATE.md
+stubs at ``.planning/milestones/v0.7.N/STATE.md`` (94 files, backfilled via
+PR #148). See ``.planning/MILESTONES.md`` for the chronological summary.
 
 ---
-*Last updated: 2026-03-04 — v0.2.0 Miscellaneous milestone initialized*
+*Last updated: 2026-05-21 — version bump to v0.7.98 + GRD docs refreshed for the post-v0.5.0 PR-driven era*
