@@ -76,8 +76,11 @@ Scope:
     Visual Cron Wizard, Conditional Trigger Rules, Repo Scope Filters,
     Structured Output, Prompt A/B Testing, Cross-Team Bot Sharing, Bot
     Clone & Fork, Incident Response Playbooks)
-- Move On-Call Escalation under Scheduling (it's rotation domain, not
-  integration).
+- ~~Move On-Call Escalation under Scheduling~~ **Amended 2026-05-21
+  (PR-B plan pass 3):** deferred to PR-D, when Scheduling becomes a
+  section as part of dashboards-lane consolidation. Held in External
+  Integrations until then. Rationale in
+  `2026-05-21-sidebar-ia-PR-B-plan.md` top-of-doc amendment note.
 - Slack + Ticketing + Notification Channels remain in a renamed "External
   Integrations" section (the 3 real integrations from the audit).
 
