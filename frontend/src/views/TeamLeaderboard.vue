@@ -1,4 +1,8 @@
 <script setup lang="ts">
+// ShipOrCut: 2026-Q3 — STUB-PROMOTE: backend handler exists at
+// `backend/app_litestar/routes/leaf_crud_c.py:186` but returns
+// `{"teams": []}` — a stub. See .planning/static-smell-triage.md.
+// Ship the feature or remove the route by EOQ3.
 import { ref, computed, onMounted } from 'vue';
 import LoadingState from '../components/base/LoadingState.vue';
 import EmptyState from '../components/base/EmptyState.vue';

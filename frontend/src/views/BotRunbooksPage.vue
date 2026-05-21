@@ -1,4 +1,9 @@
 <script setup lang="ts">
+// ShipOrCut: 2026-Q3 — STUB-PROMOTE (top of cut list): **no backend
+// route exists** for `/admin/bots/runbooks` or
+// `/admin/bots/{botId}/runbook[/{runbookId}]`. 470-line CRUD UI, zero
+// backend. See .planning/static-smell-triage.md. Ship the feature or
+// remove the route by EOQ3.
 import { ref, computed, onMounted } from 'vue';
 import LoadingState from '../components/base/LoadingState.vue';
 import { useToast } from '../composables/useToast';

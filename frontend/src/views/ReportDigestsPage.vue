@@ -1,4 +1,9 @@
 <script setup lang="ts">
+// ShipOrCut: 2026-Q3 — STUB-PROMOTE: backend `report_digests_router` at
+// `backend/app_litestar/routes/leaf_crud_c.py:259+` returns
+// `{"digests": []}` and echoes input on write — declared as stubs.
+// See .planning/static-smell-triage.md. Ship the feature or remove
+// the route by EOQ3.
 import { ref, onMounted } from 'vue';
 import LoadingState from '../components/base/LoadingState.vue';
 import EmptyState from '../components/base/EmptyState.vue';
