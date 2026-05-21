@@ -1,20 +1,15 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
-import { useRouter } from 'vue-router';
-import { marketplaceApi } from '../services/api';
-import type { MarketplaceSearchResult } from '../services/api';
-import PageHeader from '../components/base/PageHeader.vue';
-import LoadingState from '../components/base/LoadingState.vue';
-import EmptyState from '../components/base/EmptyState.vue';
-import { useToast } from '../composables/useToast';
-import { useFocusTrap } from '../composables/useFocusTrap';
-import { useWebMcpTool } from '../composables/useWebMcpTool';
-
-const router = useRouter();
+import { ref, computed, onMounted } from 'vue';
+import { marketplaceApi } from '../../services/api';
+import type { MarketplaceSearchResult } from '../../services/api';
+import LoadingState from '../../components/base/LoadingState.vue';
+import EmptyState from '../../components/base/EmptyState.vue';
+import { useToast } from '../../composables/useToast';
+import { useFocusTrap } from '../../composables/useFocusTrap';
+import { useWebMcpTool } from '../../composables/useWebMcpTool';
 
 const showToast = useToast();
 
-// Search state
 const searchQuery = ref('');
 const results = ref<MarketplaceSearchResult[]>([]);
 const isSearching = ref(false);
@@ -25,14 +20,14 @@ const detailModalOpen = computed(() => !!selectedItem.value);
 useFocusTrap(detailModalRef, detailModalOpen);
 
 useWebMcpTool({
-  name: 'agented_explore_super_agents_get_state',
-  description: 'Returns the current state of the Explore SuperAgents page',
-  page: 'ExploreSuperAgents',
+  name: 'agented_marketplace_super_agents_get_state',
+  description: 'Returns the current state of the Marketplace SuperAgents tab',
+  page: 'MarketplaceSuperAgents',
   execute: async () => ({
     content: [{
       type: 'text' as const,
       text: JSON.stringify({
-        page: 'ExploreSuperAgents',
+        page: 'MarketplaceSuperAgents',
         availableAgentsCount: results.value.length,
         isLoading: isSearching.value,
       }),
@@ -41,7 +36,6 @@ useWebMcpTool({
   deps: [results, isSearching],
 });
 
-// Debounced search
 let searchTimeout: ReturnType<typeof setTimeout> | null = null;
 
 function debouncedSearch() {
@@ -55,12 +49,11 @@ async function performSearch() {
   const q = searchQuery.value.trim();
   isSearching.value = true;
   try {
-    // super_agent type not yet supported by marketplace search type union --
-    // cast to string to bypass type check until marketplace is extended
+    // super_agent type not yet in marketplace search type union -- cast to
+    // bypass type check until marketplace is extended
     const response = await marketplaceApi.search(q, 'super_agent' as 'plugin');
     results.value = response.results || [];
   } catch (_e) {
-    // Marketplace may not support super_agent type yet -- show empty state
     results.value = [];
   } finally {
     isSearching.value = false;
@@ -82,21 +75,14 @@ function importPackage(_item: MarketplaceSearchResult) {
 function onSearchInput() {
   debouncedSearch();
 }
+
+onMounted(() => {
+  performSearch();
+});
 </script>
 
 <template>
-  <div class="explore-sa-page">
-    <PageHeader title="Explore SuperAgents" subtitle="Discover and import SuperAgent packages from marketplace registries">
-      <template #actions>
-        <button class="btn-back" @click="router.push({ name: 'super-agents' })">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M19 12H5M12 19l-7-7 7-7"/>
-          </svg>
-          Back to SuperAgents
-        </button>
-      </template>
-    </PageHeader>
-
+  <div class="marketplace-pane">
     <!-- Search Bar -->
     <div class="search-bar">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -111,7 +97,6 @@ function onSearchInput() {
       />
     </div>
 
-    <!-- Results Section -->
     <div class="results-section">
       <div class="section-header">
         <h2 v-if="searchQuery.trim()">Results for "{{ searchQuery }}" ({{ results.length }})</h2>
@@ -133,7 +118,6 @@ function onSearchInput() {
         </template>
       </EmptyState>
 
-      <!-- Results Grid -->
       <div v-else class="results-grid">
         <div
           v-for="item in results"
@@ -162,7 +146,17 @@ function onSearchInput() {
 
     <!-- Detail Panel -->
     <Teleport to="body">
-      <div v-if="selectedItem" ref="detailModalRef" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modal-title-superagent-detail" tabindex="-1" @click.self="closeDetail" @keydown.escape="closeDetail">
+      <div
+        v-if="selectedItem"
+        ref="detailModalRef"
+        class="modal-overlay"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="modal-title-superagent-detail"
+        tabindex="-1"
+        @click.self="closeDetail"
+        @keydown.escape="closeDetail"
+      >
         <div class="detail-panel">
           <div class="detail-header">
             <div class="detail-icon">
@@ -190,10 +184,14 @@ function onSearchInput() {
                 <span class="meta-value">{{ selectedItem.version }}</span>
               </div>
             </div>
+            <p class="coming-soon-note">
+              Install is not yet wired for SuperAgent packages. We will surface a
+              "Coming soon" notice when you try to import. Track progress in the v0.8 milestone.
+            </p>
           </div>
           <div class="detail-footer">
             <button class="btn" @click="closeDetail">Close</button>
-            <button class="btn btn-primary" @click="importPackage(selectedItem)">Import</button>
+            <button class="btn btn-primary" @click="importPackage(selectedItem)">Import (coming soon)</button>
           </div>
         </div>
       </div>
@@ -202,34 +200,9 @@ function onSearchInput() {
 </template>
 
 <style scoped>
-.explore-sa-page {
+.marketplace-pane {
 }
 
-.btn-back {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 16px;
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border-default);
-  border-radius: 6px;
-  color: var(--text-secondary);
-  font-size: 14px;
-  cursor: pointer;
-  transition: all 0.15s;
-}
-
-.btn-back:hover {
-  background: var(--bg-elevated);
-  color: var(--text-primary);
-}
-
-.btn-back svg {
-  width: 16px;
-  height: 16px;
-}
-
-/* Search Bar */
 .search-bar {
   display: flex;
   align-items: center;
@@ -264,7 +237,6 @@ function onSearchInput() {
   color: var(--text-tertiary);
 }
 
-/* Results section */
 .results-section {
   background: var(--bg-secondary);
   border: 1px solid var(--border-default);
@@ -368,7 +340,16 @@ function onSearchInput() {
   font-weight: 500;
 }
 
-/* Detail panel */
+.coming-soon-note {
+  margin: 16px 0 0 0;
+  padding: 10px 12px;
+  font-size: 12px;
+  color: var(--text-tertiary);
+  background: var(--bg-tertiary);
+  border-radius: 6px;
+  line-height: 1.5;
+}
+
 .detail-panel {
   background: var(--bg-secondary);
   border: 1px solid var(--border-default);

@@ -36,12 +36,14 @@ export const agentsExtRoutes: RouteRecordRaw[] = [
     component: () => import('../../views/VisualSkillComposerPage.vue'),
     meta: { title: 'Visual Skill Composer' },
   },
-  // Skill Marketplace & Sharing (item 10)
+  // Skill Marketplace & Sharing (item 10) — redirect to the unified
+  // Marketplace's Skills tab (PR-C). The SkillMarketplacePage view was
+  // deleted; its installed+available join is now reachable from the
+  // Settings → Plugin Marketplaces admin tab.
   {
     path: '/skills/marketplace',
     name: 'skill-marketplace',
-    component: () => import('../../views/SkillMarketplacePage.vue'),
-    meta: { title: 'Skill Marketplace' },
+    redirect: () => ({ name: 'marketplace', query: { type: 'skills' } }),
   },
   // Skill & Plugin Version Pinning (feature 34)
   {

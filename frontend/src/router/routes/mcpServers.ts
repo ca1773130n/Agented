@@ -8,10 +8,10 @@ export const mcpServerRoutes: RouteRecordRaw[] = [
     meta: { title: 'MCP Servers' },
   },
   {
+    // Redirect: replaced by unified Marketplace (PR-C).
     path: '/mcp-servers/explore',
     name: 'explore-mcp-servers',
-    component: () => import('../../views/ExploreMcpServers.vue'),
-    meta: { title: 'Explore MCP Servers' },
+    redirect: () => ({ name: 'marketplace', query: { type: 'mcp-servers' } }),
   },
   {
     path: '/mcp-servers/:mcpServerId',

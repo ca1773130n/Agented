@@ -8,10 +8,10 @@ export const superAgentRoutes: RouteRecordRaw[] = [
     meta: { title: 'Super Agents' },
   },
   {
+    // Redirect: replaced by unified Marketplace (PR-C).
     path: '/super-agents/explore',
     name: 'explore-super-agents',
-    component: () => import('../../views/ExploreSuperAgents.vue'),
-    meta: { title: 'Explore Super Agents' },
+    redirect: () => ({ name: 'marketplace', query: { type: 'super-agents' } }),
   },
   {
     path: '/super-agents/:superAgentId/playground',

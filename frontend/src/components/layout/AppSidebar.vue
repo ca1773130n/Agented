@@ -85,13 +85,13 @@ function autoExpandForRoute() {
   if (name === 'usage-history') {
     expandedSections.value.usage = true;
   }
-  if (['skills-playground', 'skill-create', 'my-skills', 'skill-detail', 'explore-skills'].includes(name)) {
+  if (['skills-playground', 'skill-create', 'my-skills', 'skill-detail', 'explore-skills', 'marketplace'].includes(name)) {
     expandedSections.value.skills = true;
   }
-  if (['plugins', 'plugin-design', 'harness-integration', 'explore-plugins', 'plugin-detail'].includes(name)) {
+  if (['plugins', 'plugin-design', 'harness-integration', 'explore-plugins', 'plugin-detail', 'marketplace'].includes(name)) {
     expandedSections.value.plugins = true;
   }
-  if (['mcp-servers', 'mcp-server-detail', 'explore-mcp-servers'].includes(name)) {
+  if (['mcp-servers', 'mcp-server-detail', 'explore-mcp-servers', 'marketplace'].includes(name)) {
     expandedSections.value.mcpServers = true;
   }
   if (['projects', 'project-dashboard', 'project-settings', 'project-management', 'project-planning', 'project-instance-playground'].includes(name)) {
@@ -106,7 +106,7 @@ function autoExpandForRoute() {
   if (['agents', 'agent-create', 'agent-design'].includes(name)) {
     expandedSections.value.agents = true;
   }
-  if (['super-agents', 'super-agent-playground', 'explore-super-agents'].includes(name)) {
+  if (['super-agents', 'super-agent-playground', 'explore-super-agents', 'marketplace'].includes(name)) {
     expandedSections.value.superAgents = true;
   }
   if (['hooks', 'hook-design'].includes(name)) {
@@ -180,11 +180,11 @@ function isHistorySectionActive(): boolean {
 }
 
 function isSkillsSectionActive(): boolean {
-  return ['skills-playground', 'skill-create', 'my-skills', 'explore-skills', 'skill-detail'].includes(currentRouteName.value);
+  return ['skills-playground', 'skill-create', 'my-skills', 'explore-skills', 'skill-detail', 'marketplace'].includes(currentRouteName.value);
 }
 
 function isPluginsSectionActive(): boolean {
-  return ['plugins', 'plugin-design', 'harness-integration', 'explore-plugins', 'plugin-detail'].includes(currentRouteName.value);
+  return ['plugins', 'plugin-design', 'harness-integration', 'explore-plugins', 'plugin-detail', 'marketplace'].includes(currentRouteName.value);
 }
 
 function isProjectsSectionActive(): boolean {
@@ -204,7 +204,7 @@ function isAgentsSectionActive(): boolean {
 }
 
 function isSuperAgentsSectionActive(): boolean {
-  return ['super-agents', 'super-agent-playground', 'explore-super-agents'].includes(currentRouteName.value);
+  return ['super-agents', 'super-agent-playground', 'explore-super-agents', 'marketplace'].includes(currentRouteName.value);
 }
 
 function isHooksSectionActive(): boolean {
@@ -220,7 +220,7 @@ function isRulesSectionActive(): boolean {
 }
 
 function isMcpServersSectionActive(): boolean {
-  return ['mcp-servers', 'mcp-server-detail', 'explore-mcp-servers'].includes(currentRouteName.value);
+  return ['mcp-servers', 'mcp-server-detail', 'explore-mcp-servers', 'marketplace'].includes(currentRouteName.value);
 }
 
 function isWorkflowsSectionActive(): boolean {
@@ -661,9 +661,6 @@ function handleSidebarKeydown(e: KeyboardEvent) {
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('super-agents') }" :aria-current="sidebarActive('super-agents') ? 'page' : undefined" @click="navTo('super-agents')">
           All SuperAgents
         </button>
-        <button type="button" class="submenu-item" :class="{ active: sidebarActive('explore-super-agents') }" :aria-current="sidebarActive('explore-super-agents') ? 'page' : undefined" @click="navTo('explore-super-agents')">
-          Explore
-        </button>
       </div>
 
       <SidebarSectionLabel
@@ -721,9 +718,6 @@ function handleSidebarKeydown(e: KeyboardEvent) {
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('plugin-design') }" :aria-current="sidebarActive('plugin-design') ? 'page' : undefined" @click="navTo('plugin-design')">
           Design a Plugin
         </button>
-        <button type="button" class="submenu-item" :class="{ active: sidebarActive('explore-plugins') }" :aria-current="sidebarActive('explore-plugins') ? 'page' : undefined" @click="navTo('explore-plugins')">
-          Explore
-        </button>
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('harness-integration') }" :aria-current="sidebarActive('harness-integration') ? 'page' : undefined" @click="navTo('harness-integration')">
           Harness Integration
         </button>
@@ -756,10 +750,26 @@ function handleSidebarKeydown(e: KeyboardEvent) {
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('mcp-servers') }" :aria-current="sidebarActive('mcp-servers') ? 'page' : undefined" @click="navTo('mcp-servers')">
           All MCP Servers
         </button>
-        <button type="button" class="submenu-item" :class="{ active: sidebarActive('explore-mcp-servers') }" :aria-current="sidebarActive('explore-mcp-servers') ? 'page' : undefined" @click="navTo('explore-mcp-servers')">
-          Explore
-        </button>
       </div>
+
+      <!-- Marketplace (flat link) — PR-C: unified browse surface for
+        plugins, skills, MCP servers, and SuperAgents. Positioned in
+        the Forge section near its natural neighbors. -->
+      <SidebarFlatLink
+        label="Marketplace"
+        :active="sidebarActive('marketplace')"
+        :collapsed-desktop="isCollapsedDesktop()"
+        @click="navTo('marketplace')"
+      >
+        <template #icon>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M3 9l1.5-5h15L21 9"/>
+            <path d="M3 9v11a1 1 0 001 1h16a1 1 0 001-1V9"/>
+            <path d="M3 9h18"/>
+            <path d="M8 13h8"/>
+          </svg>
+        </template>
+      </SidebarFlatLink>
 
       <!-- Skills (expandable) -->
       <SidebarGroupToggle
@@ -786,9 +796,6 @@ function handleSidebarKeydown(e: KeyboardEvent) {
         </button>
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('my-skills') }" :aria-current="sidebarActive('my-skills') ? 'page' : undefined" @click="navTo('my-skills')">
           Skill Library
-        </button>
-        <button type="button" class="submenu-item" :class="{ active: sidebarActive('explore-skills') }" :aria-current="sidebarActive('explore-skills') ? 'page' : undefined" @click="navTo('explore-skills')">
-          Explore
         </button>
       </div>
 

@@ -20,10 +20,10 @@ export const skillRoutes: RouteRecordRaw[] = [
     meta: { title: 'Skills Playground' },
   },
   {
+    // Redirect: replaced by unified Marketplace (PR-C).
     path: '/skills/explore',
     name: 'explore-skills',
-    component: () => import('../../views/ExploreSkills.vue'),
-    meta: { title: 'Explore Skills' },
+    redirect: () => ({ name: 'marketplace', query: { type: 'skills' } }),
   },
   {
     path: '/skills/:skillId',
