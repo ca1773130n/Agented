@@ -1,9 +1,14 @@
+<!--
+  ExecutionQueueCard — extracted from ExecutionQueueDashboard.vue for
+  the Activity lane (Live ops block).
+-->
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue';
-import PageHeader from '../components/base/PageHeader.vue';
-import { useToast } from '../composables/useToast';
-import { executionApi, triggerApi, ApiError } from '../services/api';
-import type { Execution, Trigger } from '../services/api';
+import { useToast } from '../../../composables/useToast';
+import { executionApi, triggerApi, ApiError } from '../../../services/api';
+import type { Execution, Trigger } from '../../../services/api';
+
+const emit = defineEmits<{ loaded: [slug: string] }>();
 const showToast = useToast();
 
 interface QueueEntry {
@@ -23,7 +28,6 @@ const cancellingIds = ref<Set<string>>(new Set());
 
 let refreshInterval: ReturnType<typeof setInterval> | null = null;
 
-// Combine running and pending for display
 const allExecutions = computed(() => {
   const items = [
     ...runningExecutions.value.map((ex, i) => ({
@@ -56,18 +60,11 @@ const stats = computed(() => ({
   total: runningExecutions.value.length + totalPending.value,
 }));
 
-// Drag-and-drop state (visual only since backend queue is FIFO)
 const isDragging = ref<string | null>(null);
 const dragOverId = ref<string | null>(null);
 
-function handleDragStart(id: string) {
-  isDragging.value = id;
-}
-
-function handleDragOver(id: string) {
-  dragOverId.value = id;
-}
-
+function handleDragStart(id: string) { isDragging.value = id; }
+function handleDragOver(id: string) { dragOverId.value = id; }
 function handleDrop(_targetId: string) {
   isDragging.value = null;
   dragOverId.value = null;
@@ -76,10 +73,7 @@ function handleDrop(_targetId: string) {
 
 function statusColor(s: string): string {
   const map: Record<string, string> = {
-    running: '#34d399',
-    pending: '#f59e0b',
-    paused: '#a78bfa',
-    dispatching: '#3b82f6',
+    running: '#34d399', pending: '#f59e0b', paused: '#a78bfa', dispatching: '#3b82f6',
   };
   return map[s] ?? '#6b7280';
 }
@@ -98,9 +92,7 @@ function formatTimeAgo(dateStr: string): string {
 async function loadTriggers() {
   const res = await triggerApi.list();
   const map = new Map<string, Trigger>();
-  for (const t of res.triggers ?? []) {
-    map.set(t.id, t);
-  }
+  for (const t of res.triggers ?? []) map.set(t.id, t);
   triggers.value = map;
 }
 
@@ -111,7 +103,6 @@ async function loadQueueData() {
       executionApi.listAll({ limit: 50, status: 'running' }),
       executionApi.listAll({ limit: 50, status: 'pending' }),
     ]);
-
     queueSummary.value = queueRes.queue;
     totalPending.value = queueRes.total_pending;
     runningExecutions.value = runningRes.executions ?? [];
@@ -152,6 +143,7 @@ async function cancelQueueForTrigger(triggerId: string) {
 
 onMounted(async () => {
   await Promise.all([loadTriggers().catch(() => {}), loadQueueData()]);
+  emit('loaded', 'execution-queue');
   refreshInterval = setInterval(loadQueueData, 5000);
 });
 
@@ -161,20 +153,19 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="exec-queue">
+  <section id="execution-queue" class="lane-card exec-queue-card">
+    <header class="lane-card__head">
+      <div>
+        <h2 class="lane-card__title">Execution Queue</h2>
+        <p class="lane-card__subtitle">Monitor and manage the execution queue in real time.</p>
+      </div>
+    </header>
 
-    <PageHeader
-      title="Execution Queue Dashboard"
-      subtitle="Monitor and manage the execution queue in real time."
-    />
-
-    <!-- Loading state -->
     <div v-if="isLoading" class="loading-state">
       <div class="loading-spinner"></div>
       <span>Loading queue data...</span>
     </div>
 
-    <!-- Error state -->
     <div v-else-if="loadError" class="error-state">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
         <circle cx="12" cy="12" r="10"/>
@@ -182,7 +173,7 @@ onUnmounted(() => {
         <line x1="12" y1="16" x2="12.01" y2="16"/>
       </svg>
       <span>{{ loadError }}</span>
-      <button class="btn btn-secondary" @click="loadQueueData">Retry</button>
+      <button class="btn-secondary" @click="loadQueueData">Retry</button>
     </div>
 
     <template v-else>
@@ -210,7 +201,6 @@ onUnmounted(() => {
       </div>
 
       <div class="lanes">
-        <!-- Running Lane -->
         <div class="lane">
           <div class="lane-header" style="border-bottom-color: #34d399">
             <div class="lane-dot" style="background: #34d399"></div>
@@ -229,12 +219,6 @@ onUnmounted(() => {
               @dragend="isDragging = null; dragOverId = null"
               :class="{ 'is-dragging': isDragging === ex.id, 'is-drag-over': dragOverId === ex.id }"
             >
-              <div class="item-drag-handle">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12">
-                  <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/>
-                  <line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>
-                </svg>
-              </div>
               <div class="item-pos">#{{ ex.position }}</div>
               <div class="item-info">
                 <div class="item-bot">{{ ex.triggerName }}</div>
@@ -251,16 +235,7 @@ onUnmounted(() => {
                 :disabled="cancellingIds.has(ex.id)"
                 @click.stop="cancelExecution(ex.id)"
                 title="Cancel execution"
-              >
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
-                  <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-                </svg>
-              </button>
-              <div class="item-progress">
-                <div class="progress-bar">
-                  <div class="progress-fill running-anim"></div>
-                </div>
-              </div>
+              >×</button>
             </div>
             <div v-if="runningQueue.length === 0" class="lane-empty">
               No running executions
@@ -268,7 +243,6 @@ onUnmounted(() => {
           </div>
         </div>
 
-        <!-- Pending Lane -->
         <div class="lane">
           <div class="lane-header" style="border-bottom-color: #f59e0b">
             <div class="lane-dot" style="background: #f59e0b"></div>
@@ -287,12 +261,6 @@ onUnmounted(() => {
               @dragend="isDragging = null; dragOverId = null"
               :class="{ 'is-dragging': isDragging === ex.id, 'is-drag-over': dragOverId === ex.id }"
             >
-              <div class="item-drag-handle">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12">
-                  <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/>
-                  <line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>
-                </svg>
-              </div>
               <div class="item-pos">#{{ ex.position }}</div>
               <div class="item-info">
                 <div class="item-bot">{{ ex.triggerName }}</div>
@@ -309,11 +277,7 @@ onUnmounted(() => {
                 :disabled="cancellingIds.has(ex.id)"
                 @click.stop="cancelExecution(ex.id)"
                 title="Cancel execution"
-              >
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
-                  <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-                </svg>
-              </button>
+              >×</button>
             </div>
             <div v-if="pendingQueue.length === 0" class="lane-empty">
               No pending executions
@@ -321,7 +285,6 @@ onUnmounted(() => {
           </div>
         </div>
 
-        <!-- Per-Trigger Queue Summary Lane -->
         <div class="lane">
           <div class="lane-header" style="border-bottom-color: #6b7280">
             <div class="lane-dot" style="background: #6b7280"></div>
@@ -342,7 +305,7 @@ onUnmounted(() => {
                 <span class="item-status" :style="{ color: '#f59e0b', background: '#f59e0b20' }">
                   {{ entry.pending }} pending
                 </span>
-                <span v-if="entry.dispatching > 0" class="item-status" :style="{ color: '#3b82f6', background: '#3b82f620' }" style="margin-top: 3px">
+                <span v-if="entry.dispatching > 0" class="item-status" :style="{ color: '#3b82f6', background: '#3b82f620' }">
                   {{ entry.dispatching }} dispatching
                 </span>
               </div>
@@ -351,11 +314,7 @@ onUnmounted(() => {
                 class="cancel-btn"
                 @click.stop="cancelQueueForTrigger(entry.trigger_id)"
                 title="Cancel all pending for this trigger"
-              >
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
-                  <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-                </svg>
-              </button>
+              >×</button>
             </div>
             <div v-if="queueSummary.length === 0" class="lane-empty">
               No queued triggers
@@ -363,308 +322,83 @@ onUnmounted(() => {
           </div>
         </div>
       </div>
-
-      <div class="drag-hint">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="14" height="14">
-          <polyline points="5 9 2 12 5 15"/><polyline points="9 5 12 2 15 5"/>
-          <polyline points="15 19 12 22 9 19"/><polyline points="19 9 22 12 19 15"/>
-          <line x1="2" y1="12" x2="22" y2="12"/><line x1="12" y1="2" x2="12" y2="22"/>
-        </svg>
-        Drag executions to reprioritize within the queue
-      </div>
     </template>
-  </div>
+  </section>
 </template>
 
 <style scoped>
-.exec-queue {
+.lane-card {
+  padding: 20px;
+  border: 1px solid var(--border-default, rgba(255, 255, 255, 0.1));
+  border-radius: 10px;
+  background: var(--bg-secondary, rgba(255, 255, 255, 0.02));
   display: flex;
   flex-direction: column;
-  gap: 24px;
-  animation: fadeIn 0.4s ease;
+  gap: 16px;
 }
+.lane-card__head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; }
+.lane-card__title { font-size: 16px; font-weight: 600; margin: 0 0 4px; color: var(--text-primary); }
+.lane-card__subtitle { font-size: 12px; color: var(--text-tertiary); margin: 0; }
 
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(12px); }
-  to { opacity: 1; transform: translateY(0); }
+.loading-state, .error-state {
+  display: flex; align-items: center; justify-content: center;
+  gap: 12px; padding: 40px 20px; color: var(--text-tertiary); font-size: 0.9rem;
 }
-
-.loading-state {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  padding: 60px 20px;
-  color: var(--text-tertiary);
-  font-size: 0.9rem;
-}
-
+.error-state { color: #ef4444; }
 .loading-spinner {
-  width: 20px;
-  height: 20px;
-  border: 2px solid var(--border-default);
-  border-top-color: var(--accent-cyan);
-  border-radius: 50%;
-  animation: spin 0.8s linear infinite;
+  width: 20px; height: 20px; border: 2px solid var(--border-default);
+  border-top-color: var(--accent-cyan); border-radius: 50%; animation: spin 0.8s linear infinite;
 }
+@keyframes spin { to { transform: rotate(360deg); } }
+.btn-secondary { padding: 6px 14px; background: var(--bg-tertiary); border: 1px solid var(--border-default); border-radius: 6px; color: var(--text-secondary); font-size: 0.8rem; cursor: pointer; }
 
-@keyframes spin {
-  to { transform: rotate(360deg); }
-}
-
-.error-state {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  padding: 40px 20px;
-  color: #ef4444;
-  font-size: 0.9rem;
-}
-
-.btn-secondary {
-  padding: 6px 14px;
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border-default);
-  border-radius: 6px;
-  color: var(--text-secondary);
-  font-size: 0.8rem;
-  cursor: pointer;
-  transition: all 0.15s;
-}
-
-.btn-secondary:hover {
-  border-color: var(--accent-cyan);
-  color: var(--text-primary);
-}
-
-.stats-bar {
-  display: flex;
-  gap: 16px;
-}
-
+.stats-bar { display: flex; gap: 12px; flex-wrap: wrap; }
 .stat-card {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 14px 20px;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-default);
-  border-radius: 10px;
+  display: flex; flex-direction: column; gap: 4px;
+  padding: 12px 16px; background: var(--bg-tertiary);
+  border: 1px solid var(--border-default); border-radius: 8px;
+  flex: 1; min-width: 90px;
 }
+.stat-num { font-size: 1.3rem; font-weight: 700; color: var(--text-primary); font-variant-numeric: tabular-nums; }
+.stat-lbl { font-size: 0.7rem; color: var(--text-tertiary); font-weight: 500; }
 
-.stat-num {
-  font-size: 1.5rem;
-  font-weight: 700;
-  color: var(--text-primary);
-  font-variant-numeric: tabular-nums;
-}
+.lanes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; align-items: start; }
 
-.stat-lbl {
-  font-size: 0.75rem;
-  color: var(--text-tertiary);
-  font-weight: 500;
-}
-
-.lanes {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 16px;
-  align-items: start;
-}
-
-.lane {
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-default);
-  border-radius: 12px;
-  overflow: hidden;
-}
-
+.lane { background: var(--bg-primary); border: 1px solid var(--border-default); border-radius: 10px; overflow: hidden; }
 .lane-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 14px 18px;
-  border-bottom: 2px solid transparent;
+  display: flex; align-items: center; gap: 8px;
+  padding: 12px 14px; border-bottom: 2px solid transparent;
 }
-
-.lane-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-}
-
-.lane-label {
-  font-size: 0.85rem;
-  font-weight: 600;
-  color: var(--text-primary);
-  flex: 1;
-}
-
-.lane-count {
-  font-size: 0.75rem;
-  font-weight: 700;
-  color: var(--text-tertiary);
-  background: var(--bg-tertiary);
-  padding: 2px 8px;
-  border-radius: 10px;
-}
-
-.lane-items {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  padding: 8px;
-}
-
+.lane-dot { width: 8px; height: 8px; border-radius: 50%; }
+.lane-label { font-size: 0.85rem; font-weight: 600; color: var(--text-primary); flex: 1; }
+.lane-count { font-size: 0.72rem; font-weight: 700; color: var(--text-tertiary); background: var(--bg-tertiary); padding: 2px 8px; border-radius: 10px; }
+.lane-items { display: flex; flex-direction: column; gap: 4px; padding: 8px; }
 .queue-item {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 12px;
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border-subtle);
-  border-radius: 8px;
-  cursor: grab;
-  transition: all 0.15s;
-  user-select: none;
-  position: relative;
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 12px; background: var(--bg-tertiary);
+  border: 1px solid var(--border-subtle); border-radius: 8px;
+  cursor: grab; transition: all 0.15s; user-select: none; position: relative;
 }
-
-.queue-item:hover { border-color: var(--border-default); background: var(--bg-elevated); }
+.queue-item:hover { border-color: var(--border-default); }
 .queue-item.is-running { border-color: rgba(52, 211, 153, 0.3); background: rgba(52, 211, 153, 0.05); }
 .queue-item.is-dragging { opacity: 0.4; cursor: grabbing; }
-.queue-item.is-drag-over { border-color: var(--accent-cyan); background: rgba(6, 182, 212, 0.06); }
-
-.item-drag-handle {
-  color: var(--text-muted);
-  flex-shrink: 0;
-}
-
-.item-pos {
-  font-size: 0.72rem;
-  font-weight: 700;
-  color: var(--text-muted);
-  min-width: 20px;
-}
-
-.item-info {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-}
-
-.item-bot {
-  font-size: 0.82rem;
-  font-weight: 600;
-  color: var(--text-primary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  font-family: monospace;
-}
-
-.item-trigger {
-  font-size: 0.72rem;
-  color: var(--text-tertiary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.item-right {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 3px;
-}
-
-.item-status {
-  font-size: 0.65rem;
-  font-weight: 700;
-  padding: 2px 6px;
-  border-radius: 3px;
-  text-transform: uppercase;
-}
-
-.item-est {
-  font-size: 0.68rem;
-  color: var(--text-muted);
-  font-family: monospace;
-}
-
+.queue-item.is-drag-over { border-color: var(--accent-cyan); }
+.item-pos { font-size: 0.72rem; font-weight: 700; color: var(--text-muted); min-width: 20px; }
+.item-info { flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.item-bot { font-size: 0.82rem; font-weight: 600; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-family: monospace; }
+.item-trigger { font-size: 0.7rem; color: var(--text-tertiary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.item-right { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; }
+.item-status { font-size: 0.65rem; font-weight: 700; padding: 2px 6px; border-radius: 3px; text-transform: uppercase; }
+.item-est { font-size: 0.66rem; color: var(--text-muted); font-family: monospace; }
 .cancel-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 4px;
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: 4px;
-  color: var(--text-muted);
-  cursor: pointer;
-  transition: all 0.15s;
-  flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  padding: 2px 6px; background: transparent; border: 1px solid transparent;
+  border-radius: 4px; color: var(--text-muted); cursor: pointer;
+  transition: all 0.15s; flex-shrink: 0; font-size: 16px; line-height: 1;
 }
-
-.cancel-btn:hover {
-  color: #ef4444;
-  border-color: rgba(239, 68, 68, 0.3);
-  background: rgba(239, 68, 68, 0.1);
-}
-
-.cancel-btn:disabled {
-  opacity: 0.3;
-  cursor: not-allowed;
-}
-
-.item-progress {
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  height: 2px;
-}
-
-.progress-bar {
-  height: 100%;
-  background: var(--bg-tertiary);
-  border-radius: 0 0 6px 6px;
-  overflow: hidden;
-}
-
-.progress-fill {
-  height: 100%;
-  background: #34d399;
-}
-
-.running-anim {
-  animation: progress 3s ease-in-out infinite;
-}
-
-@keyframes progress {
-  0% { width: 20%; }
-  50% { width: 70%; }
-  100% { width: 90%; }
-}
-
-.lane-empty {
-  padding: 24px 12px;
-  text-align: center;
-  font-size: 0.8rem;
-  color: var(--text-muted);
-}
-
-.drag-hint {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 0.78rem;
-  color: var(--text-muted);
-  justify-content: center;
-}
+.cancel-btn:hover { color: #ef4444; border-color: rgba(239, 68, 68, 0.3); background: rgba(239, 68, 68, 0.1); }
+.cancel-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+.lane-empty { padding: 24px 12px; text-align: center; font-size: 0.8rem; color: var(--text-muted); }
 
 @media (max-width: 900px) {
   .lanes { grid-template-columns: 1fr; }

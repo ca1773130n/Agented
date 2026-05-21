@@ -22,12 +22,11 @@ export const executionRoutes: RouteRecordRaw[] = [
     component: () => import('../../views/ExecutionCostEstimator.vue'),
     meta: { title: 'Execution Cost Estimator' },
   },
-  // Execution Queue Dashboard
+  // PR-D — Execution Queue folded into the Activity lane.
   {
     path: '/executions/queue',
     name: 'execution-queue-dashboard',
-    component: () => import('../../views/ExecutionQueueDashboard.vue'),
-    meta: { title: 'Execution Queue Dashboard' },
+    redirect: () => ({ name: 'dashboards-activity', hash: '#execution-queue' }),
   },
   // Execution File Diff Viewer
   {

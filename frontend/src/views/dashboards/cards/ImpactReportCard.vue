@@ -1,10 +1,16 @@
+<!--
+  ImpactReportCard — extracted from TeamImpactReport.vue for the
+  Activity lane (Reports block).
+-->
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
-import type { WeeklyReport } from '../services/api';
-import { analyticsApi, ApiError } from '../services/api';
-import LoadingState from '../components/base/LoadingState.vue';
-import StatCard from '../components/base/StatCard.vue';
-import { useToast } from '../composables/useToast';
+import type { WeeklyReport } from '../../../services/api';
+import { analyticsApi, ApiError } from '../../../services/api';
+import LoadingState from '../../../components/base/LoadingState.vue';
+import StatCard from '../../../components/base/StatCard.vue';
+import { useToast } from '../../../composables/useToast';
+
+const emit = defineEmits<{ loaded: [slug: string] }>();
 const showToast = useToast();
 
 const isLoading = ref(true);
@@ -19,6 +25,7 @@ async function loadData() {
     showToast(message, 'error');
   } finally {
     isLoading.value = false;
+    emit('loaded', 'impact-report');
   }
 }
 
@@ -50,13 +57,11 @@ onMounted(loadData);
 </script>
 
 <template>
-  <div class="team-report">
-
+  <section id="impact-report" class="lane-card team-report-card">
     <LoadingState v-if="isLoading" message="Loading weekly report..." />
 
     <template v-else-if="report">
-      <!-- Header -->
-      <div class="card status-card">
+      <div class="status-card">
         <div class="status-card-inner">
           <div class="status-header">
             <div class="status-title-area">
@@ -67,7 +72,7 @@ onMounted(loadData);
                 </svg>
               </div>
               <div>
-                <h3>Weekly Impact Report</h3>
+                <h2>Weekly Impact Report</h2>
                 <p class="status-subtitle">{{ periodDisplay }}</p>
               </div>
             </div>
@@ -81,10 +86,8 @@ onMounted(loadData);
         </div>
       </div>
 
-      <!-- Two column layout -->
       <div class="report-columns">
-        <!-- Top Performing Bots -->
-        <div class="card">
+        <div class="sub-card">
           <div class="card-header">
             <h3>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
@@ -116,8 +119,7 @@ onMounted(loadData);
           </div>
         </div>
 
-        <!-- Bots Needing Attention -->
-        <div class="card">
+        <div class="sub-card">
           <div class="card-header">
             <h3>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
@@ -159,44 +161,39 @@ onMounted(loadData);
     </template>
 
     <template v-else>
-      <div class="card">
-        <div class="empty-state">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-            <path d="M3 3v18h18"/>
-            <path d="M18 17l-5-5-4 4-4-4"/>
-          </svg>
-          <p>No execution data for this period.</p>
-        </div>
+      <div class="empty-state">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M3 3v18h18"/>
+          <path d="M18 17l-5-5-4 4-4-4"/>
+        </svg>
+        <p>No execution data for this period.</p>
       </div>
     </template>
-  </div>
+  </section>
 </template>
 
 <style scoped>
-.team-report {
+.lane-card {
+  padding: 20px;
+  border: 1px solid var(--border-default, rgba(255, 255, 255, 0.1));
+  border-radius: 10px;
+  background: var(--bg-secondary, rgba(255, 255, 255, 0.02));
   display: flex;
   flex-direction: column;
-  gap: 24px;
-  width: 100%;
-  animation: fadeIn 0.4s ease;
+  gap: 20px;
 }
-
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(12px); }
-  to { opacity: 1; transform: translateY(0); }
+.sub-card {
+  padding: 20px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--bg-primary);
 }
-
-.card {
-  padding: 24px;
-}
-
 .card-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 20px;
+  margin-bottom: 16px;
 }
-
 .card-header h3 {
   display: flex;
   align-items: center;
@@ -204,277 +201,73 @@ onMounted(loadData);
   font-size: 0.95rem;
   font-weight: 600;
   color: var(--text-primary);
+  margin: 0;
 }
-
-.card-header h3 svg {
-  width: 18px;
-  height: 18px;
-  color: var(--accent-cyan);
-}
-
+.card-header h3 svg { width: 18px; height: 18px; color: var(--accent-cyan); }
 .status-card {
   background: linear-gradient(135deg, var(--bg-secondary) 0%, var(--bg-tertiary) 100%);
-  border-color: var(--border-default);
-  padding: 0;
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
   overflow: hidden;
 }
-
-.status-card-inner {
-  padding: 28px;
-}
-
+.status-card-inner { padding: 24px; }
 .status-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 28px;
-  flex-wrap: wrap;
-  gap: 16px;
+  display: flex; justify-content: space-between; align-items: flex-start;
+  margin-bottom: 24px; flex-wrap: wrap; gap: 16px;
 }
-
-.status-title-area {
-  display: flex;
-  align-items: flex-start;
-  gap: 16px;
-}
-
+.status-title-area { display: flex; align-items: flex-start; gap: 16px; }
 .status-icon {
-  width: 48px;
-  height: 48px;
-  border-radius: 12px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--accent-cyan-dim);
-  border: 1px solid var(--accent-cyan);
+  width: 44px; height: 44px; border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--accent-cyan-dim); border: 1px solid var(--accent-cyan);
 }
-
-.status-icon svg {
-  width: 24px;
-  height: 24px;
-  color: var(--accent-cyan);
-}
-
-.status-title-area h3 {
-  font-size: 1.1rem;
-  font-weight: 600;
-  color: var(--text-primary);
-  margin-bottom: 4px;
-}
-
-.status-subtitle {
-  font-size: 0.85rem;
-  color: var(--text-tertiary);
-}
-
+.status-icon svg { width: 22px; height: 22px; color: var(--accent-cyan); }
+.status-title-area h2 { font-size: 1.05rem; font-weight: 600; color: var(--text-primary); margin: 0 0 4px; }
+.status-subtitle { font-size: 0.85rem; color: var(--text-tertiary); margin: 0; }
 .stats-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 16px;
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px;
 }
-
-/* Two column layout */
-.report-columns {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 24px;
-}
-
-/* Ranked list */
-.ranked-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
+.report-columns { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.ranked-list, .attention-list { display: flex; flex-direction: column; gap: 8px; }
 .ranked-item {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  padding: 12px 16px;
-  background: var(--bg-primary);
-  border: 1px solid var(--border-subtle);
-  border-radius: 8px;
+  display: flex; align-items: center; gap: 14px;
+  padding: 12px 16px; background: var(--bg-secondary);
+  border: 1px solid var(--border-subtle); border-radius: 8px;
   transition: all var(--transition-fast);
 }
-
-.ranked-item:hover {
-  border-color: var(--border-default);
-}
-
+.ranked-item:hover { border-color: var(--border-default); }
 .rank-number {
-  width: 28px;
-  height: 28px;
-  border-radius: 8px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: 700;
-  font-size: 0.8rem;
-  background: var(--bg-elevated);
-  color: var(--text-tertiary);
-  flex-shrink: 0;
+  width: 28px; height: 28px; border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 700; font-size: 0.8rem;
+  background: var(--bg-elevated); color: var(--text-tertiary); flex-shrink: 0;
 }
-
-.rank-number.gold {
-  background: rgba(245, 158, 11, 0.15);
-  color: var(--accent-amber);
-}
-
-.rank-number.silver {
-  background: rgba(156, 163, 175, 0.15);
-  color: var(--text-secondary);
-}
-
-.rank-number.bronze {
-  background: rgba(180, 83, 9, 0.15);
-  color: #b45309;
-}
-
-.ranked-info {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.ranked-name {
-  font-weight: 600;
-  font-size: 0.85rem;
-  color: var(--text-primary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.ranked-id {
-  font-size: 0.7rem;
-  font-family: var(--font-mono);
-  color: var(--text-muted);
-}
-
-.ranked-metric {
-  font-family: var(--font-mono);
-  font-size: 0.9rem;
-  font-weight: 700;
-  color: var(--accent-cyan);
-  flex-shrink: 0;
-}
-
-.metric-label {
-  font-size: 0.7rem;
-  font-weight: 400;
-  color: var(--text-tertiary);
-}
-
-/* Attention list */
-.attention-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
+.rank-number.gold { background: rgba(245, 158, 11, 0.15); color: var(--accent-amber); }
+.rank-number.silver { background: rgba(156, 163, 175, 0.15); color: var(--text-secondary); }
+.rank-number.bronze { background: rgba(180, 83, 9, 0.15); color: #b45309; }
+.ranked-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.ranked-name { font-weight: 600; font-size: 0.85rem; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ranked-id { font-size: 0.7rem; font-family: var(--font-mono); color: var(--text-muted); }
+.ranked-metric { font-family: var(--font-mono); font-size: 0.9rem; font-weight: 700; color: var(--accent-cyan); flex-shrink: 0; }
+.metric-label { font-size: 0.7rem; font-weight: 400; color: var(--text-tertiary); }
 .attention-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 14px;
-  padding: 12px 16px;
-  background: var(--bg-primary);
-  border: 1px solid var(--border-subtle);
-  border-left: 3px solid var(--accent-amber);
-  border-radius: 8px;
+  display: flex; align-items: center; justify-content: space-between; gap: 14px;
+  padding: 12px 16px; background: var(--bg-secondary);
+  border: 1px solid var(--border-subtle); border-left: 3px solid var(--accent-amber); border-radius: 8px;
 }
-
-.attention-info {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.attention-name {
-  font-weight: 600;
-  font-size: 0.85rem;
-  color: var(--text-primary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.attention-id {
-  font-size: 0.7rem;
-  font-family: var(--font-mono);
-  color: var(--text-muted);
-}
-
-.attention-metrics {
-  display: flex;
-  gap: 8px;
-  flex-shrink: 0;
-}
-
-.failure-rate-badge {
-  font-size: 0.7rem;
-  font-weight: 600;
-  padding: 2px 8px;
-  border-radius: 4px;
-  background: var(--bg-elevated);
-  color: var(--text-secondary);
-}
-
-.failure-rate-badge.high {
-  background: var(--accent-crimson-dim);
-  color: var(--accent-crimson);
-}
-
-.failure-rate-badge.moderate {
-  background: rgba(245, 158, 11, 0.15);
-  color: var(--accent-amber);
-}
-
-.alert-count-badge {
-  font-size: 0.7rem;
-  font-weight: 600;
-  padding: 2px 8px;
-  border-radius: 4px;
-  background: var(--bg-elevated);
-  color: var(--text-tertiary);
-}
-
-/* Empty states */
-.empty-list {
-  padding: 32px 16px;
-  text-align: center;
-  font-size: 0.85rem;
-  color: var(--text-tertiary);
-}
-
-.empty-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 12px;
-  padding: 48px 24px;
-  color: var(--text-tertiary);
-  text-align: center;
-}
-
-.empty-state svg {
-  width: 40px;
-  height: 40px;
-  opacity: 0.6;
-}
-
+.attention-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.attention-name { font-weight: 600; font-size: 0.85rem; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.attention-id { font-size: 0.7rem; font-family: var(--font-mono); color: var(--text-muted); }
+.attention-metrics { display: flex; gap: 8px; flex-shrink: 0; }
+.failure-rate-badge { font-size: 0.7rem; font-weight: 600; padding: 2px 8px; border-radius: 4px; background: var(--bg-elevated); color: var(--text-secondary); }
+.failure-rate-badge.high { background: var(--accent-crimson-dim); color: var(--accent-crimson); }
+.failure-rate-badge.moderate { background: rgba(245, 158, 11, 0.15); color: var(--accent-amber); }
+.alert-count-badge { font-size: 0.7rem; font-weight: 600; padding: 2px 8px; border-radius: 4px; background: var(--bg-elevated); color: var(--text-tertiary); }
+.empty-list { padding: 32px 16px; text-align: center; font-size: 0.85rem; color: var(--text-tertiary); }
+.empty-state { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 48px 24px; color: var(--text-tertiary); text-align: center; }
+.empty-state svg { width: 40px; height: 40px; opacity: 0.6; }
 @media (max-width: 900px) {
-  .report-columns {
-    grid-template-columns: 1fr;
-  }
-
-  .stats-grid {
-    grid-template-columns: 1fr;
-  }
+  .report-columns { grid-template-columns: 1fr; }
+  .stats-grid { grid-template-columns: 1fr; }
 }
 </style>

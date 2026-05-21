@@ -1,8 +1,15 @@
+<!--
+  ServiceHealthCard — extracted from ServiceHealthDashboard.vue for the Health lane.
+  Owns its own data fetching for AI backend account health groupings.
+-->
 <template>
-  <div class="service-health-dashboard">
-
-    <PageHeader title="Accounts" subtitle="Monitor status and usage of all registered accounts">
-      <template #actions>
+  <section id="service-health" class="lane-card service-health-card">
+    <header class="lane-card__head">
+      <div>
+        <h2 class="lane-card__title">Service Health</h2>
+        <p class="lane-card__subtitle">Monitor status and usage of all registered accounts</p>
+      </div>
+      <div class="head-actions">
         <label class="auto-refresh-toggle">
           <input type="checkbox" v-model="autoRefresh" />
           <span>Auto-refresh (10s)</span>
@@ -14,8 +21,8 @@
           </svg>
           Refresh
         </button>
-      </template>
-    </PageHeader>
+      </div>
+    </header>
 
     <ErrorState
       v-if="error"
@@ -37,31 +44,31 @@
     />
 
     <div v-for="(group, backendType) in groupedAccounts" :key="backendType" class="backend-group">
-      <h2 class="group-header">
+      <h3 class="group-header">
         <span class="group-dot" :class="backendType"></span>
         {{ formatGroupTitle(backendType as string) }}
         <span class="group-count">{{ group.length }}</span>
-      </h2>
+      </h3>
       <ServiceHealthGrid
         :accounts="group"
         :loading="isLoading"
         @clear-rate-limit="handleClearRateLimit"
       />
     </div>
-  </div>
+  </section>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
-import { orchestrationApi, type AccountHealth } from '../services/api';
-import ServiceHealthGrid from '../components/monitoring/ServiceHealthGrid.vue';
-import PageHeader from '../components/base/PageHeader.vue';
-import ErrorState from '../components/base/ErrorState.vue';
-import EmptyState from '../components/base/EmptyState.vue';
-import StatCard from '../components/base/StatCard.vue';
-import { useToast } from '../composables/useToast';
-import { useWebMcpTool } from '../composables/useWebMcpTool';
+import { orchestrationApi, type AccountHealth } from '../../../services/api';
+import ServiceHealthGrid from '../../../components/monitoring/ServiceHealthGrid.vue';
+import ErrorState from '../../../components/base/ErrorState.vue';
+import EmptyState from '../../../components/base/EmptyState.vue';
+import StatCard from '../../../components/base/StatCard.vue';
+import { useToast } from '../../../composables/useToast';
+import { useWebMcpTool } from '../../../composables/useWebMcpTool';
 
+const emit = defineEmits<{ loaded: [slug: string] }>();
 const showToast = useToast();
 
 const accounts = ref<AccountHealth[]>([]);
@@ -85,13 +92,13 @@ const groupedAccounts = computed(() => {
 
 useWebMcpTool({
   name: 'agented_service_health_get_state',
-  description: 'Returns the current state of the ServiceHealthDashboard',
-  page: 'ServiceHealthDashboard',
+  description: 'Returns the current state of the ServiceHealthCard',
+  page: 'ServiceHealthCard',
   execute: async () => ({
     content: [{
       type: 'text' as const,
       text: JSON.stringify({
-        page: 'ServiceHealthDashboard',
+        page: 'ServiceHealthCard',
         isLoading: isLoading.value,
         error: error.value,
         accountCount: accounts.value.length,
@@ -121,10 +128,11 @@ async function refresh() {
   try {
     const data = await orchestrationApi.getHealth();
     accounts.value = data.accounts || [];
-  } catch (err) {
+  } catch {
     error.value = 'Failed to load account data. Make sure the backend is running.';
   } finally {
     isLoading.value = false;
+    emit('loaded', 'service-health');
   }
 }
 
@@ -133,7 +141,7 @@ async function handleClearRateLimit(accountId: string) {
     await orchestrationApi.clearRateLimit(accountId);
     showToast?.('Rate limit cleared successfully', 'success');
     await refresh();
-  } catch (err) {
+  } catch {
     showToast?.('Failed to clear rate limit', 'error');
   }
 }
@@ -168,18 +176,24 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-.service-health-dashboard {
+.lane-card {
+  padding: 20px;
+  border: 1px solid var(--border-default, rgba(255, 255, 255, 0.1));
+  border-radius: 10px;
+  background: var(--bg-secondary, rgba(255, 255, 255, 0.02));
   display: flex;
   flex-direction: column;
-  gap: 24px;
-  width: 100%;
-  animation: fadeIn 0.4s ease;
+  gap: 20px;
 }
-
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(12px); }
-  to { opacity: 1; transform: translateY(0); }
+.lane-card__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
 }
+.lane-card__title { font-size: 16px; font-weight: 600; margin: 0 0 4px; color: var(--text-primary); }
+.lane-card__subtitle { font-size: 12px; color: var(--text-secondary); margin: 0; }
+.head-actions { display: flex; gap: 12px; align-items: center; }
 
 .auto-refresh-toggle {
   display: flex;
@@ -238,7 +252,7 @@ onUnmounted(() => {
 }
 
 .backend-group {
-  margin-bottom: 2rem;
+  margin-bottom: 1rem;
 }
 
 .group-header {
@@ -246,7 +260,7 @@ onUnmounted(() => {
   align-items: center;
   gap: 0.5rem;
   margin: 0 0 1rem;
-  font-size: 1rem;
+  font-size: 0.9375rem;
   font-weight: 600;
   color: var(--text-primary);
 }

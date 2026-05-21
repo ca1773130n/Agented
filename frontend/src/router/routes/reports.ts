@@ -29,19 +29,17 @@ export const reportsRoutes: RouteRecordRaw[] = [
     component: () => import('../../views/TeamActivityFeedPage.vue'),
     meta: { title: 'Team Activity Feed' },
   },
-  // Team Automation Leaderboard (Feature 32)
+  // PR-D — Team Automation Leaderboard folded into the Activity lane.
   {
     path: '/dashboards/leaderboard',
     name: 'team-leaderboard',
-    component: () => import('../../views/TeamLeaderboard.vue'),
-    meta: { title: 'Team Automation Leaderboard' },
+    redirect: () => ({ name: 'dashboards-activity', hash: '#roi-leaderboard' }),
   },
-  // Cross-Team Insights Dashboard (feature 33)
+  // PR-D — Cross-Team Insights folded into the Activity lane.
   {
     path: '/dashboards/cross-team-insights',
     name: 'cross-team-insights',
-    component: () => import('../../views/CrossTeamInsightsDashboard.vue'),
-    meta: { title: 'Cross-Team Insights' },
+    redirect: () => ({ name: 'dashboards-activity', hash: '#cross-team-insights' }),
   },
   // Changelog Generator
   {
