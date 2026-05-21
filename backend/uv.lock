@@ -4,7 +4,7 @@ requires-python = ">=3.11"
 
 [[package]]
 name = "agented-backend"
-version = "0.1.0"
+version = "0.7.98"
 source = { editable = "." }
 dependencies = [
     { name = "ai-accounts-core" },
@@ -94,7 +94,7 @@ dev = [
 
 [[package]]
 name = "ai-accounts-core"
-version = "0.3.8"
+version = "0.3.13"
 source = { editable = "../../ai-accounts/packages/core" }
 dependencies = [
     { name = "aiosqlite" },
@@ -114,7 +114,7 @@ provides-extras = ["testing"]
 
 [[package]]
 name = "ai-accounts-litestar"
-version = "0.3.8"
+version = "0.3.13"
 source = { editable = "../../ai-accounts/packages/litestar" }
 dependencies = [
     { name = "ai-accounts-core" },
