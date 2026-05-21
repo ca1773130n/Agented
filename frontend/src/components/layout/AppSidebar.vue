@@ -75,7 +75,7 @@ function toggleSection(section: string) {
 // Auto-expand the section matching the current route on initial load and route changes
 function autoExpandForRoute() {
   const name = String(route.name || '');
-  if (['dashboards', 'security-dashboard', 'pr-review-dashboard', 'trigger-dashboard', 'token-usage', 'products-summary', 'projects-summary', 'teams-summary', 'agents-summary', 'rotation-dashboard', 'analytics-dashboard', 'health-dashboard', 'team-impact-report', 'cross-team-insights'].includes(name)) {
+  if (['dashboards', 'dashboards-quality', 'dashboards-cost', 'dashboards-health', 'dashboards-activity', 'security-dashboard', 'pr-review-dashboard', 'trigger-dashboard', 'token-usage', 'products-summary', 'projects-summary', 'teams-summary', 'agents-summary', 'analytics-dashboard', 'health-dashboard', 'team-impact-report', 'cross-team-insights', 'execution-queue-dashboard', 'execution-anomaly-detection', 'bot-health', 'service-health'].includes(name)) {
     expandedSections.value.dashboards = true;
     expandedSections.value.watchTower = true;
   }
@@ -127,10 +127,10 @@ function autoExpandForRoute() {
   if (['triggers', 'bot-templates', 'bot-clone-fork', 'cross-team-bot-sharing', 'incident-response-playbooks', 'inline-prompt-editor', 'visual-cron-wizard', 'conditional-trigger-rules', 'repo-scope-filters', 'structured-output', 'prompt-ab-testing', 'multi-provider-fallback', 'multi-repo-fan-out', 'pr-auto-assignment', 'pr-review-learning-loop', 'github-actions', 'webhook-recorder', 'dependency-impact-bot', 'bot-recommendation-engine', 'bot-dependency-graph', 'bot-performance-benchmarks', 'bot-runbooks', 'execution-tagging', 'changelog-generator', 'prompt-snippets'].includes(name)) {
     expandedSections.value.triggers = true;
   }
-  if (['slack-notifications', 'integration-ticketing', 'notification-channels', 'on-call-escalation', 'github-app-install'].includes(name)) {
+  if (['slack-notifications', 'integration-ticketing', 'notification-channels', 'github-app-install'].includes(name)) {
     expandedSections.value.externalIntegrations = true;
   }
-  if (['secrets-vault', 'rbac-settings', 'sso-settings', 'team-budgets', 'report-digests', 'execution-quota-controls', 'team-leaderboard', 'bot-sla-uptime', 'mobile-execution-monitor', 'audit-history', 'findings-triage-board', 'skill-version-pinning', 'conversation-history-viewer'].includes(name)) {
+  if (['secrets-vault', 'rbac-settings', 'sso-settings', 'team-budgets', 'report-digests', 'execution-quota-controls', 'bot-sla-uptime', 'mobile-execution-monitor', 'audit-history', 'findings-triage-board', 'skill-version-pinning', 'conversation-history-viewer'].includes(name)) {
     expandedSections.value.platform = true;
   }
 }
@@ -172,7 +172,7 @@ function sidebarActive(page: string): boolean {
 }
 
 function isDashboardSectionActive(): boolean {
-  return ['dashboards', 'security-dashboard', 'pr-review-dashboard', 'trigger-dashboard', 'token-usage', 'products-summary', 'projects-summary', 'teams-summary', 'agents-summary', 'rotation-dashboard', 'analytics-dashboard', 'health-dashboard', 'team-impact-report', 'cross-team-insights'].includes(currentRouteName.value);
+  return ['dashboards', 'dashboards-quality', 'dashboards-cost', 'dashboards-health', 'dashboards-activity', 'security-dashboard', 'pr-review-dashboard', 'trigger-dashboard', 'token-usage', 'products-summary', 'projects-summary', 'teams-summary', 'agents-summary', 'analytics-dashboard', 'health-dashboard', 'team-impact-report', 'cross-team-insights', 'execution-queue-dashboard', 'execution-anomaly-detection', 'bot-health', 'service-health'].includes(currentRouteName.value);
 }
 
 function isHistorySectionActive(): boolean {
@@ -232,16 +232,30 @@ function isTriggersSectionActive(): boolean {
 }
 
 function isExternalIntegrationsSectionActive(): boolean {
-  return ['slack-notifications', 'integration-ticketing', 'notification-channels', 'on-call-escalation', 'github-app-install'].includes(currentRouteName.value);
+  return ['slack-notifications', 'integration-ticketing', 'notification-channels', 'github-app-install'].includes(currentRouteName.value);
 }
 
 function isPlatformSectionActive(): boolean {
-  return ['secrets-vault', 'rbac-settings', 'sso-settings', 'team-budgets', 'report-digests', 'execution-quota-controls', 'team-leaderboard', 'bot-sla-uptime', 'mobile-execution-monitor', 'audit-history', 'findings-triage-board', 'skill-version-pinning', 'conversation-history-viewer', 'system-errors'].includes(currentRouteName.value);
+  return ['secrets-vault', 'rbac-settings', 'sso-settings', 'team-budgets', 'report-digests', 'execution-quota-controls', 'bot-sla-uptime', 'mobile-execution-monitor', 'audit-history', 'findings-triage-board', 'skill-version-pinning', 'conversation-history-viewer', 'system-errors'].includes(currentRouteName.value);
 }
 
 // Helper: navigate via router (mobile auto-close handled by router.afterEach)
 function navTo(routeName: string) {
   router.push({ name: routeName });
+}
+
+// PR-D — Scheduling flat link deep-links to the Activity lane's
+// Scheduling card. Stays active whenever the user is sitting on the
+// scheduling anchor or hit the rotation-dashboard redirect.
+function openScheduling() {
+  router.push({ name: 'dashboards-activity', hash: '#scheduling' });
+}
+
+function isSchedulingActive(): boolean {
+  if (currentRouteName.value === 'rotation-dashboard') return true;
+  if (currentRouteName.value === 'on-call-escalation') return true;
+  if (currentRouteName.value !== 'dashboards-activity') return false;
+  return (route.hash || '') === '#scheduling';
 }
 
 function navToTriggerDashboard(triggerId: string) {
@@ -386,73 +400,24 @@ function handleSidebarKeydown(e: KeyboardEvent) {
           </svg>
         </template>
       </SidebarGroupToggle>
+      <!-- PR-D — Dashboards submenu collapsed from 13 entries to 5
+           (1 landing + 4 lanes). Old links are still reachable via
+           function-form redirects on their original names. -->
       <div v-show="expandedSections.dashboards" class="nav-submenu" role="region" aria-label="Dashboards">
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('dashboards') }" :aria-current="sidebarActive('dashboards') ? 'page' : undefined" @click="navTo('dashboards')">
           All Dashboards
         </button>
-        <button type="button" class="submenu-item" :class="{ active: sidebarActive('security-dashboard') }" :aria-current="sidebarActive('security-dashboard') ? 'page' : undefined" @click="navTo('security-dashboard')">
-          Security Scan
+        <button type="button" class="submenu-item" :class="{ active: sidebarActive('dashboards-quality') }" :aria-current="sidebarActive('dashboards-quality') ? 'page' : undefined" @click="navTo('dashboards-quality')">
+          Quality
         </button>
-        <button type="button" class="submenu-item" :class="{ active: sidebarActive('pr-review-dashboard') }" :aria-current="sidebarActive('pr-review-dashboard') ? 'page' : undefined" @click="navTo('pr-review-dashboard')">
-          PR Review
+        <button type="button" class="submenu-item" :class="{ active: sidebarActive('dashboards-cost') }" :aria-current="sidebarActive('dashboards-cost') ? 'page' : undefined" @click="navTo('dashboards-cost')">
+          Cost
         </button>
-        <button type="button" class="submenu-item" :class="{ active: sidebarActive('token-usage') }" :aria-current="sidebarActive('token-usage') ? 'page' : undefined" @click="navTo('token-usage')">
-          Token Usage
+        <button type="button" class="submenu-item" :class="{ active: sidebarActive('dashboards-health') }" :aria-current="sidebarActive('dashboards-health') ? 'page' : undefined" @click="navTo('dashboards-health')">
+          Health
         </button>
-        <button type="button" class="submenu-item"
-          :class="{ active: sidebarActive('rotation-dashboard') }"
-          :aria-current="sidebarActive('rotation-dashboard') ? 'page' : undefined"
-          @click="navTo('rotation-dashboard')">
-          Scheduling
-        </button>
-        <button type="button" class="submenu-item"
-          :class="{ active: sidebarActive('analytics-dashboard') }"
-          :aria-current="sidebarActive('analytics-dashboard') ? 'page' : undefined"
-          @click="navTo('analytics-dashboard')">
-          Analytics
-        </button>
-        <button type="button" class="submenu-item"
-          :class="{ active: sidebarActive('health-dashboard') }"
-          :aria-current="sidebarActive('health-dashboard') ? 'page' : undefined"
-          @click="navTo('health-dashboard')">
-          Health Monitor
-        </button>
-        <!-- v0.7.0: per-bot SLA rollup (success rate, p95, last failure). -->
-        <button type="button" class="submenu-item"
-          :class="{ active: sidebarActive('bot-health') }"
-          :aria-current="sidebarActive('bot-health') ? 'page' : undefined"
-          @click="navTo('bot-health')">
-          Bot Health
-        </button>
-        <button type="button" class="submenu-item"
-          :class="{ active: sidebarActive('team-impact-report') }"
-          :aria-current="sidebarActive('team-impact-report') ? 'page' : undefined"
-          @click="navTo('team-impact-report')">
-          Impact Report
-        </button>
-        <button type="button" class="submenu-item"
-          :class="{ active: sidebarActive('cross-team-insights') }"
-          :aria-current="sidebarActive('cross-team-insights') ? 'page' : undefined"
-          @click="navTo('cross-team-insights')">
-          Cross-Team Insights
-        </button>
-        <button type="button" class="submenu-item"
-          :class="{ active: sidebarActive('execution-queue-dashboard') }"
-          :aria-current="sidebarActive('execution-queue-dashboard') ? 'page' : undefined"
-          @click="navTo('execution-queue-dashboard')">
-          Execution Queue
-        </button>
-        <button type="button" class="submenu-item"
-          :class="{ active: sidebarActive('execution-anomaly-detection') }"
-          :aria-current="sidebarActive('execution-anomaly-detection') ? 'page' : undefined"
-          @click="navTo('execution-anomaly-detection')">
-          Anomaly Detection
-        </button>
-        <button type="button" class="submenu-item"
-          :class="{ active: sidebarActive('team-leaderboard') }"
-          :aria-current="sidebarActive('team-leaderboard') ? 'page' : undefined"
-          @click="navTo('team-leaderboard')">
-          ROI Leaderboard
+        <button type="button" class="submenu-item" :class="{ active: sidebarActive('dashboards-activity') }" :aria-current="sidebarActive('dashboards-activity') ? 'page' : undefined" @click="navTo('dashboards-activity')">
+          Activity
         </button>
         <button v-for="b in props.customTriggers" :key="b.id" type="button" class="submenu-item"
           :class="{ active: currentRouteName === 'trigger-dashboard' && route.params.triggerId === b.id }"
@@ -461,6 +426,25 @@ function handleSidebarKeydown(e: KeyboardEvent) {
           {{ b.name }}
         </button>
       </div>
+
+      <!-- PR-D — Scheduling promoted to a flat top-level link (was a
+           dashboard sidebar item; deep-links to the Scheduling card in
+           the Activity lane). Sub-items can be added later if needed. -->
+      <SidebarFlatLink
+        label="Scheduling"
+        :active="isSchedulingActive()"
+        :collapsed-desktop="isCollapsedDesktop()"
+        @click="openScheduling"
+      >
+        <template #icon>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <rect x="3" y="4" width="18" height="18" rx="2"/>
+            <line x1="16" y1="2" x2="16" y2="6"/>
+            <line x1="8" y1="2" x2="8" y2="6"/>
+            <line x1="3" y1="10" x2="21" y2="10"/>
+          </svg>
+        </template>
+      </SidebarFlatLink>
 
       <div class="nav-section-label">Work</div>
       <SidebarFlatLink
@@ -977,7 +961,8 @@ function handleSidebarKeydown(e: KeyboardEvent) {
         </button>
       </div>
 
-      <!-- External Integrations (expandable, 4 items; on-call held until PR-D) -->
+      <!-- External Integrations (expandable, 3 items — on-call merged into
+           the Scheduling card's On-Call Policy sub-card in PR-D). -->
       <SidebarSectionLabel label="External Integrations" />
       <SidebarGroupToggle
         label="External Integrations"
@@ -1001,9 +986,6 @@ function handleSidebarKeydown(e: KeyboardEvent) {
         </button>
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('notification-channels') }" :aria-current="sidebarActive('notification-channels') ? 'page' : undefined" @click="navTo('notification-channels')">
           Notification Channels
-        </button>
-        <button type="button" class="submenu-item" :class="{ active: sidebarActive('on-call-escalation') }" :aria-current="sidebarActive('on-call-escalation') ? 'page' : undefined" @click="navTo('on-call-escalation')">
-          On-Call Escalation
         </button>
       </div>
 

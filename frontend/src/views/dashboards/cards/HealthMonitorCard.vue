@@ -1,12 +1,19 @@
+<!--
+  HealthMonitorCard — extracted from BotHealthDashboard.vue (the
+  "Bot Health Monitor" surface formerly at /dashboards/health).
+  Owns its own data fetching for health status + alerts.
+-->
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue';
-import type { HealthAlert, HealthStatusResponse } from '../services/api';
-import { analyticsApi, ApiError } from '../services/api';
-import HealthAlertList from '../components/analytics/HealthAlertList.vue';
-import LoadingState from '../components/base/LoadingState.vue';
-import ErrorState from '../components/base/ErrorState.vue';
-import StatCard from '../components/base/StatCard.vue';
-import { useToast } from '../composables/useToast';
+import type { HealthAlert, HealthStatusResponse } from '../../../services/api';
+import { analyticsApi, ApiError } from '../../../services/api';
+import HealthAlertList from '../../../components/analytics/HealthAlertList.vue';
+import LoadingState from '../../../components/base/LoadingState.vue';
+import ErrorState from '../../../components/base/ErrorState.vue';
+import StatCard from '../../../components/base/StatCard.vue';
+import { useToast } from '../../../composables/useToast';
+
+const emit = defineEmits<{ loaded: [slug: string] }>();
 const showToast = useToast();
 
 const isLoading = ref(true);
@@ -30,6 +37,7 @@ async function loadData() {
     loadError.value = err instanceof ApiError ? err.message : 'Failed to load health data';
   } finally {
     isLoading.value = false;
+    emit('loaded', 'health-monitor');
   }
 }
 
@@ -61,7 +69,6 @@ async function runHealthCheck() {
 async function handleAcknowledge(alertId: number) {
   try {
     await analyticsApi.acknowledgeAlert(alertId);
-    // Update locally
     const alert = alerts.value.find(a => a.id === alertId);
     if (alert) alert.acknowledged = true;
     showToast('Alert acknowledged', 'success');
@@ -82,15 +89,14 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="health-dashboard">
-
+  <section id="health-monitor" class="lane-card health-monitor-card">
     <LoadingState v-if="isLoading" message="Loading health data..." />
 
     <ErrorState v-else-if="loadError" :message="loadError" @retry="loadData" />
 
     <template v-else>
       <!-- Status summary -->
-      <div class="card status-card">
+      <div class="status-card">
         <div class="status-card-inner">
           <div class="status-header">
             <div class="status-title-area">
@@ -100,7 +106,7 @@ onUnmounted(() => {
                 </svg>
               </div>
               <div>
-                <h3>Bot Health Monitor</h3>
+                <h2>Bot Health Monitor</h2>
                 <p class="status-subtitle">
                   <template v-if="healthStatus?.last_check_time">Last check: {{ new Date(healthStatus.last_check_time).toLocaleString() }}</template>
                   <template v-else>No health checks run yet</template>
@@ -130,8 +136,8 @@ onUnmounted(() => {
       </div>
 
       <!-- Alert list -->
-      <div class="card">
-        <div class="card-header">
+      <div class="alerts-section">
+        <div class="alerts-header">
           <h3>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
               <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
@@ -145,44 +151,38 @@ onUnmounted(() => {
         <HealthAlertList :alerts="alerts" @acknowledge="handleAcknowledge" />
       </div>
     </template>
-  </div>
+  </section>
 </template>
 
 <style scoped>
-.health-dashboard {
+.lane-card {
+  padding: 20px;
+  border: 1px solid var(--border-default, rgba(255, 255, 255, 0.1));
+  border-radius: 10px;
+  background: var(--bg-secondary, rgba(255, 255, 255, 0.02));
   display: flex;
   flex-direction: column;
   gap: 24px;
-  width: 100%;
-  animation: fadeIn 0.4s ease;
 }
 
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(12px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-.card {
-  padding: 24px;
-}
-
-.card-header {
+.alerts-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 20px;
+  margin-bottom: 16px;
 }
 
-.card-header h3 {
+.alerts-header h3 {
   display: flex;
   align-items: center;
   gap: 10px;
   font-size: 0.95rem;
   font-weight: 600;
   color: var(--text-primary);
+  margin: 0;
 }
 
-.card-header h3 svg {
+.alerts-header h3 svg {
   width: 18px;
   height: 18px;
   color: var(--accent-cyan);
@@ -201,20 +201,20 @@ onUnmounted(() => {
 
 .status-card {
   background: linear-gradient(135deg, var(--bg-secondary) 0%, var(--bg-tertiary) 100%);
-  border-color: var(--border-default);
-  padding: 0;
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
   overflow: hidden;
 }
 
 .status-card-inner {
-  padding: 28px;
+  padding: 24px;
 }
 
 .status-header {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  margin-bottom: 28px;
+  margin-bottom: 24px;
   flex-wrap: wrap;
   gap: 16px;
 }
@@ -260,16 +260,17 @@ onUnmounted(() => {
   color: var(--accent-crimson);
 }
 
-.status-title-area h3 {
-  font-size: 1.1rem;
+.status-title-area h2 {
+  font-size: 1.05rem;
   font-weight: 600;
   color: var(--text-primary);
-  margin-bottom: 4px;
+  margin: 0 0 4px;
 }
 
 .status-subtitle {
   font-size: 0.85rem;
   color: var(--text-tertiary);
+  margin: 0;
 }
 
 .status-actions {

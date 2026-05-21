@@ -36,12 +36,12 @@ export const notificationRoutes: RouteRecordRaw[] = [
     component: () => import('../../views/IntegrationTicketing.vue'),
     meta: { title: 'Ticketing Integrations' },
   },
-  // On-Call Escalation
+  // PR-D — On-Call Escalation merged into SchedulingCard's On-Call Policy
+  // sub-card inside the Activity lane.
   {
     path: '/integrations/on-call',
     name: 'on-call-escalation',
-    component: () => import('../../views/OnCallEscalation.vue'),
-    meta: { title: 'On-Call Escalation' },
+    redirect: () => ({ name: 'dashboards-activity', hash: '#scheduling' }),
   },
   // Incident Response Playbook Bots (item 34)
   {

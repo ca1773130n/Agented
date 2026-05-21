@@ -8,19 +8,17 @@ export const observabilityExtRoutes: RouteRecordRaw[] = [
     component: () => import('../../views/SystemErrorsPage.vue'),
     meta: { title: 'System Errors' },
   },
-  // Service Health
+  // PR-D — Service Health folded into the Health lane.
   {
     path: '/backends/health',
     name: 'service-health',
-    component: () => import('../../views/ServiceHealthDashboard.vue'),
-    meta: { title: 'Service Health' },
+    redirect: () => ({ name: 'dashboards-health', hash: '#service-health' }),
   },
-  // v0.7.0: per-bot success-rate / p95 / status rollups
+  // PR-D — Bot Health folded into the Health lane.
   {
     path: '/bots/health',
     name: 'bot-health',
-    component: () => import('../../views/BotHealthPage.vue'),
-    meta: { title: 'Bot Health' },
+    redirect: () => ({ name: 'dashboards-health', hash: '#bot-health' }),
   },
   // AI Cost Dashboard (Feature 4)
   {
@@ -36,11 +34,10 @@ export const observabilityExtRoutes: RouteRecordRaw[] = [
     component: () => import('../../views/ProviderBenchmarkDashboard.vue'),
     meta: { title: 'Provider Benchmarks' },
   },
-  // Execution Anomaly Detection (Feature 34)
+  // PR-D — Execution Anomaly Detection folded into the Quality lane.
   {
     path: '/executions/anomalies',
     name: 'execution-anomaly-detection',
-    component: () => import('../../views/ExecutionAnomalyDetection.vue'),
-    meta: { title: 'Execution Anomaly Detection' },
+    redirect: () => ({ name: 'dashboards-quality', hash: '#anomaly-detection' }),
   },
 ];

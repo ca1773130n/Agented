@@ -155,6 +155,20 @@ onMounted(() => {
           </svg>
           Add Skill
         </button>
+        <!-- PR-D — entry point to the skill-create wizard. The audit
+             flagged MySkills as the only wizard parent list page without
+             a wizard CTA; this closes that gap (other 5 wizards already
+             have "New X" buttons). -->
+        <button
+          class="btn btn-secondary"
+          data-testid="create-skill-cta"
+          @click="$router.push({ name: 'skill-create' })"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 5v14M5 12h14"/>
+          </svg>
+          Create Skill
+        </button>
       </template>
     </PageHeader>
 

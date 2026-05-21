@@ -1,19 +1,26 @@
+<!--
+  SecurityCard — extracted from SecurityDashboard.vue for the Quality lane.
+  Owns its own data fetching (audit stats + projects + history) and the
+  Run Scan / Resolve modals it always shipped with.
+-->
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
-import type { AuditRecord, AuditStats, ProjectInfo, Trigger } from '../services/api';
-import { auditApi, triggerApi, ApiError } from '../services/api';
-import FindingsChart from '../components/security/FindingsChart.vue';
-import RunScanModal from '../components/security/RunScanModal.vue';
-import ResolveIssuesModal from '../components/security/ResolveIssuesModal.vue';
-import DataTable from '../components/base/DataTable.vue';
-import type { DataTableColumn } from '../components/base/DataTable.vue';
-import StatusBadge from '../components/base/StatusBadge.vue';
-import EmptyState from '../components/base/EmptyState.vue';
-import LoadingState from '../components/base/LoadingState.vue';
-import StatCard from '../components/base/StatCard.vue';
-import { useToast } from '../composables/useToast';
-import { useWebMcpTool } from '../composables/useWebMcpTool';
+import type { AuditRecord, AuditStats, ProjectInfo, Trigger } from '../../../services/api';
+import { auditApi, triggerApi, ApiError } from '../../../services/api';
+import FindingsChart from '../../../components/security/FindingsChart.vue';
+import RunScanModal from '../../../components/security/RunScanModal.vue';
+import ResolveIssuesModal from '../../../components/security/ResolveIssuesModal.vue';
+import DataTable from '../../../components/base/DataTable.vue';
+import type { DataTableColumn } from '../../../components/base/DataTable.vue';
+import StatusBadge from '../../../components/base/StatusBadge.vue';
+import EmptyState from '../../../components/base/EmptyState.vue';
+import LoadingState from '../../../components/base/LoadingState.vue';
+import StatCard from '../../../components/base/StatCard.vue';
+import { useToast } from '../../../composables/useToast';
+import { useWebMcpTool } from '../../../composables/useWebMcpTool';
+
+const emit = defineEmits<{ loaded: [slug: string] }>();
 
 const router = useRouter();
 const showToast = useToast();
@@ -68,7 +75,6 @@ async function loadData() {
     triggers.value = triggersRes.triggers || [];
     hasFindings.value = (statsRes.current?.total_findings || 0) > 0;
 
-    // Find the security trigger for auto-resolve feature
     const secTrigger = triggersRes.triggers.find((t: Trigger) => t.id === 'bot-security');
     securityTrigger.value = secTrigger || null;
     if (secTrigger?.execution_status) {
@@ -79,6 +85,7 @@ async function loadData() {
     showToast(message, 'error');
   } finally {
     isLoading.value = false;
+    emit('loaded', 'security');
   }
 }
 
@@ -177,7 +184,13 @@ onMounted(loadData);
 </script>
 
 <template>
-  <div class="security-dashboard">
+  <section id="security" class="security-dashboard lane-card">
+    <header class="lane-card__head">
+      <div>
+        <h2 class="lane-card__title">Security Scan</h2>
+        <p class="lane-card__subtitle">Findings + history across tracked projects</p>
+      </div>
+    </header>
 
     <LoadingState v-if="isLoading" message="Loading security data..." />
 
@@ -230,13 +243,11 @@ onMounted(loadData);
             <StatCard title="Medium + Low" :value="((stats?.current?.severity_totals?.medium ?? 0) + (stats?.current?.severity_totals?.low ?? 0)) || '-'" />
           </div>
 
-          <!-- Resolving status indicator -->
           <div v-if="securityTriggerStatus.status === 'resolving'" class="resolving-banner">
             <div class="resolving-spinner"></div>
             <span>Auto-resolving issues and creating pull requests...</span>
           </div>
 
-          <!-- PR URLs from auto-resolve -->
           <div v-if="securityTriggerStatus.pr_urls && securityTriggerStatus.pr_urls.length > 0" class="pr-urls-section">
             <h4 class="pr-urls-title">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
@@ -405,7 +416,6 @@ onMounted(loadData);
       </div>
     </template>
 
-    <!-- Modals -->
     <RunScanModal
       v-if="showRunScanModal"
       :triggers="triggers"
@@ -418,14 +428,30 @@ onMounted(loadData);
       @close="showResolveModal = false"
       @resolved="onResolveComplete"
     />
-  </div>
+  </section>
 </template>
 
 <style scoped>
-.security-dashboard {
+.lane-card {
+  padding: 20px;
+  border: 1px solid var(--border-default, rgba(255, 255, 255, 0.1));
+  border-radius: 10px;
+  background: var(--bg-secondary, rgba(255, 255, 255, 0.02));
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: 16px;
+}
+.lane-card__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.lane-card__title { font-size: 16px; font-weight: 600; margin: 0; color: var(--text-primary); }
+.lane-card__subtitle { font-size: 12px; color: var(--text-tertiary); margin: 4px 0 0; }
+
+.security-dashboard {
   width: 100%;
   animation: fadeIn 0.4s ease;
 }
@@ -435,457 +461,78 @@ onMounted(loadData);
   to { opacity: 1; transform: translateY(0); }
 }
 
-/* Cards */
-.card {
-  padding: 24px;
-}
-
-.card-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 20px;
-}
-
-.card-header h3 {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  font-size: 0.95rem;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.card-header h3 svg {
-  width: 18px;
-  height: 18px;
-  color: var(--accent-cyan);
-}
-
-.card-badge {
-  font-size: 0.7rem;
-  font-weight: 600;
-  color: var(--text-tertiary);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  padding: 4px 10px;
-  background: var(--bg-tertiary);
-  border-radius: 4px;
-}
-
-/* Status Card */
-.status-card {
-  background: linear-gradient(135deg, var(--bg-secondary) 0%, var(--bg-tertiary) 100%);
-  border-color: var(--border-default);
-  padding: 0;
-  overflow: hidden;
-}
-
-.status-card-inner {
-  padding: 28px;
-}
-
-.status-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 28px;
-  flex-wrap: wrap;
-  gap: 16px;
-}
-
-.status-title-area {
-  display: flex;
-  align-items: flex-start;
-  gap: 16px;
-}
-
-.status-icon {
-  width: 48px;
-  height: 48px;
-  border-radius: 12px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--bg-elevated);
-  border: 1px solid var(--border-default);
-}
-
-.status-icon svg {
-  width: 24px;
-  height: 24px;
-  color: var(--text-secondary);
-}
-
-.status-icon.pass {
-  background: var(--accent-emerald-dim);
-  border-color: var(--accent-emerald);
-}
-
-.status-icon.pass svg {
-  color: var(--accent-emerald);
-}
-
-.status-icon.fail {
-  background: var(--accent-crimson-dim);
-  border-color: var(--accent-crimson);
-}
-
-.status-icon.fail svg {
-  color: var(--accent-crimson);
-}
-
-.status-title-area h3 {
-  font-size: 1.1rem;
-  font-weight: 600;
-  color: var(--text-primary);
-  margin-bottom: 4px;
-}
-
-.status-subtitle {
-  font-size: 0.85rem;
-  color: var(--text-tertiary);
-}
-
-.status-actions {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-
-.status-badge {
-  padding: 6px 16px;
-  border-radius: 20px;
-  font-weight: 600;
-  font-size: 0.75rem;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  background: var(--bg-elevated);
-  color: var(--text-secondary);
-}
-
-.status-badge.pass {
-  background: var(--accent-emerald-dim);
-  color: var(--accent-emerald);
-}
-
-.status-badge.fail {
-  background: var(--accent-crimson-dim);
-  color: var(--accent-crimson);
-}
-
-/* Buttons */
-
-.btn-primary:hover:not(:disabled) {
-  box-shadow: var(--shadow-glow-cyan);
-  transform: translateY(-1px);
-}
-
-.btn-warning {
-  background: var(--accent-amber);
-  color: var(--bg-primary);
-}
-
-.btn-warning:hover:not(:disabled) {
-  filter: brightness(1.1);
-  transform: translateY(-1px);
-}
-
-/* Stats Grid */
-.stats-grid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 16px;
-}
-
-.stats-grid.compact {
-  gap: 12px;
-}
-
-/* Projects Grid */
-.projects-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-  gap: 12px;
-}
-
-.project-card {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  padding: 16px 20px;
-  background: var(--bg-primary);
-  border: 1px solid var(--border-subtle);
-  border-radius: 10px;
-  cursor: pointer;
-  transition: all var(--transition-fast);
-  animation: cardSlideIn 0.4s ease backwards;
-  animation-delay: var(--delay, 0ms);
-}
-
-@keyframes cardSlideIn {
-  from { opacity: 0; transform: translateX(-10px); }
-  to { opacity: 1; transform: translateX(0); }
-}
-
-.project-card:hover {
-  border-color: var(--accent-cyan);
-  background: var(--bg-tertiary);
-}
-
-.project-status-icon {
-  width: 40px;
-  height: 40px;
-  border-radius: 10px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: 700;
-  font-size: 1rem;
-  flex-shrink: 0;
-  background: var(--bg-elevated);
-  color: var(--text-tertiary);
-}
-
-.project-status-icon.pass {
-  background: var(--accent-emerald-dim);
-  color: var(--accent-emerald);
-}
-
-.project-status-icon.fail {
-  background: var(--accent-crimson-dim);
-  color: var(--accent-crimson);
-}
-
-.project-status-icon.pending {
-  background: var(--bg-elevated);
-  color: var(--text-muted);
-}
-
-.project-info {
-  flex: 1;
-  min-width: 0;
-}
-
-.project-name {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-weight: 600;
-  color: var(--text-primary);
-  font-size: 0.9rem;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.project-type-badge {
-  display: inline-flex;
-  align-items: center;
-  padding: 2px 6px;
-  border-radius: 4px;
-  font-size: 0.6rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-  flex-shrink: 0;
-}
-
-.project-type-badge.local {
-  background: var(--accent-cyan-dim);
-  color: var(--accent-cyan);
-}
-
-.project-type-badge.github {
-  background: var(--accent-violet-dim);
-  color: var(--accent-violet);
-}
-
-.project-meta {
-  font-size: 0.75rem;
-  color: var(--text-tertiary);
-  margin-top: 4px;
-}
-
-.project-findings {
-  text-align: center;
-  flex-shrink: 0;
-}
-
-.findings-count {
-  font-family: var(--font-mono);
-  font-size: 1.25rem;
-  font-weight: 700;
-  color: var(--text-secondary);
-}
-
-.findings-count.pass {
-  color: var(--accent-emerald);
-}
-
-.findings-count.fail {
-  color: var(--accent-crimson);
-}
-
-.findings-label {
-  font-size: 0.65rem;
-  color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-
-/* Cell styles for DataTable */
-.cell-project {
-  font-weight: 500;
-  color: var(--text-primary);
-}
-
-.cell-date {
-  font-family: var(--font-mono);
-  font-size: 0.8rem;
-  color: var(--text-tertiary);
-}
-
-.cell-number {
-  font-family: var(--font-mono);
-  font-weight: 600;
-}
-
-/* Empty State */
-
-.empty-icon {
-  font-size: 2.5rem;
-  color: var(--text-muted);
-  margin-bottom: 12px;
-}
-
-.empty-state span {
-  font-size: 0.85rem;
-  color: var(--text-tertiary);
-}
-
-/* Auto-resolve toggle */
-.auto-resolve-toggle {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  cursor: pointer;
-  padding: 8px 14px;
-  border-radius: 8px;
-  background: var(--bg-elevated);
-  border: 1px solid var(--border-default);
-  transition: all var(--transition-fast);
-}
-
-.auto-resolve-toggle:hover {
-  border-color: var(--accent-cyan);
-}
-
-.auto-resolve-toggle input[type="checkbox"] {
-  width: 16px;
-  height: 16px;
-  accent-color: var(--accent-cyan);
-  cursor: pointer;
-}
-
-.toggle-label {
-  font-size: 0.8rem;
-  font-weight: 500;
-  color: var(--text-secondary);
-  white-space: nowrap;
-}
-
-/* Resolving banner */
-.resolving-banner {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-top: 20px;
-  padding: 14px 20px;
-  background: var(--accent-cyan-dim);
-  border: 1px solid var(--accent-cyan);
-  border-radius: 10px;
-  color: var(--accent-cyan);
-  font-size: 0.85rem;
-  font-weight: 500;
-}
-
-.resolving-spinner {
-  width: 16px;
-  height: 16px;
-  border: 2px solid var(--accent-cyan);
-  border-top-color: transparent;
-  border-radius: 50%;
-  animation: spin 0.8s linear infinite;
-  flex-shrink: 0;
-}
-
-/* PR URLs section */
-.pr-urls-section {
-  margin-top: 20px;
-  padding: 16px 20px;
-  background: var(--bg-primary);
-  border: 1px solid var(--accent-emerald);
-  border-radius: 10px;
-}
-
-.pr-urls-title {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 0.85rem;
-  font-weight: 600;
-  color: var(--accent-emerald);
-  margin-bottom: 12px;
-}
-
-.pr-urls-title svg {
-  width: 16px;
-  height: 16px;
-}
-
-.pr-urls-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.pr-url-link {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  color: var(--accent-cyan);
-  font-size: 0.8rem;
-  font-family: var(--font-mono);
-  text-decoration: none;
-  padding: 8px 12px;
-  border-radius: 6px;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-subtle);
-  transition: all var(--transition-fast);
-  word-break: break-all;
-}
-
-.pr-url-link:hover {
-  border-color: var(--accent-cyan);
-  background: var(--bg-tertiary);
-}
-
-.pr-url-link svg {
-  width: 14px;
-  height: 14px;
-  flex-shrink: 0;
-}
+.card { padding: 16px; }
+.card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+.card-header h3 { display: flex; align-items: center; gap: 10px; font-size: 0.95rem; font-weight: 600; color: var(--text-primary); margin: 0; }
+.card-header h3 svg { width: 18px; height: 18px; color: var(--accent-cyan); }
+.card-badge { font-size: 0.7rem; font-weight: 600; color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 0.05em; padding: 4px 10px; background: var(--bg-tertiary); border-radius: 4px; }
+
+.status-card { background: linear-gradient(135deg, var(--bg-secondary) 0%, var(--bg-tertiary) 100%); border: 1px solid var(--border-default); border-radius: 10px; padding: 0; overflow: hidden; }
+.status-card-inner { padding: 20px; }
+.status-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; flex-wrap: wrap; gap: 16px; }
+.status-title-area { display: flex; align-items: flex-start; gap: 16px; }
+.status-icon { width: 48px; height: 48px; border-radius: 12px; display: flex; align-items: center; justify-content: center; background: var(--bg-elevated); border: 1px solid var(--border-default); }
+.status-icon svg { width: 24px; height: 24px; color: var(--text-secondary); }
+.status-icon.pass { background: var(--accent-emerald-dim); border-color: var(--accent-emerald); }
+.status-icon.pass svg { color: var(--accent-emerald); }
+.status-icon.fail { background: var(--accent-crimson-dim); border-color: var(--accent-crimson); }
+.status-icon.fail svg { color: var(--accent-crimson); }
+.status-title-area h3 { font-size: 1.05rem; font-weight: 600; color: var(--text-primary); margin: 0 0 4px; }
+.status-subtitle { font-size: 0.8rem; color: var(--text-tertiary); margin: 0; }
+.status-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.status-badge { padding: 6px 16px; border-radius: 20px; font-weight: 600; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; background: var(--bg-elevated); color: var(--text-secondary); }
+.status-badge.pass { background: var(--accent-emerald-dim); color: var(--accent-emerald); }
+.status-badge.fail { background: var(--accent-crimson-dim); color: var(--accent-crimson); }
+.btn-warning { background: var(--accent-amber); color: var(--bg-primary); }
+
+.stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+.stats-grid.compact { gap: 10px; }
+
+.projects-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; }
+.project-card { display: flex; align-items: center; gap: 16px; padding: 14px 18px; background: var(--bg-primary); border: 1px solid var(--border-subtle); border-radius: 10px; cursor: pointer; transition: all var(--transition-fast); }
+.project-card:hover { border-color: var(--accent-cyan); background: var(--bg-tertiary); }
+.project-status-icon { width: 36px; height: 36px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 1rem; flex-shrink: 0; background: var(--bg-elevated); color: var(--text-tertiary); }
+.project-status-icon.pass { background: var(--accent-emerald-dim); color: var(--accent-emerald); }
+.project-status-icon.fail { background: var(--accent-crimson-dim); color: var(--accent-crimson); }
+.project-status-icon.pending { background: var(--bg-elevated); color: var(--text-muted); }
+.project-info { flex: 1; min-width: 0; }
+.project-name { display: flex; align-items: center; gap: 8px; font-weight: 600; color: var(--text-primary); font-size: 0.9rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.project-type-badge { display: inline-flex; align-items: center; padding: 2px 6px; border-radius: 4px; font-size: 0.6rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; flex-shrink: 0; }
+.project-type-badge.local { background: var(--accent-cyan-dim); color: var(--accent-cyan); }
+.project-type-badge.github { background: var(--accent-violet-dim); color: var(--accent-violet); }
+.project-meta { font-size: 0.75rem; color: var(--text-tertiary); margin-top: 4px; }
+.project-findings { text-align: center; flex-shrink: 0; }
+.findings-count { font-family: var(--font-mono); font-size: 1.25rem; font-weight: 700; color: var(--text-secondary); }
+.findings-count.pass { color: var(--accent-emerald); }
+.findings-count.fail { color: var(--accent-crimson); }
+.findings-label { font-size: 0.65rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
+
+.cell-project { font-weight: 500; color: var(--text-primary); }
+.cell-date { font-family: var(--font-mono); font-size: 0.8rem; color: var(--text-tertiary); }
+.cell-number { font-family: var(--font-mono); font-weight: 600; }
+
+.empty-icon { font-size: 2.5rem; color: var(--text-muted); margin-bottom: 12px; }
+.empty-state span { font-size: 0.85rem; color: var(--text-tertiary); }
+
+.auto-resolve-toggle { display: flex; align-items: center; gap: 8px; cursor: pointer; padding: 8px 14px; border-radius: 8px; background: var(--bg-elevated); border: 1px solid var(--border-default); transition: all var(--transition-fast); }
+.auto-resolve-toggle:hover { border-color: var(--accent-cyan); }
+.auto-resolve-toggle input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--accent-cyan); cursor: pointer; }
+.toggle-label { font-size: 0.8rem; font-weight: 500; color: var(--text-secondary); white-space: nowrap; }
+
+.resolving-banner { display: flex; align-items: center; gap: 12px; margin-top: 16px; padding: 14px 20px; background: var(--accent-cyan-dim); border: 1px solid var(--accent-cyan); border-radius: 10px; color: var(--accent-cyan); font-size: 0.85rem; font-weight: 500; }
+.resolving-spinner { width: 16px; height: 16px; border: 2px solid var(--accent-cyan); border-top-color: transparent; border-radius: 50%; animation: spin 0.8s linear infinite; flex-shrink: 0; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.pr-urls-section { margin-top: 16px; padding: 14px 18px; background: var(--bg-primary); border: 1px solid var(--accent-emerald); border-radius: 10px; }
+.pr-urls-title { display: flex; align-items: center; gap: 8px; font-size: 0.85rem; font-weight: 600; color: var(--accent-emerald); margin: 0 0 12px; }
+.pr-urls-title svg { width: 16px; height: 16px; }
+.pr-urls-list { display: flex; flex-direction: column; gap: 8px; }
+.pr-url-link { display: flex; align-items: center; gap: 8px; color: var(--accent-cyan); font-size: 0.8rem; font-family: var(--font-mono); text-decoration: none; padding: 8px 12px; border-radius: 6px; background: var(--bg-secondary); border: 1px solid var(--border-subtle); transition: all var(--transition-fast); word-break: break-all; }
+.pr-url-link:hover { border-color: var(--accent-cyan); background: var(--bg-tertiary); }
+.pr-url-link svg { width: 14px; height: 14px; flex-shrink: 0; }
 
 @media (max-width: 900px) {
-  .stats-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
-
-  .status-header {
-    flex-direction: column;
-    align-items: flex-start;
-  }
+  .stats-grid { grid-template-columns: repeat(2, 1fr); }
+  .status-header { flex-direction: column; align-items: flex-start; }
 }
 </style>

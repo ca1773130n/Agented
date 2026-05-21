@@ -1,18 +1,25 @@
+<!--
+  TokenUsageCard — extracted from TokenUsageDashboard.vue for the Cost lane.
+  Owns its own data fetching, polling, and rotation status reads. The lane
+  ports the heavy multi-section dashboard intact (incl. its embedded Cost
+  Trend chart) so no separate CostTrendCard is needed.
+-->
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
-import type { UsageSummaryEntry, EntityUsageEntry, BudgetLimit, MonitoringStatus, SnapshotHistory, SessionStatsSummary, RotationDashboardStatus } from '../services/api';
-import CredentialStatusBanner from '../components/credentials/CredentialStatusBanner.vue';
-import { budgetApi, agentApi, teamApi, triggerApi, monitoringApi, rotationApi } from '../services/api';
-import TokenUsageChart from '../components/monitoring/TokenUsageChart.vue';
-import BudgetLimitForm from '../components/monitoring/BudgetLimitForm.vue';
-import PageHeader from '../components/base/PageHeader.vue';
-import TokenBreakdownCard from '../components/monitoring/TokenBreakdownCard.vue';
-import MonitoringSection from '../components/monitoring/MonitoringSection.vue';
-import EntitySpendSection from '../components/monitoring/EntitySpendSection.vue';
-import BudgetLimitsSection from '../components/monitoring/BudgetLimitsSection.vue';
-import LoadingState from '../components/base/LoadingState.vue';
-import { useToast } from '../composables/useToast';
-import { useWebMcpTool } from '../composables/useWebMcpTool';
+import type { UsageSummaryEntry, EntityUsageEntry, BudgetLimit, MonitoringStatus, SnapshotHistory, SessionStatsSummary, RotationDashboardStatus } from '../../../services/api';
+import CredentialStatusBanner from '../../../components/credentials/CredentialStatusBanner.vue';
+import { budgetApi, agentApi, teamApi, triggerApi, monitoringApi, rotationApi } from '../../../services/api';
+import TokenUsageChart from '../../../components/monitoring/TokenUsageChart.vue';
+import BudgetLimitForm from '../../../components/monitoring/BudgetLimitForm.vue';
+import TokenBreakdownCard from '../../../components/monitoring/TokenBreakdownCard.vue';
+import MonitoringSection from '../../../components/monitoring/MonitoringSection.vue';
+import EntitySpendSection from '../../../components/monitoring/EntitySpendSection.vue';
+import BudgetLimitsSection from '../../../components/monitoring/BudgetLimitsSection.vue';
+import LoadingState from '../../../components/base/LoadingState.vue';
+import { useToast } from '../../../composables/useToast';
+import { useWebMcpTool } from '../../../composables/useWebMcpTool';
+
+const emit = defineEmits<{ loaded: [slug: string] }>();
 const showToast = useToast();
 
 // Period selection
@@ -27,7 +34,6 @@ const customEndDate = ref('');
 const chartType = ref<'bar' | 'line'>('bar');
 const activeEntityTab = ref<'agent' | 'team' | 'trigger'>('agent');
 
-// Data state
 const summaryData = ref<UsageSummaryEntry[]>([]);
 const entityData = ref<EntityUsageEntry[]>([]);
 const budgetLimits = ref<BudgetLimit[]>([]);
@@ -39,12 +45,10 @@ const agents = ref<{ id: string; name: string }[]>([]);
 const teams = ref<{ id: string; name: string }[]>([]);
 const triggers = ref<{ id: string; name: string }[]>([]);
 
-// Budget form modal state
 const showBudgetForm = ref(false);
 const budgetFormMode = ref<'create' | 'edit'>('create');
 const selectedLimit = ref<BudgetLimit | null>(null);
 
-// Monitoring state
 const monitoringStatus = ref<MonitoringStatus | null>(null);
 const trendHistories = ref<Record<string, SnapshotHistory>>({});
 const previousThresholdState = ref<Record<string, string>>({});
@@ -56,7 +60,9 @@ const selectedRateWindows = ref<Record<number, '24h' | '48h' | '72h' | '96h' | '
 const expandedCards = ref<Set<number>>(new Set());
 const selectedProjectionWindow = ref<Record<number, string>>({});
 
-// Rotation state
+// Rotation state — keeps the rate-limit countdown widget in the Cost lane.
+// SchedulingCard fetches the same endpoint; the API is idempotent so two
+// readers is fine. See plan §Risks #3.
 const rotationStatus = ref<RotationDashboardStatus | null>(null);
 const rotationPollingInterval = ref<ReturnType<typeof setInterval> | null>(null);
 
@@ -87,21 +93,14 @@ useWebMcpTool({
 });
 
 async function fetchRotationStatus() {
-  try {
-    rotationStatus.value = await rotationApi.getStatus();
-  } catch { /* ignore -- rotation API may not be available */ }
+  try { rotationStatus.value = await rotationApi.getStatus(); } catch { /* ignore */ }
 }
-
 function startRotationPolling() {
   stopRotationPolling();
   rotationPollingInterval.value = setInterval(fetchRotationStatus, 15000);
 }
-
 function stopRotationPolling() {
-  if (rotationPollingInterval.value) {
-    clearInterval(rotationPollingInterval.value);
-    rotationPollingInterval.value = null;
-  }
+  if (rotationPollingInterval.value) { clearInterval(rotationPollingInterval.value); rotationPollingInterval.value = null; }
 }
 
 function toLocalDateString(d: Date): string {
@@ -130,7 +129,6 @@ const dateRange = computed(() => {
   return { start_date: toLocalDateString(start), end_date: toLocalDateString(end) };
 });
 
-// Summary computations
 const totalSpend = computed(() => summaryData.value.reduce((s, d) => s + d.total_cost_usd, 0));
 const totalExecutions = computed(() => summaryData.value.reduce((s, d) => s + d.execution_count, 0));
 const totalSessions = computed(() => summaryData.value.reduce((s, d) => s + (d.session_count || 0), 0));
@@ -147,7 +145,7 @@ const cacheHitRate = computed(() => {
 
 const periodLabel = computed(() => {
   const labels: Record<string, string> = { '7d': 'Last 7 Days', '30d': 'Last 30 Days', month: 'This Month' };
-  return labels[selectedPeriod.value] || `${dateRange.value.start_date} \u2013 ${dateRange.value.end_date}`;
+  return labels[selectedPeriod.value] || `${dateRange.value.start_date} – ${dateRange.value.end_date}`;
 });
 
 const monitoringHistoryMinutes = computed(() => {
@@ -178,9 +176,7 @@ function getTrendKey(accountId: number, windowType: string) { return `${accountI
 
 const highUsageWindows = computed(() => {
   if (!monitoringStatus.value?.windows) return [];
-  return monitoringStatus.value.windows.filter(
-    w => w.threshold_level === 'warning' || w.threshold_level === 'critical'
-  );
+  return monitoringStatus.value.windows.filter(w => w.threshold_level === 'warning' || w.threshold_level === 'critical');
 });
 
 function checkAndNotifyThresholds() {
@@ -205,7 +201,6 @@ async function loadTrendHistories(windows: MonitoringStatus['windows']) {
     try { results[key] = await monitoringApi.getHistory(w.account_id, w.window_type, monitoringHistoryMinutes.value); }
     catch { /* skip */ }
   }));
-  // Batch update to avoid N reactive notifications causing chart re-renders
   trendHistories.value = { ...trendHistories.value, ...results };
 }
 
@@ -216,7 +211,6 @@ async function loadMonitoringStatus() {
     const status = await monitoringApi.getStatus();
     monitoringStatus.value = status;
     checkAndNotifyThresholds();
-    // Auto-expand all account cards and set default projection windows
     if (status.windows) {
       const accountIds = new Set(status.windows.map(w => w.account_id));
       for (const id of accountIds) {
@@ -227,7 +221,6 @@ async function loadMonitoringStatus() {
         }
       }
     }
-    // Load trend histories (parallel per-window, fast)
     if (status.windows) await loadTrendHistories(status.windows);
   } catch { monitoringStatus.value = null; }
   finally { monitoringLoading.value = false; monitoringRefreshing.value = false; }
@@ -255,7 +248,6 @@ function startMonitoringPolling() {
 }
 function stopMonitoringPolling() { if (pollingInterval.value) { clearInterval(pollingInterval.value); pollingInterval.value = null; } }
 
-/** Fill date gaps so the chart has a data point for every day in the range. */
 function fillDateGaps(data: UsageSummaryEntry[], startDate: string, endDate: string): UsageSummaryEntry[] {
   const existing = new Map(data.map(d => [d.period_start, d]));
   const result: UsageSummaryEntry[] = [];
@@ -288,7 +280,10 @@ async function loadData() {
   } catch (err) {
     showToast('Failed to load usage data', 'error');
     summaryData.value = []; entityData.value = []; budgetLimits.value = [];
-  } finally { isLoading.value = false; }
+  } finally {
+    isLoading.value = false;
+    emit('loaded', 'token-usage');
+  }
 }
 
 async function loadEntityData() {
@@ -333,19 +328,16 @@ function handleBudgetCancelled() { showBudgetForm.value = false; }
 function getDefaultProjectionWindow(accountId: number): string | null {
   const windows = monitoringStatus.value?.windows?.filter(w => w.account_id === accountId && w.window_type !== 'no_data') || [];
   if (!windows.length) return null;
-  // Gemini: prefer best model (gemini-3-pro > gemini-3-flash > gemini-2.5-pro)
   const geminiPriority = ['gemini-3-pro', 'gemini-3-flash', 'gemini-2.5-pro'];
   for (const prefix of geminiPriority) {
     const match = windows.find(w => w.window_type.includes(prefix));
     if (match) return match.window_type;
   }
-  // Codex: prefer base model primary window (shortest name with _primary_window)
   const primaryWindows = windows.filter(w => w.window_type.endsWith('_primary_window'));
   if (primaryWindows.length > 0) {
     primaryWindows.sort((a, b) => a.window_type.length - b.window_type.length);
     return primaryWindows[0].window_type;
   }
-  // Claude: prefer five_hour (Opus 5 Hour)
   const fiveHour = windows.find(w => w.window_type === 'five_hour');
   if (fiveHour) return fiveHour.window_type;
   return windows[0].window_type;
@@ -360,7 +352,6 @@ function toggleCard(accountId: number) {
       const defaultWin = getDefaultProjectionWindow(accountId);
       if (defaultWin) selectedProjectionWindow.value[accountId] = defaultWin;
     }
-    // Load trend histories for this account's windows when expanding
     const accountWindows = monitoringStatus.value?.windows?.filter(w => w.account_id === accountId);
     if (accountWindows?.length) loadTrendHistories(accountWindows);
   }
@@ -372,14 +363,13 @@ watch(activeEntityTab, loadEntityData);
 watch(() => monitoringStatus.value?.polling_minutes, () => startMonitoringPolling());
 
 onMounted(async () => {
-  // Load chart data and quick stats first (fast)
   await Promise.all([loadSessionStats(), loadAllTimeSpend(), loadAgentsTeamsAndTriggers()]);
   startMonitoringPolling();
   startRotationPolling();
-  // Run slow operations in background — don't block page render
   collectSessionUsage().catch(() => {});
   pollNow(true).catch(() => {});
   fetchRotationStatus().catch(() => {});
+  loadData();
 });
 onUnmounted(() => {
   stopMonitoringPolling();
@@ -388,21 +378,24 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="token-usage-dashboard">
-    <PageHeader title="Token Usage" subtitle="Monitor AI spending across agents and teams">
-      <template #actions>
-        <div class="period-selector">
-          <button v-for="option in periodOptions" :key="option.key" class="period-btn" :class="{ active: selectedPeriod === option.key }" @click="selectedPeriod = option.key">{{ option.label }}</button>
-        </div>
-      </template>
-    </PageHeader>
+  <section id="token-usage" class="token-usage-dashboard lane-card">
+    <header class="lane-card__head">
+      <div>
+        <h2 class="lane-card__title">Token Usage</h2>
+        <p class="lane-card__subtitle">Monitor AI spending across agents and teams</p>
+      </div>
+      <div class="period-selector">
+        <button v-for="option in periodOptions" :key="option.key" class="period-btn" :class="{ active: selectedPeriod === option.key }" @click="selectedPeriod = option.key">{{ option.label }}</button>
+      </div>
+    </header>
+
     <div v-if="selectedPeriod === 'custom'" class="custom-range">
       <div class="date-input-group"><label>Start Date</label><input type="date" v-model="customStartDate"></div>
       <div class="date-input-group"><label>End Date</label><input type="date" v-model="customEndDate"></div>
     </div>
     <div v-if="customDateError" class="date-error">{{ customDateError }}</div>
     <div v-if="selectedPeriod !== 'custom'" class="period-range-display">{{ dateRange.start_date }} &mdash; {{ dateRange.end_date }}</div>
-    <!-- Rate limit proximity warnings -->
+
     <div v-if="highUsageWindows.length > 0" class="rate-limit-alerts">
       <div
         v-for="w in highUsageWindows"
@@ -422,12 +415,6 @@ onUnmounted(() => {
       </div>
     </div>
 
-    <!-- v0.7.93 — surface accounts the poller can't resolve OAuth
-         tokens for. Without this, the dashboard silently drops
-         windows for credential-less accounts; operators had to
-         grep backend logs to see what happened. The banner self-
-         hides when there's nothing to show, so it can sit above
-         the loading state without flashing. -->
     <CredentialStatusBanner />
 
     <LoadingState v-if="isLoading" message="Loading usage data..." />
@@ -435,7 +422,6 @@ onUnmounted(() => {
     <TokenBreakdownCard v-show="!isLoading" :total-input-tokens="totalInputTokens" :total-output-tokens="totalOutputTokens" :total-cache-read-tokens="totalCacheReadTokens" :total-cache-creation-tokens="totalCacheCreationTokens" :total-all-tokens="totalAllTokens" :cache-hit-rate="cacheHitRate" :period-label="periodLabel" :total-spend="totalSpend" :total-sessions="totalSessions" :total-turns="totalTurns" :total-executions="totalExecutions" :session-stats="sessionStats" :all-time-spend="allTimeSpend" />
     <MonitoringSection v-show="!isLoading" :monitoring-status="monitoringStatus" :monitoring-loading="monitoringLoading" :poll-now-loading="pollNowLoading" :monitoring-refreshing="monitoringRefreshing" :trend-histories="trendHistories" :expanded-cards="expandedCards" :selected-rate-windows="selectedRateWindows" :selected-projection-window="selectedProjectionWindow" :chart-time-range-start="chartTimeRangeStart" :chart-time-range-end="chartTimeRangeEnd" :rotation-sessions="rotationStatus?.sessions ?? []" :rotation-evaluator="rotationStatus?.evaluator ?? undefined" @poll-now="pollNow" @toggle-card="toggleCard" @update:selected-rate-windows="Object.assign(selectedRateWindows, $event)" @update:selected-projection-window="Object.assign(selectedProjectionWindow, $event)" />
 
-    <!-- Cost Trend Chart — use v-if so Chart.js mounts with real dimensions -->
     <div class="section" v-if="!isLoading">
       <div class="section-header">
         <h2 class="section-title">Cost Trend</h2>
@@ -459,11 +445,16 @@ onUnmounted(() => {
     <BudgetLimitsSection v-show="!isLoading" :budget-limits="budgetLimits" :agents="agents" :teams="teams" :triggers="triggers" @open-add-limit="openAddLimit" @open-edit-limit="openEditLimit" @delete-limit="handleDeleteLimit" />
 
     <BudgetLimitForm v-if="showBudgetForm" :mode="budgetFormMode" :existing-limit="selectedLimit" :agents="agents" :teams="teams" :triggers="triggers" @saved="handleBudgetSaved" @cancelled="handleBudgetCancelled" />
-  </div>
+  </section>
 </template>
 
 <style scoped>
-.token-usage-dashboard { display: flex; flex-direction: column; gap: 24px; width: 100%; animation: fadeIn 0.4s ease; }
+.lane-card { padding: 20px; border: 1px solid var(--border-default, rgba(255, 255, 255, 0.1)); border-radius: 10px; background: var(--bg-secondary, rgba(255, 255, 255, 0.02)); display: flex; flex-direction: column; gap: 16px; }
+.lane-card__head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; }
+.lane-card__title { font-size: 16px; font-weight: 600; margin: 0; color: var(--text-primary); }
+.lane-card__subtitle { font-size: 12px; color: var(--text-tertiary); margin: 4px 0 0; }
+
+.token-usage-dashboard { width: 100%; animation: fadeIn 0.4s ease; }
 .rate-limit-alerts { display: flex; flex-direction: column; gap: 8px; }
 .rate-limit-alert { display: flex; align-items: flex-start; gap: 10px; padding: 10px 14px; border-radius: 8px; font-size: 0.875rem; line-height: 1.4; }
 .rate-limit-alert.warning { background: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.3); color: #f59e0b; }
@@ -474,14 +465,14 @@ onUnmounted(() => {
 .period-btn { padding: 8px 14px; border: none; border-radius: 6px; background: transparent; color: var(--text-tertiary); font-size: 0.8rem; font-weight: 500; cursor: pointer; transition: all var(--transition-fast); white-space: nowrap; }
 .period-btn:hover { color: var(--text-primary); background: var(--bg-tertiary); }
 .period-btn.active { color: var(--accent-cyan); background: var(--accent-cyan-dim); }
-.custom-range { display: flex; gap: 16px; margin-bottom: 20px; padding: 16px; background: var(--bg-secondary); border: 1px solid var(--border-subtle); border-radius: 8px; }
+.custom-range { display: flex; gap: 16px; padding: 16px; background: var(--bg-secondary); border: 1px solid var(--border-subtle); border-radius: 8px; }
 .date-input-group label { display: block; font-size: 0.75rem; color: var(--text-tertiary); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.05em; }
 .date-input-group input { padding: 8px 12px; border: 1px solid var(--border-default); border-radius: 6px; background: var(--bg-primary); color: var(--text-primary); font-size: 0.85rem; }
 .date-input-group input:focus { border-color: var(--accent-cyan); outline: none; box-shadow: 0 0 0 3px var(--accent-cyan-dim); }
-.period-range-display { font-family: var(--font-mono); font-size: 0.75rem; color: var(--text-muted); text-align: right; margin-top: -20px; margin-bottom: 8px; }
-.section { background: var(--bg-secondary); border: 1px solid var(--border-subtle); border-radius: 12px; padding: 24px; margin-bottom: 20px; }
-.section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
-.section-title { font-family: var(--font-mono); font-size: 1rem; font-weight: 600; color: var(--text-primary); }
+.period-range-display { font-family: var(--font-mono); font-size: 0.75rem; color: var(--text-muted); text-align: right; }
+.section { background: var(--bg-secondary); border: 1px solid var(--border-subtle); border-radius: 12px; padding: 20px; }
+.section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+.section-title { font-family: var(--font-mono); font-size: 1rem; font-weight: 600; color: var(--text-primary); margin: 0; }
 .chart-type-toggle { display: flex; gap: 4px; }
 .toggle-btn { width: 34px; height: 34px; display: flex; align-items: center; justify-content: center; border: 1px solid var(--border-subtle); border-radius: 6px; background: transparent; color: var(--text-tertiary); cursor: pointer; transition: all var(--transition-fast); }
 .toggle-btn:hover { color: var(--text-primary); border-color: var(--border-default); }
@@ -489,8 +480,7 @@ onUnmounted(() => {
 .toggle-btn svg { width: 16px; height: 16px; }
 .chart-wrapper { position: relative; }
 .empty-chart-overlay { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: var(--text-muted); font-size: 0.9rem; }
-.opencode-note { display: flex; align-items: center; gap: 10px; padding: 12px 16px; margin-bottom: 20px; background: var(--bg-secondary); border: 1px solid var(--border-subtle); border-left: 3px solid var(--accent-cyan); border-radius: 8px; font-size: 0.8rem; color: var(--text-tertiary); line-height: 1.4; }
+.opencode-note { display: flex; align-items: center; gap: 10px; padding: 12px 16px; background: var(--bg-secondary); border: 1px solid var(--border-subtle); border-left: 3px solid var(--accent-cyan); border-radius: 8px; font-size: 0.8rem; color: var(--text-tertiary); line-height: 1.4; }
 .note-icon { display: flex; align-items: center; justify-content: center; width: 20px; height: 20px; border-radius: 50%; background: var(--accent-cyan-dim); color: var(--accent-cyan); font-size: 0.7rem; font-weight: 700; flex-shrink: 0; }
-.date-error { color: #ef4444; font-size: 0.8rem; margin-top: -12px; margin-bottom: 16px; padding: 0 4px; }
-@media (max-width: 900px) { .dashboard-header { flex-direction: column; } }
+.date-error { color: #ef4444; font-size: 0.8rem; padding: 0 4px; }
 </style>

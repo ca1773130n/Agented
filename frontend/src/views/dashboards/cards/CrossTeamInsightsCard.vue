@@ -1,16 +1,19 @@
+<!--
+  CrossTeamInsightsCard — extracted from CrossTeamInsightsDashboard.vue
+  for the Activity lane (Reports block).
+-->
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
-import PageHeader from '../components/base/PageHeader.vue';
-import { useToast } from '../composables/useToast';
-import { analyticsApi } from '../services/api/analytics';
-import type { TeamInsightData, OrgFindingData, RepoRiskData } from '../services/api/types';
+import { useToast } from '../../../composables/useToast';
+import { analyticsApi } from '../../../services/api/analytics';
+import type { TeamInsightData, OrgFindingData, RepoRiskData } from '../../../services/api/types';
 
+const emit = defineEmits<{ loaded: [slug: string] }>();
 const showToast = useToast();
 
 type RiskLevel = 'critical' | 'high' | 'medium' | 'low';
 type SortKey = 'executions' | 'findings' | 'successRate' | 'riskScore';
 
-// Keep local interface aliases for template compatibility
 type TeamInsight = TeamInsightData;
 type OrgFinding = OrgFindingData & { severity: RiskLevel };
 type RepoRisk = RepoRiskData;
@@ -30,6 +33,8 @@ onMounted(async () => {
     topRiskyRepos.value = data.top_risky_repos;
   } catch {
     showToast('Failed to load cross-team insights', 'error');
+  } finally {
+    emit('loaded', 'cross-team-insights');
   }
 });
 
@@ -83,15 +88,14 @@ function exportReport() {
 </script>
 
 <template>
-  <div class="page-container">
-    <PageHeader
-      title="Cross-Team Insights Dashboard"
-      subtitle="Org-level view of automation activity, common findings, and risk signals across all teams"
-    >
-      <template #actions>
-        <button class="btn-secondary" @click="exportReport">↓ Export Report</button>
-      </template>
-    </PageHeader>
+  <section id="cross-team-insights" class="lane-card insights-card">
+    <header class="lane-card__head">
+      <div>
+        <h2 class="lane-card__title">Cross-Team Insights</h2>
+        <p class="lane-card__subtitle">Org-level view of automation activity, common findings, and risk signals across all teams</p>
+      </div>
+      <button class="btn-secondary" @click="exportReport">↓ Export Report</button>
+    </header>
 
     <!-- Org-level stats -->
     <div class="stats-row">
@@ -248,27 +252,41 @@ function exportReport() {
         </tbody>
       </table>
     </div>
-  </div>
+  </section>
 </template>
 
 <style scoped>
-.page-container { padding: 24px; max-width: 1200px; }
-.stats-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 20px; }
-.stat-card { background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 8px; padding: 16px; text-align: center; }
+.lane-card {
+  padding: 20px;
+  border: 1px solid var(--border-default, rgba(255, 255, 255, 0.1));
+  border-radius: 10px;
+  background: var(--bg-secondary, rgba(255, 255, 255, 0.02));
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.lane-card__head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; }
+.lane-card__title { font-size: 16px; font-weight: 600; margin: 0 0 4px; color: var(--text-primary); }
+.lane-card__subtitle { font-size: 12px; color: var(--text-tertiary); margin: 0; max-width: 500px; }
+
+.stats-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+.stat-card { background: var(--bg-tertiary); border: 1px solid var(--border-default); border-radius: 8px; padding: 16px; text-align: center; }
 .stat-label { font-size: 12px; color: var(--text-muted); margin-bottom: 6px; }
 .stat-value { font-size: 24px; font-weight: 700; color: var(--text-primary); }
-.section-card { background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 8px; padding: 20px; margin-bottom: 16px; }
+
+.section-card { background: var(--bg-primary); border: 1px solid var(--border-default); border-radius: 8px; padding: 16px; }
 .section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; flex-wrap: wrap; gap: 8px; }
 .section-title { font-size: 15px; font-weight: 600; color: var(--text-primary); margin: 0; }
 .section-hint { font-size: 12px; color: var(--text-muted); }
+
 .sort-tabs { display: flex; align-items: center; gap: 4px; }
 .sort-label { font-size: 12px; color: var(--text-muted); margin-right: 4px; }
-.sort-tab { padding: 4px 10px; border-radius: 5px; border: 1px solid var(--border-color); background: transparent; color: var(--text-muted); cursor: pointer; font-size: 12px; }
+.sort-tab { padding: 4px 10px; border-radius: 5px; border: 1px solid var(--border-default); background: transparent; color: var(--text-muted); cursor: pointer; font-size: 12px; }
 .sort-tab.active { background: var(--accent-blue); color: white; border-color: var(--accent-blue); }
+
 .teams-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
-.team-card { background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: 8px; padding: 16px; cursor: pointer; transition: border-color 0.15s; }
-.team-card:hover { border-color: var(--accent-blue); }
-.team-card.selected { border-color: var(--accent-blue); }
+.team-card { background: var(--bg-secondary); border: 1px solid var(--border-default); border-radius: 8px; padding: 16px; cursor: pointer; transition: border-color 0.15s; }
+.team-card:hover, .team-card.selected { border-color: var(--accent-blue); }
 .team-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
 .team-name { font-size: 15px; font-weight: 700; color: var(--text-primary); }
 .team-change { font-size: 12px; font-weight: 600; }
@@ -278,30 +296,32 @@ function exportReport() {
 .ts-val { font-size: 16px; font-weight: 700; color: var(--text-primary); }
 .team-risk-bar-wrap { display: flex; align-items: center; gap: 8px; }
 .risk-bar-label { font-size: 11px; color: var(--text-muted); white-space: nowrap; }
-.risk-bar-track { flex: 1; height: 6px; background: var(--bg-secondary); border-radius: 3px; overflow: hidden; }
+.risk-bar-track { flex: 1; height: 6px; background: var(--bg-tertiary); border-radius: 3px; overflow: hidden; }
 .risk-bar-track.small { width: 60px; }
 .risk-bar-fill { height: 100%; border-radius: 3px; transition: width 0.3s; }
 .risk-score { font-size: 12px; font-weight: 600; }
-.team-detail { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border-color); }
+.team-detail { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border-default); }
 .detail-row { display: flex; align-items: flex-start; gap: 8px; font-size: 13px; color: var(--text-primary); margin-bottom: 4px; }
 .detail-label { color: var(--text-muted); white-space: nowrap; }
 .risk-list { margin: 4px 0 0 16px; padding: 0; font-size: 12px; color: var(--text-muted); }
 .risk-list li { margin-bottom: 2px; }
+
 .findings-list { display: flex; flex-direction: column; gap: 0; }
-.finding-row { display: grid; grid-template-columns: 120px 1fr auto; gap: 16px; padding: 12px 0; border-bottom: 1px solid var(--border-color); align-items: start; }
+.finding-row { display: grid; grid-template-columns: 120px 1fr auto; gap: 16px; padding: 12px 0; border-bottom: 1px solid var(--border-default); align-items: start; }
 .finding-row:last-child { border-bottom: none; }
 .finding-severity { font-size: 12px; font-weight: 700; }
 .finding-title { font-size: 13px; font-weight: 600; color: var(--text-primary); margin-bottom: 4px; }
 .finding-meta { font-size: 11px; color: var(--text-muted); }
 .finding-repos { display: flex; gap: 4px; flex-wrap: wrap; }
-.repo-tag { padding: 2px 8px; border-radius: 10px; background: var(--bg-secondary); font-size: 11px; color: var(--text-muted); border: 1px solid var(--border-color); }
+.repo-tag { padding: 2px 8px; border-radius: 10px; background: var(--bg-tertiary); font-size: 11px; color: var(--text-muted); border: 1px solid var(--border-default); }
 .repo-tag.muted { opacity: 0.7; }
+
 .bench-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-.bench-table th { text-align: left; padding: 8px 12px; color: var(--text-muted); font-weight: 500; border-bottom: 1px solid var(--border-color); }
-.bench-row td { padding: 10px 12px; border-bottom: 1px solid var(--border-color); }
-.bench-row:hover { background: var(--bg-hover); }
+.bench-table th { text-align: left; padding: 8px 12px; color: var(--text-muted); font-weight: 500; border-bottom: 1px solid var(--border-default); }
+.bench-row td { padding: 10px 12px; border-bottom: 1px solid var(--border-default); }
+.bench-row:hover { background: var(--bg-hover, var(--bg-tertiary)); }
 .bot-name { font-weight: 600; color: var(--text-primary); }
 .risk-inline { display: flex; align-items: center; gap: 8px; }
 .muted-text { color: var(--text-muted); }
-.btn-secondary { padding: 6px 14px; border-radius: 6px; border: 1px solid var(--border-color); background: transparent; color: var(--text-primary); cursor: pointer; font-size: 13px; }
+.btn-secondary { padding: 6px 14px; border-radius: 6px; border: 1px solid var(--border-default); background: transparent; color: var(--text-primary); cursor: pointer; font-size: 13px; }
 </style>

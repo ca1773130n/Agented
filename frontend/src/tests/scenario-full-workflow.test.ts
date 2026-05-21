@@ -4,7 +4,7 @@
  * Tests key view components render with realistic data shapes, handle
  * user interactions, and manage error/loading states. Focuses on the
  * views that are wired to real APIs:
- * - ExecutionQueueDashboard
+ * - ExecutionQueueCard
  * - BotDryRun
  * - NaturalLanguageBotCreator
  * - BotCloneForkPage
@@ -283,7 +283,7 @@ beforeEach(() => {
   mockTriggerListPaths.mockResolvedValue({ paths: mockPathsData })
   mockTriggerPreviewPromptFull.mockResolvedValue({ rendered_prompt: 'test', unresolved_placeholders: [] })
 
-  // ExecutionQueueDashboard mocks
+  // ExecutionQueueCard mocks
   mockExecutionGetQueueStatus.mockResolvedValue(mockQueueData)
   mockExecutionListAll.mockImplementation((params?: { status?: string }) => {
     if (params?.status === 'running') return Promise.resolve(mockRunningExecutions)
@@ -335,13 +335,13 @@ beforeEach(() => {
 })
 
 // ===========================================================================
-// ExecutionQueueDashboard
+// ExecutionQueueCard
 // ===========================================================================
 
-describe('ExecutionQueueDashboard', () => {
+describe('ExecutionQueueCard', () => {
   async function mountQueueDashboard() {
-    const ExecutionQueueDashboard = (await import('../views/ExecutionQueueDashboard.vue')).default
-    return mount(ExecutionQueueDashboard, {
+    const ExecutionQueueCard = (await import('../views/dashboards/cards/ExecutionQueueCard.vue')).default
+    return mount(ExecutionQueueCard, {
       global: {
         stubs: {
           AppBreadcrumb: true,
@@ -864,7 +864,7 @@ describe('Cross-component integration', () => {
 
   it('all view components can be imported without errors', async () => {
     const modules = await Promise.all([
-      import('../views/ExecutionQueueDashboard.vue'),
+      import('../views/dashboards/cards/ExecutionQueueCard.vue'),
       import('../views/BotDryRun.vue'),
       import('../views/NaturalLanguageBotCreator.vue'),
       import('../views/BotCloneForkPage.vue'),
@@ -973,11 +973,11 @@ describe('Loading and error states', () => {
     wrapper.unmount()
   })
 
-  it('ExecutionQueueDashboard shows error when queue API fails', async () => {
+  it('ExecutionQueueCard shows error when queue API fails', async () => {
     mockExecutionGetQueueStatus.mockRejectedValue(new Error('Queue service down'))
 
-    const ExecutionQueueDashboard = (await import('../views/ExecutionQueueDashboard.vue')).default
-    const wrapper = mount(ExecutionQueueDashboard, {
+    const ExecutionQueueCard = (await import('../views/dashboards/cards/ExecutionQueueCard.vue')).default
+    const wrapper = mount(ExecutionQueueCard, {
       global: {
         stubs: { PageHeader: true },
       },
@@ -1013,9 +1013,9 @@ describe('Loading and error states', () => {
 // ===========================================================================
 
 describe('Navigation', () => {
-  it('ExecutionQueueDashboard has back navigation', async () => {
-    const ExecutionQueueDashboard = (await import('../views/ExecutionQueueDashboard.vue')).default
-    const wrapper = mount(ExecutionQueueDashboard, {
+  it('ExecutionQueueCard has back navigation', async () => {
+    const ExecutionQueueCard = (await import('../views/dashboards/cards/ExecutionQueueCard.vue')).default
+    const wrapper = mount(ExecutionQueueCard, {
       global: {
         stubs: { PageHeader: true },
       },

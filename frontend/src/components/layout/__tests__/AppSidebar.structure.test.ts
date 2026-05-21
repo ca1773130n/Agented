@@ -45,6 +45,9 @@ function buildRouter(): Router {
     'token-usage', 'rotation-dashboard', 'analytics-dashboard', 'health-dashboard',
     'bot-health', 'team-impact-report', 'cross-team-insights',
     'execution-queue-dashboard', 'execution-anomaly-detection', 'team-leaderboard',
+    // PR-D — 4 new lane routes + service-health redirect still resolves
+    'dashboards-quality', 'dashboards-cost', 'dashboards-health',
+    'dashboards-activity', 'service-health',
     'sketch-chat', 'products', 'product-dashboard', 'product-settings',
     'projects', 'project-dashboard', 'project-settings', 'project-planning',
     'project-instance-playground', 'teams', 'team-dashboard', 'team-settings',
@@ -205,14 +208,62 @@ describe('AppSidebar — PR-B structure', () => {
     expect(labels).not.toContain('Integrations');
   });
 
-  it('External Integrations contains exactly 4 items', () => {
+  it('External Integrations contains exactly 3 items after PR-D (On-Call merged into Scheduling)', () => {
     const items = submenuItems(wrapper, 'External Integrations');
     const texts = items.map((b) => b.textContent?.trim().replace(/\s+/g, ' ') ?? '');
-    expect(texts.length).toBe(4);
+    expect(texts.length).toBe(3);
     expect(texts).toContain('Slack Notifications');
     expect(texts).toContain('Jira / Linear');
     expect(texts).toContain('Notification Channels');
-    expect(texts).toContain('On-Call Escalation');
+    expect(texts).not.toContain('On-Call Escalation');
+  });
+
+  it('PR-D: Dashboards submenu collapses to exactly 5 items (1 landing + 4 lanes)', () => {
+    const items = submenuItems(wrapper, 'Dashboards');
+    const texts = items.map((b) => b.textContent?.trim().replace(/\s+/g, ' ') ?? '');
+    expect(texts.length).toBe(5);
+    expect(texts).toEqual([
+      'All Dashboards',
+      'Quality',
+      'Cost',
+      'Health',
+      'Activity',
+    ]);
+    // None of the per-dashboard items remain.
+    for (const stale of ['Security Scan', 'PR Review', 'Token Usage', 'Scheduling',
+                          'Analytics', 'Health Monitor', 'Bot Health', 'Impact Report',
+                          'Cross-Team Insights', 'Execution Queue', 'Anomaly Detection',
+                          'ROI Leaderboard']) {
+      expect(texts).not.toContain(stale);
+    }
+  });
+
+  it('PR-D: Scheduling is a flat top-level link (no expandable section)', () => {
+    const allButtons = Array.from(
+      rootEl(wrapper).querySelectorAll<HTMLElement>('button'),
+    );
+    const schedulingButtons = allButtons.filter(
+      (b) => b.querySelector<HTMLElement>('.nav-text')?.textContent?.trim() === 'Scheduling',
+    );
+    expect(schedulingButtons.length).toBe(1);
+    const btn = schedulingButtons[0];
+    // Flat link shape: no chevron, no aria-expanded.
+    expect(btn.querySelector('.chevron-icon')).toBeNull();
+    expect(btn.hasAttribute('aria-expanded')).toBe(false);
+    // No submenu region was rendered for Scheduling.
+    expect(submenuOf(wrapper, 'Scheduling')).toBeNull();
+  });
+
+  it('PR-D: Platform sidebar no longer contains team-leaderboard', () => {
+    // Platform's submenu may exist or not depending on what's labelled;
+    // assert no top-level submenu button anywhere reads "ROI Leaderboard"
+    // or is wired to the team-leaderboard route.
+    const allSubmenuItems = Array.from(
+      rootEl(wrapper).querySelectorAll<HTMLElement>('button.submenu-item'),
+    ).map((b) => b.textContent?.trim().replace(/\s+/g, ' ') ?? '');
+    expect(allSubmenuItems).not.toContain('ROI Leaderboard');
+    // Belt-and-suspenders: Team Leaderboard is the legacy label.
+    expect(allSubmenuItems).not.toContain('Team Leaderboard');
   });
 
   it('"Forge" no longer renders Triggers as a flat link (it has been promoted to its own top-level section)', () => {

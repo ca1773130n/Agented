@@ -1,8 +1,13 @@
-<!-- v0.7.0: Per-bot success-rate / latency / status rollup at /bots/health. -->
+<!--
+  BotHealthCard — extracted from BotHealthPage.vue for the Health lane.
+  Owns its own data fetching (per-bot success-rate / latency / status rollups).
+-->
 <script setup lang="ts">
 import { onMounted, ref } from 'vue';
-import { botHealthApi } from '../services/api';
-import type { BotHealthRollup } from '../services/api';
+import { botHealthApi } from '../../../services/api';
+import type { BotHealthRollup } from '../../../services/api';
+
+const emit = defineEmits<{ loaded: [slug: string] }>();
 
 const rollups = ref<BotHealthRollup[]>([]);
 const loading = ref(true);
@@ -19,6 +24,7 @@ async function load() {
     error.value = e instanceof Error ? e.message : String(e);
   } finally {
     loading.value = false;
+    emit('loaded', 'bot-health');
   }
 }
 
@@ -35,12 +41,12 @@ function pillLabel(status: BotHealthRollup['status_pill']): string {
 </script>
 
 <template>
-  <div class="bot-health-page">
-    <header class="bot-health-page__header">
-      <h1>Bot Health</h1>
+  <section id="bot-health" class="lane-card bot-health-card">
+    <header class="lane-card__head">
+      <h2 class="lane-card__title">Bot Health</h2>
       <select
         v-model.number="windowDays"
-        class="bot-health-page__window"
+        class="bot-health-card__window"
         data-testid="window-select"
         @change="load"
       >
@@ -51,17 +57,17 @@ function pillLabel(status: BotHealthRollup['status_pill']): string {
       </select>
     </header>
 
-    <div v-if="loading" class="bot-health-page__loading" data-testid="loading">
+    <div v-if="loading" class="bot-health-card__loading" data-testid="loading">
       Loading…
     </div>
-    <div v-else-if="error" class="bot-health-page__error" data-testid="error">
+    <div v-else-if="error" class="bot-health-card__error" data-testid="error">
       {{ error }}
       <button @click="load">Retry</button>
     </div>
-    <div v-else-if="rollups.length === 0" class="bot-health-page__empty" data-testid="empty">
+    <div v-else-if="rollups.length === 0" class="bot-health-card__empty" data-testid="empty">
       No bots yet.
     </div>
-    <div v-else class="bot-health-page__grid" data-testid="grid">
+    <div v-else class="bot-health-card__grid" data-testid="grid">
       <article
         v-for="r in rollups"
         :key="r.bot_id"
@@ -69,7 +75,7 @@ function pillLabel(status: BotHealthRollup['status_pill']): string {
         :data-status="r.status_pill"
       >
         <header class="bh-card__head">
-          <h2 class="bh-card__name">{{ r.bot_name }}</h2>
+          <h3 class="bh-card__name">{{ r.bot_name }}</h3>
           <span class="bh-card__pill" :data-status="r.status_pill">
             {{ pillLabel(r.status_pill) }}
           </span>
@@ -97,18 +103,24 @@ function pillLabel(status: BotHealthRollup['status_pill']): string {
         </p>
       </article>
     </div>
-  </div>
+  </section>
 </template>
 
 <style scoped>
-.bot-health-page { padding: 24px; max-width: 1280px; margin: 0 auto; }
-.bot-health-page__header {
+.lane-card {
+  padding: 20px;
+  border: 1px solid var(--border-default, rgba(255, 255, 255, 0.1));
+  border-radius: 10px;
+  background: var(--bg-secondary, rgba(255, 255, 255, 0.02));
+}
+.lane-card__head {
   display: flex;
   justify-content: space-between;
   align-items: baseline;
   margin-bottom: 16px;
 }
-.bot-health-page__grid {
+.lane-card__title { font-size: 16px; font-weight: 600; margin: 0; color: var(--text-primary); }
+.bot-health-card__grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
   gap: 16px;
@@ -159,5 +171,20 @@ function pillLabel(status: BotHealthRollup['status_pill']): string {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+.bot-health-card__window {
+  background: var(--bg-tertiary, rgba(255, 255, 255, 0.05));
+  border: 1px solid var(--border-default);
+  border-radius: 6px;
+  color: var(--text-primary);
+  padding: 4px 8px;
+  font-size: 12px;
+}
+.bot-health-card__loading,
+.bot-health-card__error,
+.bot-health-card__empty {
+  padding: 24px;
+  text-align: center;
+  color: var(--text-secondary);
 }
 </style>
