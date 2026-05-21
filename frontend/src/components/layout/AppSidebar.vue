@@ -987,10 +987,10 @@ function handleSidebarKeydown(e: KeyboardEvent) {
       </SidebarGroupToggle>
       <div v-show="expandedSections.externalIntegrations" class="nav-submenu" role="region" aria-label="External Integrations">
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('slack-notifications') }" :aria-current="sidebarActive('slack-notifications') ? 'page' : undefined" @click="navTo('slack-notifications')">
-          Slack Integration
+          Slack Notifications
         </button>
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('integration-ticketing') }" :aria-current="sidebarActive('integration-ticketing') ? 'page' : undefined" @click="navTo('integration-ticketing')">
-          Ticketing Integration
+          Jira / Linear
         </button>
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('notification-channels') }" :aria-current="sidebarActive('notification-channels') ? 'page' : undefined" @click="navTo('notification-channels')">
           Notification Channels

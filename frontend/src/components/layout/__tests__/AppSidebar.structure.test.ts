@@ -203,8 +203,8 @@ describe('AppSidebar — PR-B structure', () => {
     const items = submenuItems(wrapper, 'External Integrations');
     const texts = items.map((b) => b.textContent?.trim().replace(/\s+/g, ' ') ?? '');
     expect(texts.length).toBe(4);
-    expect(texts).toContain('Slack Integration');
-    expect(texts).toContain('Ticketing Integration');
+    expect(texts).toContain('Slack Notifications');
+    expect(texts).toContain('Jira / Linear');
     expect(texts).toContain('Notification Channels');
     expect(texts).toContain('On-Call Escalation');
   });
