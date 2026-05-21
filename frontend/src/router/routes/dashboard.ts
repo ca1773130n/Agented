@@ -93,12 +93,12 @@ export const dashboardRoutes: RouteRecordRaw[] = [
   {
     path: '/dashboards/tokens',
     name: 'token-usage',
-    redirect: () => ({ name: 'dashboards-cost' }),
+    redirect: () => ({ name: 'dashboards-cost', hash: '#token-usage' }),
   },
   {
     path: '/dashboards/analytics',
     name: 'analytics-dashboard',
-    redirect: () => ({ name: 'dashboards-cost' }),
+    redirect: () => ({ name: 'dashboards-cost', hash: '#token-usage' }),
   },
   {
     path: '/dashboards/bot-health-monitor',

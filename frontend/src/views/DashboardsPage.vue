@@ -68,6 +68,7 @@ const deepLinks: DeepLink[] = [
   {
     label: 'Token Usage',
     routeName: 'dashboards-cost',
+    hash: '#token-usage',
     description: 'Jump straight to Cost — Token Usage card.',
   },
   {
