@@ -1,4 +1,9 @@
 <script setup lang="ts">
+// ShipOrCut: 2026-Q3 — STUB-PROMOTE: backend CRUD handlers in
+// `backend/app_litestar/routes/executions.py:485+` are declared as
+// stubs — every write `del`s its parameters and returns a no-op dict.
+// See .planning/static-smell-triage.md. Ship the feature or remove
+// the route by EOQ3.
 import { ref, computed, onMounted } from 'vue';
 import LoadingState from '../components/base/LoadingState.vue';
 import EmptyState from '../components/base/EmptyState.vue';

@@ -1,4 +1,9 @@
 <script setup lang="ts">
+// ShipOrCut: 2026-Q3 — STUB-PROMOTE: backend handlers in
+// `backend/app_litestar/routes/executions.py:452+` are declared as
+// stubs (POST acknowledge `del`s its parameter). See
+// .planning/static-smell-triage.md. Ship the feature or remove the
+// route by EOQ3.
 import { ref, computed, onMounted, onUnmounted } from 'vue';
 import LoadingState from '../components/base/LoadingState.vue';
 import StatCard from '../components/base/StatCard.vue';

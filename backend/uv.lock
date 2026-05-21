@@ -4,7 +4,7 @@ requires-python = ">=3.11"
 
 [[package]]
 name = "agented-backend"
-version = "0.7.98"
+version = "0.7.99"
 source = { editable = "." }
 dependencies = [
     { name = "ai-accounts-core" },

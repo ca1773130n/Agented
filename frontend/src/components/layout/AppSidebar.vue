@@ -63,8 +63,8 @@ const expandedSections = ref<Record<string, boolean>>({
   watchTower: false,
   aiBackends: false,
   workflows: false,
-  integrations: false,
-  automationTools: false,
+  triggers: false,
+  externalIntegrations: false,
   platform: false,
 });
 
@@ -79,7 +79,7 @@ function autoExpandForRoute() {
     expandedSections.value.dashboards = true;
     expandedSections.value.watchTower = true;
   }
-  if (['security-history', 'trigger-history', 'audit-detail'].includes(name)) {
+  if (['trigger-history', 'audit-detail'].includes(name)) {
     expandedSections.value.history = true;
   }
   if (name === 'usage-history') {
@@ -121,17 +121,14 @@ function autoExpandForRoute() {
   if (['workflows', 'workflow-builder', 'workflow-playground'].includes(name)) {
     expandedSections.value.workflows = true;
   }
-  if (['triggers'].includes(name)) {
-    expandedSections.value.watchTower = true;
-  }
   if (['ai-backends', 'backend-detail', 'service-health'].includes(name)) {
     expandedSections.value.aiBackends = true;
   }
-  if (['slack-notifications', 'pr-auto-assignment', 'integration-ticketing', 'multi-provider-fallback', 'multi-repo-fan-out', 'github-actions', 'on-call-escalation', 'github-app-install', 'pr-review-learning-loop', 'notification-channels'].includes(name)) {
-    expandedSections.value.integrations = true;
+  if (['triggers', 'bot-templates', 'bot-clone-fork', 'cross-team-bot-sharing', 'incident-response-playbooks', 'inline-prompt-editor', 'visual-cron-wizard', 'conditional-trigger-rules', 'repo-scope-filters', 'structured-output', 'prompt-ab-testing', 'multi-provider-fallback', 'multi-repo-fan-out', 'pr-auto-assignment', 'pr-review-learning-loop', 'github-actions', 'webhook-recorder', 'dependency-impact-bot', 'bot-recommendation-engine', 'bot-dependency-graph', 'bot-performance-benchmarks', 'bot-runbooks', 'execution-tagging', 'changelog-generator', 'prompt-snippets'].includes(name)) {
+    expandedSections.value.triggers = true;
   }
-  if (['bot-recommendation-engine', 'bot-clone-fork', 'bot-dependency-graph', 'changelog-generator', 'dependency-impact-bot', 'incident-response-playbooks', 'cross-team-bot-sharing', 'inline-prompt-editor', 'prompt-ab-testing', 'visual-cron-wizard', 'structured-output', 'bot-runbooks', 'repo-scope-filters', 'bot-performance-benchmarks', 'smart-schedule-optimizer', 'execution-tagging'].includes(name)) {
-    expandedSections.value.automationTools = true;
+  if (['slack-notifications', 'integration-ticketing', 'notification-channels', 'on-call-escalation', 'github-app-install'].includes(name)) {
+    expandedSections.value.externalIntegrations = true;
   }
   if (['secrets-vault', 'rbac-settings', 'sso-settings', 'team-budgets', 'report-digests', 'execution-quota-controls', 'team-leaderboard', 'bot-sla-uptime', 'mobile-execution-monitor', 'audit-history', 'findings-triage-board', 'skill-version-pinning', 'conversation-history-viewer'].includes(name)) {
     expandedSections.value.platform = true;
@@ -179,7 +176,7 @@ function isDashboardSectionActive(): boolean {
 }
 
 function isHistorySectionActive(): boolean {
-  return ['security-history', 'trigger-history', 'audit-detail'].includes(currentRouteName.value);
+  return ['trigger-history', 'audit-detail'].includes(currentRouteName.value);
 }
 
 function isSkillsSectionActive(): boolean {
@@ -230,12 +227,12 @@ function isWorkflowsSectionActive(): boolean {
   return ['workflows', 'workflow-builder', 'workflow-playground'].includes(currentRouteName.value);
 }
 
-function isIntegrationsSectionActive(): boolean {
-  return ['slack-notifications', 'pr-auto-assignment', 'integration-ticketing', 'multi-provider-fallback', 'multi-repo-fan-out', 'github-actions', 'on-call-escalation', 'github-app-install', 'pr-review-learning-loop', 'notification-channels'].includes(currentRouteName.value);
+function isTriggersSectionActive(): boolean {
+  return ['triggers', 'bot-templates', 'bot-clone-fork', 'cross-team-bot-sharing', 'incident-response-playbooks', 'inline-prompt-editor', 'visual-cron-wizard', 'conditional-trigger-rules', 'repo-scope-filters', 'structured-output', 'prompt-ab-testing', 'multi-provider-fallback', 'multi-repo-fan-out', 'pr-auto-assignment', 'pr-review-learning-loop', 'github-actions', 'webhook-recorder', 'dependency-impact-bot', 'bot-recommendation-engine', 'bot-dependency-graph', 'bot-performance-benchmarks', 'bot-runbooks', 'execution-tagging', 'changelog-generator', 'prompt-snippets'].includes(currentRouteName.value);
 }
 
-function isAutomationToolsSectionActive(): boolean {
-  return ['bot-recommendation-engine', 'bot-clone-fork', 'bot-dependency-graph', 'changelog-generator', 'dependency-impact-bot', 'incident-response-playbooks', 'cross-team-bot-sharing', 'inline-prompt-editor', 'prompt-ab-testing', 'visual-cron-wizard', 'structured-output', 'bot-runbooks', 'repo-scope-filters', 'bot-performance-benchmarks', 'smart-schedule-optimizer', 'execution-tagging'].includes(currentRouteName.value);
+function isExternalIntegrationsSectionActive(): boolean {
+  return ['slack-notifications', 'integration-ticketing', 'notification-channels', 'on-call-escalation', 'github-app-install'].includes(currentRouteName.value);
 }
 
 function isPlatformSectionActive(): boolean {
@@ -253,10 +250,6 @@ function navToTriggerDashboard(triggerId: string) {
 
 function navToTriggerHistory(triggerId: string) {
   router.push({ name: 'trigger-history', params: { triggerId } });
-}
-
-function navToSecurityHistory() {
-  router.push({ name: 'security-history' });
 }
 
 function navToProductDashboard(productId: string) {
@@ -873,108 +866,42 @@ function handleSidebarKeydown(e: KeyboardEvent) {
         </button>
       </div>
 
-      <!-- Triggers (flat link) -->
-      <SidebarFlatLink
+      <!-- Triggers (expandable section, 25 items in 6 visual blocks) -->
+      <SidebarSectionLabel label="Triggers" />
+      <SidebarGroupToggle
         label="Triggers"
-        :active="sidebarActive('triggers')"
+        :expanded="expandedSections.triggers"
+        :active="isTriggersSectionActive()"
         :collapsed-desktop="isCollapsedDesktop()"
-        @click="navTo('triggers')"
+        @toggle="toggleSection('triggers')"
       >
         <template #icon>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
             <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
           </svg>
         </template>
-      </SidebarFlatLink>
-
-      <!-- Integrations (expandable) -->
-      <SidebarGroupToggle
-        label="Integrations"
-        :expanded="expandedSections.integrations"
-        :active="isIntegrationsSectionActive()"
-        :collapsed-desktop="isCollapsedDesktop()"
-        @toggle="toggleSection('integrations')"
-      >
-        <template #icon>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-            <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3"/>
-          </svg>
-        </template>
       </SidebarGroupToggle>
-      <div v-show="expandedSections.integrations" class="nav-submenu" role="region" aria-label="Integrations">
-        <button type="button" class="submenu-item" :class="{ active: sidebarActive('slack-notifications') }" :aria-current="sidebarActive('slack-notifications') ? 'page' : undefined" @click="navTo('slack-notifications')">
-          Slack Notifications
+      <div v-show="expandedSections.triggers" class="nav-submenu nav-submenu-blocks" role="region" aria-label="Triggers">
+        <div class="submenu-block-label" aria-hidden="true">Core</div>
+        <button type="button" class="submenu-item" :class="{ active: sidebarActive('triggers') }" :aria-current="sidebarActive('triggers') ? 'page' : undefined" @click="navTo('triggers')">
+          Triggers
         </button>
-        <button type="button" class="submenu-item" :class="{ active: sidebarActive('pr-auto-assignment') }" :aria-current="sidebarActive('pr-auto-assignment') ? 'page' : undefined" @click="navTo('pr-auto-assignment')">
-          PR Auto-Assignment
-        </button>
-        <button type="button" class="submenu-item" :class="{ active: sidebarActive('integration-ticketing') }" :aria-current="sidebarActive('integration-ticketing') ? 'page' : undefined" @click="navTo('integration-ticketing')">
-          Jira / Linear
-        </button>
-        <button type="button" class="submenu-item" :class="{ active: sidebarActive('multi-provider-fallback') }" :aria-current="sidebarActive('multi-provider-fallback') ? 'page' : undefined" @click="navTo('multi-provider-fallback')">
-          Provider Fallback
-        </button>
-        <button type="button" class="submenu-item" :class="{ active: sidebarActive('multi-repo-fan-out') }" :aria-current="sidebarActive('multi-repo-fan-out') ? 'page' : undefined" @click="navTo('multi-repo-fan-out')">
-          Multi-Repo Groups
-        </button>
-        <button type="button" class="submenu-item" :class="{ active: sidebarActive('github-actions') }" :aria-current="sidebarActive('github-actions') ? 'page' : undefined" @click="navTo('github-actions')">
-          GitHub Actions
-        </button>
-        <button type="button" class="submenu-item" :class="{ active: sidebarActive('on-call-escalation') }" :aria-current="sidebarActive('on-call-escalation') ? 'page' : undefined" @click="navTo('on-call-escalation')">
-          On-Call Escalation
-        </button>
-        <button type="button" class="submenu-item" :class="{ active: sidebarActive('pr-review-learning-loop') }" :aria-current="sidebarActive('pr-review-learning-loop') ? 'page' : undefined" @click="navTo('pr-review-learning-loop')">
-          PR Review Learning
-        </button>
-        <button type="button" class="submenu-item" :class="{ active: sidebarActive('notification-channels') }" :aria-current="sidebarActive('notification-channels') ? 'page' : undefined" @click="navTo('notification-channels')">
-          Notification Channels
-        </button>
-      </div>
-
-      <!-- Automation Tools (expandable) -->
-      <SidebarGroupToggle
-        label="Automation Tools"
-        :expanded="expandedSections.automationTools"
-        :active="isAutomationToolsSectionActive()"
-        :collapsed-desktop="isCollapsedDesktop()"
-        @toggle="toggleSection('automationTools')"
-      >
-        <template #icon>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-            <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
-          </svg>
-        </template>
-      </SidebarGroupToggle>
-      <div v-show="expandedSections.automationTools" class="nav-submenu" role="region" aria-label="Automation Tools">
-        <button type="button" class="submenu-item" :class="{ active: sidebarActive('bot-recommendation-engine') }" :aria-current="sidebarActive('bot-recommendation-engine') ? 'page' : undefined" @click="navTo('bot-recommendation-engine')">
-          Smart Suggestions
+        <button type="button" class="submenu-item" :class="{ active: sidebarActive('bot-templates') }" :aria-current="sidebarActive('bot-templates') ? 'page' : undefined" @click="navTo('bot-templates')">
+          Bot Templates
         </button>
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('bot-clone-fork') }" :aria-current="sidebarActive('bot-clone-fork') ? 'page' : undefined" @click="navTo('bot-clone-fork')">
           Clone &amp; Fork Bot
         </button>
-        <button type="button" class="submenu-item" :class="{ active: sidebarActive('bot-dependency-graph') }" :aria-current="sidebarActive('bot-dependency-graph') ? 'page' : undefined" @click="navTo('bot-dependency-graph')">
-          Dependency Graph
-        </button>
-        <button type="button" class="submenu-item" :class="{ active: sidebarActive('changelog-generator') }" :aria-current="sidebarActive('changelog-generator') ? 'page' : undefined" @click="navTo('changelog-generator')">
-          Changelog Generator
+        <button type="button" class="submenu-item" :class="{ active: sidebarActive('cross-team-bot-sharing') }" :aria-current="sidebarActive('cross-team-bot-sharing') ? 'page' : undefined" @click="navTo('cross-team-bot-sharing')">
+          Cross-Team Sharing
         </button>
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('incident-response-playbooks') }" :aria-current="sidebarActive('incident-response-playbooks') ? 'page' : undefined" @click="navTo('incident-response-playbooks')">
           Incident Playbooks
         </button>
-        <button type="button" class="submenu-item" :class="{ active: sidebarActive('dependency-impact-bot') }" :aria-current="sidebarActive('dependency-impact-bot') ? 'page' : undefined" @click="navTo('dependency-impact-bot')">
-          Dependency Updates
-        </button>
-        <button type="button" class="submenu-item" :class="{ active: sidebarActive('cross-team-bot-sharing') }" :aria-current="sidebarActive('cross-team-bot-sharing') ? 'page' : undefined" @click="navTo('cross-team-bot-sharing')">
-          Cross-Team Sharing
-        </button>
+
+        <div class="submenu-block-label" aria-hidden="true">Configuration</div>
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('inline-prompt-editor') }" :aria-current="sidebarActive('inline-prompt-editor') ? 'page' : undefined" @click="navTo('inline-prompt-editor')">
           Live Prompt Sandbox
-        </button>
-        <button type="button" class="submenu-item" :class="{ active: sidebarActive('prompt-ab-testing') }" :aria-current="sidebarActive('prompt-ab-testing') ? 'page' : undefined" @click="navTo('prompt-ab-testing')">
-          Prompt A/B Testing
-        </button>
-        <button type="button" class="submenu-item" :class="{ active: sidebarActive('structured-output') }" :aria-current="sidebarActive('structured-output') ? 'page' : undefined" @click="navTo('structured-output')">
-          Structured Output
         </button>
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('visual-cron-wizard') }" :aria-current="sidebarActive('visual-cron-wizard') ? 'page' : undefined" @click="navTo('visual-cron-wizard')">
           NL Cron Builder
@@ -982,56 +909,96 @@ function handleSidebarKeydown(e: KeyboardEvent) {
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('conditional-trigger-rules') }" :aria-current="sidebarActive('conditional-trigger-rules') ? 'page' : undefined" @click="navTo('conditional-trigger-rules')">
           Trigger Conditions
         </button>
-        <button type="button" class="submenu-item" :class="{ active: sidebarActive('bot-runbooks') }" :aria-current="sidebarActive('bot-runbooks') ? 'page' : undefined" @click="navTo('bot-runbooks')">
-          Bot Runbooks
-        </button>
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('repo-scope-filters') }" :aria-current="sidebarActive('repo-scope-filters') ? 'page' : undefined" @click="navTo('repo-scope-filters')">
           Repo Scope Filters
+        </button>
+        <button type="button" class="submenu-item" :class="{ active: sidebarActive('structured-output') }" :aria-current="sidebarActive('structured-output') ? 'page' : undefined" @click="navTo('structured-output')">
+          Structured Output
+        </button>
+        <button type="button" class="submenu-item" :class="{ active: sidebarActive('prompt-ab-testing') }" :aria-current="sidebarActive('prompt-ab-testing') ? 'page' : undefined" @click="navTo('prompt-ab-testing')">
+          Prompt A/B Testing
+        </button>
+        <button type="button" class="submenu-item" :class="{ active: sidebarActive('multi-provider-fallback') }" :aria-current="sidebarActive('multi-provider-fallback') ? 'page' : undefined" @click="navTo('multi-provider-fallback')">
+          Provider Fallback
+        </button>
+        <button type="button" class="submenu-item" :class="{ active: sidebarActive('multi-repo-fan-out') }" :aria-current="sidebarActive('multi-repo-fan-out') ? 'page' : undefined" @click="navTo('multi-repo-fan-out')">
+          Multi-Repo Fan-Out
+        </button>
+
+        <div class="submenu-block-label" aria-hidden="true">PR-Review</div>
+        <button type="button" class="submenu-item" :class="{ active: sidebarActive('pr-auto-assignment') }" :aria-current="sidebarActive('pr-auto-assignment') ? 'page' : undefined" @click="navTo('pr-auto-assignment')">
+          PR Auto-Assignment
+        </button>
+        <button type="button" class="submenu-item" :class="{ active: sidebarActive('pr-review-learning-loop') }" :aria-current="sidebarActive('pr-review-learning-loop') ? 'page' : undefined" @click="navTo('pr-review-learning-loop')">
+          PR Review Learning
+        </button>
+        <button type="button" class="submenu-item" :class="{ active: sidebarActive('github-actions') }" :aria-current="sidebarActive('github-actions') ? 'page' : undefined" @click="navTo('github-actions')">
+          GitHub Actions
+        </button>
+
+        <div class="submenu-block-label" aria-hidden="true">Ops</div>
+        <button type="button" class="submenu-item" :class="{ active: sidebarActive('webhook-recorder') }" :aria-current="sidebarActive('webhook-recorder') ? 'page' : undefined" @click="navTo('webhook-recorder')">
+          Webhook Recorder
+        </button>
+        <button type="button" class="submenu-item" :class="{ active: sidebarActive('dependency-impact-bot') }" :aria-current="sidebarActive('dependency-impact-bot') ? 'page' : undefined" @click="navTo('dependency-impact-bot')">
+          Dependency Updates
+        </button>
+        <button type="button" class="submenu-item" :class="{ active: sidebarActive('bot-recommendation-engine') }" :aria-current="sidebarActive('bot-recommendation-engine') ? 'page' : undefined" @click="navTo('bot-recommendation-engine')">
+          Smart Suggestions
+        </button>
+
+        <div class="submenu-block-label" aria-hidden="true">Introspection</div>
+        <button type="button" class="submenu-item" :class="{ active: sidebarActive('bot-dependency-graph') }" :aria-current="sidebarActive('bot-dependency-graph') ? 'page' : undefined" @click="navTo('bot-dependency-graph')">
+          Dependency Graph
         </button>
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('bot-performance-benchmarks') }" :aria-current="sidebarActive('bot-performance-benchmarks') ? 'page' : undefined" @click="navTo('bot-performance-benchmarks')">
           Bot Benchmarks
         </button>
-        <button type="button" class="submenu-item" :class="{ active: sidebarActive('smart-schedule-optimizer') }" :aria-current="sidebarActive('smart-schedule-optimizer') ? 'page' : undefined" @click="navTo('smart-schedule-optimizer')">
-          Schedule Optimizer
+        <button type="button" class="submenu-item" :class="{ active: sidebarActive('bot-runbooks') }" :aria-current="sidebarActive('bot-runbooks') ? 'page' : undefined" @click="navTo('bot-runbooks')">
+          Bot Runbooks
         </button>
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('execution-tagging') }" :aria-current="sidebarActive('execution-tagging') ? 'page' : undefined" @click="navTo('execution-tagging')">
           Execution Tagging
         </button>
+        <button type="button" class="submenu-item" :class="{ active: sidebarActive('changelog-generator') }" :aria-current="sidebarActive('changelog-generator') ? 'page' : undefined" @click="navTo('changelog-generator')">
+          Changelog Generator
+        </button>
+
+        <div class="submenu-block-label" aria-hidden="true">Authoring</div>
+        <button type="button" class="submenu-item" :class="{ active: sidebarActive('prompt-snippets') }" :aria-current="sidebarActive('prompt-snippets') ? 'page' : undefined" @click="navTo('prompt-snippets')">
+          Prompt Snippets
+        </button>
       </div>
 
-      <!-- Bot Templates (flat link) -->
-      <SidebarFlatLink
-        label="Bot Templates"
-        :active="sidebarActive('bot-templates')"
+      <!-- External Integrations (expandable, 4 items; on-call held until PR-D) -->
+      <SidebarSectionLabel label="External Integrations" />
+      <SidebarGroupToggle
+        label="External Integrations"
+        :expanded="expandedSections.externalIntegrations"
+        :active="isExternalIntegrationsSectionActive()"
         :collapsed-desktop="isCollapsedDesktop()"
-        @click="navTo('bot-templates')"
+        @toggle="toggleSection('externalIntegrations')"
       >
         <template #icon>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-            <rect x="3" y="3" width="7" height="7" rx="1"/>
-            <rect x="14" y="3" width="7" height="7" rx="1"/>
-            <rect x="3" y="14" width="7" height="7" rx="1"/>
-            <rect x="14" y="14" width="7" height="7" rx="1"/>
+            <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3"/>
           </svg>
         </template>
-      </SidebarFlatLink>
-
-      <!-- Prompt Snippets (flat link) -->
-      <SidebarFlatLink
-        label="Prompt Snippets"
-        :active="sidebarActive('prompt-snippets')"
-        :collapsed-desktop="isCollapsedDesktop()"
-        @click="navTo('prompt-snippets')"
-      >
-        <template #icon>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-            <path d="M14.5 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V7.5L14.5 2z"/>
-            <polyline points="14 2 14 8 20 8"/>
-            <line x1="16" y1="13" x2="8" y2="13"/>
-            <line x1="16" y1="17" x2="8" y2="17"/>
-          </svg>
-        </template>
-      </SidebarFlatLink>
+      </SidebarGroupToggle>
+      <div v-show="expandedSections.externalIntegrations" class="nav-submenu" role="region" aria-label="External Integrations">
+        <button type="button" class="submenu-item" :class="{ active: sidebarActive('slack-notifications') }" :aria-current="sidebarActive('slack-notifications') ? 'page' : undefined" @click="navTo('slack-notifications')">
+          Slack Notifications
+        </button>
+        <button type="button" class="submenu-item" :class="{ active: sidebarActive('integration-ticketing') }" :aria-current="sidebarActive('integration-ticketing') ? 'page' : undefined" @click="navTo('integration-ticketing')">
+          Jira / Linear
+        </button>
+        <button type="button" class="submenu-item" :class="{ active: sidebarActive('notification-channels') }" :aria-current="sidebarActive('notification-channels') ? 'page' : undefined" @click="navTo('notification-channels')">
+          Notification Channels
+        </button>
+        <button type="button" class="submenu-item" :class="{ active: sidebarActive('on-call-escalation') }" :aria-current="sidebarActive('on-call-escalation') ? 'page' : undefined" @click="navTo('on-call-escalation')">
+          On-Call Escalation
+        </button>
+      </div>
 
       <div class="nav-section-label">History</div>
       <!-- Triggers History (expandable) -->
@@ -1050,9 +1017,6 @@ function handleSidebarKeydown(e: KeyboardEvent) {
         </template>
       </SidebarGroupToggle>
       <div v-show="expandedSections.history" class="nav-submenu" role="region" aria-label="Trigger History">
-        <button type="button" class="submenu-item" :class="{ active: sidebarActive('security-history') }" :aria-current="sidebarActive('security-history') ? 'page' : undefined" @click="navToSecurityHistory()">
-          Security Scan
-        </button>
         <button v-for="b in props.customTriggers" :key="b.id" type="button" class="submenu-item"
           :class="{ active: currentRouteName === 'trigger-history' && route.params.triggerId === b.id }"
           :aria-current="(currentRouteName === 'trigger-history' && route.params.triggerId === b.id) ? 'page' : undefined"
@@ -1086,21 +1050,6 @@ function handleSidebarKeydown(e: KeyboardEvent) {
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
             <path d="M1 4v6h6M23 20v-6h-6"/>
             <path d="M20.49 9A9 9 0 005.64 5.64L1 10M23 14l-4.64 4.36A9 9 0 013.51 15"/>
-          </svg>
-        </template>
-      </SidebarFlatLink>
-
-      <!-- Webhook Recorder (standalone nav item) -->
-      <SidebarFlatLink
-        label="Webhook Recorder"
-        :active="sidebarActive('webhook-recorder')"
-        :collapsed-desktop="isCollapsedDesktop()"
-        @click="navTo('webhook-recorder')"
-      >
-        <template #icon>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-            <circle cx="12" cy="12" r="3"/>
-            <path d="M12 2v3M12 19v3M4.22 4.22l2.12 2.12M17.66 17.66l2.12 2.12M2 12h3M19 12h3M4.22 19.78l2.12-2.12M17.66 6.34l2.12-2.12"/>
           </svg>
         </template>
       </SidebarFlatLink>
@@ -1307,6 +1256,25 @@ function handleSidebarKeydown(e: KeyboardEvent) {
   to {
     transform: rotate(360deg);
   }
+}
+
+/* Triggers section visual block separators (PR-B).
+ * Non-clickable labels that group the 25 trigger sub-items into 6
+ * blocks. Marked aria-hidden in markup — the items themselves carry
+ * meaningful labels. */
+.submenu-block-label {
+  padding: 10px 16px 4px;
+  font-size: 0.65rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-tertiary);
+  opacity: 0.65;
+  pointer-events: none;
+}
+
+.nav-submenu-blocks .submenu-block-label:first-child {
+  padding-top: 4px;
 }
 
 /* Project instances sub-items */
