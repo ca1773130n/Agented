@@ -206,8 +206,10 @@ const FEATURE_ENABLED = false;
             v-for="skill in availableToAdd"
             :key="skill.id"
             class="skill-library-item"
+            :class="{ disabled: !FEATURE_ENABLED }"
             :style="{ borderLeftColor: categoryColors[skill.category] }"
-            @click="addSkill(skill)"
+            :title="!FEATURE_ENABLED ? 'Visual skill composer is not yet enabled in this deployment' : undefined"
+            @click="FEATURE_ENABLED && addSkill(skill)"
           >
             <div class="skill-lib-top">
               <span class="skill-lib-name">{{ skill.name }}</span>
@@ -216,7 +218,7 @@ const FEATURE_ENABLED = false;
               </span>
             </div>
             <p class="skill-lib-desc">{{ skill.description }}</p>
-            <button class="add-skill-btn">
+            <button class="add-skill-btn" :disabled="!FEATURE_ENABLED">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
               Add
             </button>
@@ -267,13 +269,28 @@ const FEATURE_ENABLED = false;
               <p class="composed-skill-desc">{{ skill.description }}</p>
             </div>
             <div class="composed-skill-controls">
-              <button class="ctrl-btn" :disabled="idx === 0" @click="moveUp(idx)" title="Move up">
+              <button
+                class="ctrl-btn"
+                :disabled="!FEATURE_ENABLED || idx === 0"
+                :title="!FEATURE_ENABLED ? 'Visual skill composer is not yet enabled in this deployment' : 'Move up'"
+                @click="moveUp(idx)"
+              >
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><polyline points="18 15 12 9 6 15"/></svg>
               </button>
-              <button class="ctrl-btn" :disabled="idx === composedSkills.length - 1" @click="moveDown(idx)" title="Move down">
+              <button
+                class="ctrl-btn"
+                :disabled="!FEATURE_ENABLED || idx === composedSkills.length - 1"
+                :title="!FEATURE_ENABLED ? 'Visual skill composer is not yet enabled in this deployment' : 'Move down'"
+                @click="moveDown(idx)"
+              >
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><polyline points="6 9 12 15 18 9"/></svg>
               </button>
-              <button class="ctrl-btn remove-btn" @click="removeSkill(skill.id)" title="Remove">
+              <button
+                class="ctrl-btn remove-btn"
+                :disabled="!FEATURE_ENABLED"
+                :title="!FEATURE_ENABLED ? 'Visual skill composer is not yet enabled in this deployment' : 'Remove'"
+                @click="removeSkill(skill.id)"
+              >
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
               </button>
             </div>

@@ -273,7 +273,12 @@ const FEATURE_ENABLED = false;
         <div v-if="rules.length === 0" class="empty-state">
           <div class="empty-icon">🔔</div>
           <p>No alert rules defined yet. Create your first rule to get proactive notifications.</p>
-          <button class="btn btn-primary" @click="openNew">Create Alert Rule</button>
+          <button
+            class="btn btn-primary"
+            :disabled="!FEATURE_ENABLED"
+            :title="!FEATURE_ENABLED ? 'Smart alert rules are not yet enabled in this deployment' : undefined"
+            @click="openNew"
+          >Create Alert Rule</button>
         </div>
 
         <div v-for="rule in rules" :key="rule.id" class="rule-card card">
