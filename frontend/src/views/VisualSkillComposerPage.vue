@@ -161,10 +161,33 @@ function skillColor(skillId: string) {
   const cat = availableSkills.value.find(s => s.id === skillId)?.category ?? 'review';
   return categoryColors[cat] ?? '#94a3b8';
 }
+
+// PR-J3: visual-skill-composer backend (composer CRUD in skills.py)
+// is not yet wired up. Flipping this constant off (and removing the
+// banner) is what gates the feature when the backend stub ships in PR-J3b.
+const FEATURE_ENABLED = false;
 </script>
 
 <template>
   <div class="skill-composer">
+
+    <!-- PR-J3: backend visual-skill-composer CRUD absent; renders as 501-equivalent banner. -->
+    <div
+      v-if="!FEATURE_ENABLED"
+      class="not-enabled-banner"
+      data-testid="visual-skill-composer-not-enabled"
+      role="status"
+    >
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <circle cx="12" cy="12" r="10"/>
+        <line x1="12" y1="8" x2="12" y2="12"/>
+        <line x1="12" y1="16" x2="12.01" y2="16"/>
+      </svg>
+      <div>
+        <strong>Visual skill composer is not yet enabled in this deployment.</strong>
+        <p>The backend that persists composed skill stacks has not shipped yet. Saving the composer state is disabled.</p>
+      </div>
+    </div>
 
     <PageHeader
       title="Visual Skill Composer"
@@ -183,8 +206,10 @@ function skillColor(skillId: string) {
             v-for="skill in availableToAdd"
             :key="skill.id"
             class="skill-library-item"
+            :class="{ disabled: !FEATURE_ENABLED }"
             :style="{ borderLeftColor: categoryColors[skill.category] }"
-            @click="addSkill(skill)"
+            :title="!FEATURE_ENABLED ? 'Visual skill composer is not yet enabled in this deployment' : undefined"
+            @click="FEATURE_ENABLED && addSkill(skill)"
           >
             <div class="skill-lib-top">
               <span class="skill-lib-name">{{ skill.name }}</span>
@@ -193,7 +218,7 @@ function skillColor(skillId: string) {
               </span>
             </div>
             <p class="skill-lib-desc">{{ skill.description }}</p>
-            <button class="add-skill-btn">
+            <button class="add-skill-btn" :disabled="!FEATURE_ENABLED">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
               Add
             </button>
@@ -210,7 +235,13 @@ function skillColor(skillId: string) {
           <div class="name-field">
             <input v-model="composerName" type="text" class="name-input" placeholder="Skill set name..." />
           </div>
-          <button class="btn btn-primary" @click="saveComposition">Save Skill Set</button>
+          <button
+            class="btn btn-primary"
+            :disabled="!FEATURE_ENABLED"
+            :title="!FEATURE_ENABLED ? 'Visual skill composer is not yet enabled in this deployment' : undefined"
+            data-testid="visual-skill-composer-save-submit"
+            @click="saveComposition"
+          >Save Skill Set</button>
         </div>
 
         <div v-if="conflictWarnings.length > 0" class="conflict-banner">
@@ -238,13 +269,28 @@ function skillColor(skillId: string) {
               <p class="composed-skill-desc">{{ skill.description }}</p>
             </div>
             <div class="composed-skill-controls">
-              <button class="ctrl-btn" :disabled="idx === 0" @click="moveUp(idx)" title="Move up">
+              <button
+                class="ctrl-btn"
+                :disabled="!FEATURE_ENABLED || idx === 0"
+                :title="!FEATURE_ENABLED ? 'Visual skill composer is not yet enabled in this deployment' : 'Move up'"
+                @click="moveUp(idx)"
+              >
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><polyline points="18 15 12 9 6 15"/></svg>
               </button>
-              <button class="ctrl-btn" :disabled="idx === composedSkills.length - 1" @click="moveDown(idx)" title="Move down">
+              <button
+                class="ctrl-btn"
+                :disabled="!FEATURE_ENABLED || idx === composedSkills.length - 1"
+                :title="!FEATURE_ENABLED ? 'Visual skill composer is not yet enabled in this deployment' : 'Move down'"
+                @click="moveDown(idx)"
+              >
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><polyline points="6 9 12 15 18 9"/></svg>
               </button>
-              <button class="ctrl-btn remove-btn" @click="removeSkill(skill.id)" title="Remove">
+              <button
+                class="ctrl-btn remove-btn"
+                :disabled="!FEATURE_ENABLED"
+                :title="!FEATURE_ENABLED ? 'Visual skill composer is not yet enabled in this deployment' : 'Remove'"
+                @click="removeSkill(skill.id)"
+              >
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
               </button>
             </div>
@@ -562,4 +608,17 @@ function skillColor(skillId: string) {
 @media (max-width: 900px) {
   .composer-layout { grid-template-columns: 1fr; }
 }
+
+/* PR-J3: 501-not-enabled banner */
+.not-enabled-banner {
+  display: flex; align-items: flex-start; gap: 12px;
+  padding: 16px 20px; border-radius: 8px;
+  background: var(--bg-elevated, rgba(255,255,255,0.04));
+  border: 1px dashed var(--border-default, rgba(255,255,255,0.15));
+  color: var(--text-secondary);
+  margin-bottom: 16px;
+}
+.not-enabled-banner svg { width: 18px; height: 18px; flex-shrink: 0; color: var(--text-tertiary); margin-top: 2px; }
+.not-enabled-banner strong { display: block; font-size: 0.9rem; font-weight: 600; color: var(--text-primary); margin-bottom: 4px; }
+.not-enabled-banner p { margin: 0; font-size: 0.82rem; color: var(--text-tertiary); }
 </style>

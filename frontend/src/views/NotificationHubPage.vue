@@ -88,11 +88,34 @@ async function testNotification() {
   }
 }
 
+// PR-J3: `/admin/notifications/{config,test}` is not yet wired up server-side.
+// Flipping this constant off (and removing the banner) is what gates the
+// feature when the backend stub ships in PR-J3b.
+const FEATURE_ENABLED = false;
+
 onMounted(loadConfig);
 </script>
 
 <template>
   <div class="notification-hub-page">
+
+    <!-- PR-J3: backend `/admin/notifications/*` absent; renders as 501-equivalent banner. -->
+    <div
+      v-if="!FEATURE_ENABLED"
+      class="not-enabled-banner"
+      data-testid="notification-hub-not-enabled"
+      role="status"
+    >
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <circle cx="12" cy="12" r="10"/>
+        <line x1="12" y1="8" x2="12" y2="12"/>
+        <line x1="12" y1="16" x2="12.01" y2="16"/>
+      </svg>
+      <div>
+        <strong>Notification hub is not yet enabled in this deployment.</strong>
+        <p>The backend that persists delivery channels and event routing has not shipped yet. Saving and test sends are disabled.</p>
+      </div>
+    </div>
 
     <div class="page-title-row">
       <div>
@@ -100,10 +123,21 @@ onMounted(loadConfig);
         <p class="subtitle">Configure delivery channels and event routing for bot notifications</p>
       </div>
       <div class="header-actions">
-        <button class="btn btn-secondary" :disabled="isTesting" @click="testNotification">
+        <button
+          class="btn btn-secondary"
+          :disabled="isTesting || !FEATURE_ENABLED"
+          :title="!FEATURE_ENABLED ? 'Notification hub is not yet enabled' : ''"
+          @click="testNotification"
+        >
           {{ isTesting ? 'Sending...' : 'Test Notification' }}
         </button>
-        <button class="btn btn-primary" :disabled="isSaving" @click="saveConfig">
+        <button
+          class="btn btn-primary"
+          :disabled="isSaving || !FEATURE_ENABLED"
+          :title="!FEATURE_ENABLED ? 'Notification hub is not yet enabled in this deployment' : undefined"
+          data-testid="notification-hub-save-submit"
+          @click="saveConfig"
+        >
           {{ isSaving ? 'Saving...' : 'Save Config' }}
         </button>
       </div>
@@ -325,4 +359,17 @@ onMounted(loadConfig);
   white-space: pre-wrap;
   margin: 0;
 }
+
+/* PR-J3: 501-not-enabled banner */
+.not-enabled-banner {
+  display: flex; align-items: flex-start; gap: 12px;
+  padding: 16px 20px; border-radius: 8px;
+  background: var(--bg-elevated, rgba(255,255,255,0.04));
+  border: 1px dashed var(--border-default, rgba(255,255,255,0.15));
+  color: var(--text-secondary);
+  margin-bottom: 16px;
+}
+.not-enabled-banner svg { width: 18px; height: 18px; flex-shrink: 0; color: var(--text-tertiary); margin-top: 2px; }
+.not-enabled-banner strong { display: block; font-size: 0.9rem; font-weight: 600; color: var(--text-primary); margin-bottom: 4px; }
+.not-enabled-banner p { margin: 0; font-size: 0.82rem; color: var(--text-tertiary); }
 </style>

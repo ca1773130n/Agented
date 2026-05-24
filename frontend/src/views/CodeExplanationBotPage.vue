@@ -121,11 +121,34 @@ function formatTime(iso: string): string {
   return d.toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' });
 }
 
+// PR-J3: `/admin/bots/code-explanations` is not yet wired up server-side.
+// Flipping this constant off (and removing the banner) is what gates the
+// feature when the backend stub ships in PR-J3b.
+const FEATURE_ENABLED = false;
+
 onMounted(loadHistory);
 </script>
 
 <template>
   <div class="page-container">
+
+    <!-- PR-J3: backend `/admin/bots/code-explanations` absent; renders as 501-equivalent banner. -->
+    <div
+      v-if="!FEATURE_ENABLED"
+      class="not-enabled-banner"
+      data-testid="code-explanation-not-enabled"
+      role="status"
+    >
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <circle cx="12" cy="12" r="10"/>
+        <line x1="12" y1="8" x2="12" y2="12"/>
+        <line x1="12" y1="16" x2="12.01" y2="16"/>
+      </svg>
+      <div>
+        <strong>On-demand code explanation bot is not yet enabled in this deployment.</strong>
+        <p>The backend that generates code explanations has not shipped yet. Running explanations is disabled.</p>
+      </div>
+    </div>
 
     <div class="page-header">
       <div>
@@ -175,7 +198,13 @@ onMounted(loadHistory);
           </div>
         </div>
 
-        <button class="run-btn" :disabled="isExplaining" @click="runExplanation">
+        <button
+          class="run-btn"
+          :disabled="isExplaining || !FEATURE_ENABLED"
+          :title="!FEATURE_ENABLED ? 'On-demand code explanation bot is not yet enabled in this deployment' : undefined"
+          data-testid="code-explanation-run-submit"
+          @click="runExplanation"
+        >
           <span v-if="isExplaining">Generating...</span>
           <span v-else>Explain</span>
         </button>
@@ -409,4 +438,17 @@ onMounted(loadHistory);
   padding: 2rem 0;
   margin: 0;
 }
+
+/* PR-J3: 501-not-enabled banner */
+.not-enabled-banner {
+  display: flex; align-items: flex-start; gap: 12px;
+  padding: 16px 20px; border-radius: 8px;
+  background: var(--bg-elevated, rgba(255,255,255,0.04));
+  border: 1px dashed var(--border-default, rgba(255,255,255,0.15));
+  color: var(--text-secondary);
+  margin-bottom: 16px;
+}
+.not-enabled-banner svg { width: 18px; height: 18px; flex-shrink: 0; color: var(--text-tertiary); margin-top: 2px; }
+.not-enabled-banner strong { display: block; font-size: 0.9rem; font-weight: 600; color: var(--text-primary); margin-bottom: 4px; }
+.not-enabled-banner p { margin: 0; font-size: 0.82rem; color: var(--text-tertiary); }
 </style>

@@ -112,22 +112,55 @@ async function savePolicy() {
   }
 }
 
+// PR-J3: `retentionApi.list/create` paths are not yet wired up server-side.
+// Flipping this constant off (and removing the banner) is what gates the
+// feature when the backend stub ships in PR-J3b.
+const FEATURE_ENABLED = false;
+
 onMounted(loadPolicies);
 </script>
 
 <template>
   <div class="data-retention">
 
+    <!-- PR-J3: backend retention routes absent; renders as 501-equivalent banner. -->
+    <div
+      v-if="!FEATURE_ENABLED"
+      class="not-enabled-banner"
+      data-testid="data-retention-not-enabled"
+      role="status"
+    >
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <circle cx="12" cy="12" r="10"/>
+        <line x1="12" y1="8" x2="12" y2="12"/>
+        <line x1="12" y1="16" x2="12.01" y2="16"/>
+      </svg>
+      <div>
+        <strong>Data retention policies are not yet enabled in this deployment.</strong>
+        <p>The backend that enforces per-team retention windows has not shipped yet. Creating, editing, or running cleanup is disabled.</p>
+      </div>
+    </div>
+
     <PageHeader
       title="Data Retention Policies"
       subtitle="Configure how long execution logs, outputs, and metrics are stored per team or bot."
     >
       <template #actions>
-        <button class="btn btn-secondary" @click="runCleanup">
+        <button
+          class="btn btn-secondary"
+          :disabled="!FEATURE_ENABLED"
+          :title="!FEATURE_ENABLED ? 'Data retention policies are not yet enabled' : ''"
+          @click="runCleanup"
+        >
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-4.5"/></svg>
           Run Cleanup Now
         </button>
-        <button class="btn btn-primary" @click="showAddModal = true">
+        <button
+          class="btn btn-primary"
+          :disabled="!FEATURE_ENABLED"
+          :title="!FEATURE_ENABLED ? 'Data retention policies are not yet enabled' : ''"
+          @click="showAddModal = true"
+        >
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
           Add Policy
         </button>
@@ -193,12 +226,23 @@ onMounted(loadPolicies);
           </div>
           <div class="size-cell">{{ (policy.estimated_size_gb ?? 0).toFixed(2) }} GB</div>
           <div class="status-cell">
-            <button class="toggle-btn" :class="{ active: policy.enabled }" @click="toggleEnabled(policy)">
+            <button
+              class="toggle-btn"
+              :class="{ active: policy.enabled }"
+              :disabled="!FEATURE_ENABLED"
+              :title="!FEATURE_ENABLED ? 'Data retention policies are not yet enabled' : ''"
+              @click="toggleEnabled(policy)"
+            >
               {{ policy.enabled ? 'Active' : 'Off' }}
             </button>
           </div>
           <div class="actions-cell">
-            <button class="icon-btn" @click="deletePolicy(policy.id)" title="Remove policy">
+            <button
+              class="icon-btn"
+              :disabled="!FEATURE_ENABLED"
+              :title="!FEATURE_ENABLED ? 'Data retention policies are not yet enabled' : 'Remove policy'"
+              @click="deletePolicy(policy.id)"
+            >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
             </button>
           </div>
@@ -257,7 +301,13 @@ onMounted(loadPolicies);
         </div>
         <div class="modal-footer">
           <button class="btn btn-secondary" @click="showAddModal = false">Cancel</button>
-          <button class="btn btn-primary" @click="savePolicy">Add Policy</button>
+          <button
+            class="btn btn-primary"
+            :disabled="!FEATURE_ENABLED"
+            :title="!FEATURE_ENABLED ? 'Data retention policies are not yet enabled in this deployment' : undefined"
+            data-testid="data-retention-save-submit"
+            @click="savePolicy"
+          >Add Policy</button>
         </div>
       </div>
     </div>
@@ -546,4 +596,17 @@ onMounted(loadPolicies);
   .table-row .expiry-cell,
   .table-row .size-cell { display: none; }
 }
+
+/* PR-J3: 501-not-enabled banner */
+.not-enabled-banner {
+  display: flex; align-items: flex-start; gap: 12px;
+  padding: 16px 20px; border-radius: 8px;
+  background: var(--bg-elevated, rgba(255,255,255,0.04));
+  border: 1px dashed var(--border-default, rgba(255,255,255,0.15));
+  color: var(--text-secondary);
+  margin-bottom: 16px;
+}
+.not-enabled-banner svg { width: 18px; height: 18px; flex-shrink: 0; color: var(--text-tertiary); margin-top: 2px; }
+.not-enabled-banner strong { display: block; font-size: 0.9rem; font-weight: 600; color: var(--text-primary); margin-bottom: 4px; }
+.not-enabled-banner p { margin: 0; font-size: 0.82rem; color: var(--text-tertiary); }
 </style>

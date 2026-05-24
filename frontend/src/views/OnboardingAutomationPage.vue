@@ -98,10 +98,33 @@ function statusColor(status: string) {
 function formatTime(ts: string) {
   return new Date(ts).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
+
+// PR-J3: onboarding automation backend (placeholder in admin_misc.py)
+// is not yet wired up. Flipping this constant off (and removing the
+// banner) is what gates the feature when the backend stub ships in PR-J3b.
+const FEATURE_ENABLED = false;
 </script>
 
 <template>
   <div class="onboarding-page">
+    <!-- PR-J3: backend onboarding automation routes absent; renders as 501-equivalent banner. -->
+    <div
+      v-if="!FEATURE_ENABLED"
+      class="not-enabled-banner"
+      data-testid="onboarding-automation-not-enabled"
+      role="status"
+    >
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <circle cx="12" cy="12" r="10"/>
+        <line x1="12" y1="8" x2="12" y2="12"/>
+        <line x1="12" y1="16" x2="12.01" y2="16"/>
+      </svg>
+      <div>
+        <strong>Onboarding automation is not yet enabled in this deployment.</strong>
+        <p>The backend that listens for GitHub member events and runs onboarding tasks has not shipped yet. Saving config and triggering runs is disabled.</p>
+      </div>
+    </div>
+
     <PageHeader
       title="New Engineer Onboarding Automation"
       subtitle="Automatically run onboarding tasks when a new GitHub org member is added"
@@ -124,12 +147,20 @@ function formatTime(ts: string) {
             <button
               class="toggle-btn"
               :class="{ active: triggerEnabled }"
+              :disabled="!FEATURE_ENABLED"
+              :title="!FEATURE_ENABLED ? 'Onboarding automation is not yet enabled' : ''"
               @click="triggerEnabled = !triggerEnabled"
             >
               {{ triggerEnabled ? 'ON' : 'OFF' }}
             </button>
           </label>
-          <button class="btn-primary" @click="saveConfig">Save</button>
+          <button
+            class="btn-primary"
+            :disabled="!FEATURE_ENABLED"
+            :title="!FEATURE_ENABLED ? 'Onboarding automation is not yet enabled in this deployment' : undefined"
+            data-testid="onboarding-save-submit"
+            @click="saveConfig"
+          >Save</button>
         </div>
       </section>
 
@@ -153,6 +184,8 @@ function formatTime(ts: string) {
             <button
               class="step-toggle"
               :class="{ active: step.enabled }"
+              :disabled="!FEATURE_ENABLED"
+              :title="!FEATURE_ENABLED ? 'Onboarding automation is not yet enabled' : ''"
               @click="toggleStep(step.id)"
             >
               {{ step.enabled ? 'Enabled' : 'Disabled' }}
@@ -446,4 +479,17 @@ function formatTime(ts: string) {
 .trigger-config .config-row {
   margin-top: 0.75rem;
 }
+
+/* PR-J3: 501-not-enabled banner */
+.not-enabled-banner {
+  display: flex; align-items: flex-start; gap: 12px;
+  padding: 16px 20px; border-radius: 8px;
+  background: var(--bg-elevated, rgba(255,255,255,0.04));
+  border: 1px dashed var(--border-default, rgba(255,255,255,0.15));
+  color: var(--text-secondary);
+  margin-bottom: 16px;
+}
+.not-enabled-banner svg { width: 18px; height: 18px; flex-shrink: 0; color: var(--text-tertiary); margin-top: 2px; }
+.not-enabled-banner strong { display: block; font-size: 0.9rem; font-weight: 600; color: var(--text-primary); margin-bottom: 4px; }
+.not-enabled-banner p { margin: 0; font-size: 0.82rem; color: var(--text-tertiary); }
 </style>

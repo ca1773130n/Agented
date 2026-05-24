@@ -180,10 +180,33 @@ function dismissSuggestion(s: ScheduleSuggestion) {
 
 const totalConflicts = computed(() => botSchedules.value.reduce((s, b) => s + b.lastConflicts, 0));
 const highRiskCount = computed(() => botSchedules.value.filter((b) => b.riskLevel === 'high').length);
+
+// PR-J3: smart-schedule-optimizer backend is not yet wired up.
+// Flipping this constant off (and removing the banner) is what gates the
+// feature when the backend stub ships in PR-J3b.
+const FEATURE_ENABLED = false;
 </script>
 
 <template>
   <div class="page-container">
+    <!-- PR-J3: backend smart-schedule-optimizer routes absent; renders as 501-equivalent banner. -->
+    <div
+      v-if="!FEATURE_ENABLED"
+      class="not-enabled-banner"
+      data-testid="smart-schedule-not-enabled"
+      role="status"
+    >
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <circle cx="12" cy="12" r="10"/>
+        <line x1="12" y1="8" x2="12" y2="12"/>
+        <line x1="12" y1="16" x2="12.01" y2="16"/>
+      </svg>
+      <div>
+        <strong>Smart schedule optimizer is not yet enabled in this deployment.</strong>
+        <p>The backend that analyzes API contention patterns and recomputes schedules has not shipped yet. Applying suggestions is disabled.</p>
+      </div>
+    </div>
+
     <PageHeader
       title="Smart Schedule Optimizer"
       subtitle="AI-powered scheduling that analyzes API rate limit patterns and execution history to avoid peak contention"
@@ -280,7 +303,9 @@ const highRiskCount = computed(() => botSchedules.value.filter((b) => b.riskLeve
           <h3 class="section-title">Current Bot Schedules</h3>
           <button
             class="btn-primary"
-            :disabled="optStatus === 'analyzing'"
+            :disabled="optStatus === 'analyzing' || !FEATURE_ENABLED"
+            :title="!FEATURE_ENABLED ? 'Smart schedule optimizer is not yet enabled in this deployment' : undefined"
+            data-testid="smart-schedule-run-submit"
             @click="runOptimizer"
           >
             {{ optStatus === 'analyzing' ? '⏳ Analyzing…' : '⚡ Run Optimizer' }}
@@ -326,8 +351,18 @@ const highRiskCount = computed(() => botSchedules.value.filter((b) => b.riskLeve
             <div class="suggestion-header">
               <div class="suggestion-bot">{{ s.botName }}</div>
               <div class="suggestion-actions">
-                <button class="btn-apply" @click="applySuggestion(s)">Apply</button>
-                <button class="btn-dismiss" @click="dismissSuggestion(s)">Dismiss</button>
+                <button
+                  class="btn-apply"
+                  :disabled="!FEATURE_ENABLED"
+                  :title="!FEATURE_ENABLED ? 'Smart schedule optimizer is not yet enabled' : ''"
+                  @click="applySuggestion(s)"
+                >Apply</button>
+                <button
+                  class="btn-dismiss"
+                  :disabled="!FEATURE_ENABLED"
+                  :title="!FEATURE_ENABLED ? 'Smart schedule optimizer is not yet enabled' : ''"
+                  @click="dismissSuggestion(s)"
+                >Dismiss</button>
               </div>
             </div>
             <div class="schedule-compare">
@@ -406,4 +441,17 @@ const highRiskCount = computed(() => botSchedules.value.filter((b) => b.riskLeve
 .empty-detail { text-align: center; padding: 40px; color: var(--text-muted); }
 .empty-icon { font-size: 32px; margin-bottom: 12px; }
 .empty-text { font-size: 14px; }
+
+/* PR-J3: 501-not-enabled banner */
+.not-enabled-banner {
+  display: flex; align-items: flex-start; gap: 12px;
+  padding: 16px 20px; border-radius: 8px;
+  background: var(--bg-elevated, rgba(255,255,255,0.04));
+  border: 1px dashed var(--border-default, rgba(255,255,255,0.15));
+  color: var(--text-secondary);
+  margin-bottom: 16px;
+}
+.not-enabled-banner svg { width: 18px; height: 18px; flex-shrink: 0; color: var(--text-tertiary); margin-top: 2px; }
+.not-enabled-banner strong { display: block; font-size: 0.9rem; font-weight: 600; color: var(--text-primary); margin-bottom: 4px; }
+.not-enabled-banner p { margin: 0; font-size: 0.82rem; color: var(--text-tertiary); }
 </style>
