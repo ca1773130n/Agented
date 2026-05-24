@@ -356,6 +356,31 @@ def on_startup(app: Any) -> None:
         register_completion_handler(WorkflowTriggerService.on_execution_complete)
     except Exception:
         logger.warning("execution_events handler registration failed", exc_info=True)
+    # Life-Harness T1: failure annotator classifies each completed execution
+    # into the four interface layers (H2/H3/H4/general) so the Activity-lane
+    # execution-inspector tile can colour-code by which layer failed.
+    # Separate try/except so an annotator import failure can't take out the
+    # trigger handler registration above.
+    try:
+        from app.services.execution_events import register_completion_handler
+        from app.services.harness_failure_annotator import (
+            on_execution_complete as on_complete_annotate,
+        )
+
+        register_completion_handler(on_complete_annotate)
+    except Exception:
+        logger.warning(
+            "harness_failure_annotator registration failed", exc_info=True
+        )
+    # Life-Harness T2: sweep stale /tmp/agented-claude-overlay-* dirs left
+    # behind by crashes / SIGKILLs where the per-execution finally block
+    # didn't run. Best-effort; never blocks startup.
+    try:
+        from app.services.harness_overlay import cleanup_stale_overlays
+
+        cleanup_stale_overlays()
+    except Exception:
+        logger.debug("harness overlay GC raised on startup", exc_info=True)
     # Pass `None` because SchedulerService.init expects a Flask-style object
     # only for testing-mode detection, which doesn't apply when Litestar
     # runs standalone. The service tolerates None via attribute getattr.

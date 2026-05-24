@@ -518,6 +518,52 @@ def execution_artifacts() -> dict[str, Any]:
     raise HTTPException(status_code=501, detail="Feature not yet enabled")
 
 
+# ---------------------------------------------------------------------------
+# Life-Harness annotation endpoints (T1 surface for the Activity lane).
+# ---------------------------------------------------------------------------
+
+
+@get("/executions/annotations/summary", sync_to_thread=False)
+def get_annotation_summary(
+    since: Optional[str] = None,
+    limit: int = 10,
+    primary_layer: Optional[str] = None,
+) -> dict[str, Any]:
+    """Aggregate harness-layer counts plus a small ``recent_failures`` list.
+
+    Reads ``execution_annotations`` only — does not join to ``execution_logs``,
+    so it stays cheap to fetch on lane render. Frontend joins client-side if
+    it needs trigger / bot names.
+    """
+    from app.db.harness_annotations import recent_with_layer, summary_counts
+
+    capped_limit = max(1, min(int(limit or 10), 100))
+    counts = summary_counts(since=since)
+    failures = recent_with_layer(
+        since=since, primary_layer=primary_layer, limit=capped_limit
+    )
+    return {
+        "since": since,
+        "by_layer": counts,
+        "recent_failures": failures,
+    }
+
+
+@get("/executions/{execution_id:str}/annotation", sync_to_thread=False)
+def get_execution_annotation(execution_id: str) -> dict[str, Any]:
+    """Per-execution annotation summary + full incident list.
+
+    Returns ``{"annotation": null, "incidents": []}`` when the execution has
+    not yet been annotated — distinct from "execution does not exist". The
+    caller can show a "Not yet annotated" hint rather than a 404 page.
+    """
+    from app.db.harness_annotations import get_annotation, list_incidents
+
+    annotation = get_annotation(execution_id)
+    incidents = list_incidents(execution_id)
+    return {"annotation": annotation, "incidents": incidents}
+
+
 executions_router = Router(
     path="/admin",
     route_handlers=[
@@ -542,5 +588,7 @@ executions_router = Router(
         update_execution_quota,
         delete_execution_quota,
         execution_artifacts,
+        get_annotation_summary,
+        get_execution_annotation,
     ],
 )

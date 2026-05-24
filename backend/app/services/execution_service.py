@@ -505,6 +505,35 @@ class ExecutionService:
             # Build process environment with optional overrides (includes vault secrets)
             proc_env = cls._build_subprocess_env(env_overrides)
 
+            # Life-Harness T2 integration: compile the bot's harness IR
+            # (H2/H3/H4/H5 layers), inject system_prompt_overlay via
+            # --append-system-prompt AND hook specs via a per-execution
+            # CLAUDE_CONFIG_DIR overlay, then snapshot what was applied.
+            # Best-effort: any failure falls back to the original cmd/env;
+            # never blocks the spawn. Disable globally with
+            # AGENTED_HARNESS_INJECT=0 (snapshots still recorded).
+            _harness_overlay_dir: Optional[str] = None
+            try:
+                from app.services.harness_snapshot_service import (
+                    prepare_harness_for_execution,
+                )
+
+                cmd, proc_env, _harness_artifact, _harness_overlay_dir = (
+                    prepare_harness_for_execution(
+                        execution_id=execution_id,
+                        bot_id=trigger.get("id", trigger_id),
+                        harness_kind=backend,
+                        cmd=cmd,
+                        env=proc_env,
+                        trigger_id=trigger_id,
+                    )
+                )
+            except Exception:
+                logger.debug(
+                    "harness_inject wrapper raised for %s", execution_id,
+                    exc_info=True,
+                )
+
             # Use Popen for streaming output (start_new_session for process group management)
             process = subprocess.Popen(
                 cmd,
@@ -711,6 +740,21 @@ class ExecutionService:
                     logger.error("Failed to clean up cloned directory %s: %s", d, e, exc_info=True)
                 except Exception:
                     logger.exception("Unexpected error cleaning up cloned directory: %s", d)
+            # Life-Harness T2: remove the per-execution Claude config overlay
+            # if one was created. ``locals().get`` guards against the variable
+            # never being assigned when an earlier setup step raised.
+            _hod = locals().get("_harness_overlay_dir")
+            if _hod and execution_id:
+                try:
+                    from app.services.harness_overlay import (
+                        cleanup_overlay_for_execution,
+                    )
+                    cleanup_overlay_for_execution(execution_id)
+                except Exception:
+                    logger.debug(
+                        "harness overlay cleanup raised for %s",
+                        execution_id, exc_info=True,
+                    )
             # Remove from ProcessManager tracking
             if execution_id:
                 ProcessManager.cleanup(execution_id)

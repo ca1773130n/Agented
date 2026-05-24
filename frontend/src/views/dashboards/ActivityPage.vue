@@ -15,6 +15,9 @@ import SchedulingCard from './cards/SchedulingCard.vue';
 import ExecutionQueueCard from './cards/ExecutionQueueCard.vue';
 import ExecutionVolumeCard from './cards/ExecutionVolumeCard.vue';
 import SuccessRateCard from './cards/SuccessRateCard.vue';
+import HarnessLayerCard from './cards/HarnessLayerCard.vue';
+import HarnessEvolutionCard from './cards/HarnessEvolutionCard.vue';
+import HarnessLayersCard from './cards/HarnessLayersCard.vue';
 import ImpactReportCard from './cards/ImpactReportCard.vue';
 import CrossTeamInsightsCard from './cards/CrossTeamInsightsCard.vue';
 import RoiLeaderboardCard from './cards/RoiLeaderboardCard.vue';
@@ -95,6 +98,9 @@ onMounted(maybeScroll);
         <ExecutionQueueCard @loaded="onCardLoaded" />
         <ExecutionVolumeCard @loaded="onCardLoaded" />
         <SuccessRateCard @loaded="onCardLoaded" />
+        <HarnessLayerCard @loaded="onCardLoaded" />
+        <HarnessLayersCard @loaded="onCardLoaded" />
+        <HarnessEvolutionCard @loaded="onCardLoaded" />
       </div>
     </section>
 

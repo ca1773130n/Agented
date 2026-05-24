@@ -82,3 +82,11 @@ backend/.secret_key
 # /understand analysis caches — keep top-level outputs only
 .understand-anything/intermediate/
 .understand-anything/tmp/
+
+# Life-Harness T3 evolution scratch dirs. The evolver calls
+# ``tempfile.mkdtemp`` which is supposed to land them in $TMPDIR; in
+# sandbox environments where TMPDIR is unset and the default falls
+# through to the CWD, they end up here. The dir contents are the per-
+# round Codex workspace (harness.json + trajectories/) and are never
+# meant to be committed.
+/agented-harness-evolution-*/

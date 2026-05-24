@@ -584,6 +584,120 @@ def _migrate_130_project_sessions_super_agent_link(conn) -> None:
     )
 
 
+def _migrate_136_harness_skill_index(conn):
+    """Life-Harness T-final: FTS5 index over enabled H5 procedural skills.
+
+    Backs BM25 top-K retrieval at compile time. Idempotent.
+
+    Reference: arXiv 2605.22166 §4.3.2 Procedural Skill Layer.
+    """
+    from app.db.schema._harness_skill_index import (
+        create_harness_skill_index_tables,
+    )
+
+    create_harness_skill_index_tables(conn)
+
+
+def _migrate_135_harness_evolution_dry_run(conn):
+    """Life-Harness T3 dry-run: widen ``status`` CHECK to include
+    ``'awaiting_approval'``. SQLite can't ALTER a CHECK constraint, so we
+    rebuild the table (rename → fresh CREATE with new schema → INSERT-SELECT
+    → drop old → recreate indexes).
+
+    Idempotent against the post-state: if the column already permits
+    ``'awaiting_approval'`` we leave the table alone.
+    """
+    # Probe: try inserting a sentinel under the new state to see if the
+    # constraint already permits it. Cheaper than parsing sqlite_master.
+    cur = conn.execute(
+        "SELECT sql FROM sqlite_master WHERE type='table' "
+        "AND name='harness_evolution_rounds'"
+    )
+    row = cur.fetchone()
+    if row is None:
+        # Migration 134 hasn't run yet — nothing to widen. (Should not
+        # happen in normal ordering but be safe.)
+        from app.db.schema._harness_evolution import (
+            create_harness_evolution_tables,
+        )
+        create_harness_evolution_tables(conn)
+        return
+    if "'awaiting_approval'" in (row[0] or ""):
+        return  # already widened
+
+    conn.execute("ALTER TABLE harness_evolution_rounds RENAME TO _her_old")
+    from app.db.schema._harness_evolution import (
+        create_harness_evolution_tables,
+    )
+    create_harness_evolution_tables(conn)
+    conn.execute(
+        """INSERT INTO harness_evolution_rounds (
+               id, bot_id, started_at, finished_at, status,
+               input_window_since, input_window_until, input_execution_count,
+               input_layers_json, output_patch_json, applied_layer_ids_json,
+               error_message, notes, scratch_dir
+           )
+           SELECT id, bot_id, started_at, finished_at, status,
+                  input_window_since, input_window_until, input_execution_count,
+                  input_layers_json, output_patch_json, applied_layer_ids_json,
+                  error_message, notes, scratch_dir
+           FROM _her_old"""
+    )
+    conn.execute("DROP TABLE _her_old")
+
+
+def _migrate_134_harness_evolution(conn):
+    """Life-Harness T3: per-round audit table for the Codex-driven
+    evolution loop. Idempotent.
+
+    Reference: arXiv 2605.22166 §5.2 Evolution Dynamics.
+    """
+    from app.db.schema._harness_evolution import create_harness_evolution_tables
+
+    create_harness_evolution_tables(conn)
+
+
+def _migrate_133_harness_snapshots(conn):
+    """Life-Harness T2 integration: per-execution snapshot of the active
+    harness IR. Capture-only — does not yet inject into the spawn argv/env.
+    Feeds T3's evolution loop (which has to attribute trajectories to
+    harness versions). Idempotent.
+    """
+    from app.db.schema._harness_snapshots import create_harness_snapshot_tables
+
+    create_harness_snapshot_tables(conn)
+
+
+def _migrate_132_harness_layers(conn):
+    """Life-Harness T2: harness_layers table for the four-layer IR.
+
+    One row per intervention (H2/H3/H4/H5). Compiled into a per-bot
+    ``HarnessBuildArtifact`` by ``HarnessBuildService.build_for``. Idempotent.
+
+    Reference: arXiv 2605.22166 (Life-Harness, §4 Method).
+    """
+    from app.db.schema._harness_layers import create_harness_layer_tables
+
+    create_harness_layer_tables(conn)
+
+
+def _migrate_131_harness_annotations(conn):
+    """Life-Harness T1: per-execution interface-failure annotation tables.
+
+    Adds ``execution_layer_incidents`` (one row per detected H2/H3/H4
+    incident) and ``execution_annotations`` (denormalized per-execution
+    roll-up consumed by the Activity-lane execution-inspector tile).
+
+    Idempotent ``CREATE TABLE IF NOT EXISTS`` blocks — safe on existing
+    installs and on a fresh DB that already ran ``create_fresh_schema``.
+
+    Reference: arXiv 2605.22166 (Life-Harness, Appendix A.1).
+    """
+    from app.db.schema._harness_annotations import create_harness_annotation_tables
+
+    create_harness_annotation_tables(conn)
+
+
 V07_MIGRATIONS: list = [
     # v0.7.7: super-agent activity inspector — timeline + rollup.
     (116, "super_agent_activity", _migrate_116_super_agent_activity),
@@ -632,4 +746,16 @@ V07_MIGRATIONS: list = [
     # back to the originating SA so the SA's activity surface
     # can list its own Ouroboros runs.
     (130, "project_sessions_super_agent_link", _migrate_130_project_sessions_super_agent_link),
+    # Life-Harness T1: per-execution interface-failure annotation tables.
+    (131, "harness_annotations", _migrate_131_harness_annotations),
+    # Life-Harness T2: harness_layers IR (H2/H3/H4/H5 first-class rows).
+    (132, "harness_layers", _migrate_132_harness_layers),
+    # Life-Harness T2 integration: per-execution snapshot table (capture-only).
+    (133, "harness_snapshots", _migrate_133_harness_snapshots),
+    # Life-Harness T3: per-round audit table for the Codex evolution loop.
+    (134, "harness_evolution", _migrate_134_harness_evolution),
+    # Life-Harness T3 dry-run: widen status CHECK to allow awaiting_approval.
+    (135, "harness_evolution_dry_run", _migrate_135_harness_evolution_dry_run),
+    # Life-Harness T-final: FTS5 BM25 index for H5 procedural skills.
+    (136, "harness_skill_index", _migrate_136_harness_skill_index),
 ]
