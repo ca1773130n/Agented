@@ -3,6 +3,7 @@ import { ref, computed, onMounted } from 'vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import { auditApi } from '../services/api';
 import type { AuditEvent } from '../services/api';
+import NotEnabledBanner from '../components/base/NotEnabledBanner.vue';
 
 type ActivityType = 'execution' | 'config_change' | 'bot_created' | 'bot_deleted' | 'trigger_added' | 'member_joined' | 'execution_failed';
 
@@ -135,23 +136,12 @@ const FEATURE_ENABLED = false;
 <template>
   <div class="team-activity">
 
-    <!-- PR-J3: backend team-scoped activity-feed route absent; renders as 501-equivalent banner. -->
-    <div
+    <NotEnabledBanner
       v-if="!FEATURE_ENABLED"
-      class="not-enabled-banner"
-      data-testid="team-activity-not-enabled"
-      role="status"
-    >
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-        <circle cx="12" cy="12" r="10"/>
-        <line x1="12" y1="8" x2="12" y2="12"/>
-        <line x1="12" y1="16" x2="12.01" y2="16"/>
-      </svg>
-      <div>
-        <strong>Team activity feed is not yet enabled in this deployment.</strong>
-        <p>The team-scoped activity backend has not shipped yet. Entries shown below are placeholders only.</p>
-      </div>
-    </div>
+      feature="Team activity feed"
+      detail="The team-scoped activity backend has not shipped yet. Entries shown below are placeholders only."
+      testid="team-activity-not-enabled"
+    />
 
     <PageHeader
       title="Team Activity Feed"
@@ -267,16 +257,4 @@ const FEATURE_ENABLED = false;
 
 .empty-state { text-align: center; padding: 40px; color: var(--text-muted); font-size: 0.875rem; }
 
-/* PR-J3: 501-not-enabled banner */
-.not-enabled-banner {
-  display: flex; align-items: flex-start; gap: 12px;
-  padding: 16px 20px; border-radius: 8px;
-  background: var(--bg-elevated, rgba(255,255,255,0.04));
-  border: 1px dashed var(--border-default, rgba(255,255,255,0.15));
-  color: var(--text-secondary);
-  margin-bottom: 16px;
-}
-.not-enabled-banner svg { width: 18px; height: 18px; flex-shrink: 0; color: var(--text-tertiary); margin-top: 2px; }
-.not-enabled-banner strong { display: block; font-size: 0.9rem; font-weight: 600; color: var(--text-primary); margin-bottom: 4px; }
-.not-enabled-banner p { margin: 0; font-size: 0.82rem; color: var(--text-tertiary); }
 </style>

@@ -4,6 +4,7 @@ import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
 import { schedulerApi, ApiError } from '../services/api';
 import type { SchedulerStatus } from '../services/api';
+import NotEnabledBanner from '../components/base/NotEnabledBanner.vue';
 
 const showToast = useToast();
 
@@ -189,23 +190,12 @@ const FEATURE_ENABLED = false;
 
 <template>
   <div class="page-container">
-    <!-- PR-J3: backend smart-schedule-optimizer routes absent; renders as 501-equivalent banner. -->
-    <div
+    <NotEnabledBanner
       v-if="!FEATURE_ENABLED"
-      class="not-enabled-banner"
-      data-testid="smart-schedule-not-enabled"
-      role="status"
-    >
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-        <circle cx="12" cy="12" r="10"/>
-        <line x1="12" y1="8" x2="12" y2="12"/>
-        <line x1="12" y1="16" x2="12.01" y2="16"/>
-      </svg>
-      <div>
-        <strong>Smart schedule optimizer is not yet enabled in this deployment.</strong>
-        <p>The backend that analyzes API contention patterns and recomputes schedules has not shipped yet. Applying suggestions is disabled.</p>
-      </div>
-    </div>
+      feature="Smart schedule optimizer"
+      detail="The backend that analyzes API contention patterns and recomputes schedules has not shipped yet. Applying suggestions is disabled."
+      testid="smart-schedule-not-enabled"
+    />
 
     <PageHeader
       title="Smart Schedule Optimizer"
@@ -442,16 +432,4 @@ const FEATURE_ENABLED = false;
 .empty-icon { font-size: 32px; margin-bottom: 12px; }
 .empty-text { font-size: 14px; }
 
-/* PR-J3: 501-not-enabled banner */
-.not-enabled-banner {
-  display: flex; align-items: flex-start; gap: 12px;
-  padding: 16px 20px; border-radius: 8px;
-  background: var(--bg-elevated, rgba(255,255,255,0.04));
-  border: 1px dashed var(--border-default, rgba(255,255,255,0.15));
-  color: var(--text-secondary);
-  margin-bottom: 16px;
-}
-.not-enabled-banner svg { width: 18px; height: 18px; flex-shrink: 0; color: var(--text-tertiary); margin-top: 2px; }
-.not-enabled-banner strong { display: block; font-size: 0.9rem; font-weight: 600; color: var(--text-primary); margin-bottom: 4px; }
-.not-enabled-banner p { margin: 0; font-size: 0.82rem; color: var(--text-tertiary); }
 </style>

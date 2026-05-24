@@ -2,6 +2,8 @@
 import { ref, onMounted } from 'vue';
 import LoadingState from '../components/base/LoadingState.vue';
 import { useToast } from '../composables/useToast';
+import NotEnabledBanner from '../components/base/NotEnabledBanner.vue';
+
 const showToast = useToast();
 
 const isLoading = ref(true);
@@ -186,23 +188,12 @@ onMounted(loadData);
 <template>
   <div class="sandbox-page">
 
-    <!-- PR-J3: backend `/admin/sandboxes` absent; renders as 501-equivalent banner. -->
-    <div
+    <NotEnabledBanner
       v-if="!FEATURE_ENABLED"
-      class="not-enabled-banner"
-      data-testid="bot-sandbox-not-enabled"
-      role="status"
-    >
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-        <circle cx="12" cy="12" r="10"/>
-        <line x1="12" y1="8" x2="12" y2="12"/>
-        <line x1="12" y1="16" x2="12.01" y2="16"/>
-      </svg>
-      <div>
-        <strong>Bot sandbox is not yet enabled in this deployment.</strong>
-        <p>The backend that runs isolated bot sandboxes has not shipped yet. Starting a new sandbox run is disabled.</p>
-      </div>
-    </div>
+      feature="Bot sandbox"
+      detail="The backend that runs isolated bot sandboxes has not shipped yet. Starting a new sandbox run is disabled."
+      testid="bot-sandbox-not-enabled"
+    />
 
     <LoadingState v-if="isLoading" message="Loading sandboxes..." />
 
@@ -499,16 +490,4 @@ onMounted(loadData);
   .main-layout { grid-template-columns: 1fr; }
 }
 
-/* PR-J3: 501-not-enabled banner */
-.not-enabled-banner {
-  display: flex; align-items: flex-start; gap: 12px;
-  padding: 16px 20px; border-radius: 8px;
-  background: var(--bg-elevated, rgba(255,255,255,0.04));
-  border: 1px dashed var(--border-default, rgba(255,255,255,0.15));
-  color: var(--text-secondary);
-  margin-bottom: 16px;
-}
-.not-enabled-banner svg { width: 18px; height: 18px; flex-shrink: 0; color: var(--text-tertiary); margin-top: 2px; }
-.not-enabled-banner strong { display: block; font-size: 0.9rem; font-weight: 600; color: var(--text-primary); margin-bottom: 4px; }
-.not-enabled-banner p { margin: 0; font-size: 0.82rem; color: var(--text-tertiary); }
 </style>
