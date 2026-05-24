@@ -1,20 +1,14 @@
 <!--
-  HarnessEvolutionDetailModal — full-payload view + impact metrics for one
-  evolution round. Opens from HarnessEvolutionCard row click.
-
-  Renders:
-    - Round header (status pill, bot id, timestamps)
-    - Codex notes (full text, not truncated)
-    - Patch entries with per-entry op + name + payload (pretty-printed JSON)
-    - Impact summary (only for applied rounds; calls /impact on mount)
-    - Approve / Abort buttons for awaiting_approval rounds (re-emit events
-      so the parent can act + refresh)
+  HarnessEvolutionDetailModal — full per-entry payload view for one
+  project-scoped Forge evolution round. Renders rule/hook/command/mcp_server
+  patch entries (skill entries surface as read-only diagnostic info).
 -->
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue';
 import {
   EVOLUTION_STATUS_COLOR_VAR,
   EVOLUTION_STATUS_LABEL,
+  FORGE_KIND_COLOR_VAR,
   harnessEvolutionApi,
   type EvolutionImpactResponse,
   type EvolutionRound,
@@ -68,17 +62,10 @@ function fmtDelta(v: number | null | undefined): string {
   return `${sign}${(v * 100).toFixed(1)}pp`;
 }
 
-function close() {
-  emit('close');
-}
-
+function close() { emit('close'); }
 function onBackdropClick(event: MouseEvent) {
-  // Close only when the operator clicks the dark overlay, not the panel.
-  if ((event.target as HTMLElement).classList.contains('modal-backdrop')) {
-    close();
-  }
+  if ((event.target as HTMLElement).classList.contains('modal-backdrop')) close();
 }
-
 function onKeydown(event: KeyboardEvent) {
   if (event.key === 'Escape') close();
 }
@@ -99,10 +86,8 @@ function onKeydown(event: KeyboardEvent) {
           <span
             class="modal-pill"
             :style="{ background: EVOLUTION_STATUS_COLOR_VAR[round!.status] }"
-          >
-            {{ EVOLUTION_STATUS_LABEL[round!.status] }}
-          </span>
-          <code class="modal-bot">{{ round!.bot_id }}</code>
+          >{{ EVOLUTION_STATUS_LABEL[round!.status] }}</span>
+          <code class="modal-project">{{ round!.project_id }}</code>
         </div>
         <button
           class="modal-close"
@@ -136,21 +121,24 @@ function onKeydown(event: KeyboardEvent) {
         </section>
 
         <section class="entries">
-          <h3>Patch entries ({{ entries.length }})</h3>
+          <h3>Forge patch entries ({{ entries.length }})</h3>
           <p v-if="entries.length === 0" class="muted">No changes proposed.</p>
           <ul v-else>
             <li
               v-for="(e, i) in entries"
-              :key="`${e.layer}-${e.name}-${i}`"
+              :key="`${e.kind}-${e.name}-${i}`"
               class="entry"
               :data-testid="`evolution-entry-${i}`"
             >
               <header class="entry__head">
                 <span class="entry__op" :data-op="e.op">{{ e.op }}</span>
-                <span class="entry__layer">{{ e.layer.toUpperCase() }}</span>
+                <span
+                  class="entry__kind"
+                  :style="{ borderColor: FORGE_KIND_COLOR_VAR[e.kind] }"
+                >{{ e.kind }}</span>
                 <span class="entry__name">{{ e.name }}</span>
-                <code v-if="e.existing_layer_id" class="entry__id">
-                  {{ e.existing_layer_id }}
+                <code v-if="e.existing_asset_id" class="entry__id">
+                  #{{ e.existing_asset_id }}
                 </code>
               </header>
               <pre v-if="e.payload" class="entry__payload">{{ JSON.stringify(e.payload, null, 2) }}</pre>
@@ -196,10 +184,7 @@ function onKeydown(event: KeyboardEvent) {
           </p>
         </section>
 
-        <section
-          v-if="round!.status === 'awaiting_approval'"
-          class="actions"
-        >
+        <section v-if="round!.status === 'awaiting_approval'" class="actions">
           <button
             class="btn btn-approve"
             data-testid="evolution-detail-approve"
@@ -218,47 +203,31 @@ function onKeydown(event: KeyboardEvent) {
 
 <style scoped>
 .modal-backdrop {
-  position: fixed;
-  inset: 0;
+  position: fixed; inset: 0;
   background: rgba(0, 0, 0, 0.6);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 100;
-  padding: 24px;
+  display: flex; align-items: center; justify-content: center;
+  z-index: 100; padding: 24px;
 }
 .modal-panel {
   background: var(--bg-primary, #111);
   border: 1px solid var(--border-default, rgba(255, 255, 255, 0.12));
   border-radius: 10px;
-  max-width: 720px;
-  width: 100%;
-  max-height: 85vh;
-  display: flex;
-  flex-direction: column;
+  max-width: 720px; width: 100%; max-height: 85vh;
+  display: flex; flex-direction: column;
 }
 .modal-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+  display: flex; align-items: center; justify-content: space-between;
   padding: 14px 18px;
   border-bottom: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.06));
 }
 .modal-head__left { display: flex; align-items: center; gap: 10px; }
-.modal-pill {
-  font-size: 10px; font-weight: 700; padding: 2px 6px;
-  border-radius: 4px; color: white; letter-spacing: 0.04em;
-}
-.modal-bot { font-family: var(--font-mono, monospace); font-size: 13px; color: var(--text-secondary); }
+.modal-pill { font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 4px; color: white; letter-spacing: 0.04em; }
+.modal-project { font-family: var(--font-mono, monospace); font-size: 13px; color: var(--text-secondary); }
 .modal-close {
-  background: transparent;
-  border: none;
-  color: var(--text-tertiary);
-  font-size: 22px;
-  cursor: pointer;
-  line-height: 1;
+  background: transparent; border: none;
+  color: var(--text-tertiary); font-size: 22px;
+  cursor: pointer; line-height: 1;
 }
-
 .modal-body { overflow-y: auto; padding: 16px 18px; display: flex; flex-direction: column; gap: 16px; }
 .modal-body h3 { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-tertiary); margin: 0 0 8px; }
 
@@ -269,47 +238,37 @@ function onKeydown(event: KeyboardEvent) {
 .notes pre,
 .error pre {
   background: var(--bg-tertiary, rgba(255, 255, 255, 0.03));
-  padding: 10px;
-  font-size: 11px;
-  border-radius: 6px;
-  white-space: pre-wrap;
-  margin: 0;
-  max-height: 140px;
-  overflow-y: auto;
+  padding: 10px; font-size: 11px; border-radius: 6px;
+  white-space: pre-wrap; margin: 0; max-height: 140px; overflow-y: auto;
 }
 .error pre { color: var(--accent-red, #ef4444); }
 
 .entries ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
 .entry {
   border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.06));
-  border-radius: 6px;
-  padding: 8px 10px;
+  border-radius: 6px; padding: 8px 10px;
 }
 .entry__head { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
 .entry__op {
-  font-size: 10px;
-  font-weight: 700;
-  text-transform: uppercase;
-  padding: 1px 5px;
-  border-radius: 3px;
-  letter-spacing: 0.04em;
-  color: white;
-  background: var(--text-tertiary, #6b7280);
+  font-size: 10px; font-weight: 700; text-transform: uppercase;
+  padding: 1px 5px; border-radius: 3px; letter-spacing: 0.04em;
+  color: white; background: var(--text-tertiary, #6b7280);
 }
-.entry__op[data-op='create']    { background: var(--accent-green,  #10b981); }
-.entry__op[data-op='supersede'] { background: var(--accent-cyan,   #06b6d4); }
-.entry__op[data-op='disable']   { background: var(--accent-red,    #ef4444); }
-.entry__layer { font-size: 10px; color: var(--text-tertiary); }
+.entry__op[data-op='create'] { background: var(--accent-green,  #10b981); }
+.entry__op[data-op='update'] { background: var(--accent-cyan,   #06b6d4); }
+.entry__op[data-op='delete'] { background: var(--accent-red,    #ef4444); }
+.entry__kind {
+  font-size: 10px; padding: 1px 5px;
+  border-radius: 3px;
+  border: 1px solid var(--text-tertiary, #6b7280);
+  color: var(--text-secondary);
+}
 .entry__name { font-size: 12px; color: var(--text-primary); }
 .entry__id { font-family: var(--font-mono, monospace); font-size: 10px; color: var(--text-tertiary); }
 .entry__payload {
   background: var(--bg-tertiary, rgba(255, 255, 255, 0.03));
-  padding: 8px;
-  margin: 6px 0 0;
-  border-radius: 4px;
-  font-size: 11px;
-  max-height: 200px;
-  overflow-y: auto;
+  padding: 8px; margin: 6px 0 0; border-radius: 4px;
+  font-size: 11px; max-height: 200px; overflow-y: auto;
   white-space: pre-wrap;
 }
 
@@ -323,13 +282,10 @@ function onKeydown(event: KeyboardEvent) {
 
 .actions { display: flex; gap: 10px; justify-content: flex-end; padding-top: 8px; }
 .btn {
-  font-size: 12px;
-  padding: 6px 14px;
-  border-radius: 4px;
+  font-size: 12px; padding: 6px 14px; border-radius: 4px;
   border: 1px solid var(--border-default, rgba(255, 255, 255, 0.12));
   background: var(--bg-secondary, transparent);
-  color: var(--text-primary);
-  cursor: pointer;
+  color: var(--text-primary); cursor: pointer;
 }
 .btn-approve { border-color: var(--accent-green, #10b981); color: var(--accent-green, #10b981); }
 .btn-abort { border-color: var(--accent-red, #ef4444); color: var(--accent-red, #ef4444); }
