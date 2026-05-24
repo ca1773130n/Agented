@@ -142,11 +142,34 @@ function formatDate(iso: string): string {
 
 const selectedCount = computed(() => repositories.value.filter(r => r.selected).length);
 
+// PR-J3: `/admin/integrations/github/*` is not yet wired up server-side.
+// Flipping this constant off (and removing the banner) is what gates the
+// feature when the backend stub ships in PR-J3b.
+const FEATURE_ENABLED = false;
+
 onMounted(loadInstallations);
 </script>
 
 <template>
   <div class="page-container">
+
+    <!-- PR-J3: backend `/admin/integrations/github/*` absent; renders as 501-equivalent banner. -->
+    <div
+      v-if="!FEATURE_ENABLED"
+      class="not-enabled-banner"
+      data-testid="github-app-install-not-enabled"
+      role="status"
+    >
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <circle cx="12" cy="12" r="10"/>
+        <line x1="12" y1="8" x2="12" y2="12"/>
+        <line x1="12" y1="16" x2="12.01" y2="16"/>
+      </svg>
+      <div>
+        <strong>One-click GitHub App install is not yet enabled in this deployment.</strong>
+        <p>The backend that brokers the GitHub App installation handshake has not shipped yet. Starting an install is disabled.</p>
+      </div>
+    </div>
 
     <div class="page-header">
       <div>
@@ -156,7 +179,12 @@ onMounted(loadInstallations);
           permissions for all selected repositories — no manual webhook setup required.
         </p>
       </div>
-      <button class="new-btn" @click="startNew">+ New Installation</button>
+      <button
+        class="new-btn"
+        :disabled="!FEATURE_ENABLED"
+        :title="!FEATURE_ENABLED ? 'One-click GitHub App install is not yet enabled' : ''"
+        @click="startNew"
+      >+ New Installation</button>
     </div>
 
     <div class="main-grid">
@@ -184,7 +212,12 @@ onMounted(loadInstallations);
             <label class="form-label">GitHub Organization</label>
             <input v-model="orgName" class="form-input" placeholder="e.g. acme-corp" />
           </div>
-          <button class="next-btn" @click="goNext">Continue</button>
+          <button
+            class="next-btn"
+            :disabled="!FEATURE_ENABLED"
+            :title="!FEATURE_ENABLED ? 'One-click GitHub App install is not yet enabled' : ''"
+            @click="goNext"
+          >Continue</button>
         </div>
 
         <!-- Step: Select repos -->
@@ -212,7 +245,12 @@ onMounted(loadInstallations);
               </span>
             </label>
           </div>
-          <button class="next-btn" @click="goNext">Continue</button>
+          <button
+            class="next-btn"
+            :disabled="!FEATURE_ENABLED"
+            :title="!FEATURE_ENABLED ? 'One-click GitHub App install is not yet enabled' : ''"
+            @click="goNext"
+          >Continue</button>
         </div>
 
         <!-- Step: Permissions -->
@@ -236,7 +274,13 @@ onMounted(loadInstallations);
               placeholder="Leave blank to auto-generate"
             />
           </div>
-          <button class="next-btn" :disabled="isInstalling" @click="goNext">
+          <button
+            class="next-btn"
+            :disabled="isInstalling || !FEATURE_ENABLED"
+            :title="!FEATURE_ENABLED ? 'One-click GitHub App install is not yet enabled in this deployment' : undefined"
+            data-testid="github-app-install-submit"
+            @click="goNext"
+          >
             {{ isInstalling ? 'Installing...' : 'Install App' }}
           </button>
         </div>
@@ -499,4 +543,17 @@ onMounted(loadInstallations);
 .install-meta { font-size: 0.75rem; color: var(--color-text-secondary, #a0a0a0); display: flex; gap: 0.4rem; align-items: center; }
 .meta-sep { opacity: 0.4; }
 .empty-msg { text-align: center; color: var(--color-text-secondary, #a0a0a0); padding: 2rem 0; margin: 0; }
+
+/* PR-J3: 501-not-enabled banner */
+.not-enabled-banner {
+  display: flex; align-items: flex-start; gap: 12px;
+  padding: 16px 20px; border-radius: 8px;
+  background: var(--bg-elevated, rgba(255,255,255,0.04));
+  border: 1px dashed var(--border-default, rgba(255,255,255,0.15));
+  color: var(--text-secondary);
+  margin-bottom: 16px;
+}
+.not-enabled-banner svg { width: 18px; height: 18px; flex-shrink: 0; color: var(--text-tertiary); margin-top: 2px; }
+.not-enabled-banner strong { display: block; font-size: 0.9rem; font-weight: 600; color: var(--text-primary); margin-bottom: 4px; }
+.not-enabled-banner p { margin: 0; font-size: 0.82rem; color: var(--text-tertiary); }
 </style>

@@ -175,11 +175,34 @@ function formatDate(iso: string | null): string {
   return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
+// PR-J3: Bot sandbox backend (`/admin/sandboxes`) is not yet wired up.
+// Flipping this constant off (and removing the banner) is what gates the
+// feature when the backend stub ships in PR-J3b.
+const FEATURE_ENABLED = false;
+
 onMounted(loadData);
 </script>
 
 <template>
   <div class="sandbox-page">
+
+    <!-- PR-J3: backend `/admin/sandboxes` absent; renders as 501-equivalent banner. -->
+    <div
+      v-if="!FEATURE_ENABLED"
+      class="not-enabled-banner"
+      data-testid="bot-sandbox-not-enabled"
+      role="status"
+    >
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <circle cx="12" cy="12" r="10"/>
+        <line x1="12" y1="8" x2="12" y2="12"/>
+        <line x1="12" y1="16" x2="12.01" y2="16"/>
+      </svg>
+      <div>
+        <strong>Bot sandbox is not yet enabled in this deployment.</strong>
+        <p>The backend that runs isolated bot sandboxes has not shipped yet. Starting a new sandbox run is disabled.</p>
+      </div>
+    </div>
 
     <LoadingState v-if="isLoading" message="Loading sandboxes..." />
 
@@ -198,7 +221,12 @@ onMounted(loadData);
             <p>Run bots against a sandboxed fork or branch without touching production repos. Bots can make changes, open PRs, and test integrations safely.</p>
           </div>
         </div>
-        <button class="btn btn-primary" @click="showCreateForm = !showCreateForm">
+        <button
+          class="btn btn-primary"
+          :disabled="!FEATURE_ENABLED"
+          :title="!FEATURE_ENABLED ? 'Bot sandbox is not yet enabled in this deployment' : ''"
+          @click="showCreateForm = !showCreateForm"
+        >
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
           New Sandbox
         </button>
@@ -230,7 +258,13 @@ onMounted(loadData);
         </div>
         <div class="form-actions">
           <button class="btn btn-ghost" @click="showCreateForm = false">Cancel</button>
-          <button class="btn btn-primary" :disabled="isCreating" @click="createSandbox">
+          <button
+            class="btn btn-primary"
+            :disabled="isCreating || !FEATURE_ENABLED"
+            :title="!FEATURE_ENABLED ? 'Bot sandbox is not yet enabled in this deployment' : undefined"
+            data-testid="bot-sandbox-create-submit"
+            @click="createSandbox"
+          >
             {{ isCreating ? 'Creating...' : 'Create Sandbox' }}
           </button>
         </div>
@@ -267,10 +301,20 @@ onMounted(loadData);
               <span class="run-count">{{ sb.run_count }} runs</span>
               <span class="last-run">Last: {{ formatDate(sb.last_run) }}</span>
               <div class="sandbox-actions" @click.stop>
-                <button class="btn btn-primary btn-sm" :disabled="isRunning && selectedSandbox?.id === sb.id" @click="runSandbox(sb)">
+                <button
+                  class="btn btn-primary btn-sm"
+                  :disabled="(isRunning && selectedSandbox?.id === sb.id) || !FEATURE_ENABLED"
+                  :title="!FEATURE_ENABLED ? 'Bot sandbox is not yet enabled' : ''"
+                  @click="runSandbox(sb)"
+                >
                   {{ isRunning && selectedSandbox?.id === sb.id ? 'Running...' : 'Run' }}
                 </button>
-                <button class="btn btn-ghost btn-sm btn-danger" @click="deleteSandbox(sb.id)">Delete</button>
+                <button
+                  class="btn btn-ghost btn-sm btn-danger"
+                  :disabled="!FEATURE_ENABLED"
+                  :title="!FEATURE_ENABLED ? 'Bot sandbox is not yet enabled' : ''"
+                  @click="deleteSandbox(sb.id)"
+                >Delete</button>
               </div>
             </div>
           </div>
@@ -454,4 +498,17 @@ onMounted(loadData);
 @media (max-width: 900px) {
   .main-layout { grid-template-columns: 1fr; }
 }
+
+/* PR-J3: 501-not-enabled banner */
+.not-enabled-banner {
+  display: flex; align-items: flex-start; gap: 12px;
+  padding: 16px 20px; border-radius: 8px;
+  background: var(--bg-elevated, rgba(255,255,255,0.04));
+  border: 1px dashed var(--border-default, rgba(255,255,255,0.15));
+  color: var(--text-secondary);
+  margin-bottom: 16px;
+}
+.not-enabled-banner svg { width: 18px; height: 18px; flex-shrink: 0; color: var(--text-tertiary); margin-top: 2px; }
+.not-enabled-banner strong { display: block; font-size: 0.9rem; font-weight: 600; color: var(--text-primary); margin-bottom: 4px; }
+.not-enabled-banner p { margin: 0; font-size: 0.82rem; color: var(--text-tertiary); }
 </style>

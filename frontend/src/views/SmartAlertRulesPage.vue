@@ -213,17 +213,45 @@ function severityColor(val: string): string {
   if (val === 'medium') return '#fbbf24';
   return '#94a3b8';
 }
+
+// PR-J3: smart-alert-rules backend is not yet wired up server-side.
+// Flipping this constant off (and removing the banner) is what gates the
+// feature when the backend stub ships in PR-J3b.
+const FEATURE_ENABLED = false;
 </script>
 
 <template>
   <div class="smart-alert-rules">
+
+    <!-- PR-J3: backend smart-alert-rules routes absent; renders as 501-equivalent banner. -->
+    <div
+      v-if="!FEATURE_ENABLED"
+      class="not-enabled-banner"
+      data-testid="smart-alert-rules-not-enabled"
+      role="status"
+    >
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <circle cx="12" cy="12" r="10"/>
+        <line x1="12" y1="8" x2="12" y2="12"/>
+        <line x1="12" y1="16" x2="12.01" y2="16"/>
+      </svg>
+      <div>
+        <strong>Smart alert rules are not yet enabled in this deployment.</strong>
+        <p>The backend that evaluates rule conditions and dispatches alerts has not shipped yet. Creating, editing, or deleting rules is disabled.</p>
+      </div>
+    </div>
 
     <PageHeader
       title="Smart Alert Rules"
       subtitle="Define conditions that fire notifications when bot findings match specific severity, keywords, or patterns."
     >
       <template #actions>
-        <button class="btn btn-primary" @click="openNew">+ New Rule</button>
+        <button
+          class="btn btn-primary"
+          :disabled="!FEATURE_ENABLED"
+          :title="!FEATURE_ENABLED ? 'Smart alert rules are not yet enabled' : ''"
+          @click="openNew"
+        >+ New Rule</button>
       </template>
     </PageHeader>
 
@@ -257,11 +285,26 @@ function severityColor(val: string): string {
               </span>
             </div>
             <div class="rule-actions">
-              <button class="btn btn-xs btn-ghost" @click="openEdit(rule)">Edit</button>
-              <button class="btn btn-xs btn-ghost" @click="toggleEnabled(rule)">
+              <button
+                class="btn btn-xs btn-ghost"
+                :disabled="!FEATURE_ENABLED"
+                :title="!FEATURE_ENABLED ? 'Smart alert rules are not yet enabled' : ''"
+                @click="openEdit(rule)"
+              >Edit</button>
+              <button
+                class="btn btn-xs btn-ghost"
+                :disabled="!FEATURE_ENABLED"
+                :title="!FEATURE_ENABLED ? 'Smart alert rules are not yet enabled' : ''"
+                @click="toggleEnabled(rule)"
+              >
                 {{ rule.enabled ? 'Disable' : 'Enable' }}
               </button>
-              <button class="btn btn-xs btn-ghost btn-danger" @click="deleteRule(rule)">Delete</button>
+              <button
+                class="btn btn-xs btn-ghost btn-danger"
+                :disabled="!FEATURE_ENABLED"
+                :title="!FEATURE_ENABLED ? 'Smart alert rules are not yet enabled' : ''"
+                @click="deleteRule(rule)"
+              >Delete</button>
             </div>
           </div>
 
@@ -370,7 +413,13 @@ function severityColor(val: string): string {
 
         <div class="panel-footer">
           <button class="btn btn-ghost" @click="showEditor = false">Cancel</button>
-          <button class="btn btn-primary" :disabled="isSaving || !formName.trim()" @click="saveRule">
+          <button
+            class="btn btn-primary"
+            :disabled="isSaving || !formName.trim() || !FEATURE_ENABLED"
+            :title="!FEATURE_ENABLED ? 'Smart alert rules are not yet enabled in this deployment' : undefined"
+            data-testid="smart-alert-save-submit"
+            @click="saveRule"
+          >
             {{ isSaving ? 'Saving...' : editingRule ? 'Update Rule' : 'Create Rule' }}
           </button>
         </div>
@@ -449,4 +498,17 @@ function severityColor(val: string): string {
 .empty-state { text-align: center; padding: 60px 20px; color: var(--text-secondary); }
 .empty-icon { font-size: 2.5rem; margin-bottom: 12px; }
 .empty-state p { margin-bottom: 16px; }
+
+/* PR-J3: 501-not-enabled banner */
+.not-enabled-banner {
+  display: flex; align-items: flex-start; gap: 12px;
+  padding: 16px 20px; border-radius: 8px;
+  background: var(--bg-elevated, rgba(255,255,255,0.04));
+  border: 1px dashed var(--border-default, rgba(255,255,255,0.15));
+  color: var(--text-secondary);
+  margin-bottom: 16px;
+}
+.not-enabled-banner svg { width: 18px; height: 18px; flex-shrink: 0; color: var(--text-tertiary); margin-top: 2px; }
+.not-enabled-banner strong { display: block; font-size: 0.9rem; font-weight: 600; color: var(--text-primary); margin-bottom: 4px; }
+.not-enabled-banner p { margin: 0; font-size: 0.82rem; color: var(--text-tertiary); }
 </style>

@@ -92,11 +92,35 @@ function categoryColor(cat: AgentCapability['category']): string {
   return { tool: 'var(--accent-cyan)', skill: 'var(--accent-violet)', permission: 'var(--accent-amber)' }[cat];
 }
 
+// PR-J3: Agent capability matrix is not yet wired up server-side
+// (no `/admin/agents/capabilities` handler exists). Flipping this
+// constant off (and removing the banner) is what gates the feature
+// when the backend stub ships in PR-J3b.
+const FEATURE_ENABLED = false;
+
 onMounted(loadData);
 </script>
 
 <template>
   <div class="capability-matrix-page">
+
+    <!-- PR-J3: backend handler absent; renders as 501-equivalent banner. -->
+    <div
+      v-if="!FEATURE_ENABLED"
+      class="not-enabled-banner"
+      data-testid="capability-matrix-not-enabled"
+      role="status"
+    >
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <circle cx="12" cy="12" r="10"/>
+        <line x1="12" y1="8" x2="12" y2="12"/>
+        <line x1="12" y1="16" x2="12.01" y2="16"/>
+      </svg>
+      <div>
+        <strong>Agent capability matrix is not yet enabled in this deployment.</strong>
+        <p>The backend handler that aggregates agent tool / skill / permission coverage has not shipped yet. The matrix below shows placeholder structure only.</p>
+      </div>
+    </div>
 
     <LoadingState v-if="isLoading" message="Loading capability matrix..." />
 
@@ -393,4 +417,16 @@ onMounted(loadData);
 
 .gap-name { font-weight: 500; color: var(--text-primary); font-size: 0.85rem; min-width: 140px; }
 .gap-desc { font-size: 0.8rem; color: var(--text-tertiary); }
+
+/* PR-J3: 501-not-enabled banner */
+.not-enabled-banner {
+  display: flex; align-items: flex-start; gap: 12px;
+  padding: 16px 20px; border-radius: 8px;
+  background: var(--bg-elevated, rgba(255,255,255,0.04));
+  border: 1px dashed var(--border-default, rgba(255,255,255,0.15));
+  color: var(--text-secondary);
+}
+.not-enabled-banner svg { width: 18px; height: 18px; flex-shrink: 0; color: var(--text-tertiary); margin-top: 2px; }
+.not-enabled-banner strong { display: block; font-size: 0.9rem; font-weight: 600; color: var(--text-primary); margin-bottom: 4px; }
+.not-enabled-banner p { margin: 0; font-size: 0.82rem; color: var(--text-tertiary); }
 </style>

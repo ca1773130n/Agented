@@ -115,11 +115,34 @@ function formatTime(iso: string): string {
   return new Date(iso).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' });
 }
 
+// PR-J3: `/admin/bots/cross-repo-impact` is not yet wired up server-side.
+// Flipping this constant off (and removing the banner) is what gates the
+// feature when the backend stub ships in PR-J3b.
+const FEATURE_ENABLED = false;
+
 onMounted(loadHistory);
 </script>
 
 <template>
   <div class="page-container">
+
+    <!-- PR-J3: backend `/admin/bots/cross-repo-impact` absent; renders as 501-equivalent banner. -->
+    <div
+      v-if="!FEATURE_ENABLED"
+      class="not-enabled-banner"
+      data-testid="cross-repo-impact-not-enabled"
+      role="status"
+    >
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <circle cx="12" cy="12" r="10"/>
+        <line x1="12" y1="8" x2="12" y2="12"/>
+        <line x1="12" y1="16" x2="12.01" y2="16"/>
+      </svg>
+      <div>
+        <strong>Cross-repo impact analysis bot is not yet enabled in this deployment.</strong>
+        <p>The backend that scans downstream repos for impacted callers has not shipped yet. Running impact scans is disabled.</p>
+      </div>
+    </div>
 
     <div class="page-header">
       <div>
@@ -139,7 +162,13 @@ onMounted(loadHistory);
           class="pr-input"
           placeholder="GitHub PR URL or e.g. acme-corp/api-gateway#247"
         />
-        <button class="run-btn" :disabled="isScanning" @click="runAnalysis">
+        <button
+          class="run-btn"
+          :disabled="isScanning || !FEATURE_ENABLED"
+          :title="!FEATURE_ENABLED ? 'Cross-repo impact analysis bot is not yet enabled in this deployment' : undefined"
+          data-testid="cross-repo-impact-run-submit"
+          @click="runAnalysis"
+        >
           {{ isScanning ? 'Scanning...' : 'Analyze Impact' }}
         </button>
       </div>
@@ -206,6 +235,8 @@ onMounted(loadHistory);
                 <button
                   v-if="!repo.notified"
                   class="notify-btn"
+                  :disabled="!FEATURE_ENABLED"
+                  :title="!FEATURE_ENABLED ? 'Cross-repo impact analysis bot is not yet enabled' : ''"
                   @click="notifyTeam(repo)"
                 >
                   Notify Team
@@ -323,4 +354,17 @@ onMounted(loadHistory);
 .notified-badge { font-size: 0.75rem; color: #34d399; }
 .repo-reason { font-size: 0.8rem; color: var(--color-text-secondary, #a0a0a0); margin: 0; line-height: 1.5; }
 .empty-msg { text-align: center; color: var(--color-text-secondary, #a0a0a0); padding: 2rem 0; margin: 0; }
+
+/* PR-J3: 501-not-enabled banner */
+.not-enabled-banner {
+  display: flex; align-items: flex-start; gap: 12px;
+  padding: 16px 20px; border-radius: 8px;
+  background: var(--bg-elevated, rgba(255,255,255,0.04));
+  border: 1px dashed var(--border-default, rgba(255,255,255,0.15));
+  color: var(--text-secondary);
+  margin-bottom: 16px;
+}
+.not-enabled-banner svg { width: 18px; height: 18px; flex-shrink: 0; color: var(--text-tertiary); margin-top: 2px; }
+.not-enabled-banner strong { display: block; font-size: 0.9rem; font-weight: 600; color: var(--text-primary); margin-bottom: 4px; }
+.not-enabled-banner p { margin: 0; font-size: 0.82rem; color: var(--text-tertiary); }
 </style>

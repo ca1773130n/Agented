@@ -83,11 +83,34 @@ function formatTime(iso: string) {
   return new Date(iso).toLocaleString();
 }
 
+// PR-J3: `/admin/bots/test-coverage/config` is not yet wired up server-side.
+// Flipping this constant off (and removing the banner) is what gates the
+// feature when the backend stub ships in PR-J3b.
+const FEATURE_ENABLED = false;
+
 onMounted(loadData);
 </script>
 
 <template>
   <div class="test-coverage-bot-page">
+
+    <!-- PR-J3: backend `/admin/bots/test-coverage/config` absent; renders as 501-equivalent banner. -->
+    <div
+      v-if="!FEATURE_ENABLED"
+      class="not-enabled-banner"
+      data-testid="test-coverage-not-enabled"
+      role="status"
+    >
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <circle cx="12" cy="12" r="10"/>
+        <line x1="12" y1="8" x2="12" y2="12"/>
+        <line x1="12" y1="16" x2="12.01" y2="16"/>
+      </svg>
+      <div>
+        <strong>Test coverage bot is not yet enabled in this deployment.</strong>
+        <p>The backend that stores coverage thresholds and posts PR analyses has not shipped yet. Saving config is disabled.</p>
+      </div>
+    </div>
 
     <div class="page-title-row">
       <div>
@@ -98,7 +121,8 @@ onMounted(loadData);
         <button
           class="btn"
           :class="config.enabled ? 'btn-danger' : 'btn-primary'"
-          :disabled="isToggling"
+          :disabled="isToggling || !FEATURE_ENABLED"
+          :title="!FEATURE_ENABLED ? 'Test coverage bot is not yet enabled in this deployment' : ''"
           @click="toggleEnabled"
         >
           {{ isToggling ? '...' : config.enabled ? 'Disable Bot' : 'Enable Bot' }}
@@ -144,7 +168,13 @@ onMounted(loadData);
             </label>
           </div>
 
-          <button class="btn btn-primary" :disabled="isSaving" @click="saveConfig">
+          <button
+            class="btn btn-primary"
+            :disabled="isSaving || !FEATURE_ENABLED"
+            :title="!FEATURE_ENABLED ? 'Test coverage bot is not yet enabled in this deployment' : undefined"
+            data-testid="test-coverage-save-submit"
+            @click="saveConfig"
+          >
             {{ isSaving ? 'Saving...' : 'Save Settings' }}
           </button>
         </div>
@@ -433,4 +463,17 @@ onMounted(loadData);
   background: var(--accent-crimson);
   color: white;
 }
+
+/* PR-J3: 501-not-enabled banner */
+.not-enabled-banner {
+  display: flex; align-items: flex-start; gap: 12px;
+  padding: 16px 20px; border-radius: 8px;
+  background: var(--bg-elevated, rgba(255,255,255,0.04));
+  border: 1px dashed var(--border-default, rgba(255,255,255,0.15));
+  color: var(--text-secondary);
+  margin-bottom: 16px;
+}
+.not-enabled-banner svg { width: 18px; height: 18px; flex-shrink: 0; color: var(--text-tertiary); margin-top: 2px; }
+.not-enabled-banner strong { display: block; font-size: 0.9rem; font-weight: 600; color: var(--text-primary); margin-bottom: 4px; }
+.not-enabled-banner p { margin: 0; font-size: 0.82rem; color: var(--text-tertiary); }
 </style>
