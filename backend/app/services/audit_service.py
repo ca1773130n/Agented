@@ -1,4 +1,20 @@
-"""Audit history service."""
+"""Security-audit findings & reports service.
+
+Owns the *security-scan audit history* — past `bot-security` scan results, the
+findings index, weekly/project rollup reports. Backed by CSV/JSON files under
+`.claude/skills/weekly-security-audit/reports/`.
+
+Not to be confused with ``audit_log_service.py``, which logs *generic activity
+events* (execution start/stop, entity edits) to the ``agented.audit`` logger.
+
+Rule of thumb:
+    "What did this scan find?"       → AuditService
+    "Who started/edited/deleted X?"  → AuditLogService
+
+Routes that use this service: ``leaf_crud_b.py`` /admin/audit-history,
+/admin/audit-stats, /admin/audit-projects, /admin/audit-detail,
+/admin/audit-add, /admin/audit-weekly-report.
+"""
 
 import csv
 import datetime

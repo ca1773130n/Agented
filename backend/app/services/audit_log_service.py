@@ -1,4 +1,17 @@
-"""Structured audit logging for execution events.
+"""Structured activity-log audit trail.
+
+Owns the *generic activity audit trail* — who did what to which entity, when.
+Records execution lifecycle events, entity create/update/delete, field-level
+changes. JSON records on the ``agented.audit`` logger + an in-memory ring
+buffer surfaced via /admin/audit-events.
+
+Not to be confused with ``audit_service.py``, which owns the *security-scan
+audit history* (past bot-security scan results, findings index, weekly reports
+under ``.claude/skills/weekly-security-audit/reports/``).
+
+Rule of thumb:
+    "Who started/edited/deleted X?"  → AuditLogService
+    "What did this scan find?"       → AuditService
 
 Produces JSON-formatted log records on the ``agented.audit`` logger so they can
 be captured by any standard Python log handler (file, syslog, cloud sink, etc.)
