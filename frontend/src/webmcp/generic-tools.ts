@@ -15,7 +15,7 @@
  */
 
 import type { ToolResponse } from './types';
-import { registerInManifest, getManifest } from './tool-registry';
+import { registerInManifest, getManifest, isRegistered } from './tool-registry';
 
 // --- Console error capture ---
 
@@ -199,7 +199,22 @@ export function registerGenericTools(): void {
   ];
 
   for (const tool of tools) {
-    mc.registerTool(tool);
+    // Skip if this module's manifest already has it (common HMR case where
+    // the module state survives the reload).
+    if (isRegistered(tool.name)) {
+      continue;
+    }
+    // navigator.modelContext is browser-global and survives HMR even when
+    // this module reloads. Tolerate "already registered" errors so the page
+    // does not crash; rethrow anything else.
+    try {
+      mc.registerTool(tool);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (!msg.includes('already registered')) {
+        throw err;
+      }
+    }
     registerInManifest(tool.name, tool.description, 'generic');
   }
 }
