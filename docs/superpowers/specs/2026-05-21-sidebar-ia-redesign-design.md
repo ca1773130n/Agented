@@ -63,7 +63,7 @@ Scope:
 
 ### PR-B — Triggers promotion
 
-**Goal:** make the IA reflect that Triggers is the central abstraction.
+> ~~**Goal:** make the IA reflect that Triggers is the central abstraction.~~ **Amended 2026-05-24 (PR-F):** the Triggers-as-top-level-section expression was rolled back. Operator-feel testing across PR-B/C/D/E showed the 25-item section dominated the sidebar without earning its weight at the IA layer (most facets are configured once and rarely revisited). Triggers collapses back to a single Forge child below Workflows; the underlying audit conclusion (Triggers is the central abstraction in the domain model) stands — but the sidebar treats it as one entry-point, not a regional capital.
 
 Scope:
 - New top-level "Triggers" section.
