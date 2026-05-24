@@ -292,9 +292,7 @@ def delete_integration(integration_id: str) -> dict[str, Any]:
 def test_integration(integration_id: str) -> dict[str, Any]:
     success, message = IntegrationConfigService.test_integration(integration_id)
     if not success:
-        raise HTTPException(
-            status_code=400, detail={"success": False, "message": message}
-        )
+        raise HTTPException(status_code=400, detail={"success": False, "message": message})
     return {"success": True, "message": message}
 
 
@@ -318,6 +316,36 @@ def get_slack_status() -> dict[str, Any]:
     }
 
 
+# PR-J3b: SlackCommandGatewayPage.vue lists / mutates commands beyond the
+# existing /integrations/slack/status. Until the gateway ships these handlers
+# return 501 ("Feature not yet enabled") so the UI banner can surface honestly.
+@get("/integrations/slack/commands", sync_to_thread=False)
+def list_slack_commands() -> dict[str, Any]:
+    raise HTTPException(status_code=501, detail="Feature not yet enabled")
+
+
+@post("/integrations/slack/commands", sync_to_thread=False)
+def create_slack_command(data: dict) -> dict[str, Any]:
+    del data
+    raise HTTPException(status_code=501, detail="Feature not yet enabled")
+
+
+@put("/integrations/slack/commands/{command_id:str}", sync_to_thread=False)
+def update_slack_command(command_id: str, data: dict) -> dict[str, Any]:
+    del command_id, data
+    raise HTTPException(status_code=501, detail="Feature not yet enabled")
+
+
+@delete(
+    "/integrations/slack/commands/{command_id:str}",
+    status_code=200,
+    sync_to_thread=False,
+)
+def delete_slack_command(command_id: str) -> dict[str, Any]:
+    del command_id
+    raise HTTPException(status_code=501, detail="Feature not yet enabled")
+
+
 integrations_router = Router(
     path="/admin",
     route_handlers=[
@@ -329,6 +357,10 @@ integrations_router = Router(
         test_integration,
         list_trigger_integrations,
         get_slack_status,
+        list_slack_commands,
+        create_slack_command,
+        update_slack_command,
+        delete_slack_command,
     ],
 )
 

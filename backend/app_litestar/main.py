@@ -126,7 +126,8 @@ from .routes.admin_tooling import (
     version_pins_router,
 )
 from .routes.agents_and_tracing import agents_router, tracing_router
-from .routes.bot_templates import bot_templates_router
+from .routes.bot_templates import bot_stubs_router, bot_templates_router
+from .routes.integrations import integrations_github_router
 from .routes.budgets import budgets_router
 from .routes.misc import misc_router
 from .routes.mcp_servers import mcp_servers_router, project_mcp_router
@@ -149,6 +150,7 @@ from .routes.super_agents_cluster import (
     super_agents_router,
 )
 from .routes.skills import (
+    skill_composer_router,
     skill_conversations_router,
     skill_sets_router,
     skills_router,
@@ -164,9 +166,7 @@ from .routes.workflows import workflows_router
 def _cors_config() -> CORSConfig:
     """Mirror Flask CORS: dev-localhost always allowed, env CSV widens."""
     allowed = [
-        o.strip()
-        for o in os.environ.get("CORS_ALLOWED_ORIGINS", "").split(",")
-        if o.strip()
+        o.strip() for o in os.environ.get("CORS_ALLOWED_ORIGINS", "").split(",") if o.strip()
     ]
     for dev_origin in ("http://localhost:3000", "http://127.0.0.1:3000"):
         if dev_origin not in allowed:
@@ -227,6 +227,8 @@ def create_app() -> Litestar:
             misc_router,
             admin_misc_router,
             bot_templates_router,
+            bot_stubs_router,
+            integrations_github_router,
             budgets_router,
             quality_ratings_router,
             scheduler_router,
@@ -242,6 +244,7 @@ def create_app() -> Litestar:
             skill_conversations_router,
             skills_router,
             skill_sets_router,
+            skill_composer_router,
             agents_router,
             tracing_router,
             rules_router,

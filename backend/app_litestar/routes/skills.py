@@ -46,9 +46,7 @@ def _result_or_raise(payload: tuple[dict, int]) -> dict:
 
 
 @get("/", sync_to_thread=False)
-def list_skills(
-    caller: Caller, trigger_id: Optional[str] = None
-) -> dict[str, Any]:
+def list_skills(caller: Caller, trigger_id: Optional[str] = None) -> dict[str, Any]:
     del caller
     return _result_or_raise(SkillsService.list_skills(trigger_id=trigger_id))
 
@@ -83,16 +81,12 @@ def add_user_skill(data: dict, caller: Caller) -> dict[str, Any]:
 
 
 @put("/user/{skill_id:int}", sync_to_thread=False)
-def update_user_skill(
-    skill_id: int, data: dict, caller: Caller
-) -> dict[str, Any]:
+def update_user_skill(skill_id: int, data: dict, caller: Caller) -> dict[str, Any]:
     del caller
     if not data:
         raise ClientException(detail="JSON body required")
     return _result_or_raise(
-        SkillsService.update_skill(
-            skill_id, {k: v for k, v in data.items() if v is not None}
-        )
+        SkillsService.update_skill(skill_id, {k: v for k, v in data.items() if v is not None})
     )
 
 
@@ -116,13 +110,9 @@ class ToggleHarnessBody(Struct):
 
 
 @put("/harness/{skill_id:int}", sync_to_thread=False)
-def toggle_harness_skill(
-    skill_id: int, data: ToggleHarnessBody, caller: Caller
-) -> dict[str, Any]:
+def toggle_harness_skill(skill_id: int, data: ToggleHarnessBody, caller: Caller) -> dict[str, Any]:
     del caller
-    return _result_or_raise(
-        SkillsService.toggle_harness_selection(skill_id, data.selected)
-    )
+    return _result_or_raise(SkillsService.toggle_harness_selection(skill_id, data.selected))
 
 
 @get("/harness/config", sync_to_thread=False)
@@ -161,16 +151,24 @@ def list_playground_files(caller: Caller) -> dict[str, Any]:
             return []
         for entry in entries:
             if entry.startswith(".") or entry in (
-                "node_modules", "__pycache__", "dist", "build", ".git",
+                "node_modules",
+                "__pycache__",
+                "dist",
+                "build",
+                ".git",
             ):
                 continue
             full_path = os.path.join(path, entry)
             rel_path = os.path.relpath(full_path, working_dir)
             if os.path.isdir(full_path):
-                items.append({
-                    "name": entry, "path": rel_path, "type": "directory",
-                    "children": build_tree(full_path, depth + 1, max_depth),
-                })
+                items.append(
+                    {
+                        "name": entry,
+                        "path": rel_path,
+                        "type": "directory",
+                        "children": build_tree(full_path, depth + 1, max_depth),
+                    }
+                )
             else:
                 items.append({"name": entry, "path": rel_path, "type": "file"})
         return items
@@ -183,9 +181,7 @@ def test_skill(data: dict, caller: Caller) -> dict[str, Any]:
     del caller
     if not data or "skill_name" not in data:
         raise ClientException(detail="skill_name is required")
-    return _result_or_raise(
-        SkillsService.test_skill(data["skill_name"], data.get("input", ""))
-    )
+    return _result_or_raise(SkillsService.test_skill(data["skill_name"], data.get("input", "")))
 
 
 @get(
@@ -229,22 +225,14 @@ def search_skills_sh(caller: Caller, q: str = "") -> dict[str, Any]:
 
 
 @post("/skills-sh/install", sync_to_thread=False)
-def install_skills_sh(
-    data: dict, caller: Caller, request: Request
-) -> dict[str, Any]:
+def install_skills_sh(data: dict, caller: Caller, request: Request) -> dict[str, Any]:
     del caller
     if not data or "source" not in data:
         raise ClientException(detail="source is required")
     from app.services.skills_sh_service import SkillsShService
 
-    client_ip = (
-        request.client.host
-        if request.client and request.client.host
-        else "unknown"
-    )
-    return _result_or_raise(
-        SkillsShService.install_skill(data["source"], client_ip=client_ip)
-    )
+    client_ip = request.client.host if request.client and request.client.host else "unknown"
+    return _result_or_raise(SkillsShService.install_skill(data["source"], client_ip=client_ip))
 
 
 skills_router = Router(
@@ -301,9 +289,7 @@ def create_skill_set_endpoint(data: dict, caller: Caller) -> dict[str, Any]:
 
 
 @put("/{set_id:str}", sync_to_thread=False)
-def update_skill_set_endpoint(
-    set_id: str, data: dict, caller: Caller
-) -> dict[str, Any]:
+def update_skill_set_endpoint(set_id: str, data: dict, caller: Caller) -> dict[str, Any]:
     del caller
     if not data:
         raise ClientException(detail="JSON body required")
@@ -350,6 +336,47 @@ skill_sets_router = Router(
 
 
 # ===========================================================================
+# PR-J3b: VisualSkillComposerPage.vue → /admin/skills/composer.
+# The view ships a "Not yet enabled" banner in PR-J3; these handlers return
+# 501 ("Feature not yet enabled") instead of 404 so the contract is explicit.
+# ===========================================================================
+
+
+@get("/", sync_to_thread=False)
+def list_skill_composer() -> dict[str, Any]:
+    raise HTTPException(status_code=501, detail="Feature not yet enabled")
+
+
+@post("/", sync_to_thread=False)
+def create_skill_composer(data: dict) -> dict[str, Any]:
+    del data
+    raise HTTPException(status_code=501, detail="Feature not yet enabled")
+
+
+@put("/{composer_id:str}", sync_to_thread=False)
+def update_skill_composer(composer_id: str, data: dict) -> dict[str, Any]:
+    del composer_id, data
+    raise HTTPException(status_code=501, detail="Feature not yet enabled")
+
+
+@delete("/{composer_id:str}", status_code=200, sync_to_thread=False)
+def delete_skill_composer(composer_id: str) -> dict[str, Any]:
+    del composer_id
+    raise HTTPException(status_code=501, detail="Feature not yet enabled")
+
+
+skill_composer_router = Router(
+    path="/admin/skills/composer",
+    route_handlers=[
+        list_skill_composer,
+        create_skill_composer,
+        update_skill_composer,
+        delete_skill_composer,
+    ],
+)
+
+
+# ===========================================================================
 # /api/skills/conversations/* — interactive skill creation
 # ===========================================================================
 
@@ -372,16 +399,12 @@ def start_conversation(caller: Caller) -> dict[str, Any]:
 @get("/{conv_id:str}", sync_to_thread=False)
 def get_conversation(conv_id: str, caller: Caller) -> dict[str, Any]:
     return _result_or_raise(
-        SkillConversationService.get_conversation(
-            conv_id, caller_user_id=_caller_user_id(caller)
-        )
+        SkillConversationService.get_conversation(conv_id, caller_user_id=_caller_user_id(caller))
     )
 
 
 @post("/{conv_id:str}/message", sync_to_thread=False)
-def send_message(
-    conv_id: str, data: dict, caller: Caller
-) -> dict[str, Any]:
+def send_message(conv_id: str, data: dict, caller: Caller) -> dict[str, Any]:
     if not data or not data.get("message"):
         raise ClientException(detail="message is required")
     return _result_or_raise(
@@ -412,9 +435,7 @@ def stream_conversation(conv_id: str, caller: Caller) -> Stream:
         raise NotFoundException(detail="Conversation not found")
 
     def generate():
-        for event in SkillConversationService.subscribe(
-            conv_id, caller_user_id=user_id
-        ):
+        for event in SkillConversationService.subscribe(conv_id, caller_user_id=user_id):
             yield event
 
     return Stream(
@@ -441,9 +462,7 @@ def list_active_skill_conversations_endpoint(caller: Caller) -> dict[str, Any]:
     and an unauthenticated user can no longer enumerate every
     operator's in-flight wizard sessions.
     """
-    return _result_or_raise(
-        SkillConversationService.list_active(user_id=_caller_user_id(caller))
-    )
+    return _result_or_raise(SkillConversationService.list_active(user_id=_caller_user_id(caller)))
 
 
 @post("/{conv_id:str}/preview-finalize", sync_to_thread=False)
@@ -455,16 +474,12 @@ def preview_finalize_skill(conv_id: str, caller: Caller) -> dict[str, Any]:
     preview that returns 200 is guaranteed to commit.
     """
     return _result_or_raise(
-        SkillConversationService.preview_finalize(
-            conv_id, caller_user_id=_caller_user_id(caller)
-        )
+        SkillConversationService.preview_finalize(conv_id, caller_user_id=_caller_user_id(caller))
     )
 
 
 @post("/{conv_id:str}/finalize", sync_to_thread=False)
-def finalize_skill(
-    conv_id: str, data: dict | None, caller: Caller
-) -> dict[str, Any]:
+def finalize_skill(conv_id: str, data: dict | None, caller: Caller) -> dict[str, Any]:
     """v0.7.77 — accepts optional ``expected_config_hash`` in the
     body so the preview drawer can guarantee the finalized
     package matches what the operator reviewed. Mismatch → 409.
