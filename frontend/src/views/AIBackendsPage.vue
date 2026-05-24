@@ -3,6 +3,18 @@
     <PageHeader title="AI Backends" subtitle="Manage AI backend providers and accounts">
       <template #actions>
         <button
+          class="btn btn-secondary detect-btn"
+          :disabled="isDetecting"
+          data-testid="detect-existing-btn"
+          @click="openDetectModal"
+        >
+          <svg v-if="!isDetecting" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+            <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+          </svg>
+          <div v-else class="spinner-sm spinner-sm-dark"></div>
+          {{ isDetecting ? 'Detecting…' : 'Detect Existing' }}
+        </button>
+        <button
           class="btn btn-primary add-account-btn"
           :disabled="isAddingAccount"
           @click="addProxyAccount"
@@ -28,12 +40,26 @@
 
     <ErrorState v-else-if="error" :message="error" @retry="loadBackends()" />
 
-    <EmptyState v-else-if="backends.length === 0" title="No backends configured" description="AI backends will appear here once detected">
+    <EmptyState
+      v-else-if="backends.length === 0"
+      title="No backends configured"
+      description="We can scan this machine for existing CLI logins (claude / codex / gemini / opencode)."
+    >
       <template #icon>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
           <circle cx="12" cy="12" r="3"/>
           <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09"/>
         </svg>
+      </template>
+      <template #actions>
+        <button
+          class="btn btn-primary"
+          :disabled="isDetecting"
+          data-testid="detect-existing-empty-btn"
+          @click="openDetectModal"
+        >
+          {{ isDetecting ? 'Detecting…' : 'Detect Existing Logins' }}
+        </button>
       </template>
     </EmptyState>
 
@@ -109,6 +135,108 @@
       </div>
     </div>
 
+    <Teleport to="body">
+      <div
+        v-if="showDetectModal"
+        class="modal-overlay"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="detect-modal-title"
+        tabindex="-1"
+        data-testid="detect-modal"
+        @click.self="closeDetectModal"
+        @keydown.escape="closeDetectModal"
+      >
+        <div class="modal detect-modal">
+          <div class="modal-header">
+            <h2 id="detect-modal-title">Detected CLI logins</h2>
+            <button
+              type="button"
+              class="modal-close-btn"
+              aria-label="Close"
+              data-testid="detect-modal-close"
+              @click="closeDetectModal"
+            >×</button>
+          </div>
+
+          <div class="modal-body">
+            <div v-if="isDetecting" class="detect-loading">
+              <div class="spinner-md"></div>
+              <p>Probing CLIs on this machine. This may take ~12 s per candidate…</p>
+            </div>
+
+            <div
+              v-else-if="discoveredItems.length === 0"
+              class="detect-empty"
+              data-testid="detect-empty"
+            >
+              <p><strong>Nothing found.</strong></p>
+              <p>Install a CLI like <code>claude</code>, <code>codex</code>, <code>gemini</code>, or <code>opencode</code> and login, then try again.</p>
+            </div>
+
+            <ul v-else class="detect-list" data-testid="detect-list">
+              <li
+                v-for="item in discoveredItems"
+                :key="item.kind + ':' + item.path"
+                class="detect-row"
+                :data-testid="`detect-row-${item.kind}`"
+              >
+                <div class="detect-row-main">
+                  <span class="kind-badge" :class="`kind-${item.kind}`">{{ item.kind }}</span>
+                  <div class="detect-row-text">
+                    <div class="detect-name">{{ item.suggested_name }}</div>
+                    <div class="detect-path" :title="item.path">{{ item.path }}</div>
+                  </div>
+                </div>
+                <div class="detect-row-side">
+                  <span
+                    class="login-badge"
+                    :class="{ ok: item.is_logged_in, bad: !item.is_logged_in }"
+                    :title="item.error ?? undefined"
+                    :aria-label="item.error ?? undefined"
+                  >
+                    {{ item.is_logged_in ? 'Logged in' : 'Not logged in' }}
+                  </span>
+                  <span
+                    v-if="item.backend_id"
+                    class="already-imported-badge"
+                    data-testid="already-imported"
+                  >Already imported</span>
+                  <button
+                    v-else-if="item.is_logged_in"
+                    type="button"
+                    class="btn btn-primary btn-sm"
+                    :disabled="importingPath === item.path"
+                    :data-testid="`detect-import-${item.kind}`"
+                    @click="importItem(item)"
+                  >
+                    <div v-if="importingPath === item.path" class="spinner-sm"></div>
+                    {{ importingPath === item.path ? 'Importing…' : 'Import' }}
+                  </button>
+                  <span v-else class="not-logged-hint">Login required</span>
+                </div>
+              </li>
+            </ul>
+          </div>
+
+          <div class="modal-actions">
+            <button
+              type="button"
+              class="btn btn-secondary"
+              :disabled="isDetecting"
+              data-testid="detect-rescan"
+              @click="rescan"
+            >Rescan</button>
+            <button
+              type="button"
+              class="btn btn-secondary"
+              @click="closeDetectModal"
+            >Close</button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
     <div class="test-panel-section">
       <div class="section-header">
         <h2>Test Backend</h2>
@@ -136,7 +264,33 @@ import ErrorState from '../components/base/ErrorState.vue';
 import EmptyState from '../components/base/EmptyState.vue';
 import CredentialStatusBanner from '../components/credentials/CredentialStatusBanner.vue';
 import { AiChatPanel } from '@ai-accounts/vue-styled';
+import { useAiAccounts } from '@ai-accounts/vue-headless';
 import { useToast } from '../composables/useToast';
+
+const { client: aiAccountsClient } = useAiAccounts();
+
+/**
+ * v0.7.97 — auto-discovery.
+ *
+ * The sidecar's `/api/v1/discovery/` endpoint probes each candidate
+ * CLI by running a real prompt (e.g. `claude -p hello`). That costs
+ * upstream tokens and takes up to ~12s per candidate, so this MUST
+ * stay user-triggered. Never invoke on mount or in any background
+ * effect.
+ */
+interface DiscoveredItem {
+  kind: string;
+  path: string;
+  suggested_name: string;
+  is_logged_in: boolean;
+  error: string | null;
+  backend_id: string | null;
+}
+
+const isDetecting = ref(false);
+const showDetectModal = ref(false);
+const discoveredItems = ref<DiscoveredItem[]>([]);
+const importingPath = ref<string | null>(null);
 
 const router = useRouter();
 
@@ -200,6 +354,61 @@ async function addProxyAccount() {
     showToast(e instanceof Error ? e.message : 'Failed to start login', 'error');
   } finally {
     isAddingAccount.value = false;
+  }
+}
+
+function closeDetectModal() {
+  if (importingPath.value) return; // don't close mid-import
+  showDetectModal.value = false;
+}
+
+async function runDiscovery() {
+  if (isDetecting.value) return;
+  isDetecting.value = true;
+  try {
+    const res = await aiAccountsClient.discoverConfigs();
+    discoveredItems.value = res.items;
+    if (res.items.length === 0) {
+      showToast('No existing CLI logins detected on this machine.', 'info');
+    }
+  } catch (e: unknown) {
+    discoveredItems.value = [];
+    showToast(e instanceof Error ? e.message : 'Discovery failed', 'error');
+  } finally {
+    isDetecting.value = false;
+  }
+}
+
+async function openDetectModal() {
+  showDetectModal.value = true;
+  await runDiscovery();
+}
+
+async function rescan() {
+  await runDiscovery();
+}
+
+async function importItem(item: DiscoveredItem) {
+  if (importingPath.value) return;
+  importingPath.value = item.path;
+  try {
+    await aiAccountsClient.importDiscovered({
+      kind: item.kind,
+      path: item.path,
+      display_name: item.suggested_name,
+    });
+    showToast(`Imported ${item.suggested_name}`, 'success');
+    // Mark locally so the row flips to "Already imported" without
+    // a full rescan (which would re-prompt every CLI again).
+    item.backend_id = 'imported';
+    await loadBackends(true);
+  } catch (e: unknown) {
+    showToast(
+      e instanceof Error ? e.message : `Failed to import ${item.suggested_name}`,
+      'error',
+    );
+  } finally {
+    importingPath.value = null;
   }
 }
 
@@ -521,5 +730,196 @@ onMounted(async () => {
 .chat-welcome p {
   margin: 0;
   color: var(--text-secondary);
+}
+
+/* --- Detect Existing modal --- */
+.detect-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  flex-shrink: 0;
+  margin-right: 8px;
+}
+
+.spinner-sm-dark {
+  border: 2px solid rgba(0,0,0,0.15);
+  border-top-color: var(--text-primary);
+}
+
+.spinner-md {
+  width: 28px;
+  height: 28px;
+  border: 3px solid rgba(255,255,255,0.15);
+  border-top-color: var(--accent-cyan);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  margin-bottom: 12px;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.detect-modal {
+  max-width: 640px;
+  width: 95%;
+}
+
+.modal-close-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 8px;
+}
+
+.modal-close-btn:hover { color: var(--text-primary); }
+
+.detect-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 16px;
+  text-align: center;
+  color: var(--text-secondary);
+}
+
+.detect-empty {
+  padding: 20px 8px;
+  color: var(--text-secondary);
+  text-align: center;
+}
+
+.detect-empty code {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  background: var(--bg-tertiary);
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+
+.detect-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.detect-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  background: var(--bg-tertiary);
+}
+
+.detect-row-main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  flex: 1;
+}
+
+.detect-row-text {
+  min-width: 0;
+  flex: 1;
+}
+
+.detect-name {
+  font-weight: 600;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.detect-path {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-tertiary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.detect-row-side {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.kind-badge {
+  text-transform: uppercase;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  padding: 4px 8px;
+  border-radius: 4px;
+  background: var(--accent-violet-dim);
+  color: var(--accent-violet);
+}
+
+.kind-claude { background: rgba(217, 119, 87, 0.18); color: #D97757; }
+.kind-codex { background: rgba(16, 163, 127, 0.18); color: #10A37F; }
+.kind-gemini { background: rgba(66, 133, 244, 0.18); color: #4285F4; }
+.kind-opencode { background: rgba(0, 184, 148, 0.18); color: #00B894; }
+
+.login-badge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 4px;
+}
+
+.login-badge.ok {
+  background: var(--accent-emerald-dim);
+  color: var(--accent-emerald);
+}
+
+.login-badge.bad {
+  background: var(--accent-crimson-dim);
+  color: var(--accent-crimson);
+}
+
+.already-imported-badge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 4px 8px;
+  border-radius: 4px;
+  background: rgba(150, 150, 150, 0.15);
+  color: var(--text-tertiary);
+}
+
+.not-logged-hint {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  font-style: italic;
+}
+
+.btn-sm {
+  padding: 4px 12px;
+  font-size: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-default);
 }
 </style>
