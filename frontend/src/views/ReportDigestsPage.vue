@@ -1,15 +1,20 @@
 <script setup lang="ts">
-// ShipOrCut: 2026-Q3 — STUB-PROMOTE: backend `report_digests_router` at
-// `backend/app_litestar/routes/leaf_crud_c.py:259+` returns
-// `{"digests": []}` and echoes input on write — declared as stubs.
-// See .planning/static-smell-triage.md. Ship the feature or remove
-// the route by EOQ3.
+// PR-G: the mutating backend handlers in
+// `backend/app_litestar/routes/leaf_crud_c.py` (POST/PUT /reports/digests)
+// now return 501 ("Feature not yet enabled"). The GET still returns an
+// honest empty `{digests: []}`. We render a banner at the top of the page
+// and disable the create/edit submit buttons so operators don't believe
+// their changes persisted.
 import { ref, onMounted } from 'vue';
 import LoadingState from '../components/base/LoadingState.vue';
 import EmptyState from '../components/base/EmptyState.vue';
 import { useToast } from '../composables/useToast';
 
 const showToast = useToast();
+
+// Digest delivery is not yet wired up server-side. Flipping this constant
+// off (and removing the banner) is what gates the feature when it ships.
+const FEATURE_ENABLED = false;
 const isLoading = ref(true);
 const isSaving = ref(false);
 const showCreateForm = ref(false);
@@ -147,12 +152,35 @@ onMounted(loadDigests);
 <template>
   <div class="report-digests-page">
 
+    <!-- PR-G: backend mutating handlers return 501 ("Feature not yet enabled"). -->
+    <div
+      v-if="!FEATURE_ENABLED"
+      class="not-enabled-banner"
+      data-testid="digests-not-enabled"
+      role="status"
+    >
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <circle cx="12" cy="12" r="10"/>
+        <line x1="12" y1="8" x2="12" y2="12"/>
+        <line x1="12" y1="16" x2="12.01" y2="16"/>
+      </svg>
+      <div>
+        <strong>Digest delivery is not yet enabled in this deployment.</strong>
+        <p>Creating or editing digest schedules is disabled until the backend ships digest persistence and delivery.</p>
+      </div>
+    </div>
+
     <div class="page-title-row">
       <div>
         <h2>Report Digests</h2>
         <p class="subtitle">Schedule AI-generated summaries delivered to email or Slack</p>
       </div>
-      <button class="btn btn-primary" @click="showCreateForm = !showCreateForm">
+      <button
+        class="btn btn-primary"
+        :disabled="!FEATURE_ENABLED"
+        :title="!FEATURE_ENABLED ? 'Digest delivery is not yet enabled' : ''"
+        @click="showCreateForm = !showCreateForm"
+      >
         {{ showCreateForm ? 'Cancel' : '+ Add Digest' }}
       </button>
     </div>
@@ -195,7 +223,12 @@ onMounted(loadDigests);
         </div>
         <div class="create-actions">
           <button class="btn btn-secondary btn-sm" @click="showCreateForm = false; resetCreateForm()">Cancel</button>
-          <button class="btn btn-primary btn-sm" :disabled="isCreating" @click="createDigest">
+          <button
+            class="btn btn-primary btn-sm"
+            :disabled="isCreating || !FEATURE_ENABLED"
+            data-testid="digest-create-submit"
+            @click="createDigest"
+          >
             {{ isCreating ? 'Creating...' : 'Create Digest' }}
           </button>
         </div>
@@ -207,7 +240,12 @@ onMounted(loadDigests);
     <template v-else>
       <EmptyState v-if="digests.length === 0" title="No report digests configured" description="Configure digest schedules for your teams to receive automated reports.">
         <template #actions>
-          <button class="btn btn-primary" @click="showCreateForm = true">+ Add Digest</button>
+          <button
+            class="btn btn-primary"
+            :disabled="!FEATURE_ENABLED"
+            :title="!FEATURE_ENABLED ? 'Digest delivery is not yet enabled' : ''"
+            @click="showCreateForm = true"
+          >+ Add Digest</button>
         </template>
       </EmptyState>
       <div class="digest-list">
@@ -261,7 +299,11 @@ onMounted(loadDigests);
             </div>
 
             <div class="save-row">
-              <button class="btn btn-primary btn-sm" :disabled="isSaving" @click="saveDigest(d)">
+              <button
+                class="btn btn-primary btn-sm"
+                :disabled="isSaving || !FEATURE_ENABLED"
+                @click="saveDigest(d)"
+              >
                 {{ isSaving ? 'Saving...' : 'Save' }}
               </button>
             </div>
@@ -299,6 +341,18 @@ onMounted(loadDigests);
   justify-content: space-between;
   align-items: flex-start;
 }
+
+/* PR-G: 501-not-enabled banner */
+.not-enabled-banner {
+  display: flex; align-items: flex-start; gap: 12px;
+  padding: 16px 20px; border-radius: 8px;
+  background: var(--bg-elevated, rgba(255,255,255,0.04));
+  border: 1px dashed var(--border-default, rgba(255,255,255,0.15));
+  color: var(--text-secondary);
+}
+.not-enabled-banner svg { width: 18px; height: 18px; flex-shrink: 0; color: var(--text-tertiary); margin-top: 2px; }
+.not-enabled-banner strong { display: block; font-size: 0.9rem; font-weight: 600; color: var(--text-primary); margin-bottom: 4px; }
+.not-enabled-banner p { margin: 0; font-size: 0.82rem; color: var(--text-tertiary); }
 
 .page-title-row h2 {
   font-size: 1.4rem;

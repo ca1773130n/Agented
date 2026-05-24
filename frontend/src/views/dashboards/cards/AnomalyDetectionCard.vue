@@ -3,11 +3,16 @@
   for the Quality lane.
 -->
 <script setup lang="ts">
-// ShipOrCut: 2026-Q3 — STUB-PROMOTE: backend handlers are stubs.
+// PR-G: backend handlers `GET /admin/executions/anomalies` +
+// `POST /admin/executions/anomalies/{id}/acknowledge` now return 501
+// ("Feature not yet enabled"). When we detect 501 we render a static
+// "not yet enabled" banner instead of falling through to the legacy
+// demo-on-failure mock data, which masked the missing feature.
 import { ref, computed, onMounted, onUnmounted } from 'vue';
 import LoadingState from '../../../components/base/LoadingState.vue';
 import StatCard from '../../../components/base/StatCard.vue';
 import { useToast } from '../../../composables/useToast';
+import { isNotImplemented } from '../../../services/api/error-handler';
 
 const emit = defineEmits<{ loaded: [slug: string] }>();
 const showToast = useToast();
@@ -48,26 +53,44 @@ interface BotBaseline {
 const anomalies = ref<Anomaly[]>([]);
 const baselines = ref<BotBaseline[]>([]);
 const filterAcknowledged = ref(false);
+// PR-G: when the backend reports 501 ("Feature not yet enabled") we render a
+// static banner instead of the empty-state ("all executions look normal") or
+// the demo-on-failure fallback that previously masked the missing feature.
+const notEnabled = ref(false);
+
+class HttpStatusError extends Error {
+  constructor(public readonly status: number) {
+    super(`HTTP ${status}`);
+  }
+}
 
 async function loadData() {
   try {
     const res = await fetch('/admin/executions/anomalies');
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    if (!res.ok) throw new HttpStatusError(res.status);
     const data = await res.json();
     anomalies.value = data.anomalies ?? [];
     baselines.value = data.baselines ?? [];
-  } catch {
-    anomalies.value = [
-      { id: 'an-1', bot_id: 'bot-security', bot_name: 'Security Audit', execution_id: 'ex-abc123', anomaly_type: 'duration', detected_at: new Date(Date.now() - 1800000).toISOString(), severity: 'critical', acknowledged: false, description: 'Execution took 4x longer than baseline — possible infinite loop or API hang.', baseline_value: 62, observed_value: 248, unit: 'seconds' },
-      { id: 'an-2', bot_id: 'bot-pr-review', bot_name: 'PR Review', execution_id: 'ex-def456', anomaly_type: 'output_length', detected_at: new Date(Date.now() - 3600000).toISOString(), severity: 'warning', acknowledged: false, description: 'Output was unusually short (47 chars). Bot may have produced empty or truncated response.', baseline_value: 2800, observed_value: 47, unit: 'characters' },
-      { id: 'an-3', bot_id: 'bot-security', bot_name: 'Security Audit', execution_id: 'ex-ghi789', anomaly_type: 'finding_spike', detected_at: new Date(Date.now() - 7200000).toISOString(), severity: 'warning', acknowledged: true, description: 'Found 23 issues vs baseline of 3.2. Spike may indicate new vulnerable code or prompt regression.', baseline_value: 3, observed_value: 23, unit: 'findings' },
-      { id: 'an-4', bot_id: 'bot-dep', bot_name: 'Dep Check', execution_id: 'ex-jkl012', anomaly_type: 'error_rate', detected_at: new Date(Date.now() - 10800000).toISOString(), severity: 'critical', acknowledged: false, description: '8 of the last 10 runs failed. Error: Claude API rate limited. Bot is likely stuck in a loop.', baseline_value: 5, observed_value: 80, unit: '% error rate' },
-    ];
-    baselines.value = [
-      { bot_id: 'bot-security', bot_name: 'Security Audit', avg_duration_s: 62, avg_output_chars: 3400, avg_findings: 3.2, error_rate_pct: 4.1, sample_count: 87 },
-      { bot_id: 'bot-pr-review', bot_name: 'PR Review', avg_duration_s: 45, avg_output_chars: 2800, avg_findings: 1.8, error_rate_pct: 2.3, sample_count: 241 },
-      { bot_id: 'bot-dep', bot_name: 'Dep Check', avg_duration_s: 28, avg_output_chars: 1200, avg_findings: 5.1, error_rate_pct: 5.0, sample_count: 64 },
-    ];
+    notEnabled.value = false;
+  } catch (err) {
+    if (isNotImplemented(err)) {
+      // Feature not yet enabled — show banner, do NOT fall through to demo.
+      notEnabled.value = true;
+      anomalies.value = [];
+      baselines.value = [];
+    } else {
+      anomalies.value = [
+        { id: 'an-1', bot_id: 'bot-security', bot_name: 'Security Audit', execution_id: 'ex-abc123', anomaly_type: 'duration', detected_at: new Date(Date.now() - 1800000).toISOString(), severity: 'critical', acknowledged: false, description: 'Execution took 4x longer than baseline — possible infinite loop or API hang.', baseline_value: 62, observed_value: 248, unit: 'seconds' },
+        { id: 'an-2', bot_id: 'bot-pr-review', bot_name: 'PR Review', execution_id: 'ex-def456', anomaly_type: 'output_length', detected_at: new Date(Date.now() - 3600000).toISOString(), severity: 'warning', acknowledged: false, description: 'Output was unusually short (47 chars). Bot may have produced empty or truncated response.', baseline_value: 2800, observed_value: 47, unit: 'characters' },
+        { id: 'an-3', bot_id: 'bot-security', bot_name: 'Security Audit', execution_id: 'ex-ghi789', anomaly_type: 'finding_spike', detected_at: new Date(Date.now() - 7200000).toISOString(), severity: 'warning', acknowledged: true, description: 'Found 23 issues vs baseline of 3.2. Spike may indicate new vulnerable code or prompt regression.', baseline_value: 3, observed_value: 23, unit: 'findings' },
+        { id: 'an-4', bot_id: 'bot-dep', bot_name: 'Dep Check', execution_id: 'ex-jkl012', anomaly_type: 'error_rate', detected_at: new Date(Date.now() - 10800000).toISOString(), severity: 'critical', acknowledged: false, description: '8 of the last 10 runs failed. Error: Claude API rate limited. Bot is likely stuck in a loop.', baseline_value: 5, observed_value: 80, unit: '% error rate' },
+      ];
+      baselines.value = [
+        { bot_id: 'bot-security', bot_name: 'Security Audit', avg_duration_s: 62, avg_output_chars: 3400, avg_findings: 3.2, error_rate_pct: 4.1, sample_count: 87 },
+        { bot_id: 'bot-pr-review', bot_name: 'PR Review', avg_duration_s: 45, avg_output_chars: 2800, avg_findings: 1.8, error_rate_pct: 2.3, sample_count: 241 },
+        { bot_id: 'bot-dep', bot_name: 'Dep Check', avg_duration_s: 28, avg_output_chars: 1200, avg_findings: 5.1, error_rate_pct: 5.0, sample_count: 64 },
+      ];
+    }
   } finally {
     isLoading.value = false;
     emit('loaded', 'anomaly-detection');
@@ -77,7 +100,7 @@ async function loadData() {
 async function acknowledge(anomaly: Anomaly) {
   try {
     const res = await fetch(`/admin/executions/anomalies/${anomaly.id}/acknowledge`, { method: 'POST' });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    if (!res.ok) throw new HttpStatusError(res.status);
     anomaly.acknowledged = true;
     showToast('Anomaly acknowledged', 'success');
   } catch {
@@ -134,6 +157,24 @@ onUnmounted(() => { if (refreshInterval) clearInterval(refreshInterval); });
     </header>
 
     <LoadingState v-if="isLoading" message="Loading anomaly data..." />
+
+    <!-- PR-G: backend returns 501 ("Feature not yet enabled") for anomalies. -->
+    <div
+      v-else-if="notEnabled"
+      class="not-enabled-banner"
+      data-testid="anomaly-not-enabled"
+      role="status"
+    >
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <circle cx="12" cy="12" r="10"/>
+        <line x1="12" y1="8" x2="12" y2="12"/>
+        <line x1="12" y1="16" x2="12.01" y2="16"/>
+      </svg>
+      <div>
+        <strong>Anomaly detection is not yet enabled in this deployment.</strong>
+        <p>This card will populate once anomaly baselines are wired up server-side.</p>
+      </div>
+    </div>
 
     <template v-else>
       <div class="stats-grid">
@@ -266,6 +307,18 @@ onUnmounted(() => { if (refreshInterval) clearInterval(refreshInterval); });
 
 .empty-anomalies { display: flex; align-items: center; gap: 10px; padding: 32px; justify-content: center; color: var(--accent-emerald); font-size: 0.9rem; }
 .empty-anomalies svg { width: 20px; height: 20px; }
+
+/* PR-G: 501-not-enabled banner */
+.not-enabled-banner {
+  display: flex; align-items: flex-start; gap: 12px;
+  padding: 16px 20px; border-radius: 8px;
+  background: var(--bg-elevated, rgba(255,255,255,0.04));
+  border: 1px dashed var(--border-default, rgba(255,255,255,0.15));
+  color: var(--text-secondary);
+}
+.not-enabled-banner svg { width: 18px; height: 18px; flex-shrink: 0; color: var(--text-tertiary); margin-top: 2px; }
+.not-enabled-banner strong { display: block; font-size: 0.9rem; font-weight: 600; color: var(--text-primary); margin-bottom: 4px; }
+.not-enabled-banner p { margin: 0; font-size: 0.82rem; color: var(--text-tertiary); }
 
 .anomaly-list { display: flex; flex-direction: column; gap: 12px; }
 .anomaly-card {

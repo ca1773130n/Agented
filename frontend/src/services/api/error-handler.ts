@@ -86,6 +86,27 @@ export function formatApiError(status: number, serverMessage?: string): string {
 }
 
 /**
+ * PR-G — detects a 501 "Feature not yet enabled" response from a backend stub.
+ *
+ * Used by `AnomalyDetectionCard`, `ExecutionQuotaControls`, and
+ * `ReportDigestsPage` so they can render a static "not yet enabled" banner
+ * instead of falling through to a generic error toast or — worse — the
+ * legacy demo-on-failure fallback that masked the missing feature.
+ *
+ * Accepts both our `ApiError` (where `status` is a top-level field) and
+ * raw `fetch`-style errors where the caller hung a `response.status` on
+ * the thrown object.
+ */
+export function isNotImplemented(err: unknown): boolean {
+  if (!err || typeof err !== 'object') return false;
+  if (err instanceof ApiError) return err.status === 501;
+  const e = err as { status?: number; response?: { status?: number } };
+  if (e.status === 501) return true;
+  if (e.response && e.response.status === 501) return true;
+  return false;
+}
+
+/**
  * Handle any error by showing a toast notification and returning the formatted message.
  *
  * - ApiError: uses formatApiError with the status and message

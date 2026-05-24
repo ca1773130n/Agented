@@ -1,14 +1,19 @@
 <script setup lang="ts">
-// ShipOrCut: 2026-Q3 — STUB-PROMOTE: backend CRUD handlers in
-// `backend/app_litestar/routes/executions.py:485+` are declared as
-// stubs — every write `del`s its parameters and returns a no-op dict.
-// See .planning/static-smell-triage.md. Ship the feature or remove
-// the route by EOQ3.
+// PR-G: the mutating backend handlers in
+// `backend/app_litestar/routes/executions.py` (POST/PUT/DELETE /executions/quotas)
+// now return 501 ("Feature not yet enabled"). The GET still returns an
+// honest empty `{rules: []}`. We render a static banner at the top of the
+// page and disable the create/edit/delete controls so operators don't
+// believe their changes persisted.
 import { ref, computed, onMounted } from 'vue';
 import LoadingState from '../components/base/LoadingState.vue';
 import EmptyState from '../components/base/EmptyState.vue';
 import { useToast } from '../composables/useToast';
 const showToast = useToast();
+
+// Quota enforcement is not yet wired up server-side. Flipping this constant
+// off (and removing the banner) is what gates the feature when it ships.
+const FEATURE_ENABLED = false;
 
 const isLoading = ref(true);
 const isSaving = ref(false);
@@ -138,6 +143,24 @@ onMounted(loadData);
 <template>
   <div class="quota-page">
 
+    <!-- PR-G: backend mutating handlers return 501 ("Feature not yet enabled"). -->
+    <div
+      v-if="!FEATURE_ENABLED"
+      class="not-enabled-banner"
+      data-testid="quotas-not-enabled"
+      role="status"
+    >
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <circle cx="12" cy="12" r="10"/>
+        <line x1="12" y1="8" x2="12" y2="12"/>
+        <line x1="12" y1="16" x2="12.01" y2="16"/>
+      </svg>
+      <div>
+        <strong>Quota enforcement is not yet enabled in this deployment.</strong>
+        <p>Creating, editing, or deleting quota rules is disabled until the backend ships persistent quota enforcement.</p>
+      </div>
+    </div>
+
     <LoadingState v-if="isLoading" message="Loading quota rules..." />
 
     <template v-else>
@@ -161,7 +184,12 @@ onMounted(loadData);
           <h2>Quota Rules</h2>
           <p>Set max executions per bot per hour/day. Hard stops block; soft alerts notify only.</p>
         </div>
-        <button class="btn btn-primary" @click="showNewForm = !showNewForm">
+        <button
+          class="btn btn-primary"
+          :disabled="!FEATURE_ENABLED"
+          :title="!FEATURE_ENABLED ? 'Quota enforcement is not yet enabled' : ''"
+          @click="showNewForm = !showNewForm"
+        >
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
           New Rule
         </button>
@@ -204,7 +232,12 @@ onMounted(loadData);
         </div>
         <div class="form-actions">
           <button class="btn btn-ghost" @click="showNewForm = false">Cancel</button>
-          <button class="btn btn-primary" :disabled="isSaving" @click="createRule">Create Rule</button>
+          <button
+            class="btn btn-primary"
+            :disabled="isSaving || !FEATURE_ENABLED"
+            data-testid="quota-create-submit"
+            @click="createRule"
+          >Create Rule</button>
         </div>
       </div>
 
@@ -219,10 +252,20 @@ onMounted(loadData);
               <span v-if="rule.hard_stop" class="hard-stop-badge">Hard Stop</span>
             </div>
             <div class="rule-actions">
-              <button class="btn btn-ghost btn-sm" @click="editingId = editingId === rule.id ? null : rule.id">
+              <button
+                class="btn btn-ghost btn-sm"
+                :disabled="!FEATURE_ENABLED"
+                :title="!FEATURE_ENABLED ? 'Quota enforcement is not yet enabled' : ''"
+                @click="editingId = editingId === rule.id ? null : rule.id"
+              >
                 {{ editingId === rule.id ? 'Cancel' : 'Edit' }}
               </button>
-              <button class="btn btn-ghost btn-sm btn-danger" @click="deleteRule(rule.id)">Delete</button>
+              <button
+                class="btn btn-ghost btn-sm btn-danger"
+                :disabled="!FEATURE_ENABLED"
+                :title="!FEATURE_ENABLED ? 'Quota enforcement is not yet enabled' : ''"
+                @click="deleteRule(rule.id)"
+              >Delete</button>
             </div>
           </div>
 
@@ -278,7 +321,7 @@ onMounted(loadData);
               </div>
             </div>
             <div class="form-actions">
-              <button class="btn btn-primary btn-sm" :disabled="isSaving" @click="saveRule(rule)">Save Changes</button>
+              <button class="btn btn-primary btn-sm" :disabled="isSaving || !FEATURE_ENABLED" @click="saveRule(rule)">Save Changes</button>
             </div>
           </div>
         </div>
@@ -302,6 +345,18 @@ onMounted(loadData);
 }
 
 .card { padding: 24px; }
+
+/* PR-G: 501-not-enabled banner */
+.not-enabled-banner {
+  display: flex; align-items: flex-start; gap: 12px;
+  padding: 16px 20px; border-radius: 8px;
+  background: var(--bg-elevated, rgba(255,255,255,0.04));
+  border: 1px dashed var(--border-default, rgba(255,255,255,0.15));
+  color: var(--text-secondary);
+}
+.not-enabled-banner svg { width: 18px; height: 18px; flex-shrink: 0; color: var(--text-tertiary); margin-top: 2px; }
+.not-enabled-banner strong { display: block; font-size: 0.9rem; font-weight: 600; color: var(--text-primary); margin-bottom: 4px; }
+.not-enabled-banner p { margin: 0; font-size: 0.82rem; color: var(--text-tertiary); }
 
 .alert-banner {
   display: flex;

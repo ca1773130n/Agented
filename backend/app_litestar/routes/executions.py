@@ -27,8 +27,7 @@ def _ensure_running(execution: dict, action: str) -> None:
         raise HTTPException(
             status_code=409,
             detail=(
-                f'Can only {action} running executions. '
-                f'Current status is "{execution["status"]}".'
+                f'Can only {action} running executions. Current status is "{execution["status"]}".'
             ),
         )
 
@@ -216,9 +215,7 @@ def get_execution_diff(execution_id: str) -> dict[str, Any]:
             )
     except Exception:
         diff_header_re = re.compile(r"^diff --git a/(.+) b/(.+)$", re.MULTILINE)
-        hunk_header_re = re.compile(
-            r"^(@@ -\d+(?:,\d+)? \+\d+(?:,\d+)? @@[^\n]*)$", re.MULTILINE
-        )
+        hunk_header_re = re.compile(r"^(@@ -\d+(?:,\d+)? \+\d+(?:,\d+)? @@[^\n]*)$", re.MULTILINE)
         raw_files = re.split(r"(?=^diff --git )", stdout_log, flags=re.MULTILINE)
         for raw_file in raw_files:
             if not raw_file.strip():
@@ -358,8 +355,7 @@ def resume_execution(execution_id: str) -> dict[str, Any]:
         raise HTTPException(
             status_code=409,
             detail=(
-                f'Can only resume paused executions. '
-                f'Current status is "{execution["status"]}".'
+                f'Can only resume paused executions. Current status is "{execution["status"]}".'
             ),
         )
     if not ProcessManager.resume(execution_id):
@@ -393,8 +389,10 @@ def bulk_cancel_executions(data: dict) -> dict[str, Any]:
         current_status = execution["status"]
         if current_status == "paused":
             success = ProcessManager.resume(eid)
-            success = ProcessManager.cancel_graceful(eid) if success else (
+            success = (
                 ProcessManager.cancel_graceful(eid)
+                if success
+                else (ProcessManager.cancel_graceful(eid))
             )
         elif current_status == "running":
             success = ProcessManager.cancel_graceful(eid)
@@ -412,9 +410,7 @@ def bulk_cancel_executions(data: dict) -> dict[str, Any]:
             results.append({"execution_id": eid, "success": True})
             cancelled += 1
         else:
-            results.append(
-                {"execution_id": eid, "success": False, "reason": "cancel failed"}
-            )
+            results.append({"execution_id": eid, "success": False, "reason": "cancel failed"})
             failed += 1
     return {"cancelled": cancelled, "failed": failed, "details": results}
 
@@ -473,36 +469,46 @@ def pending_retries() -> dict[str, Any]:
 
 @get("/executions/anomalies", sync_to_thread=False)
 def execution_anomalies() -> dict[str, Any]:
-    return {"anomalies": [], "baselines": []}
+    # PR-G: silent-success stub flipped to 501. Anomaly detection is not yet
+    # implemented; returning an empty list misled the UI into rendering a
+    # "no active anomalies — all executions look normal" green state.
+    raise HTTPException(status_code=501, detail="Feature not yet enabled")
 
 
-@post("/executions/anomalies/{anomaly_id:str}/acknowledge", status_code=200, sync_to_thread=False)
+@post("/executions/anomalies/{anomaly_id:str}/acknowledge", sync_to_thread=False)
 def acknowledge_anomaly(anomaly_id: str) -> dict[str, Any]:
     del anomaly_id
-    return {"ok": True}
+    # PR-G: silent-success stub flipped to 501.
+    raise HTTPException(status_code=501, detail="Feature not yet enabled")
 
 
 @get("/executions/quotas", sync_to_thread=False)
 def execution_quotas() -> dict[str, Any]:
+    # Honest empty read kept as-is (PR-G): UI renders an empty-state when the
+    # list is empty, which is truthful for an un-shipped feature. Only the
+    # mutating quota handlers below return 501.
     return {"rules": []}
 
 
 @post("/executions/quotas", sync_to_thread=False)
 def create_execution_quota(data: dict) -> dict[str, Any]:
     del data
-    return {"id": "q-stub", "message": "created"}
+    # PR-G: silent-success stub flipped to 501.
+    raise HTTPException(status_code=501, detail="Feature not yet enabled")
 
 
 @put("/executions/quotas/{quota_id:str}", sync_to_thread=False)
 def update_execution_quota(quota_id: str, data: dict) -> dict[str, Any]:
     del quota_id, data
-    return {"ok": True}
+    # PR-G: silent-success stub flipped to 501.
+    raise HTTPException(status_code=501, detail="Feature not yet enabled")
 
 
 @delete("/executions/quotas/{quota_id:str}", status_code=200, sync_to_thread=False)
 def delete_execution_quota(quota_id: str) -> dict[str, Any]:
     del quota_id
-    return {"ok": True}
+    # PR-G: silent-success stub flipped to 501.
+    raise HTTPException(status_code=501, detail="Feature not yet enabled")
 
 
 executions_router = Router(

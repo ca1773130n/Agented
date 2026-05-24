@@ -102,38 +102,44 @@ def test_pending_retries(isolated_db):
     assert resp.status_code == 200
 
 
-def test_anomalies_stub(isolated_db):
+# PR-G: silent-success stubs flipped to 501. The mutating quota handlers and
+# both anomaly endpoints now return 501 ("Feature not yet enabled") so the UI
+# can render a banner instead of a fake green state. The GET /quotas read
+# stays as an honest empty 200 — the UI renders an empty state for it.
+
+
+def test_anomalies_returns_501(isolated_db):
     with _client() as c:
         resp = c.get("/admin/executions/anomalies")
-    assert resp.status_code == 200
-    assert resp.json() == {"anomalies": [], "baselines": []}
+    assert resp.status_code == 501
 
 
-def test_acknowledge_anomaly_stub(isolated_db):
+def test_acknowledge_anomaly_returns_501(isolated_db):
     with _client() as c:
         resp = c.post("/admin/executions/anomalies/x/acknowledge", json={})
-    assert resp.status_code == 200
+    assert resp.status_code == 501
 
 
-def test_quotas_stub(isolated_db):
+def test_quotas_get_returns_empty_200(isolated_db):
     with _client() as c:
         resp = c.get("/admin/executions/quotas")
     assert resp.status_code == 200
+    assert resp.json() == {"rules": []}
 
 
-def test_create_quota_stub(isolated_db):
+def test_create_quota_returns_501(isolated_db):
     with _client() as c:
         resp = c.post("/admin/executions/quotas", json={})
-    assert resp.status_code == 201
+    assert resp.status_code == 501
 
 
-def test_update_quota_stub(isolated_db):
+def test_update_quota_returns_501(isolated_db):
     with _client() as c:
         resp = c.put("/admin/executions/quotas/q-x", json={})
-    assert resp.status_code == 200
+    assert resp.status_code == 501
 
 
-def test_delete_quota_stub(isolated_db):
+def test_delete_quota_returns_501(isolated_db):
     with _client() as c:
         resp = c.delete("/admin/executions/quotas/q-x")
-    assert resp.status_code == 200
+    assert resp.status_code == 501
