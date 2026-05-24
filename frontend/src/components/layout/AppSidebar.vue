@@ -128,7 +128,7 @@ function autoExpandForRoute() {
   if (['ai-backends', 'backend-detail', 'service-health'].includes(name)) {
     expandedSections.value.aiBackends = true;
   }
-  if (['triggers', 'bot-templates', 'bot-clone-fork', 'cross-team-bot-sharing', 'incident-response-playbooks', 'inline-prompt-editor', 'visual-cron-wizard', 'conditional-trigger-rules', 'repo-scope-filters', 'structured-output', 'prompt-ab-testing', 'multi-provider-fallback', 'multi-repo-fan-out', 'pr-auto-assignment', 'pr-review-learning-loop', 'github-actions', 'webhook-recorder', 'dependency-impact-bot', 'bot-recommendation-engine', 'bot-dependency-graph', 'bot-performance-benchmarks', 'bot-runbooks', 'execution-tagging', 'changelog-generator', 'prompt-snippets', 'bot-dry-run', 'bot-output-piping', 'bot-output-webhook-forwarding', 'nl-trigger-rule-editor', 'webhook-payload-transformer', 'repo-bot-defaults'].includes(name)) {
+  if (['triggers', 'bot-templates', 'bot-clone-fork', 'cross-team-bot-sharing', 'incident-response-playbooks', 'inline-prompt-editor', 'visual-cron-wizard', 'conditional-trigger-rules', 'repo-scope-filters', 'structured-output', 'prompt-ab-testing', 'multi-provider-fallback', 'multi-repo-fan-out', 'pr-auto-assignment', 'pr-review-learning-loop', 'github-actions', 'webhook-recorder', 'dependency-impact-bot', 'bot-recommendation-engine', 'bot-dependency-graph', 'bot-performance-benchmarks', 'bot-runbooks', 'execution-tagging', 'changelog-generator', 'prompt-snippets', 'bot-dry-run', 'bot-output-piping', 'bot-output-webhook-forwarding', 'nl-trigger-rule-editor', 'webhook-payload-transformer'].includes(name)) {
     expandedSections.value.triggers = true;
   }
   // PR-J2 — Agent Memory parent + thread detail keep the Work
@@ -241,7 +241,7 @@ function isWorkflowsSectionActive(): boolean {
 }
 
 function isTriggersSectionActive(): boolean {
-  return ['triggers', 'bot-templates', 'bot-clone-fork', 'cross-team-bot-sharing', 'incident-response-playbooks', 'inline-prompt-editor', 'visual-cron-wizard', 'conditional-trigger-rules', 'repo-scope-filters', 'structured-output', 'prompt-ab-testing', 'multi-provider-fallback', 'multi-repo-fan-out', 'pr-auto-assignment', 'pr-review-learning-loop', 'github-actions', 'webhook-recorder', 'dependency-impact-bot', 'bot-recommendation-engine', 'bot-dependency-graph', 'bot-performance-benchmarks', 'bot-runbooks', 'execution-tagging', 'changelog-generator', 'prompt-snippets', 'bot-dry-run', 'bot-output-piping', 'bot-output-webhook-forwarding', 'nl-trigger-rule-editor', 'webhook-payload-transformer', 'repo-bot-defaults'].includes(currentRouteName.value);
+  return ['triggers', 'bot-templates', 'bot-clone-fork', 'cross-team-bot-sharing', 'incident-response-playbooks', 'inline-prompt-editor', 'visual-cron-wizard', 'conditional-trigger-rules', 'repo-scope-filters', 'structured-output', 'prompt-ab-testing', 'multi-provider-fallback', 'multi-repo-fan-out', 'pr-auto-assignment', 'pr-review-learning-loop', 'github-actions', 'webhook-recorder', 'dependency-impact-bot', 'bot-recommendation-engine', 'bot-dependency-graph', 'bot-performance-benchmarks', 'bot-runbooks', 'execution-tagging', 'changelog-generator', 'prompt-snippets', 'bot-dry-run', 'bot-output-piping', 'bot-output-webhook-forwarding', 'nl-trigger-rule-editor', 'webhook-payload-transformer'].includes(currentRouteName.value);
 }
 
 // PR-J2 — Agent Memory parent (Work group). agent-memory-thread-detail
