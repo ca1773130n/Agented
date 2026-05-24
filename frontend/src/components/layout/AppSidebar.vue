@@ -126,12 +126,8 @@ function autoExpandForRoute() {
   if (['ai-backends', 'backend-detail', 'service-health'].includes(name)) {
     expandedSections.value.aiBackends = true;
   }
-  // PR-N — auto-expand list still includes routes whose sidebar entries
-  // were removed (repo-scope-filters, structured-output, prompt-ab-testing,
-  // multi-provider-fallback, multi-repo-fan-out, bot-recommendation-engine,
-  // bot-dependency-graph, bot-performance-benchmarks, changelog-generator)
-  // are dropped here so the section doesn't auto-open for nav targets the
-  // user can no longer see in the sidebar.
+  // Auto-expand only for sidebar-visible Triggers children; URL-only
+  // routes (still reachable, just not in this submenu) don't trigger expand.
   if (['triggers', 'bot-templates', 'bot-clone-fork', 'cross-team-bot-sharing', 'incident-response-playbooks', 'inline-prompt-editor', 'visual-cron-wizard', 'conditional-trigger-rules', 'pr-auto-assignment', 'pr-review-learning-loop', 'github-actions', 'webhook-recorder', 'dependency-impact-bot', 'bot-runbooks', 'execution-tagging', 'prompt-snippets', 'bot-dry-run', 'bot-output-piping', 'bot-output-webhook-forwarding', 'nl-trigger-rule-editor', 'webhook-payload-transformer'].includes(name)) {
     expandedSections.value.triggers = true;
   }
@@ -240,12 +236,8 @@ function isWorkflowsSectionActive(): boolean {
 }
 
 function isTriggersSectionActive(): boolean {
-  // PR-N — routes for the 9 removed sidebar entries (repo-scope-filters,
-  // structured-output, prompt-ab-testing, multi-provider-fallback,
-  // multi-repo-fan-out, bot-recommendation-engine, bot-dependency-graph,
-  // bot-performance-benchmarks, changelog-generator) are dropped here so
-  // the toggle doesn't display "active" for routes the user can no
-  // longer reach from the sidebar.
+  // Only the 21 currently-visible Triggers children. URL-only routes
+  // (still reachable) don't paint this toggle active.
   return ['triggers', 'bot-templates', 'bot-clone-fork', 'cross-team-bot-sharing', 'incident-response-playbooks', 'inline-prompt-editor', 'visual-cron-wizard', 'conditional-trigger-rules', 'pr-auto-assignment', 'pr-review-learning-loop', 'github-actions', 'webhook-recorder', 'dependency-impact-bot', 'bot-runbooks', 'execution-tagging', 'prompt-snippets', 'bot-dry-run', 'bot-output-piping', 'bot-output-webhook-forwarding', 'nl-trigger-rule-editor', 'webhook-payload-transformer'].includes(currentRouteName.value);
 }
 
@@ -743,11 +735,7 @@ function handleSidebarKeydown(e: KeyboardEvent) {
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('conditional-trigger-rules') }" :aria-current="sidebarActive('conditional-trigger-rules') ? 'page' : undefined" @click="navTo('conditional-trigger-rules')">
           Trigger Conditions
         </button>
-        <!-- PR-N — repo-scope-filters, structured-output, prompt-ab-testing,
-             multi-provider-fallback, multi-repo-fan-out removed from sidebar
-             (routes still reachable). Specialty config surfaces failed the
-             operator-daily-driver test. -->
-        <!-- PR-J2 — NL rule editor: free-text -> trigger rule. -->
+        <!-- NL rule editor: free-text -> trigger rule. -->
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('nl-trigger-rule-editor') }" :aria-current="sidebarActive('nl-trigger-rule-editor') ? 'page' : undefined" @click="navTo('nl-trigger-rule-editor')">
           NL Rule Editor
         </button>
@@ -774,27 +762,18 @@ function handleSidebarKeydown(e: KeyboardEvent) {
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('dependency-impact-bot') }" :aria-current="sidebarActive('dependency-impact-bot') ? 'page' : undefined" @click="navTo('dependency-impact-bot')">
           Dependency Updates
         </button>
-        <!-- PR-N — bot-recommendation-engine removed from sidebar (route
-             still reachable). Specialty recommender failed the
-             operator-daily-driver test. -->
-        <!-- PR-J2 — Bot dry-run: simulate a trigger without side-effects. -->
+        <!-- Bot dry-run: simulate a trigger without side-effects. -->
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('bot-dry-run') }" :aria-current="sidebarActive('bot-dry-run') ? 'page' : undefined" @click="navTo('bot-dry-run')">
           Bot Dry-Run
         </button>
-        <!-- PR-J2 — Bot output piping: chain stdout to a downstream sink. -->
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('bot-output-piping') }" :aria-current="sidebarActive('bot-output-piping') ? 'page' : undefined" @click="navTo('bot-output-piping')">
           Output Piping
         </button>
-        <!-- PR-J2 — Bot output webhook forwarding. -->
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('bot-output-webhook-forwarding') }" :aria-current="sidebarActive('bot-output-webhook-forwarding') ? 'page' : undefined" @click="navTo('bot-output-webhook-forwarding')">
           Webhook Forwarding
         </button>
 
         <div class="submenu-block-label" aria-hidden="true">Introspection</div>
-        <!-- PR-N — bot-dependency-graph, bot-performance-benchmarks, and
-             changelog-generator removed from sidebar (routes still
-             reachable). Specialty viz/perf/doc-gen failed the
-             operator-daily-driver test. -->
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('bot-runbooks') }" :aria-current="sidebarActive('bot-runbooks') ? 'page' : undefined" @click="navTo('bot-runbooks')">
           Bot Runbooks
         </button>
