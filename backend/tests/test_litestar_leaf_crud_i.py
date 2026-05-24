@@ -93,6 +93,55 @@ def test_mark_unknown_message_404(isolated_db):
     assert resp.status_code == 404
 
 
+def test_delete_agent_message_success(isolated_db):
+    """DELETE removes a message that belongs to the given super-agent inbox."""
+    from app.db.messages import add_agent_message, get_inbox_messages
+    from app.db.super_agents import create_super_agent
+
+    sender_id = create_super_agent(name="sender")
+    owner_id = create_super_agent(name="owner")
+    msg_id = add_agent_message(
+        from_agent_id=sender_id,
+        to_agent_id=owner_id,
+        content="hello",
+    )
+    assert msg_id is not None
+
+    with _client() as c:
+        resp = c.delete(f"/admin/super-agents/{owner_id}/messages/{msg_id}")
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["message"] == "Message deleted"
+    assert get_inbox_messages(owner_id) == []
+
+
+def test_delete_agent_message_wrong_owner_returns_404(isolated_db):
+    """DELETE refuses to remove a message owned by a different super-agent."""
+    from app.db.messages import add_agent_message, get_inbox_messages
+    from app.db.super_agents import create_super_agent
+
+    sender_id = create_super_agent(name="sender2")
+    owner_a = create_super_agent(name="owner-A")
+    owner_b = create_super_agent(name="owner-B")
+    msg_id = add_agent_message(
+        from_agent_id=sender_id,
+        to_agent_id=owner_a,
+        content="hello",
+    )
+    assert msg_id is not None
+
+    with _client() as c:
+        resp = c.delete(f"/admin/super-agents/{owner_b}/messages/{msg_id}")
+    assert resp.status_code == 404
+    # Row still present in the real owner's inbox.
+    assert len(get_inbox_messages(owner_a)) == 1
+
+
+def test_delete_agent_message_not_found(isolated_db):
+    with _client() as c:
+        resp = c.delete("/admin/super-agents/sa-x/messages/missing-msg")
+    assert resp.status_code == 404
+
+
 # Team generation
 
 

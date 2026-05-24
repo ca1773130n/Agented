@@ -179,6 +179,16 @@ def delete_mcp_server_endpoint(server_id: str, caller: Caller) -> dict[str, Any]
     return {"message": "Deleted"}
 
 
+@post("/{server_id:str}/test", sync_to_thread=False)
+def test_mcp_server(server_id: str, caller: Caller) -> dict[str, Any]:
+    """Probe an MCP server's reachability without launching it."""
+    del caller
+    server = get_mcp_server(server_id)
+    if not server:
+        raise NotFoundException(detail="MCP server not found")
+    return McpSyncService.test_connection(server)
+
+
 @post("/sync/{project_id:str}", sync_to_thread=False)
 def sync_mcp_to_project(project_id: str, caller: Caller) -> dict[str, Any]:
     del caller
@@ -217,6 +227,7 @@ mcp_servers_router = Router(
         create_mcp_server_endpoint,
         update_mcp_server_endpoint,
         delete_mcp_server_endpoint,
+        test_mcp_server,
         sync_mcp_to_project,
         preview_mcp_sync,
     ],

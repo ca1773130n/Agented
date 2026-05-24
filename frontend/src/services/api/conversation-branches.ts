@@ -24,7 +24,7 @@ export const branchApi = {
   /** Get the branch tree structure for a conversation. */
   getBranchTree: (conversationId: string) =>
     apiFetch<BranchTree>(
-      `/admin/conversations/${conversationId}/branch-tree`
+      `/admin/conversations/${conversationId}/branches/tree`
     ),
 
   /** Get all messages in a specific branch. */
