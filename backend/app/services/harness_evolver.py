@@ -470,28 +470,41 @@ def _default_codex_cmd() -> list[str]:
             return shlex.split(raw)
         except ValueError:
             logger.warning("AGENTED_CODEX_CMD malformed; using default")
-    return ["codex", "exec", _PROMPT_TOKEN]
+    # ``--skip-git-repo-check`` is load-bearing: the scratch workspace
+    # lives under /tmp/agented-harness-evolution-* which is not a git
+    # repo, and Codex refuses to run in non-git dirs by default.
+    return ["codex", "exec", "--skip-git-repo-check", _PROMPT_TOKEN]
 
 
 def _run_codex_in_workspace(scratch_dir: Path, *, timeout: int = 600) -> None:
     template = _default_codex_cmd()
     prompt_text = (scratch_dir / "PROMPT.md").read_text(encoding="utf-8")
 
+    # If the template references {PROMPT}, substitute the prompt text at
+    # that position. Otherwise pipe it on stdin — older Codex builds
+    # accept the prompt positionally, newer ones prefer stdin; the
+    # ``codex exec ... {PROMPT}`` default works for both because the
+    # positional arg is unambiguous when it's the trailing token.
     if _PROMPT_TOKEN in template:
         cmd = [prompt_text if part == _PROMPT_TOKEN else part for part in template]
+        stdin_input = None
     else:
-        # No explicit placeholder — assume the override is self-contained
-        # (e.g. uses ``--prompt-file PROMPT.md``) and don't append.
+        # Override without {PROMPT} → assume the override either uses
+        # ``--prompt-file PROMPT.md`` or expects the prompt on stdin.
+        # Pass it on stdin defensively; a self-contained override that
+        # uses ``--prompt-file`` will simply ignore stdin.
         cmd = list(template)
+        stdin_input = prompt_text
 
     logger.info(
-        "harness_evolver: invoking codex in %s: %s",
-        scratch_dir, cmd[:2] + ["…"] if len(cmd) > 2 else cmd,
+        "harness_evolver: invoking codex in %s",
+        scratch_dir,
     )
     try:
         result = subprocess.run(
             cmd,
             cwd=str(scratch_dir),
+            input=stdin_input,
             timeout=timeout,
             capture_output=True,
             text=True,
@@ -505,9 +518,13 @@ def _run_codex_in_workspace(scratch_dir: Path, *, timeout: int = 600) -> None:
             f"codex CLI timed out after {timeout}s"
         ) from exc
     if result.returncode != 0:
+        # Strip the noisy "Reading additional input from stdin..." prefix
+        # that newer Codex emits before the real error.
+        err = (result.stderr or "").replace(
+            "Reading additional input from stdin...", "",
+        ).strip()
         raise RuntimeError(
-            f"codex CLI exited {result.returncode}: "
-            f"{(result.stderr or '')[:500]}"
+            f"codex CLI exited {result.returncode}: {err[:500]}"
         )
 
 
