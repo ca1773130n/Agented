@@ -56,7 +56,7 @@ export const collaborativeApi = {
   /** Delete an inline comment. */
   deleteComment: (commentId: string) =>
     apiFetch<null>(
-      `/admin/execution-comments/${commentId}`,
+      `/admin/comments/${commentId}`,
       { method: 'DELETE' }
     ),
 };

@@ -220,3 +220,53 @@ class McpSyncService:
         if not os.access(str(path), os.W_OK):
             return (False, f"No write permission on: {project_path}")
         return (True, "")
+
+    @staticmethod
+    def test_connection(server: dict) -> dict:
+        """Probe reachability for an MCP server config row.
+
+        HTTP servers: GET with 2s timeout. Any HTTP response counts as
+          reachable (MCP JSON-RPC speaks POST, so GET is expected to return
+          405/404, which still proves the server is up).
+        stdio servers: shutil.which() to confirm the command is on PATH.
+          Does NOT spawn the process.
+        """
+        import httpx
+
+        server_type = (server.get("server_type") or "").lower()
+        if server_type == "http":
+            url = server.get("url")
+            if not url:
+                return {
+                    "success": False,
+                    "message": "HTTP server has no URL configured.",
+                }
+            try:
+                with httpx.Client(timeout=2.0) as client:
+                    resp = client.get(url)
+                return {
+                    "success": True,
+                    "message": f"Reachable (HTTP {resp.status_code}).",
+                }
+            except httpx.HTTPError as e:
+                return {"success": False, "message": f"Unreachable: {e}"}
+        if server_type == "stdio":
+            command = server.get("command")
+            if not command:
+                return {
+                    "success": False,
+                    "message": "stdio server has no command configured.",
+                }
+            if shutil.which(command):
+                return {
+                    "success": True,
+                    "message": f"Command '{command}' is on PATH.",
+                }
+            return {
+                "success": False,
+                "message": f"Command '{command}' not found on PATH.",
+            }
+        return {
+            "success": False,
+            "message": f"Connection test not supported for server type '{server_type}'.",
+        }

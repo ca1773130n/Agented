@@ -200,9 +200,28 @@ def mark_message_read(super_agent_id: str, message_id: str) -> dict[str, Any]:
     return {"message": "Message marked as read"}
 
 
+@delete(
+    "/{super_agent_id:str}/messages/{message_id:str}",
+    status_code=200,
+    sync_to_thread=False,
+)
+def delete_agent_message(super_agent_id: str, message_id: str) -> dict[str, Any]:
+    from app.db.messages import delete_message
+
+    if not delete_message(message_id, super_agent_id):
+        raise NotFoundException(detail="Message not found")
+    return {"message": "Message deleted"}
+
+
 super_agent_messages_router = Router(
     path="/admin/super-agents",
-    route_handlers=[send_agent_message, get_inbox, get_outbox, mark_message_read],
+    route_handlers=[
+        send_agent_message,
+        get_inbox,
+        get_outbox,
+        mark_message_read,
+        delete_agent_message,
+    ],
 )
 
 

@@ -139,6 +139,21 @@ def update_message_status(message_id: str, status: str) -> bool:
         return cursor.rowcount > 0
 
 
+def delete_message(message_id: str, to_agent_id: str) -> bool:
+    """Hard delete an agent message scoped to the inbox owner.
+
+    Returns True only if a row matching both message_id AND to_agent_id
+    was removed. Prevents cross-agent deletes via path tampering.
+    """
+    with get_connection() as conn:
+        cur = conn.execute(
+            "DELETE FROM agent_messages WHERE id = ? AND to_agent_id = ?",
+            (message_id, to_agent_id),
+        )
+        conn.commit()
+        return cur.rowcount > 0
+
+
 def expire_stale_messages() -> int:
     """Mark messages past their expires_at as expired.
 

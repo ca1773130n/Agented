@@ -131,14 +131,9 @@ async function testConnection() {
       showToast(result.message || 'Connection failed', 'error');
     }
   } catch (err) {
-    if (err instanceof ApiError && err.status === 404) {
-      testResult.value = { success: false, message: 'Test endpoint not available' };
-      showToast('Test endpoint not available', 'error');
-    } else {
-      const message = err instanceof ApiError ? err.message : 'Connection test failed';
-      testResult.value = { success: false, message };
-      showToast(message, 'error');
-    }
+    const message = err instanceof ApiError ? err.message : 'Connection test failed';
+    testResult.value = { success: false, message };
+    showToast(message, 'error');
   } finally {
     isTesting.value = false;
   }
