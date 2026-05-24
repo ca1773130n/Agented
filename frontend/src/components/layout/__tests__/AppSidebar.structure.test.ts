@@ -198,24 +198,28 @@ describe('AppSidebar — PR-B structure', () => {
     ]);
   });
 
-  it('renders a top-level "External Integrations" section header', () => {
+  it('PR-E: "External Integrations" is no longer a top-level section (folded into System as "Integrations")', () => {
     const labels = Array.from(
       rootEl(wrapper).querySelectorAll<HTMLElement>('.nav-section-label')
     ).map((el) => el.textContent?.trim().replace(/\s+/g, ' ') ?? '');
-    expect(labels).toContain('External Integrations');
-    // Old "Integrations" header is gone (the PR-B rename).
-    // The audit notes the section was renamed, not just relabelled.
+    // The top-level section header is gone; the items now live as a
+    // child group under System.
+    expect(labels).not.toContain('External Integrations');
     expect(labels).not.toContain('Integrations');
   });
 
-  it('External Integrations contains exactly 3 items after PR-D (On-Call merged into Scheduling)', () => {
-    const items = submenuItems(wrapper, 'External Integrations');
+  it('PR-E: Integrations group exists under System with the original 3 items', () => {
+    // The renamed-to-"Integrations" group still carries the same 3
+    // items it had as "External Integrations" before PR-E.
+    const items = submenuItems(wrapper, 'Integrations');
     const texts = items.map((b) => b.textContent?.trim().replace(/\s+/g, ' ') ?? '');
     expect(texts.length).toBe(3);
     expect(texts).toContain('Slack Notifications');
     expect(texts).toContain('Jira / Linear');
     expect(texts).toContain('Notification Channels');
     expect(texts).not.toContain('On-Call Escalation');
+    // And the old aria-label/region is gone.
+    expect(submenuOf(wrapper, 'External Integrations')).toBeNull();
   });
 
   it('PR-D: Dashboards submenu collapses to exactly 5 items (1 landing + 4 lanes)', () => {
@@ -334,8 +338,8 @@ describe('AppSidebar — PR-B structure', () => {
       );
     expect(pluginsStaticTexts).not.toContain('Explore');
 
-    // MCP Servers submenu: no "Explore" row.
-    const mcpTexts = submenuItems(wrapper, 'MCP Servers').map(
+    // MCPs submenu: no "Explore" row. (PR-E renamed "MCP Servers" → "MCPs".)
+    const mcpTexts = submenuItems(wrapper, 'MCPs').map(
       (b) => b.textContent?.trim().replace(/\s+/g, ' ') ?? '',
     );
     expect(mcpTexts).not.toContain('Explore');
@@ -347,11 +351,10 @@ describe('AppSidebar — PR-B structure', () => {
     expect(saTexts).not.toContain('Explore');
   });
 
-  it('PR-C: Forge renders a top-level "Marketplace" sidebar entry', () => {
+  it('PR-E: Marketplace is a top-level peer (no longer nested inside Forge)', () => {
     // The Marketplace entry is a flat link (no chevron, no
-    // aria-expanded). We look for any top-level button whose .nav-text
-    // is "Marketplace" and assert it exists and is shaped like a flat
-    // link.
+    // aria-expanded). PR-E promoted it out of Forge to its own slot
+    // between Forge and Triggers.
     const allButtons = Array.from(
       rootEl(wrapper).querySelectorAll<HTMLElement>('button'),
     );
@@ -364,6 +367,60 @@ describe('AppSidebar — PR-B structure', () => {
     const btn = marketplaceButtons[0];
     expect(btn.querySelector('.chevron-icon')).toBeNull();
     expect(btn.hasAttribute('aria-expanded')).toBe(false);
+  });
+
+  it('PR-E: "MCPs" label replaces "MCP Servers" on the sidebar group toggle', () => {
+    const toggleLabels = Array.from(
+      rootEl(wrapper).querySelectorAll<HTMLElement>('.nav-group-toggle .nav-text')
+    ).map((el) => el.textContent?.trim() ?? '');
+    expect(toggleLabels).toContain('MCPs');
+    expect(toggleLabels).not.toContain('MCP Servers');
+    // The submenu region's aria-label also changes.
+    expect(submenuOf(wrapper, 'MCPs')).not.toBeNull();
+    expect(submenuOf(wrapper, 'MCP Servers')).toBeNull();
+  });
+
+  it('PR-E: Dashboards group lives inside the Work group (no top-level slot above Work)', () => {
+    // Dashboards is now an expandable group rendered after Sketch inside
+    // the Work section. The Dashboards submenu region must still exist
+    // (its body is unchanged from PR-D) — only its position moved.
+    expect(submenuOf(wrapper, 'Dashboards')).not.toBeNull();
+  });
+
+  it('PR-E: Scheduling flat link is rendered inside the Work group (after Dashboards)', () => {
+    // Order check: Sketch → Dashboards → Scheduling among the buttons
+    // appearing before the Organization section label.
+    const all = Array.from(rootEl(wrapper).children[0].children) as HTMLElement[];
+    // Find indexes of the Work label, the Organization label, and the
+    // three Work entries by their .nav-text content.
+    function indexOfLabelText(text: string): number {
+      return all.findIndex(
+        (el) =>
+          el.classList.contains('nav-section-label') &&
+          el.textContent?.trim() === text,
+      );
+    }
+    function indexOfButtonText(text: string): number {
+      return all.findIndex(
+        (el) =>
+          el.tagName === 'BUTTON' &&
+          el.querySelector<HTMLElement>('.nav-text')?.textContent?.trim() === text,
+      );
+    }
+    const workIdx = indexOfLabelText('Work');
+    const orgIdx = indexOfLabelText('Organization');
+    const sketchIdx = indexOfButtonText('Sketch');
+    const dashIdx = indexOfButtonText('Dashboards');
+    const schedIdx = indexOfButtonText('Scheduling');
+    expect(workIdx).toBeGreaterThan(-1);
+    expect(orgIdx).toBeGreaterThan(workIdx);
+    // All three Work entries sit between Work label and Organization label.
+    expect(sketchIdx).toBeGreaterThan(workIdx);
+    expect(sketchIdx).toBeLessThan(orgIdx);
+    expect(dashIdx).toBeGreaterThan(sketchIdx);
+    expect(dashIdx).toBeLessThan(orgIdx);
+    expect(schedIdx).toBeGreaterThan(dashIdx);
+    expect(schedIdx).toBeLessThan(orgIdx);
   });
 
   it('"security-history" sidebar entry is absent (the route still exists, only the sidebar row is removed)', () => {

@@ -85,13 +85,13 @@ function autoExpandForRoute() {
   if (name === 'usage-history') {
     expandedSections.value.usage = true;
   }
-  if (['skills-playground', 'skill-create', 'my-skills', 'skill-detail', 'explore-skills', 'marketplace'].includes(name)) {
+  if (['skills-playground', 'skill-create', 'my-skills', 'skill-detail', 'explore-skills'].includes(name)) {
     expandedSections.value.skills = true;
   }
-  if (['plugins', 'plugin-design', 'harness-integration', 'explore-plugins', 'plugin-detail', 'marketplace'].includes(name)) {
+  if (['plugins', 'plugin-design', 'harness-integration', 'explore-plugins', 'plugin-detail'].includes(name)) {
     expandedSections.value.plugins = true;
   }
-  if (['mcp-servers', 'mcp-server-detail', 'explore-mcp-servers', 'marketplace'].includes(name)) {
+  if (['mcp-servers', 'mcp-server-detail', 'explore-mcp-servers'].includes(name)) {
     expandedSections.value.mcpServers = true;
   }
   if (['projects', 'project-dashboard', 'project-settings', 'project-management', 'project-planning', 'project-instance-playground'].includes(name)) {
@@ -106,7 +106,7 @@ function autoExpandForRoute() {
   if (['agents', 'agent-create', 'agent-design'].includes(name)) {
     expandedSections.value.agents = true;
   }
-  if (['super-agents', 'super-agent-playground', 'explore-super-agents', 'marketplace'].includes(name)) {
+  if (['super-agents', 'super-agent-playground', 'explore-super-agents'].includes(name)) {
     expandedSections.value.superAgents = true;
   }
   if (['hooks', 'hook-design'].includes(name)) {
@@ -180,11 +180,11 @@ function isHistorySectionActive(): boolean {
 }
 
 function isSkillsSectionActive(): boolean {
-  return ['skills-playground', 'skill-create', 'my-skills', 'explore-skills', 'skill-detail', 'marketplace'].includes(currentRouteName.value);
+  return ['skills-playground', 'skill-create', 'my-skills', 'explore-skills', 'skill-detail'].includes(currentRouteName.value);
 }
 
 function isPluginsSectionActive(): boolean {
-  return ['plugins', 'plugin-design', 'harness-integration', 'explore-plugins', 'plugin-detail', 'marketplace'].includes(currentRouteName.value);
+  return ['plugins', 'plugin-design', 'harness-integration', 'explore-plugins', 'plugin-detail'].includes(currentRouteName.value);
 }
 
 function isProjectsSectionActive(): boolean {
@@ -204,7 +204,7 @@ function isAgentsSectionActive(): boolean {
 }
 
 function isSuperAgentsSectionActive(): boolean {
-  return ['super-agents', 'super-agent-playground', 'explore-super-agents', 'marketplace'].includes(currentRouteName.value);
+  return ['super-agents', 'super-agent-playground', 'explore-super-agents'].includes(currentRouteName.value);
 }
 
 function isHooksSectionActive(): boolean {
@@ -220,7 +220,7 @@ function isRulesSectionActive(): boolean {
 }
 
 function isMcpServersSectionActive(): boolean {
-  return ['mcp-servers', 'mcp-server-detail', 'explore-mcp-servers', 'marketplace'].includes(currentRouteName.value);
+  return ['mcp-servers', 'mcp-server-detail', 'explore-mcp-servers'].includes(currentRouteName.value);
 }
 
 function isWorkflowsSectionActive(): boolean {
@@ -383,7 +383,23 @@ function handleSidebarKeydown(e: KeyboardEvent) {
         @retry="(k) => emit('retrySidebarSection', k)"
       />
 
-      <!-- Dashboards (expandable) -->
+      <div class="nav-section-label">Work</div>
+      <SidebarFlatLink
+        label="Sketch"
+        :active="sidebarActive('sketch-chat')"
+        :collapsed-desktop="isCollapsedDesktop()"
+        @click="navTo('sketch-chat')"
+      >
+        <template #icon>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
+          </svg>
+        </template>
+      </SidebarFlatLink>
+
+      <!-- Dashboards (expandable) — PR-E: moved into the Work group so
+           it sits next to Sketch and Scheduling, the other daily-Work
+           surfaces. -->
       <SidebarGroupToggle
         label="Dashboards"
         :expanded="expandedSections.dashboards"
@@ -429,7 +445,8 @@ function handleSidebarKeydown(e: KeyboardEvent) {
 
       <!-- PR-D — Scheduling promoted to a flat top-level link (was a
            dashboard sidebar item; deep-links to the Scheduling card in
-           the Activity lane). Sub-items can be added later if needed. -->
+           the Activity lane). PR-E moved it into the Work group, after
+           Dashboards. -->
       <SidebarFlatLink
         label="Scheduling"
         :active="isSchedulingActive()"
@@ -442,20 +459,6 @@ function handleSidebarKeydown(e: KeyboardEvent) {
             <line x1="16" y1="2" x2="16" y2="6"/>
             <line x1="8" y1="2" x2="8" y2="6"/>
             <line x1="3" y1="10" x2="21" y2="10"/>
-          </svg>
-        </template>
-      </SidebarFlatLink>
-
-      <div class="nav-section-label">Work</div>
-      <SidebarFlatLink
-        label="Sketch"
-        :active="sidebarActive('sketch-chat')"
-        :collapsed-desktop="isCollapsedDesktop()"
-        @click="navTo('sketch-chat')"
-      >
-        <template #icon>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-            <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
           </svg>
         </template>
       </SidebarFlatLink>
@@ -713,9 +716,11 @@ function handleSidebarKeydown(e: KeyboardEvent) {
         </button>
       </div>
 
-      <!-- MCP Servers (expandable) -->
+      <!-- MCPs (expandable) — PR-E: label tightened from "MCP Servers"
+           to "MCPs" for parity with Plugins / Skills / Hooks / Rules /
+           Commands. Route name + page title unchanged. -->
       <SidebarGroupToggle
-        label="MCP Servers"
+        label="MCPs"
         :expanded="expandedSections.mcpServers"
         :active="isMcpServersSectionActive()"
         :collapsed-desktop="isCollapsedDesktop()"
@@ -730,30 +735,11 @@ function handleSidebarKeydown(e: KeyboardEvent) {
           </svg>
         </template>
       </SidebarGroupToggle>
-      <div v-show="expandedSections.mcpServers" class="nav-submenu" role="region" aria-label="MCP Servers">
+      <div v-show="expandedSections.mcpServers" class="nav-submenu" role="region" aria-label="MCPs">
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('mcp-servers') }" :aria-current="sidebarActive('mcp-servers') ? 'page' : undefined" @click="navTo('mcp-servers')">
           All MCP Servers
         </button>
       </div>
-
-      <!-- Marketplace (flat link) — PR-C: unified browse surface for
-        plugins, skills, MCP servers, and SuperAgents. Positioned in
-        the Forge section near its natural neighbors. -->
-      <SidebarFlatLink
-        label="Marketplace"
-        :active="sidebarActive('marketplace')"
-        :collapsed-desktop="isCollapsedDesktop()"
-        @click="navTo('marketplace')"
-      >
-        <template #icon>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-            <path d="M3 9l1.5-5h15L21 9"/>
-            <path d="M3 9v11a1 1 0 001 1h16a1 1 0 001-1V9"/>
-            <path d="M3 9h18"/>
-            <path d="M8 13h8"/>
-          </svg>
-        </template>
-      </SidebarFlatLink>
 
       <!-- Skills (expandable) -->
       <SidebarGroupToggle
@@ -857,6 +843,27 @@ function handleSidebarKeydown(e: KeyboardEvent) {
         </button>
       </div>
 
+      <!-- Marketplace (flat link) — PR-E: promoted out of Forge to its
+           own top-level slot between Forge and Triggers. Forge holds
+           the assets you manage locally; Marketplace is where you go to
+           get more. Keeping them as siblings (not parent/child) matches
+           the operator's mental model. -->
+      <SidebarFlatLink
+        label="Marketplace"
+        :active="sidebarActive('marketplace')"
+        :collapsed-desktop="isCollapsedDesktop()"
+        @click="navTo('marketplace')"
+      >
+        <template #icon>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M3 9l1.5-5h15L21 9"/>
+            <path d="M3 9v11a1 1 0 001 1h16a1 1 0 001-1V9"/>
+            <path d="M3 9h18"/>
+            <path d="M8 13h8"/>
+          </svg>
+        </template>
+      </SidebarFlatLink>
+
       <!-- Triggers (expandable section, 25 items in 6 visual blocks) -->
       <SidebarSectionLabel label="Triggers" />
       <SidebarGroupToggle
@@ -958,34 +965,6 @@ function handleSidebarKeydown(e: KeyboardEvent) {
         <div class="submenu-block-label" aria-hidden="true">Authoring</div>
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('prompt-snippets') }" :aria-current="sidebarActive('prompt-snippets') ? 'page' : undefined" @click="navTo('prompt-snippets')">
           Prompt Snippets
-        </button>
-      </div>
-
-      <!-- External Integrations (expandable, 3 items — on-call merged into
-           the Scheduling card's On-Call Policy sub-card in PR-D). -->
-      <SidebarSectionLabel label="External Integrations" />
-      <SidebarGroupToggle
-        label="External Integrations"
-        :expanded="expandedSections.externalIntegrations"
-        :active="isExternalIntegrationsSectionActive()"
-        :collapsed-desktop="isCollapsedDesktop()"
-        @toggle="toggleSection('externalIntegrations')"
-      >
-        <template #icon>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-            <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3"/>
-          </svg>
-        </template>
-      </SidebarGroupToggle>
-      <div v-show="expandedSections.externalIntegrations" class="nav-submenu" role="region" aria-label="External Integrations">
-        <button type="button" class="submenu-item" :class="{ active: sidebarActive('slack-notifications') }" :aria-current="sidebarActive('slack-notifications') ? 'page' : undefined" @click="navTo('slack-notifications')">
-          Slack Notifications
-        </button>
-        <button type="button" class="submenu-item" :class="{ active: sidebarActive('integration-ticketing') }" :aria-current="sidebarActive('integration-ticketing') ? 'page' : undefined" @click="navTo('integration-ticketing')">
-          Jira / Linear
-        </button>
-        <button type="button" class="submenu-item" :class="{ active: sidebarActive('notification-channels') }" :aria-current="sidebarActive('notification-channels') ? 'page' : undefined" @click="navTo('notification-channels')">
-          Notification Channels
         </button>
       </div>
 
@@ -1137,6 +1116,38 @@ function handleSidebarKeydown(e: KeyboardEvent) {
           {{ b.name }}
         </button>
       </div>
+
+      <!-- Integrations (expandable, 3 items) — PR-E: folded the
+           former top-level "External Integrations" section into System
+           as a child block alongside AI Backends. Label tightened to
+           "Integrations". State key (`externalIntegrations`) and the
+           helper (`isExternalIntegrationsSectionActive`) intentionally
+           keep their old names — only the user-visible label changes. -->
+      <SidebarGroupToggle
+        label="Integrations"
+        :expanded="expandedSections.externalIntegrations"
+        :active="isExternalIntegrationsSectionActive()"
+        :collapsed-desktop="isCollapsedDesktop()"
+        @toggle="toggleSection('externalIntegrations')"
+      >
+        <template #icon>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3"/>
+          </svg>
+        </template>
+      </SidebarGroupToggle>
+      <div v-show="expandedSections.externalIntegrations" class="nav-submenu" role="region" aria-label="Integrations">
+        <button type="button" class="submenu-item" :class="{ active: sidebarActive('slack-notifications') }" :aria-current="sidebarActive('slack-notifications') ? 'page' : undefined" @click="navTo('slack-notifications')">
+          Slack Notifications
+        </button>
+        <button type="button" class="submenu-item" :class="{ active: sidebarActive('integration-ticketing') }" :aria-current="sidebarActive('integration-ticketing') ? 'page' : undefined" @click="navTo('integration-ticketing')">
+          Jira / Linear
+        </button>
+        <button type="button" class="submenu-item" :class="{ active: sidebarActive('notification-channels') }" :aria-current="sidebarActive('notification-channels') ? 'page' : undefined" @click="navTo('notification-channels')">
+          Notification Channels
+        </button>
+      </div>
+
       <!-- Platform Admin (expandable) -->
       <SidebarGroupToggle
         label="Platform"
