@@ -81,5 +81,7 @@ export const mcpServerApi = {
     apiFetch<McpSyncResult>(`/admin/mcp-servers/sync/${projectId}/preview`),
 
   testConnection: (id: string) =>
-    apiFetch<{ success: boolean; message: string }>(`/admin/mcp-servers/${id}/test`),
+    apiFetch<{ success: boolean; message: string }>(`/admin/mcp-servers/${id}/test`, {
+      method: 'POST',
+    }),
 };
