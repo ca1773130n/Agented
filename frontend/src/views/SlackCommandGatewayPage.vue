@@ -4,6 +4,7 @@ import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
 import { slackApi, integrationApi } from '../services/api';
 import type { Integration } from '../services/api';
+import NotEnabledBanner from '../components/base/NotEnabledBanner.vue';
 
 const showToast = useToast();
 
@@ -149,23 +150,12 @@ onMounted(loadData);
 
 <template>
   <div class="slack-gateway">
-    <!-- PR-J3: backend slack-command CRUD absent; renders as 501-equivalent banner. -->
-    <div
+    <NotEnabledBanner
       v-if="!FEATURE_ENABLED"
-      class="not-enabled-banner"
-      data-testid="slack-command-gateway-not-enabled"
-      role="status"
-    >
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-        <circle cx="12" cy="12" r="10"/>
-        <line x1="12" y1="8" x2="12" y2="12"/>
-        <line x1="12" y1="16" x2="12.01" y2="16"/>
-      </svg>
-      <div>
-        <strong>Slack command gateway is not yet enabled in this deployment.</strong>
-        <p>The backend that persists and dispatches slash commands has not shipped yet. Creating or editing commands is disabled.</p>
-      </div>
-    </div>
+      feature="Slack command gateway"
+      detail="The backend that persists and dispatches slash commands has not shipped yet. Creating or editing commands is disabled."
+      testid="slack-command-gateway-not-enabled"
+    />
 
     <PageHeader
       title="Slack Command Gateway"
@@ -526,16 +516,4 @@ onMounted(loadData);
   font-size: 0.875rem;
 }
 
-/* PR-J3: 501-not-enabled banner */
-.not-enabled-banner {
-  display: flex; align-items: flex-start; gap: 12px;
-  padding: 16px 20px; border-radius: 8px;
-  background: var(--bg-elevated, rgba(255,255,255,0.04));
-  border: 1px dashed var(--border-default, rgba(255,255,255,0.15));
-  color: var(--text-secondary);
-  margin-bottom: 16px;
-}
-.not-enabled-banner svg { width: 18px; height: 18px; flex-shrink: 0; color: var(--text-tertiary); margin-top: 2px; }
-.not-enabled-banner strong { display: block; font-size: 0.9rem; font-weight: 600; color: var(--text-primary); margin-bottom: 4px; }
-.not-enabled-banner p { margin: 0; font-size: 0.82rem; color: var(--text-tertiary); }
 </style>

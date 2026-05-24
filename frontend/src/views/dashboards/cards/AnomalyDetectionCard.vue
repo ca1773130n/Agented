@@ -13,6 +13,7 @@ import LoadingState from '../../../components/base/LoadingState.vue';
 import StatCard from '../../../components/base/StatCard.vue';
 import { useToast } from '../../../composables/useToast';
 import { isNotImplemented } from '../../../services/api/error-handler';
+import NotEnabledBanner from '../../../components/base/NotEnabledBanner.vue';
 
 const emit = defineEmits<{ loaded: [slug: string] }>();
 const showToast = useToast();
@@ -158,23 +159,12 @@ onUnmounted(() => { if (refreshInterval) clearInterval(refreshInterval); });
 
     <LoadingState v-if="isLoading" message="Loading anomaly data..." />
 
-    <!-- PR-G: backend returns 501 ("Feature not yet enabled") for anomalies. -->
-    <div
+    <NotEnabledBanner
       v-else-if="notEnabled"
-      class="not-enabled-banner"
-      data-testid="anomaly-not-enabled"
-      role="status"
-    >
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-        <circle cx="12" cy="12" r="10"/>
-        <line x1="12" y1="8" x2="12" y2="12"/>
-        <line x1="12" y1="16" x2="12.01" y2="16"/>
-      </svg>
-      <div>
-        <strong>Anomaly detection is not yet enabled in this deployment.</strong>
-        <p>This card will populate once anomaly baselines are wired up server-side.</p>
-      </div>
-    </div>
+      feature="Anomaly detection"
+      detail="This card will populate once anomaly baselines are wired up server-side."
+      testid="anomaly-not-enabled"
+    />
 
     <template v-else>
       <div class="stats-grid">
@@ -307,18 +297,6 @@ onUnmounted(() => { if (refreshInterval) clearInterval(refreshInterval); });
 
 .empty-anomalies { display: flex; align-items: center; gap: 10px; padding: 32px; justify-content: center; color: var(--accent-emerald); font-size: 0.9rem; }
 .empty-anomalies svg { width: 20px; height: 20px; }
-
-/* PR-G: 501-not-enabled banner */
-.not-enabled-banner {
-  display: flex; align-items: flex-start; gap: 12px;
-  padding: 16px 20px; border-radius: 8px;
-  background: var(--bg-elevated, rgba(255,255,255,0.04));
-  border: 1px dashed var(--border-default, rgba(255,255,255,0.15));
-  color: var(--text-secondary);
-}
-.not-enabled-banner svg { width: 18px; height: 18px; flex-shrink: 0; color: var(--text-tertiary); margin-top: 2px; }
-.not-enabled-banner strong { display: block; font-size: 0.9rem; font-weight: 600; color: var(--text-primary); margin-bottom: 4px; }
-.not-enabled-banner p { margin: 0; font-size: 0.82rem; color: var(--text-tertiary); }
 
 .anomaly-list { display: flex; flex-direction: column; gap: 12px; }
 .anomaly-card {

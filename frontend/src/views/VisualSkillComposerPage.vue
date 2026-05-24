@@ -4,6 +4,7 @@ import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
 import { userSkillsApi, skillSetsApi } from '../services/api';
 import type { UserSkill } from '../services/api';
+import NotEnabledBanner from '../components/base/NotEnabledBanner.vue';
 
 const showToast = useToast();
 
@@ -171,23 +172,12 @@ const FEATURE_ENABLED = false;
 <template>
   <div class="skill-composer">
 
-    <!-- PR-J3: backend visual-skill-composer CRUD absent; renders as 501-equivalent banner. -->
-    <div
+    <NotEnabledBanner
       v-if="!FEATURE_ENABLED"
-      class="not-enabled-banner"
-      data-testid="visual-skill-composer-not-enabled"
-      role="status"
-    >
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-        <circle cx="12" cy="12" r="10"/>
-        <line x1="12" y1="8" x2="12" y2="12"/>
-        <line x1="12" y1="16" x2="12.01" y2="16"/>
-      </svg>
-      <div>
-        <strong>Visual skill composer is not yet enabled in this deployment.</strong>
-        <p>The backend that persists composed skill stacks has not shipped yet. Saving the composer state is disabled.</p>
-      </div>
-    </div>
+      feature="Visual skill composer"
+      detail="The backend that persists composed skill stacks has not shipped yet. Saving the composer state is disabled."
+      testid="visual-skill-composer-not-enabled"
+    />
 
     <PageHeader
       title="Visual Skill Composer"
@@ -609,16 +599,4 @@ const FEATURE_ENABLED = false;
   .composer-layout { grid-template-columns: 1fr; }
 }
 
-/* PR-J3: 501-not-enabled banner */
-.not-enabled-banner {
-  display: flex; align-items: flex-start; gap: 12px;
-  padding: 16px 20px; border-radius: 8px;
-  background: var(--bg-elevated, rgba(255,255,255,0.04));
-  border: 1px dashed var(--border-default, rgba(255,255,255,0.15));
-  color: var(--text-secondary);
-  margin-bottom: 16px;
-}
-.not-enabled-banner svg { width: 18px; height: 18px; flex-shrink: 0; color: var(--text-tertiary); margin-top: 2px; }
-.not-enabled-banner strong { display: block; font-size: 0.9rem; font-weight: 600; color: var(--text-primary); margin-bottom: 4px; }
-.not-enabled-banner p { margin: 0; font-size: 0.82rem; color: var(--text-tertiary); }
 </style>

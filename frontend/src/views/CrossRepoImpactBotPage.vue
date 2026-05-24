@@ -2,6 +2,7 @@
 import { ref, computed, onMounted } from 'vue';
 import LoadingState from '../components/base/LoadingState.vue';
 import { useToast } from '../composables/useToast';
+import NotEnabledBanner from '../components/base/NotEnabledBanner.vue';
 
 const showToast = useToast();
 const isLoading = ref(true);
@@ -126,23 +127,12 @@ onMounted(loadHistory);
 <template>
   <div class="page-container">
 
-    <!-- PR-J3: backend `/admin/bots/cross-repo-impact` absent; renders as 501-equivalent banner. -->
-    <div
+    <NotEnabledBanner
       v-if="!FEATURE_ENABLED"
-      class="not-enabled-banner"
-      data-testid="cross-repo-impact-not-enabled"
-      role="status"
-    >
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-        <circle cx="12" cy="12" r="10"/>
-        <line x1="12" y1="8" x2="12" y2="12"/>
-        <line x1="12" y1="16" x2="12.01" y2="16"/>
-      </svg>
-      <div>
-        <strong>Cross-repo impact analysis bot is not yet enabled in this deployment.</strong>
-        <p>The backend that scans downstream repos for impacted callers has not shipped yet. Running impact scans is disabled.</p>
-      </div>
-    </div>
+      feature="Cross-repo impact analysis bot"
+      detail="The backend that scans downstream repos for impacted callers has not shipped yet. Running impact scans is disabled."
+      testid="cross-repo-impact-not-enabled"
+    />
 
     <div class="page-header">
       <div>
@@ -355,16 +345,4 @@ onMounted(loadHistory);
 .repo-reason { font-size: 0.8rem; color: var(--color-text-secondary, #a0a0a0); margin: 0; line-height: 1.5; }
 .empty-msg { text-align: center; color: var(--color-text-secondary, #a0a0a0); padding: 2rem 0; margin: 0; }
 
-/* PR-J3: 501-not-enabled banner */
-.not-enabled-banner {
-  display: flex; align-items: flex-start; gap: 12px;
-  padding: 16px 20px; border-radius: 8px;
-  background: var(--bg-elevated, rgba(255,255,255,0.04));
-  border: 1px dashed var(--border-default, rgba(255,255,255,0.15));
-  color: var(--text-secondary);
-  margin-bottom: 16px;
-}
-.not-enabled-banner svg { width: 18px; height: 18px; flex-shrink: 0; color: var(--text-tertiary); margin-top: 2px; }
-.not-enabled-banner strong { display: block; font-size: 0.9rem; font-weight: 600; color: var(--text-primary); margin-bottom: 4px; }
-.not-enabled-banner p { margin: 0; font-size: 0.82rem; color: var(--text-tertiary); }
 </style>
