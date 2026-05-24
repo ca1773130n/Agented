@@ -52,6 +52,7 @@ withDefaults(
   background: var(--bg-elevated, rgba(255, 255, 255, 0.04));
   border: 1px dashed var(--border-default, rgba(255, 255, 255, 0.15));
   color: var(--text-secondary);
+  margin-bottom: 16px;
 }
 .not-enabled-banner svg {
   width: 18px;
