@@ -112,6 +112,13 @@ function buildRouter() {
       { path: '/teams/:teamId', name: 'team-dashboard', component: defineComponent({ render: () => h('div') }) },
       { path: '/projects/:projectId', name: 'project-dashboard', component: defineComponent({ render: () => h('div') }) },
       { path: '/agents/:agentId', name: 'agent-detail', component: defineComponent({ render: () => h('div') }) },
+      // PR-P inspector deep-links (Activity lane "Inspector tools" block).
+      { path: '/executions/timeline', name: 'execution-timeline', component: defineComponent({ render: () => h('div') }) },
+      { path: '/executions/artifacts', name: 'execution-artifacts', component: defineComponent({ render: () => h('div') }) },
+      { path: '/executions/diff-viewer', name: 'execution-file-diff-viewer', component: defineComponent({ render: () => h('div') }) },
+      { path: '/executions/time-travel', name: 'execution-time-travel-debugger', component: defineComponent({ render: () => h('div') }) },
+      { path: '/bots/cost-estimator', name: 'execution-cost-estimator', component: defineComponent({ render: () => h('div') }) },
+      { path: '/traces', name: 'traces-list', component: defineComponent({ render: () => h('div') }) },
     ],
   });
 }
@@ -153,7 +160,7 @@ describe('PR-D lane pages — smoke', () => {
     expect(w.find('#bot-effectiveness').exists()).toBe(true);
   });
 
-  it('ActivityPage mounts and renders the 7 activity anchors (2 visual blocks)', async () => {
+  it('ActivityPage mounts and renders the 7 activity anchors (3 visual blocks)', async () => {
     const w = await mountLane(ActivityPage);
     expect(w.find('#scheduling').exists()).toBe(true);
     expect(w.find('#execution-queue').exists()).toBe(true);
@@ -162,6 +169,26 @@ describe('PR-D lane pages — smoke', () => {
     expect(w.find('#impact-report').exists()).toBe(true);
     expect(w.find('#cross-team-insights').exists()).toBe(true);
     expect(w.find('#roi-leaderboard').exists()).toBe(true);
-    expect(w.findAll('.lane-block__title').map((n) => n.text())).toEqual(['Live ops', 'Reports']);
+    expect(w.findAll('.lane-block__title').map((n) => n.text())).toEqual([
+      'Live ops',
+      'Reports',
+      'Inspector tools',
+    ]);
+  });
+
+  it('ActivityPage Inspector tools block renders 6 deep-link tiles', async () => {
+    const w = await mountLane(ActivityPage);
+    const tiles = w.findAll('.inspector-tile');
+    expect(tiles.length).toBe(6);
+    const labels = tiles.map((t) => t.find('.inspector-tile__label').text());
+    expect(labels).toEqual([
+      'Timeline',
+      'Artifacts',
+      'Diff Viewer',
+      'Time-Travel Debugger',
+      'Cost Estimator',
+      'Traces',
+    ]);
+    expect(w.find('[data-testid="inspector-tile-execution-timeline"]').exists()).toBe(true);
   });
 });
