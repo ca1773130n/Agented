@@ -410,19 +410,50 @@ def build_workspace(inputs: dict[str, Any], scratch_dir: Path) -> Path:
 # Step 3 — Codex invocation (mockable)
 # --------------------------------------------------------------------------
 
+_PROMPT_TOKEN = "{PROMPT}"
+
+
 def _default_codex_cmd() -> list[str]:
+    """Build the Codex argv. ``AGENTED_CODEX_CMD`` overrides the default.
+
+    Use the literal token ``{PROMPT}`` anywhere in the argv to receive the
+    contents of ``PROMPT.md`` at that position. If the token is absent the
+    prompt text is appended as the final positional argument.
+
+    Examples::
+
+        AGENTED_CODEX_CMD="codex exec {PROMPT}"           # default
+        AGENTED_CODEX_CMD="codex exec --model o3 {PROMPT}"
+        AGENTED_CODEX_CMD="codex exec --prompt-file PROMPT.md"
+
+    The default avoids version-specific flags (older releases had
+    ``--auto``, newer ones don't) and just invokes ``codex exec`` with
+    the prompt body as the trailing positional argument.
+    """
     raw = os.environ.get("AGENTED_CODEX_CMD")
     if raw:
         try:
             return shlex.split(raw)
         except ValueError:
             logger.warning("AGENTED_CODEX_CMD malformed; using default")
-    return ["codex", "exec", "--auto", "--prompt-file", "PROMPT.md"]
+    return ["codex", "exec", _PROMPT_TOKEN]
 
 
 def _run_codex_in_workspace(scratch_dir: Path, *, timeout: int = 600) -> None:
-    cmd = _default_codex_cmd()
-    logger.info("harness_evolver: invoking codex in %s: %s", scratch_dir, cmd)
+    template = _default_codex_cmd()
+    prompt_text = (scratch_dir / "PROMPT.md").read_text(encoding="utf-8")
+
+    if _PROMPT_TOKEN in template:
+        cmd = [prompt_text if part == _PROMPT_TOKEN else part for part in template]
+    else:
+        # No explicit placeholder — assume the override is self-contained
+        # (e.g. uses ``--prompt-file PROMPT.md``) and don't append.
+        cmd = list(template)
+
+    logger.info(
+        "harness_evolver: invoking codex in %s: %s",
+        scratch_dir, cmd[:2] + ["…"] if len(cmd) > 2 else cmd,
+    )
     try:
         result = subprocess.run(
             cmd,
@@ -433,7 +464,7 @@ def _run_codex_in_workspace(scratch_dir: Path, *, timeout: int = 600) -> None:
         )
     except FileNotFoundError as exc:
         raise RuntimeError(
-            f"codex CLI not found ({cmd[0]}); set AGENTED_CODEX_CMD"
+            f"codex CLI not found ({template[0]}); set AGENTED_CODEX_CMD"
         ) from exc
     except subprocess.TimeoutExpired as exc:
         raise RuntimeError(
