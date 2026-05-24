@@ -96,10 +96,10 @@ Update assertions:
 - Delete any assertion verifying Watch Tower section label presence.
 - Delete any assertion verifying a top-level Triggers SidebarSectionLabel.
 - Update Work-group ordering assertions: first child is Dashboards, not Sketch.
-- Update Forge-group child enumeration: Triggers now appears in Forge children after Workflows and before Plugins.
+- Forge-group child enumeration: **if** the existing test enumerates Forge children explicitly, update it so Triggers appears between Workflows and Plugins. If no such enumeration exists today (codex confirmed it does not), add a fresh assertion verifying the new Forge ordering — `Workflows → Triggers → Plugins → MCPs → Skills → Commands → Hooks → Rules`. Do not invent assertions about other groups.
 - Keep all Triggers submenu-item presence assertions — those items haven't changed, just relocated.
 
-If a test references `'External Integrations'` or `'MCP Servers'` literals, leave alone (those are PR-E concerns, already updated).
+PR-F does **not** touch the `'Integrations'` (PR-E) or `'MCPs'` (PR-E) label assertions. Leave both intact exactly as PR-E shipped them.
 
 ### `docs/superpowers/specs/2026-05-21-sidebar-ia-redesign-design.md`
 
