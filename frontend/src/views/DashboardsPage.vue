@@ -85,6 +85,40 @@ const deepLinks: DeepLink[] = [
   },
 ];
 
+interface OrgTile {
+  label: string;
+  routeName: string;
+  description: string;
+  accent: string;
+}
+
+const orgTiles: OrgTile[] = [
+  {
+    label: 'Products',
+    routeName: 'products-summary',
+    description: 'All products with project + team rollups.',
+    accent: 'var(--accent-violet)',
+  },
+  {
+    label: 'Projects',
+    routeName: 'projects-summary',
+    description: 'All projects with activity + health rollups.',
+    accent: 'var(--accent-cyan)',
+  },
+  {
+    label: 'Teams',
+    routeName: 'teams-summary',
+    description: 'All teams with member + bot rollups.',
+    accent: 'var(--accent-emerald)',
+  },
+  {
+    label: 'Agents',
+    routeName: 'agents-summary',
+    description: 'All agents with run + skill rollups.',
+    accent: 'var(--accent-amber)',
+  },
+];
+
 useWebMcpTool({
   name: 'agented_dashboards_get_state',
   description: 'Returns the current state of the DashboardsPage (4-lane index)',
@@ -97,6 +131,7 @@ useWebMcpTool({
         layout: 'lanes-v1',
         laneCount: lanes.length,
         deepLinkCount: deepLinks.length,
+        orgTileCount: orgTiles.length,
       }),
     }],
   }),
@@ -108,6 +143,10 @@ function openLane(tile: LaneTile) {
 
 function openDeepLink(link: DeepLink) {
   router.push({ name: link.routeName, hash: link.hash });
+}
+
+function openOrgTile(tile: OrgTile) {
+  router.push({ name: tile.routeName });
 }
 </script>
 
@@ -128,6 +167,23 @@ function openDeepLink(link: DeepLink) {
         <span class="lane-tile__name">{{ tile.name }}</span>
         <span class="lane-tile__desc">{{ tile.description }}</span>
       </button>
+    </section>
+
+    <section class="org-tiles" aria-label="Org-overview dashboards">
+      <h2 class="org-tiles__title">Org overview</h2>
+      <div class="org-tiles__grid">
+        <button
+          v-for="tile in orgTiles"
+          :key="tile.routeName"
+          class="org-tile"
+          :data-testid="`org-tile-${tile.routeName}`"
+          :style="{ '--tile-accent': tile.accent }"
+          @click="openOrgTile(tile)"
+        >
+          <span class="org-tile__label">{{ tile.label }}</span>
+          <span class="org-tile__desc">{{ tile.description }}</span>
+        </button>
+      </div>
     </section>
 
     <section class="deep-links" aria-label="Quick deep links">
@@ -209,4 +265,23 @@ function openDeepLink(link: DeepLink) {
 .deep-link:hover { border-color: var(--accent-cyan); }
 .deep-link__label { font-size: 13px; font-weight: 600; }
 .deep-link__desc { font-size: 11px; color: var(--text-tertiary); }
+
+.org-tiles { display: flex; flex-direction: column; gap: 12px; }
+.org-tiles__title { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-tertiary); margin: 0; }
+.org-tiles__grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+
+.org-tile {
+  display: flex; flex-direction: column; gap: 4px;
+  padding: 14px 16px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  text-align: left;
+  cursor: pointer;
+  color: var(--text-primary);
+  transition: border-color 0.15s;
+}
+.org-tile:hover { border-color: var(--tile-accent); }
+.org-tile__label { font-size: 13px; font-weight: 600; }
+.org-tile__desc { font-size: 11px; color: var(--text-tertiary); }
 </style>
