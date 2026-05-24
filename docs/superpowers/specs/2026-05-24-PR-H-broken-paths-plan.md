@@ -37,17 +37,14 @@ Backend `delete_inline_comment` at `leaf_crud_d.py:234` already wired and regist
 
 The MCP server detail page exposes a "Test Connection" button that today gracefully degrades to "Test endpoint not available" on 404. We'll implement a minimal but useful connection probe.
 
+**Per codex plan review (Q1):** use the project-standard `httpx` (already pinned at `>=0.28.1` in `backend/pyproject.toml`), NOT `urllib.request`. Use **GET** not HEAD — MCP HTTP servers speak JSON-RPC over POST, so HEAD often returns 405 or unexpected behavior. With GET, ANY HTTP status response (even 405 Method Not Allowed) proves reachability; only connection errors mean unreachable.
+
 **New handler** in `backend/app_litestar/routes/mcp_servers.py` (insert after the existing `delete_mcp_server` handler at line ~170):
 
 ```python
 @post("/{server_id:str}/test", sync_to_thread=False)
 def test_mcp_server(server_id: str, caller: Caller) -> dict[str, Any]:
-    """Probe an MCP server's reachability without launching it.
-
-    HTTP servers: HEAD/GET request with a short timeout.
-    stdio servers: shutil.which() to confirm the command is on PATH.
-    Other types: returns {success: False, message: "..."} explaining why.
-    """
+    """Probe an MCP server's reachability without launching it."""
     del caller
     server = get_mcp_server(server_id)
     if not server:
@@ -55,48 +52,73 @@ def test_mcp_server(server_id: str, caller: Caller) -> dict[str, Any]:
     return McpSyncService.test_connection(server)
 ```
 
-Register it in the router (line ~205-215 of `mcp_servers.py`).
+Register `test_mcp_server` in the `mcp_servers_router` tuple at `mcp_servers.py:212`.
 
 **New helper** on `McpSyncService` in `backend/app/services/mcp_sync_service.py`:
 
 ```python
 @staticmethod
 def test_connection(server: dict) -> dict[str, Any]:
-    """Probe reachability for an MCP server config row."""
+    """Probe reachability for an MCP server config row.
+
+    HTTP servers: GET with 2s timeout. Any HTTP response counts as reachable
+      (MCP JSON-RPC speaks POST, so GET is expected to return 405/404, which
+      still proves the server is up).
+    stdio servers: shutil.which() to confirm the command is on PATH. Does
+      NOT spawn the process.
+    """
+    import httpx
+    import shutil
+
     server_type = (server.get("server_type") or "").lower()
     if server_type == "http":
         url = server.get("url")
         if not url:
             return {"success": False, "message": "HTTP server has no URL configured."}
         try:
-            import urllib.request
-            req = urllib.request.Request(url, method="HEAD")
-            with urllib.request.urlopen(req, timeout=2.0) as resp:
-                return {"success": True, "message": f"Reachable (HTTP {resp.status})."}
-        except Exception as e:
+            with httpx.Client(timeout=2.0) as client:
+                resp = client.get(url)
+            return {
+                "success": True,
+                "message": f"Reachable (HTTP {resp.status_code}).",
+            }
+        except httpx.HTTPError as e:
             return {"success": False, "message": f"Unreachable: {e}"}
     if server_type == "stdio":
         command = server.get("command")
         if not command:
             return {"success": False, "message": "stdio server has no command configured."}
-        import shutil
         if shutil.which(command):
             return {"success": True, "message": f"Command '{command}' is on PATH."}
         return {"success": False, "message": f"Command '{command}' not found on PATH."}
-    return {"success": False, "message": f"Connection test not supported for server type '{server_type}'."}
+    return {
+        "success": False,
+        "message": f"Connection test not supported for server type '{server_type}'.",
+    }
 ```
 
 **Why this is minimal-but-correct:** the test never spawns the stdio command (avoids running arbitrary code) and uses a 2-second timeout for HTTP. The UI already handles a `{success, message}` shape exactly.
 
+**Frontend cleanup (per codex Q5):** since the backend now always returns a result, the 404-handling branch at `frontend/src/views/McpServerDetailPage.vue:135` ("Test endpoint not available") becomes dead code. **Remove it** in this PR — the `else` arm at line 138 already handles all real errors via `ApiError.message`.
+
 ### Fix 4 — Implement `DELETE /admin/super-agents/{id}/messages/{message_id}`
+
+**Per codex Q2:** scope the delete by `super_agent_id` (the inbox owner). The `agent_messages` table has `from_agent_id` and `to_agent_id`. The MessageInbox UX is "delete from my inbox," so the scoping check is `to_agent_id = ?` (the URL's super_agent_id). Hard delete is correct — message bus has no `deleted` status.
 
 **New DB helper** in `backend/app/db/messages.py` (append after `update_message_status` at line ~117):
 
 ```python
-def delete_message(message_id: str) -> bool:
-    """Hard delete an agent message. Returns True if a row was removed."""
+def delete_message(message_id: str, to_agent_id: str) -> bool:
+    """Hard delete an agent message scoped to the inbox owner.
+
+    Returns True only if a row matching both message_id AND to_agent_id
+    was removed. Prevents cross-agent deletes via path tampering.
+    """
     with get_connection() as conn:
-        cur = conn.execute("DELETE FROM agent_messages WHERE id = ?", (message_id,))
+        cur = conn.execute(
+            "DELETE FROM agent_messages WHERE id = ? AND to_agent_id = ?",
+            (message_id, to_agent_id),
+        )
         conn.commit()
         return cur.rowcount > 0
 ```
@@ -110,15 +132,14 @@ def delete_message(message_id: str) -> bool:
     sync_to_thread=False,
 )
 def delete_agent_message(super_agent_id: str, message_id: str) -> dict[str, Any]:
-    del super_agent_id
     from app.db.messages import delete_message
 
-    if not delete_message(message_id):
+    if not delete_message(message_id, super_agent_id):
         raise NotFoundException(detail="Message not found")
     return {"message": "Message deleted"}
 ```
 
-Add `delete_agent_message` to the `super_agent_messages_router` route_handlers tuple.
+Add `delete_agent_message` to the `super_agent_messages_router` route_handlers tuple at `leaf_crud_i.py:203`.
 
 ## Backend tests
 
