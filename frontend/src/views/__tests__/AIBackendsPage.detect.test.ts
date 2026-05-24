@@ -184,6 +184,34 @@ describe('AIBackendsPage — auto-discovery', () => {
     );
   });
 
+  it('surfaces a toast error and clears importingPath when importDiscovered rejects', async () => {
+    discoverConfigs.mockResolvedValue({ items: [structuredClone(sampleItems[0])] });
+    importDiscovered.mockRejectedValue(new Error('keychain locked'));
+
+    const wrapper = await mountPage();
+    await wrapper.get('[data-testid="detect-existing-btn"]').trigger('click');
+    await flushPromises();
+
+    vi.mocked(listGroupedBackends).mockClear();
+
+    const importBtn = document.body.querySelector('[data-testid="detect-import-claude"]') as HTMLButtonElement;
+    expect(importBtn).toBeTruthy();
+    importBtn.click();
+    await flushPromises();
+
+    expect(importDiscovered).toHaveBeenCalledTimes(1);
+    expect(toastSpy).toHaveBeenCalledWith(
+      expect.stringContaining('keychain locked'),
+      'error',
+    );
+    // Import button remains — backend_id was NOT flipped because import failed.
+    expect(document.body.querySelector('[data-testid="detect-import-claude"]')).toBeTruthy();
+    // Backend list NOT refreshed on failure.
+    expect(listGroupedBackends).not.toHaveBeenCalled();
+    // Import button is enabled again (importingPath cleared in `finally`).
+    expect(importBtn.disabled).toBe(false);
+  });
+
   it('imports a candidate and reloads the backend list', async () => {
     discoverConfigs.mockResolvedValue({ items: [sampleItems[0]] });
     importDiscovered.mockResolvedValue({ id: 'bk-new' });
@@ -233,4 +261,5 @@ describe('AIBackendsPage — auto-discovery', () => {
     await flushPromises();
     expect(discoverConfigs).toHaveBeenCalledTimes(1);
   });
+
 });
