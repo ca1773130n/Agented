@@ -259,20 +259,6 @@ function navTo(routeName: string) {
   router.push({ name: routeName });
 }
 
-// PR-D — Scheduling flat link deep-links to the Activity lane's
-// Scheduling card. Stays active whenever the user is sitting on the
-// scheduling anchor or hit the rotation-dashboard redirect.
-function openScheduling() {
-  router.push({ name: 'dashboards-activity', hash: '#scheduling' });
-}
-
-function isSchedulingActive(): boolean {
-  if (currentRouteName.value === 'rotation-dashboard') return true;
-  if (currentRouteName.value === 'on-call-escalation') return true;
-  if (currentRouteName.value !== 'dashboards-activity') return false;
-  return (route.hash || '') === '#scheduling';
-}
-
 function navToTriggerDashboard(triggerId: string) {
   router.push({ name: 'trigger-dashboard', params: { triggerId } });
 }
@@ -452,25 +438,6 @@ function handleSidebarKeydown(e: KeyboardEvent) {
         </template>
       </SidebarFlatLink>
 
-      <!-- PR-D — Scheduling promoted to a flat top-level link (was a
-           dashboard sidebar item; deep-links to the Scheduling card in
-           the Activity lane). PR-E moved it into the Work group, after
-           Dashboards. -->
-      <SidebarFlatLink
-        label="Scheduling"
-        :active="isSchedulingActive()"
-        :collapsed-desktop="isCollapsedDesktop()"
-        @click="openScheduling"
-      >
-        <template #icon>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-            <rect x="3" y="4" width="18" height="18" rx="2"/>
-            <line x1="16" y1="2" x2="16" y2="6"/>
-            <line x1="8" y1="2" x2="8" y2="6"/>
-            <line x1="3" y1="10" x2="21" y2="10"/>
-          </svg>
-        </template>
-      </SidebarFlatLink>
 
       <SidebarSectionLabel
         label="Organization"

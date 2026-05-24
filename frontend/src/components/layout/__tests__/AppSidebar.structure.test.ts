@@ -283,19 +283,17 @@ describe('AppSidebar — PR-B structure', () => {
     }
   });
 
-  it('PR-D: Scheduling is a flat top-level link (no expandable section)', () => {
+  it('Scheduling is removed from the sidebar (consolidated into the Activity dashboard)', () => {
+    // The Activity-lane SchedulingCard is the operator's single entry point
+    // for scheduling state; the redundant flat link in the sidebar got
+    // pulled to reduce nav surface.
     const allButtons = Array.from(
       rootEl(wrapper).querySelectorAll<HTMLElement>('button'),
     );
     const schedulingButtons = allButtons.filter(
       (b) => b.querySelector<HTMLElement>('.nav-text')?.textContent?.trim() === 'Scheduling',
     );
-    expect(schedulingButtons.length).toBe(1);
-    const btn = schedulingButtons[0];
-    // Flat link shape: no chevron, no aria-expanded.
-    expect(btn.querySelector('.chevron-icon')).toBeNull();
-    expect(btn.hasAttribute('aria-expanded')).toBe(false);
-    // No submenu region was rendered for Scheduling.
+    expect(schedulingButtons.length).toBe(0);
     expect(submenuOf(wrapper, 'Scheduling')).toBeNull();
   });
 
@@ -429,9 +427,10 @@ describe('AppSidebar — PR-B structure', () => {
     expect(submenuOf(wrapper, 'Dashboards')).not.toBeNull();
   });
 
-  it('PR-F: Work group ordering is Dashboards → Sketch → Scheduling', () => {
-    // PR-F reordered the Work group so Dashboards is first — it's the
-    // daily entry-point. Sketch and Scheduling follow.
+  it('Work group ordering is Dashboards → Sketch (Scheduling consolidated into Activity)', () => {
+    // PR-F set Dashboards as the daily entry-point with Sketch after.
+    // Scheduling used to be a third entry but was pulled in favour of the
+    // SchedulingCard inside the Activity dashboard.
     const all = Array.from(rootEl(wrapper).children[0].children) as HTMLElement[];
     function indexOfLabelText(text: string): number {
       return all.findIndex(
@@ -451,16 +450,13 @@ describe('AppSidebar — PR-B structure', () => {
     const orgIdx = indexOfLabelText('Organization');
     const sketchIdx = indexOfButtonText('Sketch');
     const dashIdx = indexOfButtonText('Dashboards');
-    const schedIdx = indexOfButtonText('Scheduling');
     expect(workIdx).toBeGreaterThan(-1);
     expect(orgIdx).toBeGreaterThan(workIdx);
-    // All three Work entries sit between Work label and Organization label.
+    // Both Work entries sit between Work label and Organization label.
     expect(dashIdx).toBeGreaterThan(workIdx);
     expect(dashIdx).toBeLessThan(orgIdx);
     expect(sketchIdx).toBeGreaterThan(dashIdx);
     expect(sketchIdx).toBeLessThan(orgIdx);
-    expect(schedIdx).toBeGreaterThan(sketchIdx);
-    expect(schedIdx).toBeLessThan(orgIdx);
   });
 
   it('PR-F: Forge group children appear in order Workflows → Triggers → Plugins → MCPs → Skills → Commands → Hooks → Rules', () => {
