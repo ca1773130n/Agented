@@ -177,11 +177,19 @@ describe('AppSidebar — PR-B structure', () => {
     expect(labels).not.toContain('Triggers');
   });
 
-  it('Triggers section contains exactly 30 sub-items (25 pre-PR-J2 + 5 KEEP+WIRE additions)', () => {
-    // PR-J2 added: NL Rule Editor + Payload Transformer (Configuration),
-    // Bot Dry-Run + Output Piping + Webhook Forwarding (Ops).
+  it('Triggers section contains exactly 21 sub-items (PR-N trimmed 9 specialty surfaces from 30)', () => {
+    // PR-N removed the following 9 sidebar entries (routes still
+    // reachable by URL — only the sidebar shortcuts were dropped):
+    //   Configuration block (5):
+    //     Repo Scope Filters, Structured Output, Prompt A/B Testing,
+    //     Provider Fallback, Multi-Repo Fan-Out
+    //   Ops block (1): Smart Suggestions
+    //   Introspection block (3):
+    //     Dependency Graph, Bot Benchmarks, Changelog Generator
+    // Resulting blocks: Core (5) + Configuration (5) + PR-Review (3)
+    // + Ops (5) + Introspection (2) + Authoring (1) = 21.
     const items = submenuItems(wrapper, 'Triggers');
-    expect(items.length).toBe(30);
+    expect(items.length).toBe(21);
   });
 
   it('Triggers section contains spot-checked items from different blocks', () => {
@@ -195,6 +203,24 @@ describe('AppSidebar — PR-B structure', () => {
     expect(texts).toContain('Webhook Recorder');
     // Authoring block (folded-in Prompt Snippets)
     expect(texts).toContain('Prompt Snippets');
+  });
+
+  it('PR-N: Triggers section does NOT contain the 9 removed specialty items (routes still reachable by URL)', () => {
+    const texts = submenuItems(wrapper, 'Triggers').map(
+      (b) => b.textContent?.trim().replace(/\s+/g, ' ') ?? '',
+    );
+    // Configuration block removals
+    expect(texts).not.toContain('Repo Scope Filters');
+    expect(texts).not.toContain('Structured Output');
+    expect(texts).not.toContain('Prompt A/B Testing');
+    expect(texts).not.toContain('Provider Fallback');
+    expect(texts).not.toContain('Multi-Repo Fan-Out');
+    // Ops block removal
+    expect(texts).not.toContain('Smart Suggestions');
+    // Introspection block removals
+    expect(texts).not.toContain('Dependency Graph');
+    expect(texts).not.toContain('Bot Benchmarks');
+    expect(texts).not.toContain('Changelog Generator');
   });
 
   it('Triggers section renders 6 visual block labels (Core, Configuration, PR-Review, Ops, Introspection, Authoring)', () => {
