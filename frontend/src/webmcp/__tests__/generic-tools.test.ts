@@ -230,4 +230,33 @@ describe('generic-tools', () => {
       expect(getManifest()).toHaveLength(0)
     })
   })
+
+  describe('HMR idempotency', () => {
+    it('skips re-registration when called twice (manifest preserved)', () => {
+      registerGenericTools()
+      expect(mockRegisterTool).toHaveBeenCalledTimes(5)
+      registerGenericTools()
+      // No additional calls — manifest already has all 5.
+      expect(mockRegisterTool).toHaveBeenCalledTimes(5)
+      expect(getManifest()).toHaveLength(5)
+    })
+
+    it('tolerates "already registered" from navigator.modelContext (module reloaded but browser-global survived)', () => {
+      // Simulate: this module's manifest was reset (HMR reloaded the module)
+      // but navigator.modelContext still has every prior registration.
+      mockRegisterTool.mockImplementation((tool: any) => {
+        throw new Error(`Tool already registered: ${tool.name}`)
+      })
+      expect(() => registerGenericTools()).not.toThrow()
+      // Manifest still tracks the logical registrations.
+      expect(getManifest()).toHaveLength(5)
+    })
+
+    it('rethrows unrelated registerTool errors', () => {
+      mockRegisterTool.mockImplementation(() => {
+        throw new Error('Schema validation failed')
+      })
+      expect(() => registerGenericTools()).toThrow('Schema validation failed')
+    })
+  })
 })
