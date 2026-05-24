@@ -40,6 +40,7 @@ const selectedProjectId = ref<string>('');
 const triggering = ref(false);
 const triggerStatus = ref<string | null>(null);
 const triggerError = ref<string | null>(null);
+const forceTrigger = ref(false);
 
 const detailRound = ref<EvolutionRound | null>(null);
 
@@ -92,7 +93,8 @@ async function runDryRun() {
   triggerStatus.value = null;
   try {
     const result = await harnessEvolutionApi.dryRun(
-      selectedProjectId.value, { limit: 25 },
+      selectedProjectId.value,
+      { limit: 25, force: forceTrigger.value },
     );
     triggerStatus.value =
       `Round ${result.round_id} · ${result.status}` +
@@ -201,6 +203,17 @@ onMounted(loadData);
         >
           {{ triggering ? 'Running…' : 'Dry-run' }}
         </button>
+        <label class="trigger__force" :title="
+          'Skip the 24h rate-limit guard (default: one successful round per project per day).'
+        ">
+          <input
+            type="checkbox"
+            v-model="forceTrigger"
+            :disabled="triggering"
+            data-testid="evolution-trigger-force"
+          />
+          <span>Force</span>
+        </label>
       </div>
       <p
         v-if="triggerError"
@@ -332,6 +345,16 @@ onMounted(loadData);
   font-size: 12px;
   padding: 6px 14px;
 }
+.trigger__force {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  user-select: none;
+}
+.trigger__force input { cursor: pointer; }
 .trigger__error { font-size: 12px; color: var(--accent-red, #ef4444); margin: 0; }
 .trigger__status { font-size: 12px; color: var(--text-secondary); margin: 0; }
 .trigger__hint { font-size: 11px; color: var(--text-tertiary); margin: 0; }

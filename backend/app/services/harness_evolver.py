@@ -84,23 +84,57 @@ def _default_min_interval_hours() -> int:
 def _check_rate_limit(
     project_id: str, min_interval_hours: int,
 ) -> Optional[str]:
-    if min_interval_hours <= 0:
-        return None
-    recent = evolution_repo.list_for_project(project_id, limit=1)
+    """Return a human-readable blocking reason or ``None``.
+
+    Two independent gates:
+
+    1. **In-flight** — ``pending`` / ``running`` rounds always block, even
+       if their elapsed time would otherwise allow a retry. The operator
+       must wait for or abort the in-flight round before starting another.
+
+    2. **Recent-success rate limit** — only ``applied`` /
+       ``awaiting_approval`` rounds count toward the time-based gate.
+       ``failed`` and ``aborted`` rounds are skipped: a buggy or
+       operator-rejected attempt shouldn't lock the project out of
+       retrying — the whole point of dry-run is to recover from those.
+    """
+    # Pull a small window — enough to find an in-flight round AND the most
+    # recent successful one without needing pagination.
+    recent = evolution_repo.list_for_project(project_id, limit=20)
     if not recent:
         return None
-    last = recent[0]
-    started = last.get("started_at")
-    if not started:
+
+    in_flight = next(
+        (r for r in recent if r.get("status") in ("pending", "running")),
+        None,
+    )
+    if in_flight is not None:
+        return (
+            f"round {in_flight['id']} is already {in_flight['status']!r}; "
+            f"wait for it to finish or abort it before starting another"
+        )
+
+    if min_interval_hours <= 0:
         return None
-    parsed = _parse_sqlite_dt(started)
+
+    successful = next(
+        (r for r in recent
+         if r.get("status") in ("applied", "awaiting_approval")),
+        None,
+    )
+    if successful is None:
+        return None
+
+    started = successful.get("started_at")
+    parsed = _parse_sqlite_dt(started) if started else None
     if parsed is None:
         return None
+
     elapsed = datetime.now(timezone.utc) - parsed
     if elapsed < timedelta(hours=min_interval_hours):
         remaining = timedelta(hours=min_interval_hours) - elapsed
         return (
-            f"rate-limited: last round at {started} "
+            f"rate-limited: last successful round at {started} "
             f"(<{min_interval_hours}h ago, "
             f"~{int(remaining.total_seconds() // 60)}m remaining); "
             f"pass force=True or AGENTED_EVOLUTION_MIN_INTERVAL_HOURS=0 to override"

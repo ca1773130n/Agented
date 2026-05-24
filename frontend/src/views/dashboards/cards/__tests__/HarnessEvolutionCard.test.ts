@@ -125,9 +125,28 @@ describe('HarnessEvolutionCard (project-scoped)', () => {
     await flushPromises();
     await w.find('[data-testid="evolution-trigger-dry-run"]').trigger('click');
     await flushPromises();
-    expect(dryRun).toHaveBeenCalledWith('proj-a', { limit: 25 });
+    expect(dryRun).toHaveBeenCalledWith('proj-a', { limit: 25, force: false });
     expect(listAll).toHaveBeenCalledTimes(2);
     expect(w.find('[data-testid="evolution-round-her-new"]').exists()).toBe(true);
+  });
+
+  it('Force checkbox passes force=true to the dry-run API', async () => {
+    listAll.mockResolvedValue({ rounds: [] });
+    projectList.mockResolvedValue({
+      projects: [{ id: 'proj-f', name: 'Force' }],
+    });
+    dryRun.mockResolvedValue({
+      round_id: 'her-f', status: 'awaiting_approval',
+      applied_asset_ids: [], error: null, notes: null,
+    });
+
+    const w = mount(HarnessEvolutionCard);
+    await flushPromises();
+    const force = w.find<HTMLInputElement>('[data-testid="evolution-trigger-force"]');
+    await force.setValue(true);
+    await w.find('[data-testid="evolution-trigger-dry-run"]').trigger('click');
+    await flushPromises();
+    expect(dryRun).toHaveBeenCalledWith('proj-f', { limit: 25, force: true });
   });
 
   it('approve + abort call the API and reload', async () => {

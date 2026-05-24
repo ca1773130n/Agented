@@ -343,3 +343,36 @@ def test_rate_limit_aborts_burst_triggers(isolated_db, mock_codex):
     # force=True bypasses
     third = evolver.run_evolution_round("proj-rate", dry_run=True, force=True)
     assert third.status == "awaiting_approval"
+
+
+def test_rate_limit_ignores_failed_rounds(isolated_db, mock_codex):
+    """A failed round (e.g. Codex CLI errored before producing edits)
+    must not block a retry — the operator should be able to fix the
+    failure and try again immediately."""
+    _seed_project("proj-retry")
+
+    # First call: simulate Codex crash.
+    def _crash(scratch_dir, *, timeout=600):
+        raise RuntimeError("codex CLI exited 2: --auto not found")
+    with patch.object(evolver, "_run_codex_in_workspace", _crash):
+        first = evolver.run_evolution_round("proj-retry", dry_run=True)
+    assert first.status == "failed"
+
+    # Second call should NOT be rate-limited because the first round
+    # never actually succeeded at running Codex.
+    mock_codex(files={})
+    second = evolver.run_evolution_round("proj-retry", dry_run=True)
+    assert second.status == "awaiting_approval", second.error
+
+
+def test_rate_limit_ignores_aborted_rounds(isolated_db, mock_codex):
+    """An operator-aborted round shouldn't block a fresh attempt either."""
+    _seed_project("proj-aborted-retry")
+    mock_codex(files={})
+
+    first = evolver.run_evolution_round("proj-aborted-retry", dry_run=True)
+    assert first.status == "awaiting_approval"
+    evolver.abort_dry_run_round(first.round_id, reason="changed my mind")
+
+    second = evolver.run_evolution_round("proj-aborted-retry", dry_run=True)
+    assert second.status == "awaiting_approval", second.error
