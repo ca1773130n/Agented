@@ -238,6 +238,17 @@ export const backendManagementApi = {
     const res = await aiAccountsClient.cliproxyCallbackForward(callbackUrl);
     return { status: res.status, message: res.message };
   },
+
+  /**
+   * Admin-only: trigger a CLIProxy (cliproxyapi) upgrade. Backend gates by role,
+   * so non-admin callers get 403. Returns the result + the resulting installed version.
+   */
+  upgradeCliproxy: async (): Promise<{ success: boolean; message: string; version: string | null }> => {
+    return apiFetch<{ success: boolean; message: string; version: string | null }>(
+      '/admin/system/cliproxy/upgrade',
+      { method: 'POST' },
+    );
+  },
 };
 
 // =============================================================================

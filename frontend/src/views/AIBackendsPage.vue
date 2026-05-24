@@ -3,6 +3,19 @@
     <PageHeader title="AI Backends" subtitle="Manage AI backend providers and accounts">
       <template #actions>
         <button
+          class="btn btn-ghost upgrade-cliproxy-btn"
+          :disabled="isUpgradingCliproxy"
+          data-testid="upgrade-cliproxy-btn"
+          :title="isUpgradingCliproxy ? 'Upgrade in progress…' : 'Upgrade the cliproxyapi binary (admin only)'"
+          @click="upgradeCliproxy"
+        >
+          <svg v-if="!isUpgradingCliproxy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+            <polyline points="23 4 23 10 17 10"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10"/>
+          </svg>
+          <div v-else class="spinner-sm spinner-sm-dark"></div>
+          {{ isUpgradingCliproxy ? 'Upgrading…' : 'Upgrade CLIProxy' }}
+        </button>
+        <button
           class="btn btn-secondary detect-btn"
           :disabled="isDetecting"
           data-testid="detect-existing-btn"
@@ -354,6 +367,28 @@ async function addProxyAccount() {
     showToast(e instanceof Error ? e.message : 'Failed to start login', 'error');
   } finally {
     isAddingAccount.value = false;
+  }
+}
+
+const isUpgradingCliproxy = ref(false);
+
+async function upgradeCliproxy() {
+  if (isUpgradingCliproxy.value) return;
+  isUpgradingCliproxy.value = true;
+  showToast('Upgrading CLIProxy…', 'info');
+  try {
+    const result = await backendManagementApi.upgradeCliproxy();
+    const versionSuffix = result.version ? ` (v${result.version})` : '';
+    if (result.success) {
+      showToast(`CLIProxy upgraded${versionSuffix}`, 'success');
+    } else {
+      showToast(`CLIProxy upgrade failed: ${result.message}`, 'error');
+    }
+    await loadBackends(true);
+  } catch (e: unknown) {
+    showToast(e instanceof Error ? e.message : 'Failed to upgrade CLIProxy', 'error');
+  } finally {
+    isUpgradingCliproxy.value = false;
   }
 }
 
