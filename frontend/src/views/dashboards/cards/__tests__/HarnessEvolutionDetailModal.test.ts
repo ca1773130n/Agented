@@ -26,11 +26,19 @@ vi.mock('../../../../services/api/harness-evolution', async () => {
 });
 
 import HarnessEvolutionDetailModal from '../HarnessEvolutionDetailModal.vue';
+import type {
+  EvolutionPatchEntry,
+  EvolutionRound,
+  EvolutionStatus,
+} from '../../../../services/api/harness-evolution';
 
-function _round(over: Partial<{ id: string; status: string;
-                                entries: Array<Record<string, unknown>>;
-                                notes: string | null;
-                                error_message: string | null }>) {
+function _round(over: Partial<{
+  id: string;
+  status: EvolutionStatus;
+  entries: EvolutionPatchEntry[];
+  notes: string | null;
+  error_message: string | null;
+}>): EvolutionRound {
   return {
     id: over.id || 'her-x',
     bot_id: 'bot-x',
@@ -43,7 +51,7 @@ function _round(over: Partial<{ id: string; status: string;
     input_layers: {},
     output_patch: {
       notes: '',
-      entries: (over.entries as Array<Record<string, unknown>> | undefined) || [
+      entries: over.entries || [
         {
           op: 'create', layer: 'h2', name: 'block-rm',
           existing_layer_id: null,
