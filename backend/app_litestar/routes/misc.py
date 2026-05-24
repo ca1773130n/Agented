@@ -160,20 +160,6 @@ def create_sandbox(data: dict) -> dict[str, Any]:
     raise HTTPException(status_code=501, detail="Feature not yet enabled")
 
 
-# DataRetentionPoliciesPage.vue → /admin/retention/* (distinct from real
-# /admin/retention-policies/*). The view's banner is gated by FEATURE_ENABLED;
-# this handler matches the path referenced in the PR-J3 commit message.
-@get("/admin/retention", sync_to_thread=False)
-def list_retention_stub() -> dict[str, Any]:
-    raise HTTPException(status_code=501, detail="Feature not yet enabled")
-
-
-@post("/admin/retention", sync_to_thread=False)
-def create_retention_stub(data: dict) -> dict[str, Any]:
-    del data
-    raise HTTPException(status_code=501, detail="Feature not yet enabled")
-
-
 # NotificationHubPage.vue → /admin/notifications/{config,test}
 @get("/admin/notifications/config", sync_to_thread=False)
 def get_notifications_config() -> dict[str, Any]:
@@ -275,8 +261,6 @@ misc_router = Router(
         scheduling_suggestions,
         list_sandboxes,
         create_sandbox,
-        list_retention_stub,
-        create_retention_stub,
         get_notifications_config,
         update_notifications_config,
         test_notifications,

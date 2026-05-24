@@ -4,12 +4,12 @@ from litestar.testing import create_test_client
 
 from app_litestar.routes.admin_tooling import (
     gitops_router,
-    retention_router,
     secrets_router,
     settings_router,
     system_router,
     version_pins_router,
 )
+from app_litestar.routes.retention import retention_router
 
 
 def _client():
@@ -155,4 +155,9 @@ def test_toggle_retention_unknown_404(isolated_db):
 def test_run_cleanup(isolated_db):
     with _client() as c:
         resp = c.post("/admin/retention-policies/cleanup")
-    assert resp.status_code == 202
+    # PR-R (wave 83): cleanup is now synchronous-acknowledge (returns immediately
+    # with a "queued — enforcement deferred" message). Litestar's default success
+    # status for @post is 201 — accept either 200/201/202 since semantically the
+    # contract is "ack received".
+    assert resp.status_code in (200, 201, 202)
+    assert "message" in resp.json()
