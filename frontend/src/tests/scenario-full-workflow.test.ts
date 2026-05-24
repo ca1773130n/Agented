@@ -6,7 +6,6 @@
  * views that are wired to real APIs:
  * - ExecutionQueueCard
  * - BotDryRun
- * - NaturalLanguageBotCreator
  * - BotCloneForkPage
  * - MultiRepoFanOut
  * - MultiProviderFallback
@@ -509,119 +508,6 @@ describe('BotDryRun', () => {
 })
 
 // ===========================================================================
-// NaturalLanguageBotCreator
-// ===========================================================================
-
-describe('NaturalLanguageBotCreator', () => {
-  async function mountNLCreator() {
-    const NaturalLanguageBotCreator = (await import('../views/NaturalLanguageBotCreator.vue')).default
-    return mount(NaturalLanguageBotCreator, {
-      global: {
-        stubs: {
-          AppBreadcrumb: true,
-          PageHeader: true,
-        },
-      },
-    })
-  }
-
-  it('renders with description input field', async () => {
-    const wrapper = await mountNLCreator()
-    await flushPromises()
-
-    expect(wrapper.exists()).toBe(true)
-    const textareas = wrapper.findAll('textarea')
-    expect(textareas.length).toBeGreaterThan(0)
-  })
-
-  it('disables generate button when description is too short', async () => {
-    const wrapper = await mountNLCreator()
-    await flushPromises()
-
-    const textarea = wrapper.find('textarea')
-    if (textarea.exists()) {
-      await textarea.setValue('short')
-      await nextTick()
-
-      const buttons = wrapper.findAll('button')
-      const genButton = buttons.find(b => b.text().toLowerCase().includes('generate'))
-      if (genButton) {
-        expect(genButton.attributes('disabled')).toBeDefined()
-      }
-    }
-  })
-
-  it('enables generate button with sufficient description', async () => {
-    const wrapper = await mountNLCreator()
-    await flushPromises()
-
-    const textarea = wrapper.find('textarea')
-    if (textarea.exists()) {
-      await textarea.setValue('Create a bot that reviews pull requests for security issues and OWASP vulnerabilities')
-      await nextTick()
-
-      const buttons = wrapper.findAll('button')
-      const genButton = buttons.find(b => b.text().toLowerCase().includes('generate'))
-      if (genButton) {
-        expect(genButton.attributes('disabled')).toBeUndefined()
-      }
-    }
-  })
-
-  it('shows generated config after generation', async () => {
-    vi.useFakeTimers()
-
-    const wrapper = await mountNLCreator()
-    await flushPromises()
-
-    const textarea = wrapper.find('textarea')
-    if (textarea.exists()) {
-      await textarea.setValue('Create a daily security scanner that reviews code for OWASP vulnerabilities')
-      await nextTick()
-
-      const buttons = wrapper.findAll('button')
-      const genButton = buttons.find(b => b.text().toLowerCase().includes('generate'))
-      if (genButton) {
-        await genButton.trigger('click')
-        vi.advanceTimersByTime(1500)
-        await flushPromises()
-        await nextTick()
-
-        const text = wrapper.text()
-        expect(text).toContain('Bot')
-      }
-    }
-
-    vi.useRealTimers()
-  })
-
-  it('shows toast on successful generation', async () => {
-    vi.useFakeTimers()
-
-    const wrapper = await mountNLCreator()
-    await flushPromises()
-
-    const textarea = wrapper.find('textarea')
-    if (textarea.exists()) {
-      await textarea.setValue('A bot that scans repositories for dependency updates weekly')
-      await nextTick()
-
-      const buttons = wrapper.findAll('button')
-      const genButton = buttons.find(b => b.text().toLowerCase().includes('generate'))
-      if (genButton) {
-        await genButton.trigger('click')
-        vi.advanceTimersByTime(1500)
-        await flushPromises()
-
-        expect(mockShowToast).toHaveBeenCalledWith('Bot configuration generated', 'success')
-      }
-    }
-
-    vi.useRealTimers()
-  })
-})
-
-// ===========================================================================
 // BotCloneForkPage
 // ===========================================================================
 
@@ -866,7 +752,6 @@ describe('Cross-component integration', () => {
     const modules = await Promise.all([
       import('../views/dashboards/cards/ExecutionQueueCard.vue'),
       import('../views/BotDryRun.vue'),
-      import('../views/NaturalLanguageBotCreator.vue'),
       import('../views/BotCloneForkPage.vue'),
       import('../views/MultiRepoFanOut.vue'),
       import('../views/MultiProviderFallback.vue'),
@@ -951,28 +836,6 @@ describe('Loading and error states', () => {
     wrapper.unmount()
   })
 
-  it('NaturalLanguageBotCreator is fully interactive without API calls', async () => {
-    const NLCreator = (await import('../views/NaturalLanguageBotCreator.vue')).default
-    const wrapper = mount(NLCreator, {
-      global: {
-        stubs: { PageHeader: true },
-      },
-    })
-    await flushPromises()
-
-    // Should not have made any trigger API calls on mount
-    expect(mockTriggerList).not.toHaveBeenCalled()
-
-    const textarea = wrapper.find('textarea')
-    if (textarea.exists()) {
-      await textarea.setValue('This is a test description that is long enough to pass validation')
-      await nextTick()
-      expect(wrapper.exists()).toBe(true)
-    }
-
-    wrapper.unmount()
-  })
-
   it('ExecutionQueueCard shows error when queue API fails', async () => {
     mockExecutionGetQueueStatus.mockRejectedValue(new Error('Queue service down'))
 
@@ -1039,45 +902,4 @@ describe('Navigation', () => {
     wrapper.unmount()
   })
 
-  it('NaturalLanguageBotCreator navigates to triggers on save', async () => {
-    vi.useFakeTimers()
-
-    const NLCreator = (await import('../views/NaturalLanguageBotCreator.vue')).default
-    const wrapper = mount(NLCreator, {
-      global: {
-        stubs: { PageHeader: true },
-      },
-    })
-    await flushPromises()
-
-    // First generate config
-    const textarea = wrapper.find('textarea')
-    if (textarea.exists()) {
-      await textarea.setValue('Create a daily security scanner bot that reviews code for OWASP vulnerabilities')
-      await nextTick()
-
-      const genBtn = wrapper.findAll('button').find(b => b.text().toLowerCase().includes('generate'))
-      if (genBtn) {
-        await genBtn.trigger('click')
-        vi.advanceTimersByTime(1500)
-        await flushPromises()
-        await nextTick()
-
-        // Now try to save
-        const saveBtn = wrapper.findAll('button').find(b => b.text().toLowerCase().includes('save'))
-        if (saveBtn && !saveBtn.attributes('disabled')) {
-          await saveBtn.trigger('click')
-          vi.advanceTimersByTime(1000)
-          await flushPromises()
-
-          // After v0.7.27 fix: was navigating to a non-existent
-          // ``bots`` route (404). Real list lives at ``triggers``.
-          expect(mockPush).toHaveBeenCalledWith({ name: 'triggers' })
-        }
-      }
-    }
-
-    vi.useRealTimers()
-    wrapper.unmount()
-  })
 })

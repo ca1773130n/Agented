@@ -15,11 +15,4 @@ export const onboardingRoutes: RouteRecordRaw[] = [
     component: () => import('../../views/SketchChatPage.vue'),
     meta: { title: 'Sketch Chat' },
   },
-  // Environment Promotion
-  {
-    path: '/bots/environments',
-    name: 'environment-promotion',
-    component: () => import('../../views/EnvironmentPromotion.vue'),
-    meta: { title: 'Environment Promotion' },
-  },
 ];

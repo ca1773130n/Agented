@@ -92,11 +92,4 @@ export const executionRoutes: RouteRecordRaw[] = [
     component: () => import('../../views/ExecutionTaggingPage.vue'),
     meta: { title: 'Execution Tagging & Search' },
   },
-  // Shareable Execution Live Links (Feature 34)
-  {
-    path: '/executions/share',
-    name: 'shareable-execution-links',
-    component: () => import('../../views/ShareableExecutionLinksPage.vue'),
-    meta: { title: 'Shareable Execution Links' },
-  },
 ];

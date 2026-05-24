@@ -8,21 +8,6 @@ export const botRoutes: RouteRecordRaw[] = [
     component: () => import('../../views/TestCoverageBot.vue'),
     meta: { title: 'Test Coverage Bot' },
   },
-  // Natural Language Bot Creator
-  {
-    path: '/bots/natural-language-creator',
-    name: 'natural-language-bot-creator',
-    component: () => import('../../views/NaturalLanguageBotCreator.vue'),
-    meta: { title: 'Natural Language Bot Creator' },
-  },
-  // Bot Version History
-  {
-    path: '/bots/:botId/versions',
-    name: 'bot-version-history',
-    component: () => import('../../views/BotVersionHistory.vue'),
-    props: true,
-    meta: { title: 'Bot Version History' },
-  },
   // Bot Dry Run
   {
     path: '/bots/dry-run',
@@ -64,20 +49,6 @@ export const botRoutes: RouteRecordRaw[] = [
     name: 'bot-recommendation-engine',
     component: () => import('../../views/BotRecommendationEngine.vue'),
     meta: { title: 'Bot Recommendations' },
-  },
-  // Configurable Smart Retry Policies
-  {
-    path: '/bots/retry-policies',
-    name: 'bot-retry-policies',
-    component: () => import('../../views/BotRetryPoliciesPage.vue'),
-    meta: { title: 'Retry Policies' },
-  },
-  // Auto-Generated Bot Documentation
-  {
-    path: '/bots/doc-generator',
-    name: 'bot-doc-generator',
-    component: () => import('../../views/BotDocGeneratorPage.vue'),
-    meta: { title: 'Bot Doc Generator' },
   },
   // Bot Clone & Fork
   {
