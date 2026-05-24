@@ -81,9 +81,7 @@ def list_rules(
     offset: Optional[int] = None,
 ) -> dict[str, Any]:
     if caller.user_id:
-        rows = get_for_user(
-            "rules", caller.user_id, limit=limit, offset=offset or 0
-        )
+        rows = get_for_user("rules", caller.user_id, limit=limit, offset=offset or 0)
         return {"rules": rows, "total_count": len(rows)}
     return {
         "rules": get_all_rules(project_id, limit=limit, offset=offset or 0),
@@ -127,9 +125,7 @@ def get_rule_endpoint(rule_id: int, caller: Caller) -> dict[str, Any]:
 
 
 @put("/{rule_id:int}", sync_to_thread=False)
-def update_rule_endpoint(
-    rule_id: int, data: dict, caller: Caller
-) -> dict[str, Any]:
+def update_rule_endpoint(rule_id: int, data: dict, caller: Caller) -> dict[str, Any]:
     del caller
     if not update_rule(
         rule_id,
@@ -194,9 +190,7 @@ def generate_rule_stream(data: dict, caller: Caller) -> Stream:
     del caller
     from app.services.rule_generation_service import RuleGenerationService
 
-    return _stream(
-        RuleGenerationService.generate_streaming((data or {}).get("description", ""))
-    )
+    return _stream(RuleGenerationService.generate_streaming((data or {}).get("description", "")))
 
 
 rules_router = Router(
@@ -229,9 +223,7 @@ def list_plugins(
     offset: Optional[int] = None,
 ) -> dict[str, Any]:
     if caller.user_id:
-        rows = get_for_user(
-            "plugins", caller.user_id, limit=limit, offset=offset or 0
-        )
+        rows = get_for_user("plugins", caller.user_id, limit=limit, offset=offset or 0)
         return {"plugins": rows, "total_count": len(rows)}
     del project_id  # original Flask version didn't filter by it either
     return {
@@ -269,9 +261,7 @@ def get_plugin_endpoint(plugin_id: str, caller: Caller) -> dict[str, Any]:
 
 
 @put("/{plugin_id:str}", sync_to_thread=False)
-def update_plugin_endpoint(
-    plugin_id: str, data: dict, caller: Caller
-) -> dict[str, Any]:
+def update_plugin_endpoint(plugin_id: str, data: dict, caller: Caller) -> dict[str, Any]:
     del caller
     if not update_plugin(
         plugin_id,
@@ -302,9 +292,7 @@ def list_components(plugin_id: str, caller: Caller) -> dict[str, Any]:
 
 
 @post("/{plugin_id:str}/components", sync_to_thread=False)
-def create_component(
-    plugin_id: str, data: dict, caller: Caller
-) -> dict[str, Any]:
+def create_component(plugin_id: str, data: dict, caller: Caller) -> dict[str, Any]:
     del caller
     if not data:
         raise ClientException(detail="JSON body required")
@@ -320,9 +308,7 @@ def create_component(
     return {"message": "Component added", "id": cid}
 
 
-@put(
-    "/{plugin_id:str}/components/{component_id:int}", sync_to_thread=False
-)
+@put("/{plugin_id:str}/components/{component_id:int}", sync_to_thread=False)
 def update_component(
     plugin_id: str, component_id: int, data: dict, caller: Caller
 ) -> dict[str, Any]:
@@ -343,9 +329,7 @@ def update_component(
     status_code=200,
     sync_to_thread=False,
 )
-def delete_component(
-    plugin_id: str, component_id: int, caller: Caller
-) -> dict[str, Any]:
+def delete_component(plugin_id: str, component_id: int, caller: Caller) -> dict[str, Any]:
     del caller, plugin_id
     if not delete_plugin_component(component_id):
         raise NotFoundException(detail="Component not found")
@@ -361,9 +345,21 @@ def generate_plugin_stream(data: dict, caller: Caller) -> Stream:
     del caller
     from app.services.plugin_generation_service import PluginGenerationService
 
-    return _stream(
-        PluginGenerationService.generate_streaming((data or {}).get("description", ""))
-    )
+    return _stream(PluginGenerationService.generate_streaming((data or {}).get("description", "")))
+
+
+# PR-J3b: PluginSandboxPage.vue calls /admin/plugins/sandbox/{run,runs} and
+# neither has a real handler. The view ships a "Not yet enabled" banner in
+# PR-J3; these handlers return 501 instead of 404 so the contract is explicit.
+@get("/sandbox/runs", sync_to_thread=False)
+def list_plugin_sandbox_runs() -> dict[str, Any]:
+    raise HTTPException(status_code=501, detail="Feature not yet enabled")
+
+
+@post("/sandbox/run", sync_to_thread=False)
+def run_plugin_sandbox(data: dict) -> dict[str, Any]:
+    del data
+    raise HTTPException(status_code=501, detail="Feature not yet enabled")
 
 
 plugins_router = Router(
@@ -379,6 +375,8 @@ plugins_router = Router(
         update_component,
         delete_component,
         generate_plugin_stream,
+        list_plugin_sandbox_runs,
+        run_plugin_sandbox,
     ],
 )
 
@@ -396,9 +394,7 @@ def list_hooks(
     offset: Optional[int] = None,
 ) -> dict[str, Any]:
     if caller.user_id:
-        rows = get_for_user(
-            "hooks", caller.user_id, limit=limit, offset=offset or 0
-        )
+        rows = get_for_user("hooks", caller.user_id, limit=limit, offset=offset or 0)
         return {"hooks": rows, "total_count": len(rows)}
     return {
         "hooks": get_all_hooks(project_id, limit=limit, offset=offset or 0),
@@ -441,9 +437,7 @@ def get_hook_endpoint(hook_id: int, caller: Caller) -> dict[str, Any]:
 
 
 @put("/{hook_id:int}", sync_to_thread=False)
-def update_hook_endpoint(
-    hook_id: int, data: dict, caller: Caller
-) -> dict[str, Any]:
+def update_hook_endpoint(hook_id: int, data: dict, caller: Caller) -> dict[str, Any]:
     del caller
     if not update_hook(
         hook_id,
@@ -486,9 +480,7 @@ def generate_hook_stream(data: dict, caller: Caller) -> Stream:
     del caller
     from app.services.hook_generation_service import HookGenerationService
 
-    return _stream(
-        HookGenerationService.generate_streaming((data or {}).get("description", ""))
-    )
+    return _stream(HookGenerationService.generate_streaming((data or {}).get("description", "")))
 
 
 hooks_router = Router(
@@ -520,9 +512,7 @@ def list_commands(
     offset: Optional[int] = None,
 ) -> dict[str, Any]:
     if caller.user_id:
-        rows = get_for_user(
-            "commands", caller.user_id, limit=limit, offset=offset or 0
-        )
+        rows = get_for_user("commands", caller.user_id, limit=limit, offset=offset or 0)
         return {"commands": rows, "total_count": len(rows)}
     return {
         "commands": get_all_commands(project_id, limit=limit, offset=offset or 0),
@@ -559,9 +549,7 @@ def get_command_endpoint(command_id: int, caller: Caller) -> dict[str, Any]:
 
 
 @put("/{command_id:int}", sync_to_thread=False)
-def update_command_endpoint(
-    command_id: int, data: dict, caller: Caller
-) -> dict[str, Any]:
+def update_command_endpoint(command_id: int, data: dict, caller: Caller) -> dict[str, Any]:
     del caller
     if not update_command(
         command_id,
@@ -601,11 +589,7 @@ def generate_command_stream(data: dict, caller: Caller) -> Stream:
     del caller
     from app.services.command_generation_service import CommandGenerationService
 
-    return _stream(
-        CommandGenerationService.generate_streaming(
-            (data or {}).get("description", "")
-        )
-    )
+    return _stream(CommandGenerationService.generate_streaming((data or {}).get("description", "")))
 
 
 commands_router = Router(

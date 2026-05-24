@@ -10,8 +10,8 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
-from litestar import Router, get
-from litestar.exceptions import ClientException
+from litestar import Router, delete, get, post, put
+from litestar.exceptions import ClientException, HTTPException
 
 from app.db.audit_events import count_audit_events, query_audit_events
 from app.db.cross_team_insights import get_cross_team_insights
@@ -41,9 +41,7 @@ def _map_event_to_activity(event: dict) -> dict:
     outcome: str = event.get("outcome", "")
     details: dict = event.get("details") or {}
     description = (
-        f"{entity_type} {entity_id} — {outcome}"
-        if outcome
-        else f"{entity_type} {entity_id}"
+        f"{entity_type} {entity_id} — {outcome}" if outcome else f"{entity_type} {entity_id}"
     )
     return {
         "id": str(event.get("id", "")),
@@ -143,6 +141,130 @@ def scheduling_suggestions(trigger_id: Optional[str] = None) -> dict[str, Any]:
     return result.model_dump()
 
 
+# ===========================================================================
+# PR-J3b: 501 stubs for STUB-DEFER frontend views (PR-J3). Each view ships a
+# "Not yet enabled" banner; these handlers replace the previous 404s so the
+# UI sees an explicit contract.
+# ===========================================================================
+
+
+# BotSandboxPage.vue → /admin/sandboxes
+@get("/admin/sandboxes", sync_to_thread=False)
+def list_sandboxes() -> dict[str, Any]:
+    raise HTTPException(status_code=501, detail="Feature not yet enabled")
+
+
+@post("/admin/sandboxes", sync_to_thread=False)
+def create_sandbox(data: dict) -> dict[str, Any]:
+    del data
+    raise HTTPException(status_code=501, detail="Feature not yet enabled")
+
+
+# DataRetentionPoliciesPage.vue → /admin/retention/* (distinct from real
+# /admin/retention-policies/*). The view's banner is gated by FEATURE_ENABLED;
+# this handler matches the path referenced in the PR-J3 commit message.
+@get("/admin/retention", sync_to_thread=False)
+def list_retention_stub() -> dict[str, Any]:
+    raise HTTPException(status_code=501, detail="Feature not yet enabled")
+
+
+@post("/admin/retention", sync_to_thread=False)
+def create_retention_stub(data: dict) -> dict[str, Any]:
+    del data
+    raise HTTPException(status_code=501, detail="Feature not yet enabled")
+
+
+# NotificationHubPage.vue → /admin/notifications/{config,test}
+@get("/admin/notifications/config", sync_to_thread=False)
+def get_notifications_config() -> dict[str, Any]:
+    raise HTTPException(status_code=501, detail="Feature not yet enabled")
+
+
+@put("/admin/notifications/config", sync_to_thread=False)
+def update_notifications_config(data: dict) -> dict[str, Any]:
+    del data
+    raise HTTPException(status_code=501, detail="Feature not yet enabled")
+
+
+@post("/admin/notifications/test", sync_to_thread=False)
+def test_notifications(data: dict) -> dict[str, Any]:
+    del data
+    raise HTTPException(status_code=501, detail="Feature not yet enabled")
+
+
+# PromptLocalizationPage.vue → /admin/prompt-localization/*
+@get("/admin/prompt-localization", sync_to_thread=False)
+def list_prompt_localizations() -> dict[str, Any]:
+    raise HTTPException(status_code=501, detail="Feature not yet enabled")
+
+
+@post("/admin/prompt-localization", sync_to_thread=False)
+def create_prompt_localization(data: dict) -> dict[str, Any]:
+    del data
+    raise HTTPException(status_code=501, detail="Feature not yet enabled")
+
+
+@post("/admin/prompt-localization/translate", sync_to_thread=False)
+def translate_prompt(data: dict) -> dict[str, Any]:
+    del data
+    raise HTTPException(status_code=501, detail="Feature not yet enabled")
+
+
+# SmartAlertRulesPage.vue → /admin/alerts/rules
+@get("/admin/alerts/rules", sync_to_thread=False)
+def list_alert_rules() -> dict[str, Any]:
+    raise HTTPException(status_code=501, detail="Feature not yet enabled")
+
+
+@post("/admin/alerts/rules", sync_to_thread=False)
+def create_alert_rule(data: dict) -> dict[str, Any]:
+    del data
+    raise HTTPException(status_code=501, detail="Feature not yet enabled")
+
+
+@put("/admin/alerts/rules/{rule_id:str}", sync_to_thread=False)
+def update_alert_rule(rule_id: str, data: dict) -> dict[str, Any]:
+    del rule_id, data
+    raise HTTPException(status_code=501, detail="Feature not yet enabled")
+
+
+@delete("/admin/alerts/rules/{rule_id:str}", status_code=200, sync_to_thread=False)
+def delete_alert_rule(rule_id: str) -> dict[str, Any]:
+    del rule_id
+    raise HTTPException(status_code=501, detail="Feature not yet enabled")
+
+
+# SmartScheduleOptimizerPage.vue → /admin/schedule-optimizer/*
+@get("/admin/schedule-optimizer", sync_to_thread=False)
+def get_schedule_optimizer() -> dict[str, Any]:
+    raise HTTPException(status_code=501, detail="Feature not yet enabled")
+
+
+@post("/admin/schedule-optimizer/optimize", sync_to_thread=False)
+def run_schedule_optimizer(data: dict) -> dict[str, Any]:
+    del data
+    raise HTTPException(status_code=501, detail="Feature not yet enabled")
+
+
+# TeamActivityFeedPage.vue → /admin/activity-feed?team= (team-scoped variant of
+# the existing /api/activity-feed). View itself reads from auditApi; this stub
+# fills in the missing team-scoped endpoint named in the PR-J3 commit.
+@get("/admin/activity-feed", sync_to_thread=False)
+def team_activity_feed(team: Optional[str] = None) -> dict[str, Any]:
+    del team
+    raise HTTPException(status_code=501, detail="Feature not yet enabled")
+
+
+# OnboardingAutomationPage.vue extra: the existing /admin/onboarding/* router
+# already covers config + runs. PR-J3 lists onboarding-automation among the
+# STUB-DEFER set because the view assumes higher-level automation that isn't
+# wired up; the trigger-specific stub below sits alongside the real handlers.
+@post("/admin/onboarding/automate", sync_to_thread=False)
+def onboarding_automate(data: dict) -> dict[str, Any]:
+    del data
+    raise HTTPException(status_code=501, detail="Feature not yet enabled")
+
+
 misc_router = Router(
     path="/",
     route_handlers=[
@@ -151,5 +273,23 @@ misc_router = Router(
         cross_team_insights,
         model_pricing,
         scheduling_suggestions,
+        list_sandboxes,
+        create_sandbox,
+        list_retention_stub,
+        create_retention_stub,
+        get_notifications_config,
+        update_notifications_config,
+        test_notifications,
+        list_prompt_localizations,
+        create_prompt_localization,
+        translate_prompt,
+        list_alert_rules,
+        create_alert_rule,
+        update_alert_rule,
+        delete_alert_rule,
+        get_schedule_optimizer,
+        run_schedule_optimizer,
+        team_activity_feed,
+        onboarding_automate,
     ],
 )

@@ -6,7 +6,7 @@ import json
 from typing import Any
 
 from litestar import Router, get, post
-from litestar.exceptions import NotFoundException
+from litestar.exceptions import HTTPException, NotFoundException
 
 from app.db.bot_templates import deploy_template, get_all_templates, get_template
 
@@ -74,4 +74,58 @@ def deploy_template_endpoint(template_id: str, authorized: Caller) -> dict[str, 
 bot_templates_router = Router(
     path="/admin/bot-templates",
     route_handlers=[list_templates, get_template_detail, deploy_template_endpoint],
+)
+
+
+# ===========================================================================
+# PR-J3b: specialized-bot config stubs (CodeExplanation, CrossRepoImpact,
+# TestCoverage). The respective views ship a "Not yet enabled" banner in PR-J3;
+# these handlers return 501 instead of 404 so the frontend sees a consistent
+# error contract.
+# ===========================================================================
+
+
+@get("/code-explanations", sync_to_thread=False)
+def list_code_explanations() -> dict[str, Any]:
+    raise HTTPException(status_code=501, detail="Feature not yet enabled")
+
+
+@post("/code-explanations", sync_to_thread=False)
+def create_code_explanation(data: dict) -> dict[str, Any]:
+    del data
+    raise HTTPException(status_code=501, detail="Feature not yet enabled")
+
+
+@get("/cross-repo-impact", sync_to_thread=False)
+def list_cross_repo_impact() -> dict[str, Any]:
+    raise HTTPException(status_code=501, detail="Feature not yet enabled")
+
+
+@post("/cross-repo-impact", sync_to_thread=False)
+def create_cross_repo_impact(data: dict) -> dict[str, Any]:
+    del data
+    raise HTTPException(status_code=501, detail="Feature not yet enabled")
+
+
+@get("/test-coverage/config", sync_to_thread=False)
+def get_test_coverage_config() -> dict[str, Any]:
+    raise HTTPException(status_code=501, detail="Feature not yet enabled")
+
+
+@post("/test-coverage/config", sync_to_thread=False)
+def set_test_coverage_config(data: dict) -> dict[str, Any]:
+    del data
+    raise HTTPException(status_code=501, detail="Feature not yet enabled")
+
+
+bot_stubs_router = Router(
+    path="/admin/bots",
+    route_handlers=[
+        list_code_explanations,
+        create_code_explanation,
+        list_cross_repo_impact,
+        create_cross_repo_impact,
+        get_test_coverage_config,
+        set_test_coverage_config,
+    ],
 )

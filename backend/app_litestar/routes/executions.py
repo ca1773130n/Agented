@@ -511,6 +511,13 @@ def delete_execution_quota(quota_id: str) -> dict[str, Any]:
     raise HTTPException(status_code=501, detail="Feature not yet enabled")
 
 
+# PR-J3b: execution-artifacts backend not yet implemented. Returning 501
+# matches the "Not yet enabled" banner shipped in PR-J3 (ExecutionArtifactsPage.vue).
+@get("/executions/artifacts", sync_to_thread=False)
+def execution_artifacts() -> dict[str, Any]:
+    raise HTTPException(status_code=501, detail="Feature not yet enabled")
+
+
 executions_router = Router(
     path="/admin",
     route_handlers=[
@@ -534,5 +541,6 @@ executions_router = Router(
         create_execution_quota,
         update_execution_quota,
         delete_execution_quota,
+        execution_artifacts,
     ],
 )

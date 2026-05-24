@@ -48,13 +48,9 @@ def list_agents(
     caller: Caller, limit: Optional[int] = None, offset: Optional[int] = None
 ) -> dict[str, Any]:
     if caller.user_id:
-        rows = get_for_user(
-            "agents", caller.user_id, limit=limit, offset=offset or 0
-        )
+        rows = get_for_user("agents", caller.user_id, limit=limit, offset=offset or 0)
         return {"agents": rows, "total_count": len(rows)}
-    return _result_or_raise(
-        AgentService.list_agents(limit=limit, offset=offset or 0)
-    )
+    return _result_or_raise(AgentService.list_agents(limit=limit, offset=offset or 0))
 
 
 @post("/", sync_to_thread=False)
@@ -72,9 +68,7 @@ def get_agent_detail(agent_id: str, caller: Caller) -> dict[str, Any]:
 
 
 @put("/{agent_id:str}", sync_to_thread=False)
-def update_agent(
-    agent_id: str, data: dict, caller: Caller
-) -> dict[str, Any]:
+def update_agent(agent_id: str, data: dict, caller: Caller) -> dict[str, Any]:
     del caller
     return _result_or_raise(
         AgentService.update_agent_data(
@@ -90,19 +84,22 @@ def delete_agent(agent_id: str, caller: Caller) -> dict[str, Any]:
 
 
 @post("/{agent_id:str}/run", sync_to_thread=False)
-def run_agent(
-    agent_id: str, data: dict, caller: Caller
-) -> dict[str, Any]:
+def run_agent(agent_id: str, data: dict, caller: Caller) -> dict[str, Any]:
     del caller
-    return _result_or_raise(
-        AgentService.run_agent(agent_id, (data or {}).get("message", ""))
-    )
+    return _result_or_raise(AgentService.run_agent(agent_id, (data or {}).get("message", "")))
 
 
 @get("/{agent_id:str}/export", sync_to_thread=False)
 def export_agent(agent_id: str, caller: Caller) -> dict[str, Any]:
     del caller
     return _result_or_raise(SkillsService.export_agent_to_harness(agent_id))
+
+
+# PR-J3b: agent capability matrix backend not yet implemented. Returning 501
+# matches the "Not yet enabled" banner shipped in PR-J3 (AgentCapabilityMatrix.vue).
+@get("/capabilities", sync_to_thread=False)
+def agent_capabilities() -> dict[str, Any]:
+    raise HTTPException(status_code=501, detail="Feature not yet enabled")
 
 
 agents_router = Router(
@@ -115,6 +112,7 @@ agents_router = Router(
         delete_agent,
         run_agent,
         export_agent,
+        agent_capabilities,
     ],
 )
 
@@ -140,9 +138,7 @@ def list_all_traces(
             limit=limit,
             offset=offset,
         ),
-        "total": count_traces(
-            entity_type=entity_type, entity_id=entity_id, status=status
-        ),
+        "total": count_traces(entity_type=entity_type, entity_id=entity_id, status=status),
     }
 
 
@@ -199,7 +195,7 @@ async def stream_trace(trace_id: str) -> Stream:
         while True:
             trace = get_trace(trace_id)
             if trace is None:
-                yield f'event: error\ndata: {json.dumps({"reason": "not_found"})}\n\n'
+                yield f"event: error\ndata: {json.dumps({'reason': 'not_found'})}\n\n"
                 return
             spans = list_spans(trace_id)
             for s in spans:
@@ -207,15 +203,15 @@ async def stream_trace(trace_id: str) -> Stream:
                 if sid not in seen_span_ids:
                     seen_span_ids.add(sid)
                     span_status[sid] = s["status"]
-                    yield f'event: span_started\ndata: {json.dumps(s, default=str)}\n\n'
+                    yield f"event: span_started\ndata: {json.dumps(s, default=str)}\n\n"
                 elif span_status.get(sid) != s["status"]:
                     span_status[sid] = s["status"]
-                    yield f'event: span_ended\ndata: {json.dumps(s, default=str)}\n\n'
+                    yield f"event: span_ended\ndata: {json.dumps(s, default=str)}\n\n"
             if trace["status"] in ("completed", "error"):
-                yield f'event: trace_ended\ndata: {json.dumps(trace, default=str)}\n\n'
+                yield f"event: trace_ended\ndata: {json.dumps(trace, default=str)}\n\n"
                 return
             if asyncio.get_event_loop().time() > deadline:
-                yield f'event: timeout\ndata: {json.dumps({"reason": "max_duration"})}\n\n'
+                yield f"event: timeout\ndata: {json.dumps({'reason': 'max_duration'})}\n\n"
                 return
             await asyncio.sleep(1.0)
 
