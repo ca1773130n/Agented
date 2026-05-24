@@ -126,7 +126,9 @@ function autoExpandForRoute() {
   if (['ai-backends', 'backend-detail', 'service-health'].includes(name)) {
     expandedSections.value.aiBackends = true;
   }
-  if (['triggers', 'bot-templates', 'bot-clone-fork', 'cross-team-bot-sharing', 'incident-response-playbooks', 'inline-prompt-editor', 'visual-cron-wizard', 'conditional-trigger-rules', 'repo-scope-filters', 'structured-output', 'prompt-ab-testing', 'multi-provider-fallback', 'multi-repo-fan-out', 'pr-auto-assignment', 'pr-review-learning-loop', 'github-actions', 'webhook-recorder', 'dependency-impact-bot', 'bot-recommendation-engine', 'bot-dependency-graph', 'bot-performance-benchmarks', 'bot-runbooks', 'execution-tagging', 'changelog-generator', 'prompt-snippets', 'bot-dry-run', 'bot-output-piping', 'bot-output-webhook-forwarding', 'nl-trigger-rule-editor', 'webhook-payload-transformer'].includes(name)) {
+  // Auto-expand only for sidebar-visible Triggers children; URL-only
+  // routes (still reachable, just not in this submenu) don't trigger expand.
+  if (['triggers', 'bot-templates', 'bot-clone-fork', 'cross-team-bot-sharing', 'incident-response-playbooks', 'inline-prompt-editor', 'visual-cron-wizard', 'conditional-trigger-rules', 'pr-auto-assignment', 'pr-review-learning-loop', 'github-actions', 'webhook-recorder', 'dependency-impact-bot', 'bot-runbooks', 'execution-tagging', 'prompt-snippets', 'bot-dry-run', 'bot-output-piping', 'bot-output-webhook-forwarding', 'nl-trigger-rule-editor', 'webhook-payload-transformer'].includes(name)) {
     expandedSections.value.triggers = true;
   }
   // PR-J2 — Analytics dashboards (System).
@@ -234,7 +236,9 @@ function isWorkflowsSectionActive(): boolean {
 }
 
 function isTriggersSectionActive(): boolean {
-  return ['triggers', 'bot-templates', 'bot-clone-fork', 'cross-team-bot-sharing', 'incident-response-playbooks', 'inline-prompt-editor', 'visual-cron-wizard', 'conditional-trigger-rules', 'repo-scope-filters', 'structured-output', 'prompt-ab-testing', 'multi-provider-fallback', 'multi-repo-fan-out', 'pr-auto-assignment', 'pr-review-learning-loop', 'github-actions', 'webhook-recorder', 'dependency-impact-bot', 'bot-recommendation-engine', 'bot-dependency-graph', 'bot-performance-benchmarks', 'bot-runbooks', 'execution-tagging', 'changelog-generator', 'prompt-snippets', 'bot-dry-run', 'bot-output-piping', 'bot-output-webhook-forwarding', 'nl-trigger-rule-editor', 'webhook-payload-transformer'].includes(currentRouteName.value);
+  // Only the 21 currently-visible Triggers children. URL-only routes
+  // (still reachable) don't paint this toggle active.
+  return ['triggers', 'bot-templates', 'bot-clone-fork', 'cross-team-bot-sharing', 'incident-response-playbooks', 'inline-prompt-editor', 'visual-cron-wizard', 'conditional-trigger-rules', 'pr-auto-assignment', 'pr-review-learning-loop', 'github-actions', 'webhook-recorder', 'dependency-impact-bot', 'bot-runbooks', 'execution-tagging', 'prompt-snippets', 'bot-dry-run', 'bot-output-piping', 'bot-output-webhook-forwarding', 'nl-trigger-rule-editor', 'webhook-payload-transformer'].includes(currentRouteName.value);
 }
 
 // PR-J2 — Analytics dashboards group under System.
@@ -731,22 +735,7 @@ function handleSidebarKeydown(e: KeyboardEvent) {
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('conditional-trigger-rules') }" :aria-current="sidebarActive('conditional-trigger-rules') ? 'page' : undefined" @click="navTo('conditional-trigger-rules')">
           Trigger Conditions
         </button>
-        <button type="button" class="submenu-item" :class="{ active: sidebarActive('repo-scope-filters') }" :aria-current="sidebarActive('repo-scope-filters') ? 'page' : undefined" @click="navTo('repo-scope-filters')">
-          Repo Scope Filters
-        </button>
-        <button type="button" class="submenu-item" :class="{ active: sidebarActive('structured-output') }" :aria-current="sidebarActive('structured-output') ? 'page' : undefined" @click="navTo('structured-output')">
-          Structured Output
-        </button>
-        <button type="button" class="submenu-item" :class="{ active: sidebarActive('prompt-ab-testing') }" :aria-current="sidebarActive('prompt-ab-testing') ? 'page' : undefined" @click="navTo('prompt-ab-testing')">
-          Prompt A/B Testing
-        </button>
-        <button type="button" class="submenu-item" :class="{ active: sidebarActive('multi-provider-fallback') }" :aria-current="sidebarActive('multi-provider-fallback') ? 'page' : undefined" @click="navTo('multi-provider-fallback')">
-          Provider Fallback
-        </button>
-        <button type="button" class="submenu-item" :class="{ active: sidebarActive('multi-repo-fan-out') }" :aria-current="sidebarActive('multi-repo-fan-out') ? 'page' : undefined" @click="navTo('multi-repo-fan-out')">
-          Multi-Repo Fan-Out
-        </button>
-        <!-- PR-J2 — NL rule editor: free-text -> trigger rule. -->
+        <!-- NL rule editor: free-text -> trigger rule. -->
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('nl-trigger-rule-editor') }" :aria-current="sidebarActive('nl-trigger-rule-editor') ? 'page' : undefined" @click="navTo('nl-trigger-rule-editor')">
           NL Rule Editor
         </button>
@@ -773,37 +762,23 @@ function handleSidebarKeydown(e: KeyboardEvent) {
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('dependency-impact-bot') }" :aria-current="sidebarActive('dependency-impact-bot') ? 'page' : undefined" @click="navTo('dependency-impact-bot')">
           Dependency Updates
         </button>
-        <button type="button" class="submenu-item" :class="{ active: sidebarActive('bot-recommendation-engine') }" :aria-current="sidebarActive('bot-recommendation-engine') ? 'page' : undefined" @click="navTo('bot-recommendation-engine')">
-          Smart Suggestions
-        </button>
-        <!-- PR-J2 — Bot dry-run: simulate a trigger without side-effects. -->
+        <!-- Bot dry-run: simulate a trigger without side-effects. -->
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('bot-dry-run') }" :aria-current="sidebarActive('bot-dry-run') ? 'page' : undefined" @click="navTo('bot-dry-run')">
           Bot Dry-Run
         </button>
-        <!-- PR-J2 — Bot output piping: chain stdout to a downstream sink. -->
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('bot-output-piping') }" :aria-current="sidebarActive('bot-output-piping') ? 'page' : undefined" @click="navTo('bot-output-piping')">
           Output Piping
         </button>
-        <!-- PR-J2 — Bot output webhook forwarding. -->
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('bot-output-webhook-forwarding') }" :aria-current="sidebarActive('bot-output-webhook-forwarding') ? 'page' : undefined" @click="navTo('bot-output-webhook-forwarding')">
           Webhook Forwarding
         </button>
 
         <div class="submenu-block-label" aria-hidden="true">Introspection</div>
-        <button type="button" class="submenu-item" :class="{ active: sidebarActive('bot-dependency-graph') }" :aria-current="sidebarActive('bot-dependency-graph') ? 'page' : undefined" @click="navTo('bot-dependency-graph')">
-          Dependency Graph
-        </button>
-        <button type="button" class="submenu-item" :class="{ active: sidebarActive('bot-performance-benchmarks') }" :aria-current="sidebarActive('bot-performance-benchmarks') ? 'page' : undefined" @click="navTo('bot-performance-benchmarks')">
-          Bot Benchmarks
-        </button>
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('bot-runbooks') }" :aria-current="sidebarActive('bot-runbooks') ? 'page' : undefined" @click="navTo('bot-runbooks')">
           Bot Runbooks
         </button>
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('execution-tagging') }" :aria-current="sidebarActive('execution-tagging') ? 'page' : undefined" @click="navTo('execution-tagging')">
           Execution Tagging
-        </button>
-        <button type="button" class="submenu-item" :class="{ active: sidebarActive('changelog-generator') }" :aria-current="sidebarActive('changelog-generator') ? 'page' : undefined" @click="navTo('changelog-generator')">
-          Changelog Generator
         </button>
 
         <div class="submenu-block-label" aria-hidden="true">Authoring</div>
