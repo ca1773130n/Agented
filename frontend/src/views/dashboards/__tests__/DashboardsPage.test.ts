@@ -20,6 +20,10 @@ function buildRouter() {
       { path: '/dashboards/cost', name: 'dashboards-cost', component: defineComponent({ render: () => h('div', 'cost') }) },
       { path: '/dashboards/health', name: 'dashboards-health', component: defineComponent({ render: () => h('div', 'health') }) },
       { path: '/dashboards/activity', name: 'dashboards-activity', component: defineComponent({ render: () => h('div', 'activity') }) },
+      { path: '/dashboards/products', name: 'products-summary', component: defineComponent({ render: () => h('div', 'products') }) },
+      { path: '/dashboards/projects', name: 'projects-summary', component: defineComponent({ render: () => h('div', 'projects') }) },
+      { path: '/dashboards/teams', name: 'teams-summary', component: defineComponent({ render: () => h('div', 'teams') }) },
+      { path: '/dashboards/agents', name: 'agents-summary', component: defineComponent({ render: () => h('div', 'agents') }) },
     ],
   });
 }
@@ -68,5 +72,20 @@ describe('PR-D DashboardsPage (4-tile lane index)', () => {
     const w = mount(DashboardsPage, { global: { plugins: [router] } });
     await w.find('[data-testid="deep-link-dashboards-health#service-health"]').trigger('click');
     expect(push).toHaveBeenCalledWith({ name: 'dashboards-health', hash: '#service-health' });
+  });
+
+  it('renders 4 org-overview tiles (Products / Projects / Teams / Agents)', () => {
+    const w = mount(DashboardsPage, { global: { plugins: [router] } });
+    const tiles = w.findAll('.org-tile');
+    expect(tiles.length).toBe(4);
+    const labels = tiles.map((t) => t.find('.org-tile__label').text());
+    expect(labels).toEqual(['Products', 'Projects', 'Teams', 'Agents']);
+  });
+
+  it('clicking an org tile navigates to that org-summary route', async () => {
+    const push = vi.spyOn(router, 'push');
+    const w = mount(DashboardsPage, { global: { plugins: [router] } });
+    await w.find('[data-testid="org-tile-teams-summary"]').trigger('click');
+    expect(push).toHaveBeenCalledWith({ name: 'teams-summary' });
   });
 });
