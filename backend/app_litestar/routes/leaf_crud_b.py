@@ -19,6 +19,9 @@ from litestar.params import Parameter
 
 from app.db import integrations as db_integrations
 from app.models.common import PaginationQuery
+# AuditLogService → activity-event log (who did what; /admin/audit-events).
+# AuditService    → security-scan findings (bot-security results; /admin/audit-history).
+# Two services, two domains — see each module's docstring for the boundary.
 from app.services.audit_log_service import AuditLogService
 from app.services.audit_service import AuditService
 from app.services.github_service import GitHubService
