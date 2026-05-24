@@ -86,17 +86,10 @@ def test_set_test_coverage_config_returns_501(isolated_db):
         assert c.post("/admin/bots/test-coverage/config", json={}).status_code == 501
 
 
-# DataRetentionPoliciesPage.vue ---------------------------------------------
-
-
-def test_retention_stub_get_returns_501(isolated_db):
-    with _client(misc_router) as c:
-        assert c.get("/admin/retention").status_code == 501
-
-
-def test_retention_stub_post_returns_501(isolated_db):
-    with _client(misc_router) as c:
-        assert c.post("/admin/retention", json={}).status_code == 501
+# DataRetentionPoliciesPage.vue stubs removed in PR-R (wave 83) — the feature
+# is now a real CRUD at /admin/retention-policies/* (see
+# test_litestar_retention.py). The old /admin/retention 501 path no longer
+# exists.
 
 
 # ExecutionArtifactsPage.vue -------------------------------------------------

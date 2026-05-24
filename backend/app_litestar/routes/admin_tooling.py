@@ -31,12 +31,6 @@ from app.db.gitops import (
     list_sync_logs,
     update_gitops_repo,
 )
-from app.db.retention_policies import (
-    create_policy,
-    delete_policy,
-    list_policies,
-    update_policy_enabled,
-)
 from app.db.system_errors import (
     count_errors_by_status,
     get_system_error_with_fixes,
@@ -53,7 +47,6 @@ from app.db.version_pins import (
 from app.services.error_capture import capture_error
 from app.services.gitops_sync_service import GitOpsSyncService
 from app.services.secret_vault_service import SecretVaultService
-
 
 # ===========================================================================
 # /api/settings/* (6)
@@ -201,7 +194,9 @@ def retry_fix(error_id: str) -> dict[str, Any]:
 def get_logs(lines: int = 200) -> dict[str, Any]:
     log_file = os.path.join(
         os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
-        "data", "logs", "agented.log",
+        "data",
+        "logs",
+        "agented.log",
     )
     if not os.path.exists(log_file):
         return {"lines": []}
@@ -338,9 +333,7 @@ def reveal_secret(secret_id: str) -> dict[str, Any]:
 def update_secret(secret_id: str, data: dict) -> dict[str, Any]:
     _ensure_vault_configured()
     if not data or (data.get("value") is None and data.get("description") is None):
-        raise ClientException(
-            detail="At least one of value or description is required"
-        )
+        raise ClientException(detail="At least one of value or description is required")
     if not SecretVaultService.update_secret(
         secret_id=secret_id,
         value=data.get("value"),
@@ -531,69 +524,6 @@ version_pins_router = Router(
 )
 
 
-# ===========================================================================
-# /admin/retention-policies/* (5)
-# ===========================================================================
-
-
-@get("/", sync_to_thread=False)
-def list_retention_policies() -> dict[str, Any]:
-    return {"policies": list_policies()}
-
-
-@post("/", sync_to_thread=False)
-def create_retention_policy(data: dict) -> Any:
-    if not data:
-        raise ClientException(detail="JSON body required")
-    try:
-        policy_id = create_policy(
-            category=data["category"],
-            scope=data["scope"],
-            scope_name=data.get("scope_name"),
-            retention_days=data["retention_days"],
-            delete_on_expiry=data.get("delete_on_expiry", True),
-            archive_on_expiry=data.get("archive_on_expiry", False),
-            estimated_size_gb=data.get("estimated_size_gb"),
-        )
-    except (KeyError, TypeError, ValueError) as exc:
-        raise ClientException(detail=str(exc)) from None
-    return next(
-        (p for p in list_policies() if p["id"] == policy_id), {"id": policy_id}
-    )
-
-
-@patch("/{policy_id:str}/toggle", sync_to_thread=False)
-def toggle_retention_policy(policy_id: str, data: dict) -> dict[str, Any]:
-    if not data or "enabled" not in data:
-        raise ClientException(detail="enabled is required")
-    if not update_policy_enabled(policy_id, bool(data["enabled"])):
-        raise NotFoundException(
-            detail=f"Retention policy {policy_id} not found"
-        )
-    return {"id": policy_id, "enabled": bool(data["enabled"])}
-
-
-@delete("/{policy_id:str}", status_code=204, sync_to_thread=False)
-def delete_retention_policy(policy_id: str) -> None:
-    if not delete_policy(policy_id):
-        raise NotFoundException(
-            detail=f"Retention policy {policy_id} not found"
-        )
-    return None
-
-
-@post("/cleanup", status_code=202, sync_to_thread=False)
-def run_cleanup() -> dict[str, Any]:
-    return {"message": "Cleanup job queued"}
-
-
-retention_router = Router(
-    path="/admin/retention-policies",
-    route_handlers=[
-        list_retention_policies,
-        create_retention_policy,
-        toggle_retention_policy,
-        delete_retention_policy,
-        run_cleanup,
-    ],
-)
+# /admin/retention-policies/* moved to app_litestar.routes.retention (PR-R,
+# wave 83). Persistence is real, validation lives in
+# ``app.services.retention_service``; destructive enforcement is deferred.

@@ -4,7 +4,6 @@ import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
 import { retentionApi } from '../services/api/retention';
 import type { RetentionPolicy } from '../services/api/retention';
-import NotEnabledBanner from '../components/base/NotEnabledBanner.vue';
 
 const showToast = useToast();
 
@@ -83,8 +82,11 @@ async function deletePolicy(id: string) {
 
 async function runCleanup() {
   try {
-    await retentionApi.runCleanup();
-    showToast('Cleanup job queued — expired data will be removed within 5 minutes', 'success');
+    const res = await retentionApi.runCleanup();
+    // PR-R: enforcement is deferred to a follow-up PR. Surface the
+    // backend's message (which says "queued — enforcement ships next") so
+    // operators aren't surprised when no rows disappear.
+    showToast(res.message ?? 'Cleanup queued', 'success');
   } catch {
     showToast('Failed to queue cleanup job', 'error');
   }
@@ -113,23 +115,19 @@ async function savePolicy() {
   }
 }
 
-// PR-J3: `retentionApi.list/create` paths are not yet wired up server-side.
-// Flipping this constant off (and removing the banner) is what gates the
-// feature when the backend stub ships in PR-J3b.
-const FEATURE_ENABLED = false;
+// PR-R (wave 83): data retention is now a real feature — persistence + CRUD
+// ship at /admin/retention-policies/*. Destructive enforcement (the actual
+// cleanup worker that walks expired rows) is intentionally deferred to a
+// follow-up PR; the "Run Cleanup Now" button acknowledges the request and
+// surfaces a "queued — enforcement coming" toast. The FEATURE_ENABLED const
+// (and the NotEnabledBanner that used to gate the page) is gone — the page
+// is always live.
 
 onMounted(loadPolicies);
 </script>
 
 <template>
   <div class="data-retention">
-
-    <NotEnabledBanner
-      v-if="!FEATURE_ENABLED"
-      feature="Data retention policies"
-      detail="The backend that enforces per-team retention windows has not shipped yet. Creating, editing, or running cleanup is disabled."
-      testid="data-retention-not-enabled"
-    />
 
     <PageHeader
       title="Data Retention Policies"
@@ -138,8 +136,6 @@ onMounted(loadPolicies);
       <template #actions>
         <button
           class="btn btn-secondary"
-          :disabled="!FEATURE_ENABLED"
-          :title="!FEATURE_ENABLED ? 'Data retention policies are not yet enabled' : ''"
           @click="runCleanup"
         >
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-4.5"/></svg>
@@ -147,8 +143,6 @@ onMounted(loadPolicies);
         </button>
         <button
           class="btn btn-primary"
-          :disabled="!FEATURE_ENABLED"
-          :title="!FEATURE_ENABLED ? 'Data retention policies are not yet enabled' : ''"
           @click="showAddModal = true"
         >
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
@@ -219,8 +213,6 @@ onMounted(loadPolicies);
             <button
               class="toggle-btn"
               :class="{ active: policy.enabled }"
-              :disabled="!FEATURE_ENABLED"
-              :title="!FEATURE_ENABLED ? 'Data retention policies are not yet enabled' : ''"
               @click="toggleEnabled(policy)"
             >
               {{ policy.enabled ? 'Active' : 'Off' }}
@@ -229,8 +221,7 @@ onMounted(loadPolicies);
           <div class="actions-cell">
             <button
               class="icon-btn"
-              :disabled="!FEATURE_ENABLED"
-              :title="!FEATURE_ENABLED ? 'Data retention policies are not yet enabled' : 'Remove policy'"
+              title="Remove policy"
               @click="deletePolicy(policy.id)"
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
@@ -293,8 +284,6 @@ onMounted(loadPolicies);
           <button class="btn btn-secondary" @click="showAddModal = false">Cancel</button>
           <button
             class="btn btn-primary"
-            :disabled="!FEATURE_ENABLED"
-            :title="!FEATURE_ENABLED ? 'Data retention policies are not yet enabled in this deployment' : undefined"
             data-testid="data-retention-save-submit"
             @click="savePolicy"
           >Add Policy</button>
