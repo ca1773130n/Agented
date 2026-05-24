@@ -22,13 +22,6 @@ export const triggersExtRoutes: RouteRecordRaw[] = [
     component: () => import('../../views/WebhookPayloadTransformerPage.vue'),
     meta: { title: 'Webhook Payload Transformer' },
   },
-  // Trigger Simulation & Test Harness
-  {
-    path: '/triggers/simulation',
-    name: 'trigger-simulation',
-    component: () => import('../../views/TriggerSimulation.vue'),
-    meta: { title: 'Trigger Simulation' },
-  },
   // Visual Schedule / Cron Wizard
   {
     path: '/scheduling/wizard',
@@ -57,13 +50,6 @@ export const triggersExtRoutes: RouteRecordRaw[] = [
     component: () => import('../../views/MultiProviderFallback.vue'),
     meta: { title: 'Multi-Provider Fallback' },
   },
-  // Dependency-Aware Scheduling (feature 30)
-  {
-    path: '/scheduling/dependency',
-    name: 'dependency-aware-scheduling',
-    component: () => import('../../views/DependencyAwareSchedulingPage.vue'),
-    meta: { title: 'Dependency-Aware Scheduling' },
-  },
   // Smart Schedule Optimizer (feature 37)
   {
     path: '/scheduling/optimizer',
@@ -84,12 +70,5 @@ export const triggersExtRoutes: RouteRecordRaw[] = [
     name: 'alert-grouping',
     component: () => import('../../views/AlertGrouping.vue'),
     meta: { title: 'Alert Grouping' },
-  },
-  // Repository Context Indexing
-  {
-    path: '/bots/repo-context',
-    name: 'repo-context-indexing',
-    component: () => import('../../views/RepoContextIndexingPage.vue'),
-    meta: { title: 'Repository Context Indexing' },
   },
 ];

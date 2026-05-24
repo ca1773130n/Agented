@@ -1,20 +1,6 @@
 import type { RouteRecordRaw } from 'vue-router';
 
 export const infraRoutes: RouteRecordRaw[] = [
-  // Infrastructure-as-Code Export (Feature 30)
-  {
-    path: '/settings/iac-export',
-    name: 'iac-export',
-    component: () => import('../../views/IaCExportPage.vue'),
-    meta: { title: 'IaC Export' },
-  },
-  // Metrics Export to Grafana/Datadog (feature 25)
-  {
-    path: '/settings/metrics-export',
-    name: 'metrics-export',
-    component: () => import('../../views/MetricsExportPage.vue'),
-    meta: { title: 'Metrics Export' },
-  },
   // Plugin SDK & CLI (Feature 18)
   {
     path: '/plugins/sdk',

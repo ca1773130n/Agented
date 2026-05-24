@@ -8,20 +8,6 @@ export const promptRoutes: RouteRecordRaw[] = [
     component: () => import('../../views/StructuredOutputPage.vue'),
     meta: { title: 'Structured Output' },
   },
-  // Prompt Optimizer
-  {
-    path: '/bots/prompt-optimizer',
-    name: 'prompt-optimizer',
-    component: () => import('../../views/PromptOptimizer.vue'),
-    meta: { title: 'Prompt Optimizer' },
-  },
-  // Context Window Visualizer
-  {
-    path: '/bots/context-window',
-    name: 'context-window-visualizer',
-    component: () => import('../../views/ContextWindowVisualizer.vue'),
-    meta: { title: 'Context Window Visualizer' },
-  },
   // Prompt A/B Testing
   {
     path: '/bots/ab-testing',
@@ -49,13 +35,6 @@ export const promptRoutes: RouteRecordRaw[] = [
     name: 'conversation-history-viewer',
     component: () => import('../../views/ConversationHistoryViewer.vue'),
     meta: { title: 'Conversation History' },
-  },
-  // Prompt Template Playground (Feature 2)
-  {
-    path: '/bots/prompt-playground',
-    name: 'prompt-template-playground',
-    component: () => import('../../views/PromptTemplatePlayground.vue'),
-    meta: { title: 'Prompt Template Playground' },
   },
   // Non-English Prompt Localization (Feature 38)
   {
