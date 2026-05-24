@@ -346,6 +346,16 @@ def on_startup(app: Any) -> None:
     except Exception:
         logger.warning("cliproxyapi version check raised", exc_info=True)
     _detect_backends()
+    # Wire WorkflowTriggerService into the execution_events channel —
+    # decouples workflow_execution_service from importing the trigger service
+    # directly (one-way runtime dep instead of two-way).
+    try:
+        from app.services.execution_events import register_completion_handler
+        from app.services.workflow_trigger_service import WorkflowTriggerService
+
+        register_completion_handler(WorkflowTriggerService.on_execution_complete)
+    except Exception:
+        logger.warning("execution_events handler registration failed", exc_info=True)
     # Pass `None` because SchedulerService.init expects a Flask-style object
     # only for testing-mode detection, which doesn't apply when Litestar
     # runs standalone. The service tolerates None via attribute getattr.

@@ -652,21 +652,18 @@ class WorkflowExecutionService:
         final_status = "failed" if workflow_failed else "completed"
         logger.info(f"Workflow execution finished: {execution_id} (status={final_status})")
 
-        # Fire completion triggers (lazy import to avoid circular dependency)
-        try:
-            from .workflow_trigger_service import WorkflowTriggerService
+        # Fire completion via the execution_events channel — handlers are
+        # registered at startup (see app_litestar/lifecycle.py). Per-handler
+        # exceptions are caught + logged inside the channel.
+        from .execution_events import emit_execution_complete
 
-            output_data = None
-            if last_output:
-                try:
-                    output_data = json.loads(last_output)
-                except (json.JSONDecodeError, TypeError):
-                    pass  # Intentionally silenced: malformed data handled gracefully
-            WorkflowTriggerService.on_execution_complete(
-                "workflow", workflow_id, final_status, output=output_data
-            )
-        except Exception as e:
-            logger.error(f"Error firing completion triggers for {execution_id}: {e}", exc_info=True)
+        output_data = None
+        if last_output:
+            try:
+                output_data = json.loads(last_output)
+            except (json.JSONDecodeError, TypeError):
+                pass  # Intentionally silenced: malformed data handled gracefully
+        emit_execution_complete("workflow", workflow_id, final_status, output_data)
 
         cls._schedule_cleanup(execution_id)
 
