@@ -226,6 +226,7 @@ onMounted(loadDigests);
           <button
             class="btn btn-primary btn-sm"
             :disabled="isCreating || !FEATURE_ENABLED"
+            :title="!FEATURE_ENABLED ? 'Digest delivery is not yet enabled in this deployment' : undefined"
             data-testid="digest-create-submit"
             @click="createDigest"
           >
@@ -302,6 +303,7 @@ onMounted(loadDigests);
               <button
                 class="btn btn-primary btn-sm"
                 :disabled="isSaving || !FEATURE_ENABLED"
+                :title="!FEATURE_ENABLED ? 'Digest delivery is not yet enabled in this deployment' : undefined"
                 @click="saveDigest(d)"
               >
                 {{ isSaving ? 'Saving...' : 'Save' }}

@@ -235,6 +235,7 @@ onMounted(loadData);
           <button
             class="btn btn-primary"
             :disabled="isSaving || !FEATURE_ENABLED"
+            :title="!FEATURE_ENABLED ? 'Quota enforcement is not yet enabled in this deployment' : undefined"
             data-testid="quota-create-submit"
             @click="createRule"
           >Create Rule</button>
@@ -321,7 +322,12 @@ onMounted(loadData);
               </div>
             </div>
             <div class="form-actions">
-              <button class="btn btn-primary btn-sm" :disabled="isSaving || !FEATURE_ENABLED" @click="saveRule(rule)">Save Changes</button>
+              <button
+                class="btn btn-primary btn-sm"
+                :disabled="isSaving || !FEATURE_ENABLED"
+                :title="!FEATURE_ENABLED ? 'Quota enforcement is not yet enabled in this deployment' : undefined"
+                @click="saveRule(rule)"
+              >Save Changes</button>
             </div>
           </div>
         </div>
