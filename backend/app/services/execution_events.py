@@ -1,25 +1,22 @@
-"""Execution-completion event channel — decouples execution from trigger.
+"""Session-completion event channel.
 
-Before this module, ``WorkflowExecutionService._run_workflow`` lazy-imported
-``WorkflowTriggerService`` to call ``on_execution_complete``. That created a
-bidirectional runtime dependency: trigger service also imports execution
-service (lazy) to *start* workflows. Codex F7 flagged the cycle.
-
-This module flips the dependency. ``WorkflowExecutionService`` dispatches a
-completion event into this registry; ``WorkflowTriggerService.on_execution_complete``
-is registered as a handler at startup (see ``app_litestar/lifecycle.py``).
-
-The execution side never imports the trigger side. The trigger side still
-imports the execution side (one-way), which is acceptable.
+Originally a workflow-only ``execution_events`` channel; now generalized
+to all session producers (trigger executions, workflow nodes, super-agent
+sessions, project sessions).
 
 Public API:
-    register_completion_handler(callback)  — wire a handler at startup.
-    emit_execution_complete(...)           — call from execution-completion paths.
-    clear_completion_handlers()            — test helper; never call from prod.
+    register_session_handler(callback)      — register at startup
+    emit_session_complete(...)              — call from session-completion paths
+    clear_session_handlers()                — test helper
+
+Compat shims kept for any callers that haven't migrated yet:
+    register_completion_handler  ← register_session_handler
+    emit_execution_complete      ← emit_session_complete (entity_type ↦ session_kind,
+                                                          entity_id ↦ session_id)
 
 Handler signature:
-    def handler(entity_type: str, entity_id: str, status: str,
-                output: dict | None) -> None
+    def handler(session_kind: str, session_id: str, project_id: Optional[str],
+                status: str, output: dict | None) -> None
 """
 
 from __future__ import annotations
@@ -29,21 +26,86 @@ from typing import Callable, Optional
 
 logger = logging.getLogger(__name__)
 
-CompletionCallback = Callable[[str, str, str, Optional[dict]], None]
+# (session_kind, session_id, project_id, status, output) -> None
+SessionCallback = Callable[
+    [str, str, Optional[str], str, Optional[dict]],
+    None,
+]
 
-_handlers: list[CompletionCallback] = []
+_handlers: list[SessionCallback] = []
 
 
-def register_completion_handler(callback: CompletionCallback) -> None:
-    """Register a handler fired on every execution completion event.
+def register_session_handler(callback: SessionCallback) -> None:
+    """Register a handler fired on every session-completion event.
 
-    Idempotent: registering the same callable twice keeps it once. Lifecycle
-    startup may re-register on reload; tests may register handlers and then
-    call ``clear_completion_handlers()``.
+    Idempotent: registering the same callable twice keeps it once.
     """
     if callback in _handlers:
         return
     _handlers.append(callback)
+
+
+def emit_session_complete(
+    session_kind: str,
+    session_id: str,
+    project_id: Optional[str],
+    status: str,
+    output: Optional[dict],
+) -> None:
+    """Fire all registered handlers. Per-handler exceptions are swallowed +
+    logged so one buggy handler can't block another or abort the calling
+    session-completion path."""
+    for handler in list(_handlers):
+        try:
+            handler(session_kind, session_id, project_id, status, output)
+        except Exception:
+            logger.exception(
+                "session_events handler %r raised on %s/%s",
+                handler,
+                session_kind,
+                session_id,
+            )
+
+
+def clear_session_handlers() -> None:
+    """Test-only — wipe all registered handlers."""
+    _handlers.clear()
+
+
+# ---------------------------------------------------------------------------
+# Compat shims for callers that haven't migrated to the session-scoped API
+# ---------------------------------------------------------------------------
+
+# entity_type ↦ session_kind translation. Workflow-side callers pass
+# ``entity_type='workflow'``; we preserve that label.
+_LEGACY_KIND_MAP = {
+    "workflow": "workflow",
+    "trigger": "trigger_execution",
+}
+
+CompletionCallback = Callable[[str, str, str, Optional[dict]], None]
+
+
+def register_completion_handler(callback: CompletionCallback) -> None:
+    """Legacy 4-arg handler signature: ``(entity_type, entity_id, status, output)``.
+
+    Wrapped so it can subscribe to the new 5-arg session channel.
+    """
+    def _shim(session_kind, session_id, project_id, status, output):
+        try:
+            callback(session_kind, session_id, status, output)
+        except Exception:
+            # Keep the "execution_events handler" phrasing so legacy tests
+            # asserting on this log message continue to pass.
+            logger.exception(
+                "execution_events handler %r raised on %s/%s",
+                callback, session_kind, session_id,
+            )
+
+    _shim.__wrapped_target__ = callback  # type: ignore[attr-defined]
+    if any(getattr(h, "__wrapped_target__", None) is callback for h in _handlers):
+        return
+    _handlers.append(_shim)
 
 
 def emit_execution_complete(
@@ -52,22 +114,14 @@ def emit_execution_complete(
     status: str,
     output: Optional[dict],
 ) -> None:
-    """Fire all registered handlers. Per-handler exceptions are swallowed +
-    logged so one buggy handler can't block the completion of another or
-    abort the calling execution path.
-    """
-    for handler in list(_handlers):
-        try:
-            handler(entity_type, entity_id, status, output)
-        except Exception:
-            logger.exception(
-                "execution_events handler %r raised on %s/%s",
-                handler,
-                entity_type,
-                entity_id,
-            )
+    """Legacy emitter. Maps ``entity_type`` to a ``session_kind`` and
+    delegates to ``emit_session_complete``. ``project_id`` is unknown
+    in the legacy contract — handlers either tolerate ``None`` or
+    resolve the project themselves."""
+    session_kind = _LEGACY_KIND_MAP.get(entity_type, entity_type)
+    emit_session_complete(session_kind, entity_id, None, status, output)
 
 
 def clear_completion_handlers() -> None:
-    """Test-only — wipe all registered handlers."""
-    _handlers.clear()
+    """Legacy test-only helper."""
+    clear_session_handlers()

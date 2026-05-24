@@ -84,7 +84,9 @@ describe('HarnessLayerCard', () => {
       by_layer: { h2: 1, h3: 0, h4: 0, general: 0, none: 0, total: 1 },
       recent_failures: [
         {
-          execution_id: 'exec-zzz',
+          session_kind: 'trigger_execution',
+          session_id: 'exec-zzz',
+          project_id: null,
           primary_layer: 'h2',
           incident_count: 3,
           h2_count: 3,

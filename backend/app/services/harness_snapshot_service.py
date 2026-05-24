@@ -1,12 +1,13 @@
-"""Per-execution snapshot of which Forge primitives were active at spawn.
+"""Per-session snapshot of which Forge primitives were active at start.
 
-Capture-only: Forge's own renderer chain owns the actual injection
-(``--append-system-prompt`` for claude, equivalents for the other backends).
-We just record the project's enabled bindings + a deterministic hash so
-T3's evolution loop can attribute trajectories to harness versions and
-compute pre/post-evolution A/B impact.
+Capture-only: Forge's renderer chain owns the actual injection. We record
+the project's enabled bindings + a deterministic hash so the evolver can
+attribute trajectories to harness versions and compute pre/post-evolution
+A/B impact.
 
-Never raises — the spawn path must not be blocked by snapshot bookkeeping.
+Polymorphic — works for any session kind (trigger execution, workflow node,
+super-agent session, project session). Never raises; the spawn/start path
+must not be blocked by snapshot bookkeeping.
 """
 
 from __future__ import annotations
@@ -22,18 +23,16 @@ from app.db.connection import get_connection
 logger = logging.getLogger(__name__)
 
 
-def capture_snapshot_for_execution(
+def capture_snapshot_for_session(
     *,
-    execution_id: str,
-    trigger: dict[str, Any],
+    session_kind: str,
+    session_id: str,
+    project_id: Optional[str],
     harness_kind: str,
 ) -> Optional[dict[str, Any]]:
-    """Record the Forge snapshot for this execution. Returns the saved row,
-    or ``None`` when nothing was captured (lookup error swallowed)."""
+    """Record the Forge snapshot for this session. Returns the saved row
+    or ``None`` when nothing was captured."""
     try:
-        bot_id = trigger.get("id")
-        project_id = _resolve_project_id(trigger)
-
         resolved: list[dict[str, Any]] = []
         bundle_hash: Optional[str] = None
         if project_id:
@@ -58,25 +57,45 @@ def capture_snapshot_for_execution(
                 )
 
         snapshots_repo.upsert_snapshot(
-            execution_id=execution_id,
+            session_kind=session_kind,
+            session_id=session_id,
             project_id=project_id,
-            bot_id=bot_id,
             harness_kind=harness_kind,
             bundle_hash=bundle_hash,
             resolved_bindings=resolved,
         )
-        return snapshots_repo.get_snapshot(execution_id)
+        return snapshots_repo.get_snapshot(session_kind, session_id)
     except Exception:  # noqa: BLE001 — must never raise into the spawn path
         logger.warning(
-            "harness_snapshot: capture failed for execution=%s",
-            execution_id, exc_info=True,
+            "harness_snapshot: capture failed for %s/%s",
+            session_kind, session_id, exc_info=True,
         )
         return None
 
 
-def _resolve_project_id(trigger: dict[str, Any]) -> Optional[str]:
-    """A trigger doesn't directly carry ``project_id``; it joins to projects
-    via ``project_paths``. Pick the first non-NULL ``project_id`` we find."""
+# ---------------------------------------------------------------------------
+# Compat shim for the existing trigger-execution spawn site.
+# ---------------------------------------------------------------------------
+
+def capture_snapshot_for_execution(
+    *,
+    execution_id: str,
+    trigger: dict[str, Any],
+    harness_kind: str,
+) -> Optional[dict[str, Any]]:
+    """Legacy entry point still used from ``ExecutionService.run_trigger``.
+    Resolves the project_id via the project_paths join and delegates to
+    the session-scoped capture."""
+    project_id = _resolve_trigger_project_id(trigger)
+    return capture_snapshot_for_session(
+        session_kind="trigger_execution",
+        session_id=execution_id,
+        project_id=project_id,
+        harness_kind=harness_kind,
+    )
+
+
+def _resolve_trigger_project_id(trigger: dict[str, Any]) -> Optional[str]:
     explicit = trigger.get("project_id")
     if explicit:
         return str(explicit)
@@ -97,9 +116,6 @@ def _resolve_project_id(trigger: dict[str, Any]) -> Optional[str]:
 
 
 def _hash_bindings(bindings: list[dict[str, Any]]) -> str:
-    """Deterministic 16-hex digest over the (kind, asset_id) set. Stable
-    regardless of binding insertion order so the same Forge state hashes
-    the same across runs."""
     payload = json.dumps(
         sorted([(b["kind"], str(b["asset_id"])) for b in bindings]),
         separators=(",", ":"),

@@ -327,6 +327,21 @@ class SuperAgentSessionService:
                 },
             )
 
+            # Life-Harness: emit session-completion event so the annotator
+            # + snapshot service observe super-agent sessions. Best-effort.
+            try:
+                from app.services.execution_events import emit_session_complete
+
+                emit_session_complete(
+                    "super_agent",
+                    session_id,
+                    session.get("project_id"),
+                    "completed",
+                    None,
+                )
+            except Exception:  # noqa: BLE001 — must not block session teardown
+                pass
+
             # Remove from active sessions
             del cls._active_sessions[session_id]
 

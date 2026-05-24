@@ -1,25 +1,22 @@
-"""Life-Harness failure-annotation DDL (T1).
+"""Life-Harness failure-annotation DDL (post-pivot, session-scoped).
 
-Two tables back the four-layer failure observability surface:
+Two tables back the four-layer failure-observability surface across EVERY
+session kind Agented runs (trigger executions, workflow nodes, super-agent
+sessions, project sessions). Layers follow the paper's priority order:
+H2 → H3 → H4 → general (Appendix A.1).
 
-- ``execution_layer_incidents`` — one row per detected interface incident.
-  Layers follow the paper's priority order: H2 (Action Realization), H3
-  (Environment Contract), H4 (Trajectory Regulation), then ``general`` as a
-  catch-all when an execution failed but no layer fired.
-- ``execution_annotations`` — denormalized per-execution roll-up that the
-  Activity-lane execution-inspector tile reads on render. Recomputed by the
-  annotator whenever incidents are (re)written.
+- ``session_layer_incidents`` — one row per detected interface incident.
+  Polymorphic ``(session_kind, session_id)`` identifier so the annotator
+  works against any session producer.
+- ``session_annotations`` — per-session denormalized roll-up consumed by
+  the Activity-lane card and the evolver. ``project_id`` is denormalized
+  here so project-scoped queries don't have to fan out per session kind.
 
-Reference: arXiv 2605.22166 Appendix A.1 (Failure Annotation Protocol).
+Session kinds today: ``trigger_execution``, ``workflow``, ``super_agent``,
+``project_session``. New kinds are added by adding a fetcher in
+``app.services.harness_failure_annotator``.
 
-Register from ``schema/__init__.py``::
-
-    from ._harness_annotations import create_harness_annotation_tables
-    ...
-    create_harness_annotation_tables(conn)
-
-And add a matching ``CREATE TABLE IF NOT EXISTS`` block to the current
-``migrations/v0X_features.py`` so existing installs pick it up.
+Reference: arXiv 2605.22166 Appendix A.1.
 """
 
 from __future__ import annotations
@@ -28,12 +25,14 @@ from __future__ import annotations
 def create_harness_annotation_tables(conn) -> None:
     """Create Life-Harness annotation tables on a fresh DB. Idempotent."""
 
-    # Per-incident detail.
+    # Per-incident detail. Polymorphic session reference.
     conn.execute(
         """
-        CREATE TABLE IF NOT EXISTS execution_layer_incidents (
+        CREATE TABLE IF NOT EXISTS session_layer_incidents (
             id                TEXT    PRIMARY KEY,
-            execution_id      TEXT    NOT NULL,
+            session_kind      TEXT    NOT NULL,
+            session_id        TEXT    NOT NULL,
+            project_id        TEXT,
             layer             TEXT    NOT NULL
                               CHECK (layer IN ('h2', 'h3', 'h4', 'general')),
             priority          INTEGER NOT NULL,
@@ -46,21 +45,25 @@ def create_harness_annotation_tables(conn) -> None:
         """
     )
     conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_eli_execution_id "
-        "ON execution_layer_incidents(execution_id)"
+        "CREATE INDEX IF NOT EXISTS idx_sli_session "
+        "ON session_layer_incidents(session_kind, session_id)"
     )
     conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_eli_layer ON execution_layer_incidents(layer)"
+        "CREATE INDEX IF NOT EXISTS idx_sli_project "
+        "ON session_layer_incidents(project_id, created_at DESC)"
     )
     conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_eli_kind ON execution_layer_incidents(kind)"
+        "CREATE INDEX IF NOT EXISTS idx_sli_layer "
+        "ON session_layer_incidents(layer)"
     )
 
-    # Per-execution roll-up. Recomputed; not append-only.
+    # Per-session roll-up. Recomputed on each annotation pass.
     conn.execute(
         """
-        CREATE TABLE IF NOT EXISTS execution_annotations (
-            execution_id       TEXT PRIMARY KEY,
+        CREATE TABLE IF NOT EXISTS session_annotations (
+            session_kind       TEXT NOT NULL,
+            session_id         TEXT NOT NULL,
+            project_id         TEXT,
             annotator_version  TEXT NOT NULL,
             primary_layer      TEXT
                                CHECK (primary_layer IS NULL OR
@@ -71,11 +74,16 @@ def create_harness_annotation_tables(conn) -> None:
             h4_count           INTEGER NOT NULL DEFAULT 0,
             general_count      INTEGER NOT NULL DEFAULT 0,
             outcome            TEXT,
-            annotated_at       TEXT NOT NULL DEFAULT (datetime('now'))
+            annotated_at       TEXT NOT NULL DEFAULT (datetime('now')),
+            PRIMARY KEY (session_kind, session_id)
         )
         """
     )
     conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_ea_primary_layer "
-        "ON execution_annotations(primary_layer)"
+        "CREATE INDEX IF NOT EXISTS idx_sa_project "
+        "ON session_annotations(project_id, annotated_at DESC)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_sa_primary_layer "
+        "ON session_annotations(primary_layer)"
     )

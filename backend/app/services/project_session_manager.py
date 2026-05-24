@@ -1375,6 +1375,31 @@ class ProjectSessionManager:
             if session_info:
                 session_info.status = status
 
+        # Life-Harness: emit session-completion event so the annotator +
+        # snapshot service observe project sessions. Best-effort.
+        try:
+            from app.services.execution_events import emit_session_complete
+
+            # project_id is on the DB row (project_sessions.project_id NOT NULL);
+            # avoid an extra round-trip by fetching it directly.
+            from app.database import get_connection as _gc
+
+            with _gc() as _conn:
+                _row = _conn.execute(
+                    "SELECT project_id FROM project_sessions WHERE id = ?",
+                    (session_id,),
+                ).fetchone()
+            _project_id = _row["project_id"] if _row else None
+            emit_session_complete(
+                "project_session",
+                session_id,
+                _project_id,
+                status,
+                None,
+            )
+        except Exception:  # noqa: BLE001 — must not block session teardown
+            pass
+
         # Sync GRD .planning/ files to DB on session completion (only for GRD-initialized projects)
         try:
             from .grd_planning_service import GrdPlanningService

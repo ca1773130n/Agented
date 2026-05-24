@@ -125,32 +125,51 @@ def test_annotate_from_text_writes_rollup(annotation_tables):
         {"type": "text", "text": "I'll take_action({a:1})"},
     ]}})
     counts = annotate_from_text(
-        "exec-aaaaaa", stream, backend_type="claude", outcome="failed",
+        "trigger_execution", "exec-aaaaaa", stream,
+        project_id=None, backend_type="claude", outcome="failed",
     )
     assert counts["total"] >= 1
     assert counts["primary_layer"] == "h2"
 
-    summary = repo.get_annotation("exec-aaaaaa")
+    summary = repo.get_annotation("trigger_execution", "exec-aaaaaa")
     assert summary is not None
     assert summary["primary_layer"] == "h2"
     assert summary["h2_count"] >= 1
-    incs = repo.list_incidents("exec-aaaaaa")
+    incs = repo.list_incidents("trigger_execution", "exec-aaaaaa")
     assert all(i["evidence"] for i in incs)
 
 
 def test_annotate_replaces_prior_incidents(annotation_tables):
     annotate_from_text(
-        "exec-bbbbbb",
+        "trigger_execution", "exec-bbbbbb",
         json.dumps({"type": "assistant", "message": {"content": [
             {"type": "text", "text": "answer_action({})"},
         ]}}),
-        backend_type="claude", outcome="failed",
+        project_id=None, backend_type="claude", outcome="failed",
     )
     # Re-annotate with a clean trajectory — prior incidents must be cleared.
     annotate_from_text(
-        "exec-bbbbbb", "", backend_type="claude", outcome="success",
+        "trigger_execution", "exec-bbbbbb", "",
+        project_id=None, backend_type="claude", outcome="success",
     )
-    summary = repo.get_annotation("exec-bbbbbb")
+    summary = repo.get_annotation("trigger_execution", "exec-bbbbbb")
     assert summary["incident_count"] == 0
     assert summary["primary_layer"] is None
-    assert repo.list_incidents("exec-bbbbbb") == []
+    assert repo.list_incidents("trigger_execution", "exec-bbbbbb") == []
+
+
+def test_annotate_propagates_project_id_to_summary(annotation_tables):
+    """Session-scope pivot: project_id is stored on the annotation roll-up
+    so the Activity-lane summary can filter by project."""
+    annotate_from_text(
+        "super_agent", "sa-zzz",
+        json.dumps({"type": "assistant", "message": {"content": [
+            {"type": "text", "text": "take_action({})"},
+        ]}}),
+        project_id="proj-xyz", backend_type="claude", outcome="failed",
+    )
+    summary = repo.get_annotation("super_agent", "sa-zzz")
+    assert summary["project_id"] == "proj-xyz"
+    counts = repo.summary_counts(project_id="proj-xyz")
+    assert counts["h2"] >= 1
+    assert counts["total"] >= 1

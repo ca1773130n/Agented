@@ -30,7 +30,8 @@ H2_STREAM = (
 
 def test_per_execution_annotation_returns_payload(isolated_db):
     annotate_from_text(
-        "exec-aaa", H2_STREAM, backend_type="claude", outcome="failed"
+        "trigger_execution", "exec-aaa", H2_STREAM,
+        project_id=None, backend_type="claude", outcome="failed",
     )
     with _client() as c:
         resp = c.get("/admin/executions/exec-aaa/annotation")
@@ -54,9 +55,12 @@ def test_per_execution_annotation_unannotated_returns_nulls(isolated_db):
 
 def test_summary_aggregates_by_layer(isolated_db):
     # Two H2 failures + one clean run → h2=2, none=1.
-    annotate_from_text("exec-aaa", H2_STREAM, backend_type="claude", outcome="failed")
-    annotate_from_text("exec-bbb", H2_STREAM, backend_type="claude", outcome="failed")
-    annotate_from_text("exec-ccc", "", backend_type="claude", outcome="success")
+    annotate_from_text("trigger_execution", "exec-aaa", H2_STREAM,
+                       project_id=None, backend_type="claude", outcome="failed")
+    annotate_from_text("trigger_execution", "exec-bbb", H2_STREAM,
+                       project_id=None, backend_type="claude", outcome="failed")
+    annotate_from_text("trigger_execution", "exec-ccc", "",
+                       project_id=None, backend_type="claude", outcome="success")
 
     with _client() as c:
         resp = c.get("/admin/executions/annotations/summary?limit=5")
@@ -66,20 +70,22 @@ def test_summary_aggregates_by_layer(isolated_db):
     assert body["by_layer"]["none"] == 1
     assert body["by_layer"]["total"] == 3
     # recent_failures excludes the clean run.
-    ids = [r["execution_id"] for r in body["recent_failures"]]
+    ids = [r["session_id"] for r in body["recent_failures"]]
     assert "exec-ccc" not in ids
     assert set(ids) >= {"exec-aaa", "exec-bbb"}
 
 
 def test_summary_filters_by_primary_layer(isolated_db):
-    annotate_from_text("exec-aaa", H2_STREAM, backend_type="claude", outcome="failed")
+    annotate_from_text("trigger_execution", "exec-aaa", H2_STREAM,
+                       project_id=None, backend_type="claude", outcome="failed")
     # An outcome=failed with NO classifiable trajectory → general bucket.
-    annotate_from_text("exec-bbb", "", backend_type="claude", outcome="failed")
+    annotate_from_text("trigger_execution", "exec-bbb", "",
+                       project_id=None, backend_type="claude", outcome="failed")
 
     with _client() as c:
         resp = c.get(
             "/admin/executions/annotations/summary?primary_layer=h2&limit=5"
         )
     assert resp.status_code == 200
-    ids = [r["execution_id"] for r in resp.json()["recent_failures"]]
+    ids = [r["session_id"] for r in resp.json()["recent_failures"]]
     assert ids == ["exec-aaa"]

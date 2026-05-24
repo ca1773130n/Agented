@@ -13,7 +13,9 @@ import { apiFetch } from './client';
 export type HarnessLayer = 'h2' | 'h3' | 'h4' | 'general';
 
 export interface HarnessAnnotation {
-  execution_id: string;
+  session_kind: string;
+  session_id: string;
+  project_id: string | null;
   annotator_version: string;
   primary_layer: HarnessLayer | null;
   incident_count: number;
@@ -46,7 +48,9 @@ export interface HarnessSummaryByLayer {
 }
 
 export interface HarnessRecentFailure {
-  execution_id: string;
+  session_kind: string;
+  session_id: string;
+  project_id: string | null;
   primary_layer: HarnessLayer;
   incident_count: number;
   h2_count: number;

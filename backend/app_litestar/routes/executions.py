@@ -528,22 +528,26 @@ def get_annotation_summary(
     since: Optional[str] = None,
     limit: int = 10,
     primary_layer: Optional[str] = None,
+    project_id: Optional[str] = None,
 ) -> dict[str, Any]:
     """Aggregate harness-layer counts plus a small ``recent_failures`` list.
 
-    Reads ``execution_annotations`` only — does not join to ``execution_logs``,
-    so it stays cheap to fetch on lane render. Frontend joins client-side if
-    it needs trigger / bot names.
+    Reads ``session_annotations`` (post session-scope pivot). Optional
+    ``project_id`` filter scopes the summary to a single project. Returns
+    sessions across every kind — trigger executions, workflow nodes,
+    super-agent sessions, project sessions.
     """
     from app.db.harness_annotations import recent_with_layer, summary_counts
 
     capped_limit = max(1, min(int(limit or 10), 100))
-    counts = summary_counts(since=since)
+    counts = summary_counts(since=since, project_id=project_id)
     failures = recent_with_layer(
-        since=since, primary_layer=primary_layer, limit=capped_limit
+        since=since, primary_layer=primary_layer,
+        project_id=project_id, limit=capped_limit,
     )
     return {
         "since": since,
+        "project_id": project_id,
         "by_layer": counts,
         "recent_failures": failures,
     }
@@ -551,17 +555,30 @@ def get_annotation_summary(
 
 @get("/executions/{execution_id:str}/annotation", sync_to_thread=False)
 def get_execution_annotation(execution_id: str) -> dict[str, Any]:
-    """Per-execution annotation summary + full incident list.
+    """Per-execution annotation summary + full incident list (legacy alias
+    for ``trigger_execution`` sessions).
 
     Returns ``{"annotation": null, "incidents": []}`` when the execution has
-    not yet been annotated — distinct from "execution does not exist". The
-    caller can show a "Not yet annotated" hint rather than a 404 page.
+    not yet been annotated.
     """
     from app.db.harness_annotations import get_annotation, list_incidents
 
-    annotation = get_annotation(execution_id)
-    incidents = list_incidents(execution_id)
+    annotation = get_annotation("trigger_execution", execution_id)
+    incidents = list_incidents("trigger_execution", execution_id)
     return {"annotation": annotation, "incidents": incidents}
+
+
+@get("/sessions/{session_kind:str}/{session_id:str}/annotation",
+     sync_to_thread=False)
+def get_session_annotation(session_kind: str, session_id: str) -> dict[str, Any]:
+    """Polymorphic session annotation lookup. ``session_kind`` ∈
+    {trigger_execution, workflow, super_agent, project_session}."""
+    from app.db.harness_annotations import get_annotation, list_incidents
+
+    return {
+        "annotation": get_annotation(session_kind, session_id),
+        "incidents": list_incidents(session_kind, session_id),
+    }
 
 
 executions_router = Router(
@@ -590,5 +607,6 @@ executions_router = Router(
         execution_artifacts,
         get_annotation_summary,
         get_execution_annotation,
+        get_session_annotation,
     ],
 )

@@ -356,18 +356,16 @@ def on_startup(app: Any) -> None:
         register_completion_handler(WorkflowTriggerService.on_execution_complete)
     except Exception:
         logger.warning("execution_events handler registration failed", exc_info=True)
-    # Life-Harness T1: failure annotator classifies each completed execution
-    # into the four interface layers (H2/H3/H4/general) so the Activity-lane
-    # execution-inspector tile can colour-code by which layer failed.
-    # Separate try/except so an annotator import failure can't take out the
-    # trigger handler registration above.
+    # Life-Harness: failure annotator classifies EVERY completed session
+    # (trigger executions, workflow nodes, super-agent sessions, project
+    # sessions) into H2/H3/H4/general layers. Subscribes to the
+    # session-scoped event channel so the annotator receives project_id
+    # directly from the emitter.
     try:
-        from app.services.execution_events import register_completion_handler
-        from app.services.harness_failure_annotator import (
-            on_execution_complete as on_complete_annotate,
-        )
+        from app.services.execution_events import register_session_handler
+        from app.services.harness_failure_annotator import on_session_complete
 
-        register_completion_handler(on_complete_annotate)
+        register_session_handler(on_session_complete)
     except Exception:
         logger.warning(
             "harness_failure_annotator registration failed", exc_info=True

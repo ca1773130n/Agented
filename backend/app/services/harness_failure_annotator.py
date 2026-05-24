@@ -1,35 +1,19 @@
-"""Life-Harness failure annotator (T1 stub).
+"""Life-Harness session failure annotator (session-scoped).
 
-Walks a completed execution's harness output and classifies recurring
-interface failures into the four Life-Harness layers:
+Walks any completed session's harness output and classifies recurring
+interface failures into the four Life-Harness layers (H2 → H3 → H4 →
+general) per Appendix A.1.
 
-    H2 — Action Realization       (priority 2, checked first)
-    H3 — Environment Contract     (priority 3)
-    H4 — Trajectory Regulation    (priority 4)
-    general                       (priority 5, residual)
+Works across every session kind via a small per-kind fetcher map: given
+a ``session_id``, the fetcher returns the raw text stream + the harness
+backend type + the project_id. New session producers register by adding
+a fetcher.
 
-Reference: arXiv 2605.22166 Appendix A.1.
+Wiring (lifecycle.py):
 
-Wiring
-------
-At process startup (``app_litestar/lifecycle.py``) add::
-
-    from app.services import execution_events
-    from app.services.harness_failure_annotator import on_execution_complete
-    execution_events.register_completion_handler(on_execution_complete)
-
-That hooks the annotator onto every WorkflowExecutionService completion;
-errors are already swallowed by ``emit_execution_complete``.
-
-Design notes
-------------
-- T1 ships only a Claude-Code JSONL parser. Other harnesses fall through to
-  the regex-only fallback, which can still raise ``general`` when an
-  execution failed and emit ``h2_tool_in_content`` from textual cues.
-- Detectors are intentionally conservative. False positives are worse than
-  false negatives at this stage; we want users to trust the colored tiles.
-- H3 detection is mostly TODO — real H3 needs per-bot tool contracts, which
-  is exactly what T2 ``harness_layers`` will encode.
+    from app.services.execution_events import register_session_handler
+    from app.services.harness_failure_annotator import on_session_complete
+    register_session_handler(on_session_complete)
 """
 
 from __future__ import annotations
@@ -39,22 +23,18 @@ import logging
 import re
 from collections import Counter
 from dataclasses import dataclass, field
-from typing import Any, Iterable, Optional
+from typing import Any, Callable, Optional
 
 from app.db import harness_annotations as repo
 from app.db.connection import get_connection
 
 logger = logging.getLogger(__name__)
 
-ANNOTATOR_VERSION = "0.1.0"
-DETECTOR_VERSION = "0.1.0"
+ANNOTATOR_VERSION = "0.2.0"  # bumped for the session-scope pivot
+DETECTOR_VERSION = "0.2.0"
 
-# Outcome strings (from execution_logs.status) considered failures.
 FAILED_OUTCOMES = frozenset({"failed", "timeout", "interrupted", "cancelled"})
 
-# H2: textual cues that the model wrote a "tool call" in content instead of
-# emitting a real tool_use event. Conservative — only flag when an action-
-# shaped token is the dominant message form.
 _TOOL_IN_CONTENT_RE = re.compile(
     r"\b(take_action|answer_action|submit_answer|finish_task)\s*\(",
     re.IGNORECASE,
@@ -64,18 +44,127 @@ _TOOL_FENCE_RE = re.compile(r"```\s*(tool|tool_call|action)\b", re.IGNORECASE)
 
 @dataclass
 class TurnEvent:
-    """One parsed turn from a harness trajectory.
-
-    Fields are intentionally minimal — what every harness can provide.
-    """
-
+    """One parsed turn from a session trajectory."""
     index: int
-    role: str                       # "assistant" | "tool_result" | "user" | "system"
+    role: str
     content_text: str = ""
     tool_name: Optional[str] = None
     tool_args: Optional[dict] = None
-    tool_error: Optional[str] = None  # tool-result error message, if any
+    tool_error: Optional[str] = None
     raw: dict = field(default_factory=dict)
+
+
+# ---------------------------------------------------------------------------
+# Per-kind fetchers: pull (text, backend_type, project_id, outcome)
+# ---------------------------------------------------------------------------
+
+@dataclass
+class SessionPayload:
+    text: str
+    backend_type: str
+    project_id: Optional[str]
+    outcome: Optional[str]
+
+
+def _fetch_trigger_execution(session_id: str) -> Optional[SessionPayload]:
+    with get_connection() as conn:
+        row = conn.execute(
+            """SELECT e.stdout_log, e.status, e.backend_type, pp.project_id
+               FROM execution_logs e
+               LEFT JOIN project_paths pp ON pp.trigger_id = e.trigger_id
+                   AND pp.project_id IS NOT NULL
+               WHERE e.execution_id = ?
+               ORDER BY pp.id ASC LIMIT 1""",
+            (session_id,),
+        ).fetchone()
+    if not row:
+        return None
+    return SessionPayload(
+        text=row["stdout_log"] or "",
+        backend_type=row["backend_type"] or "",
+        project_id=row["project_id"],
+        outcome=row["status"],
+    )
+
+
+def _fetch_super_agent_session(session_id: str) -> Optional[SessionPayload]:
+    with get_connection() as conn:
+        row = conn.execute(
+            """SELECT conversation_log, status, project_id
+               FROM super_agent_sessions WHERE id = ?""",
+            (session_id,),
+        ).fetchone()
+    if not row:
+        return None
+    return SessionPayload(
+        text=row["conversation_log"] or "",
+        # super-agent sessions go through CLI proxies; treat as claude-flavoured
+        # by default since most super-agents drive Claude Code.
+        backend_type="claude",
+        project_id=row["project_id"],
+        outcome=row["status"],
+    )
+
+
+def _fetch_project_session(session_id: str) -> Optional[SessionPayload]:
+    with get_connection() as conn:
+        row = conn.execute(
+            """SELECT log_json, status, project_id
+               FROM project_sessions WHERE id = ?""",
+            (session_id,),
+        ).fetchone()
+    if not row:
+        return None
+    return SessionPayload(
+        text=row["log_json"] or "",
+        backend_type="claude",
+        project_id=row["project_id"],
+        outcome=row["status"],
+    )
+
+
+def _fetch_workflow(session_id: str) -> Optional[SessionPayload]:
+    """Workflow completion event passes the workflow id. Aggregate node
+    outputs as the trajectory text."""
+    with get_connection() as conn:
+        wf_row = conn.execute(
+            "SELECT status FROM workflow_executions WHERE id = ?",
+            (session_id,),
+        ).fetchone()
+        nodes = conn.execute(
+            """SELECT output_json, error FROM workflow_node_executions
+               WHERE execution_id = ? ORDER BY id ASC""",
+            (session_id,),
+        ).fetchall()
+    if not wf_row and not nodes:
+        return None
+    text_parts = []
+    for n in nodes:
+        if n["output_json"]:
+            text_parts.append(n["output_json"])
+        if n["error"]:
+            text_parts.append(n["error"])
+    return SessionPayload(
+        text="\n".join(text_parts),
+        backend_type="claude",
+        project_id=None,  # workflows don't carry project_id directly
+        outcome=(wf_row["status"] if wf_row else None),
+    )
+
+
+SessionFetcher = Callable[[str], Optional[SessionPayload]]
+
+_FETCHERS: dict[str, SessionFetcher] = {
+    "trigger_execution": _fetch_trigger_execution,
+    "super_agent": _fetch_super_agent_session,
+    "project_session": _fetch_project_session,
+    "workflow": _fetch_workflow,
+}
+
+
+def register_session_fetcher(session_kind: str, fetcher: SessionFetcher) -> None:
+    """Plugin point for new session producers added in the future."""
+    _FETCHERS[session_kind] = fetcher
 
 
 # ---------------------------------------------------------------------------
@@ -83,11 +172,6 @@ class TurnEvent:
 # ---------------------------------------------------------------------------
 
 def parse_claude_stream(stdout: str) -> list[TurnEvent]:
-    """Best-effort parse of Claude Code's ``--output-format stream-json``.
-
-    Lines that are not JSON or do not look like Claude events are skipped
-    silently. Never raises.
-    """
     events: list[TurnEvent] = []
     idx = 0
     for line in (stdout or "").splitlines():
@@ -130,7 +214,6 @@ def parse_claude_stream(stdout: str) -> list[TurnEvent]:
                                   tool_error=err, raw=block)
                     )
                     idx += 1
-        # other types (system, result) are not turn-shaped; ignore.
     return events
 
 
@@ -142,7 +225,6 @@ def _stringify(value: Any) -> str:
     if isinstance(value, list):
         return "\n".join(_stringify(v) for v in value)
     if isinstance(value, dict):
-        # Anthropic content blocks carry text under "text"
         if "text" in value:
             return str(value["text"])
         try:
@@ -153,11 +235,10 @@ def _stringify(value: Any) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Detectors — return iterable of incident dicts
+# Detectors
 # ---------------------------------------------------------------------------
 
 def detect_h2(events: list[TurnEvent]) -> list[dict]:
-    """Action Realization — pre-execution interface errors."""
     incidents: list[dict] = []
     for ev in events:
         if ev.role == "assistant" and ev.tool_name is None and ev.content_text:
@@ -185,10 +266,6 @@ def detect_h2(events: list[TurnEvent]) -> list[dict]:
 
 
 def detect_h3(events: list[TurnEvent]) -> list[dict]:
-    """Environment Contract — TODO: real H3 needs bot-level tool contracts
-    (the T2 ``harness_layers`` IR). For T1 we only flag the most universal
-    cue: a tool_result that says the parameter or tool semantic is wrong
-    even though the call was syntactically accepted."""
     incidents: list[dict] = []
     for ev in events:
         if ev.role == "tool_result" and ev.tool_error:
@@ -205,10 +282,8 @@ def detect_h3(events: list[TurnEvent]) -> list[dict]:
 
 
 def detect_h4(events: list[TurnEvent], *, outcome: Optional[str]) -> list[dict]:
-    """Trajectory Regulation — repetition, stagnation, budget exhaustion."""
     incidents: list[dict] = []
 
-    # Repeated identical tool calls (same name + same args) ≥3 times.
     sig_counts: Counter = Counter()
     sig_first: dict[tuple, int] = {}
     for ev in events:
@@ -225,7 +300,6 @@ def detect_h4(events: list[TurnEvent], *, outcome: Optional[str]) -> list[dict]:
                 "evidence": {"tool": sig[0], "count": count},
             })
 
-    # Stagnation: ≥5 consecutive assistant turns with no tool_use.
     streak = 0
     streak_start: Optional[int] = None
     for ev in events:
@@ -245,7 +319,6 @@ def detect_h4(events: list[TurnEvent], *, outcome: Optional[str]) -> list[dict]:
                 streak = 0
                 streak_start = None
 
-    # Budget exhaustion via outcome.
     if outcome == "timeout":
         incidents.append({
             "layer": "h4",
@@ -262,8 +335,6 @@ def _apply_priority_protocol(
     *,
     outcome: Optional[str],
 ) -> list[dict]:
-    """Run detectors in paper-priority order; once a turn is claimed by a
-    higher-priority layer it cannot also raise a lower-priority incident."""
     claimed: set[int] = set()
     out: list[dict] = []
 
@@ -287,8 +358,6 @@ def _apply_priority_protocol(
             continue
         out.append(incident)
 
-    # Residual general bucket: only when the execution failed AND nothing else
-    # fired. Mirrors the paper's "remaining general reasoning failures".
     if not out and outcome in FAILED_OUTCOMES:
         out.append({
             "layer": "general",
@@ -305,66 +374,89 @@ def _apply_priority_protocol(
 # ---------------------------------------------------------------------------
 
 def annotate_from_text(
-    execution_id: str,
-    stdout: str,
+    session_kind: str,
+    session_id: str,
+    text: str,
     *,
+    project_id: Optional[str],
     backend_type: str,
     outcome: Optional[str],
 ) -> dict[str, int]:
-    """Parse → detect → persist. Returns the counts roll-up."""
+    """Parse → detect → persist. Pure on text input."""
     if backend_type == "claude":
-        events = parse_claude_stream(stdout)
+        events = parse_claude_stream(text)
     else:
-        # TODO(t1): parsers for codex / opencode / gemini. Until then we still
-        # store a `general` bucket if the run failed, so the lane stays useful.
         events = []
     incidents = _apply_priority_protocol(events, outcome=outcome)
     return repo.replace_incidents(
-        execution_id,
-        incidents,
+        session_kind, session_id, incidents,
+        project_id=project_id,
         detector_version=DETECTOR_VERSION,
         annotator_version=ANNOTATOR_VERSION,
         outcome=outcome,
     )
 
 
-def annotate_execution(execution_id: str) -> Optional[dict[str, int]]:
-    """Look up an execution by its string ID and annotate it. Returns None
-    if the execution row is missing. Best-effort: logs but never raises."""
-    try:
-        with get_connection() as conn:
-            row = conn.execute(
-                """SELECT execution_id, status, backend_type, stdout_log
-                   FROM execution_logs
-                   WHERE execution_id = ?""",
-                (execution_id,),
-            ).fetchone()
-    except Exception as exc:  # noqa: BLE001 — repo failure must not block caller
-        logger.warning("annotate_execution lookup failed for %s: %s",
-                       execution_id, exc)
-        return None
-    if not row:
+def annotate_session(
+    session_kind: str,
+    session_id: str,
+    *,
+    project_id: Optional[str] = None,
+) -> Optional[dict[str, int]]:
+    """Look up + annotate one session via its registered fetcher. Returns
+    ``None`` if the session is unknown or the kind has no fetcher. Never
+    raises — best-effort observability."""
+    fetcher = _FETCHERS.get(session_kind)
+    if fetcher is None:
+        logger.debug("annotate_session: no fetcher for %s", session_kind)
         return None
     try:
-        return annotate_from_text(
-            row["execution_id"],
-            row["stdout_log"] or "",
-            backend_type=row["backend_type"] or "",
-            outcome=row["status"],
+        payload = fetcher(session_id)
+    except Exception:
+        logger.warning(
+            "annotate_session: fetcher for %s/%s raised",
+            session_kind, session_id, exc_info=True,
         )
-    except Exception as exc:  # noqa: BLE001 — never break execution completion
-        logger.warning("annotator failed for %s: %s", execution_id, exc)
         return None
+    if payload is None:
+        return None
+    return annotate_from_text(
+        session_kind, session_id, payload.text,
+        project_id=project_id or payload.project_id,
+        backend_type=payload.backend_type,
+        outcome=payload.outcome,
+    )
 
 
-# Completion-handler signature: (entity_type, entity_id, status, output).
-# Registered from lifecycle.py via execution_events.register_completion_handler.
-def on_execution_complete(
-    entity_type: str,
-    entity_id: str,
+def on_session_complete(
+    session_kind: str,
+    session_id: str,
+    project_id: Optional[str],
     status: str,
     output: Optional[dict],
 ) -> None:
-    if entity_type != "workflow":
-        return  # only workflow executions land in execution_logs today
-    annotate_execution(entity_id)
+    """Handler for ``execution_events.register_session_handler``.
+
+    Fires after any session producer completes; routes to the right fetcher
+    and persists annotations. Per-kind fetchers may resolve project_id
+    themselves when the emitter didn't know it (e.g., a trigger-execution
+    emitter that doesn't join project_paths)."""
+    annotate_session(session_kind, session_id, project_id=project_id)
+
+
+# ---------------------------------------------------------------------------
+# Legacy entry point retained for any code path still calling the old API
+# ---------------------------------------------------------------------------
+
+def annotate_execution(execution_id: str) -> Optional[dict[str, int]]:
+    """Compat: triggered against an execution_logs row by execution_id."""
+    return annotate_session("trigger_execution", execution_id)
+
+
+def on_execution_complete(
+    entity_type: str, entity_id: str, status: str, output: Optional[dict],
+) -> None:
+    """Compat for the 4-arg legacy handler signature. Maps entity_type to
+    a session_kind (workflow → workflow; trigger → trigger_execution)."""
+    session_kind = "workflow" if entity_type == "workflow" else entity_type
+    annotate_session(session_kind, entity_id)

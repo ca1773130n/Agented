@@ -308,11 +308,13 @@ def gather_inputs(
 
     trajectories = []
     for snap in snapshots:
-        exec_id = snap["execution_id"]
-        annotation = annotations_repo.get_annotation(exec_id)
-        incidents = annotations_repo.list_incidents(exec_id)
+        session_kind = snap.get("session_kind") or "trigger_execution"
+        session_id = snap["session_id"]
+        annotation = annotations_repo.get_annotation(session_kind, session_id)
+        incidents = annotations_repo.list_incidents(session_kind, session_id)
         trajectories.append({
-            "execution_id": exec_id,
+            "session_kind": session_kind,
+            "session_id": session_id,
             "bundle_hash": snap.get("bundle_hash"),
             "active_bindings": snap.get("resolved_bindings") or [],
             "outcome": (annotation or {}).get("outcome"),

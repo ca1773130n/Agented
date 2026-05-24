@@ -735,6 +735,38 @@ class ExecutionService:
             # Remove from ProcessManager tracking
             if execution_id:
                 ProcessManager.cleanup(execution_id)
+            # Life-Harness: emit session-completion event for this trigger
+            # execution so the annotator + evolver observe it. Best-effort;
+            # session_id is the execution_id, project_id resolved via
+            # project_paths join inside the handler if not passed here.
+            if execution_id:
+                try:
+                    from app.services.execution_events import emit_session_complete
+                    from app.services.harness_snapshot_service import (
+                        _resolve_trigger_project_id,
+                    )
+
+                    _final_status = "completed"
+                    try:
+                        from app.database import get_execution_log
+
+                        _row = get_execution_log(execution_id)
+                        if _row:
+                            _final_status = _row.get("status") or "completed"
+                    except Exception:
+                        pass
+                    emit_session_complete(
+                        "trigger_execution",
+                        execution_id,
+                        _resolve_trigger_project_id(trigger or {}),
+                        _final_status,
+                        None,
+                    )
+                except Exception:
+                    logger.debug(
+                        "session_events emit failed for %s",
+                        execution_id, exc_info=True,
+                    )
 
         return execution_id
 

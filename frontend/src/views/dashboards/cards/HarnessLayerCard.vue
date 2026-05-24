@@ -94,7 +94,7 @@ onMounted(loadData);
         <ul class="recent__list">
           <li
             v-for="row in summary.recent_failures"
-            :key="row.execution_id"
+            :key="row.session_id"
             class="recent__row"
           >
             <span
@@ -103,7 +103,7 @@ onMounted(loadData);
             >
               {{ row.primary_layer.toUpperCase() }}
             </span>
-            <code class="recent__id">{{ row.execution_id }}</code>
+            <code class="recent__id">{{ row.session_id }}</code>
             <span class="recent__count">
               {{ row.incident_count }}
               {{ row.incident_count === 1 ? 'incident' : 'incidents' }}

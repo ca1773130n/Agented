@@ -584,6 +584,85 @@ def _migrate_130_project_sessions_super_agent_link(conn) -> None:
     )
 
 
+def _migrate_138_session_scope_pivot(conn):
+    """Life-Harness session-scope pivot: generalize from trigger-execution
+    observation to ALL session producers (super-agent, project session,
+    workflow node, trigger execution).
+
+    Renames + reshapes three tables:
+        execution_layer_incidents  → session_layer_incidents
+        execution_annotations      → session_annotations
+        execution_harness_snapshots → session_harness_snapshots
+
+    Each gains a polymorphic ``(session_kind, session_id)`` identifier
+    and a denormalized ``project_id`` column. Existing rows backfill as
+    ``session_kind='trigger_execution'`` with ``session_id`` = the old
+    ``execution_id``.
+
+    Idempotent against fresh installs: if the old tables don't exist,
+    just create the new ones directly via the bundle.
+    """
+    from app.db.schema._harness_annotations import (
+        create_harness_annotation_tables,
+    )
+    from app.db.schema._harness_snapshots import (
+        create_harness_snapshot_tables,
+    )
+
+    # ── execution_layer_incidents → session_layer_incidents ────────────
+    old_exists = _column_exists(conn, "execution_layer_incidents", "execution_id")
+    new_exists = _column_exists(conn, "session_layer_incidents", "session_id")
+    if old_exists and not new_exists:
+        create_harness_annotation_tables(conn)
+        conn.execute(
+            """INSERT INTO session_layer_incidents
+                   (id, session_kind, session_id, project_id, layer, priority,
+                    kind, evidence_json, event_index, detector_version, created_at)
+               SELECT id, 'trigger_execution', execution_id, NULL, layer, priority,
+                      kind, evidence_json, event_index, detector_version, created_at
+               FROM execution_layer_incidents"""
+        )
+        conn.execute("DROP TABLE execution_layer_incidents")
+    elif not new_exists:
+        create_harness_annotation_tables(conn)
+
+    # ── execution_annotations → session_annotations ────────────────────
+    old_exists = _column_exists(conn, "execution_annotations", "execution_id")
+    new_exists = _column_exists(conn, "session_annotations", "session_id")
+    if old_exists and not new_exists:
+        create_harness_annotation_tables(conn)  # idempotent
+        conn.execute(
+            """INSERT INTO session_annotations
+                   (session_kind, session_id, project_id, annotator_version,
+                    primary_layer, incident_count, h2_count, h3_count, h4_count,
+                    general_count, outcome, annotated_at)
+               SELECT 'trigger_execution', execution_id, NULL, annotator_version,
+                      primary_layer, incident_count, h2_count, h3_count, h4_count,
+                      general_count, outcome, annotated_at
+               FROM execution_annotations"""
+        )
+        conn.execute("DROP TABLE execution_annotations")
+    elif not new_exists:
+        create_harness_annotation_tables(conn)
+
+    # ── execution_harness_snapshots → session_harness_snapshots ────────
+    old_exists = _column_exists(conn, "execution_harness_snapshots", "execution_id")
+    new_exists = _column_exists(conn, "session_harness_snapshots", "session_id")
+    if old_exists and not new_exists:
+        create_harness_snapshot_tables(conn)
+        conn.execute(
+            """INSERT INTO session_harness_snapshots
+                   (session_kind, session_id, project_id, harness_kind,
+                    bundle_hash, resolved_bindings_json, created_at)
+               SELECT 'trigger_execution', execution_id, project_id, harness_kind,
+                      bundle_hash, resolved_bindings_json, created_at
+               FROM execution_harness_snapshots"""
+        )
+        conn.execute("DROP TABLE execution_harness_snapshots")
+    elif not new_exists:
+        create_harness_snapshot_tables(conn)
+
+
 def _migrate_137_harness_forge_pivot(conn):
     """Life-Harness pivot: drop the parallel ``harness_layers`` /
     ``harness_skill_index`` tables (Forge already owns rules/skills/hooks/
@@ -871,4 +950,7 @@ V07_MIGRATIONS: list = [
     (136, "harness_skill_index", _migrate_136_harness_skill_index),
     # Life-Harness Forge pivot: drop parallel IR; project-scope evolution.
     (137, "harness_forge_pivot", _migrate_137_harness_forge_pivot),
+    # Life-Harness session-scope pivot: generalize observation from
+    # trigger-executions-only to all session producers.
+    (138, "session_scope_pivot", _migrate_138_session_scope_pivot),
 ]

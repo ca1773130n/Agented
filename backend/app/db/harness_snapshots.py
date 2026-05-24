@@ -1,9 +1,9 @@
-"""Repository helpers for per-execution harness snapshots.
+"""Repository helpers for per-session Forge snapshots.
 
-Records which Forge primitives were active for an execution: a hash of the
-rendered ``ContextBundle`` plus the ``(kind, asset_id)`` pairs that fed
-into it. T3's evolution loop joins on ``project_id`` + this table +
-``execution_annotations`` to compute pre/post-evolution impact deltas.
+Polymorphic ``(session_kind, session_id)`` identifier so the same table
+captures trigger executions, workflow nodes, super-agent sessions, and
+project sessions. T3's evolution loop joins on ``project_id`` so the
+window queries are project-scoped regardless of session kind.
 """
 
 from __future__ import annotations
@@ -16,30 +16,29 @@ from .connection import get_connection
 
 def upsert_snapshot(
     *,
-    execution_id: str,
+    session_kind: str,
+    session_id: str,
     project_id: Optional[str],
-    bot_id: Optional[str],
     harness_kind: str,
     bundle_hash: Optional[str],
     resolved_bindings: list[dict[str, Any]],
 ) -> None:
-    """Record (or replace) the Forge snapshot for this execution."""
+    """Record (or replace) the Forge snapshot for this session."""
     with get_connection() as conn:
         conn.execute(
-            """INSERT INTO execution_harness_snapshots
-                   (execution_id, project_id, bot_id, harness_kind,
+            """INSERT INTO session_harness_snapshots
+                   (session_kind, session_id, project_id, harness_kind,
                     bundle_hash, resolved_bindings_json)
                VALUES (?, ?, ?, ?, ?, ?)
-               ON CONFLICT(execution_id) DO UPDATE SET
+               ON CONFLICT(session_kind, session_id) DO UPDATE SET
                    project_id              = excluded.project_id,
-                   bot_id                  = excluded.bot_id,
                    harness_kind            = excluded.harness_kind,
                    bundle_hash             = excluded.bundle_hash,
                    resolved_bindings_json  = excluded.resolved_bindings_json""",
             (
-                execution_id,
+                session_kind,
+                session_id,
                 project_id,
-                bot_id,
                 harness_kind,
                 bundle_hash,
                 json.dumps(resolved_bindings, default=str),
@@ -48,11 +47,12 @@ def upsert_snapshot(
         conn.commit()
 
 
-def get_snapshot(execution_id: str) -> Optional[dict]:
+def get_snapshot(session_kind: str, session_id: str) -> Optional[dict]:
     with get_connection() as conn:
         row = conn.execute(
-            "SELECT * FROM execution_harness_snapshots WHERE execution_id = ?",
-            (execution_id,),
+            "SELECT * FROM session_harness_snapshots "
+            "WHERE session_kind = ? AND session_id = ?",
+            (session_kind, session_id),
         ).fetchone()
     if row is None:
         return None
@@ -67,10 +67,10 @@ def list_for_project(
     after_ts: Optional[str] = None,
     limit: int = 50,
 ) -> list[dict]:
-    """Project-scoped snapshot listing, newest first. Used by T3's impact
-    eval to gather windows before / after an evolution round."""
+    """Project-scoped snapshot listing, newest first. The evolver windows
+    snapshots before / after an applied round to compute impact deltas."""
     sql = [
-        "SELECT * FROM execution_harness_snapshots WHERE project_id = ?",
+        "SELECT * FROM session_harness_snapshots WHERE project_id = ?",
     ]
     params: list[Any] = [project_id]
     if bundle_hash is not None:

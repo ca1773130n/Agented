@@ -62,10 +62,12 @@ def _gather_window(project_id, *, before_ts=None, after_ts=None, limit=20):
     )
     enriched = []
     for snap in snaps:
-        exec_id = snap["execution_id"]
+        session_kind = snap.get("session_kind") or "trigger_execution"
+        session_id = snap["session_id"]
         enriched.append({
-            "execution_id": exec_id,
-            "annotation": annotations_repo.get_annotation(exec_id),
+            "session_kind": session_kind,
+            "session_id": session_id,
+            "annotation": annotations_repo.get_annotation(session_kind, session_id),
             "snapshot_at": snap["created_at"],
             "bundle_hash": snap.get("bundle_hash"),
         })
