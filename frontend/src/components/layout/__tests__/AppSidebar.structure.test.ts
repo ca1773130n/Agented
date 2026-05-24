@@ -77,19 +77,14 @@ function buildRouter(): Router {
     'bot-dependency-graph', 'bot-performance-benchmarks', 'bot-runbooks',
     'execution-tagging', 'changelog-generator', 'prompt-snippets',
     // PR-J2 — KEEP+WIRE routes wired into the sidebar.
-    // Forge group flat links + Plugins child.
-    'agent-skill-discovery', 'gitops-sync', 'plugin-sdk',
-    'repo-bot-defaults', 'auto-context-injection',
-    // Work group: Agent Memory parent + 5 flat links (project-instance-
-    // playground stays a contextual deep-link reached from project rows).
-    'agent-memory', 'agent-quality-scoring', 'bot-memory-store',
-    'github-pr-annotation', 'human-approval-gates',
-    'multi-agent-collaboration',
-    // Triggers submenu additions.
+    // Plugins child (PR-K kept Plugin SDK only).
+    'plugin-sdk',
+    // Triggers submenu additions (PR-K kept these — low marginal cost
+    // inside the existing busy submenu).
     'bot-dry-run', 'bot-output-piping', 'bot-output-webhook-forwarding',
     'nl-trigger-rule-editor', 'webhook-payload-transformer',
-    // System / Analytics group.
-    'ai-cost-dashboard', 'alert-grouping', 'provider-benchmark-dashboard',
+    // System / Analytics group (PR-K dropped alert-grouping).
+    'ai-cost-dashboard', 'provider-benchmark-dashboard',
     'traces-list',
     // External integrations
     'slack-notifications', 'integration-ticketing', 'notification-channels',
@@ -468,7 +463,10 @@ describe('AppSidebar — PR-B structure', () => {
     }
   });
 
-  // ─── PR-J2 — KEEP+WIRE bucket: 16 dark routes wired into the sidebar ───
+  // ─── PR-J2 (post-PR-K revert) — KEEP+WIRE bucket: kept Plugin SDK,
+  //     5 Triggers additions, and 3 Analytics dashboards. The 10 bad
+  //     IA additions (5 Work flat links + Agent Memory + 4 Forge flat
+  //     links + Alert Grouping) were reverted in PR-K. ───
 
   it('PR-J2: Plugins submenu includes "Plugin SDK"', () => {
     const texts = submenuItems(wrapper, 'Plugins').map(
@@ -490,44 +488,35 @@ describe('AppSidebar — PR-B structure', () => {
     expect(texts).toContain('Webhook Forwarding');
   });
 
-  it('PR-J2: Forge group has 4 new flat links (Skill Discovery, GitOps Sync, Repo Bot Defaults, Context Injection)', () => {
+  it('PR-K: Forge group does NOT contain the 4 PR-J2 flat links (reverted — daily-operator test failed)', () => {
     const allButtons = Array.from(
       rootEl(wrapper).querySelectorAll<HTMLElement>('button'),
     );
     const labels = allButtons
       .map((b) => b.querySelector<HTMLElement>('.nav-text')?.textContent?.trim() ?? '')
       .filter(Boolean);
-    expect(labels).toContain('Skill Discovery');
-    expect(labels).toContain('GitOps Sync');
-    expect(labels).toContain('Repo Bot Defaults');
-    expect(labels).toContain('Context Injection');
+    expect(labels).not.toContain('Skill Discovery');
+    expect(labels).not.toContain('GitOps Sync');
+    expect(labels).not.toContain('Repo Bot Defaults');
+    expect(labels).not.toContain('Context Injection');
   });
 
-  it('PR-J2: Work group has Agent Memory expandable + 5 new flat links', () => {
+  it('PR-K: Work group does NOT contain Agent Memory or the 5 PR-J2 flat links (reverted)', () => {
     const allButtons = Array.from(
       rootEl(wrapper).querySelectorAll<HTMLElement>('button'),
     );
     const labels = allButtons
       .map((b) => b.querySelector<HTMLElement>('.nav-text')?.textContent?.trim() ?? '')
       .filter(Boolean);
-    // Agent Memory is an expandable group toggle.
-    expect(labels).toContain('Agent Memory');
-    // The 5 flat-link additions.
-    expect(labels).toContain('Quality Scoring');
-    expect(labels).toContain('Bot Memory Store');
-    expect(labels).toContain('PR Annotation');
-    expect(labels).toContain('Approval Gates');
-    expect(labels).toContain('Multi-Agent Collab');
+    expect(labels).not.toContain('Agent Memory');
+    expect(labels).not.toContain('Quality Scoring');
+    expect(labels).not.toContain('Bot Memory Store');
+    expect(labels).not.toContain('PR Annotation');
+    expect(labels).not.toContain('Approval Gates');
+    expect(labels).not.toContain('Multi-Agent Collab');
   });
 
-  it('PR-J2: Agent Memory submenu contains the parent route', () => {
-    const texts = submenuItems(wrapper, 'Agent Memory').map(
-      (b) => b.textContent?.trim().replace(/\s+/g, ' ') ?? '',
-    );
-    expect(texts).toContain('Memory Threads');
-  });
-
-  it('PR-J2: Analytics expandable exists under System with the 4 KEEP+WIRE dashboards', () => {
+  it('PR-K: Analytics expandable contains the 3 kept KEEP+WIRE dashboards (Alert Grouping removed)', () => {
     const region = submenuOf(wrapper, 'Analytics');
     expect(region).not.toBeNull();
     const texts = submenuItems(wrapper, 'Analytics').map(
@@ -536,7 +525,6 @@ describe('AppSidebar — PR-B structure', () => {
     expect(texts).toEqual([
       'AI Cost',
       'Provider Benchmarks',
-      'Alert Grouping',
       'Traces',
     ]);
   });

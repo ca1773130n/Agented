@@ -66,8 +66,6 @@ const expandedSections = ref<Record<string, boolean>>({
   triggers: false,
   externalIntegrations: false,
   platform: false,
-  // PR-J2 — Work group expandables for newly-wired KEEP+WIRE routes.
-  agentMemory: false,
   // PR-J2 — System analytics dashboards group.
   analytics: false,
 });
@@ -131,13 +129,8 @@ function autoExpandForRoute() {
   if (['triggers', 'bot-templates', 'bot-clone-fork', 'cross-team-bot-sharing', 'incident-response-playbooks', 'inline-prompt-editor', 'visual-cron-wizard', 'conditional-trigger-rules', 'repo-scope-filters', 'structured-output', 'prompt-ab-testing', 'multi-provider-fallback', 'multi-repo-fan-out', 'pr-auto-assignment', 'pr-review-learning-loop', 'github-actions', 'webhook-recorder', 'dependency-impact-bot', 'bot-recommendation-engine', 'bot-dependency-graph', 'bot-performance-benchmarks', 'bot-runbooks', 'execution-tagging', 'changelog-generator', 'prompt-snippets', 'bot-dry-run', 'bot-output-piping', 'bot-output-webhook-forwarding', 'nl-trigger-rule-editor', 'webhook-payload-transformer'].includes(name)) {
     expandedSections.value.triggers = true;
   }
-  // PR-J2 — Agent Memory parent + thread detail keep the Work
-  // "Agent Memory" expandable open.
-  if (['agent-memory', 'agent-memory-thread-detail'].includes(name)) {
-    expandedSections.value.agentMemory = true;
-  }
   // PR-J2 — Analytics dashboards (System).
-  if (['ai-cost-dashboard', 'alert-grouping', 'provider-benchmark-dashboard', 'traces-list', 'trace-detail'].includes(name)) {
+  if (['ai-cost-dashboard', 'provider-benchmark-dashboard', 'traces-list', 'trace-detail'].includes(name)) {
     expandedSections.value.analytics = true;
   }
   if (['slack-notifications', 'integration-ticketing', 'notification-channels', 'github-app-install'].includes(name)) {
@@ -244,16 +237,9 @@ function isTriggersSectionActive(): boolean {
   return ['triggers', 'bot-templates', 'bot-clone-fork', 'cross-team-bot-sharing', 'incident-response-playbooks', 'inline-prompt-editor', 'visual-cron-wizard', 'conditional-trigger-rules', 'repo-scope-filters', 'structured-output', 'prompt-ab-testing', 'multi-provider-fallback', 'multi-repo-fan-out', 'pr-auto-assignment', 'pr-review-learning-loop', 'github-actions', 'webhook-recorder', 'dependency-impact-bot', 'bot-recommendation-engine', 'bot-dependency-graph', 'bot-performance-benchmarks', 'bot-runbooks', 'execution-tagging', 'changelog-generator', 'prompt-snippets', 'bot-dry-run', 'bot-output-piping', 'bot-output-webhook-forwarding', 'nl-trigger-rule-editor', 'webhook-payload-transformer'].includes(currentRouteName.value);
 }
 
-// PR-J2 — Agent Memory parent (Work group). agent-memory-thread-detail
-// is a deep-link reached from MemoryPage rows but still keeps the
-// parent highlighted while the user is on the detail page.
-function isAgentMemorySectionActive(): boolean {
-  return ['agent-memory', 'agent-memory-thread-detail'].includes(currentRouteName.value);
-}
-
 // PR-J2 — Analytics dashboards group under System.
 function isAnalyticsSectionActive(): boolean {
-  return ['ai-cost-dashboard', 'alert-grouping', 'provider-benchmark-dashboard', 'traces-list', 'trace-detail'].includes(currentRouteName.value);
+  return ['ai-cost-dashboard', 'provider-benchmark-dashboard', 'traces-list', 'trace-detail'].includes(currentRouteName.value);
 }
 
 function isExternalIntegrationsSectionActive(): boolean {
@@ -669,105 +655,6 @@ function handleSidebarKeydown(e: KeyboardEvent) {
         </button>
       </div>
 
-      <!-- PR-J2 — Agent Memory (expandable, Work group). Parent
-           `agent-memory` is the MemoryPage; the thread-detail deep-link
-           is reached by clicking a thread row, no sidebar entry. -->
-      <SidebarGroupToggle
-        label="Agent Memory"
-        :expanded="expandedSections.agentMemory"
-        :active="isAgentMemorySectionActive()"
-        :collapsed-desktop="isCollapsedDesktop()"
-        @toggle="toggleSection('agentMemory')"
-      >
-        <template #icon>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-            <path d="M12 2a4 4 0 014 4v1a3 3 0 013 3v6a3 3 0 01-3 3h-8a3 3 0 01-3-3v-6a3 3 0 013-3V6a4 4 0 014-4z"/>
-            <path d="M9 12h6M9 16h4"/>
-          </svg>
-        </template>
-      </SidebarGroupToggle>
-      <div v-show="expandedSections.agentMemory" class="nav-submenu" role="region" aria-label="Agent Memory">
-        <button type="button" class="submenu-item" :class="{ active: sidebarActive('agent-memory') }" :aria-current="sidebarActive('agent-memory') ? 'page' : undefined" @click="navTo('agent-memory')">
-          Memory Threads
-        </button>
-      </div>
-
-      <!-- PR-J2 — Agent Quality Scoring (flat link, Work group). -->
-      <SidebarFlatLink
-        label="Quality Scoring"
-        :active="sidebarActive('agent-quality-scoring')"
-        :collapsed-desktop="isCollapsedDesktop()"
-        @click="navTo('agent-quality-scoring')"
-      >
-        <template #icon>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-            <polygon points="12 2 15 8.5 22 9.3 17 14 18.2 21 12 17.8 5.8 21 7 14 2 9.3 9 8.5 12 2"/>
-          </svg>
-        </template>
-      </SidebarFlatLink>
-
-      <!-- PR-J2 — Bot Memory Store (flat link, Work group). -->
-      <SidebarFlatLink
-        label="Bot Memory Store"
-        :active="sidebarActive('bot-memory-store')"
-        :collapsed-desktop="isCollapsedDesktop()"
-        @click="navTo('bot-memory-store')"
-      >
-        <template #icon>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-            <ellipse cx="12" cy="5" rx="9" ry="3"/>
-            <path d="M3 5v6a9 3 0 0018 0V5M3 11v6a9 3 0 0018 0v-6"/>
-          </svg>
-        </template>
-      </SidebarFlatLink>
-
-      <!-- PR-J2 — GitHub PR Annotation (flat link, Work group). -->
-      <SidebarFlatLink
-        label="PR Annotation"
-        :active="sidebarActive('github-pr-annotation')"
-        :collapsed-desktop="isCollapsedDesktop()"
-        @click="navTo('github-pr-annotation')"
-      >
-        <template #icon>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-            <path d="M18 8a6 6 0 01-7.743 5.743L10 14l-1 1-1 1H6v2H2v-4l4.257-4.257A6 6 0 1118 8z"/>
-            <circle cx="14" cy="8" r="1.5" fill="currentColor"/>
-          </svg>
-        </template>
-      </SidebarFlatLink>
-
-      <!-- PR-J2 — Human Approval Gates (flat link, Work group). -->
-      <SidebarFlatLink
-        label="Approval Gates"
-        :active="sidebarActive('human-approval-gates')"
-        :collapsed-desktop="isCollapsedDesktop()"
-        @click="navTo('human-approval-gates')"
-      >
-        <template #icon>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-            <path d="M9 12l2 2 4-4"/>
-            <path d="M12 2l3 3h6v6l3 3-3 3v6h-6l-3 3-3-3H3v-6l-3-3 3-3V5h6l3-3z"/>
-          </svg>
-        </template>
-      </SidebarFlatLink>
-
-      <!-- PR-J2 — Multi-Agent Collaboration (flat link, Work group). -->
-      <SidebarFlatLink
-        label="Multi-Agent Collab"
-        :active="sidebarActive('multi-agent-collaboration')"
-        :collapsed-desktop="isCollapsedDesktop()"
-        @click="navTo('multi-agent-collaboration')"
-      >
-        <template #icon>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-            <circle cx="6" cy="7" r="3"/>
-            <circle cx="18" cy="7" r="3"/>
-            <circle cx="12" cy="17" r="3"/>
-            <path d="M8 9l3 6M16 9l-3 6"/>
-          </svg>
-        </template>
-      </SidebarFlatLink>
-
       <SidebarSectionLabel
         label="Forge"
         :error-keys="['plugins', 'triggers']"
@@ -1088,66 +975,6 @@ function handleSidebarKeydown(e: KeyboardEvent) {
         </button>
       </div>
 
-      <!-- PR-J2 — Forge flat links: top-level Forge utilities that don't
-           fit cleanly under a single existing submenu (Workflows /
-           Triggers / Plugins / MCPs / Skills / Commands / Hooks / Rules).
-           They sit at the bottom of Forge above the Marketplace peer. -->
-      <SidebarFlatLink
-        label="Skill Discovery"
-        :active="sidebarActive('agent-skill-discovery')"
-        :collapsed-desktop="isCollapsedDesktop()"
-        @click="navTo('agent-skill-discovery')"
-      >
-        <template #icon>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-            <circle cx="11" cy="11" r="8"/>
-            <line x1="21" y1="21" x2="16.65" y2="16.65"/>
-            <path d="M11 8v6M8 11h6"/>
-          </svg>
-        </template>
-      </SidebarFlatLink>
-      <SidebarFlatLink
-        label="GitOps Sync"
-        :active="sidebarActive('gitops-sync')"
-        :collapsed-desktop="isCollapsedDesktop()"
-        @click="navTo('gitops-sync')"
-      >
-        <template #icon>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-            <circle cx="6" cy="6" r="3"/>
-            <circle cx="18" cy="18" r="3"/>
-            <path d="M6 9v6a3 3 0 003 3h6"/>
-          </svg>
-        </template>
-      </SidebarFlatLink>
-      <SidebarFlatLink
-        label="Repo Bot Defaults"
-        :active="sidebarActive('repo-bot-defaults')"
-        :collapsed-desktop="isCollapsedDesktop()"
-        @click="navTo('repo-bot-defaults')"
-      >
-        <template #icon>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-            <rect x="3" y="11" width="18" height="10" rx="2"/>
-            <circle cx="12" cy="5" r="2"/>
-            <path d="M12 7v4M8 16h.01M16 16h.01"/>
-          </svg>
-        </template>
-      </SidebarFlatLink>
-      <SidebarFlatLink
-        label="Context Injection"
-        :active="sidebarActive('auto-context-injection')"
-        :collapsed-desktop="isCollapsedDesktop()"
-        @click="navTo('auto-context-injection')"
-      >
-        <template #icon>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-            <path d="M3 12h12M11 6l6 6-6 6"/>
-            <rect x="17" y="4" width="4" height="16" rx="1"/>
-          </svg>
-        </template>
-      </SidebarFlatLink>
-
       <!-- Marketplace (flat link) — PR-E: promoted out of Forge to its
            own top-level slot between Forge and Triggers. Forge holds
            the assets you manage locally; Marketplace is where you go to
@@ -1318,7 +1145,7 @@ function handleSidebarKeydown(e: KeyboardEvent) {
         </button>
       </div>
 
-      <!-- PR-J2 — Analytics (expandable, System group). Holds the four
+      <!-- PR-J2 — Analytics (expandable, System group). Holds the three
            KEEP+WIRE observability/cost dashboards. `trace-detail` is a
            deep-link reached from `traces-list` rows. -->
       <SidebarGroupToggle
@@ -1341,9 +1168,6 @@ function handleSidebarKeydown(e: KeyboardEvent) {
         </button>
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('provider-benchmark-dashboard') }" :aria-current="sidebarActive('provider-benchmark-dashboard') ? 'page' : undefined" @click="navTo('provider-benchmark-dashboard')">
           Provider Benchmarks
-        </button>
-        <button type="button" class="submenu-item" :class="{ active: sidebarActive('alert-grouping') }" :aria-current="sidebarActive('alert-grouping') ? 'page' : undefined" @click="navTo('alert-grouping')">
-          Alert Grouping
         </button>
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('traces-list') }" :aria-current="sidebarActive('traces-list') ? 'page' : undefined" @click="navTo('traces-list')">
           Traces
