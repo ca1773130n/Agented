@@ -376,30 +376,11 @@ function handleSidebarKeydown(e: KeyboardEvent) {
     @keydown="handleSidebarKeydown"
   >
     <div class="sidebar-nav">
-      <SidebarSectionLabel
-        label="Watch Tower"
-        :error-keys="['triggers']"
-        :errors="props.sidebarErrors"
-        @retry="(k) => emit('retrySidebarSection', k)"
-      />
-
       <div class="nav-section-label">Work</div>
-      <SidebarFlatLink
-        label="Sketch"
-        :active="sidebarActive('sketch-chat')"
-        :collapsed-desktop="isCollapsedDesktop()"
-        @click="navTo('sketch-chat')"
-      >
-        <template #icon>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-            <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
-          </svg>
-        </template>
-      </SidebarFlatLink>
-
       <!-- Dashboards (expandable) — PR-E: moved into the Work group so
            it sits next to Sketch and Scheduling, the other daily-Work
-           surfaces. -->
+           surfaces. PR-F: reordered to top of Work group — Dashboards is
+           the daily entry-point. -->
       <SidebarGroupToggle
         label="Dashboards"
         :expanded="expandedSections.dashboards"
@@ -442,6 +423,19 @@ function handleSidebarKeydown(e: KeyboardEvent) {
           {{ b.name }}
         </button>
       </div>
+
+      <SidebarFlatLink
+        label="Sketch"
+        :active="sidebarActive('sketch-chat')"
+        :collapsed-desktop="isCollapsedDesktop()"
+        @click="navTo('sketch-chat')"
+      >
+        <template #icon>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
+          </svg>
+        </template>
+      </SidebarFlatLink>
 
       <!-- PR-D — Scheduling promoted to a flat top-level link (was a
            dashboard sidebar item; deep-links to the Scheduling card in
@@ -652,7 +646,7 @@ function handleSidebarKeydown(e: KeyboardEvent) {
 
       <SidebarSectionLabel
         label="Forge"
-        :error-keys="['plugins']"
+        :error-keys="['plugins', 'triggers']"
         :errors="props.sidebarErrors"
         @retry="(k) => emit('retrySidebarSection', k)"
       />
@@ -681,6 +675,109 @@ function handleSidebarKeydown(e: KeyboardEvent) {
         </button>
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('workflow-playground') }" :aria-current="sidebarActive('workflow-playground') ? 'page' : undefined" @click="navTo('workflow-playground')">
           Playground
+        </button>
+      </div>
+
+      <!-- Triggers (expandable) — PR-F: collapsed back into Forge after operator-feel testing showed the standalone section overweighted itself. -->
+      <SidebarGroupToggle
+        label="Triggers"
+        :expanded="expandedSections.triggers"
+        :active="isTriggersSectionActive()"
+        :collapsed-desktop="isCollapsedDesktop()"
+        @toggle="toggleSection('triggers')"
+      >
+        <template #icon>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+          </svg>
+        </template>
+      </SidebarGroupToggle>
+      <div v-show="expandedSections.triggers" class="nav-submenu nav-submenu-blocks" role="region" aria-label="Triggers">
+        <div class="submenu-block-label" aria-hidden="true">Core</div>
+        <button type="button" class="submenu-item" :class="{ active: sidebarActive('triggers') }" :aria-current="sidebarActive('triggers') ? 'page' : undefined" @click="navTo('triggers')">
+          Triggers
+        </button>
+        <button type="button" class="submenu-item" :class="{ active: sidebarActive('bot-templates') }" :aria-current="sidebarActive('bot-templates') ? 'page' : undefined" @click="navTo('bot-templates')">
+          Bot Templates
+        </button>
+        <button type="button" class="submenu-item" :class="{ active: sidebarActive('bot-clone-fork') }" :aria-current="sidebarActive('bot-clone-fork') ? 'page' : undefined" @click="navTo('bot-clone-fork')">
+          Clone &amp; Fork Bot
+        </button>
+        <button type="button" class="submenu-item" :class="{ active: sidebarActive('cross-team-bot-sharing') }" :aria-current="sidebarActive('cross-team-bot-sharing') ? 'page' : undefined" @click="navTo('cross-team-bot-sharing')">
+          Cross-Team Sharing
+        </button>
+        <button type="button" class="submenu-item" :class="{ active: sidebarActive('incident-response-playbooks') }" :aria-current="sidebarActive('incident-response-playbooks') ? 'page' : undefined" @click="navTo('incident-response-playbooks')">
+          Incident Playbooks
+        </button>
+
+        <div class="submenu-block-label" aria-hidden="true">Configuration</div>
+        <button type="button" class="submenu-item" :class="{ active: sidebarActive('inline-prompt-editor') }" :aria-current="sidebarActive('inline-prompt-editor') ? 'page' : undefined" @click="navTo('inline-prompt-editor')">
+          Live Prompt Sandbox
+        </button>
+        <button type="button" class="submenu-item" :class="{ active: sidebarActive('visual-cron-wizard') }" :aria-current="sidebarActive('visual-cron-wizard') ? 'page' : undefined" @click="navTo('visual-cron-wizard')">
+          NL Cron Builder
+        </button>
+        <button type="button" class="submenu-item" :class="{ active: sidebarActive('conditional-trigger-rules') }" :aria-current="sidebarActive('conditional-trigger-rules') ? 'page' : undefined" @click="navTo('conditional-trigger-rules')">
+          Trigger Conditions
+        </button>
+        <button type="button" class="submenu-item" :class="{ active: sidebarActive('repo-scope-filters') }" :aria-current="sidebarActive('repo-scope-filters') ? 'page' : undefined" @click="navTo('repo-scope-filters')">
+          Repo Scope Filters
+        </button>
+        <button type="button" class="submenu-item" :class="{ active: sidebarActive('structured-output') }" :aria-current="sidebarActive('structured-output') ? 'page' : undefined" @click="navTo('structured-output')">
+          Structured Output
+        </button>
+        <button type="button" class="submenu-item" :class="{ active: sidebarActive('prompt-ab-testing') }" :aria-current="sidebarActive('prompt-ab-testing') ? 'page' : undefined" @click="navTo('prompt-ab-testing')">
+          Prompt A/B Testing
+        </button>
+        <button type="button" class="submenu-item" :class="{ active: sidebarActive('multi-provider-fallback') }" :aria-current="sidebarActive('multi-provider-fallback') ? 'page' : undefined" @click="navTo('multi-provider-fallback')">
+          Provider Fallback
+        </button>
+        <button type="button" class="submenu-item" :class="{ active: sidebarActive('multi-repo-fan-out') }" :aria-current="sidebarActive('multi-repo-fan-out') ? 'page' : undefined" @click="navTo('multi-repo-fan-out')">
+          Multi-Repo Fan-Out
+        </button>
+
+        <div class="submenu-block-label" aria-hidden="true">PR-Review</div>
+        <button type="button" class="submenu-item" :class="{ active: sidebarActive('pr-auto-assignment') }" :aria-current="sidebarActive('pr-auto-assignment') ? 'page' : undefined" @click="navTo('pr-auto-assignment')">
+          PR Auto-Assignment
+        </button>
+        <button type="button" class="submenu-item" :class="{ active: sidebarActive('pr-review-learning-loop') }" :aria-current="sidebarActive('pr-review-learning-loop') ? 'page' : undefined" @click="navTo('pr-review-learning-loop')">
+          PR Review Learning
+        </button>
+        <button type="button" class="submenu-item" :class="{ active: sidebarActive('github-actions') }" :aria-current="sidebarActive('github-actions') ? 'page' : undefined" @click="navTo('github-actions')">
+          GitHub Actions
+        </button>
+
+        <div class="submenu-block-label" aria-hidden="true">Ops</div>
+        <button type="button" class="submenu-item" :class="{ active: sidebarActive('webhook-recorder') }" :aria-current="sidebarActive('webhook-recorder') ? 'page' : undefined" @click="navTo('webhook-recorder')">
+          Webhook Recorder
+        </button>
+        <button type="button" class="submenu-item" :class="{ active: sidebarActive('dependency-impact-bot') }" :aria-current="sidebarActive('dependency-impact-bot') ? 'page' : undefined" @click="navTo('dependency-impact-bot')">
+          Dependency Updates
+        </button>
+        <button type="button" class="submenu-item" :class="{ active: sidebarActive('bot-recommendation-engine') }" :aria-current="sidebarActive('bot-recommendation-engine') ? 'page' : undefined" @click="navTo('bot-recommendation-engine')">
+          Smart Suggestions
+        </button>
+
+        <div class="submenu-block-label" aria-hidden="true">Introspection</div>
+        <button type="button" class="submenu-item" :class="{ active: sidebarActive('bot-dependency-graph') }" :aria-current="sidebarActive('bot-dependency-graph') ? 'page' : undefined" @click="navTo('bot-dependency-graph')">
+          Dependency Graph
+        </button>
+        <button type="button" class="submenu-item" :class="{ active: sidebarActive('bot-performance-benchmarks') }" :aria-current="sidebarActive('bot-performance-benchmarks') ? 'page' : undefined" @click="navTo('bot-performance-benchmarks')">
+          Bot Benchmarks
+        </button>
+        <button type="button" class="submenu-item" :class="{ active: sidebarActive('bot-runbooks') }" :aria-current="sidebarActive('bot-runbooks') ? 'page' : undefined" @click="navTo('bot-runbooks')">
+          Bot Runbooks
+        </button>
+        <button type="button" class="submenu-item" :class="{ active: sidebarActive('execution-tagging') }" :aria-current="sidebarActive('execution-tagging') ? 'page' : undefined" @click="navTo('execution-tagging')">
+          Execution Tagging
+        </button>
+        <button type="button" class="submenu-item" :class="{ active: sidebarActive('changelog-generator') }" :aria-current="sidebarActive('changelog-generator') ? 'page' : undefined" @click="navTo('changelog-generator')">
+          Changelog Generator
+        </button>
+
+        <div class="submenu-block-label" aria-hidden="true">Authoring</div>
+        <button type="button" class="submenu-item" :class="{ active: sidebarActive('prompt-snippets') }" :aria-current="sidebarActive('prompt-snippets') ? 'page' : undefined" @click="navTo('prompt-snippets')">
+          Prompt Snippets
         </button>
       </div>
 
@@ -863,110 +960,6 @@ function handleSidebarKeydown(e: KeyboardEvent) {
           </svg>
         </template>
       </SidebarFlatLink>
-
-      <!-- Triggers (expandable section, 25 items in 6 visual blocks) -->
-      <SidebarSectionLabel label="Triggers" />
-      <SidebarGroupToggle
-        label="Triggers"
-        :expanded="expandedSections.triggers"
-        :active="isTriggersSectionActive()"
-        :collapsed-desktop="isCollapsedDesktop()"
-        @toggle="toggleSection('triggers')"
-      >
-        <template #icon>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-            <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
-          </svg>
-        </template>
-      </SidebarGroupToggle>
-      <div v-show="expandedSections.triggers" class="nav-submenu nav-submenu-blocks" role="region" aria-label="Triggers">
-        <div class="submenu-block-label" aria-hidden="true">Core</div>
-        <button type="button" class="submenu-item" :class="{ active: sidebarActive('triggers') }" :aria-current="sidebarActive('triggers') ? 'page' : undefined" @click="navTo('triggers')">
-          Triggers
-        </button>
-        <button type="button" class="submenu-item" :class="{ active: sidebarActive('bot-templates') }" :aria-current="sidebarActive('bot-templates') ? 'page' : undefined" @click="navTo('bot-templates')">
-          Bot Templates
-        </button>
-        <button type="button" class="submenu-item" :class="{ active: sidebarActive('bot-clone-fork') }" :aria-current="sidebarActive('bot-clone-fork') ? 'page' : undefined" @click="navTo('bot-clone-fork')">
-          Clone &amp; Fork Bot
-        </button>
-        <button type="button" class="submenu-item" :class="{ active: sidebarActive('cross-team-bot-sharing') }" :aria-current="sidebarActive('cross-team-bot-sharing') ? 'page' : undefined" @click="navTo('cross-team-bot-sharing')">
-          Cross-Team Sharing
-        </button>
-        <button type="button" class="submenu-item" :class="{ active: sidebarActive('incident-response-playbooks') }" :aria-current="sidebarActive('incident-response-playbooks') ? 'page' : undefined" @click="navTo('incident-response-playbooks')">
-          Incident Playbooks
-        </button>
-
-        <div class="submenu-block-label" aria-hidden="true">Configuration</div>
-        <button type="button" class="submenu-item" :class="{ active: sidebarActive('inline-prompt-editor') }" :aria-current="sidebarActive('inline-prompt-editor') ? 'page' : undefined" @click="navTo('inline-prompt-editor')">
-          Live Prompt Sandbox
-        </button>
-        <button type="button" class="submenu-item" :class="{ active: sidebarActive('visual-cron-wizard') }" :aria-current="sidebarActive('visual-cron-wizard') ? 'page' : undefined" @click="navTo('visual-cron-wizard')">
-          NL Cron Builder
-        </button>
-        <button type="button" class="submenu-item" :class="{ active: sidebarActive('conditional-trigger-rules') }" :aria-current="sidebarActive('conditional-trigger-rules') ? 'page' : undefined" @click="navTo('conditional-trigger-rules')">
-          Trigger Conditions
-        </button>
-        <button type="button" class="submenu-item" :class="{ active: sidebarActive('repo-scope-filters') }" :aria-current="sidebarActive('repo-scope-filters') ? 'page' : undefined" @click="navTo('repo-scope-filters')">
-          Repo Scope Filters
-        </button>
-        <button type="button" class="submenu-item" :class="{ active: sidebarActive('structured-output') }" :aria-current="sidebarActive('structured-output') ? 'page' : undefined" @click="navTo('structured-output')">
-          Structured Output
-        </button>
-        <button type="button" class="submenu-item" :class="{ active: sidebarActive('prompt-ab-testing') }" :aria-current="sidebarActive('prompt-ab-testing') ? 'page' : undefined" @click="navTo('prompt-ab-testing')">
-          Prompt A/B Testing
-        </button>
-        <button type="button" class="submenu-item" :class="{ active: sidebarActive('multi-provider-fallback') }" :aria-current="sidebarActive('multi-provider-fallback') ? 'page' : undefined" @click="navTo('multi-provider-fallback')">
-          Provider Fallback
-        </button>
-        <button type="button" class="submenu-item" :class="{ active: sidebarActive('multi-repo-fan-out') }" :aria-current="sidebarActive('multi-repo-fan-out') ? 'page' : undefined" @click="navTo('multi-repo-fan-out')">
-          Multi-Repo Fan-Out
-        </button>
-
-        <div class="submenu-block-label" aria-hidden="true">PR-Review</div>
-        <button type="button" class="submenu-item" :class="{ active: sidebarActive('pr-auto-assignment') }" :aria-current="sidebarActive('pr-auto-assignment') ? 'page' : undefined" @click="navTo('pr-auto-assignment')">
-          PR Auto-Assignment
-        </button>
-        <button type="button" class="submenu-item" :class="{ active: sidebarActive('pr-review-learning-loop') }" :aria-current="sidebarActive('pr-review-learning-loop') ? 'page' : undefined" @click="navTo('pr-review-learning-loop')">
-          PR Review Learning
-        </button>
-        <button type="button" class="submenu-item" :class="{ active: sidebarActive('github-actions') }" :aria-current="sidebarActive('github-actions') ? 'page' : undefined" @click="navTo('github-actions')">
-          GitHub Actions
-        </button>
-
-        <div class="submenu-block-label" aria-hidden="true">Ops</div>
-        <button type="button" class="submenu-item" :class="{ active: sidebarActive('webhook-recorder') }" :aria-current="sidebarActive('webhook-recorder') ? 'page' : undefined" @click="navTo('webhook-recorder')">
-          Webhook Recorder
-        </button>
-        <button type="button" class="submenu-item" :class="{ active: sidebarActive('dependency-impact-bot') }" :aria-current="sidebarActive('dependency-impact-bot') ? 'page' : undefined" @click="navTo('dependency-impact-bot')">
-          Dependency Updates
-        </button>
-        <button type="button" class="submenu-item" :class="{ active: sidebarActive('bot-recommendation-engine') }" :aria-current="sidebarActive('bot-recommendation-engine') ? 'page' : undefined" @click="navTo('bot-recommendation-engine')">
-          Smart Suggestions
-        </button>
-
-        <div class="submenu-block-label" aria-hidden="true">Introspection</div>
-        <button type="button" class="submenu-item" :class="{ active: sidebarActive('bot-dependency-graph') }" :aria-current="sidebarActive('bot-dependency-graph') ? 'page' : undefined" @click="navTo('bot-dependency-graph')">
-          Dependency Graph
-        </button>
-        <button type="button" class="submenu-item" :class="{ active: sidebarActive('bot-performance-benchmarks') }" :aria-current="sidebarActive('bot-performance-benchmarks') ? 'page' : undefined" @click="navTo('bot-performance-benchmarks')">
-          Bot Benchmarks
-        </button>
-        <button type="button" class="submenu-item" :class="{ active: sidebarActive('bot-runbooks') }" :aria-current="sidebarActive('bot-runbooks') ? 'page' : undefined" @click="navTo('bot-runbooks')">
-          Bot Runbooks
-        </button>
-        <button type="button" class="submenu-item" :class="{ active: sidebarActive('execution-tagging') }" :aria-current="sidebarActive('execution-tagging') ? 'page' : undefined" @click="navTo('execution-tagging')">
-          Execution Tagging
-        </button>
-        <button type="button" class="submenu-item" :class="{ active: sidebarActive('changelog-generator') }" :aria-current="sidebarActive('changelog-generator') ? 'page' : undefined" @click="navTo('changelog-generator')">
-          Changelog Generator
-        </button>
-
-        <div class="submenu-block-label" aria-hidden="true">Authoring</div>
-        <button type="button" class="submenu-item" :class="{ active: sidebarActive('prompt-snippets') }" :aria-current="sidebarActive('prompt-snippets') ? 'page' : undefined" @click="navTo('prompt-snippets')">
-          Prompt Snippets
-        </button>
-      </div>
 
       <div class="nav-section-label">History</div>
       <!-- Triggers History (expandable) -->

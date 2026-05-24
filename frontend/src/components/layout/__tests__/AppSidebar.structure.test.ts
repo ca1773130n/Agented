@@ -157,11 +157,14 @@ describe('AppSidebar — PR-B structure', () => {
     wrapper = await mountSidebar();
   });
 
-  it('renders a top-level "Triggers" section header', () => {
+  it('PR-F: Triggers is no longer rendered as a top-level section header (collapsed back into Forge)', () => {
     const labels = Array.from(
       rootEl(wrapper).querySelectorAll<HTMLElement>('.nav-section-label')
     ).map((el) => el.textContent?.trim().replace(/\s+/g, ' ') ?? '');
-    expect(labels).toContain('Triggers');
+    // PR-B promoted Triggers to its own section; PR-F reverses that.
+    // The expandable Triggers group still exists (now nested in Forge),
+    // but the standalone section label is gone.
+    expect(labels).not.toContain('Triggers');
   });
 
   it('Triggers section contains exactly 25 sub-items (24 trigger facets + 1 Authoring)', () => {
@@ -270,15 +273,16 @@ describe('AppSidebar — PR-B structure', () => {
     expect(allSubmenuItems).not.toContain('Team Leaderboard');
   });
 
-  it('"Forge" no longer renders Triggers as a flat link (it has been promoted to its own top-level section)', () => {
+  it('Triggers is always rendered as an expandable group toggle (never a flat link)', () => {
     // The pre-PR-B sidebar rendered Triggers via <SidebarFlatLink>, which
     // produces a top-level <button> with no chevron, no aria-expanded,
-    // and no nav-group-toggle class. After PR-B Triggers is a
-    // <SidebarGroupToggle> (has chevron + aria-expanded).
+    // and no nav-group-toggle class. PR-B switched it to a
+    // <SidebarGroupToggle>; PR-F kept that shape but collapsed it back
+    // into Forge (so it's no longer a standalone section header).
     //
     // Collect every top-level button whose .nav-text reads "Triggers"
     // and assert none of them are the old flat-link shape — they must
-    // all be group toggles (the new Triggers section + the History
+    // all be group toggles (the Forge Triggers child + the History
     // "Triggers" sub-section).
     const allButtons = Array.from(
       rootEl(wrapper).querySelectorAll<HTMLElement>('button')
@@ -295,12 +299,12 @@ describe('AppSidebar — PR-B structure', () => {
       expect(hasChevron, 'Triggers button is a flat link (no chevron)').toBe(true);
       expect(hasAriaExpanded, 'Triggers button lacks aria-expanded').toBe(true);
     }
-    // And exactly one such button is the new top-level Triggers section
-    // header — the other(s) are the History "Triggers" group.
-    const newSectionToggle = triggersButtons.find(
+    // And at least one such button is the Forge-nested Triggers group
+    // — the other(s) are the History "Triggers" group.
+    const triggersToggle = triggersButtons.find(
       (b) => b.getAttribute('aria-expanded') !== null,
     );
-    expect(newSectionToggle).toBeTruthy();
+    expect(triggersToggle).toBeTruthy();
   });
 
   it('"Automation Tools" section no longer exists', () => {
@@ -387,12 +391,10 @@ describe('AppSidebar — PR-B structure', () => {
     expect(submenuOf(wrapper, 'Dashboards')).not.toBeNull();
   });
 
-  it('PR-E: Scheduling flat link is rendered inside the Work group (after Dashboards)', () => {
-    // Order check: Sketch → Dashboards → Scheduling among the buttons
-    // appearing before the Organization section label.
+  it('PR-F: Work group ordering is Dashboards → Sketch → Scheduling', () => {
+    // PR-F reordered the Work group so Dashboards is first — it's the
+    // daily entry-point. Sketch and Scheduling follow.
     const all = Array.from(rootEl(wrapper).children[0].children) as HTMLElement[];
-    // Find indexes of the Work label, the Organization label, and the
-    // three Work entries by their .nav-text content.
     function indexOfLabelText(text: string): number {
       return all.findIndex(
         (el) =>
@@ -415,12 +417,38 @@ describe('AppSidebar — PR-B structure', () => {
     expect(workIdx).toBeGreaterThan(-1);
     expect(orgIdx).toBeGreaterThan(workIdx);
     // All three Work entries sit between Work label and Organization label.
-    expect(sketchIdx).toBeGreaterThan(workIdx);
-    expect(sketchIdx).toBeLessThan(orgIdx);
-    expect(dashIdx).toBeGreaterThan(sketchIdx);
+    expect(dashIdx).toBeGreaterThan(workIdx);
     expect(dashIdx).toBeLessThan(orgIdx);
-    expect(schedIdx).toBeGreaterThan(dashIdx);
+    expect(sketchIdx).toBeGreaterThan(dashIdx);
+    expect(sketchIdx).toBeLessThan(orgIdx);
+    expect(schedIdx).toBeGreaterThan(sketchIdx);
     expect(schedIdx).toBeLessThan(orgIdx);
+  });
+
+  it('PR-F: Forge group children appear in order Workflows → Triggers → Plugins → MCPs → Skills → Commands → Hooks → Rules', () => {
+    // PR-F collapsed Triggers back into Forge, positioned between
+    // Workflows and Plugins. This locks the full Forge child ordering.
+    const all = Array.from(rootEl(wrapper).children[0].children) as HTMLElement[];
+    function indexOfButtonText(text: string): number {
+      return all.findIndex(
+        (el) =>
+          el.tagName === 'BUTTON' &&
+          el.querySelector<HTMLElement>('.nav-text')?.textContent?.trim() === text,
+      );
+    }
+    const order = ['Workflows', 'Triggers', 'Plugins', 'MCPs', 'Skills', 'Commands', 'Hooks', 'Rules'];
+    const indexes = order.map((label) => ({ label, idx: indexOfButtonText(label) }));
+    // All children exist.
+    for (const { label, idx } of indexes) {
+      expect(idx, `Forge child "${label}" not found`).toBeGreaterThan(-1);
+    }
+    // Strictly ascending order.
+    for (let i = 1; i < indexes.length; i++) {
+      expect(
+        indexes[i].idx,
+        `Expected "${indexes[i].label}" to come after "${indexes[i - 1].label}"`,
+      ).toBeGreaterThan(indexes[i - 1].idx);
+    }
   });
 
   it('"security-history" sidebar entry is absent (the route still exists, only the sidebar row is removed)', () => {
