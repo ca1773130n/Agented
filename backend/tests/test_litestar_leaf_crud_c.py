@@ -115,31 +115,29 @@ def test_delete_unknown_finding_404(isolated_db):
 # Report digests
 
 
-def test_list_digests(isolated_db):
+# PR-G: silent-success stubs flipped to 501. The GET /digests read stays as
+# an honest empty 200 — the UI renders an empty state for it. The create and
+# update handlers previously echoed input back as if persisted; they now
+# return 501 ("Feature not yet enabled") so the UI can render a banner.
+
+
+def test_list_digests_returns_empty_200(isolated_db):
     with _client() as c:
         resp = c.get("/admin/reports/digests")
     assert resp.status_code == 200
+    assert resp.json() == {"digests": []}
 
 
-def test_create_digest_requires_team_name(isolated_db):
-    with _client() as c:
-        resp = c.post("/admin/reports/digests", json={})
-    assert resp.status_code == 400
-
-
-def test_create_digest_ok(isolated_db):
+def test_create_digest_returns_501(isolated_db):
     with _client() as c:
         resp = c.post("/admin/reports/digests", json={"team_name": "Demo"})
-    assert resp.status_code == 201
-    body = resp.json()
-    assert body["team_name"] == "Demo"
-    assert body["team_id"].startswith("team-")
+    assert resp.status_code == 501
 
 
-def test_update_digest_ok(isolated_db):
+def test_update_digest_returns_501(isolated_db):
     with _client() as c:
         resp = c.put("/admin/reports/digests/team-x", json={"enabled": True})
-    assert resp.status_code == 200
+    assert resp.status_code == 501
 
 
 # Config export/import
@@ -165,9 +163,7 @@ def test_import_requires_body(isolated_db):
 
 def test_validate_config_requires_format(isolated_db):
     with _client() as c:
-        resp = c.post(
-            "/admin/triggers/validate-config", json={"config": "name: x"}
-        )
+        resp = c.post("/admin/triggers/validate-config", json={"config": "name: x"})
     assert resp.status_code == 400
 
 

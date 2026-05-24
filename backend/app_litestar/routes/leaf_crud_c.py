@@ -5,8 +5,6 @@ products + analytics + findings + report_digests + config_export.
 
 from __future__ import annotations
 
-import random
-import string
 from typing import Any, Optional
 
 from litestar import MediaType, Response, Router, delete, get, patch, post, put
@@ -261,29 +259,20 @@ def list_digests() -> dict[str, list]:
     return {"digests": []}
 
 
-@post("/digests", status_code=201, sync_to_thread=False)
+@post("/digests", sync_to_thread=False)
 def create_digest(data: dict) -> dict[str, Any]:
-    if not data:
-        raise ClientException(detail="JSON body required")
-    team_name = (data.get("team_name") or "").strip()
-    if not team_name:
-        raise ClientException(detail="team_name is required")
-    suffix = "".join(random.choices(string.ascii_lowercase + string.digits, k=6))
-    return {
-        "team_id": f"team-{suffix}",
-        "team_name": team_name,
-        "frequency": data.get("frequency", "weekly"),
-        "channel": data.get("channel", "email"),
-        "recipients": data.get("recipients", ""),
-        "enabled": data.get("enabled", False),
-        "last_generated": None,
-    }
+    del data
+    # PR-G: silent-success stub flipped to 501. The previous body echoed
+    # input back as if the digest had been persisted; nothing was wired up
+    # behind the scenes, so the UI was lying about "Saved".
+    raise HTTPException(status_code=501, detail="Feature not yet enabled")
 
 
 @put("/digests/{team_id:str}", sync_to_thread=False)
 def update_digest(team_id: str, data: dict) -> dict[str, Any]:
     del team_id, data
-    return {"ok": True}
+    # PR-G: silent-success stub flipped to 501.
+    raise HTTPException(status_code=501, detail="Feature not yet enabled")
 
 
 report_digests_router = Router(
