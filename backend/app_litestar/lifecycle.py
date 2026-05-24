@@ -372,15 +372,15 @@ def on_startup(app: Any) -> None:
         logger.warning(
             "harness_failure_annotator registration failed", exc_info=True
         )
-    # Life-Harness T2: sweep stale /tmp/agented-claude-overlay-* dirs left
-    # behind by crashes / SIGKILLs where the per-execution finally block
+    # Life-Harness: sweep stale /tmp/agented-claude-overlay-* dirs left
+    # behind by crashes / SIGKILLs where the per-session finally block
     # didn't run. Best-effort; never blocks startup.
     try:
-        from app.services.harness_overlay import cleanup_stale_overlays
+        from app.services.claude_config_overlay import cleanup_stale_overlays
 
         cleanup_stale_overlays()
     except Exception:
-        logger.debug("harness overlay GC raised on startup", exc_info=True)
+        logger.debug("claude overlay GC raised on startup", exc_info=True)
     # Pass `None` because SchedulerService.init expects a Flask-style object
     # only for testing-mode detection, which doesn't apply when Litestar
     # runs standalone. The service tolerates None via attribute getattr.

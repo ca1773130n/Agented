@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
-"""Run one Life-Harness evolution round from the command line (T3).
+"""Run one Life-Harness evolution round from the command line (project-scoped).
 
 Usage::
 
-    uv run python scripts/run_harness_evolution.py <bot_id> [--since ISO]
-                                                  [--until ISO] [--limit N]
+    uv run python scripts/run_harness_evolution.py <project_id> [--since ISO]
+        [--until ISO] [--limit N] [--dry-run] [--force]
 
 The operator's environment must have Codex CLI on PATH (or
-``AGENTED_CODEX_CMD`` set). Exits 0 on success, non-zero on failure.
+``AGENTED_CODEX_CMD`` set). Exits 0 on ``applied`` or
+``awaiting_approval``; non-zero on ``failed`` / ``aborted``.
 """
 
 from __future__ import annotations
@@ -19,9 +20,9 @@ import sys
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Run one Life-Harness evolution round.",
+        description="Run one Life-Harness evolution round (project-scoped).",
     )
-    parser.add_argument("bot_id")
+    parser.add_argument("project_id")
     parser.add_argument("--since", default=None,
                         help="ISO-8601 lower bound on snapshot.created_at")
     parser.add_argument("--until", default=None,
@@ -42,7 +43,7 @@ def main() -> int:
     from app.services.harness_evolver import run_evolution_round
 
     result = run_evolution_round(
-        args.bot_id,
+        args.project_id,
         since=args.since,
         until=args.until,
         limit=args.limit,
@@ -54,7 +55,7 @@ def main() -> int:
         {
             "round_id": result.round_id,
             "status": result.status,
-            "applied_layer_ids": result.applied_layer_ids,
+            "applied_asset_ids": result.applied_asset_ids,
             "error": result.error,
             "notes": result.notes,
         },

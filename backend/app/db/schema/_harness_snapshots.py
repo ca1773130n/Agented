@@ -21,24 +21,32 @@ from __future__ import annotations
 
 
 def create_harness_snapshot_tables(conn) -> None:
+    """Per-execution record of which Forge primitives were active at spawn.
+
+    ``bundle_hash`` is a deterministic digest of the rendered ``ContextBundle``
+    (sufficient to identify "same harness as run X"). ``resolved_bindings_json``
+    lists the ``(kind, asset_id)`` pairs that fed into the bundle. T3's
+    evolution loop joins on ``project_id`` + this table + ``execution_annotations``
+    to compute pre/post-evolution impact deltas.
+    """
     conn.execute(
         """
         CREATE TABLE IF NOT EXISTS execution_harness_snapshots (
-            execution_id         TEXT PRIMARY KEY,
-            bot_id               TEXT NOT NULL,
-            harness_kind         TEXT NOT NULL,
-            layer_versions_json  TEXT NOT NULL DEFAULT '{}',
-            artifact_json        TEXT NOT NULL,
-            applied              INTEGER NOT NULL DEFAULT 0,
-            created_at           TEXT NOT NULL DEFAULT (datetime('now'))
+            execution_id            TEXT PRIMARY KEY,
+            project_id              TEXT,
+            bot_id                  TEXT,
+            harness_kind            TEXT NOT NULL,
+            bundle_hash             TEXT,
+            resolved_bindings_json  TEXT NOT NULL DEFAULT '[]',
+            created_at              TEXT NOT NULL DEFAULT (datetime('now'))
         )
         """
     )
     conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_ehs_bot_id "
-        "ON execution_harness_snapshots(bot_id)"
+        "CREATE INDEX IF NOT EXISTS idx_ehs_project_id "
+        "ON execution_harness_snapshots(project_id, created_at DESC)"
     )
     conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_ehs_applied "
-        "ON execution_harness_snapshots(applied)"
+        "CREATE INDEX IF NOT EXISTS idx_ehs_bundle_hash "
+        "ON execution_harness_snapshots(bundle_hash)"
     )

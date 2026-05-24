@@ -1,13 +1,11 @@
 /**
- * Life-Harness T3 evolution API (typed client).
+ * Life-Harness evolution API (project-scoped, Forge-aware).
  *
- * Surfaces the admin endpoints for ``harness_evolution_rounds``:
- *  - List rounds (cross-bot or per-bot)
- *  - Fetch a single round detail
- *  - Trigger dry-run / live evolution
- *  - Approve / abort an ``awaiting_approval`` round
+ * Codex-driven rounds operate on a project's Forge bindings (rules /
+ * hooks / commands / mcp_servers). Skills are read-only here — the
+ * evolver can propose them in NOTES but can't auto-apply.
  *
- * Reference: arXiv 2605.22166 (Life-Harness §5.2 Evolution Dynamics).
+ * Reference: arXiv 2605.22166 §5.2.
  */
 
 import { apiFetch } from './client';
@@ -20,13 +18,14 @@ export type EvolutionStatus =
   | 'failed'
   | 'aborted';
 
-export type EvolutionOp = 'create' | 'supersede' | 'disable';
+export type EvolutionOp = 'create' | 'update' | 'delete';
+export type ForgeKind = 'rule' | 'hook' | 'command' | 'mcp_server' | 'skill';
 
 export interface EvolutionPatchEntry {
   op: EvolutionOp;
-  layer: 'h2' | 'h3' | 'h4' | 'h5';
+  kind: ForgeKind;
   name: string;
-  existing_layer_id: string | null;
+  existing_asset_id: number | string | null;
   payload: Record<string, unknown> | null;
 }
 
@@ -35,18 +34,24 @@ export interface EvolutionPatch {
   entries: EvolutionPatchEntry[];
 }
 
+export interface AppliedAssetRef {
+  kind: ForgeKind;
+  op: EvolutionOp;
+  asset_id: number | string;
+}
+
 export interface EvolutionRound {
   id: string;
-  bot_id: string;
+  project_id: string;
   status: EvolutionStatus;
   started_at: string;
   finished_at: string | null;
   input_window_since: string | null;
   input_window_until: string | null;
   input_execution_count: number;
-  input_layers: Record<string, unknown>;
+  input_forge: Record<string, unknown>;
   output_patch: EvolutionPatch | null;
-  applied_layer_ids: string[];
+  applied_asset_ids: AppliedAssetRef[];
   error_message: string | null;
   notes: string | null;
   scratch_dir: string | null;
@@ -56,12 +61,13 @@ export interface EvolutionRunOptions {
   since?: string;
   until?: string;
   limit?: number;
+  force?: boolean;
 }
 
 export interface EvolutionRunResult {
   round_id: string;
   status: EvolutionStatus;
-  applied_layer_ids: string[];
+  applied_asset_ids: AppliedAssetRef[];
   error: string | null;
   notes: string | null;
 }
@@ -84,7 +90,7 @@ export type EvolutionImpactResponse =
   | {
       available: true;
       round_id: string;
-      bot_id: string;
+      project_id: string;
       window_size: number;
       before: EvolutionImpactWindow;
       after: EvolutionImpactWindow;
@@ -92,7 +98,6 @@ export type EvolutionImpactResponse =
     };
 
 export const harnessEvolutionApi = {
-  /** Cross-bot listing, newest first. */
   listAll: (opts: { limit?: number; status?: EvolutionStatus } = {}) => {
     const params = new URLSearchParams();
     if (opts.limit !== undefined) params.set('limit', String(opts.limit));
@@ -103,9 +108,9 @@ export const harnessEvolutionApi = {
     );
   },
 
-  listForBot: (botId: string, limit = 20) =>
-    apiFetch<{ bot_id: string; rounds: EvolutionRound[] }>(
-      `/admin/bots/${encodeURIComponent(botId)}/evolution/rounds?limit=${limit}`,
+  listForProject: (projectId: string, limit = 20) =>
+    apiFetch<{ project_id: string; rounds: EvolutionRound[] }>(
+      `/admin/projects/${encodeURIComponent(projectId)}/evolution/rounds?limit=${limit}`,
     ),
 
   getRound: (roundId: string) =>
@@ -113,15 +118,15 @@ export const harnessEvolutionApi = {
       `/admin/evolution/rounds/${encodeURIComponent(roundId)}`,
     ),
 
-  dryRun: (botId: string, opts: EvolutionRunOptions = {}) =>
+  dryRun: (projectId: string, opts: EvolutionRunOptions = {}) =>
     apiFetch<EvolutionRunResult>(
-      `/admin/bots/${encodeURIComponent(botId)}/evolution/dry-run`,
+      `/admin/projects/${encodeURIComponent(projectId)}/evolution/dry-run`,
       { method: 'POST', body: JSON.stringify(opts) },
     ),
 
-  liveRun: (botId: string, opts: EvolutionRunOptions = {}) =>
+  liveRun: (projectId: string, opts: EvolutionRunOptions = {}) =>
     apiFetch<EvolutionRunResult>(
-      `/admin/bots/${encodeURIComponent(botId)}/evolution/apply`,
+      `/admin/projects/${encodeURIComponent(projectId)}/evolution/apply`,
       { method: 'POST', body: JSON.stringify(opts) },
     ),
 
@@ -146,7 +151,6 @@ export const harnessEvolutionApi = {
     ),
 };
 
-/** Status → CSS-var colour for badges + row tints. */
 export const EVOLUTION_STATUS_COLOR_VAR: Record<EvolutionStatus, string> = {
   pending: 'var(--accent-amber, #f59e0b)',
   running: 'var(--accent-amber, #f59e0b)',
@@ -163,4 +167,12 @@ export const EVOLUTION_STATUS_LABEL: Record<EvolutionStatus, string> = {
   applied: 'Applied',
   failed: 'Failed',
   aborted: 'Aborted',
+};
+
+export const FORGE_KIND_COLOR_VAR: Record<ForgeKind, string> = {
+  rule: 'var(--accent-cyan, #06b6d4)',
+  hook: 'var(--accent-red, #ef4444)',
+  command: 'var(--accent-amber, #f59e0b)',
+  mcp_server: 'var(--accent-green, #10b981)',
+  skill: 'var(--text-tertiary, #6b7280)',
 };

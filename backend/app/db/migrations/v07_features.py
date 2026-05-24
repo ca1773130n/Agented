@@ -584,18 +584,114 @@ def _migrate_130_project_sessions_super_agent_link(conn) -> None:
     )
 
 
-def _migrate_136_harness_skill_index(conn):
-    """Life-Harness T-final: FTS5 index over enabled H5 procedural skills.
+def _migrate_137_harness_forge_pivot(conn):
+    """Life-Harness pivot: drop the parallel ``harness_layers`` /
+    ``harness_skill_index`` tables (Forge already owns rules/skills/hooks/
+    commands/mcp_servers) and re-key the audit tables on ``project_id``
+    instead of ``bot_id``.
 
-    Backs BM25 top-K retrieval at compile time. Idempotent.
-
-    Reference: arXiv 2605.22166 §4.3.2 Procedural Skill Layer.
+    ``harness_evolution_rounds`` and ``execution_harness_snapshots`` are
+    rebuilt because SQLite can't ALTER existing column constraints; the
+    rebuild widens nullability on ``bot_id`` and adds the project-side
+    columns. Existing rows are preserved with NULL ``project_id`` — they
+    remain queryable as historical audit but won't participate in the new
+    project-scoped evolution loop.
     """
-    from app.db.schema._harness_skill_index import (
-        create_harness_skill_index_tables,
-    )
+    # 1. Drop the duplicates-of-Forge tables. IF EXISTS so the migration
+    #    is idempotent and a fresh install (where these never landed)
+    #    is a no-op.
+    conn.execute("DROP TABLE IF EXISTS harness_skill_index")
+    conn.execute("DROP TABLE IF EXISTS harness_layers")
 
-    create_harness_skill_index_tables(conn)
+    # 2. Rebuild ``execution_harness_snapshots`` — but only when the table
+    #    still has the pre-pivot shape (the fresh-install bundle creates
+    #    the new shape directly, so this migration is a no-op there).
+    ehs_old_shape = _column_exists(
+        conn, "execution_harness_snapshots", "artifact_json",
+    )
+    if ehs_old_shape:
+        conn.execute(
+            "ALTER TABLE execution_harness_snapshots RENAME TO _ehs_old"
+        )
+        from app.db.schema._harness_snapshots import (
+            create_harness_snapshot_tables,
+        )
+        create_harness_snapshot_tables(conn)
+        conn.execute(
+            """INSERT INTO execution_harness_snapshots
+                   (execution_id, project_id, bot_id, harness_kind,
+                    bundle_hash, resolved_bindings_json, created_at)
+               SELECT execution_id, NULL, bot_id, harness_kind,
+                      NULL, '[]', created_at
+               FROM _ehs_old"""
+        )
+        conn.execute("DROP TABLE _ehs_old")
+
+    # 3. Rebuild ``harness_evolution_rounds`` — same idempotency probe.
+    her_old_shape = _column_exists(
+        conn, "harness_evolution_rounds", "input_layers_json",
+    )
+    if her_old_shape:
+        conn.execute(
+            "ALTER TABLE harness_evolution_rounds RENAME TO _her_old"
+        )
+        from app.db.schema._harness_evolution import (
+            create_harness_evolution_tables,
+        )
+        create_harness_evolution_tables(conn)
+        # Backfill rounds with NULL project_id — they predate the pivot
+        # and stay as historical audit. New rounds carry project_id.
+        # NOTE: the new table requires project_id NOT NULL. To keep the
+        # legacy rows we relax it by storing the old bot_id there as a
+        # placeholder so the constraint passes; consumers filter on
+        # ``status = 'applied'`` for impact computations and the placeholder
+        # never matches a real project id.
+        conn.execute(
+            """INSERT INTO harness_evolution_rounds
+                   (id, project_id, started_at, finished_at, status,
+                    input_window_since, input_window_until, input_execution_count,
+                    input_forge_json, output_patch_json, applied_asset_ids_json,
+                    error_message, notes, scratch_dir)
+               SELECT id,
+                      COALESCE(NULLIF(bot_id, ''), 'legacy-pre-pivot') AS project_id,
+                      started_at, finished_at, status,
+                      input_window_since, input_window_until, input_execution_count,
+                      COALESCE(input_layers_json, '{}'),
+                      output_patch_json,
+                      COALESCE(applied_layer_ids_json, '[]'),
+                      error_message, notes, scratch_dir
+               FROM _her_old"""
+        )
+        conn.execute("DROP TABLE _her_old")
+
+
+def _column_exists(conn, table: str, column: str) -> bool:
+    """Probe ``PRAGMA table_info`` to see whether a column is present."""
+    try:
+        cursor = conn.execute(f"PRAGMA table_info({table})")
+        return any(row[1] == column for row in cursor.fetchall())
+    except Exception:
+        return False
+
+
+def _migrate_136_harness_skill_index(conn):
+    """Life-Harness T-final: FTS5 index over H5 procedural skills (historical).
+
+    Removed by migration 137 (Forge pivot — Forge owns skills directly).
+    DDL inlined so the migration chain stays runnable post-pivot.
+    """
+    conn.execute(
+        """
+        CREATE VIRTUAL TABLE IF NOT EXISTS harness_skill_index USING fts5(
+            layer_id UNINDEXED,
+            bot_id UNINDEXED,
+            title,
+            when_clause,
+            recipe,
+            tags
+        )
+        """
+    )
 
 
 def _migrate_135_harness_evolution_dry_run(conn):
@@ -669,16 +765,31 @@ def _migrate_133_harness_snapshots(conn):
 
 
 def _migrate_132_harness_layers(conn):
-    """Life-Harness T2: harness_layers table for the four-layer IR.
+    """Life-Harness T2: harness_layers table (historical).
 
-    One row per intervention (H2/H3/H4/H5). Compiled into a per-bot
-    ``HarnessBuildArtifact`` by ``HarnessBuildService.build_for``. Idempotent.
-
-    Reference: arXiv 2605.22166 (Life-Harness, §4 Method).
+    NOTE: this table is removed by migration 137 (Forge pivot). The DDL
+    is inlined here rather than imported from a schema bundle because the
+    bundle file no longer exists post-pivot. We keep the migration runnable
+    on its own so the version chain stays intact.
     """
-    from app.db.schema._harness_layers import create_harness_layer_tables
-
-    create_harness_layer_tables(conn)
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS harness_layers (
+            id               TEXT    PRIMARY KEY,
+            bot_id           TEXT    NOT NULL,
+            trigger_id       TEXT,
+            layer            TEXT    NOT NULL,
+            name             TEXT    NOT NULL,
+            enabled          INTEGER NOT NULL DEFAULT 1,
+            version          INTEGER NOT NULL DEFAULT 1,
+            parent_layer_id  TEXT,
+            source_kind      TEXT    NOT NULL DEFAULT 'manual',
+            payload_json     TEXT    NOT NULL DEFAULT '{}',
+            created_at       TEXT    NOT NULL DEFAULT (datetime('now')),
+            updated_at       TEXT    NOT NULL DEFAULT (datetime('now'))
+        )
+        """
+    )
 
 
 def _migrate_131_harness_annotations(conn):
@@ -758,4 +869,6 @@ V07_MIGRATIONS: list = [
     (135, "harness_evolution_dry_run", _migrate_135_harness_evolution_dry_run),
     # Life-Harness T-final: FTS5 BM25 index for H5 procedural skills.
     (136, "harness_skill_index", _migrate_136_harness_skill_index),
+    # Life-Harness Forge pivot: drop parallel IR; project-scope evolution.
+    (137, "harness_forge_pivot", _migrate_137_harness_forge_pivot),
 ]

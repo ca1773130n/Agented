@@ -362,3 +362,52 @@ def cleanup_session_overlay(session_id: str) -> None:
         logger.warning(
             "claude_config_overlay: failed to remove %s: %s", overlay, exc
         )
+
+
+_OVERLAY_GLOB = "agented-claude-overlay-*"
+_DEFAULT_MAX_AGE_HOURS = 2
+
+
+def cleanup_stale_overlays(*, max_age_hours: int = _DEFAULT_MAX_AGE_HOURS) -> dict:
+    """Remove ``/tmp/agented-claude-overlay-*`` dirs older than the threshold.
+
+    Called at backend startup to mop up after crashes / SIGKILLs where the
+    per-session ``finally:`` block didn't get to run. Two-hour default gives
+    in-flight long executions plenty of slack while still cleaning multi-day
+    orphans.
+
+    Returns ``{"removed": N, "kept": N, "errors": N}`` for diagnostic logs.
+    Never raises — startup must succeed even when /tmp is hostile.
+    """
+    import time
+
+    removed = 0
+    kept = 0
+    errors = 0
+    cutoff = time.time() - max_age_hours * 3600
+
+    try:
+        for path in Path("/tmp").glob(_OVERLAY_GLOB):
+            try:
+                if not path.is_dir():
+                    continue
+                if path.stat().st_mtime >= cutoff:
+                    kept += 1
+                    continue
+                shutil.rmtree(path, ignore_errors=True)
+                if path.exists():
+                    errors += 1
+                else:
+                    removed += 1
+            except OSError:
+                errors += 1
+    except OSError:
+        errors += 1
+
+    if removed or errors:
+        logger.info(
+            "claude_config_overlay GC: removed=%d kept=%d errors=%d "
+            "(max_age_hours=%d)",
+            removed, kept, errors, max_age_hours,
+        )
+    return {"removed": removed, "kept": kept, "errors": errors}
