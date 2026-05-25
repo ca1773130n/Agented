@@ -655,6 +655,53 @@ def test_constraint_skips_intent_narrative(isolated_db):
     )
 
 
+def test_file_mention_pattern_surfaces_backticked_paths(isolated_db):
+    """English-trigger-free domain_fact detector. Real conversations
+    inline backticked paths without "lives at" / "located in", and the
+    dogfood pass against agented.db showed the English-keyed pattern
+    missed 124 of these mentions across 4 sessions. The new pattern
+    should surface them as domain_fact takeaways keyed on the path."""
+    _seed_execution("exec-fm", _make_assistant_stream(
+        "The fix is in `frontend/src/webmcp/generic-tools.ts` and the "
+        "regression test is in `frontend/src/webmcp/__tests__/generic-tools.test.ts`.",
+    ))
+    _extract("exec-fm", "proj-fm")
+    facts = [r for r in repo.list_for_project("proj-fm")
+             if r["kind"] == "domain_fact"]
+    paths = {(r.get("evidence") or {}).get("path") for r in facts}
+    assert "frontend/src/webmcp/generic-tools.ts" in paths
+    assert "frontend/src/webmcp/__tests__/generic-tools.test.ts" in paths
+    # All are knowledge_graph-targeted at 0.40 confidence (review-only).
+    assert all(r["suggested_target"] == "knowledge_graph" for r in facts)
+    assert all(r["confidence"] < 0.85 for r in facts)
+
+
+def test_file_mention_pattern_dedupes_repeated_path(isolated_db):
+    """A chatty conversation mentioning the same path 8 times shouldn't
+    produce 8 takeaways. Dedup is keyed on the canonical path."""
+    _seed_execution("exec-fm-dup", _make_assistant_stream(
+        "Editing `src/App.vue`. Then again in `src/App.vue`. And once "
+        "more in `src/App.vue`. Finally `src/App.vue` works.",
+    ))
+    _extract("exec-fm-dup", "proj-fm-dup")
+    facts = [r for r in repo.list_for_project("proj-fm-dup")
+             if r["kind"] == "domain_fact"
+             and (r.get("evidence") or {}).get("path") == "src/App.vue"]
+    assert len(facts) == 1
+
+
+def test_file_mention_pattern_skips_version_numbers(isolated_db):
+    """Backticked tokens like ``1.0`` and ``3.11.2`` shouldn't be treated
+    as filepaths."""
+    _seed_execution("exec-fm-ver", _make_assistant_stream(
+        "Bumped to `3.11.2` and updated the schema version to `1.0`.",
+    ))
+    _extract("exec-fm-ver", "proj-fm-ver")
+    facts = [r for r in repo.list_for_project("proj-fm-ver")
+             if r["kind"] == "domain_fact"]
+    assert facts == []
+
+
 def test_constraint_still_catches_environment_block(isolated_db):
     """Real example: ``cannot reach the server (ERR-NETWORK)`` IS an
     environmental constraint and should still surface after the

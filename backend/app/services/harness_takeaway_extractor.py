@@ -182,6 +182,98 @@ _PATTERNS: tuple[_Pattern, ...] = (
 )
 
 
+# File-mention pattern (English-trigger-free domain_fact detector).
+#
+# Real coding conversations inline backticked filepaths without saying
+# "lives at" or "located in" — the existing ``_DOMAIN_FACT_PATH``
+# pattern misses all of them. Dogfood against the live agented.db
+# showed 124 backticked-path mentions across 4 super-agent sessions
+# that produced ZERO domain_fact takeaways via the English-keyed
+# pattern.
+#
+# This pattern is trigger-free: any backticked token containing a
+# dot-separated extension counts. Dedup is keyed on the canonical
+# path (not the surrounding sentence), and per-session matches are
+# capped so a chatty conversation can't noise-bomb the operator
+# queue. Confidence stays at 0.40 — review-only, never auto-applies.
+_FILE_MENTION_RE = re.compile(
+    r"`([A-Za-z0-9_./\-]+\.[a-zA-Z0-9]{1,8})`"
+)
+_FILE_MENTION_MAX_PER_SESSION = 8
+
+
+def _extract_file_mentions(
+    events: list[TurnEvent],
+    session_kind: str,
+    session_id: str,
+    project_id: Optional[str],
+) -> list[dict[str, Any]]:
+    """Surface backticked-filepath mentions as domain_fact takeaways.
+
+    Dedup-by-path, cap per session, capture the surrounding sentence
+    as content. Skips noise like ``1.0`` (version numbers) and very
+    short tokens.
+    """
+    seen_paths: set[str] = set()
+    out: list[dict[str, Any]] = []
+
+    for ev in events:
+        if ev.role != "assistant" or not ev.content_text:
+            continue
+        text = ev.content_text
+
+        for m in _FILE_MENTION_RE.finditer(text):
+            path = m.group(1)
+            # Skip pure version numbers ("1.0", "3.11.2") and tiny tokens.
+            if len(path) < 4:
+                continue
+            parts = [p for p in path.split(".") if p]
+            if all(p.isdigit() for p in parts):
+                continue
+            if path in seen_paths:
+                continue
+            seen_paths.add(path)
+
+            # Pull a ±200-char window and clip to nearest sentence boundary.
+            start, end = m.span()
+            sent_start = max(start - 200, 0)
+            back = text.rfind(".", sent_start, start)
+            if back >= 0:
+                sent_start = back + 1
+            sent_end = min(end + 200, len(text))
+            forward = text.find(".", end, sent_end)
+            if forward >= 0:
+                sent_end = forward + 1
+            content = text[sent_start:sent_end].strip()
+            if len(content) < 10:
+                content = f"Path `{path}` was referenced in this session."
+
+            out.append({
+                "session_kind": session_kind,
+                "session_id": session_id,
+                "project_id": project_id,
+                "kind": "domain_fact",
+                "content": content[:500],
+                "confidence": 0.40,
+                "evidence": {
+                    "event_index": ev.index,
+                    "pattern": "backticked filepath inline mention",
+                    "path": path,
+                },
+                "suggested_target": "knowledge_graph",
+                "suggested_payload": {
+                    "name": path,
+                    "entity_type": "domain_fact",
+                    "context_sentence": content[:500],
+                },
+                "extractor_version": EXTRACTOR_VERSION,
+            })
+            if len(out) >= _FILE_MENTION_MAX_PER_SESSION:
+                return out
+
+    return out
+
+
 # ---------------------------------------------------------------------------
 # Extraction
 # ---------------------------------------------------------------------------
@@ -228,6 +320,13 @@ def _extract_heuristic(
                     ),
                     "extractor_version": EXTRACTOR_VERSION,
                 })
+
+    # File-mention domain_fact pass (English-trigger-free; path-keyed dedup
+    # internal to the helper, then the global _dedupe collapses any
+    # cross-event repetition).
+    out.extend(_extract_file_mentions(
+        events, session_kind, session_id, project_id,
+    ))
     return _dedupe(out)
 
 
