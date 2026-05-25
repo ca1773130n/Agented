@@ -104,6 +104,82 @@ def test_h4_does_not_flag_stagnation_when_outcome_is_completed():
     assert not any(i["kind"] == "h4_stagnation" for i in incs)
 
 
+def test_parse_stream_unwraps_json_array_wrapping():
+    """Regression from dogfood: ``execution_logs.stdout_log`` is stored
+    as a single JSON array wrapping already-Claude-shaped entries —
+    ``[{"type": "system", ...}, {"type": "assistant", ...}]`` — instead
+    of newline-delimited JSONL. The parser used to reject the leading
+    ``[`` and produce 0 events for every trigger execution. The bridge
+    (_to_claude_jsonl) unwraps the array."""
+    from app.services.harness_failure_annotator import (
+        _to_claude_jsonl, parse_claude_stream,
+    )
+    wrapped = json.dumps([
+        {"type": "system", "subtype": "init", "session_id": "x"},
+        {"type": "assistant", "message": {"content": [
+            {"type": "text", "text": "hello from claude"},
+        ]}},
+    ])
+    bridged = _to_claude_jsonl(wrapped)
+    events = parse_claude_stream(bridged)
+    assistant = [e for e in events if e.role == "assistant"]
+    assert assistant
+    assert any("hello from claude" in e.content_text for e in assistant)
+
+
+def test_parse_stream_surfaces_setup_failure_from_result_event():
+    """Dogfood regression: Two weekly cron triggers had been silently
+    no-op-running for weeks because their slash-command wasn't
+    registered. Claude exited cleanly (shell status=success) but the
+    ``type: result`` event said ``num_turns=0`` with
+    ``result: "Unknown command: /vulnerability-scan"``. The parser
+    used to drop the result event entirely, so no detector ever fired.
+    The fix surfaces num_turns=0 / is_error=true result events as
+    synthetic tool_result+error so H3 picks them up."""
+    from app.services.harness_failure_annotator import (
+        parse_claude_stream, detect_h3,
+    )
+    # Simulated stream: system init + result with num_turns=0
+    stream = "\n".join([
+        json.dumps({"type": "system", "subtype": "init"}),
+        json.dumps({
+            "type": "result", "subtype": "success", "is_error": False,
+            "num_turns": 0, "result": "Unknown command: /vulnerability-scan",
+        }),
+    ])
+    events = parse_claude_stream(stream)
+    err_events = [e for e in events
+                  if e.role == "tool_result" and e.tool_error]
+    assert err_events
+    assert "Unknown command" in err_events[0].tool_error
+
+    # And H3 flags it as a setup failure.
+    incs = detect_h3(events)
+    setup = [i for i in incs if i["kind"] == "h3_setup_failure"]
+    assert setup
+    assert "Unknown command" in setup[0]["evidence"]["error"]
+
+
+def test_parse_stream_ignores_successful_result_events():
+    """The normal path: a result event with num_turns>0 and is_error=false
+    is a healthy recap and shouldn't synthesize a fake tool_error."""
+    from app.services.harness_failure_annotator import parse_claude_stream
+    stream = "\n".join([
+        json.dumps({"type": "system", "subtype": "init"}),
+        json.dumps({"type": "assistant", "message": {"content": [
+            {"type": "text", "text": "done"},
+        ]}}),
+        json.dumps({
+            "type": "result", "subtype": "success", "is_error": False,
+            "num_turns": 1, "result": "All checks passed.",
+        }),
+    ])
+    events = parse_claude_stream(stream)
+    err_events = [e for e in events
+                  if e.role == "tool_result" and e.tool_error]
+    assert err_events == []
+
+
 def test_h4_flags_timeout_budget():
     incs = detect_h4([], outcome="timeout")
     assert incs and incs[0]["kind"] == "h4_budget_exhausted"

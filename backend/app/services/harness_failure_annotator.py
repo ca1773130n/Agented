@@ -80,32 +80,44 @@ def _fetch_trigger_execution(session_id: str) -> Optional[SessionPayload]:
     if not row:
         return None
     return SessionPayload(
-        text=row["stdout_log"] or "",
+        text=_to_claude_jsonl(row["stdout_log"] or ""),
         backend_type=row["backend_type"] or "",
         project_id=row["project_id"],
         outcome=row["status"],
     )
 
 
-def _role_content_array_to_claude_jsonl(text: str) -> str:
-    """Convert a Python-side role/content dialogue (JSON array) into
-    Claude JSONL stream format so ``parse_claude_stream`` can read it.
+def _to_claude_jsonl(text: str) -> str:
+    """Bridge various storage formats to Claude JSONL stream format so
+    ``parse_claude_stream`` can read them.
 
-    ``super_agent_sessions.conversation_log`` and
-    ``project_sessions.log_json`` both store dialogues as
-    ``[{"role": "user"|"assistant", "content": "..."}, ...]`` — NOT
-    the newline-delimited ``{"type": "assistant", "message": {...}}``
-    format the harness parser was originally written for. Without this
-    bridge the parser returns zero events and the heuristic extractor
-    surfaces zero takeaways from these session kinds (silent failure).
+    Discovered by dogfood: three different session producers store their
+    transcripts in three different wrappers, ALL of which the original
+    parser rejects:
+
+      1. ``super_agent_sessions.conversation_log`` →
+         ``[{"role": "user"|"assistant", "content": "..."}, ...]``
+         (Python-side role/content dialogue). Needs re-shaping each
+         entry into ``{"type": "assistant", "message": {...}}``.
+      2. ``project_sessions.log_json`` → same shape as #1.
+      3. ``execution_logs.stdout_log`` → a SINGLE JSON ARRAY wrapping
+         already-Claude-shaped entries
+         (``[{"type": "system", ...}, {"type": "assistant", ...}]``).
+         The entries are correct; only the wrapping is wrong — they
+         need to be one-per-line, not enclosed in ``[...]``.
+
+    The parser is written for newline-delimited JSONL (``{...}\n{...}\n...``).
+    Without this bridge each producer silently surfaces zero events,
+    which silently produces zero takeaways and zero incidents.
 
     Behaviour:
 
-      - If ``text`` parses as a list of dicts where the first dict has
-        a ``role`` key, re-emit each entry as one JSONL line in the
-        Claude stream shape.
-      - Otherwise return ``text`` unchanged so existing Claude-JSONL
-        callers are unaffected.
+      - If ``text`` parses as a JSON array AND the first element has
+        a ``role`` key → role/content bridge (case 1, 2).
+      - If ``text`` parses as a JSON array AND the first element has
+        a ``type`` key → unwrap to JSONL (case 3).
+      - Otherwise return ``text`` unchanged so already-JSONL callers
+        and miscellaneous formats pass through.
     """
     stripped = (text or "").lstrip()
     if not stripped.startswith("["):
@@ -117,7 +129,20 @@ def _role_content_array_to_claude_jsonl(text: str) -> str:
     if not isinstance(parsed, list) or not parsed:
         return text
     first = parsed[0]
-    if not isinstance(first, dict) or "role" not in first:
+    if not isinstance(first, dict):
+        return text
+
+    # Case 3: already-Claude-shaped entries wrapped in a JSON array.
+    # Unwrap each to its own JSONL line; the parser handles the rest.
+    if "type" in first:
+        return "\n".join(
+            json.dumps(entry) for entry in parsed
+            if isinstance(entry, dict)
+        )
+
+    # Cases 1 + 2: role/content dialogue → wrap each into the
+    # ``{"type": ..., "message": {"content": [...]}}`` shape.
+    if "role" not in first:
         return text
 
     lines: list[str] = []
@@ -127,9 +152,6 @@ def _role_content_array_to_claude_jsonl(text: str) -> str:
         role = entry.get("role")
         content = entry.get("content")
         if not isinstance(content, str):
-            # Some agent backends already store content as a list of
-            # blocks; in that case pass it through verbatim and let the
-            # parser unpack blocks.
             content_blocks = content if isinstance(content, list) else []
             if role in ("assistant", "user") and content_blocks:
                 lines.append(json.dumps({
@@ -148,6 +170,10 @@ def _role_content_array_to_claude_jsonl(text: str) -> str:
                 "message": {"content": [{"type": "text", "text": content}]},
             }))
     return "\n".join(lines)
+
+
+# Compat alias for callers that still reference the narrower name.
+_role_content_array_to_claude_jsonl = _to_claude_jsonl
 
 
 def _fetch_super_agent_session(session_id: str) -> Optional[SessionPayload]:
@@ -297,6 +323,36 @@ def parse_claude_stream(stdout: str) -> list[TurnEvent]:
         ev_type = obj.get("type")
         msg = obj.get("message") or {}
 
+        # ``type: result`` is the final event on a Claude run. Most of
+        # the time it's a recap (duration, usage, success); we ignore
+        # it. But when ``is_error: true`` OR the run reports
+        # ``num_turns: 0`` (Claude did literally no work), the stream
+        # parser would otherwise drop the only signal that anything
+        # went wrong, leaving H2/H3/H4 nothing to fire on. Dogfood
+        # against execution_logs caught two vuln-scan bots that had
+        # been silently no-op-running because their trigger referenced
+        # an unknown slash command — column status was "success", but
+        # the result event said ``"Unknown command: ..."``. Surface
+        # those as synthetic ``tool_result`` events so the existing
+        # detectors classify them.
+        if ev_type == "result":
+            err_text = None
+            if obj.get("is_error"):
+                err_text = _stringify(obj.get("result")) or "Claude reported is_error=true"
+            elif obj.get("num_turns") == 0:
+                err_text = (
+                    _stringify(obj.get("result"))
+                    or "Claude run produced zero turns (bot did nothing)"
+                )
+            if err_text:
+                events.append(
+                    TurnEvent(idx, "tool_result",
+                              content_text=err_text,
+                              tool_error=err_text, raw=obj)
+                )
+                idx += 1
+            continue
+
         if ev_type == "assistant":
             for block in msg.get("content") or []:
                 btype = block.get("type")
@@ -386,6 +442,18 @@ def detect_h3(events: list[TurnEvent]) -> list[dict]:
                 incidents.append({
                     "layer": "h3",
                     "kind": "h3_contract_violation",
+                    "event_index": ev.index,
+                    "evidence": {"error": ev.tool_error[:240]},
+                })
+            # Setup-level contract failures surfaced by parse_claude_stream
+            # from the final ``type: result`` event. Dogfood caught two
+            # weekly cron triggers silently no-op-running for weeks
+            # because their slash-command was unregistered.
+            elif "unknown command" in err or "command not found" in err \
+                    or "zero turns" in err:
+                incidents.append({
+                    "layer": "h3",
+                    "kind": "h3_setup_failure",
                     "event_index": ev.index,
                     "evidence": {"error": ev.tool_error[:240]},
                 })
