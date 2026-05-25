@@ -341,7 +341,7 @@ def _build_payload(
         return {"key": _slugify(content), "value": content}
     if target == "rule":
         return {
-            "name": _slugify(content)[:50],
+            "name": _truncate_slug(_slugify(content), 50),
             "description": content,
             "rule_type": "convention" if kind == "user_preference" else "validation",
         }
@@ -349,7 +349,7 @@ def _build_payload(
         return {"name": content[:100], "entity_type": kind}
     if target == "skill":
         return {
-            "title": _slugify(content)[:60],
+            "title": _truncate_slug(_slugify(content), 60),
             "when": "extracted from session takeaway",
             "recipe": content,
         }
@@ -359,6 +359,27 @@ def _build_payload(
 def _slugify(text: str) -> str:
     s = re.sub(r"[^a-zA-Z0-9]+", "-", text.lower()).strip("-")
     return s or "takeaway"
+
+
+def _truncate_slug(slug: str, max_len: int) -> str:
+    """Truncate a slug at the last word boundary (``-``) before
+    ``max_len`` so we don't ship ``when-a-user-requests-deep-web-
+    competitor-research-`` (trailing dash) or
+    ``...segment-the-landscape-into-m`` (mid-token cut).
+
+    Dogfood found rule + skill names with both quirks after autoapply.
+    Cheap one-pass fix: cut at max_len, then walk back to the last
+    ``-`` (or strip a trailing one outright if there's nothing to walk
+    back to). Falls back to a hard cut if no dash exists in the range.
+    """
+    if len(slug) <= max_len:
+        return slug
+    head = slug[:max_len]
+    # Prefer a clean word boundary if there's one in the kept range.
+    last_dash = head.rfind("-")
+    if last_dash > max_len // 2:
+        return head[:last_dash]
+    return head.rstrip("-") or "takeaway"
 
 
 def _dedupe(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -720,7 +741,9 @@ def _render_skill_md(takeaway: dict[str, Any]) -> str:
     a Markdown body describing the recipe.
     """
     payload = takeaway.get("suggested_payload") or {}
-    title = payload.get("title") or _slugify(takeaway["content"])[:60]
+    title = payload.get("title") or _truncate_slug(
+        _slugify(takeaway["content"]), 60,
+    )
     when = payload.get("when") or "extracted from session takeaway"
     recipe = payload.get("recipe") or takeaway["content"]
     description = takeaway["content"][:200]
@@ -760,7 +783,7 @@ def _apply_to_skill(takeaway: dict[str, Any]) -> Optional[str]:
         or payload.get("name")
         or _slugify(takeaway["content"])
     )
-    skill_name = _slugify(skill_name)[:60]
+    skill_name = _truncate_slug(_slugify(skill_name), 60)
     if not skill_name:
         return None
 

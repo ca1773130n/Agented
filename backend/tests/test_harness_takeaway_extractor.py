@@ -658,6 +658,39 @@ def test_constraint_skips_intent_narrative(isolated_db):
     )
 
 
+def test_truncate_slug_avoids_mid_token_and_trailing_dash():
+    """Dogfood regression: rule + skill names landed with trailing
+    dashes (``...research-``) or mid-token cuts (``...into-m``) when
+    ``_slugify(...)[:N]`` ran without word-boundary awareness."""
+    from app.services.harness_takeaway_extractor import _truncate_slug
+
+    # Trailing dash case: 50-char window ending right after a dash.
+    long_slug = "when-a-user-requests-deep-web-competitor-research-check-deferred"
+    out = _truncate_slug(long_slug, 50)
+    assert not out.endswith("-")
+    assert len(out) <= 50
+    # Should cut at a word boundary, not mid-token.
+    # The 50th char of ``when-a-user-requests-deep-web-competitor-research-``
+    # is the trailing dash; we want to keep through ``...research`` (49 chars).
+    assert out == "when-a-user-requests-deep-web-competitor-research"
+
+    # Mid-token case: 60-char window cuts ``multi`` to ``m``.
+    slug = (
+        "for-agented-competitor-research-segment-the-landscape-into-multi-harness"
+    )
+    out = _truncate_slug(slug, 60)
+    assert not out.endswith("-")
+    # Should NOT contain the truncated ``into-m`` token.
+    assert not out.endswith("into-m")
+    # Should fall back to a clean boundary.
+    assert "into" in out
+
+
+def test_truncate_slug_short_slug_passes_through():
+    from app.services.harness_takeaway_extractor import _truncate_slug
+    assert _truncate_slug("short-slug", 60) == "short-slug"
+
+
 def test_file_mention_pattern_surfaces_backticked_paths(isolated_db):
     """English-trigger-free domain_fact detector. Real conversations
     inline backticked paths without "lives at" / "located in", and the
