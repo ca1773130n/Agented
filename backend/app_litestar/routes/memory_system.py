@@ -224,6 +224,121 @@ def refresh_tesserae_for_project(project_id: str) -> dict[str, Any]:
     return {"project_id": project_id, **result}
 
 
+@get(
+    "/system/memory/tesserae/projects/{project_id:str}/status",
+    sync_to_thread=True,
+)
+def tesserae_workspace_status(project_id: str) -> dict[str, Any]:
+    """Cheap status read: initialized? compiled? graph size? session
+    count? last-modified timestamps. No subprocess call."""
+    with get_connection() as conn:
+        row = conn.execute(
+            "SELECT 1 FROM projects WHERE id = ?", (project_id,),
+        ).fetchone()
+    if not row:
+        raise NotFoundException(detail=f"project not found: {project_id}")
+    return ti.workspace_status(project_id)
+
+
+@post(
+    "/system/memory/tesserae/projects/{project_id:str}/init",
+    sync_to_thread=True,
+)
+def tesserae_init(project_id: str) -> dict[str, Any]:
+    """``tesserae project init`` — create the .tesserae/ skeleton.
+    Synchronous (instant)."""
+    with get_connection() as conn:
+        row = conn.execute(
+            "SELECT 1 FROM projects WHERE id = ?", (project_id,),
+        ).fetchone()
+    if not row:
+        raise NotFoundException(detail=f"project not found: {project_id}")
+    return ti.init_workspace(project_id).to_dict()
+
+
+@post(
+    "/system/memory/tesserae/projects/{project_id:str}/ingest",
+    sync_to_thread=True,
+)
+def tesserae_ingest(
+    project_id: str, data: Optional[dict[str, Any]] = None,
+) -> dict[str, Any]:
+    """``tesserae project ingest`` — pull markdown sources into the
+    extraction queue. Body optional ``{paths: [str]}`` to override the
+    default set (README/CLAUDE/AGENTS/CONVENTIONS/.planning)."""
+    with get_connection() as conn:
+        row = conn.execute(
+            "SELECT 1 FROM projects WHERE id = ?", (project_id,),
+        ).fetchone()
+    if not row:
+        raise NotFoundException(detail=f"project not found: {project_id}")
+    paths = None
+    if data:
+        raw = data.get("paths")
+        if raw and isinstance(raw, list):
+            paths = [str(p) for p in raw if isinstance(p, str)]
+    return ti.ingest_paths(project_id, paths=paths).to_dict()
+
+
+@post(
+    "/system/memory/tesserae/projects/{project_id:str}/compile",
+    sync_to_thread=True,
+)
+def tesserae_compile(project_id: str) -> dict[str, Any]:
+    """``tesserae project compile`` — extract the typed knowledge
+    graph. Long-running (minutes); dispatched async. Returns a
+    ``job_id`` the caller polls via the jobs endpoint."""
+    with get_connection() as conn:
+        row = conn.execute(
+            "SELECT 1 FROM projects WHERE id = ?", (project_id,),
+        ).fetchone()
+    if not row:
+        raise NotFoundException(detail=f"project not found: {project_id}")
+    if ti.get_tesserae_root(project_id) is None:
+        raise ValidationException(
+            detail="Tesserae not enabled for this project",
+        )
+    job_id = ti.run_op_async(project_id, "compile")
+    return {"job_id": job_id, "project_id": project_id, "op": "compile",
+            "status": "running"}
+
+
+@post(
+    "/system/memory/tesserae/projects/{project_id:str}/build-site",
+    sync_to_thread=True,
+)
+def tesserae_build_site(project_id: str) -> dict[str, Any]:
+    """``tesserae project build-site`` — generate static HTML from
+    the compiled graph. Long-running; dispatched async."""
+    with get_connection() as conn:
+        row = conn.execute(
+            "SELECT 1 FROM projects WHERE id = ?", (project_id,),
+        ).fetchone()
+    if not row:
+        raise NotFoundException(detail=f"project not found: {project_id}")
+    if ti.get_tesserae_root(project_id) is None:
+        raise ValidationException(
+            detail="Tesserae not enabled for this project",
+        )
+    job_id = ti.run_op_async(project_id, "build-site")
+    return {"job_id": job_id, "project_id": project_id,
+            "op": "build-site", "status": "running"}
+
+
+@get(
+    "/system/memory/tesserae/jobs/{job_id:str}",
+    sync_to_thread=True,
+)
+def tesserae_job_status(job_id: str) -> dict[str, Any]:
+    """Poll an async op job. Returns ``status`` in
+    {running, completed, failed} plus the result dict when done.
+    404 when the job_id is unknown (process restarted, etc.)."""
+    job = ti.get_op_job(job_id)
+    if not job:
+        raise NotFoundException(detail=f"job not found: {job_id}")
+    return job
+
+
 memory_system_router = Router(
     path="/admin",
     route_handlers=[
@@ -231,5 +346,11 @@ memory_system_router = Router(
         list_tesserae_projects,
         set_tesserae_for_project,
         refresh_tesserae_for_project,
+        tesserae_workspace_status,
+        tesserae_init,
+        tesserae_ingest,
+        tesserae_compile,
+        tesserae_build_site,
+        tesserae_job_status,
     ],
 )

@@ -47,7 +47,25 @@ logger = logging.getLogger(__name__)
 
 _TESSERAE_CMD = shutil.which("tesserae") or "tesserae"
 _TESSERAE_BATCH_MAX_SESSIONS = 500
-_TESSERAE_IMPORT_TIMEOUT = 60  # subprocess timeout, seconds
+_TESSERAE_IMPORT_TIMEOUT = 60      # sessions import — fast
+_TESSERAE_INIT_TIMEOUT = 30        # init — instant
+_TESSERAE_INGEST_TIMEOUT = 180     # ingest — walks markdown files
+_TESSERAE_COMPILE_TIMEOUT = 600    # compile — extractor over all sources (5-10 min)
+_TESSERAE_BUILD_SITE_TIMEOUT = 300 # build-site — static gen
+_TESSERAE_DEFAULT_INGEST_PATHS = (
+    "README.md",
+    "CLAUDE.md",
+    "AGENTS.md",
+    "CONVENTIONS.md",
+    ".planning",
+)
+
+# Auto-compile policy. After N session imports OR M minutes since the
+# last successful compile, on_session_complete schedules a daemon-thread
+# compile so the graph stays warm. Operator can override per project
+# via a future settings UI; for now these env-tunable knobs.
+_TESSERAE_AUTO_COMPILE_AFTER_N_SESSIONS_DEFAULT = 5
+_TESSERAE_AUTO_COMPILE_MIN_INTERVAL_SECONDS_DEFAULT = 60 * 60  # 1 hour
 
 
 # ---------------------------------------------------------------------------
@@ -388,6 +406,335 @@ def export_sessions_to_tesserae(project_id: str) -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
+# Per-op operations — init / ingest / compile / build-site / status
+# ---------------------------------------------------------------------------
+#
+# Each op shells out to ``tesserae project <subcommand>`` with the
+# project root passed via ``--project``. All return a result dict with
+# at least ``{"ok": bool, "stdout"?, "stderr"?, "reason"?}``. Long ops
+# (compile, build-site) can also be invoked via ``run_async`` which
+# dispatches to a daemon thread and returns immediately with a job id;
+# operator polls ``get_op_status`` for completion.
+
+import threading
+import time as _time
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
+
+
+@dataclass
+class TesseraeOpResult:
+    op: str
+    ok: bool
+    stdout: str = ""
+    stderr: str = ""
+    reason: str = ""
+    started_at: str = ""
+    finished_at: str = ""
+    elapsed_seconds: float = 0.0
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "op": self.op, "ok": self.ok,
+            "stdout": self.stdout[:4000],
+            "stderr": self.stderr[:2000],
+            "reason": self.reason,
+            "started_at": self.started_at, "finished_at": self.finished_at,
+            "elapsed_seconds": round(self.elapsed_seconds, 2),
+        }
+
+
+# In-memory job tracker for async ops. ``{job_id: TesseraeOpResult}``.
+# Cleared per-process; survives only until next gunicorn restart.
+# Workers=1 (mandated by gunicorn.conf.py) so the dict is safe.
+_op_jobs: dict[str, dict[str, Any]] = {}
+_op_jobs_lock = threading.Lock()
+
+
+def _now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _run_tesserae_subcommand(
+    op: str, args: list[str], *, cwd: Path, timeout: int,
+) -> TesseraeOpResult:
+    """Run ``tesserae project <subcommand>`` with the given args.
+
+    Returns a populated TesseraeOpResult — never raises, even on
+    CLI-missing / timeout / non-zero exit. Operators see the failure
+    via the result dict.
+    """
+    cmd = [_TESSERAE_CMD, "project", *args]
+    started = _time.monotonic()
+    started_iso = _now_iso()
+    try:
+        proc = subprocess.run(
+            cmd, cwd=str(cwd), capture_output=True, text=True,
+            timeout=timeout,
+        )
+    except FileNotFoundError:
+        return TesseraeOpResult(
+            op=op, ok=False, reason="cli_missing",
+            started_at=started_iso, finished_at=_now_iso(),
+            elapsed_seconds=_time.monotonic() - started,
+        )
+    except subprocess.TimeoutExpired:
+        return TesseraeOpResult(
+            op=op, ok=False, reason=f"timeout_after_{timeout}s",
+            started_at=started_iso, finished_at=_now_iso(),
+            elapsed_seconds=_time.monotonic() - started,
+        )
+    finished_iso = _now_iso()
+    elapsed = _time.monotonic() - started
+    if proc.returncode != 0:
+        return TesseraeOpResult(
+            op=op, ok=False, stdout=proc.stdout or "",
+            stderr=proc.stderr or "", reason=f"exit_{proc.returncode}",
+            started_at=started_iso, finished_at=finished_iso,
+            elapsed_seconds=elapsed,
+        )
+    return TesseraeOpResult(
+        op=op, ok=True, stdout=proc.stdout or "", stderr=proc.stderr or "",
+        started_at=started_iso, finished_at=finished_iso,
+        elapsed_seconds=elapsed,
+    )
+
+
+def init_workspace(project_id: str) -> TesseraeOpResult:
+    """Create the ``.tesserae/`` skeleton inside the project root.
+
+    Idempotent — Tesserae's ``project init`` is safe to run on an
+    already-initialized directory (it surfaces a warning, returns 0).
+    """
+    root = get_tesserae_root(project_id)
+    if root is None:
+        return TesseraeOpResult(op="init", ok=False, reason="tesserae_disabled",
+                                started_at=_now_iso(), finished_at=_now_iso())
+    return _run_tesserae_subcommand(
+        "init", ["init"], cwd=root, timeout=_TESSERAE_INIT_TIMEOUT,
+    )
+
+
+def ingest_paths(
+    project_id: str, paths: Optional[list[str]] = None,
+) -> TesseraeOpResult:
+    """Ingest markdown sources into the project's extraction queue.
+
+    ``paths`` defaults to the project root's high-signal markdown
+    surfaces (README.md, CLAUDE.md, AGENTS.md, CONVENTIONS.md,
+    .planning/). Non-existent entries are silently dropped so the
+    default set works even when some files don't exist.
+    """
+    root = get_tesserae_root(project_id)
+    if root is None:
+        return TesseraeOpResult(op="ingest", ok=False, reason="tesserae_disabled",
+                                started_at=_now_iso(), finished_at=_now_iso())
+    targets = paths or list(_TESSERAE_DEFAULT_INGEST_PATHS)
+    resolved: list[str] = []
+    for p in targets:
+        candidate = root / p
+        if candidate.exists():
+            resolved.append(str(candidate))
+    if not resolved:
+        return TesseraeOpResult(
+            op="ingest", ok=False, reason="no_paths_to_ingest",
+            started_at=_now_iso(), finished_at=_now_iso(),
+        )
+    return _run_tesserae_subcommand(
+        "ingest", ["ingest", *resolved], cwd=root,
+        timeout=_TESSERAE_INGEST_TIMEOUT,
+    )
+
+
+def compile_workspace(project_id: str) -> TesseraeOpResult:
+    """Extract the typed knowledge graph over all ingested sources.
+
+    Heavy operation (LLM calls if extractor is claude-cli; minutes to
+    complete). Synchronous variant — callers wanting async should use
+    ``run_op_async`` instead.
+    """
+    root = get_tesserae_root(project_id)
+    if root is None:
+        return TesseraeOpResult(op="compile", ok=False, reason="tesserae_disabled",
+                                started_at=_now_iso(), finished_at=_now_iso())
+    return _run_tesserae_subcommand(
+        "compile", ["compile"], cwd=root,
+        timeout=_TESSERAE_COMPILE_TIMEOUT,
+    )
+
+
+def build_site(project_id: str) -> TesseraeOpResult:
+    """Build the static frontend site from the compiled graph."""
+    root = get_tesserae_root(project_id)
+    if root is None:
+        return TesseraeOpResult(op="build-site", ok=False, reason="tesserae_disabled",
+                                started_at=_now_iso(), finished_at=_now_iso())
+    return _run_tesserae_subcommand(
+        "build-site", ["build-site"], cwd=root,
+        timeout=_TESSERAE_BUILD_SITE_TIMEOUT,
+    )
+
+
+_OP_DISPATCH = {
+    "init": init_workspace,
+    "ingest": ingest_paths,
+    "compile": compile_workspace,
+    "build-site": build_site,
+    "sessions-import": lambda pid: TesseraeOpResult(
+        op="sessions-import",
+        ok=(export_sessions_to_tesserae(pid).get("imported", 0) > 0),
+        reason=export_sessions_to_tesserae(pid).get("skipped_reason", ""),
+        started_at=_now_iso(), finished_at=_now_iso(),
+    ),
+}
+
+
+def run_op_async(project_id: str, op: str) -> str:
+    """Run a Tesserae op in a daemon thread, return a job_id the
+    caller can poll. Used for long ops (compile, build-site) so the
+    HTTP handler returns immediately."""
+    if op not in _OP_DISPATCH:
+        raise ValueError(f"unknown tesserae op: {op}")
+    import secrets
+
+    job_id = f"tess-{op}-{secrets.token_hex(6)}"
+    with _op_jobs_lock:
+        _op_jobs[job_id] = {
+            "job_id": job_id, "project_id": project_id, "op": op,
+            "status": "running", "started_at": _now_iso(),
+            "result": None,
+        }
+
+    def _runner():
+        try:
+            result = _OP_DISPATCH[op](project_id)
+            with _op_jobs_lock:
+                _op_jobs[job_id]["status"] = "completed" if result.ok else "failed"
+                _op_jobs[job_id]["finished_at"] = _now_iso()
+                _op_jobs[job_id]["result"] = result.to_dict()
+        except Exception as exc:
+            logger.warning("tesserae async op %s failed", op, exc_info=True)
+            with _op_jobs_lock:
+                _op_jobs[job_id]["status"] = "failed"
+                _op_jobs[job_id]["finished_at"] = _now_iso()
+                _op_jobs[job_id]["result"] = {"op": op, "ok": False,
+                                              "reason": str(exc)[:200]}
+
+    threading.Thread(target=_runner, daemon=True).start()
+    return job_id
+
+
+def get_op_job(job_id: str) -> Optional[dict[str, Any]]:
+    """Look up the in-memory status of an async op job."""
+    with _op_jobs_lock:
+        return dict(_op_jobs.get(job_id) or {}) or None
+
+
+def workspace_status(project_id: str) -> dict[str, Any]:
+    """Inspect the Tesserae workspace: initialized? compiled? session
+    count? Last-modified timestamps for the graph + manifest. Cheap;
+    no subprocess call."""
+    root = get_tesserae_root(project_id)
+    out: dict[str, Any] = {
+        "project_id": project_id,
+        "tesserae_root": str(root) if root else None,
+        "workspace_initialized": False,
+        "graph_compiled": False,
+        "graph_compiled_at": None,
+        "graph_size_bytes": None,
+        "session_count": 0,
+        "last_session_imported_at": None,
+        "site_built": False,
+    }
+    if root is None:
+        return out
+    tess = root / ".tesserae"
+    out["workspace_initialized"] = tess.is_dir()
+    graph = tess / "graph.json"
+    if graph.is_file():
+        st = graph.stat()
+        out["graph_compiled"] = st.st_size > 100
+        out["graph_size_bytes"] = st.st_size
+        out["graph_compiled_at"] = datetime.fromtimestamp(
+            st.st_mtime, tz=timezone.utc,
+        ).isoformat()
+    manifest = tess / "harness_sessions" / "manifest.json"
+    if manifest.is_file():
+        try:
+            data = json.loads(manifest.read_text())
+            out["session_count"] = len(data.get("sessions") or [])
+            out["last_session_imported_at"] = datetime.fromtimestamp(
+                manifest.stat().st_mtime, tz=timezone.utc,
+            ).isoformat()
+        except (OSError, ValueError):
+            pass
+    site_index = tess / "site" / "index.html"
+    out["site_built"] = site_index.is_file()
+    return out
+
+
+# ---------------------------------------------------------------------------
+# Auto-compile policy
+# ---------------------------------------------------------------------------
+
+# Per-project counters tracking sessions imported since last compile.
+# Resets when compile completes successfully.
+_session_count_since_compile: dict[str, int] = {}
+_last_auto_compile_attempt: dict[str, float] = {}
+_auto_compile_lock = threading.Lock()
+
+
+def _auto_compile_after_n() -> int:
+    raw = os.environ.get("AGENTED_TESSERAE_AUTO_COMPILE_AFTER_N_SESSIONS")
+    if raw:
+        try:
+            return max(1, int(raw))
+        except ValueError:
+            pass
+    return _TESSERAE_AUTO_COMPILE_AFTER_N_SESSIONS_DEFAULT
+
+
+def _auto_compile_min_interval_seconds() -> int:
+    raw = os.environ.get("AGENTED_TESSERAE_AUTO_COMPILE_MIN_INTERVAL_SECONDS")
+    if raw:
+        try:
+            return max(60, int(raw))
+        except ValueError:
+            pass
+    return _TESSERAE_AUTO_COMPILE_MIN_INTERVAL_SECONDS_DEFAULT
+
+
+def _maybe_schedule_auto_compile(project_id: str) -> None:
+    """Fire a background compile if N sessions imported since last
+    compile AND it's been ≥M seconds since the last attempt.
+
+    Skipping is the default — operators who want eager compile use the
+    Settings → Memory System "Compile" button.
+    """
+    threshold = _auto_compile_after_n()
+    min_interval = _auto_compile_min_interval_seconds()
+    with _auto_compile_lock:
+        n = _session_count_since_compile.get(project_id, 0) + 1
+        _session_count_since_compile[project_id] = n
+        if n < threshold:
+            return
+        last = _last_auto_compile_attempt.get(project_id, 0.0)
+        if _time.monotonic() - last < min_interval:
+            return
+        _last_auto_compile_attempt[project_id] = _time.monotonic()
+        _session_count_since_compile[project_id] = 0
+    logger.info(
+        "tesserae: auto-compile scheduled for %s (after %d sessions)",
+        project_id, n,
+    )
+    try:
+        run_op_async(project_id, "compile")
+    except Exception:
+        logger.warning("tesserae: auto-compile dispatch failed for %s",
+                       project_id, exc_info=True)
+
+
+# ---------------------------------------------------------------------------
 # Session-completion handler — fires on every completed session
 # ---------------------------------------------------------------------------
 
@@ -426,6 +773,16 @@ def on_session_complete(
         logger.warning(
             "tesserae: export failed for %s after %s/%s",
             project_id, session_kind, session_id, exc_info=True,
+        )
+        return
+    # Auto-compile policy: after enough fresh sessions, kick off a
+    # background compile so the graph stays warm. Best-effort.
+    try:
+        _maybe_schedule_auto_compile(project_id)
+    except Exception:
+        logger.warning(
+            "tesserae: auto-compile decision failed for %s",
+            project_id, exc_info=True,
         )
 
 

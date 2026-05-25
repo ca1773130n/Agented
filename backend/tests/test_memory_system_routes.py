@@ -173,3 +173,143 @@ def test_refresh_404_unknown_project(client):
         "/admin/system/memory/tesserae/projects/proj-ghost/refresh"
     )
     assert r.status_code == 404
+
+
+# ---------- per-op endpoints (init / ingest / compile / build-site /
+#            status / job) ---------------------------------------------------
+
+def test_status_returns_workspace_introspection(client, tmp_path):
+    import json
+    tess = tmp_path / ".tesserae"
+    tess.mkdir()
+    # Plant a graph + manifest so status reports the populated state
+    (tess / "graph.json").write_text('{"nodes": [{"x": 1}]}' + ' ' * 200)
+    hs = tess / "harness_sessions"
+    hs.mkdir()
+    (hs / "manifest.json").write_text(json.dumps({
+        "version": "1", "sessions": [{"id": "a"}],
+    }))
+    _seed_project("proj-status", root=str(tmp_path))
+
+    r = client.get(
+        "/admin/system/memory/tesserae/projects/proj-status/status"
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["workspace_initialized"] is True
+    assert body["graph_compiled"] is True
+    assert body["session_count"] == 1
+
+
+def test_status_404_unknown_project(client):
+    r = client.get(
+        "/admin/system/memory/tesserae/projects/proj-ghost/status"
+    )
+    assert r.status_code == 404
+
+
+def test_init_invokes_cli_with_init_subcommand(client, tmp_path):
+    _seed_project("proj-init", root=str(tmp_path))
+
+    class _FakeResult:
+        returncode = 0
+        stdout = "Initialized project wiki"
+        stderr = ""
+
+    captured: dict = {}
+
+    def _fake_run(cmd, **kwargs):
+        captured["cmd"] = cmd
+        captured["cwd"] = kwargs.get("cwd")
+        return _FakeResult()
+
+    from app.services import tesserae_integration as ti
+    with patch.object(ti.subprocess, "run", side_effect=_fake_run):
+        r = client.post(
+            "/admin/system/memory/tesserae/projects/proj-init/init"
+        )
+    assert r.status_code == 201, r.text
+    body = r.json()
+    assert body["ok"] is True
+    assert captured["cmd"][1:3] == ["project", "init"]
+    assert captured["cwd"] == str(tmp_path)
+
+
+def test_ingest_skips_when_no_paths_exist(client, tmp_path):
+    """Default ingest paths (CLAUDE.md / README.md / etc.) don't exist
+    in tmp_path → ingest reports ``no_paths_to_ingest`` and never
+    invokes the CLI."""
+    _seed_project("proj-ingest-empty", root=str(tmp_path))
+    from app.services import tesserae_integration as ti
+    with patch.object(ti.subprocess, "run") as mock_run:
+        r = client.post(
+            "/admin/system/memory/tesserae/projects/proj-ingest-empty/ingest"
+        )
+    assert r.status_code == 201, r.text
+    body = r.json()
+    assert body["ok"] is False
+    assert body["reason"] == "no_paths_to_ingest"
+    mock_run.assert_not_called()
+
+
+def test_ingest_passes_resolved_paths_to_cli(client, tmp_path):
+    (tmp_path / "README.md").write_text("# readme")
+    (tmp_path / "CLAUDE.md").write_text("# claude")
+    _seed_project("proj-ingest-yes", root=str(tmp_path))
+
+    class _FakeResult:
+        returncode = 0
+        stdout = "Ingested"
+        stderr = ""
+
+    captured: dict = {}
+    def _fake_run(cmd, **kwargs):
+        captured["cmd"] = cmd
+        return _FakeResult()
+
+    from app.services import tesserae_integration as ti
+    with patch.object(ti.subprocess, "run", side_effect=_fake_run):
+        r = client.post(
+            "/admin/system/memory/tesserae/projects/proj-ingest-yes/ingest"
+        )
+    assert r.status_code == 201
+    assert r.json()["ok"] is True
+    # Both README.md + CLAUDE.md should be in the argv.
+    argv_str = " ".join(captured["cmd"])
+    assert "README.md" in argv_str
+    assert "CLAUDE.md" in argv_str
+
+
+def test_compile_dispatches_async_returns_job_id(client, tmp_path):
+    _seed_project("proj-compile", root=str(tmp_path))
+    r = client.post(
+        "/admin/system/memory/tesserae/projects/proj-compile/compile"
+    )
+    assert r.status_code == 201, r.text
+    body = r.json()
+    assert body["status"] == "running"
+    assert body["op"] == "compile"
+    assert body["job_id"].startswith("tess-compile-")
+
+
+def test_compile_404_unknown_project(client):
+    r = client.post(
+        "/admin/system/memory/tesserae/projects/proj-ghost/compile"
+    )
+    assert r.status_code == 404
+
+
+def test_compile_rejects_disabled_project(client):
+    _seed_project("proj-disabled", root=None)
+    r = client.post(
+        "/admin/system/memory/tesserae/projects/proj-disabled/compile"
+    )
+    # ValidationException → 400 or 422
+    assert r.status_code in (400, 422)
+
+
+def test_job_status_404_unknown_job(client):
+    r = client.get(
+        "/admin/system/memory/tesserae/jobs/tess-bogus-aabbccdd"
+    )
+    assert r.status_code == 404

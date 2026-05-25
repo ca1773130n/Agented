@@ -40,6 +40,39 @@ export interface TesseraeRefreshResult {
   stdout?: string;
 }
 
+export interface TesseraeOpResult {
+  op: string;
+  ok: boolean;
+  stdout?: string;
+  stderr?: string;
+  reason?: string;
+  started_at?: string;
+  finished_at?: string;
+  elapsed_seconds?: number;
+}
+
+export interface TesseraeWorkspaceStatus {
+  project_id: string;
+  tesserae_root: string | null;
+  workspace_initialized: boolean;
+  graph_compiled: boolean;
+  graph_compiled_at: string | null;
+  graph_size_bytes: number | null;
+  session_count: number;
+  last_session_imported_at: string | null;
+  site_built: boolean;
+}
+
+export interface TesseraeAsyncJob {
+  job_id: string;
+  project_id: string;
+  op: string;
+  status: 'running' | 'completed' | 'failed';
+  started_at?: string;
+  finished_at?: string;
+  result?: TesseraeOpResult;
+}
+
 export const memorySystemApi = {
   list: () =>
     apiFetch<{ memory_systems: MemorySystemSummary[] }>(
@@ -64,5 +97,45 @@ export const memorySystemApi = {
     apiFetch<TesseraeRefreshResult>(
       `/admin/system/memory/tesserae/projects/${encodeURIComponent(projectId)}/refresh`,
       { method: 'POST' },
+    ),
+
+  // Per-op buttons surfaced in Settings → Memory System.
+  // init + ingest are synchronous (fast). compile + build-site are
+  // dispatched to a daemon thread; caller polls via `jobStatus`.
+  tesseraeStatus: (projectId: string) =>
+    apiFetch<TesseraeWorkspaceStatus>(
+      `/admin/system/memory/tesserae/projects/${encodeURIComponent(projectId)}/status`,
+    ),
+
+  tesseraeInit: (projectId: string) =>
+    apiFetch<TesseraeOpResult>(
+      `/admin/system/memory/tesserae/projects/${encodeURIComponent(projectId)}/init`,
+      { method: 'POST' },
+    ),
+
+  tesseraeIngest: (projectId: string, paths?: string[]) =>
+    apiFetch<TesseraeOpResult>(
+      `/admin/system/memory/tesserae/projects/${encodeURIComponent(projectId)}/ingest`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ paths: paths || null }),
+      },
+    ),
+
+  tesseraeCompile: (projectId: string) =>
+    apiFetch<TesseraeAsyncJob>(
+      `/admin/system/memory/tesserae/projects/${encodeURIComponent(projectId)}/compile`,
+      { method: 'POST' },
+    ),
+
+  tesseraeBuildSite: (projectId: string) =>
+    apiFetch<TesseraeAsyncJob>(
+      `/admin/system/memory/tesserae/projects/${encodeURIComponent(projectId)}/build-site`,
+      { method: 'POST' },
+    ),
+
+  tesseraeJobStatus: (jobId: string) =>
+    apiFetch<TesseraeAsyncJob>(
+      `/admin/system/memory/tesserae/jobs/${encodeURIComponent(jobId)}`,
     ),
 };
