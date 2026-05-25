@@ -157,8 +157,7 @@ onMounted(loadData);
             <template v-else>
               <button
                 class="btn btn-apply"
-                :disabled="actingId === tk.id || !tk.suggested_target ||
-                          tk.suggested_target === 'claude_md'"
+                :disabled="actingId === tk.id || !tk.suggested_target"
                 :data-testid="`takeaway-apply-${tk.id}`"
                 @click="applyOne(tk)"
               >Apply</button>
@@ -169,9 +168,9 @@ onMounted(loadData);
                 @click="dismissOne(tk)"
               >Dismiss</button>
               <span
-                v-if="tk.suggested_target === 'claude_md'"
+                v-if="!tk.suggested_target"
                 class="tk__manual-hint"
-              >Apply manually (no auto-writer for CLAUDE.md yet)</span>
+              >No target suggested — review manually</span>
             </template>
           </footer>
         </li>

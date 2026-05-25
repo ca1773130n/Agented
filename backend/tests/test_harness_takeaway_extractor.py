@@ -286,6 +286,152 @@ def test_apply_skill_without_project_id_fails(isolated_db):
     assert result["applied"] is False
 
 
+# ---------- claude_md auto-writer -------------------------------------------
+
+def _plant_claude_md_takeaway(
+    project_id: str,
+    content: str = "Use the existing test fixtures instead of inventing new ones.",
+) -> str:
+    """Insert a claude_md-targeted takeaway directly (extractor doesn't
+    surface claude_md from heuristic patterns)."""
+    [tk_id] = repo.insert_many([{
+        "session_kind": "trigger_execution",
+        "session_id": f"exec-cm-{project_id}",
+        "project_id": project_id,
+        "kind": "user_preference",
+        "content": content,
+        "confidence": 0.9,
+        "suggested_target": "claude_md",
+        "suggested_payload": {},
+        "extractor_version": "test-claude-md",
+    }])
+    return tk_id
+
+
+def test_apply_claude_md_appends_managed_section_preserving_user_content(
+    isolated_db, tmp_path,
+):
+    """An existing CLAUDE.md gets a new marker-bracketed section appended;
+    operator-authored content stays untouched."""
+    _seed_project_with_local_path("proj-cm-a", tmp_path)
+    cm = tmp_path / "CLAUDE.md"
+    cm.write_text("# My Project\n\nOperator-authored content stays here.\n")
+
+    tk_id = _plant_claude_md_takeaway("proj-cm-a")
+    result = extractor.apply_takeaway(tk_id)
+    assert result["applied"] is True
+    assert result["target"] == "claude_md"
+
+    body = cm.read_text()
+    # Original content survives verbatim.
+    assert "# My Project" in body
+    assert "Operator-authored content stays here." in body
+    # Managed section landed AFTER it.
+    assert "<!-- Agented Takeaways: project proj-cm-a" in body
+    assert "<!-- End Agented Takeaways -->" in body
+    # Takeaway bullet present with id marker.
+    assert f"tk:{tk_id}" in body
+    assert "test fixtures" in body
+    # The two regions are in the right order.
+    assert body.index("Operator-authored") < body.index("Agented Takeaways")
+
+
+def test_apply_claude_md_creates_file_when_missing(isolated_db, tmp_path):
+    _seed_project_with_local_path("proj-cm-b", tmp_path)
+    cm = tmp_path / "CLAUDE.md"
+    assert not cm.exists()
+
+    tk_id = _plant_claude_md_takeaway("proj-cm-b")
+    result = extractor.apply_takeaway(tk_id)
+    assert result["applied"] is True
+    assert cm.is_file()
+    body = cm.read_text()
+    assert "Agented Takeaways: project proj-cm-b" in body
+    assert f"tk:{tk_id}" in body
+
+
+def test_apply_claude_md_is_idempotent_on_reapply(isolated_db, tmp_path):
+    """A second apply of the same takeaway must not double-write the bullet."""
+    _seed_project_with_local_path("proj-cm-c", tmp_path)
+    tk_id = _plant_claude_md_takeaway("proj-cm-c")
+    extractor.apply_takeaway(tk_id)
+
+    # Force-reset the applied flag so we can re-run apply through the
+    # public entry point.
+    from app.db.connection import get_connection
+
+    with get_connection() as conn:
+        conn.execute(
+            "UPDATE session_takeaways SET applied = 0, applied_at = NULL "
+            "WHERE id = ?",
+            (tk_id,),
+        )
+        conn.commit()
+
+    extractor.apply_takeaway(tk_id)
+    body = (tmp_path / "CLAUDE.md").read_text()
+    # Bullet appears exactly once.
+    assert body.count(f"tk:{tk_id}") == 1
+
+
+def test_apply_claude_md_multiple_takeaways_share_one_section(
+    isolated_db, tmp_path,
+):
+    """Multiple takeaways for the same project end up as bullets inside
+    the SAME marker-bracketed section, not duplicated section blocks."""
+    _seed_project_with_local_path("proj-cm-d", tmp_path)
+    tk1 = _plant_claude_md_takeaway("proj-cm-d", content="prefer pytest")
+    tk2 = _plant_claude_md_takeaway("proj-cm-d", content="never edit migrations")
+    extractor.apply_takeaway(tk1)
+    extractor.apply_takeaway(tk2)
+
+    body = (tmp_path / "CLAUDE.md").read_text()
+    assert body.count("<!-- Agented Takeaways: project proj-cm-d") == 1
+    assert body.count("<!-- End Agented Takeaways -->") == 1
+    assert f"tk:{tk1}" in body
+    assert f"tk:{tk2}" in body
+
+
+def test_apply_claude_md_without_project_id_fails(isolated_db):
+    """No project_id → no target file path. Returns failed without writing."""
+    [tk_id] = repo.insert_many([{
+        "session_kind": "trigger_execution",
+        "session_id": "exec-cm-orphan",
+        "project_id": None,
+        "kind": "user_preference",
+        "content": "something",
+        "confidence": 0.9,
+        "suggested_target": "claude_md",
+        "suggested_payload": {},
+        "extractor_version": "test",
+    }])
+    result = extractor.apply_takeaway(tk_id)
+    assert result["applied"] is False
+
+
+def test_apply_claude_md_falls_back_to_user_dir(
+    isolated_db, monkeypatch, tmp_path,
+):
+    """Project with no local_path → writes to ``$HOME/.claude/CLAUDE.md``."""
+    monkeypatch.setenv("HOME", str(tmp_path))
+    from app.db.connection import get_connection
+
+    with get_connection() as conn:
+        conn.execute(
+            "INSERT OR IGNORE INTO projects (id, name) VALUES (?, 'Test')",
+            ("proj-cm-noloc",),
+        )
+        conn.commit()
+    tk_id = _plant_claude_md_takeaway("proj-cm-noloc")
+    result = extractor.apply_takeaway(tk_id)
+    assert result["applied"] is True
+
+    cm = tmp_path / ".claude" / "CLAUDE.md"
+    assert cm.is_file()
+    body = cm.read_text()
+    assert "Agented Takeaways: project proj-cm-noloc" in body
+
+
 # ---------- LLM extraction --------------------------------------------------
 
 def _long_subtle_stream() -> str:

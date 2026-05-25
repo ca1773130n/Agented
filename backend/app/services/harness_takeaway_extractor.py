@@ -632,6 +632,122 @@ def _apply_to_skill(takeaway: dict[str, Any]) -> Optional[str]:
     return skill_name
 
 
+def _project_claude_md_path(project_id: str) -> "Path":
+    """Pick where the project's CLAUDE.md lives.
+
+    Preference order:
+
+    1. ``<project.local_path>/CLAUDE.md`` — the project's working tree
+       (what Claude Code naturally reads as the project CLAUDE.md).
+    2. ``~/.claude/CLAUDE.md`` — user-scope fallback. The managed section
+       header includes the project_id so multiple projects coexist
+       without colliding.
+    """
+    from pathlib import Path
+
+    try:
+        from app.db.connection import get_connection
+
+        with get_connection() as conn:
+            row = conn.execute(
+                "SELECT local_path FROM projects WHERE id = ?",
+                (project_id,),
+            ).fetchone()
+        if row and row["local_path"]:
+            return Path(row["local_path"]).expanduser() / "CLAUDE.md"
+    except Exception:
+        pass
+    return Path(os.path.expanduser("~/.claude/CLAUDE.md"))
+
+
+_AGENTED_TAKEAWAY_MARKER_START_TMPL = (
+    "<!-- Agented Takeaways: project {project_id} "
+    "(managed; edits between these markers will be overwritten) -->"
+)
+_AGENTED_TAKEAWAY_MARKER_END = "<!-- End Agented Takeaways -->"
+_AGENTED_TAKEAWAY_SECTION_HEADING = "## Session Takeaways"
+
+
+def _render_takeaway_bullet(takeaway: dict[str, Any]) -> str:
+    """One markdown bullet per takeaway. The HTML comment carries the
+    takeaway_id so idempotency works on re-apply."""
+    kind = takeaway.get("kind", "takeaway").replace("_", " ")
+    content = (takeaway.get("content") or "").strip().replace("\n", " ")
+    return f"- <!--tk:{takeaway['id']}--> **{kind}** — {content}"
+
+
+def _apply_to_claude_md(takeaway: dict[str, Any]) -> Optional[str]:
+    """Insert the takeaway as a bullet inside a project-scoped, marker-
+    delimited section of CLAUDE.md. Idempotent: re-applying the same
+    takeaway is a no-op (detected via the ``tk:<id>`` HTML comment in
+    the existing bullet). Operator-authored content outside the markers
+    is never touched."""
+    project_id = takeaway.get("project_id")
+    if not project_id:
+        return None
+
+    path = _project_claude_md_path(project_id)
+    start_marker = _AGENTED_TAKEAWAY_MARKER_START_TMPL.format(
+        project_id=project_id,
+    )
+
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        existing = path.read_text(encoding="utf-8") if path.exists() else ""
+    except OSError as exc:
+        logger.warning(
+            "takeaway: CLAUDE.md read failed for %s: %s",
+            takeaway["id"], exc,
+        )
+        return None
+
+    bullet = _render_takeaway_bullet(takeaway)
+    marker_id_token = f"tk:{takeaway['id']}"
+
+    start_idx = existing.find(start_marker)
+    end_idx = existing.find(_AGENTED_TAKEAWAY_MARKER_END, max(0, start_idx))
+
+    if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
+        # Section already present — idempotency check then append.
+        section = existing[start_idx:end_idx]
+        if marker_id_token in section:
+            return f"already-present:{takeaway['id']}"
+        before_end = existing[:end_idx].rstrip()
+        after_end = existing[end_idx:]
+        new_text = f"{before_end}\n{bullet}\n{after_end}"
+    elif start_idx != -1 and end_idx == -1:
+        # Orphaned start marker (operator deleted the end). Truncate
+        # everything after the start and rewrite a clean section.
+        before = existing[:start_idx].rstrip()
+        new_text = (
+            f"{before}\n\n{start_marker}\n"
+            f"{_AGENTED_TAKEAWAY_SECTION_HEADING}\n\n"
+            f"{bullet}\n"
+            f"{_AGENTED_TAKEAWAY_MARKER_END}\n"
+        )
+    else:
+        # No section yet — append fresh.
+        sep = "\n\n" if existing.strip() else ""
+        body = existing.rstrip()
+        new_text = (
+            f"{body}{sep}{start_marker}\n"
+            f"{_AGENTED_TAKEAWAY_SECTION_HEADING}\n\n"
+            f"{bullet}\n"
+            f"{_AGENTED_TAKEAWAY_MARKER_END}\n"
+        )
+
+    try:
+        path.write_text(new_text, encoding="utf-8")
+    except OSError as exc:
+        logger.warning(
+            "takeaway: CLAUDE.md write failed for %s: %s",
+            takeaway["id"], exc,
+        )
+        return None
+
+    return f"claude_md:{takeaway['id']}"
+
+
 def _apply_to_rule(takeaway: dict[str, Any]) -> Optional[str]:
     project_id = takeaway.get("project_id")
     if not project_id:
@@ -658,8 +774,7 @@ _APPLIERS = {
     "knowledge_graph": _apply_to_knowledge_graph,
     "rule": _apply_to_rule,
     "skill": _apply_to_skill,
-    # claude_md remains proposal-only — needs a project-aware section
-    # appender that doesn't clobber operator-authored content.
+    "claude_md": _apply_to_claude_md,
 }
 
 
