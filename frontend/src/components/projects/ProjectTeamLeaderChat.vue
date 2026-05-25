@@ -35,12 +35,19 @@ interface Citation {
   value: string;
 }
 
+interface ToolUseRecord {
+  name: string;
+  input: unknown;
+  id?: string;
+}
+
 interface ChatMessage {
   role: 'user' | 'assistant';
   content: string;
   message_id?: string;
   timestamp?: string;
   citations?: Citation[];
+  tool_uses?: ToolUseRecord[];
 }
 
 const messages = ref<ChatMessage[]>([]);
@@ -116,6 +123,23 @@ function connectStream(session: TeamLeaderChatSession) {
         messages.value.push(activeAssistant);
       }
       activeAssistant.content += data.content || '';
+      scrollToBottom();
+    } else if (deltaType === 'tool_use') {
+      // Real tool-use event surfaced by the backend stream — Anthropic
+      // tool_use blocks or OpenAI tool_calls deltas, dispatched by
+      // run_streaming_response. Attach to the active assistant turn.
+      if (!activeAssistant) {
+        activeAssistant = { role: 'assistant', content: '' };
+        messages.value.push(activeAssistant);
+      }
+      const tu: ToolUseRecord = {
+        name: data.name || 'unknown',
+        input: data.input,
+        id: data.id,
+      };
+      activeAssistant.tool_uses = activeAssistant.tool_uses
+        ? [...activeAssistant.tool_uses, tu]
+        : [tu];
       scrollToBottom();
     } else if (deltaType === 'finish') {
       if (activeAssistant) {
@@ -206,6 +230,35 @@ async function send() {
   }
 }
 
+function formatToolInput(tu: ToolUseRecord): string {
+  // Full args as JSON for the badge hover tooltip.
+  try {
+    return JSON.stringify(tu.input, null, 2).slice(0, 600);
+  } catch {
+    return String(tu.input);
+  }
+}
+
+function formatToolPreview(tu: ToolUseRecord): string {
+  // One-line summary for inline display next to the tool name.
+  // For tesserae_ask / search_* the first arg is the operative one;
+  // pick a sensible primary field.
+  if (typeof tu.input === 'string') {
+    const s = tu.input.trim();
+    return s.length > 60 ? s.slice(0, 57) + '…' : s;
+  }
+  if (tu.input && typeof tu.input === 'object') {
+    const obj = tu.input as Record<string, unknown>;
+    const primary =
+      obj.question || obj.query || obj.q || obj.path ||
+      obj.symbol || obj.seed_nodes || obj.session_id || obj.name;
+    if (primary == null) return '';
+    const s = typeof primary === 'string' ? primary : JSON.stringify(primary);
+    return s.length > 60 ? s.slice(0, 57) + '…' : s;
+  }
+  return '';
+}
+
 function scrollToBottom() {
   nextTick(() => {
     if (scrollContainer.value) {
@@ -264,6 +317,25 @@ onUnmounted(closeStream);
           :data-role="m.role"
         >
           <div class="msg__role">{{ m.role }}</div>
+          <div
+            v-if="m.role === 'assistant' && m.tool_uses?.length"
+            class="msg__tools"
+            data-testid="msg-tool-uses"
+          >
+            <span class="tool-label">Queried:</span>
+            <span
+              v-for="(tu, ti) in m.tool_uses"
+              :key="(tu.id || tu.name) + ':' + ti"
+              class="tool-badge"
+              :data-tool="tu.name"
+              :title="formatToolInput(tu)"
+            >
+              <code>{{ tu.name }}</code>
+              <span v-if="formatToolPreview(tu)" class="tool-preview">
+                {{ formatToolPreview(tu) }}
+              </span>
+            </span>
+          </div>
           <div class="msg__content">{{ m.content }}</div>
           <div
             v-if="m.role === 'assistant' && m.citations?.length"
@@ -378,6 +450,36 @@ onUnmounted(closeStream);
   border-color: rgba(245, 158, 11, 0.3);
   color: var(--accent-amber, #f59e0b);
 }
+.msg__tools {
+  display: flex; flex-wrap: wrap; gap: 4px; align-items: center;
+  margin-bottom: 2px;
+}
+.tool-label { font-size: 10px; color: var(--text-tertiary); }
+.tool-badge {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 10px; padding: 2px 6px; border-radius: 3px;
+  background: rgba(139, 92, 246, 0.12);
+  border: 1px solid rgba(139, 92, 246, 0.35);
+  color: var(--accent-purple, #8b5cf6);
+  font-family: var(--font-mono, monospace);
+  cursor: help;
+}
+.tool-badge[data-tool^="tesserae_"] {
+  background: rgba(16, 185, 129, 0.12);
+  border-color: rgba(16, 185, 129, 0.35);
+  color: var(--accent-green, #10b981);
+}
+.tool-badge code { font-family: inherit; font-size: 10px; }
+.tool-preview {
+  font-family: var(--font-sans, sans-serif);
+  font-size: 10px;
+  opacity: 0.8;
+  max-width: 240px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .streaming { font-size: 14px; color: var(--text-tertiary); padding: 6px 12px; }
 
 .composer {

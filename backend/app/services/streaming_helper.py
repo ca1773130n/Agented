@@ -136,7 +136,19 @@ def run_streaming_response(
                     chat_mode=chat_mode,
                 )
 
+            # Typed chunk dispatch — ``stream_llm_response`` yields
+            # ``Union[str, ToolUseEvent]``. Text accumulates as today;
+            # tool_use events get their own ChatStateService delta so
+            # the operator UI can render a citation badge with the
+            # tool name + args (which Tesserae query the leader ran).
+            from .conversation_streaming import ToolUseEvent
+
             for chunk in stream_iter:
+                if isinstance(chunk, ToolUseEvent):
+                    ChatStateService.push_delta(
+                        _session_id, "tool_use", chunk.to_dict(),
+                    )
+                    continue
                 if chunk:
                     accumulated.append(chunk)
                     ChatStateService.push_delta(_session_id, "content_delta", {"content": chunk})

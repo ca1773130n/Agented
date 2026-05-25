@@ -658,6 +658,11 @@ class PluginConversationService:
             for chunk in stream_llm_response(
                 messages, model=model, account_email=account_id, backend=backend
             ):
+                # Plugin conversations don't surface tool-use events;
+                # filter to text chunks so we never accumulate a
+                # ToolUseEvent into the response string.
+                if not isinstance(chunk, str):
+                    continue
                 full_response_parts.append(chunk)
                 cls._broadcast(conv_id, "response_chunk", {"content": chunk})
 

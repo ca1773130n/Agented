@@ -18,14 +18,49 @@ import logging
 import os
 import subprocess
 import threading
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Generator, List, Optional
+from typing import Any, Generator, List, Optional, Union
 
 import yaml
 
 logger = logging.getLogger(__name__)
 
 SUBPROCESS_TIMEOUT = 120
+
+
+@dataclass
+class ToolUseEvent:
+    """Structured tool-use event surfaced by a streaming backend.
+
+    Yielded alongside text by ``stream_llm_response`` when the agent's
+    underlying CLI / proxy exposes function-call deltas:
+
+      - Anthropic stream-json (Claude CLI fallback): ``type=assistant``
+        message events with a ``tool_use`` content block.
+      - OpenAI chat-completions delta (CLIProxyAPI primary path):
+        ``delta.tool_calls[].function`` entries.
+
+    Callers that only want text can ``isinstance(chunk, str)``-filter;
+    the chat-streaming helper dispatches us as a ``tool_use`` delta
+    via ChatStateService so the operator UI surfaces a citation badge.
+
+    ``input`` is the parsed JSON arguments when available, or the raw
+    string fragment for proxy responses that stream tool-call args as
+    incomplete JSON chunks (operator UI shows whichever it gets).
+    """
+    name: str
+    input: Any = field(default_factory=dict)
+    id: Optional[str] = None
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"name": self.name, "input": self.input, "id": self.id}
+
+
+# Tuple type for the chunk stream — what every helper yields and what
+# ``run_streaming_response`` dispatches on. New event types added by
+# extending this Union (and the callers that handle them).
+ChatChunk = Union[str, ToolUseEvent]
 
 
 class ProxyAccountError(Exception):
@@ -563,21 +598,73 @@ def _stream_via_proxy(
                     yield f"\n\n[Proxy error: {error_detail}]"
                 return
 
+            # Accumulator for OpenAI tool_calls — the protocol streams
+            # tool-call ``arguments`` as JSON fragments across multiple
+            # deltas, so we buffer per-index and emit a ToolUseEvent
+            # only once the call is complete (arguments parse as JSON).
+            tool_buffers: dict[int, dict[str, Any]] = {}
+
+            def _flush_tool(idx: int):
+                buf = tool_buffers.get(idx)
+                if not buf or not buf.get("name"):
+                    return None
+                raw_args = buf.get("arguments") or ""
+                try:
+                    parsed = json.loads(raw_args) if raw_args.strip() else {}
+                except json.JSONDecodeError:
+                    parsed = raw_args  # surface fragment as-is
+                return ToolUseEvent(
+                    name=buf["name"], input=parsed, id=buf.get("id"),
+                )
+
             for line in response.iter_lines():
                 if not line or line.startswith(":"):
                     continue
                 if line.startswith("data: "):
                     data = line[6:]
                     if data.strip() == "[DONE]":
+                        # Flush any pending tool calls (model finished
+                        # streaming arguments without an explicit close).
+                        for idx in list(tool_buffers.keys()):
+                            evt = _flush_tool(idx)
+                            if evt is not None:
+                                yield evt
+                        tool_buffers.clear()
                         break
                     try:
                         chunk = json.loads(data)
                         choices = chunk.get("choices", [])
-                        if choices:
-                            delta = choices[0].get("delta", {})
-                            content = delta.get("content")
-                            if content:
-                                yield content
+                        if not choices:
+                            continue
+                        delta = choices[0].get("delta", {})
+                        content = delta.get("content")
+                        if content:
+                            yield content
+
+                        # OpenAI / CLIProxyAPI tool-call deltas: each
+                        # entry has an index, may carry function name +
+                        # streaming arguments fragments.
+                        for tc in delta.get("tool_calls") or []:
+                            idx = tc.get("index", 0)
+                            buf = tool_buffers.setdefault(idx, {})
+                            if tc.get("id"):
+                                buf["id"] = tc["id"]
+                            fn = tc.get("function") or {}
+                            if fn.get("name"):
+                                buf["name"] = fn["name"]
+                            if fn.get("arguments"):
+                                buf["arguments"] = (
+                                    buf.get("arguments", "") + fn["arguments"]
+                                )
+
+                        # finish_reason=tool_calls or stop → flush
+                        finish_reason = choices[0].get("finish_reason")
+                        if finish_reason in ("tool_calls", "stop") and tool_buffers:
+                            for idx in list(tool_buffers.keys()):
+                                evt = _flush_tool(idx)
+                                if evt is not None:
+                                    yield evt
+                            tool_buffers.clear()
                     except json.JSONDecodeError:
                         continue
 
@@ -703,6 +790,12 @@ def _stream_via_cli(
                 event = json.loads(line)
             except json.JSONDecodeError:
                 continue
+
+            # Tool-use blocks land alongside text in the same event;
+            # yield them as typed ToolUseEvent so the chat streaming
+            # helper can dispatch a separate ChatStateService delta.
+            for tu in _extract_tool_uses_from_event(event):
+                yield tu
 
             text = _extract_text_from_event(event)
             if text:
@@ -888,3 +981,43 @@ def _extract_text_from_event(event: dict) -> Optional[str]:
             return result_text
 
     return None
+
+
+def _extract_tool_uses_from_event(event: dict) -> list[ToolUseEvent]:
+    """Surface ``tool_use`` content blocks from Claude stream-json
+    events. The CLI emits one assistant event per turn whose
+    ``message.content`` may contain a mix of text + tool_use blocks
+    (the latter when the agent calls one of its MCP tools).
+
+    Returns the list in event order so the caller can yield each one
+    in sequence; an empty list when no tool_use is present.
+    """
+    out: list[ToolUseEvent] = []
+    event_type = event.get("type", "")
+
+    candidates: list[dict] = []
+    if event_type == "assistant":
+        message = event.get("message", {})
+        candidates = message.get("content") or []
+    elif event_type == "stream_event":
+        # content_block_start with type=tool_use carries the block
+        inner = event.get("event", {})
+        if inner.get("type") == "content_block_start":
+            block = inner.get("content_block", {})
+            if block.get("type") == "tool_use":
+                candidates = [block]
+
+    for block in candidates:
+        if not isinstance(block, dict):
+            continue
+        if block.get("type") != "tool_use":
+            continue
+        name = block.get("name")
+        if not isinstance(name, str):
+            continue
+        out.append(ToolUseEvent(
+            name=name,
+            input=block.get("input") or {},
+            id=block.get("id"),
+        ))
+    return out
