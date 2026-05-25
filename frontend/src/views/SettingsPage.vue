@@ -9,6 +9,7 @@ import MarketplaceSettings from '../components/settings/MarketplaceSettings.vue'
 import HarnessSettings from '../components/settings/HarnessSettings.vue';
 import McpSettings from '../components/settings/McpSettings.vue';
 import GrdSettings from '../components/settings/GrdSettings.vue';
+import MemorySystemSettings from '../components/settings/MemorySystemSettings.vue';
 import SecuritySettings from './RbacSettingsPage.vue';
 import { useToast } from '../composables/useToast';
 import { useFocusTrap } from '../composables/useFocusTrap';
@@ -17,7 +18,7 @@ import { useWebMcpTool } from '../composables/useWebMcpTool';
 const showToast = useToast();
 const route = useRoute();
 
-const TAB_NAMES = ['general', 'security', 'marketplaces', 'harness', 'mcp', 'grd'] as const;
+const TAB_NAMES = ['general', 'security', 'marketplaces', 'harness', 'mcp', 'grd', 'memory'] as const;
 type TabName = (typeof TAB_NAMES)[number];
 
 function getTabFromHash(): TabName {
@@ -59,7 +60,7 @@ useWebMcpTool({
   name: 'agented_settings_switch_tab',
   description: 'Switches the active tab on the Settings page',
   page: 'SettingsPage',
-  inputSchema: { type: 'object', properties: { tab: { type: 'string', description: 'Tab name: general, security, marketplaces, harness, mcp, or grd' } }, required: ['tab'] },
+  inputSchema: { type: 'object', properties: { tab: { type: 'string', description: 'Tab name: general, security, marketplaces, harness, mcp, grd, or memory' } }, required: ['tab'] },
   execute: async (args: Record<string, unknown>) => {
     const tab = args.tab as string;
     if ((TAB_NAMES as readonly string[]).includes(tab)) {
@@ -181,6 +182,13 @@ onUnmounted(() => {
       >
         GRD Planning
       </button>
+      <button
+        :class="['tab', { active: activeTab === 'memory' }]"
+        @click="activeTab = 'memory'"
+        data-testid="settings-tab-memory"
+      >
+        Memory System
+      </button>
     </div>
 
     <!-- Tab Content -->
@@ -195,6 +203,7 @@ onUnmounted(() => {
     <HarnessSettings v-if="activeTab === 'harness'" :marketplaces="marketplaces" />
     <McpSettings v-if="activeTab === 'mcp'" />
     <GrdSettings v-if="activeTab === 'grd'" />
+    <MemorySystemSettings v-if="activeTab === 'memory'" />
 
     <!-- Add Marketplace Modal -->
     <Teleport to="body">

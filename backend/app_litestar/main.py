@@ -50,6 +50,7 @@ from .routes.executions import executions_router
 from .routes.grd_routes import grd_router
 from .routes.harness_evolution import harness_evolution_router
 from .routes.harness_takeaways import harness_takeaways_router
+from .routes.memory_system import memory_system_router
 from .routes.health import health_router
 from .routes.integrations import integrations_github_router
 from .routes.leaf_crud_a import (
@@ -307,6 +308,7 @@ def create_app() -> Litestar:
             executions_router,
             harness_evolution_router,
             harness_takeaways_router,
+            memory_system_router,
             setup_router,
             super_agent_messages_router,
             team_generation_router,
