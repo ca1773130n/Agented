@@ -82,6 +82,28 @@ def _default_min_interval_hours() -> int:
         return 24
 
 
+_DEFAULT_MAX_RUNNING_AGE_SECONDS = 1800  # 30 min
+
+
+def _max_running_age_seconds() -> int:
+    """Threshold past which a ``running`` / ``pending`` evolution round
+    is considered orphaned and reaped. Default 30 min — generously
+    larger than the 10-min Codex subprocess timeout, so a live round
+    is never wrongly reaped while still preventing forever-block when
+    the parent process dies.
+    """
+    raw = os.environ.get("AGENTED_EVOLUTION_MAX_RUNNING_AGE_SECONDS")
+    if raw:
+        try:
+            return max(60, int(raw))
+        except ValueError:
+            logger.warning(
+                "AGENTED_EVOLUTION_MAX_RUNNING_AGE_SECONDS malformed; "
+                "using default",
+            )
+    return _DEFAULT_MAX_RUNNING_AGE_SECONDS
+
+
 def _check_rate_limit(
     project_id: str, min_interval_hours: int,
 ) -> Optional[str]:
@@ -89,9 +111,13 @@ def _check_rate_limit(
 
     Two independent gates:
 
-    1. **In-flight** — ``pending`` / ``running`` rounds always block, even
-       if their elapsed time would otherwise allow a retry. The operator
-       must wait for or abort the in-flight round before starting another.
+    1. **In-flight** — ``pending`` / ``running`` rounds block, BUT with
+       an orphan-reaper: any in-flight round older than
+       ``_max_running_age_seconds()`` is silently marked failed
+       (parent process likely died) so a dead round can't lock the
+       project out forever. Dogfood caught this: a shell-timeout-killed
+       parent left a ``running`` round that would have blocked every
+       subsequent evolution attempt indefinitely.
 
     2. **Recent-success rate limit** — only ``applied`` /
        ``awaiting_approval`` rounds count toward the time-based gate.
@@ -110,10 +136,42 @@ def _check_rate_limit(
         None,
     )
     if in_flight is not None:
-        return (
-            f"round {in_flight['id']} is already {in_flight['status']!r}; "
-            f"wait for it to finish or abort it before starting another"
-        )
+        # Orphan reaper: an in-flight round older than the max age
+        # threshold is treated as dead — parent process killed, network
+        # split, OS crash, whatever. Reap it and fall through to the
+        # recent-success check so the caller can start a fresh round.
+        started_at = in_flight.get("started_at")
+        parsed = _parse_sqlite_dt(started_at) if started_at else None
+        age_s: Optional[float] = None
+        if parsed is not None:
+            age_s = (datetime.now(timezone.utc) - parsed).total_seconds()
+        max_age = _max_running_age_seconds()
+        if age_s is not None and age_s > max_age:
+            try:
+                evolution_repo.mark_failed(
+                    in_flight["id"],
+                    error_message=(
+                        f"reaped: round was {in_flight['status']!r} for "
+                        f"{int(age_s)}s (>{max_age}s threshold); "
+                        f"likely orphaned parent process"
+                    ),
+                )
+                logger.warning(
+                    "harness_evolver: reaped stale %s round %s (age=%.0fs)",
+                    in_flight["status"], in_flight["id"], age_s,
+                )
+            except Exception:
+                logger.warning(
+                    "harness_evolver: failed to reap stale round %s",
+                    in_flight["id"], exc_info=True,
+                )
+            # Fall through — no in-flight blocker anymore.
+        else:
+            return (
+                f"round {in_flight['id']} is already "
+                f"{in_flight['status']!r}; "
+                f"wait for it to finish or abort it before starting another"
+            )
 
     if min_interval_hours <= 0:
         return None

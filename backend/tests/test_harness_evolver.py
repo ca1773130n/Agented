@@ -489,3 +489,75 @@ def test_rate_limit_ignores_aborted_rounds(isolated_db, mock_codex):
 
     second = evolver.run_evolution_round("proj-aborted-retry", dry_run=True)
     assert second.status == "awaiting_approval", second.error
+
+
+def test_rate_limit_reaps_stale_running_round(isolated_db, mock_codex):
+    """Regression from the live-data dogfood: a parent process killed
+    mid-evolution leaves the round in ``status='running'`` forever.
+    The rate limiter used to block all future runs on that project
+    indefinitely. Fix: in-flight rounds older than the configurable
+    max age (default 30 min) are silently reaped (marked failed) so
+    subsequent runs can proceed."""
+    from app.db import harness_evolution as evo_repo
+    from app.db.connection import get_connection
+
+    _seed_project("proj-reap")
+
+    # Plant an old "running" round directly. ``start_round`` only
+    # accepts ``project_id``; we set started_at via UPDATE.
+    rid = evo_repo.start_round(
+        project_id="proj-reap",
+        input_window_since=None, input_window_until=None,
+        input_execution_count=0, input_forge={},
+        scratch_dir="/tmp/x",
+    )
+    evo_repo.mark_running(rid)
+    with get_connection() as conn:
+        # Backdate by 1 hour — well past the 30-min default threshold.
+        conn.execute(
+            "UPDATE harness_evolution_rounds "
+            "SET started_at = datetime('now', '-1 hour') WHERE id = ?",
+            (rid,),
+        )
+        conn.commit()
+
+    # A new run should reap the stale round and proceed (don't get
+    # blocked by the rate-limit in-flight check).
+    mock_codex(files={})
+    fresh = evolver.run_evolution_round("proj-reap", dry_run=True)
+    assert fresh.status == "awaiting_approval", fresh.error
+
+    # And the stale round is now marked failed with a reaper message.
+    with get_connection() as conn:
+        row = conn.execute(
+            "SELECT status, error_message FROM harness_evolution_rounds "
+            "WHERE id = ?", (rid,),
+        ).fetchone()
+    assert row["status"] == "failed"
+    assert "reaped" in (row["error_message"] or "").lower()
+
+
+def test_rate_limit_does_not_reap_fresh_in_flight_round(
+    isolated_db, mock_codex,
+):
+    """An in-flight round STARTED RECENTLY should still block — the
+    reaper must only fire on truly stale rounds, not interrupt a
+    healthy concurrent attempt."""
+    from app.db import harness_evolution as evo_repo
+
+    _seed_project("proj-no-reap")
+
+    rid = evo_repo.start_round(
+        project_id="proj-no-reap",
+        input_window_since=None, input_window_until=None,
+        input_execution_count=0, input_forge={},
+        scratch_dir="/tmp/y",
+    )
+    evo_repo.mark_running(rid)
+    # started_at left at NOW (just now). Reaper threshold is 30 min,
+    # so this should NOT be reaped.
+
+    mock_codex(files={})
+    blocked = evolver.run_evolution_round("proj-no-reap", dry_run=True)
+    assert blocked.status == "aborted"
+    assert "already" in (blocked.error or "")
