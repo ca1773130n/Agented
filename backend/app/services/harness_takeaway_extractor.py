@@ -634,19 +634,38 @@ def _apply_to_knowledge_graph(takeaway: dict[str, Any]) -> Optional[str]:
     payload = takeaway.get("suggested_payload") or {}
     name = payload.get("name") or takeaway["content"][:100]
     entity_type = payload.get("entity_type") or takeaway["kind"]
+    # Propagate the rich context the heuristic / LLM extractor produced
+    # into properties so the KG node is actually queryable beyond the
+    # bare name (dogfood found nodes landing with properties={}, useless).
+    properties = {
+        "source_takeaway_id": takeaway["id"],
+        "source_session_kind": takeaway.get("session_kind"),
+        "source_session_id": takeaway.get("session_id"),
+        "kind": takeaway.get("kind"),
+        "confidence": takeaway.get("confidence"),
+    }
+    ctx = payload.get("context_sentence") or takeaway.get("content")
+    if ctx:
+        properties["context"] = ctx[:500]
     try:
         from app.db.knowledge_graph import upsert_entity
-        eid = upsert_entity(
+        result = upsert_entity(
             agent_id=project_id,
             name=name,
             entity_type=entity_type,
+            properties=properties,
         )
-        return str(eid) if eid else None
     except Exception:
         logger.warning(
             "takeaway: KG write failed for %s", takeaway["id"], exc_info=True,
         )
         return None
+    # upsert_entity returns the full entity dict; the asset_id is the
+    # entity's id string. Without unwrapping we used to record
+    # ``str(dict)`` as the asset_id — junk for any later cross-reference.
+    if isinstance(result, dict):
+        return result.get("id")
+    return str(result) if result else None
 
 
 def _project_local_or_user_path(
