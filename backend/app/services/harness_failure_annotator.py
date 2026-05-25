@@ -87,6 +87,69 @@ def _fetch_trigger_execution(session_id: str) -> Optional[SessionPayload]:
     )
 
 
+def _role_content_array_to_claude_jsonl(text: str) -> str:
+    """Convert a Python-side role/content dialogue (JSON array) into
+    Claude JSONL stream format so ``parse_claude_stream`` can read it.
+
+    ``super_agent_sessions.conversation_log`` and
+    ``project_sessions.log_json`` both store dialogues as
+    ``[{"role": "user"|"assistant", "content": "..."}, ...]`` — NOT
+    the newline-delimited ``{"type": "assistant", "message": {...}}``
+    format the harness parser was originally written for. Without this
+    bridge the parser returns zero events and the heuristic extractor
+    surfaces zero takeaways from these session kinds (silent failure).
+
+    Behaviour:
+
+      - If ``text`` parses as a list of dicts where the first dict has
+        a ``role`` key, re-emit each entry as one JSONL line in the
+        Claude stream shape.
+      - Otherwise return ``text`` unchanged so existing Claude-JSONL
+        callers are unaffected.
+    """
+    stripped = (text or "").lstrip()
+    if not stripped.startswith("["):
+        return text
+    try:
+        parsed = json.loads(text)
+    except (TypeError, ValueError):
+        return text
+    if not isinstance(parsed, list) or not parsed:
+        return text
+    first = parsed[0]
+    if not isinstance(first, dict) or "role" not in first:
+        return text
+
+    lines: list[str] = []
+    for entry in parsed:
+        if not isinstance(entry, dict):
+            continue
+        role = entry.get("role")
+        content = entry.get("content")
+        if not isinstance(content, str):
+            # Some agent backends already store content as a list of
+            # blocks; in that case pass it through verbatim and let the
+            # parser unpack blocks.
+            content_blocks = content if isinstance(content, list) else []
+            if role in ("assistant", "user") and content_blocks:
+                lines.append(json.dumps({
+                    "type": role,
+                    "message": {"content": content_blocks},
+                }))
+            continue
+        if role == "assistant":
+            lines.append(json.dumps({
+                "type": "assistant",
+                "message": {"content": [{"type": "text", "text": content}]},
+            }))
+        elif role == "user":
+            lines.append(json.dumps({
+                "type": "user",
+                "message": {"content": [{"type": "text", "text": content}]},
+            }))
+    return "\n".join(lines)
+
+
 def _fetch_super_agent_session(session_id: str) -> Optional[SessionPayload]:
     with get_connection() as conn:
         row = conn.execute(
@@ -97,7 +160,7 @@ def _fetch_super_agent_session(session_id: str) -> Optional[SessionPayload]:
     if not row:
         return None
     return SessionPayload(
-        text=row["conversation_log"] or "",
+        text=_role_content_array_to_claude_jsonl(row["conversation_log"] or ""),
         # super-agent sessions go through CLI proxies; treat as claude-flavoured
         # by default since most super-agents drive Claude Code.
         backend_type="claude",
@@ -116,7 +179,7 @@ def _fetch_project_session(session_id: str) -> Optional[SessionPayload]:
     if not row:
         return None
     return SessionPayload(
-        text=row["log_json"] or "",
+        text=_role_content_array_to_claude_jsonl(row["log_json"] or ""),
         backend_type="claude",
         project_id=row["project_id"],
         outcome=row["status"],

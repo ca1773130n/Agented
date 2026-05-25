@@ -111,10 +111,34 @@ _DISCOVERED_PROCEDURE = _Pattern(
 )
 
 # Constraints — environment told the agent it can't do X.
+#
+# Triggers are deliberately restricted to "the environment said no"
+# verbs: ``cannot``, ``can't``, ``must``, ``requires``. The earlier
+# pattern also matched ``need to`` / ``required to``, but a dogfood
+# run against real super-agent sessions showed those produce mostly
+# agent-intent narrative ("I need to see how X works") rather than
+# environmental constraints. Dropping them cuts noise without losing
+# the high-signal "I can't browse the web" / "must have X" / "requires
+# X" matches.
+#
+# Anchored at sentence end (``[.!\n]`` or string end) with a GREEDY
+# capture so the takeaway is the full claim, not the first 10 chars
+# ending at a word boundary (that bug shipped fragments like
+# "browse the" and "be running").
+#
+# Per-trigger narrative filter: the ``(?<!I'll )(?<!I will )`` lookbehind
+# only attaches to ``must`` — that's where "I'll must / I will must" style
+# narrative leakage would occur. ``can't`` / ``cannot`` / ``requires``
+# never produce intent-narrative false positives even when "I" is the
+# subject ("I can't reach the server" IS an environmental constraint —
+# the system told the agent no).
 _CONSTRAINT = _Pattern(
     regex=re.compile(
-        r"(?:must|cannot|can'?t|need to|required to|requires)\s+"
-        r"([^.!\n]{10,200}?)\b",
+        r"(?:"
+        r"(?<!I'll )(?<!I will )(?<!you'll )must|"
+        r"cannot|can'?t|requires"
+        r")\s+"
+        r"([^.!\n]{10,200})(?:[.!\n]|$)",
         re.IGNORECASE,
     ),
     kind="constraint",

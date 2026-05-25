@@ -606,3 +606,65 @@ def test_llm_dedups_when_overlapping_with_heuristic(isolated_db, monkeypatch):
     # Heuristic wins ties (cheaper, deterministic).
     assert len(flake8_rows) == 1
     assert flake8_rows[0]["extractor_version"].startswith("heuristic")
+
+
+# ---------- constraint pattern: dogfood regressions ------------------------
+#
+# These tests lock the dogfood findings from running the extractor against
+# the live ``agented.db``. The original constraint regex captured non-greedy
+# up to the first word boundary, producing junk like "browse the" (10 chars)
+# instead of the full claim, and the "need to" / "required to" triggers
+# matched agent-intent narrative.
+
+def test_constraint_captures_full_claim_not_fragment(isolated_db):
+    """Real example from the dogfood: ``I can't browse the web — I don't
+    have web search or internet access in this environment``. The full
+    claim should land as a single takeaway, not the 10-char fragment
+    "browse the"."""
+    _seed_execution("exec-c1", _make_assistant_stream(
+        "I can't browse the web - I don't have web search or internet "
+        "access in this environment.",
+    ))
+    _extract("exec-c1", "proj-c1")
+    constraints = [r for r in repo.list_for_project("proj-c1")
+                   if r["kind"] == "constraint"]
+    assert constraints, "expected at least one constraint"
+    # The full sentence after "can't" should be in the content — not a
+    # tiny word-boundary fragment.
+    matched = [c for c in constraints if "browse the web" in c["content"]]
+    assert matched, f"got: {[c['content'] for c in constraints]}"
+    # And specifically NOT just the 10-char fragment.
+    assert all(len(c["content"]) > 15 for c in constraints)
+
+
+def test_constraint_skips_intent_narrative(isolated_db):
+    """Real example from the dogfood: ``I need to see exactly how those
+    branches are structured`` shouldn't be a constraint — it's agent
+    intent narrative, not an environmental block. Achieved by dropping
+    ``need to`` from the trigger verb set."""
+    _seed_execution("exec-c2", _make_assistant_stream(
+        "I need to see exactly how those branches are structured in "
+        "the template.",
+        "I'll need to consider whether the parent re-renders matter.",
+    ))
+    _extract("exec-c2", "proj-c2")
+    constraints = [r for r in repo.list_for_project("proj-c2")
+                   if r["kind"] == "constraint"]
+    assert constraints == [], (
+        f"intent narrative leaked: {[c['content'] for c in constraints]}"
+    )
+
+
+def test_constraint_still_catches_environment_block(isolated_db):
+    """Real example: ``cannot reach the server (ERR-NETWORK)`` IS an
+    environmental constraint and should still surface after the
+    tightening."""
+    _seed_execution("exec-c3", _make_assistant_stream(
+        "The proxy cannot reach the server at all (sidecar :20001 "
+        "restarted, network blip, CORS preflight denied).",
+    ))
+    _extract("exec-c3", "proj-c3")
+    constraints = [r for r in repo.list_for_project("proj-c3")
+                   if r["kind"] == "constraint"]
+    assert constraints
+    assert any("reach the server" in c["content"] for c in constraints)

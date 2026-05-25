@@ -249,6 +249,51 @@ def test_extract_for_session_produces_team_session_takeaways(isolated_db):
     assert any("pytest" in r["content"] for r in prefs)
 
 
+def test_role_content_array_converted_to_claude_jsonl(isolated_db):
+    """Dogfood regression: ``super_agent_sessions.conversation_log`` is
+    stored as ``json.dumps([{"role": ..., "content": ...}, ...])``, NOT
+    the Claude JSONL stream format the parser expects. Before the
+    fetcher converted it, ``parse_claude_stream`` returned 0 events and
+    the extractor produced 0 takeaways from real super-agent sessions."""
+    from app.services.harness_failure_annotator import (
+        _fetch_super_agent_session,
+        parse_claude_stream,
+    )
+    from app.db.connection import get_connection
+
+    role_content_log = json.dumps([
+        {"role": "user", "content": "what's the deploy procedure?"},
+        {
+            "role": "assistant",
+            "content": (
+                "Got it, I'll remember that you prefer "
+                "deploying via `just deploy` over `make`."
+            ),
+        },
+    ])
+    with get_connection() as conn:
+        conn.execute(
+            "INSERT OR IGNORE INTO super_agents (id, name) "
+            "VALUES ('sa-conv-fmt', 'SA')"
+        )
+        conn.execute(
+            "INSERT INTO super_agent_sessions (id, super_agent_id, status, "
+            "conversation_log) VALUES (?, 'sa-conv-fmt', 'completed', ?)",
+            ("sess-conv-format", role_content_log),
+        )
+        conn.commit()
+
+    payload = _fetch_super_agent_session("sess-conv-format")
+    assert payload is not None
+    events = parse_claude_stream(payload.text)
+    # The parser registers assistant text blocks and tool_result user
+    # blocks — plain user text is intentionally skipped. So we expect
+    # ≥1 assistant event with the preserved content.
+    assistant_events = [e for e in events if e.role == "assistant"]
+    assert assistant_events
+    assert any("just deploy" in e.content_text for e in assistant_events)
+
+
 def test_extract_team_session_missing_row_is_noop(isolated_db):
     """extract_for_session on a missing team_session id is a clean no-op
     (the fetcher returns None and the extractor records nothing)."""
