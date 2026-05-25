@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { ref, computed, onUnmounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import type { Project, Team, Product } from '../services/api';
-import { projectApi, teamApi, productApi, ApiError } from '../services/api';
+import type { Project, Team, Product, SuperAgent } from '../services/api';
+import {
+  projectApi, teamApi, productApi, superAgentApi, ApiError,
+} from '../services/api';
 import PageHeader from '../components/base/PageHeader.vue';
 import ProjectMcpPanel from '../components/project/ProjectMcpPanel.vue';
 import ProjectAllowedAccountsPanel from '../components/project/ProjectAllowedAccountsPanel.vue';
@@ -37,6 +39,9 @@ const editName = ref('');
 const originalName = ref('');
 const editDescription = ref('');
 const originalDescription = ref('');
+const superAgents = ref<SuperAgent[]>([]);
+const selectedManagerSaId = ref<string>('');
+const originalManagerSaId = ref<string>('');
 const cloneStatus = ref<string>('none');
 const cloneError = ref<string>('');
 const lastSyncedAt = ref<string>('');
@@ -83,14 +88,18 @@ useWebMcpTool({
 
 async function loadData() {
   try {
-    const [projectData, teamsData, productsData] = await Promise.all([
+    const [projectData, teamsData, productsData, saData] = await Promise.all([
       projectApi.get(projectId.value),
       teamApi.list(),
       productApi.list(),
+      superAgentApi.list(),
     ]);
     project.value = projectData;
     teams.value = teamsData.teams || [];
     products.value = productsData.products || [];
+    superAgents.value = saData.super_agents || [];
+    selectedManagerSaId.value = projectData.manager_super_agent_id || '';
+    originalManagerSaId.value = projectData.manager_super_agent_id || '';
     // Initialize selected teams from project's current teams
     const teamIds = project.value.teams?.map(t => t.id) || [];
     selectedTeamIds.value = [...teamIds];
@@ -128,7 +137,7 @@ async function saveSettings() {
   isSaving.value = true;
   try {
     // Update product, owner team, local path, name, and description if changed
-    const updateData: { name?: string; description?: string; product_id?: string; owner_team_id?: string; local_path?: string } = {};
+    const updateData: { name?: string; description?: string; product_id?: string; owner_team_id?: string; local_path?: string; manager_super_agent_id?: string } = {};
     if (editName.value !== originalName.value) updateData.name = editName.value;
     if (editDescription.value !== originalDescription.value) updateData.description = editDescription.value;
     if (selectedProductId.value !== originalProductId.value) {
@@ -140,6 +149,9 @@ async function saveSettings() {
     if (editLocalPath.value !== originalLocalPath.value) {
       updateData.local_path = editLocalPath.value;
     }
+    if (selectedManagerSaId.value !== originalManagerSaId.value) {
+      updateData.manager_super_agent_id = selectedManagerSaId.value;
+    }
     if (Object.keys(updateData).length > 0) {
       await projectApi.update(projectId.value, updateData);
       originalName.value = editName.value;
@@ -147,6 +159,7 @@ async function saveSettings() {
       originalProductId.value = selectedProductId.value;
       originalOwnerTeamId.value = selectedOwnerTeamId.value;
       originalLocalPath.value = editLocalPath.value;
+      originalManagerSaId.value = selectedManagerSaId.value;
     }
 
     // Find teams to add (in selected but not in original)
@@ -325,6 +338,48 @@ async function retryClone() {
 
           <p v-if="selectedOwnerTeamId !== originalOwnerTeamId" class="change-hint">
             Owner team will be updated when you save.
+          </p>
+        </div>
+      </div>
+
+      <!-- Team Leader Section -->
+      <div class="card" data-testid="project-team-leader-card">
+        <div class="card-header">
+          <h3>Team Leader</h3>
+          <span v-if="selectedManagerSaId" class="owner-badge">Manager SA</span>
+        </div>
+        <div class="card-body">
+          <p class="section-description">
+            Pick the super-agent that acts as this project's team leader.
+            They answer operator questions on the Project Dashboard's
+            "Ask the team leader" panel, and any per-project agent
+            instances inherit their context bundle. When the project
+            has Tesserae enabled, the leader's runtime gets
+            <code>tesserae_ask</code> automatically.
+          </p>
+
+          <div class="product-select-wrapper">
+            <select
+              v-model="selectedManagerSaId"
+              class="product-select"
+              data-testid="project-manager-sa-select"
+            >
+              <option value="">No team leader assigned</option>
+              <option
+                v-for="sa in superAgents"
+                :key="sa.id"
+                :value="sa.id"
+              >
+                {{ sa.name }} ({{ sa.id }})
+              </option>
+            </select>
+            <svg class="select-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M6 9l6 6 6-6"/>
+            </svg>
+          </div>
+
+          <p v-if="selectedManagerSaId !== originalManagerSaId" class="change-hint">
+            Team leader will be updated when you save.
           </p>
         </div>
       </div>

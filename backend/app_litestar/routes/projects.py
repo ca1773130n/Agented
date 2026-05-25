@@ -187,6 +187,7 @@ def update_project_endpoint(
         owner_team_id=data.get("owner_team_id"),
         local_path=data.get("local_path"),
         github_host=data.get("github_host"),
+        manager_super_agent_id=data.get("manager_super_agent_id"),
     ):
         raise NotFoundException(detail="Project not found or no changes made")
     return get_project(project_id)

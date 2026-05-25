@@ -28,12 +28,19 @@ const isResolving = ref(true);
 const resolveError = ref<string | null>(null);
 const chatSession = ref<TeamLeaderChatSession | null>(null);
 
+type CitationKind = 'file' | 'kg_entity' | 'session' | 'takeaway';
+
+interface Citation {
+  kind: CitationKind;
+  value: string;
+}
+
 interface ChatMessage {
   role: 'user' | 'assistant';
   content: string;
   message_id?: string;
   timestamp?: string;
-  cited_paths?: string[];
+  citations?: Citation[];
 }
 
 const messages = ref<ChatMessage[]>([]);
@@ -112,7 +119,7 @@ function connectStream(session: TeamLeaderChatSession) {
       scrollToBottom();
     } else if (deltaType === 'finish') {
       if (activeAssistant) {
-        activeAssistant.cited_paths = extractCitedPaths(activeAssistant.content);
+        activeAssistant.citations = extractCitations(activeAssistant.content);
         activeAssistant = null;
       }
       isStreaming.value = false;
@@ -134,16 +141,40 @@ function closeStream() {
   }
 }
 
-function extractCitedPaths(text: string): string[] {
-  // Same regex as the takeaway extractor's file-mention pattern.
-  // Cap at 8 unique paths so the chip row doesn't explode.
+// Citation kinds we recognize in the assistant's synthesized text.
+// File paths are caught by backtick + extension; entity / session /
+// takeaway IDs use Agented's prefix conventions:
+//   kge-*   knowledge graph entity (Tesserae node id pattern)
+//   sess-*  super-agent / project session
+//   tk*     takeaway id
+// Each chip carries a kind for typed rendering. The list is best-
+// effort — actual tool_use citations would need plumbing through the
+// CLI proxy's tool-call stream (see harness_evolver.py and
+// conversation_streaming.py — both currently yield plain text only;
+// tool_use events surface only in the Anthropic stream-json fallback
+// and the proxy's OpenAI chat-completions surface drops them).
+const CITATION_PATTERNS: { kind: CitationKind; re: RegExp }[] = [
+  { kind: 'file', re: /`([A-Za-z0-9_./\-]+\.[a-zA-Z0-9]{1,8})`/g },
+  { kind: 'kg_entity', re: /\b(kge-[a-z0-9]{4,})\b/g },
+  { kind: 'session', re: /\b(sess-[a-z0-9]{4,}|psa-[a-z0-9]{4,})\b/g },
+  { kind: 'takeaway', re: /\b(tk[a-z0-9]{6,})\b/g },
+];
+
+function extractCitations(text: string): Citation[] {
   const seen = new Set<string>();
-  const re = /`([A-Za-z0-9_./\-]+\.[a-zA-Z0-9]{1,8})`/g;
-  for (const m of text.matchAll(re)) {
-    if (seen.size >= 8) break;
-    if (m[1]) seen.add(m[1]);
+  const out: Citation[] = [];
+  for (const { kind, re } of CITATION_PATTERNS) {
+    for (const m of text.matchAll(re)) {
+      const value = m[1];
+      if (!value) continue;
+      const key = `${kind}:${value}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push({ kind, value });
+      if (out.length >= 12) return out;
+    }
   }
-  return Array.from(seen);
+  return out;
 }
 
 async function send() {
@@ -202,6 +233,10 @@ onUnmounted(closeStream);
           </span>
           <span v-else-if="isResolving">Resolving team leader…</span>
         </p>
+        <p v-if="chatSession" class="muted tiny">
+          Conversation persists across reloads —
+          backed by <code>super_agent_sessions.conversation_log</code>.
+        </p>
       </div>
     </header>
 
@@ -231,15 +266,17 @@ onUnmounted(closeStream);
           <div class="msg__role">{{ m.role }}</div>
           <div class="msg__content">{{ m.content }}</div>
           <div
-            v-if="m.role === 'assistant' && m.cited_paths?.length"
+            v-if="m.role === 'assistant' && m.citations?.length"
             class="msg__cites"
           >
-            <span class="cite-label">Mentioned:</span>
+            <span class="cite-label">Cited:</span>
             <code
-              v-for="p in m.cited_paths"
-              :key="p"
+              v-for="c in m.citations"
+              :key="c.kind + ':' + c.value"
               class="cite-chip"
-            >{{ p }}</code>
+              :data-kind="c.kind"
+              :title="`Citation kind: ${c.kind}`"
+            >{{ c.value }}</code>
           </div>
         </article>
         <div v-if="isStreaming" class="streaming">…</div>
@@ -280,6 +317,8 @@ onUnmounted(closeStream);
 }
 .head h3 { margin: 0; font-size: 14px; }
 .muted { color: var(--text-tertiary); font-size: 12px; margin: 4px 0 0; }
+.muted.tiny { font-size: 10px; margin-top: 2px; }
+.muted.tiny code { font-size: 10px; }
 .badge.ok {
   margin-left: 8px; padding: 1px 6px; border-radius: 3px;
   font-size: 10px; letter-spacing: 0.04em; text-transform: uppercase;
@@ -323,6 +362,21 @@ onUnmounted(closeStream);
   border: 1px solid rgba(6, 182, 212, 0.2);
   color: var(--accent-cyan, #06b6d4);
   font-family: var(--font-mono, monospace);
+}
+.cite-chip[data-kind="kg_entity"] {
+  background: rgba(139, 92, 246, 0.1);
+  border-color: rgba(139, 92, 246, 0.3);
+  color: var(--accent-purple, #8b5cf6);
+}
+.cite-chip[data-kind="session"] {
+  background: rgba(16, 185, 129, 0.1);
+  border-color: rgba(16, 185, 129, 0.3);
+  color: var(--accent-green, #10b981);
+}
+.cite-chip[data-kind="takeaway"] {
+  background: rgba(245, 158, 11, 0.1);
+  border-color: rgba(245, 158, 11, 0.3);
+  color: var(--accent-amber, #f59e0b);
 }
 .streaming { font-size: 14px; color: var(--text-tertiary); padding: 6px 12px; }
 
