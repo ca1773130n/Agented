@@ -514,6 +514,124 @@ def _apply_to_knowledge_graph(takeaway: dict[str, Any]) -> Optional[str]:
         return None
 
 
+def _project_skills_root(project_id: str) -> "Path":
+    """Pick where ``SKILL.md`` files for a project's takeaways live.
+
+    Preference order:
+
+    1. ``<project.local_path>/.claude/skills/`` — the project's own
+       working tree, where Claude Code naturally discovers project-scoped
+       skills. Requires the project to have a ``local_path`` set.
+    2. ``~/.claude/skills/agented-<project_id>/`` — operator-scope
+       fallback when no project local_path is configured. Skill names
+       get prefixed so multiple Agented projects can coexist under the
+       same user directory without collision.
+    """
+    from pathlib import Path
+
+    try:
+        from app.db.connection import get_connection
+
+        with get_connection() as conn:
+            row = conn.execute(
+                "SELECT local_path FROM projects WHERE id = ?",
+                (project_id,),
+            ).fetchone()
+        if row and row["local_path"]:
+            return Path(row["local_path"]).expanduser() / ".claude" / "skills"
+    except Exception:
+        pass
+    return (
+        Path(os.path.expanduser("~/.claude/skills"))
+        / f"agented-{project_id}"
+    )
+
+
+def _render_skill_md(takeaway: dict[str, Any]) -> str:
+    """Render the takeaway as a SKILL.md package body.
+
+    Format: YAML frontmatter (Claude Code's existing convention) +
+    a Markdown body describing the recipe.
+    """
+    payload = takeaway.get("suggested_payload") or {}
+    title = payload.get("title") or _slugify(takeaway["content"])[:60]
+    when = payload.get("when") or "extracted from session takeaway"
+    recipe = payload.get("recipe") or takeaway["content"]
+    description = takeaway["content"][:200]
+
+    frontmatter = (
+        "---\n"
+        f'name: {title}\n'
+        f'description: {description!s}\n'
+        f'source: agented-takeaway\n'
+        f'takeaway_id: {takeaway["id"]}\n'
+        f'kind: {takeaway["kind"]}\n'
+        f'confidence: {takeaway.get("confidence", 0.5)}\n'
+        "---\n"
+    )
+    body = (
+        f"\n# {title}\n\n"
+        f"**When to use:** {when}\n\n"
+        f"## Recipe\n\n{recipe}\n\n"
+        f"---\n*Surfaced by Agented from a session takeaway. Edit as needed.*\n"
+    )
+    return frontmatter + body
+
+
+def _apply_to_skill(takeaway: dict[str, Any]) -> Optional[str]:
+    """Materialize a takeaway as a ``.claude/skills/<name>/SKILL.md`` package
+    and register it via Forge's existing ``add_project_skill``. Returns the
+    skill_name (the natural identifier) on success."""
+    from pathlib import Path
+
+    project_id = takeaway.get("project_id")
+    if not project_id:
+        return None
+
+    payload = takeaway.get("suggested_payload") or {}
+    skill_name = (
+        payload.get("title")
+        or payload.get("name")
+        or _slugify(takeaway["content"])
+    )
+    skill_name = _slugify(skill_name)[:60]
+    if not skill_name:
+        return None
+
+    try:
+        root = _project_skills_root(project_id)
+        skill_dir = root / skill_name
+        skill_dir.mkdir(parents=True, exist_ok=True)
+        skill_path = skill_dir / "SKILL.md"
+        skill_path.write_text(_render_skill_md(takeaway), encoding="utf-8")
+    except OSError as exc:
+        logger.warning(
+            "takeaway: skill write failed for %s: %s",
+            takeaway["id"], exc,
+        )
+        return None
+
+    try:
+        from app.db.projects import add_project_skill
+
+        add_project_skill(
+            project_id=project_id,
+            skill_name=skill_name,
+            skill_path=str(skill_path),
+            source="agented-takeaway",
+        )
+    except Exception:
+        logger.warning(
+            "takeaway: add_project_skill failed for %s",
+            takeaway["id"], exc_info=True,
+        )
+        # Filesystem artifact survives even if DB binding fails; operator
+        # can manually re-bind. Return the skill_name so the takeaway is
+        # still marked applied.
+
+    return skill_name
+
+
 def _apply_to_rule(takeaway: dict[str, Any]) -> Optional[str]:
     project_id = takeaway.get("project_id")
     if not project_id:
@@ -539,8 +657,9 @@ _APPLIERS = {
     "memory": _apply_to_memory,
     "knowledge_graph": _apply_to_knowledge_graph,
     "rule": _apply_to_rule,
-    # skill + claude_md remain proposal-only (filesystem materialization
-    # for skills; CLAUDE.md project sections need a dedicated writer).
+    "skill": _apply_to_skill,
+    # claude_md remains proposal-only — needs a project-aware section
+    # appender that doesn't clobber operator-authored content.
 }
 
 

@@ -182,6 +182,110 @@ def test_autoapply_enabled_applies_high_confidence(isolated_db, monkeypatch):
     assert any(r["applied"] for r in memory_rows)
 
 
+# ---------- skill auto-writer -----------------------------------------------
+
+def _seed_project_with_local_path(project_id: str, local_path) -> None:
+    """Plant a projects row with a local_path so the skill auto-writer
+    targets the project's own .claude/skills tree."""
+    from app.db.connection import get_connection
+
+    with get_connection() as conn:
+        conn.execute(
+            "INSERT OR IGNORE INTO projects (id, name, local_path) "
+            "VALUES (?, 'Test', ?)",
+            (project_id, str(local_path)),
+        )
+        conn.commit()
+
+
+def test_apply_skill_materializes_skill_md_and_binds(isolated_db, tmp_path):
+    """Skill auto-writer writes a SKILL.md package under the project's
+    .claude/skills/<name>/ and registers it via add_project_skill."""
+    _seed_project_with_local_path("proj-skill-a", tmp_path)
+    _seed_execution("exec-skill", _make_assistant_stream(
+        "I learned that to spin up the dev server you must run "
+        "`just dev-backend` and `just dev-frontend` in separate terminals.",
+    ))
+    ids = _extract("exec-skill", "proj-skill-a")
+    skill_tk = next(
+        repo.get(i) for i in ids
+        if (repo.get(i) or {}).get("suggested_target") == "skill"
+    )
+
+    result = extractor.apply_takeaway(skill_tk["id"])
+    assert result["applied"] is True
+    assert result["target"] == "skill"
+
+    # SKILL.md exists at the expected location.
+    skill_root = tmp_path / ".claude" / "skills"
+    skill_dirs = list(skill_root.iterdir())
+    assert skill_dirs, f"expected SKILL.md dir under {skill_root}"
+    md_path = skill_dirs[0] / "SKILL.md"
+    assert md_path.is_file()
+    body = md_path.read_text()
+    # Frontmatter + recipe body landed.
+    assert "name: " in body
+    assert "source: agented-takeaway" in body
+    assert "just dev-backend" in body
+
+    # And the project_skills binding was registered.
+    from app.db.projects import get_project_skills
+    bindings = get_project_skills("proj-skill-a")
+    assert bindings
+    assert any(b["skill_name"] == result["asset_id"] for b in bindings)
+
+
+def test_apply_skill_falls_back_to_user_dir_when_no_local_path(
+    isolated_db, monkeypatch, tmp_path,
+):
+    """Project with no local_path → skill lands under
+    ``~/.claude/skills/agented-<project_id>/`` (sandboxed via HOME)."""
+    monkeypatch.setenv("HOME", str(tmp_path))
+    from app.db.connection import get_connection
+
+    with get_connection() as conn:
+        conn.execute(
+            "INSERT OR IGNORE INTO projects (id, name) VALUES (?, 'Test')",
+            ("proj-skill-noloc",),
+        )
+        conn.commit()
+    _seed_execution("exec-skill-noloc", _make_assistant_stream(
+        "I learned that the deploy script must be run with sudo because "
+        "it writes to /etc.",
+    ))
+    ids = _extract("exec-skill-noloc", "proj-skill-noloc")
+    skill_tk = next(
+        repo.get(i) for i in ids
+        if (repo.get(i) or {}).get("suggested_target") == "skill"
+    )
+    result = extractor.apply_takeaway(skill_tk["id"])
+    assert result["applied"] is True
+
+    expected_root = tmp_path / ".claude" / "skills" / "agented-proj-skill-noloc"
+    skill_dirs = list(expected_root.iterdir())
+    assert skill_dirs
+    assert (skill_dirs[0] / "SKILL.md").is_file()
+
+
+def test_apply_skill_without_project_id_fails(isolated_db):
+    """A skill takeaway with no project_id can't be materialized — no
+    target directory to write to."""
+    # Insert directly (bypass extractor) with project_id=None.
+    [tk_id] = repo.insert_many([{
+        "session_kind": "trigger_execution",
+        "session_id": "exec-orphan",
+        "project_id": None,
+        "kind": "discovered_procedure",
+        "content": "Some procedure",
+        "confidence": 0.7,
+        "suggested_target": "skill",
+        "suggested_payload": {"title": "orphan-skill", "recipe": "do X"},
+        "extractor_version": "heuristic-test",
+    }])
+    result = extractor.apply_takeaway(tk_id)
+    assert result["applied"] is False
+
+
 # ---------- LLM extraction --------------------------------------------------
 
 def _long_subtle_stream() -> str:

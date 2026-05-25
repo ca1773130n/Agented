@@ -158,7 +158,6 @@ onMounted(loadData);
               <button
                 class="btn btn-apply"
                 :disabled="actingId === tk.id || !tk.suggested_target ||
-                          tk.suggested_target === 'skill' ||
                           tk.suggested_target === 'claude_md'"
                 :data-testid="`takeaway-apply-${tk.id}`"
                 @click="applyOne(tk)"
@@ -170,12 +169,9 @@ onMounted(loadData);
                 @click="dismissOne(tk)"
               >Dismiss</button>
               <span
-                v-if="tk.suggested_target === 'skill' ||
-                      tk.suggested_target === 'claude_md'"
+                v-if="tk.suggested_target === 'claude_md'"
                 class="tk__manual-hint"
-              >Apply manually (no auto-writer for {{
-                TAKEAWAY_TARGET_LABEL[tk.suggested_target]
-              }} yet)</span>
+              >Apply manually (no auto-writer for CLAUDE.md yet)</span>
             </template>
           </footer>
         </li>
