@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from unittest.mock import patch
 
 from app.db import harness_takeaways as repo
 from app.services import harness_takeaway_extractor as extractor
@@ -179,3 +180,179 @@ def test_autoapply_enabled_applies_high_confidence(isolated_db, monkeypatch):
     memory_rows = [r for r in rows if r["suggested_target"] == "memory"]
     assert memory_rows
     assert any(r["applied"] for r in memory_rows)
+
+
+# ---------- LLM extraction --------------------------------------------------
+
+def _long_subtle_stream() -> str:
+    """A transcript with NO heuristic-matching phrases — only the LLM
+    should surface anything. Long enough to clear the min-bytes gate."""
+    filler = "Analysing the codebase. " * 80  # ~2KB filler
+    return _make_assistant_stream(
+        filler + " Note for context: the project's CI uses pytest-xdist "
+        "and we should batch slow tests with the @pytest.mark.slow marker.",
+    )
+
+
+def test_llm_disabled_by_default(isolated_db, monkeypatch):
+    """Without AGENTED_TAKEAWAY_LLM=1 the LLM path never runs."""
+    monkeypatch.delenv("AGENTED_TAKEAWAY_LLM", raising=False)
+    _seed_execution("exec-llm-off", _long_subtle_stream())
+
+    with patch.object(
+        extractor, "_run_codex_for_extraction",
+    ) as mock_codex:
+        _extract("exec-llm-off", "proj-tk-llm-off")
+    mock_codex.assert_not_called()
+
+
+def test_llm_enabled_with_short_transcript_skips_codex(isolated_db, monkeypatch):
+    """Short transcripts don't justify the LLM cost — heuristic-only."""
+    monkeypatch.setenv("AGENTED_TAKEAWAY_LLM", "1")
+    _seed_execution("exec-llm-short", _make_assistant_stream("brief"))
+
+    with patch.object(
+        extractor, "_run_codex_for_extraction",
+    ) as mock_codex:
+        _extract("exec-llm-short", "proj-tk-llm-short")
+    mock_codex.assert_not_called()
+
+
+def test_llm_extracts_takeaways_from_long_transcript(isolated_db, monkeypatch):
+    """LLM surfaces what heuristic missed: subtle multi-line context."""
+    monkeypatch.setenv("AGENTED_TAKEAWAY_LLM", "1")
+    monkeypatch.setenv("AGENTED_TAKEAWAY_LLM_MIN_BYTES", "100")
+    _seed_execution("exec-llm-on", _long_subtle_stream())
+
+    llm_payload = [
+        {
+            "kind": "domain_fact",
+            "content": "CI uses pytest-xdist; slow tests need @pytest.mark.slow",
+            "confidence": 0.85,
+            "suggested_target": "knowledge_graph",
+            "rationale": "transcript mentioned pytest-xdist + slow marker",
+        },
+        {
+            "kind": "user_preference",
+            "content": "Batch slow tests with @pytest.mark.slow",
+            "confidence": 0.75,
+            "suggested_target": "memory",
+            "rationale": "stated as a convention",
+        },
+    ]
+    with patch.object(
+        extractor, "_run_codex_for_extraction",
+        return_value=json.dumps(llm_payload),
+    ):
+        ids = _extract("exec-llm-on", "proj-tk-llm-on")
+
+    rows = [r for r in (repo.get(i) for i in ids) if r is not None]
+    llm_rows = [r for r in rows if r["extractor_version"].startswith("llm")]
+    assert len(llm_rows) == 2
+    facts = [r for r in llm_rows if r["kind"] == "domain_fact"]
+    assert facts and "pytest-xdist" in facts[0]["content"]
+    # Rationale lands in the evidence blob.
+    assert facts[0]["evidence"].get("rationale")
+
+
+def test_llm_handles_codex_preamble(isolated_db, monkeypatch):
+    """Real Codex sometimes prints a preamble before the JSON. The
+    extractor must slice from first ``[`` to last ``]``."""
+    monkeypatch.setenv("AGENTED_TAKEAWAY_LLM", "1")
+    monkeypatch.setenv("AGENTED_TAKEAWAY_LLM_MIN_BYTES", "100")
+    _seed_execution("exec-llm-preamble", _long_subtle_stream())
+
+    noisy = (
+        "Reading prompt...\nOK, here's the JSON:\n"
+        + json.dumps([{
+            "kind": "domain_fact", "content": "x is at /path/to/x",
+            "confidence": 0.7, "suggested_target": "knowledge_graph",
+            "rationale": "explicit reference",
+        }])
+        + "\n\n(end of output)\n"
+    )
+    with patch.object(
+        extractor, "_run_codex_for_extraction", return_value=noisy,
+    ):
+        ids = _extract("exec-llm-preamble", "proj-tk-llm-preamble")
+
+    rows = [r for r in (repo.get(i) for i in ids) if r is not None]
+    llm_rows = [r for r in rows if r["extractor_version"].startswith("llm")]
+    assert len(llm_rows) == 1
+    assert "x is at" in llm_rows[0]["content"]
+
+
+def test_llm_codex_failure_does_not_block_heuristic(isolated_db, monkeypatch):
+    """If Codex errors, the heuristic results still flow through."""
+    monkeypatch.setenv("AGENTED_TAKEAWAY_LLM", "1")
+    monkeypatch.setenv("AGENTED_TAKEAWAY_LLM_MIN_BYTES", "100")
+    # Stream that has BOTH a heuristic match AND enough length for LLM.
+    stream = _make_assistant_stream(
+        "Got it, I'll remember that you prefer ESLint over Prettier.",
+        "x" * 3000,
+    )
+    _seed_execution("exec-llm-error", stream)
+
+    def _exploding(*_args, **_kwargs):
+        raise RuntimeError("codex CLI exited 1: boom")
+
+    with patch.object(
+        extractor, "_run_codex_for_extraction", _exploding,
+    ):
+        ids = _extract("exec-llm-error", "proj-tk-llm-error")
+
+    # Heuristic still surfaced the "I'll remember" preference.
+    rows = [r for r in (repo.get(i) for i in ids) if r is not None]
+    assert any(r["kind"] == "user_preference" for r in rows)
+
+
+def test_llm_malformed_output_is_dropped_silently(isolated_db, monkeypatch):
+    """A Codex run that returns non-JSON gibberish must not crash —
+    the heuristic results still land."""
+    monkeypatch.setenv("AGENTED_TAKEAWAY_LLM", "1")
+    monkeypatch.setenv("AGENTED_TAKEAWAY_LLM_MIN_BYTES", "100")
+    stream = _make_assistant_stream(
+        "Got it, I'll remember that you prefer Vue's <script setup>.",
+        "x" * 3000,
+    )
+    _seed_execution("exec-llm-bad", stream)
+
+    with patch.object(
+        extractor, "_run_codex_for_extraction",
+        return_value="this is not json at all",
+    ):
+        ids = _extract("exec-llm-bad", "proj-tk-llm-bad")
+    rows = [r for r in (repo.get(i) for i in ids) if r is not None]
+    # No LLM rows, but the heuristic preference is still there.
+    assert all(not r["extractor_version"].startswith("llm") for r in rows)
+    assert any(r["kind"] == "user_preference" for r in rows)
+
+
+def test_llm_dedups_when_overlapping_with_heuristic(isolated_db, monkeypatch):
+    """If LLM and heuristic surface the same content, only ONE row lands."""
+    monkeypatch.setenv("AGENTED_TAKEAWAY_LLM", "1")
+    monkeypatch.setenv("AGENTED_TAKEAWAY_LLM_MIN_BYTES", "100")
+    stream = _make_assistant_stream(
+        "Got it, I'll remember that you prefer flake8 over pylint.",
+        "x" * 3000,
+    )
+    _seed_execution("exec-llm-dedup", stream)
+
+    # LLM proposes the SAME preference content the heuristic already caught.
+    overlap = json.dumps([{
+        "kind": "user_preference",
+        "content": "flake8 over pylint",
+        "confidence": 0.8,
+        "suggested_target": "memory",
+        "rationale": "explicit preference statement",
+    }])
+    with patch.object(
+        extractor, "_run_codex_for_extraction", return_value=overlap,
+    ):
+        ids = _extract("exec-llm-dedup", "proj-tk-llm-dedup")
+
+    rows = [r for r in (repo.get(i) for i in ids) if r is not None]
+    flake8_rows = [r for r in rows if "flake8" in r["content"].lower()]
+    # Heuristic wins ties (cheaper, deterministic).
+    assert len(flake8_rows) == 1
+    assert flake8_rows[0]["extractor_version"].startswith("heuristic")

@@ -30,6 +30,9 @@ import json
 import logging
 import os
 import re
+import shlex
+import subprocess
+import tempfile
 from dataclasses import dataclass
 from typing import Any, Optional
 
@@ -42,7 +45,8 @@ from app.services.harness_failure_annotator import (
 
 logger = logging.getLogger(__name__)
 
-EXTRACTOR_VERSION = "0.1.0"
+EXTRACTOR_VERSION = "heuristic-0.1.0"
+LLM_EXTRACTOR_VERSION = "llm-0.1.0"
 HIGH_CONFIDENCE = 0.85
 
 
@@ -246,6 +250,205 @@ def _dedupe(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 # ---------------------------------------------------------------------------
+# LLM-based extraction (opt-in via AGENTED_TAKEAWAY_LLM=1)
+# ---------------------------------------------------------------------------
+
+_LLM_PROMPT_TEMPLATE = """You are analysing one AI-agent session transcript and
+extracting reusable TAKEAWAYS — facts, preferences, procedures, constraints,
+or patterns revealed during the session that future sessions on the same
+project should remember.
+
+Output a JSON ARRAY (no preamble, no markdown fences). Each element is an
+object with these fields:
+
+  kind                — one of: {valid_kinds}
+  content             — 1-2 sentence summary, max 500 chars
+  confidence          — your honest estimate, 0.0-1.0
+  suggested_target    — one of: {valid_targets}, or null if unclear
+  rationale           — short evidence quote from the transcript
+
+Rules:
+  - Only extract takeaways that are NEW and ACTIONABLE.
+  - Don't restate the task itself or obvious project facts.
+  - Prefer 3-5 high-confidence takeaways over 20 low-confidence ones.
+  - Suggest a ``target`` only when the takeaway clearly belongs in one
+    of memory / rule / skill / knowledge_graph / claude_md.
+  - If nothing meaningful is in the transcript, output ``[]``.
+
+TRANSCRIPT:
+
+{transcript}
+"""
+
+_TAKEAWAY_LLM_TIMEOUT_DEFAULT = 60
+_TAKEAWAY_LLM_MIN_BYTES_DEFAULT = 2048
+_TAKEAWAY_LLM_TRANSCRIPT_CAP = 50_000
+
+
+def _llm_enabled() -> bool:
+    return os.environ.get("AGENTED_TAKEAWAY_LLM", "0") == "1"
+
+
+def _llm_min_text_bytes() -> int:
+    raw = os.environ.get(
+        "AGENTED_TAKEAWAY_LLM_MIN_BYTES", str(_TAKEAWAY_LLM_MIN_BYTES_DEFAULT),
+    )
+    try:
+        return max(0, int(raw))
+    except ValueError:
+        return _TAKEAWAY_LLM_MIN_BYTES_DEFAULT
+
+
+def _llm_timeout() -> int:
+    raw = os.environ.get(
+        "AGENTED_TAKEAWAY_LLM_TIMEOUT", str(_TAKEAWAY_LLM_TIMEOUT_DEFAULT),
+    )
+    try:
+        return max(5, int(raw))
+    except ValueError:
+        return _TAKEAWAY_LLM_TIMEOUT_DEFAULT
+
+
+def _llm_codex_cmd() -> list[str]:
+    """Codex argv for extraction. Same {PROMPT} substitution as the
+    evolver. Independent override via ``AGENTED_TAKEAWAY_CODEX_CMD`` so
+    operators can pin a cheaper model for extraction vs. evolution."""
+    raw = os.environ.get("AGENTED_TAKEAWAY_CODEX_CMD") or os.environ.get(
+        "AGENTED_CODEX_CMD",
+    )
+    if raw:
+        try:
+            return shlex.split(raw)
+        except ValueError:
+            logger.warning("AGENTED_TAKEAWAY_CODEX_CMD malformed; using default")
+    return ["codex", "exec", "--skip-git-repo-check", "{PROMPT}"]
+
+
+def _run_codex_for_extraction(prompt: str, *, timeout: int) -> str:
+    """Invoke Codex with the extraction prompt and return its stdout.
+
+    Mockable: tests patch this entire function to return canned JSON
+    without spawning a real Codex CLI.
+    """
+    template = _llm_codex_cmd()
+    if "{PROMPT}" in template:
+        cmd = [prompt if part == "{PROMPT}" else part for part in template]
+        stdin_input = None
+    else:
+        cmd = list(template)
+        stdin_input = prompt
+
+    try:
+        result = subprocess.run(
+            cmd,
+            cwd=tempfile.gettempdir(),
+            input=stdin_input,
+            timeout=timeout,
+            capture_output=True,
+            text=True,
+        )
+    except FileNotFoundError as exc:
+        raise RuntimeError(
+            f"codex CLI not found ({template[0]}); set "
+            f"AGENTED_TAKEAWAY_CODEX_CMD or AGENTED_CODEX_CMD"
+        ) from exc
+    except subprocess.TimeoutExpired as exc:
+        raise RuntimeError(
+            f"codex extraction timed out after {timeout}s"
+        ) from exc
+    if result.returncode != 0:
+        err = (result.stderr or "").replace(
+            "Reading additional input from stdin...", "",
+        ).strip()
+        raise RuntimeError(
+            f"codex extraction exited {result.returncode}: {err[:300]}"
+        )
+    return result.stdout or ""
+
+
+def _slice_json_array(text: str) -> str:
+    """Codex may emit a preamble before the JSON. Slice from the first
+    ``[`` to the matching last ``]``."""
+    start = text.find("[")
+    end = text.rfind("]")
+    if start == -1 or end == -1 or end < start:
+        return "[]"
+    return text[start : end + 1]
+
+
+def _extract_llm(
+    session_kind: str,
+    session_id: str,
+    project_id: Optional[str],
+    payload: SessionPayload,
+) -> list[dict[str, Any]]:
+    """Call Codex on the transcript and parse takeaways from its JSON
+    output. Returns ``[]`` when extraction is disabled, the transcript is
+    too short to be worth the LLM cost, or anything goes wrong."""
+    if not _llm_enabled():
+        return []
+    text = payload.text or ""
+    if len(text.encode("utf-8")) < _llm_min_text_bytes():
+        return []
+
+    transcript = text[:_TAKEAWAY_LLM_TRANSCRIPT_CAP]
+    prompt = _LLM_PROMPT_TEMPLATE.format(
+        valid_kinds=", ".join(sorted(repo.VALID_KINDS)),
+        valid_targets=", ".join(sorted(repo.VALID_TARGETS)),
+        transcript=transcript,
+    )
+
+    try:
+        raw_output = _run_codex_for_extraction(prompt, timeout=_llm_timeout())
+    except RuntimeError as exc:
+        logger.warning("takeaway LLM: %s", exc)
+        return []
+
+    try:
+        items_raw = json.loads(_slice_json_array(raw_output))
+    except (TypeError, ValueError) as exc:
+        logger.warning("takeaway LLM: malformed JSON output (%s)", exc)
+        return []
+    if not isinstance(items_raw, list):
+        return []
+
+    out: list[dict[str, Any]] = []
+    for raw in items_raw:
+        if not isinstance(raw, dict):
+            continue
+        kind = raw.get("kind")
+        if kind not in repo.VALID_KINDS:
+            continue
+        target = raw.get("suggested_target")
+        if target is not None and target not in repo.VALID_TARGETS:
+            target = None
+        content = str(raw.get("content") or "").strip()
+        if not content:
+            continue
+        try:
+            confidence = float(raw.get("confidence", 0.5))
+        except (TypeError, ValueError):
+            confidence = 0.5
+        confidence = max(0.0, min(1.0, confidence))
+        out.append({
+            "session_kind": session_kind,
+            "session_id": session_id,
+            "project_id": project_id,
+            "kind": kind,
+            "content": content[:500],
+            "confidence": confidence,
+            "evidence": {
+                "extractor": "llm",
+                "rationale": str(raw.get("rationale") or "")[:500],
+            },
+            "suggested_target": target,
+            "suggested_payload": _build_payload(target, kind, content, project_id),
+            "extractor_version": LLM_EXTRACTOR_VERSION,
+        })
+    return out
+
+
+# ---------------------------------------------------------------------------
 # Apply-target writers (auto-apply path)
 # ---------------------------------------------------------------------------
 
@@ -405,11 +608,17 @@ def extract_for_session(
         return []
     if payload is None:
         return []
-    items = _extract_heuristic(
-        session_kind, session_id,
-        project_id or payload.project_id,
-        payload,
+    resolved_project_id = project_id or payload.project_id
+    heuristic = _extract_heuristic(
+        session_kind, session_id, resolved_project_id, payload,
     )
+    llm = _extract_llm(
+        session_kind, session_id, resolved_project_id, payload,
+    )
+    # Cross-source dedup: LLM may surface the same takeaway the regex
+    # already caught. Heuristic comes first so it wins ties (cheaper,
+    # deterministic).
+    items = _dedupe(heuristic + llm)
     if not items:
         return []
     try:
