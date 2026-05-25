@@ -180,20 +180,24 @@ def set_tesserae_for_project(
         if not exists:
             raise NotFoundException(detail=f"project not found: {project_id}")
 
-        if raw_root in (None, ""):
+    if raw_root in (None, ""):
+        # Clear the column AND disable the Tesserae MCP binding so the
+        # team-leader SA stops getting tesserae_ask. Row in mcp_servers
+        # stays for history.
+        with get_connection() as conn:
             conn.execute(
                 "UPDATE projects SET tesserae_project_root = NULL "
                 "WHERE id = ?", (project_id,),
             )
-        else:
-            if not isinstance(raw_root, str):
-                raise ValidationException(detail="'root' must be a string or null")
-            resolved = str(Path(raw_root).expanduser().resolve())
-            conn.execute(
-                "UPDATE projects SET tesserae_project_root = ? WHERE id = ?",
-                (resolved, project_id),
-            )
-        conn.commit()
+            conn.commit()
+        ti.unset_tesserae_root_bindings(project_id)
+    else:
+        if not isinstance(raw_root, str):
+            raise ValidationException(detail="'root' must be a string or null")
+        resolved_path = Path(raw_root).expanduser().resolve()
+        # set_tesserae_root does the column write AND upserts /
+        # rebinds the per-project Tesserae MCP server.
+        ti.set_tesserae_root(project_id, resolved_path)
 
     # Return the fresh per-project state (single row).
     state = [

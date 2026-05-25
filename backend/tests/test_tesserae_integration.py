@@ -179,6 +179,85 @@ def test_handler_swallows_cli_missing(isolated_db, tmp_path):
         )
 
 
+def test_set_tesserae_root_auto_binds_mcp_server(isolated_db, tmp_path):
+    """Enabling Tesserae for a project upserts a per-project mcp_server
+    entry pointing at the project's graph.json AND adds a
+    project_forge_bindings row (kind=mcp_server, enabled=1). This is
+    what gives the team-leader super-agent ``tesserae_ask`` at
+    runtime without any operator-side MCP config."""
+    _seed_project_with_tesserae("proj-bind", root=None)
+    ti.set_tesserae_root("proj-bind", tmp_path)
+
+    from app.db.connection import get_connection
+
+    with get_connection() as conn:
+        # mcp_servers row exists with the expected name + command
+        srv = conn.execute(
+            "SELECT id, name, command, args FROM mcp_servers "
+            "WHERE name = ?", ("tesserae-proj-bind",),
+        ).fetchone()
+        assert srv is not None
+        assert srv["command"] == ti._TESSERAE_MCP_COMMAND
+        assert ".tesserae/graph.json" in srv["args"]
+
+        # Project binding exists + is enabled
+        binding = conn.execute(
+            "SELECT id, kind, asset_id, enabled FROM project_forge_bindings "
+            "WHERE project_id = ? AND kind = 'mcp_server'",
+            ("proj-bind",),
+        ).fetchone()
+        assert binding is not None
+        assert str(binding["asset_id"]) == str(srv["id"])
+        assert binding["enabled"] == 1
+
+
+def test_unset_tesserae_root_disables_mcp_binding(isolated_db, tmp_path):
+    """Disabling Tesserae flips the binding's enabled flag (keeps the
+    mcp_servers row for history). Operator can re-enable + the
+    binding wakes up again."""
+    _seed_project_with_tesserae("proj-unbind", root=None)
+    ti.set_tesserae_root("proj-unbind", tmp_path)
+    ti.unset_tesserae_root_bindings("proj-unbind")
+
+    from app.db.connection import get_connection
+
+    with get_connection() as conn:
+        binding = conn.execute(
+            "SELECT enabled FROM project_forge_bindings "
+            "WHERE project_id = ? AND kind = 'mcp_server'",
+            ("proj-unbind",),
+        ).fetchone()
+        assert binding is not None
+        assert binding["enabled"] == 0
+
+
+def test_re_enable_tesserae_re_enables_existing_binding(isolated_db, tmp_path):
+    """Don't create a duplicate mcp_servers row when an operator
+    disables then re-enables. The existing row + binding both come
+    back online."""
+    _seed_project_with_tesserae("proj-cycle", root=None)
+    ti.set_tesserae_root("proj-cycle", tmp_path)
+    ti.unset_tesserae_root_bindings("proj-cycle")
+    ti.set_tesserae_root("proj-cycle", tmp_path)
+
+    from app.db.connection import get_connection
+
+    with get_connection() as conn:
+        # Exactly ONE mcp_server, exactly ONE binding, both alive.
+        servers = conn.execute(
+            "SELECT id FROM mcp_servers WHERE name = ?",
+            ("tesserae-proj-cycle",),
+        ).fetchall()
+        assert len(servers) == 1
+        bindings = conn.execute(
+            "SELECT enabled FROM project_forge_bindings "
+            "WHERE project_id = ? AND kind = 'mcp_server'",
+            ("proj-cycle",),
+        ).fetchall()
+        assert len(bindings) == 1
+        assert bindings[0]["enabled"] == 1
+
+
 def test_export_skips_when_tesserae_root_uninitialized(isolated_db, tmp_path):
     """Tesserae column set, but the workspace at that path doesn't have
     ``.tesserae/`` yet (operator forgot to ``tesserae project init``).

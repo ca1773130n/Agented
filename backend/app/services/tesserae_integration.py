@@ -100,7 +100,11 @@ def get_tesserae_root(project_id: str) -> Optional[Path]:
 
 def set_tesserae_root(project_id: str, root: Path) -> None:
     """Persist the Tesserae workspace path on the project. Idempotent
-    re-set is fine."""
+    re-set is fine. Also upserts + binds the per-project Tesserae MCP
+    server so any super-agent / agent running on this project has
+    ``tesserae_ask`` (and the rest of the Tesserae MCP surface)
+    available automatically — operator can ask the team-leader SA
+    about the project without configuring MCP plumbing by hand."""
     from app.db.connection import get_connection
 
     with get_connection() as conn:
@@ -109,6 +113,157 @@ def set_tesserae_root(project_id: str, root: Path) -> None:
             (str(root.resolve()), project_id),
         )
         conn.commit()
+    # Bind the MCP server. Best-effort — if it fails (e.g. tesserae_mcp
+    # not on PATH), the project's Tesserae state is still set and the
+    # operator can re-bind manually later from Settings → MCPs.
+    try:
+        _ensure_tesserae_mcp_binding(project_id, root)
+    except Exception:
+        logger.warning(
+            "tesserae: MCP auto-bind failed for %s",
+            project_id, exc_info=True,
+        )
+
+
+def unset_tesserae_root_bindings(project_id: str) -> None:
+    """Disable the Tesserae MCP binding when a project disables
+    Tesserae. The mcp_server row itself stays for history; we just
+    flip the binding's enabled flag."""
+    try:
+        from app.db.project_forge_bindings import list_bindings
+        from app.db.connection import get_connection
+
+        bindings = [b for b in list_bindings(project_id, enabled_only=False)
+                    if b.get("kind") == "mcp_server"]
+        for b in bindings:
+            if str(b.get("asset_id", "")).startswith(
+                _TESSERAE_MCP_SERVER_NAME_PREFIX
+            ) or _is_tesserae_binding(b):
+                with get_connection() as conn:
+                    conn.execute(
+                        "UPDATE project_forge_bindings SET enabled = 0 "
+                        "WHERE id = ?", (b["id"],),
+                    )
+                    conn.commit()
+    except Exception:
+        logger.warning(
+            "tesserae: unset MCP bindings failed for %s",
+            project_id, exc_info=True,
+        )
+
+
+# Unique per-project MCP server name. The "tesserae-" prefix makes it
+# trivially identifiable in Settings → MCPs and lets us scope binding
+# checks without dragging in a separate column.
+_TESSERAE_MCP_SERVER_NAME_PREFIX = "tesserae-"
+_TESSERAE_MCP_COMMAND = shutil.which("tesserae_mcp") or "tesserae_mcp"
+
+
+def _tesserae_mcp_server_name(project_id: str) -> str:
+    return f"{_TESSERAE_MCP_SERVER_NAME_PREFIX}{project_id}"
+
+
+def _is_tesserae_binding(binding: dict[str, Any]) -> bool:
+    """Resolve the bound mcp_server and check if its name has our
+    prefix. Used by ``unset_tesserae_root_bindings`` so we don't
+    accidentally disable an unrelated mcp_server binding the operator
+    has on the project."""
+    try:
+        from app.db.mcp_servers import get_mcp_server
+
+        server = get_mcp_server(str(binding.get("asset_id", "")))
+        if not server:
+            return False
+        return str(server.get("name") or "").startswith(
+            _TESSERAE_MCP_SERVER_NAME_PREFIX,
+        )
+    except Exception:
+        return False
+
+
+def _ensure_tesserae_mcp_binding(project_id: str, root: Path) -> Optional[str]:
+    """Upsert the per-project Tesserae MCP server entry + Forge binding.
+
+    Schema reminder: ``mcp_servers`` is a global registry keyed by id;
+    ``project_forge_bindings`` is the per-project owner table. We
+    create / find an mcp_server row named ``tesserae-<project_id>``
+    pointing the stdio server at the project's ``graph.json``, then
+    add a project binding (kind=mcp_server) so ContextCompilerService
+    picks it up when building the runtime context bundle for any
+    Claude / Codex / Gemini run on this project.
+    """
+    from app.db.connection import get_connection
+    from app.db.mcp_servers import create_mcp_server, get_mcp_server
+    from app.db.project_forge_bindings import add_binding, list_bindings
+
+    name = _tesserae_mcp_server_name(project_id)
+    graph_path = (root / ".tesserae" / "graph.json").as_posix()
+
+    # Find or create the mcp_server row.
+    with get_connection() as conn:
+        existing = conn.execute(
+            "SELECT id FROM mcp_servers WHERE name = ?", (name,),
+        ).fetchone()
+    if existing:
+        server_id = existing["id"]
+        # Re-write the args in case the path changed (e.g. project moved).
+        with get_connection() as conn:
+            conn.execute(
+                "UPDATE mcp_servers SET command = ?, args = ?, "
+                "server_type = 'stdio' WHERE id = ?",
+                (_TESSERAE_MCP_COMMAND,
+                 json.dumps(["--graph", graph_path]),
+                 server_id),
+            )
+            conn.commit()
+    else:
+        server_id = create_mcp_server(
+            name=name,
+            display_name=f"Tesserae ({project_id})",
+            description=(
+                "Per-project Tesserae knowledge-graph MCP server. "
+                "Provides tesserae_ask, search_facts, graph_ppr, "
+                "list_sessions, find_session_findings, etc. for the "
+                "compiled project graph."
+            ),
+            server_type="stdio",
+            command=_TESSERAE_MCP_COMMAND,
+            args=json.dumps(["--graph", graph_path]),
+            category="memory",
+            is_preset=0,
+        )
+        if not server_id:
+            logger.warning(
+                "tesserae: create_mcp_server returned None for %s", name,
+            )
+            return None
+        # Verify
+        if not get_mcp_server(server_id):
+            return None
+
+    # Add the binding (idempotent — bumps position + re-enables).
+    bindings = [b for b in list_bindings(project_id, enabled_only=False)
+                if b.get("kind") == "mcp_server"]
+    already = next(
+        (b for b in bindings if str(b.get("asset_id")) == str(server_id)),
+        None,
+    )
+    if already and already.get("enabled"):
+        return server_id
+    if already and not already.get("enabled"):
+        with get_connection() as conn:
+            conn.execute(
+                "UPDATE project_forge_bindings SET enabled = 1 WHERE id = ?",
+                (already["id"],),
+            )
+            conn.commit()
+        return server_id
+    add_binding(project_id, "mcp_server", str(server_id))
+    logger.info(
+        "tesserae: auto-bound MCP server %s to project %s",
+        name, project_id,
+    )
+    return server_id
 
 
 # ---------------------------------------------------------------------------
