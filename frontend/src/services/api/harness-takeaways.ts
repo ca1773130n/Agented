@@ -3,8 +3,9 @@
  * the failure annotator).
  *
  * Takeaways are proposals by default. Operator approves → asset is
- * written to its suggested target (memory / rule / knowledge_graph).
- * Skill + claude_md targets are proposal-only today (no auto-writer).
+ * written to its suggested target. All five targets (memory, rule,
+ * knowledge_graph, skill, claude_md) have auto-writers; operator
+ * approval just gates when the write happens.
  *
  * Set ``AGENTED_TAKEAWAY_AUTOAPPLY=1`` on the backend to auto-apply
  * high-confidence (>= 0.85) takeaways at extraction time.

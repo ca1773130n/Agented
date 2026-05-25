@@ -514,18 +514,24 @@ def _apply_to_knowledge_graph(takeaway: dict[str, Any]) -> Optional[str]:
         return None
 
 
-def _project_skills_root(project_id: str) -> "Path":
-    """Pick where ``SKILL.md`` files for a project's takeaways live.
+def _project_local_or_user_path(
+    project_id: str,
+    project_subpath: str,
+    user_subpath: str,
+) -> "Path":
+    """Pick a write target for a project-scoped artifact.
 
     Preference order:
 
-    1. ``<project.local_path>/.claude/skills/`` — the project's own
-       working tree, where Claude Code naturally discovers project-scoped
-       skills. Requires the project to have a ``local_path`` set.
-    2. ``~/.claude/skills/agented-<project_id>/`` — operator-scope
-       fallback when no project local_path is configured. Skill names
-       get prefixed so multiple Agented projects can coexist under the
-       same user directory without collision.
+    1. ``<project.local_path>/<project_subpath>`` — the project's own
+       working tree (what Claude Code reads natively for project-scoped
+       skills, CLAUDE.md, etc). Requires the project row to have a
+       ``local_path`` set.
+    2. ``~/.claude/<user_subpath>`` — user-scope fallback. The caller
+       is responsible for namespacing inside ``user_subpath`` (typically
+       with a ``agented-<project_id>/`` prefix or by baking the
+       project_id into the artifact itself) so multiple projects
+       coexist without collision.
     """
     from pathlib import Path
 
@@ -538,12 +544,18 @@ def _project_skills_root(project_id: str) -> "Path":
                 (project_id,),
             ).fetchone()
         if row and row["local_path"]:
-            return Path(row["local_path"]).expanduser() / ".claude" / "skills"
+            return Path(row["local_path"]).expanduser() / project_subpath
     except Exception:
         pass
-    return (
-        Path(os.path.expanduser("~/.claude/skills"))
-        / f"agented-{project_id}"
+    return Path(os.path.expanduser("~/.claude")) / user_subpath
+
+
+def _project_skills_root(project_id: str) -> "Path":
+    """``SKILL.md`` package directory. See ``_project_local_or_user_path``."""
+    return _project_local_or_user_path(
+        project_id,
+        project_subpath=".claude/skills",
+        user_subpath=f"skills/agented-{project_id}",
     )
 
 
@@ -633,31 +645,17 @@ def _apply_to_skill(takeaway: dict[str, Any]) -> Optional[str]:
 
 
 def _project_claude_md_path(project_id: str) -> "Path":
-    """Pick where the project's CLAUDE.md lives.
+    """Project CLAUDE.md path. See ``_project_local_or_user_path``.
 
-    Preference order:
-
-    1. ``<project.local_path>/CLAUDE.md`` — the project's working tree
-       (what Claude Code naturally reads as the project CLAUDE.md).
-    2. ``~/.claude/CLAUDE.md`` — user-scope fallback. The managed section
-       header includes the project_id so multiple projects coexist
-       without colliding.
+    The user-scope fallback writes to ``~/.claude/CLAUDE.md`` (a shared
+    file). The managed-section start marker includes the project_id so
+    multiple projects coexist without colliding.
     """
-    from pathlib import Path
-
-    try:
-        from app.db.connection import get_connection
-
-        with get_connection() as conn:
-            row = conn.execute(
-                "SELECT local_path FROM projects WHERE id = ?",
-                (project_id,),
-            ).fetchone()
-        if row and row["local_path"]:
-            return Path(row["local_path"]).expanduser() / "CLAUDE.md"
-    except Exception:
-        pass
-    return Path(os.path.expanduser("~/.claude/CLAUDE.md"))
+    return _project_local_or_user_path(
+        project_id,
+        project_subpath="CLAUDE.md",
+        user_subpath="CLAUDE.md",
+    )
 
 
 _AGENTED_TAKEAWAY_MARKER_START_TMPL = (
@@ -792,8 +790,10 @@ def apply_takeaway(takeaway_id: str) -> dict[str, Any]:
     if applier is None:
         return {
             "applied": False,
-            "reason": f"target {target!r} not auto-applicable; "
-                      "operator must materialize manually",
+            "reason": (
+                f"no auto-applier for target {target!r}"
+                if target else "no suggested target"
+            ),
         }
     asset_id = applier(tk)
     if asset_id is None:
