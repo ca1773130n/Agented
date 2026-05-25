@@ -40,6 +40,10 @@ opencode.json
 # Per-machine Claude Code state (not the whole .claude/ — skills/commands stay tracked)
 .claude/settings.json
 .claude/scheduled_tasks.lock
+# Auto-generated agented-takeaway skill packages (operator-curated
+# skills under .claude/skills/ STAY tracked; only this subdir is
+# ignored). Re-deriveable from session_takeaways.
+.claude/skills/.agented-takeaways/
 
 # Local data
 backend/data/
@@ -90,3 +94,7 @@ backend/.secret_key
 # round Codex workspace (harness.json + trajectories/) and are never
 # meant to be committed.
 /agented-harness-evolution-*/
+
+# Tesserae per-project workspace (compiled graph + harness sessions —
+# regenerable from source, per-machine state).
+.tesserae/

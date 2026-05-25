@@ -726,11 +726,19 @@ def _project_local_or_user_path(
 
 
 def _project_skills_root(project_id: str) -> "Path":
-    """``SKILL.md`` package directory. See ``_project_local_or_user_path``."""
+    """``SKILL.md`` package directory for AUTO-GENERATED takeaway skills.
+
+    Lands under ``<root>/.claude/skills/.agented-takeaways/`` so a
+    single gitignore line (``.claude/skills/.agented-takeaways/``)
+    cleanly separates operator-curated skills (tracked) from
+    auto-generated ones (ignored). The leading dot keeps it out of
+    casual ``ls`` while still being a valid Claude-Code skills
+    location.
+    """
     return _project_local_or_user_path(
         project_id,
-        project_subpath=".claude/skills",
-        user_subpath=f"skills/agented-{project_id}",
+        project_subpath=".claude/skills/.agented-takeaways",
+        user_subpath=f"skills/.agented-takeaways/{project_id}",
     )
 
 

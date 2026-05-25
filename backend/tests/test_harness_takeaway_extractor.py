@@ -216,8 +216,10 @@ def test_apply_skill_materializes_skill_md_and_binds(isolated_db, tmp_path):
     assert result["applied"] is True
     assert result["target"] == "skill"
 
-    # SKILL.md exists at the expected location.
-    skill_root = tmp_path / ".claude" / "skills"
+    # SKILL.md exists under .claude/skills/.agented-takeaways/ — the
+    # dedicated subdir keeps auto-generated takeaway skills separable
+    # from operator-curated ones (single gitignore line).
+    skill_root = tmp_path / ".claude" / "skills" / ".agented-takeaways"
     skill_dirs = list(skill_root.iterdir())
     assert skill_dirs, f"expected SKILL.md dir under {skill_root}"
     md_path = skill_dirs[0] / "SKILL.md"
@@ -239,7 +241,8 @@ def test_apply_skill_falls_back_to_user_dir_when_no_local_path(
     isolated_db, monkeypatch, tmp_path,
 ):
     """Project with no local_path → skill lands under
-    ``~/.claude/skills/agented-<project_id>/`` (sandboxed via HOME)."""
+    ``~/.claude/skills/.agented-takeaways/<project_id>/`` (sandboxed
+    via HOME)."""
     monkeypatch.setenv("HOME", str(tmp_path))
     from app.db.connection import get_connection
 
@@ -261,7 +264,10 @@ def test_apply_skill_falls_back_to_user_dir_when_no_local_path(
     result = extractor.apply_takeaway(skill_tk["id"])
     assert result["applied"] is True
 
-    expected_root = tmp_path / ".claude" / "skills" / "agented-proj-skill-noloc"
+    expected_root = (
+        tmp_path / ".claude" / "skills" / ".agented-takeaways"
+        / "proj-skill-noloc"
+    )
     skill_dirs = list(expected_root.iterdir())
     assert skill_dirs
     assert (skill_dirs[0] / "SKILL.md").is_file()
