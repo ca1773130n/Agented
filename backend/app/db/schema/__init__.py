@@ -14,6 +14,7 @@ from ._embeddings import create_embedding_tables
 from ._harness_annotations import create_harness_annotation_tables
 from ._harness_evolution import create_harness_evolution_tables
 from ._harness_snapshots import create_harness_snapshot_tables
+from ._harness_takeaways import create_harness_takeaway_tables
 from ._misc import create_misc_tables
 from ._monitoring import create_monitoring_tables
 from ._orgs import create_org_tables
@@ -60,4 +61,5 @@ def create_fresh_schema(conn):
     create_harness_annotation_tables(conn)
     create_harness_snapshot_tables(conn)
     create_harness_evolution_tables(conn)
+    create_harness_takeaway_tables(conn)
     conn.commit()

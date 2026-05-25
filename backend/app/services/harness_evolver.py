@@ -39,6 +39,7 @@ from typing import Any, Optional
 from app.db import harness_annotations as annotations_repo
 from app.db import harness_evolution as evolution_repo
 from app.db import harness_snapshots as snapshots_repo
+from app.db import harness_takeaways as takeaways_repo
 from app.db import project_forge_bindings as bindings_repo
 from app.db.commands import (
     create_command,
@@ -324,10 +325,22 @@ def gather_inputs(
             "snapshot_taken_at": snap.get("created_at"),
         })
 
+    # Takeaways: positive-learning signals (preferences, discovered
+    # procedures, domain facts) — Codex sees these alongside trajectories
+    # so its proposals include "add this skill / rule / KG entry" not
+    # just "guard against this failure".
+    try:
+        takeaways = takeaways_repo.list_for_project(
+            project_id, dismissed=False, applied=False, limit=limit,
+        )
+    except Exception:
+        takeaways = []
+
     return {
         "project_id": project_id,
         "primitives": primitives,
         "trajectories": trajectories,
+        "takeaways": takeaways,
     }
 
 
@@ -411,6 +424,7 @@ def build_workspace(inputs: dict[str, Any], scratch_dir: Path) -> Path:
     scratch_dir.mkdir(parents=True, exist_ok=True)
     (scratch_dir / "forge").mkdir(exist_ok=True)
     (scratch_dir / "trajectories").mkdir(exist_ok=True)
+    (scratch_dir / "takeaways").mkdir(exist_ok=True)
     for kind in READABLE_KINDS:
         (scratch_dir / "forge" / f"{kind}s").mkdir(exist_ok=True)
 
@@ -426,7 +440,7 @@ def build_workspace(inputs: dict[str, Any], scratch_dir: Path) -> Path:
             )
 
     for traj in inputs["trajectories"]:
-        safe = _safe_filename(traj["execution_id"])
+        safe = _safe_filename(str(traj.get("session_id") or "unknown"))
         (scratch_dir / "trajectories" / f"{safe}.json").write_text(
             json.dumps(traj, indent=2, ensure_ascii=False, default=str),
             encoding="utf-8",

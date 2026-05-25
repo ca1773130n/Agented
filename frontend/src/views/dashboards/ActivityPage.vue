@@ -17,6 +17,7 @@ import ExecutionVolumeCard from './cards/ExecutionVolumeCard.vue';
 import SuccessRateCard from './cards/SuccessRateCard.vue';
 import HarnessLayerCard from './cards/HarnessLayerCard.vue';
 import HarnessEvolutionCard from './cards/HarnessEvolutionCard.vue';
+import HarnessTakeawaysCard from './cards/HarnessTakeawaysCard.vue';
 import ImpactReportCard from './cards/ImpactReportCard.vue';
 import CrossTeamInsightsCard from './cards/CrossTeamInsightsCard.vue';
 import RoiLeaderboardCard from './cards/RoiLeaderboardCard.vue';
@@ -98,6 +99,7 @@ onMounted(maybeScroll);
         <ExecutionVolumeCard @loaded="onCardLoaded" />
         <SuccessRateCard @loaded="onCardLoaded" />
         <HarnessLayerCard @loaded="onCardLoaded" />
+        <HarnessTakeawaysCard @loaded="onCardLoaded" />
         <HarnessEvolutionCard @loaded="onCardLoaded" />
       </div>
     </section>

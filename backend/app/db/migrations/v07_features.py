@@ -584,6 +584,15 @@ def _migrate_130_project_sessions_super_agent_link(conn) -> None:
     )
 
 
+def _migrate_139_session_takeaways(conn):
+    """Life-Harness positive-learning capture: ``session_takeaways`` table
+    holds extracted takeaways from each completed session (the inverse of
+    the failure annotator's H2/H3/H4 incident capture)."""
+    from app.db.schema._harness_takeaways import create_harness_takeaway_tables
+
+    create_harness_takeaway_tables(conn)
+
+
 def _migrate_138_session_scope_pivot(conn):
     """Life-Harness session-scope pivot: generalize from trigger-execution
     observation to ALL session producers (super-agent, project session,
@@ -953,4 +962,6 @@ V07_MIGRATIONS: list = [
     # Life-Harness session-scope pivot: generalize observation from
     # trigger-executions-only to all session producers.
     (138, "session_scope_pivot", _migrate_138_session_scope_pivot),
+    # Life-Harness positive-learning capture: session takeaways.
+    (139, "session_takeaways", _migrate_139_session_takeaways),
 ]

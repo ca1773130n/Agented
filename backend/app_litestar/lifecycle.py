@@ -370,6 +370,20 @@ def on_startup(app: Any) -> None:
         logger.warning(
             "harness_failure_annotator registration failed", exc_info=True
         )
+    # Takeaway extractor — the positive-learning counterpart to the
+    # annotator. Fires on the same session-completion channel. Separate
+    # try/except so an extractor failure doesn't take out the annotator.
+    try:
+        from app.services.execution_events import register_session_handler
+        from app.services.harness_takeaway_extractor import (
+            on_session_complete as on_takeaway_extract,
+        )
+
+        register_session_handler(on_takeaway_extract)
+    except Exception:
+        logger.warning(
+            "harness_takeaway_extractor registration failed", exc_info=True
+        )
     # Life-Harness: sweep stale /tmp/agented-claude-overlay-* dirs left
     # behind by crashes / SIGKILLs where the per-session finally block
     # didn't run. Best-effort; never blocks startup.
