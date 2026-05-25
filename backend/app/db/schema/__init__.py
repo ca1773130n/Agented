@@ -23,6 +23,7 @@ from ._security import create_security_tables
 from ._setup import create_setup_tables
 from ._skills import create_skill_tables
 from ._super_agents import create_super_agent_tables
+from ._team_executions import create_team_execution_tables
 from ._triggers_infra import create_triggers_infra_tables
 from ._workflows import create_workflow_tables
 
@@ -62,4 +63,5 @@ def create_fresh_schema(conn):
     create_harness_snapshot_tables(conn)
     create_harness_evolution_tables(conn)
     create_harness_takeaway_tables(conn)
+    create_team_execution_tables(conn)
     conn.commit()

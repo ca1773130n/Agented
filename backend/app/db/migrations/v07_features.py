@@ -584,6 +584,16 @@ def _migrate_130_project_sessions_super_agent_link(conn) -> None:
     )
 
 
+def _migrate_140_team_executions(conn):
+    """Life-Harness team-session observation: persist team executions
+    so the takeaway extractor + failure annotator can attach to
+    ``session_kind='team_session'`` after the in-memory tracker is
+    cleaned up (300 s TTL)."""
+    from app.db.schema._team_executions import create_team_execution_tables
+
+    create_team_execution_tables(conn)
+
+
 def _migrate_139_session_takeaways(conn):
     """Life-Harness positive-learning capture: ``session_takeaways`` table
     holds extracted takeaways from each completed session (the inverse of
@@ -964,4 +974,8 @@ V07_MIGRATIONS: list = [
     (138, "session_scope_pivot", _migrate_138_session_scope_pivot),
     # Life-Harness positive-learning capture: session takeaways.
     (139, "session_takeaways", _migrate_139_session_takeaways),
+    # Life-Harness team-session observation: durable mirror of the
+    # in-memory TeamExecutionTracker so takeaway/annotator can run
+    # after the tracker's 5-minute cleanup.
+    (140, "team_executions", _migrate_140_team_executions),
 ]

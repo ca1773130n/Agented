@@ -152,6 +152,53 @@ def _fetch_workflow(session_id: str) -> Optional[SessionPayload]:
     )
 
 
+def _fetch_team_session(session_id: str) -> Optional[SessionPayload]:
+    """Team executions don't have their own conversation log — they
+    aggregate one or more component trigger executions. Build a unified
+    SessionPayload by concatenating each component's stdout_log in the
+    order they were spawned.
+
+    Returns ``None`` when the team_executions row is missing entirely
+    (extractor will then no-op). Returns a payload with empty text
+    when the row exists but no components produced output yet.
+    """
+    from app.db.team_executions import get_team_execution
+
+    row = get_team_execution(session_id)
+    if not row:
+        return None
+    execution_ids = row.get("execution_ids") or []
+    if not execution_ids:
+        return SessionPayload(
+            text="",
+            backend_type="claude",
+            project_id=row.get("project_id"),
+            outcome=row.get("status"),
+        )
+    placeholders = ",".join("?" * len(execution_ids))
+    with get_connection() as conn:
+        rows = conn.execute(
+            f"""SELECT execution_id, stdout_log, backend_type
+                FROM execution_logs
+                WHERE execution_id IN ({placeholders})
+                ORDER BY id ASC""",
+            execution_ids,
+        ).fetchall()
+    parts: list[str] = []
+    backend = "claude"
+    for r in rows:
+        if r["backend_type"]:
+            backend = r["backend_type"]
+        if r["stdout_log"]:
+            parts.append(r["stdout_log"])
+    return SessionPayload(
+        text="\n".join(parts),
+        backend_type=backend,
+        project_id=row.get("project_id"),
+        outcome=row.get("status"),
+    )
+
+
 SessionFetcher = Callable[[str], Optional[SessionPayload]]
 
 _FETCHERS: dict[str, SessionFetcher] = {
@@ -159,6 +206,7 @@ _FETCHERS: dict[str, SessionFetcher] = {
     "super_agent": _fetch_super_agent_session,
     "project_session": _fetch_project_session,
     "workflow": _fetch_workflow,
+    "team_session": _fetch_team_session,
 }
 
 

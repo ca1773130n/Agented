@@ -78,8 +78,30 @@ class TeamExecutionService:
         # Generate tracking ID
         team_exec_id = generate_id("team-exec-", 8)
 
-        # Record tracking entry
+        # Record tracking entry (in-memory) AND persist a durable
+        # ``team_executions`` row so the takeaway extractor / failure
+        # annotator can attach via session_kind='team_session' after the
+        # tracker's 5-minute cleanup.
         TeamExecutionTracker.register(team_exec_id, team_id, topology, trigger_type)
+        try:
+            from app.db.team_executions import (
+                insert_team_execution,
+                resolve_project_id_for_team,
+            )
+
+            insert_team_execution(
+                team_exec_id,
+                team_id,
+                topology,
+                trigger_type,
+                project_id=resolve_project_id_for_team(team_id),
+                message=message,
+            )
+        except Exception:
+            logger.warning(
+                "team_executions: insert failed for %s",
+                team_exec_id, exc_info=True,
+            )
 
         # Strategy dispatch map
         strategy_map = {
@@ -134,6 +156,9 @@ class TeamExecutionService:
         working_directory=None,
     ) -> None:
         """Wrapper that runs a strategy and catches all errors."""
+        terminal_status = "failed"
+        terminal_error: Optional[str] = None
+        execution_ids: list = []
         try:
             # Build kwargs depending on whether the strategy needs tracker
             kwargs = {"run_agent": cls._run_agent_and_get_output}
@@ -142,19 +167,83 @@ class TeamExecutionService:
 
             execution_ids = strategy(
                 team, config, message, event, trigger_type, working_directory, **kwargs
-            )
+            ) or []
             TeamExecutionTracker.set_completed(team_exec_id, execution_ids)
+            terminal_status = "completed"
             logger.info(f"Team execution completed: {team_exec_id}")
         except Exception as e:
             logger.error(f"Team execution failed: {team_exec_id} - {e}", exc_info=True)
             TeamExecutionTracker.set_error(team_exec_id, str(e))
+            terminal_status = "failed"
+            terminal_error = str(e)
         finally:
+            # Persist the terminal status + execution_ids and emit a
+            # session_complete event so harness observability can attach.
+            cls._finalize_team_execution(
+                team_exec_id,
+                terminal_status,
+                execution_ids=execution_ids,
+                error=terminal_error,
+            )
             # Schedule cleanup after 5 minutes
             timer = threading.Timer(
                 300, TeamExecutionTracker.cleanup_execution, args=[team_exec_id]
             )
             timer.daemon = True
             timer.start()
+
+    @classmethod
+    def _finalize_team_execution(
+        cls,
+        team_exec_id: str,
+        status: str,
+        *,
+        execution_ids: Optional[list] = None,
+        error: Optional[str] = None,
+    ) -> None:
+        """Persist terminal status + fire session_complete for the
+        takeaway extractor / failure annotator.
+
+        Swallows all errors — observability must never block a team
+        run from finishing cleanly.
+        """
+        project_id: Optional[str] = None
+        try:
+            from app.db.team_executions import (
+                backfill_project_id_from_components,
+                update_team_execution_status,
+            )
+
+            update_team_execution_status(
+                team_exec_id,
+                status,
+                execution_ids=execution_ids,
+                error=error,
+            )
+            # Component executions may have surfaced a project_id even
+            # if the team itself wasn't bound to a project.
+            project_id = backfill_project_id_from_components(team_exec_id)
+        except Exception:
+            logger.warning(
+                "team_executions: finalize failed for %s",
+                team_exec_id, exc_info=True,
+            )
+
+        try:
+            from app.services.execution_events import emit_session_complete
+
+            emit_session_complete(
+                "team_session",
+                team_exec_id,
+                project_id,
+                status,
+                {"execution_ids": execution_ids or []},
+            )
+        except Exception:
+            logger.warning(
+                "team_executions: emit_session_complete failed for %s",
+                team_exec_id, exc_info=True,
+            )
 
     @classmethod
     def get_execution_status(cls, team_exec_id: str) -> Optional[dict]:
