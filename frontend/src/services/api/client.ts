@@ -160,7 +160,23 @@ async function apiFetchSingle<T>(url: string, options?: ApiFetchOptions): Promis
     if (!response.ok) {
       const data = await response.json().catch(() => ({}));
       const retryAfter = response.status === 429 ? parseRetryAfter(response.headers) : undefined;
-      throw new ApiError(response.status, data.message || data.error || `HTTP ${response.status}`, retryAfter);
+      // Litestar's default error shape is ``{error: {code, message, ...}}`` —
+      // not a flat string. Without unwrapping, the message coerces to
+      // ``[object Object]`` (dogfood found this on a 404 from the
+      // takeaways card). Try ordered: top-level ``message`` →
+      // nested ``error.message`` → flat string ``error`` →
+      // ``detail`` (FastAPI-style) → HTTP status fallback.
+      const errObj = data && typeof data === 'object' ? data : {};
+      const nested = errObj.error && typeof errObj.error === 'object'
+        ? errObj.error
+        : null;
+      const message: string =
+        (typeof errObj.message === 'string' && errObj.message) ||
+        (nested && typeof nested.message === 'string' && nested.message) ||
+        (typeof errObj.error === 'string' && errObj.error) ||
+        (typeof errObj.detail === 'string' && errObj.detail) ||
+        `HTTP ${response.status}`;
+      throw new ApiError(response.status, message, retryAfter);
     }
 
     // Handle 204 No Content explicitly

@@ -42,6 +42,54 @@ describe('API Service', () => {
       expect(error.message).toBe('Not found')
       expect(error.name).toBe('ApiError')
     })
+
+    it('unwraps Litestar nested error.message shape (regression)', async () => {
+      // Dogfood from the operator UI: a 404 from Litestar returns
+      // ``{error: {code: "NOT_FOUND", message: "Not Found"}}``. The
+      // client used to pass ``data.error`` (an object) into ApiError's
+      // message, which coerced to "[object Object]" — and that string
+      // landed in the HarnessTakeawaysCard's error banner. Fix
+      // extracts ``data.error.message`` instead.
+      vi.mocked(fetch).mockResolvedValueOnce(
+        mockResponse(
+          { error: { code: 'NOT_FOUND', message: 'Not Found' } },
+          false, 404,
+        ),
+      )
+      try {
+        await triggerApi.list()
+        expect.fail('expected throw')
+      } catch (err) {
+        expect(err).toBeInstanceOf(ApiError)
+        expect((err as ApiError).message).toBe('Not Found')
+        expect((err as ApiError).message).not.toContain('[object Object]')
+      }
+    })
+
+    it('falls back to status code when no message anywhere', async () => {
+      vi.mocked(fetch).mockResolvedValueOnce(
+        mockResponse({}, false, 500),
+      )
+      try {
+        await triggerApi.list()
+        expect.fail('expected throw')
+      } catch (err) {
+        expect((err as ApiError).message).toBe('HTTP 500')
+      }
+    })
+
+    it('still handles flat string error field', async () => {
+      // Legacy / non-Litestar APIs: ``{error: "Server error"}``.
+      vi.mocked(fetch).mockResolvedValueOnce(
+        mockResponse({ error: 'Server error' }, false, 500),
+      )
+      try {
+        await triggerApi.list()
+        expect.fail('expected throw')
+      } catch (err) {
+        expect((err as ApiError).message).toBe('Server error')
+      }
+    })
   })
 
   describe('triggerApi', () => {
