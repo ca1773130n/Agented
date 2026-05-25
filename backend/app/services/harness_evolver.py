@@ -539,10 +539,33 @@ def _default_codex_cmd() -> list[str]:
             return shlex.split(raw)
         except ValueError:
             logger.warning("AGENTED_CODEX_CMD malformed; using default")
-    # ``--skip-git-repo-check`` is load-bearing: the scratch workspace
-    # lives under /tmp/agented-harness-evolution-* which is not a git
-    # repo, and Codex refuses to run in non-git dirs by default.
-    return ["codex", "exec", "--skip-git-repo-check", _PROMPT_TOKEN]
+    # Two flags are load-bearing here; both invisible to unit tests
+    # because the tests patch ``_run_codex_in_workspace`` and never
+    # invoke the real CLI:
+    #
+    #   --skip-git-repo-check  the scratch workspace lives under
+    #                          /tmp/agented-harness-evolution-* (not a
+    #                          git repo), and Codex refuses to run in
+    #                          non-git dirs by default.
+    #   --sandbox workspace-write  ``codex exec`` defaults to a
+    #                          read-only sandbox. Without this flag,
+    #                          every file write the model attempts is
+    #                          silently rejected by the sandbox; the
+    #                          subprocess still exits 0; parse_patch
+    #                          finds zero modifications; the operator
+    #                          sees ``awaiting_approval`` with an empty
+    #                          patch and never learns what Codex
+    #                          actually proposed. Dogfood against
+    #                          agented.db caught this — Codex was
+    #                          producing rich, takeaway-cited
+    #                          rule/command proposals that were thrown
+    #                          on the floor before parse_patch ran.
+    return [
+        "codex", "exec",
+        "--skip-git-repo-check",
+        "--sandbox", "workspace-write",
+        _PROMPT_TOKEN,
+    ]
 
 
 def _run_codex_in_workspace(scratch_dir: Path, *, timeout: int = 600) -> None:

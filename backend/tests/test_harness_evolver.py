@@ -326,6 +326,32 @@ def test_build_workspace_prompt_references_takeaways(tmp_path, isolated_db):
 
 
 # --------------------------------------------------------------------------
+# Codex CLI invocation defaults
+# --------------------------------------------------------------------------
+
+def test_default_codex_cmd_includes_workspace_write_sandbox(monkeypatch):
+    """Regression from the live-data dogfood: ``codex exec`` defaults
+    to ``--sandbox read-only``, which silently rejects every file
+    write the model attempts. The subprocess still exits 0, so the
+    evolver sees an empty scratch_dir, parse_patch returns 0 entries,
+    and the operator gets awaiting_approval with nothing to review.
+    The fix is non-negotiable: the default CLI MUST include
+    ``--sandbox workspace-write`` so Codex can write into the
+    ephemeral scratch_dir."""
+    monkeypatch.delenv("AGENTED_CODEX_CMD", raising=False)
+    cmd = evolver._default_codex_cmd()
+    assert "--sandbox" in cmd, f"missing --sandbox in {cmd}"
+    sandbox_value = cmd[cmd.index("--sandbox") + 1]
+    assert sandbox_value == "workspace-write", (
+        f"sandbox must be 'workspace-write' (read-only would silently "
+        f"reject writes); got {sandbox_value!r}"
+    )
+    # And --skip-git-repo-check is also load-bearing (scratch_dir
+    # isn't a git repo); locking both together.
+    assert "--skip-git-repo-check" in cmd
+
+
+# --------------------------------------------------------------------------
 # Full round with Codex mocked
 # --------------------------------------------------------------------------
 
