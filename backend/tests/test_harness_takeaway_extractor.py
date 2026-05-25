@@ -444,9 +444,12 @@ def _long_subtle_stream() -> str:
     )
 
 
-def test_llm_disabled_by_default(isolated_db, monkeypatch):
-    """Without AGENTED_TAKEAWAY_LLM=1 the LLM path never runs."""
-    monkeypatch.delenv("AGENTED_TAKEAWAY_LLM", raising=False)
+def test_llm_explicit_disable_skips_codex(isolated_db, monkeypatch):
+    """Setting ``AGENTED_TAKEAWAY_LLM=0`` disables the LLM path. The
+    default is ON (flipped 2026-05-25 after dogfood); this test locks
+    the opt-out so CI / tests that don't want Codex calls can disable
+    it explicitly."""
+    monkeypatch.setenv("AGENTED_TAKEAWAY_LLM", "0")
     _seed_execution("exec-llm-off", _long_subtle_stream())
 
     with patch.object(

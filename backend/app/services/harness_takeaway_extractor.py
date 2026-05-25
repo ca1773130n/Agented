@@ -8,9 +8,11 @@ rule / KG) when confidence is high and auto-apply is enabled, or queues
 for operator review via the Activity-lane Takeaways card.
 
 Two extraction modes:
-    - **Heuristic** (default, no LLM): regex patterns over the parsed
-      trajectory. Cheap, runs on every completed session.
-    - **LLM** (opt-in via ``AGENTED_TAKEAWAY_LLM=1``): would call Codex
+    - **Heuristic**: regex patterns over the parsed trajectory. Cheap,
+      runs on every completed session. Catches inline file mentions
+      and explicit "I can't / cannot / must / requires" constraints.
+    - **LLM** (default ON; disable with ``AGENTED_TAKEAWAY_LLM=0``):
+      calls Codex
       with the transcript + extraction prompt. Skeleton only — wire your
       preferred LLM here when ready.
 
@@ -373,7 +375,7 @@ def _dedupe(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 # ---------------------------------------------------------------------------
-# LLM-based extraction (opt-in via AGENTED_TAKEAWAY_LLM=1)
+# LLM-based extraction (default ON; disable with AGENTED_TAKEAWAY_LLM=0)
 # ---------------------------------------------------------------------------
 
 _LLM_PROMPT_TEMPLATE = """You are analysing one AI-agent session transcript and
@@ -409,7 +411,17 @@ _TAKEAWAY_LLM_TRANSCRIPT_CAP = 50_000
 
 
 def _llm_enabled() -> bool:
-    return os.environ.get("AGENTED_TAKEAWAY_LLM", "0") == "1"
+    """LLM extraction is ON by default — flipped after a dogfood run
+    against ``agented.db`` showed the LLM produces dramatically higher
+    quality takeaways than the heuristic (5+ project-specific takeaways
+    at 0.80-0.98 confidence vs. mostly empty / mostly-noise from regex).
+
+    Set ``AGENTED_TAKEAWAY_LLM=0`` to disable (useful in CI / when
+    Codex isn't available; the extractor falls back gracefully to
+    heuristic-only either way, but the failed Codex call costs ~timeout
+    seconds before the warning logs).
+    """
+    return os.environ.get("AGENTED_TAKEAWAY_LLM", "1") != "0"
 
 
 def _llm_min_text_bytes() -> int:

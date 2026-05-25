@@ -7,6 +7,8 @@
  * knowledge_graph, skill, claude_md) have auto-writers; operator
  * approval just gates when the write happens.
  *
+ * Backend extraction is two-track: heuristic regex (always on) +
+ * LLM via Codex (default ON; disable with ``AGENTED_TAKEAWAY_LLM=0``).
  * Set ``AGENTED_TAKEAWAY_AUTOAPPLY=1`` on the backend to auto-apply
  * high-confidence (>= 0.85) takeaways at extraction time.
  */
