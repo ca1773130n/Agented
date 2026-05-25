@@ -6,6 +6,7 @@ import { projectApi, grdApi, hookApi, commandApi, ruleApi, agentApi, teamApi, su
 import EntityLayout from '../layouts/EntityLayout.vue';
 import InteractiveSetup from '../components/projects/InteractiveSetup.vue';
 import ProjectStatusCard from '../components/projects/ProjectStatusCard.vue';
+import ProjectTeamLeaderChat from '../components/projects/ProjectTeamLeaderChat.vue';
 import ProjectTeamsSection from '../components/projects/ProjectTeamsSection.vue';
 import ProjectTeamCanvas from '../components/projects/ProjectTeamCanvas.vue';
 import ProjectLibraryTabs from '../components/projects/ProjectLibraryTabs.vue';
@@ -539,6 +540,11 @@ function onSetupCompleted() {
       <InteractiveSetup v-if="showSetup" :projectId="projectId" :initialCommand="setupCommand" @close="showSetup = false" @completed="onSetupCompleted" />
 
       <HarnessStatusSection :project="project" :totalTeamCount="totalTeamCount" />
+
+      <ProjectTeamLeaderChat
+        v-if="projectId && project?.manager_super_agent_id"
+        :projectId="projectId"
+      />
 
       <ProjectTeamsSection
         :projectId="projectId"

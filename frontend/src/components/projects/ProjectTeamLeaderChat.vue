@@ -1,0 +1,346 @@
+<!--
+  Ask the team leader — single-pane chat panel for a project.
+
+  Resolves the project's manager super-agent + leader session via the
+  /admin/projects/{id}/team-leader/chat/session endpoint, then drives
+  the existing super-agent chat surface (POST + SSE) directly.
+
+  When the project has Tesserae enabled, a "grounded by Tesserae"
+  badge is shown — the leader's runtime context already has the
+  tesserae_* MCP tools available, so the synthesized answers can pull
+  from the compiled project graph automatically.
+-->
+<script setup lang="ts">
+import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue';
+import {
+  teamLeaderChatApi,
+  type TeamLeaderChatSession,
+} from '../../services/api/team-leader-chat';
+import { apiFetch, ApiError } from '../../services/api/client';
+import { useToast } from '../../composables/useToast';
+import LoadingState from '../base/LoadingState.vue';
+import ErrorState from '../base/ErrorState.vue';
+
+const props = defineProps<{ projectId: string }>();
+const showToast = useToast();
+
+const isResolving = ref(true);
+const resolveError = ref<string | null>(null);
+const chatSession = ref<TeamLeaderChatSession | null>(null);
+
+interface ChatMessage {
+  role: 'user' | 'assistant';
+  content: string;
+  message_id?: string;
+  timestamp?: string;
+  cited_paths?: string[];
+}
+
+const messages = ref<ChatMessage[]>([]);
+const draft = ref('');
+const isSending = ref(false);
+const isStreaming = ref(false);
+
+const sseSource = ref<EventSource | null>(null);
+const scrollContainer = ref<HTMLDivElement | null>(null);
+
+const tesseraeBadge = computed(() =>
+  chatSession.value?.tesserae_enabled ? 'grounded by Tesserae' : null,
+);
+
+async function resolveAndConnect() {
+  isResolving.value = true;
+  resolveError.value = null;
+  try {
+    const session = await teamLeaderChatApi.openSession(props.projectId);
+    chatSession.value = session;
+    connectStream(session);
+  } catch (err) {
+    resolveError.value =
+      err instanceof ApiError ? err.message : 'Failed to open chat';
+  } finally {
+    isResolving.value = false;
+  }
+}
+
+function connectStream(session: TeamLeaderChatSession) {
+  // The chat SSE path lives on the existing super-agent surface.
+  // Use template SA id (matches what _resolve_chat_session expects).
+  const url =
+    `/admin/super-agents/${encodeURIComponent(session.super_agent_id)}` +
+    `/sessions/${encodeURIComponent(session.session_id)}/chat/stream`;
+
+  closeStream();
+
+  // EventSource doesn't accept custom headers — auth flows via cookie
+  // when the dev server is set up properly.
+  const es = new EventSource(url, { withCredentials: true });
+  sseSource.value = es;
+
+  let activeAssistant: ChatMessage | null = null;
+
+  es.onmessage = (ev) => {
+    let payload: any;
+    try {
+      payload = JSON.parse(ev.data);
+    } catch {
+      return;
+    }
+    const deltaType = payload.type || payload.delta_type;
+    const data = payload.data || payload;
+
+    if (deltaType === 'message') {
+      if (data.role === 'user' && data.content) {
+        // De-dup against optimistic local push by message_id.
+        if (
+          data.message_id &&
+          !messages.value.some((m) => m.message_id === data.message_id)
+        ) {
+          messages.value.push({
+            role: 'user',
+            content: data.content,
+            message_id: data.message_id,
+          });
+        }
+      }
+    } else if (deltaType === 'content_delta') {
+      if (!activeAssistant) {
+        activeAssistant = { role: 'assistant', content: '' };
+        messages.value.push(activeAssistant);
+      }
+      activeAssistant.content += data.content || '';
+      scrollToBottom();
+    } else if (deltaType === 'finish') {
+      if (activeAssistant) {
+        activeAssistant.cited_paths = extractCitedPaths(activeAssistant.content);
+        activeAssistant = null;
+      }
+      isStreaming.value = false;
+    } else if (deltaType === 'status_change') {
+      isStreaming.value = data.status === 'streaming';
+    }
+  };
+
+  es.onerror = (err) => {
+    console.warn('[TeamLeaderChat] SSE error', err);
+    isStreaming.value = false;
+  };
+}
+
+function closeStream() {
+  if (sseSource.value) {
+    sseSource.value.close();
+    sseSource.value = null;
+  }
+}
+
+function extractCitedPaths(text: string): string[] {
+  // Same regex as the takeaway extractor's file-mention pattern.
+  // Cap at 8 unique paths so the chip row doesn't explode.
+  const seen = new Set<string>();
+  const re = /`([A-Za-z0-9_./\-]+\.[a-zA-Z0-9]{1,8})`/g;
+  for (const m of text.matchAll(re)) {
+    if (seen.size >= 8) break;
+    if (m[1]) seen.add(m[1]);
+  }
+  return Array.from(seen);
+}
+
+async function send() {
+  if (!chatSession.value || !draft.value.trim()) return;
+  const content = draft.value.trim();
+  draft.value = '';
+  isSending.value = true;
+  isStreaming.value = true;
+
+  messages.value.push({ role: 'user', content });
+  scrollToBottom();
+
+  try {
+    const session = chatSession.value;
+    await apiFetch(
+      `/admin/super-agents/${encodeURIComponent(session.super_agent_id)}` +
+        `/sessions/${encodeURIComponent(session.session_id)}/chat`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ content }),
+      },
+    );
+  } catch (err) {
+    const msg = err instanceof ApiError ? err.message : 'Send failed';
+    showToast(msg, 'error');
+    isStreaming.value = false;
+  } finally {
+    isSending.value = false;
+  }
+}
+
+function scrollToBottom() {
+  nextTick(() => {
+    if (scrollContainer.value) {
+      scrollContainer.value.scrollTop = scrollContainer.value.scrollHeight;
+    }
+  });
+}
+
+onMounted(resolveAndConnect);
+onUnmounted(closeStream);
+</script>
+
+<template>
+  <section class="team-leader-chat" data-testid="project-team-leader-chat">
+    <header class="head">
+      <div>
+        <h3>Ask the team leader</h3>
+        <p class="muted">
+          <span v-if="chatSession">
+            Conversation with
+            <strong>{{ chatSession.leader_name }}</strong>
+            <span v-if="tesseraeBadge" class="badge ok">
+              {{ tesseraeBadge }}
+            </span>
+          </span>
+          <span v-else-if="isResolving">Resolving team leader…</span>
+        </p>
+      </div>
+    </header>
+
+    <LoadingState v-if="isResolving" message="Opening chat session…" />
+    <ErrorState
+      v-else-if="resolveError"
+      :message="resolveError"
+      @retry="resolveAndConnect"
+    />
+    <template v-else-if="chatSession">
+      <div
+        ref="scrollContainer"
+        class="messages"
+        data-testid="team-leader-chat-messages"
+      >
+        <p v-if="!messages.length" class="empty muted">
+          Ask the leader anything about this project — they have access
+          to the compiled Tesserae graph (code + docs + past sessions)
+          when grounded retrieval is needed.
+        </p>
+        <article
+          v-for="(m, i) in messages"
+          :key="i"
+          :class="['msg', `msg--${m.role}`]"
+          :data-role="m.role"
+        >
+          <div class="msg__role">{{ m.role }}</div>
+          <div class="msg__content">{{ m.content }}</div>
+          <div
+            v-if="m.role === 'assistant' && m.cited_paths?.length"
+            class="msg__cites"
+          >
+            <span class="cite-label">Mentioned:</span>
+            <code
+              v-for="p in m.cited_paths"
+              :key="p"
+              class="cite-chip"
+            >{{ p }}</code>
+          </div>
+        </article>
+        <div v-if="isStreaming" class="streaming">…</div>
+      </div>
+
+      <footer class="composer">
+        <textarea
+          v-model="draft"
+          placeholder="Ask the team leader…"
+          :disabled="isSending"
+          rows="2"
+          data-testid="team-leader-chat-input"
+          @keydown.enter.exact.prevent="send"
+        />
+        <button
+          class="btn-send"
+          :disabled="!draft.trim() || isSending"
+          data-testid="team-leader-chat-send"
+          @click="send"
+        >
+          Ask
+        </button>
+      </footer>
+    </template>
+  </section>
+</template>
+
+<style scoped>
+.team-leader-chat {
+  display: flex; flex-direction: column;
+  border: 1px solid var(--border-default, rgba(255,255,255,0.1));
+  border-radius: 10px;
+  background: var(--bg-secondary, rgba(255,255,255,0.02));
+  padding: 16px 18px;
+  gap: 12px;
+  min-height: 400px;
+  max-height: 600px;
+}
+.head h3 { margin: 0; font-size: 14px; }
+.muted { color: var(--text-tertiary); font-size: 12px; margin: 4px 0 0; }
+.badge.ok {
+  margin-left: 8px; padding: 1px 6px; border-radius: 3px;
+  font-size: 10px; letter-spacing: 0.04em; text-transform: uppercase;
+  background: var(--accent-green, #10b981); color: white;
+}
+
+.messages {
+  flex: 1; overflow-y: auto;
+  display: flex; flex-direction: column; gap: 10px;
+  padding: 6px 0;
+}
+.empty { padding: 24px 4px; text-align: center; font-size: 12px; }
+
+.msg {
+  padding: 10px 12px; border-radius: 8px;
+  display: flex; flex-direction: column; gap: 4px;
+}
+.msg--user {
+  background: var(--bg-tertiary, rgba(99, 102, 241, 0.08));
+  border: 1px solid rgba(99, 102, 241, 0.2);
+  align-self: flex-end; max-width: 80%;
+}
+.msg--assistant {
+  background: var(--bg-tertiary, rgba(255, 255, 255, 0.03));
+  border: 1px solid var(--border-subtle, rgba(255,255,255,0.06));
+  align-self: flex-start; max-width: 90%;
+}
+.msg__role {
+  font-size: 10px; text-transform: uppercase;
+  letter-spacing: 0.06em; color: var(--text-tertiary);
+}
+.msg__content { font-size: 13px; white-space: pre-wrap; line-height: 1.5; }
+.msg__cites {
+  display: flex; flex-wrap: wrap; gap: 4px;
+  margin-top: 4px;
+}
+.cite-label { font-size: 10px; color: var(--text-tertiary); }
+.cite-chip {
+  font-size: 10px; padding: 1px 5px; border-radius: 3px;
+  background: rgba(6, 182, 212, 0.1);
+  border: 1px solid rgba(6, 182, 212, 0.2);
+  color: var(--accent-cyan, #06b6d4);
+  font-family: var(--font-mono, monospace);
+}
+.streaming { font-size: 14px; color: var(--text-tertiary); padding: 6px 12px; }
+
+.composer {
+  display: flex; gap: 8px; align-items: stretch;
+}
+.composer textarea {
+  flex: 1; resize: none;
+  font-size: 13px; padding: 8px 10px; border-radius: 6px;
+  background: var(--bg-primary, rgba(0,0,0,0.2));
+  border: 1px solid var(--border-default, rgba(255,255,255,0.12));
+  color: var(--text-primary); font-family: inherit;
+}
+.btn-send {
+  padding: 6px 16px; border-radius: 6px;
+  border: 1px solid var(--accent-cyan, #06b6d4);
+  background: transparent; color: var(--accent-cyan, #06b6d4);
+  cursor: pointer; font-size: 13px;
+}
+.btn-send:disabled { opacity: 0.4; cursor: not-allowed; }
+</style>
