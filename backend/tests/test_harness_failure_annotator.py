@@ -60,10 +60,48 @@ def test_h4_detects_repeated_action():
     assert any(i["kind"] == "h4_repeat_action" for i in incs)
 
 
-def test_h4_detects_stagnation_streak():
-    events = [TurnEvent(i, "assistant", content_text="thinking…") for i in range(5)]
-    incs = detect_h4(events, outcome="success")
+def test_h4_detects_stagnation_in_failed_tool_using_session():
+    """A tool-using agent session that FAILED with 5+ consecutive text
+    turns IS a stagnation signal — the agent stopped making tool calls
+    and "talked to itself" before giving up. Both gates required:
+    (1) at least one tool call in the session, (2) outcome in failed
+    set."""
+    events = (
+        [TurnEvent(0, "assistant", tool_name="Read", tool_args={"path": "x"})]
+        + [TurnEvent(i, "assistant", content_text="thinking…")
+           for i in range(1, 6)]
+    )
+    incs = detect_h4(events, outcome="failed")
     assert any(i["kind"] == "h4_stagnation" for i in incs)
+
+
+def test_h4_does_not_flag_stagnation_for_pure_chat_session():
+    """Regression from the live-DB dogfood: a super-agent / project-
+    session conversation with 0 tool calls is chat-by-design, not
+    degeneration. Even if outcome is failed, no stagnation flag —
+    counting text turns has no meaning when tools aren't available."""
+    events = [TurnEvent(i, "assistant", content_text="thinking…")
+              for i in range(10)]
+    for outcome in ("failed", "completed", "timeout", "success"):
+        incs = detect_h4(events, outcome=outcome)
+        stag = [i for i in incs if i["kind"] == "h4_stagnation"]
+        assert stag == [], (
+            f"chat session with outcome={outcome} should NOT flag "
+            f"stagnation; got {stag}"
+        )
+
+
+def test_h4_does_not_flag_stagnation_when_outcome_is_completed():
+    """Regression: a tool-using session that COMPLETED successfully
+    with verbose text turns isn't a "failure" the operator needs to
+    act on. Only stagnation during a failure run is actionable."""
+    events = (
+        [TurnEvent(0, "assistant", tool_name="Read", tool_args={"path": "x"})]
+        + [TurnEvent(i, "assistant", content_text="thinking…")
+           for i in range(1, 7)]
+    )
+    incs = detect_h4(events, outcome="completed")
+    assert not any(i["kind"] == "h4_stagnation" for i in incs)
 
 
 def test_h4_flags_timeout_budget():

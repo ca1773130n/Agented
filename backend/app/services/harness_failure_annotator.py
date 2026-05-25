@@ -411,24 +411,38 @@ def detect_h4(events: list[TurnEvent], *, outcome: Optional[str]) -> list[dict]:
                 "evidence": {"tool": sig[0], "count": count},
             })
 
-    streak = 0
-    streak_start: Optional[int] = None
-    for ev in events:
-        if ev.role == "assistant":
-            if ev.tool_name is None:
-                streak += 1
-                if streak_start is None:
-                    streak_start = ev.index
-                if streak == 5:
-                    incidents.append({
-                        "layer": "h4",
-                        "kind": "h4_stagnation",
-                        "event_index": streak_start,
-                        "evidence": {"consecutive_text_turns": streak},
-                    })
-            else:
-                streak = 0
-                streak_start = None
+    # H4 stagnation = "agent talking to itself instead of making progress".
+    # Meaningful only when the agent CAN call tools but doesn't — for pure
+    # chat sessions (super-agent Q&A, project-session conversations) text
+    # turns are the entire output by design, not a degeneration signal.
+    # A dogfood run against agented.db flagged 3/3 successful super-agent
+    # sessions as h4_stagnation — the detector was misfiring on chat.
+    #
+    # Also gate by outcome: a session that completed successfully with a
+    # verbose chat run isn't a "failure" the operator needs to act on.
+    # Stagnation incidents only matter when the run actually went wrong.
+    has_any_tool_call = any(
+        ev.role == "assistant" and ev.tool_name for ev in events
+    )
+    if has_any_tool_call and outcome in FAILED_OUTCOMES:
+        streak = 0
+        streak_start: Optional[int] = None
+        for ev in events:
+            if ev.role == "assistant":
+                if ev.tool_name is None:
+                    streak += 1
+                    if streak_start is None:
+                        streak_start = ev.index
+                    if streak == 5:
+                        incidents.append({
+                            "layer": "h4",
+                            "kind": "h4_stagnation",
+                            "event_index": streak_start,
+                            "evidence": {"consecutive_text_turns": streak},
+                        })
+                else:
+                    streak = 0
+                    streak_start = None
 
     if outcome == "timeout":
         incidents.append({
