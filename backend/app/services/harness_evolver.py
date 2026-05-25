@@ -218,10 +218,27 @@ don't add files for them.
       commands/<name>.json
       mcp_servers/<name>.json
       skills/<name>.json      (read-only — do not edit)
-    trajectories/<exec_id>.json
+    trajectories/<exec_id>.json   (negative signal — what failed)
+    takeaways/<takeaway_id>.json  (positive signal — what worked / was learned)
     DESIGN_GUIDE.md            (this file — read-only)
     PROMPT.md                  (your task)
     NOTES.md                   (write your rationale here)
+
+## Two evidence streams
+
+- ``trajectories/`` shows you what went wrong: each file has an outcome,
+  a primary failure layer (h2/h3/h4), and concrete incidents. Use it to
+  decide where to add **defensive** primitives.
+- ``takeaways/`` shows you what the operator + agents learned: user
+  preferences, discovered procedures, domain facts, success patterns.
+  Each file has a ``kind`` and a ``suggested_target`` (memory / rule /
+  knowledge_graph / skill / claude_md). The memory / KG / skill /
+  claude_md targets have already been materialized automatically. Use
+  takeaways with ``suggested_target=null`` or with kind in
+  {discovered_procedure, success_pattern, tool_pattern, constraint} to
+  decide whether to add a **proactive** rule / command / hook / MCP
+  server. Don't redundantly add a rule that already exists in
+  ``forge/rules/``.
 
 ## Editing rules
 
@@ -251,21 +268,30 @@ failed trajectories and editing the Forge primitives under ``forge/``.
 - ``forge/skills/*.json``: read-only view of bound skills. Skill changes
   are not auto-applied — propose them in NOTES.md only.
 - ``trajectories/*.json``: per-execution outcome + ``primary_layer`` +
-  incidents + ``active_bindings``.
-- ``DESIGN_GUIDE.md``: four-layer principles + editing rules.
+  incidents + ``active_bindings``. NEGATIVE signal — what failed.
+- ``takeaways/*.json``: per-session positive learnings (preferences,
+  discovered procedures, success patterns). POSITIVE signal — what
+  worked or was learned. Has ``kind`` + ``suggested_target`` to guide
+  whether the right move is a rule / command / hook / mcp_server.
+- ``DESIGN_GUIDE.md``: four-layer principles + editing rules + how to
+  weigh the two evidence streams.
 
 # Your task
 1. Group failed trajectories by ``primary_layer``.
 2. For each cluster, decide which Forge primitive type addresses it (h2/h4
    → hooks; h3 → rules; tool gaps → mcp_servers; recurring procedures →
    commands).
-3. Edit ``forge/<kind>/<name>.json`` files following the rules in
+3. Cross-reference ``takeaways/`` for positive signal: when a takeaway
+   describes a procedure or constraint not yet captured in
+   ``forge/rules/`` or ``forge/commands/``, add it.
+4. Edit ``forge/<kind>/<name>.json`` files following the rules in
    ``DESIGN_GUIDE.md``.
-4. Write your rationale to ``NOTES.md`` (what changed, why, and any skill
-   suggestions for the operator to apply manually).
+5. Write your rationale to ``NOTES.md`` (what changed, why, and any skill
+   suggestions for the operator to apply manually). Cite takeaway ids
+   and trajectory ids when they motivated a change.
 
 Do NOT edit ``DESIGN_GUIDE.md``, ``PROMPT.md``, or anything in
-``trajectories/`` / ``forge/skills/``.
+``trajectories/`` / ``takeaways/`` / ``forge/skills/``.
 """
 
 
@@ -443,6 +469,33 @@ def build_workspace(inputs: dict[str, Any], scratch_dir: Path) -> Path:
         safe = _safe_filename(str(traj.get("session_id") or "unknown"))
         (scratch_dir / "trajectories" / f"{safe}.json").write_text(
             json.dumps(traj, indent=2, ensure_ascii=False, default=str),
+            encoding="utf-8",
+        )
+
+    # Takeaways = positive-learning signals (user preferences, discovered
+    # procedures, domain facts, success patterns). Codex sees these so
+    # its proposals can ADD primitives derived from what worked, not
+    # just remediate what failed. We project each takeaway to a minimal
+    # JSON shape — id, kind, content, suggested_target, confidence — so
+    # the model can decide whether to formalize it as a rule / hook /
+    # command / mcp_server. Skill + memory + KG + claude_md takeaways
+    # are already auto-materialized by the takeaway extractor; the
+    # evolver sees them too, as evidence of what's been learned.
+    for tk in inputs.get("takeaways") or []:
+        safe = _safe_filename(str(tk.get("id") or "unknown"))
+        projection = {
+            "id": tk.get("id"),
+            "kind": tk.get("kind"),
+            "content": tk.get("content"),
+            "confidence": tk.get("confidence"),
+            "suggested_target": tk.get("suggested_target"),
+            "suggested_payload": tk.get("suggested_payload"),
+            "session_kind": tk.get("session_kind"),
+            "session_id": tk.get("session_id"),
+            "created_at": tk.get("created_at"),
+        }
+        (scratch_dir / "takeaways" / f"{safe}.json").write_text(
+            json.dumps(projection, indent=2, ensure_ascii=False, default=str),
             encoding="utf-8",
         )
 

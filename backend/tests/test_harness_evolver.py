@@ -239,6 +239,93 @@ def test_parse_patch_classifies_create_update_delete(tmp_path, isolated_db):
 
 
 # --------------------------------------------------------------------------
+# Takeaways → workspace (positive-learning evidence stream)
+# --------------------------------------------------------------------------
+
+def test_build_workspace_writes_takeaways_to_disk(tmp_path, isolated_db):
+    """Each gathered takeaway lands as a JSON file under ``takeaways/``
+    so Codex can read it alongside trajectories. The projection contains
+    the operator-meaningful fields (kind, content, confidence,
+    suggested_target) but excludes DB-internal flags."""
+    from app.db import harness_takeaways as takeaways_repo
+
+    _seed_project("proj-tk-evol")
+    [tk1, tk2] = takeaways_repo.insert_many([
+        {
+            "session_kind": "trigger_execution",
+            "session_id": "exec-tk-1",
+            "project_id": "proj-tk-evol",
+            "kind": "discovered_procedure",
+            "content": "Run migrations with `just db-migrate` before each deploy.",
+            "confidence": 0.85,
+            "suggested_target": "skill",
+            "suggested_payload": {"title": "deploy-flow"},
+            "extractor_version": "test",
+        },
+        {
+            "session_kind": "team_session",
+            "session_id": "team-exec-tk-1",
+            "project_id": "proj-tk-evol",
+            "kind": "user_preference",
+            "content": "Prefer pytest over unittest for new test files.",
+            "confidence": 0.9,
+            "suggested_target": "rule",
+            "suggested_payload": {},
+            "extractor_version": "test",
+        },
+    ])
+
+    inputs = gather_inputs("proj-tk-evol", limit=10)
+    assert len(inputs["takeaways"]) == 2
+
+    scratch = build_workspace(inputs, tmp_path / "ws")
+    tk_dir = scratch / "takeaways"
+    assert tk_dir.is_dir()
+    files = sorted(tk_dir.iterdir())
+    assert len(files) == 2
+
+    bodies = {f.name: json.loads(f.read_text()) for f in files}
+    by_id = {b["id"]: b for b in bodies.values()}
+    assert tk1 in by_id and tk2 in by_id
+    # Operator-meaningful fields preserved.
+    assert by_id[tk1]["kind"] == "discovered_procedure"
+    assert by_id[tk1]["suggested_target"] == "skill"
+    assert by_id[tk2]["content"].startswith("Prefer pytest")
+    assert by_id[tk2]["session_kind"] == "team_session"
+
+
+def test_build_workspace_takeaway_dir_empty_when_no_takeaways(tmp_path, isolated_db):
+    """No takeaways for the project → the directory is still created
+    (so Codex's prompt instructions don't reference a missing path)
+    but empty. Codex tolerates an empty evidence stream."""
+    _seed_project("proj-tk-none")
+    inputs = gather_inputs("proj-tk-none", limit=10)
+    assert inputs["takeaways"] == []
+    scratch = build_workspace(inputs, tmp_path / "ws")
+    tk_dir = scratch / "takeaways"
+    assert tk_dir.is_dir()
+    assert list(tk_dir.iterdir()) == []
+
+
+def test_build_workspace_prompt_references_takeaways(tmp_path, isolated_db):
+    """The PROMPT.md + DESIGN_GUIDE.md materials must reference the
+    takeaways/ directory so Codex actually looks at it. Regression
+    guard: gather_inputs used to fill the inputs dict and the workspace
+    builder used to create the empty directory — but neither the
+    prompt nor the design guide pointed at it. (Fixed alongside the
+    workspace write itself.)"""
+    _seed_project("proj-tk-prompt")
+    inputs = gather_inputs("proj-tk-prompt", limit=10)
+    scratch = build_workspace(inputs, tmp_path / "ws")
+    prompt = (scratch / "PROMPT.md").read_text()
+    guide = (scratch / "DESIGN_GUIDE.md").read_text()
+    assert "takeaways/" in prompt
+    assert "takeaways/" in guide
+    # And the prompt actually tells Codex how to weigh them.
+    assert "positive" in prompt.lower() or "positive" in guide.lower()
+
+
+# --------------------------------------------------------------------------
 # Full round with Codex mocked
 # --------------------------------------------------------------------------
 
