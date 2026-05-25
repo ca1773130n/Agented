@@ -384,6 +384,22 @@ def on_startup(app: Any) -> None:
         logger.warning(
             "harness_takeaway_extractor registration failed", exc_info=True
         )
+    # Tesserae integration — opt-in per project via
+    # ``projects.tesserae_project_root``. Fires on every completed
+    # session; cheap no-op for projects without the column set.
+    # Independent try/except so a Tesserae CLI issue can't take down
+    # the takeaway or annotator paths.
+    try:
+        from app.services.execution_events import register_session_handler
+        from app.services.tesserae_integration import (
+            on_session_complete as on_tesserae_export,
+        )
+
+        register_session_handler(on_tesserae_export)
+    except Exception:
+        logger.warning(
+            "tesserae_integration registration failed", exc_info=True
+        )
     # Life-Harness: sweep stale /tmp/agented-claude-overlay-* dirs left
     # behind by crashes / SIGKILLs where the per-session finally block
     # didn't run. Best-effort; never blocks startup.

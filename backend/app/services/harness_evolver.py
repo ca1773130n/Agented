@@ -278,6 +278,10 @@ don't add files for them.
       skills/<name>.json      (read-only — do not edit)
     trajectories/<exec_id>.json   (negative signal — what failed)
     takeaways/<takeaway_id>.json  (positive signal — what worked / was learned)
+    tesserae_context.md           (OPTIONAL — Tesserae graph answers
+                                  for the top-5 takeaways: code, docs,
+                                  past-session references; present
+                                  only when project enabled Tesserae)
     DESIGN_GUIDE.md            (this file — read-only)
     PROMPT.md                  (your task)
     NOTES.md                   (write your rationale here)
@@ -331,6 +335,11 @@ failed trajectories and editing the Forge primitives under ``forge/``.
   discovered procedures, success patterns). POSITIVE signal — what
   worked or was learned. Has ``kind`` + ``suggested_target`` to guide
   whether the right move is a rule / command / hook / mcp_server.
+- ``tesserae_context.md`` (OPTIONAL): code/doc/session context from the
+  project's compiled Tesserae knowledge graph, keyed to the highest-
+  confidence takeaways. When present, USE IT to ground proposals in
+  concrete files / symbols / past sessions — cite Tesserae node IDs
+  or file paths in NOTES.md alongside takeaway IDs.
 - ``DESIGN_GUIDE.md``: four-layer principles + editing rules + how to
   weigh the two evidence streams.
 
@@ -557,6 +566,27 @@ def build_workspace(inputs: dict[str, Any], scratch_dir: Path) -> Path:
             encoding="utf-8",
         )
 
+    # Tesserae context — opt-in per project. When the project has a
+    # ``tesserae_project_root`` set, query the compiled graph for code/
+    # doc context related to the input takeaways and write the result
+    # to ``tesserae_context.md`` so Codex can cite Tesserae node IDs
+    # alongside takeaway IDs. Cheap no-op if Tesserae isn't enabled or
+    # the CLI fails — workspace still builds.
+    project_id = inputs.get("project_id")
+    if project_id:
+        try:
+            tesserae_md = _build_tesserae_context_md(project_id, inputs)
+        except Exception:
+            logger.warning(
+                "harness_evolver: tesserae_context build failed for %s",
+                project_id, exc_info=True,
+            )
+            tesserae_md = None
+        if tesserae_md:
+            (scratch_dir / "tesserae_context.md").write_text(
+                tesserae_md, encoding="utf-8",
+            )
+
     (scratch_dir / "DESIGN_GUIDE.md").write_text(_DESIGN_GUIDE, encoding="utf-8")
     (scratch_dir / "PROMPT.md").write_text(
         _PROMPT_TEMPLATE.format(project_id=inputs["project_id"]),
@@ -565,6 +595,73 @@ def build_workspace(inputs: dict[str, Any], scratch_dir: Path) -> Path:
     (scratch_dir / "NOTES.md").write_text("", encoding="utf-8")
 
     return scratch_dir
+
+
+def _build_tesserae_context_md(
+    project_id: str, inputs: dict[str, Any],
+) -> Optional[str]:
+    """Ask Tesserae for context relevant to the input takeaways.
+
+    Strategy: synthesize one query per takeaway from its content (capped
+    at 5 takeaways to bound LLM cost), call ``tesserae ask`` for each,
+    concatenate the responses with attribution.
+
+    Returns ``None`` when Tesserae isn't enabled for the project, the
+    CLI is missing, or every query failed — caller treats that as
+    "no Tesserae context, just write the file or skip it."
+    """
+    from app.services.tesserae_integration import (
+        ask_tesserae,
+        get_tesserae_root,
+    )
+
+    root = get_tesserae_root(project_id)
+    if root is None:
+        return None
+    takeaways = inputs.get("takeaways") or []
+    if not takeaways:
+        return None
+
+    # Limit to top-5 by confidence so we don't fan out the LLM cost
+    # uncontrollably for projects with hundreds of takeaways.
+    ranked = sorted(
+        takeaways,
+        key=lambda t: float(t.get("confidence") or 0),
+        reverse=True,
+    )[:5]
+
+    sections: list[str] = ["# Tesserae context (from compiled graph)\n"]
+    sections.append(
+        f"Project: ``{project_id}`` · Tesserae root: ``{root}``\n"
+    )
+    sections.append(
+        "The following are answers from Tesserae's compiled "
+        "knowledge graph (code + docs + session history) to questions "
+        "derived from the highest-confidence takeaways. Cite the "
+        "relevant node IDs / file paths in NOTES.md when a Tesserae "
+        "answer motivated a primitive change.\n"
+    )
+
+    any_answered = False
+    for tk in ranked:
+        content = (tk.get("content") or "").strip().replace("\n", " ")
+        if not content:
+            continue
+        question = f"What in the codebase or past sessions relates to: {content[:200]}"
+        answer = ask_tesserae(project_id, question, top_k=5)
+        if not answer:
+            continue
+        any_answered = True
+        tk_id = tk.get("id", "?")
+        kind = tk.get("kind", "?")
+        sections.append(f"## Re: takeaway ``{tk_id}`` ({kind})\n")
+        sections.append(f"> {content[:200]}\n")
+        sections.append(answer.strip())
+        sections.append("")
+
+    if not any_answered:
+        return None
+    return "\n".join(sections)
 
 
 # --------------------------------------------------------------------------

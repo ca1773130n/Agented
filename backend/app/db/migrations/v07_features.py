@@ -584,6 +584,27 @@ def _migrate_130_project_sessions_super_agent_link(conn) -> None:
     )
 
 
+def _migrate_141_projects_tesserae(conn):
+    """Add ``tesserae_project_root`` to ``projects`` so each Agented
+    project can record where its Tesserae ``.tesserae/`` workspace lives.
+
+    Defaults NULL — opt-in per project. A project with this set
+    receives every completed session as a Tesserae import (via the
+    ``on_session_complete`` handler), so the project's compiled
+    Tesserae graph contains code + docs + agent-session history in
+    one queryable store.
+
+    The column holds an ABSOLUTE PATH, not an ID — Tesserae's CLI
+    keys on the project root directory, not on opaque ids.
+    """
+    cursor = conn.execute("PRAGMA table_info(projects)")
+    cols = {row[1] for row in cursor.fetchall()}
+    if "tesserae_project_root" not in cols:
+        conn.execute(
+            "ALTER TABLE projects ADD COLUMN tesserae_project_root TEXT"
+        )
+
+
 def _migrate_140_team_executions(conn):
     """Life-Harness team-session observation: persist team executions
     so the takeaway extractor + failure annotator can attach to
@@ -978,4 +999,8 @@ V07_MIGRATIONS: list = [
     # in-memory TeamExecutionTracker so takeaway/annotator can run
     # after the tracker's 5-minute cleanup.
     (140, "team_executions", _migrate_140_team_executions),
+    # Life-Harness Tesserae integration: per-project link to the
+    # Tesserae workspace that consolidates code + docs + sessions
+    # into a typed KG for retrieval.
+    (141, "projects_tesserae", _migrate_141_projects_tesserae),
 ]

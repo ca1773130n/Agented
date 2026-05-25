@@ -1,0 +1,191 @@
+"""Tests for the Tesserae integration.
+
+The Tesserae CLI is mocked at the subprocess boundary so tests stay
+hermetic; the integration's own normalisation + DB lookups are
+exercised end-to-end against ``isolated_db``.
+"""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+from unittest.mock import patch
+
+import pytest
+
+from app.services import tesserae_integration as ti
+
+
+def _seed_project_with_tesserae(
+    project_id: str, *, root: Path | None = None, name: str = "Test",
+) -> str:
+    from app.db.connection import get_connection
+
+    with get_connection() as conn:
+        conn.execute(
+            "INSERT OR IGNORE INTO projects (id, name, local_path, "
+            "tesserae_project_root) VALUES (?, ?, ?, ?)",
+            (project_id, name, str(root) if root else None,
+             str(root) if root else None),
+        )
+        conn.commit()
+    return project_id
+
+
+def _seed_super_agent_session(
+    session_id: str, *, project_id: str | None = None,
+    status: str = "completed",
+    conversation_log: str = "[]",
+) -> None:
+    from app.db.connection import get_connection
+
+    with get_connection() as conn:
+        conn.execute(
+            "INSERT OR IGNORE INTO super_agents (id, name) "
+            "VALUES ('sa-tess', 'SA')"
+        )
+        conn.execute(
+            "INSERT INTO super_agent_sessions (id, super_agent_id, "
+            "status, project_id, conversation_log, started_at) "
+            "VALUES (?, 'sa-tess', ?, ?, ?, datetime('now'))",
+            (session_id, status, project_id, conversation_log),
+        )
+        conn.commit()
+
+
+# ---------- project linkage --------------------------------------------------
+
+def test_get_tesserae_root_returns_none_when_unset(isolated_db):
+    _seed_project_with_tesserae("proj-no-tess", root=None)
+    assert ti.get_tesserae_root("proj-no-tess") is None
+
+
+def test_get_tesserae_root_returns_path_when_set(isolated_db, tmp_path):
+    _seed_project_with_tesserae("proj-with-tess", root=tmp_path)
+    out = ti.get_tesserae_root("proj-with-tess")
+    assert out is not None
+    assert out == tmp_path
+
+
+def test_set_tesserae_root_is_idempotent(isolated_db, tmp_path):
+    _seed_project_with_tesserae("proj-set", root=None)
+    ti.set_tesserae_root("proj-set", tmp_path)
+    ti.set_tesserae_root("proj-set", tmp_path)
+    assert ti.get_tesserae_root("proj-set") == tmp_path.resolve()
+
+
+# ---------- session normalization -------------------------------------------
+
+def test_normalize_super_agent_extracts_message_count_and_preview():
+    log = json.dumps([
+        {"role": "user", "content": "hello"},
+        {"role": "assistant", "content": "world this is the assistant"},
+        {"role": "user", "content": "ok"},
+    ])
+    out = ti._normalize_super_agent_session({
+        "conversation_log": log,
+        "started_at": "2026-01-01",
+        "ended_at": "2026-01-02",
+        "super_agent_id": "sa-1",
+    })
+    assert out["message_count"] == 3
+    assert "world this is the assistant" in out["redacted_preview"]
+
+
+# ---------- on_session_complete handler -------------------------------------
+
+def test_handler_noop_for_project_without_tesserae(isolated_db):
+    """Tesserae unset → handler must NOT call the CLI."""
+    _seed_project_with_tesserae("proj-noop", root=None)
+    _seed_super_agent_session("sess-1", project_id="proj-noop")
+    with patch.object(ti, "subprocess") as mock_sp:
+        ti.on_session_complete(
+            "super_agent", "sess-1", "proj-noop",
+            "completed", None,
+        )
+    mock_sp.run.assert_not_called()
+
+
+def test_handler_skips_failed_outcomes(isolated_db, tmp_path):
+    """Failure paths are owned by the annotator/extractor — Tesserae
+    consolidates SUCCESSFUL trajectories. A failed status doesn't fire
+    Tesserae."""
+    (tmp_path / ".tesserae").mkdir()
+    _seed_project_with_tesserae("proj-fail", root=tmp_path)
+    _seed_super_agent_session("sess-fail", project_id="proj-fail",
+                              status="terminated")
+    with patch.object(ti, "subprocess") as mock_sp:
+        ti.on_session_complete(
+            "super_agent", "sess-fail", "proj-fail", "terminated", None,
+        )
+    mock_sp.run.assert_not_called()
+
+
+def test_handler_invokes_cli_with_normalized_batch(isolated_db, tmp_path):
+    """Happy path: completed session on a Tesserae-enabled project →
+    CLI invoked exactly once with a tempfile containing the normalized
+    batch."""
+    (tmp_path / ".tesserae").mkdir()
+    _seed_project_with_tesserae("proj-go", root=tmp_path, name="GoProject")
+    log = json.dumps([
+        {"role": "assistant", "content": "I learned the layout"},
+    ])
+    _seed_super_agent_session("sess-go", project_id="proj-go",
+                              conversation_log=log)
+
+    class _FakeResult:
+        returncode = 0
+        stdout = "Imported harness sessions: 1"
+        stderr = ""
+
+    captured: dict = {}
+
+    def _fake_run(cmd, **kwargs):
+        captured["cmd"] = cmd
+        # Verify the tempfile contains valid JSON with at least one
+        # normalised entry.
+        json_path = cmd[4]
+        captured["payload"] = json.loads(Path(json_path).read_text())
+        return _FakeResult()
+
+    with patch.object(ti.subprocess, "run", side_effect=_fake_run):
+        ti.on_session_complete(
+            "super_agent", "sess-go", "proj-go", "completed", None,
+        )
+
+    assert captured["cmd"][1:4] == ["project", "sessions", "import"]
+    assert "--project" in captured["cmd"]
+    assert str(tmp_path.resolve()) in captured["cmd"]
+    # Payload normalized correctly.
+    assert isinstance(captured["payload"], list)
+    assert captured["payload"]
+    entry = captured["payload"][0]
+    assert entry["project_root"] == str(tmp_path.resolve())
+    assert entry["project_name"] == "GoProject"
+    assert entry["id"] == "agented:super_agent:sess-go"
+
+
+def test_handler_swallows_cli_missing(isolated_db, tmp_path):
+    """If the Tesserae CLI isn't installed, the handler must NOT raise
+    — observability never blocks the session-completion chain."""
+    (tmp_path / ".tesserae").mkdir()
+    _seed_project_with_tesserae("proj-no-cli", root=tmp_path)
+    _seed_super_agent_session("sess-no-cli", project_id="proj-no-cli")
+    with patch.object(ti.subprocess, "run", side_effect=FileNotFoundError("no tesserae")):
+        # Must not raise.
+        ti.on_session_complete(
+            "super_agent", "sess-no-cli", "proj-no-cli",
+            "completed", None,
+        )
+
+
+def test_export_skips_when_tesserae_root_uninitialized(isolated_db, tmp_path):
+    """Tesserae column set, but the workspace at that path doesn't have
+    ``.tesserae/`` yet (operator forgot to ``tesserae project init``).
+    Skip the import and log a hint — don't try anyway."""
+    _seed_project_with_tesserae("proj-uninit", root=tmp_path)
+    # NOTE: no .tesserae/ created
+    _seed_super_agent_session("sess-uninit", project_id="proj-uninit")
+    result = ti.export_sessions_to_tesserae("proj-uninit")
+    assert result["imported"] == 0
+    assert result["skipped_reason"] == "tesserae_not_initialized"
