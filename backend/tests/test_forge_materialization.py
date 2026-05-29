@@ -189,3 +189,40 @@ def test_hook_materialization_preserves_operator_entries(isolated_db, tmp_path):
     cmds = [h["command"] for e in data["hooks"]["PreToolUse"] for h in e["hooks"]]
     assert "operator.sh" in cmds  # operator entry preserved
     assert ".claude/hooks/guard.sh" in cmds  # agented entry added
+
+
+def test_materialize_writes_mcp_json_idempotent_and_operator_safe(isolated_db, tmp_path):
+    import json as _json
+    from app.db import mcp_servers as mcp_repo
+    from app.db import project_forge_bindings as bindings_repo
+    from app.services.harness_evolver import _find_mcp_server_id_by_name
+    from app.database import get_connection
+
+    with get_connection() as conn:
+        conn.execute("INSERT INTO projects (id, name, status) VALUES ('proj-m', 'P', 'active')")
+        conn.commit()
+    # operator-authored mcp.json with a non-agented server
+    (tmp_path / ".claude").mkdir(parents=True)
+    (tmp_path / ".claude" / "mcp.json").write_text(
+        _json.dumps({"mcpServers": {"operator-srv": {"command": "op"}}})
+    )
+    mcp_repo.create_mcp_server(
+        name="ctx",
+        description="ctx",
+        server_type="stdio",
+        command="ctx-server",
+        args=None,
+        env_json=None,
+        url=None,
+    )
+    mid = _find_mcp_server_id_by_name("ctx")
+    bindings_repo.add_binding("proj-m", "mcp_server", str(mid))
+
+    materialize_primitives({"id": "proj-m"}, ["mcp_server"], tmp_path)
+    materialize_primitives({"id": "proj-m"}, ["mcp_server"], tmp_path)  # idempotent
+
+    data = _json.loads((tmp_path / ".claude" / "mcp.json").read_text())
+    assert data["mcpServers"]["ctx"]["command"] == "ctx-server"
+    assert data["mcpServers"]["operator-srv"]["command"] == "op"  # operator preserved
+    assert data["_agented_mcp_servers"] == ["ctx"]
+    assert list(data["mcpServers"].keys()).count("ctx") == 1  # no dup

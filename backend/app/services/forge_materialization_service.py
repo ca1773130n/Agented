@@ -206,4 +206,56 @@ def materialize_primitives(
             )
             result.written.append(WrittenFile(".claude/settings.json", "hook", "settings"))
 
+    if "mcp_server" in kinds:
+        mcp_path = workspace_path / ".claude" / "mcp.json"
+        doc: dict[str, Any] = {}
+        if mcp_path.exists():
+            try:
+                doc = json.loads(mcp_path.read_text())
+            except (OSError, json.JSONDecodeError):
+                doc = {}
+        servers: dict[str, Any] = doc.get("mcpServers") or {}
+        prior_agented = doc.get("_agented_mcp_servers") or []
+        # Drop previously-Agented servers (so unbound ones disappear); keep operator ones.
+        for name in prior_agented:
+            servers.pop(name, None)
+
+        current_agented: list[str] = []
+        for asset in _bound_assets(project_id, "mcp_server"):
+            name = asset.get("name") or str(asset.get("id"))
+            entry: dict[str, Any] = {}
+            args = asset.get("args")
+            env = asset.get("env_json")
+            if isinstance(args, str):
+                try:
+                    args = json.loads(args)
+                except (ValueError, TypeError):
+                    args = None
+            if isinstance(env, str):
+                try:
+                    env = json.loads(env)
+                except (ValueError, TypeError):
+                    env = None
+            for key, val in (
+                ("command", asset.get("command")),
+                ("args", args),
+                ("env", env),
+                ("url", asset.get("url")),
+                ("type", asset.get("server_type")),
+            ):
+                if val is not None:
+                    entry[key] = val
+            servers[name] = entry
+            current_agented.append(name)
+
+        if current_agented or prior_agented:
+            doc["mcpServers"] = servers
+            doc["_agented_mcp_servers"] = current_agented
+            _write(
+                workspace_path,
+                ".claude/mcp.json",
+                json.dumps(doc, indent=2, ensure_ascii=False) + "\n",
+            )
+            result.written.append(WrittenFile(".claude/mcp.json", "mcp_server", "mcp"))
+
     return result
