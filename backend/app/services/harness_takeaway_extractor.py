@@ -1028,11 +1028,18 @@ def _autoapply_enabled() -> bool:
     return os.environ.get("AGENTED_TAKEAWAY_AUTOAPPLY", "0") == "1"
 
 
+def _default_provider_kind(project_id: Optional[str]) -> str:
+    """Resolve the provider kind for extraction. Single seam to extend with
+    per-project backend lookup later; for now env override -> anthropic."""
+    return os.environ.get("AGENTED_TAKEAWAY_PROVIDER", "anthropic")
+
+
 def extract_for_session(
     session_kind: str,
     session_id: str,
     *,
     project_id: Optional[str] = None,
+    provider_kind: Optional[str] = None,
 ) -> list[str]:
     """Pull the session's text via the annotator's fetcher map, run the
     extractor, persist takeaways. Returns the new takeaway ids."""
@@ -1052,6 +1059,7 @@ def extract_for_session(
     if payload is None:
         return []
     resolved_project_id = project_id or payload.project_id
+    resolved_provider = provider_kind or _default_provider_kind(resolved_project_id)
     heuristic = _extract_heuristic(
         session_kind,
         session_id,
@@ -1063,6 +1071,7 @@ def extract_for_session(
         session_id,
         resolved_project_id,
         payload,
+        provider_kind=resolved_provider,
     )
     # Cross-source dedup: LLM may surface the same takeaway the regex
     # already caught. Heuristic comes first so it wins ties (cheaper,
