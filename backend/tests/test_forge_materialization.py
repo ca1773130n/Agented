@@ -98,3 +98,33 @@ def test_non_numeric_asset_id_skipped_not_crash(isolated_db, tmp_path):
     # Must not raise; just produces no rule file.
     result = materialize_primitives({"id": "proj-3"}, ["rule"], tmp_path)
     assert result.written == []
+
+
+def test_materialize_writes_hook_and_settings(isolated_db, tmp_path):
+    import json as _json
+    from app.db import hooks as hooks_repo
+    from app.db import project_forge_bindings as bindings_repo
+    from app.database import get_connection
+
+    with get_connection() as conn:
+        conn.execute("INSERT INTO projects (id, name, status) VALUES ('proj-h', 'P', 'active')")
+        conn.commit()
+    hid = hooks_repo.create_hook(
+        name="guard",
+        event="PreToolUse",
+        description="block force push",
+        content="#!/bin/sh\necho block",
+        project_id="proj-h",
+    )
+    bindings_repo.add_binding("proj-h", "hook", str(hid))
+
+    materialize_primitives({"id": "proj-h"}, ["hook"], tmp_path)
+
+    sh = tmp_path / ".claude" / "hooks" / "guard.sh"
+    settings = tmp_path / ".claude" / "settings.json"
+    assert sh.exists()
+    assert "echo block" in sh.read_text()
+    data = _json.loads(settings.read_text())
+    entry = data["hooks"]["PreToolUse"][0]
+    assert entry["hooks"][0]["command"] == ".claude/hooks/guard.sh"
+    assert entry["hooks"][0]["type"] == "command"

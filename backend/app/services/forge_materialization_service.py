@@ -149,4 +149,36 @@ def materialize_primitives(
             _write(workspace_path, rel, f"{fm}\n\n{asset.get('action') or ''}\n")
             result.written.append(WrittenFile(rel, "rule", str(asset.get("id"))))
 
+    if "hook" in kinds:
+        settings_path = workspace_path / ".claude" / "settings.json"
+        settings: dict[str, Any] = {}
+        if settings_path.exists():
+            try:
+                settings = json.loads(settings_path.read_text())
+            except (OSError, json.JSONDecodeError):
+                settings = {}
+        hooks_block = settings.setdefault("hooks", {})
+        for asset in _bound_assets(project_id, "hook"):
+            safe = _safe(asset.get("name") or str(asset.get("id")))
+            rel = _unique_rel(used_rels, f".claude/hooks/{safe}.sh", asset.get("id"))
+            _write(workspace_path, rel, (asset.get("content") or "") + "\n")
+            event = asset.get("event") or "PreToolUse"
+            event_block = hooks_block.setdefault(event, [])
+            if not isinstance(event_block, list):
+                event_block = []
+                hooks_block[event] = event_block
+            event_block.append(
+                {
+                    "matcher": asset.get("matcher") or ".*",
+                    "hooks": [{"type": "command", "command": rel}],
+                }
+            )
+            result.written.append(WrittenFile(rel, "hook", str(asset.get("id"))))
+        _write(
+            workspace_path,
+            ".claude/settings.json",
+            json.dumps(settings, indent=2, ensure_ascii=False) + "\n",
+        )
+        result.written.append(WrittenFile(".claude/settings.json", "hook", "settings"))
+
     return result
