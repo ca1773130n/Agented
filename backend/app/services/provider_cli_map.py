@@ -7,10 +7,14 @@ reconciliation #3. Phase A owns this; when Phase C ships, the same
 their import only. Templates carry a ``{PROMPT}`` placeholder substituted by
 the caller (same convention as the existing _llm_codex_cmd()).
 """
+
 from __future__ import annotations
 
+import logging
 import os
 import shlex
+
+logger = logging.getLogger(__name__)
 
 SUPPORTED_PROVIDER_KINDS = ("anthropic", "openai", "gemini", "ollama")
 
@@ -21,7 +25,9 @@ _DEFAULT_TEMPLATES: dict[str, list[str]] = {
     "ollama": ["ollama", "run", "{MODEL}", "{PROMPT}"],
 }
 
-_DEFAULT_MODELS: dict[str, str] = {"ollama": "llama3"}
+_DEFAULT_MODELS: dict[str, str] = {
+    "ollama": "llama3"
+}  # only ollama needs a positional {MODEL} arg in its template
 
 
 def resolve_llm_cmd(provider_kind: str, model_override: str | None = None) -> list[str]:
@@ -39,6 +45,10 @@ def resolve_llm_cmd(provider_kind: str, model_override: str | None = None) -> li
         try:
             template = shlex.split(override)
         except ValueError:
+            logger.warning(
+                "AGENTED_TAKEAWAY_%s_CMD is malformed; using default template",
+                provider_kind.upper(),
+            )
             template = list(_DEFAULT_TEMPLATES[provider_kind])
     else:
         template = list(_DEFAULT_TEMPLATES[provider_kind])

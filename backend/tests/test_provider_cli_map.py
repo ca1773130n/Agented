@@ -29,3 +29,16 @@ def test_resolve_llm_cmd_env_override(monkeypatch):
 def test_resolve_llm_cmd_unknown_raises():
     with pytest.raises(ValueError, match="unknown provider_kind"):
         resolve_llm_cmd("deepseek")
+
+
+def test_resolve_llm_cmd_malformed_override_falls_back(monkeypatch):
+    # Unbalanced quote → shlex.split raises ValueError → fall back to default.
+    monkeypatch.setenv("AGENTED_TAKEAWAY_ANTHROPIC_CMD", 'claude -p "unclosed')
+    cmd = resolve_llm_cmd("anthropic")
+    assert cmd == ["claude", "-p", "{PROMPT}"]
+
+
+def test_resolve_llm_cmd_model_override_substituted():
+    cmd = resolve_llm_cmd("ollama", model_override="qwen2.5-coder")
+    assert "qwen2.5-coder" in cmd
+    assert "{MODEL}" not in cmd
