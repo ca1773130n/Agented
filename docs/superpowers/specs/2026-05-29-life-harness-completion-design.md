@@ -19,11 +19,27 @@ independent phase designs left mismatched.
 
 | Phase | Title | Goal (done-when) | Detailed design |
 |---|---|---|---|
-| **A** | Complete the evidence | All 5 session scopes emit; failures classified into H2/H3/H4/general; takeaway LLM path backend-agnostic | [phaseA-evidence](2026-05-29-life-harness-phaseA-evidence-design.md) |
+| **A** | Complete the evidence | **(re-scoped — see Re-baseline below)** Fix the workflow emit/fetch id mismatch; *enrich* the existing `detect_h2/h3/h4` detectors with confidence/severity + typed shape; make the *already-working* LLM extractor provider-kind aware | [phaseA-evidence](2026-05-29-life-harness-phaseA-evidence-design.md) |
 | **B** | Make the forge real | Applied rounds materialize primitives (incl. skills) to `.claude/` + a git commit referencing the round | [phaseB-forge](2026-05-29-life-harness-phaseB-forge-design.md) |
 | **C** | Trust the changes | A patch is eval'd (static + replay) before apply; any applied round can be cleanly reverted | [phaseC-trust](2026-05-29-life-harness-phaseC-trust-design.md) |
 | **D** | Close the loop | Confidence-gated autonomous apply; review-mode default, autonomy opt-in; global kill switch | [phaseD-autonomy](2026-05-29-life-harness-phaseD-autonomy-design.md) |
 | **E** | Collective + self-feeding | Proven primitives propagate beyond their origin project; Tesserae KG feeds `gather_inputs()` | [phaseE-collective](2026-05-29-life-harness-phaseE-collective-design.md) |
+
+## Re-baseline against source (2026-05-29)
+
+The initial gap audit was a hand-wavy pass and **overstated Phase A**. Each
+phase's claimed gaps were re-verified by reading the actual source. Trust this
+table over the earlier audit narrative when writing plans.
+
+| Phase | Verified verdict | Evidence (file:line) |
+|---|---|---|
+| **A** | 🟡 **Overstated.** Only the **workflow** scope is broken — `_fetch_workflow` queries `workflow_executions WHERE id = ?` (`harness_failure_annotator.py:220`) but the emit passes the parent `workflow_id` (`workflow_execution_service.py:666` → `execution_events.py:122`). `_fetch_team_session` is **correct** (`:244`). `detect_h2/detect_h3/detect_h4` **already exist and run** (`:408/:435/:463`, orchestrated by `_apply_priority_protocol:526`) — they are keyword-based and lack confidence/severity, so Gap 2 is *enrichment*, not from-scratch. The LLM extractor is **wired and ON by default** (`harness_takeaway_extractor.py:445`, `_extract_llm:535` → `_run_codex_for_extraction:483`) — it is **codex-only**, so Gap 3 is *provider-kind generalization*, not "wire the skeleton." |
+| **B** | 🟢 **Accurate.** `apply_patch` performs **no** git commit and **no** `.claude` materialization (DB-only). `WRITABLE_KINDS = ("rule","hook","command","mcp_server")` excludes `skill` (`harness_evolver.py:64`); `validate_patch` flags skill ops unsupported. A read-only workspace projection already exists (`build_workspace:516`, `_run_codex_in_workspace:726`) and should be reused by `materialize_primitives`. |
+| **C** | 🟢 **Accurate.** Only `validate_patch` (shape-check, `harness_evolver.py:858`) runs pre-apply — no eval/replay/regression. `harness_evolution.py` has `mark_running/applied/awaiting_approval/failed/aborted` but **no** `mark_reverted`/revert; routes have no revert endpoint. |
+| **D** | 🟢 **Substantively accurate** (audit phrasing corrected). A live-apply path exists (`run_evolution_round(dry_run=False)` → `mark_applied:1146`, exposed at `/evolution/apply`), but it is operator-*initiated*. There is **no autonomous self-trigger** (nothing fires `dry_run=False` on session-complete/schedule) and **no autonomy config** (`AGENTED_AUTONOMY`/`autonomy_mode`/`auto_evolve` absent from the codebase). |
+| **E** | 🟢 **Accurate.** `list_bindings(project_id, enabled_only)` is strictly per-project (`project_forge_bindings.py:40`); no promote/shared/global scope in the bindings layer. `gather_inputs` pulls **no** KG signal; Tesserae is used only to write a prose `tesserae_context.md` inside `build_workspace` (`harness_evolver.py:570-587`), not as structured evolution input. *Plan-time check:* Phase E's design assumes an existing `project_id IS NULL` global scope in the rule/hook/command repos — confirm that in those repos (not yet verified). |
+
+**Net effect on planning:** Phase A shrinks to roughly 40% of its billed size and changes character (fix + enrich + generalize, not build-from-scratch). Phases B–E are confirmed; their design docs are sound to plan against. The Codex-generated Phase A *plan* was discarded — it hallucinated file/function names (`execution_events.py::_fetch_workflow_execution`, `build_session_evidence`, `_merge_dedup`) that don't exist; plans will be authored directly against the verified symbols above.
 
 ## Build order & dependency DAG
 
