@@ -104,33 +104,53 @@ def _write(workspace: Path, rel: str, content: str) -> None:
     target.write_text(content, encoding="utf-8")
 
 
-def _load_manifest(workspace: Path) -> list[str]:
+def _load_manifest(workspace: Path) -> dict[str, list[str]]:
     p = workspace / _MANIFEST_REL
     if not p.exists():
-        return []
+        return {}
     try:
-        return json.loads(p.read_text()).get("paths", [])
+        data = json.loads(p.read_text())
     except (OSError, json.JSONDecodeError):
-        return []
+        return {}
+    by_kind = data.get("paths_by_kind")
+    return by_kind if isinstance(by_kind, dict) else {}
 
 
-def _finalize_manifest(workspace: Path, result: MaterializationResult) -> None:
-    current = set(result.rel_paths())
-    previous = set(_load_manifest(workspace))
-    for stale in previous - current:
-        if stale in _NEVER_DELETE:
-            continue
-        target = workspace / stale
-        try:
-            if target.exists():
-                target.unlink()
-                result.deleted.append(stale)
-        except OSError:
-            logger.warning("forge cleanup: could not remove %s", stale)
+def _finalize_manifest(
+    workspace: Path,
+    result: MaterializationResult,
+    kinds: list[str],
+) -> None:
+    """Reconcile ONLY the manifest buckets for the kinds materialized this run.
+    Stale per-asset files (in a reconciled bucket but no longer written) are
+    deleted, except operator-shared/marker-managed files. Buckets for kinds not
+    in this run are preserved untouched (partial-kinds safety)."""
+    manifest = _load_manifest(workspace)
+    for kind in kinds:
+        current = {w.rel_path for w in result.written if w.kind == kind}
+        previous = set(manifest.get(kind, []))
+        for stale in previous - current:
+            if stale in _NEVER_DELETE:
+                continue
+            target = workspace / stale
+            try:
+                if target.exists():
+                    target.unlink()
+                    result.deleted.append(stale)
+                    # best-effort: drop the now-empty parent dir
+                    parent = target.parent
+                    try:
+                        if parent != workspace and not any(parent.iterdir()):
+                            parent.rmdir()
+                    except OSError:
+                        pass
+            except OSError:
+                logger.warning("forge cleanup: could not remove %s", stale)
+        manifest[kind] = sorted(current)
     _write(
         workspace,
         _MANIFEST_REL,
-        json.dumps({"paths": sorted(current)}, indent=2) + "\n",
+        json.dumps({"paths_by_kind": manifest}, indent=2) + "\n",
     )
 
 
@@ -292,5 +312,5 @@ def materialize_primitives(
             )
             result.written.append(WrittenFile(".claude/mcp.json", "mcp_server", "mcp"))
 
-    _finalize_manifest(workspace_path, result)
+    _finalize_manifest(workspace_path, result, kinds)
     return result

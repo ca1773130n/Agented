@@ -269,7 +269,35 @@ def test_manifest_written(isolated_db, tmp_path):
     manifest = tmp_path / ".claude" / "agented-forge" / "manifest.json"
     assert manifest.exists()
     data = _json.loads(manifest.read_text())
-    assert ".claude/commands/deploy.md" in data["paths"]
+    assert ".claude/commands/deploy.md" in data["paths_by_kind"]["command"]
+
+
+def test_partial_kinds_run_does_not_delete_other_kinds(isolated_db, tmp_path):
+    """A subsequent kinds=['command'] run must NOT delete still-bound rule files."""
+    import json as _json
+    from app.db import commands as commands_repo
+    from app.db import rules as rules_repo
+    from app.db import project_forge_bindings as bindings_repo
+    from app.database import get_connection
+
+    with get_connection() as conn:
+        conn.execute("INSERT INTO projects (id, name, status) VALUES ('proj-pk', 'P', 'active')")
+        conn.commit()
+    cid = commands_repo.create_command(
+        name="deploy", description="d", content="x", project_id="proj-pk"
+    )
+    rid = rules_repo.create_rule(
+        name="guard", rule_type="validation", description="d", project_id="proj-pk"
+    )
+    bindings_repo.add_binding("proj-pk", "command", str(cid))
+    bindings_repo.add_binding("proj-pk", "rule", str(rid))
+    # full run materializes both
+    materialize_primitives({"id": "proj-pk"}, ["command", "rule"], tmp_path)
+    rule_file = tmp_path / ".claude" / "agented-forge" / "rules" / "guard.md"
+    assert rule_file.exists()
+    # partial run for command only must NOT delete the still-bound rule file
+    materialize_primitives({"id": "proj-pk"}, ["command"], tmp_path)
+    assert rule_file.exists()
 
 
 def test_cleanup_never_deletes_shared_files(isolated_db, tmp_path):
