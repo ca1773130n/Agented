@@ -45,3 +45,24 @@ def test_h3_permission_denied_detected():
     )
     kinds = {i["kind"] for i in out}
     assert "h3_permission_denied" in kinds
+
+
+def _assistant(idx: int, text: str = "", tool: str | None = None) -> TurnEvent:
+    return TurnEvent(index=idx, role="assistant", content_text=text, tool_name=tool)
+
+
+def test_h2_repeated_tool_failure_detected():
+    events = [
+        _tool_result(0, "bash: boom: command failed"),
+        _tool_result(1, "bash: boom: command failed"),
+    ]
+    out = _apply_priority_protocol(events, outcome="failed")
+    assert "h2_repeated_tool_failure" in {i["kind"] for i in out}
+
+
+def test_h4_abandoned_goal_detected():
+    events = [
+        _assistant(0, "I can't continue, giving up on this task."),
+    ]
+    out = _apply_priority_protocol(events, outcome="failed")
+    assert "h4_abandoned_goal" in {i["kind"] for i in out}

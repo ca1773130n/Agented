@@ -429,6 +429,23 @@ def detect_h2(events: list[TurnEvent]) -> list[dict]:
                     "event_index": ev.index,
                     "evidence": {"error": ev.tool_error[:240]},
                 })
+
+    # Repeated identical tool errors → systemic failure, not a one-off.
+    err_counts: dict[str, int] = {}
+    err_first: dict[str, int] = {}
+    for ev in events:
+        if ev.role == "tool_result" and ev.tool_error:
+            key = ev.tool_error.strip().lower()[:120]
+            err_counts[key] = err_counts.get(key, 0) + 1
+            err_first.setdefault(key, ev.index)
+    for key, count in err_counts.items():
+        if count >= 2:
+            incidents.append({
+                "layer": "h2",
+                "kind": "h2_repeated_tool_failure",
+                "event_index": err_first[key],
+                "evidence": {"error": key, "count": count},
+            })
     return incidents
 
 
@@ -537,6 +554,22 @@ def detect_h4(events: list[TurnEvent], *, outcome: Optional[str]) -> list[dict]:
             "event_index": None,
             "evidence": {"outcome": outcome},
         })
+
+    _ABANDON_PHRASES = (
+        "i can't continue", "i cannot continue", "unable to proceed",
+        "giving up", "cannot complete", "i give up",
+    )
+    for ev in events:
+        if ev.role == "assistant" and ev.content_text:
+            low = ev.content_text.lower()
+            if any(p in low for p in _ABANDON_PHRASES):
+                incidents.append({
+                    "layer": "h4",
+                    "kind": "h4_abandoned_goal",
+                    "event_index": ev.index,
+                    "evidence": {"snippet": ev.content_text[:240]},
+                })
+                break
 
     return incidents
 
