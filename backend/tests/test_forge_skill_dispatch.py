@@ -54,3 +54,38 @@ def test_update_then_delete_skill(_proj):
     ev._delete_dispatch["skill"](asset_id=aid)
     assert skills_repo.get_user_skill(int(aid)) is None
     assert not md.exists()
+
+
+def test_skill_description_with_colon_newline_is_yaml_safe(_proj):
+    from pathlib import Path
+
+    import yaml
+
+    aid = ev._create_dispatch["skill"](
+        name="tricky",
+        payload={"description": "Fix: do\nthing", "content": "body"},
+        project_id="proj-sk",
+    )
+    assert aid is not None
+    md = Path(_proj) / ".claude" / "skills" / "tricky" / "SKILL.md"
+    text = md.read_text()
+    fm = yaml.safe_load(text.split("---")[1])
+    assert fm["description"] == "Fix: do\nthing"
+    assert fm["name"] == "tricky"
+
+
+def test_create_skill_duplicate_name_updates_existing(_proj):
+    aid1 = ev._create_dispatch["skill"](
+        name="dup",
+        payload={"description": "d1", "content": "v1"},
+        project_id="proj-sk",
+    )
+    aid2 = ev._create_dispatch["skill"](
+        name="dup",
+        payload={"description": "d2", "content": "v2"},
+        project_id="proj-sk",
+    )
+    # Same row id returned (updated, not orphaned), and only one row by name.
+    assert int(aid2) == int(aid1)
+    row = skills_repo.get_user_skill_by_name("dup")
+    assert row is not None

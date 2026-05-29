@@ -1142,7 +1142,13 @@ def _project_root(project_id: str) -> Optional[Path]:
 def _render_skill_md(name: str, payload: dict) -> str:
     description = (payload.get("description") or "")[:200]
     body = payload.get("content") or payload.get("body") or ""
-    return f"---\nname: {name}\ndescription: {description}\n---\n\n{body}\n"
+    return (
+        "---\n"
+        f"name: {json.dumps(str(name))}\n"
+        f"description: {json.dumps(str(description))}\n"
+        "---\n\n"
+        f"{body}\n"
+    )
 
 
 def _create_skill(*, name, payload, project_id):
@@ -1154,14 +1160,28 @@ def _create_skill(*, name, payload, project_id):
     skill_dir = root / ".claude" / "skills" / safe
     skill_dir.mkdir(parents=True, exist_ok=True)
     (skill_dir / "SKILL.md").write_text(_render_skill_md(name, payload), encoding="utf-8")
-    from app.db.skills import add_user_skill
+    from app.db.skills import add_user_skill, get_user_skill_by_name, update_user_skill
 
-    return add_user_skill(
+    new_id = add_user_skill(
         skill_name=name,
         skill_path=str(skill_dir / "SKILL.md"),
         description=payload.get("description"),
         enabled=1,
     )
+    if new_id is not None:
+        return new_id
+    # Duplicate skill_name: update the existing row to point at the (re-written) file.
+    existing = get_user_skill_by_name(name)
+    if existing is None:
+        logger.warning("skill create: add_user_skill failed and no existing row for %s", name)
+        return None
+    logger.warning("skill create: %s already exists; updating existing row", name)
+    update_user_skill(
+        int(existing["id"]),
+        skill_path=str(skill_dir / "SKILL.md"),
+        description=payload.get("description"),
+    )
+    return existing["id"]
 
 
 def _update_skill(*, asset_id, payload):
@@ -1174,6 +1194,10 @@ def _update_skill(*, asset_id, payload):
         path = row.get("skill_path")
         if path:
             Path(path).write_text(_render_skill_md(row["skill_name"], payload), encoding="utf-8")
+        else:
+            logger.warning(
+                "skill update: row %s has no skill_path; SKILL.md not rewritten", asset_id
+            )
     update_user_skill(int(asset_id), description=payload.get("description"))
 
 
