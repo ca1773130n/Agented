@@ -21,6 +21,10 @@ from app.db.rules import get_rule
 
 logger = logging.getLogger(__name__)
 
+_MANIFEST_REL = ".claude/agented-forge/manifest.json"
+# Operator-shared, marker-managed files — NEVER manifest-deleted.
+_NEVER_DELETE = {_MANIFEST_REL, ".claude/settings.json", ".claude/mcp.json"}
+
 
 @dataclass
 class WrittenFile:
@@ -98,6 +102,36 @@ def _write(workspace: Path, rel: str, content: str) -> None:
     target = workspace / rel
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(content, encoding="utf-8")
+
+
+def _load_manifest(workspace: Path) -> list[str]:
+    p = workspace / _MANIFEST_REL
+    if not p.exists():
+        return []
+    try:
+        return json.loads(p.read_text()).get("paths", [])
+    except (OSError, json.JSONDecodeError):
+        return []
+
+
+def _finalize_manifest(workspace: Path, result: MaterializationResult) -> None:
+    current = set(result.rel_paths())
+    previous = set(_load_manifest(workspace))
+    for stale in previous - current:
+        if stale in _NEVER_DELETE:
+            continue
+        target = workspace / stale
+        try:
+            if target.exists():
+                target.unlink()
+                result.deleted.append(stale)
+        except OSError:
+            logger.warning("forge cleanup: could not remove %s", stale)
+    _write(
+        workspace,
+        _MANIFEST_REL,
+        json.dumps({"paths": sorted(current)}, indent=2) + "\n",
+    )
 
 
 def materialize_primitives(
@@ -258,4 +292,5 @@ def materialize_primitives(
             )
             result.written.append(WrittenFile(".claude/mcp.json", "mcp_server", "mcp"))
 
+    _finalize_manifest(workspace_path, result)
     return result

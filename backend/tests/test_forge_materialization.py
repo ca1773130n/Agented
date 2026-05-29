@@ -226,3 +226,71 @@ def test_materialize_writes_mcp_json_idempotent_and_operator_safe(isolated_db, t
     assert data["mcpServers"]["operator-srv"]["command"] == "op"  # operator preserved
     assert data["_agented_mcp_servers"] == ["ctx"]
     assert list(data["mcpServers"].keys()).count("ctx") == 1  # no dup
+
+
+def test_cleanup_removes_stale_per_asset_file(isolated_db, tmp_path):
+    from app.db import commands as commands_repo
+    from app.db import project_forge_bindings as bindings_repo
+    from app.database import get_connection
+
+    with get_connection() as conn:
+        conn.execute("INSERT INTO projects (id, name, status) VALUES ('proj-cl', 'P', 'active')")
+        conn.commit()
+    cid = commands_repo.create_command(
+        name="deploy", description="d", content="x", project_id="proj-cl"
+    )
+    bindings_repo.add_binding("proj-cl", "command", str(cid))
+    materialize_primitives({"id": "proj-cl"}, ["command"], tmp_path)
+    assert (tmp_path / ".claude" / "commands" / "deploy.md").exists()
+
+    # Unbind the command (remove_binding takes the BINDING ROW id), re-run.
+    for b in bindings_repo.list_bindings("proj-cl"):
+        if b["kind"] == "command":
+            bindings_repo.remove_binding(b["id"])
+    result = materialize_primitives({"id": "proj-cl"}, ["command"], tmp_path)
+    assert not (tmp_path / ".claude" / "commands" / "deploy.md").exists()
+    assert ".claude/commands/deploy.md" in result.deleted
+
+
+def test_manifest_written(isolated_db, tmp_path):
+    import json as _json
+    from app.db import commands as commands_repo
+    from app.db import project_forge_bindings as bindings_repo
+    from app.database import get_connection
+
+    with get_connection() as conn:
+        conn.execute("INSERT INTO projects (id, name, status) VALUES ('proj-mf', 'P', 'active')")
+        conn.commit()
+    cid = commands_repo.create_command(
+        name="deploy", description="d", content="x", project_id="proj-mf"
+    )
+    bindings_repo.add_binding("proj-mf", "command", str(cid))
+    materialize_primitives({"id": "proj-mf"}, ["command"], tmp_path)
+    manifest = tmp_path / ".claude" / "agented-forge" / "manifest.json"
+    assert manifest.exists()
+    data = _json.loads(manifest.read_text())
+    assert ".claude/commands/deploy.md" in data["paths"]
+
+
+def test_cleanup_never_deletes_shared_files(isolated_db, tmp_path):
+    # settings.json / mcp.json must survive even when no hooks/mcp are bound this run.
+    import json as _json
+    from app.db import hooks as hooks_repo
+    from app.db import project_forge_bindings as bindings_repo
+    from app.database import get_connection
+
+    with get_connection() as conn:
+        conn.execute("INSERT INTO projects (id, name, status) VALUES ('proj-sh', 'P', 'active')")
+        conn.commit()
+    hid = hooks_repo.create_hook(
+        name="g", event="PreToolUse", description="d", content="echo x", project_id="proj-sh"
+    )
+    bindings_repo.add_binding("proj-sh", "hook", str(hid))
+    materialize_primitives({"id": "proj-sh"}, ["hook"], tmp_path)
+    assert (tmp_path / ".claude" / "settings.json").exists()
+    # Unbind the hook, re-run with hooks kind → settings.json must still exist (marker-managed), not manifest-deleted.
+    for b in bindings_repo.list_bindings("proj-sh"):
+        if b["kind"] == "hook":
+            bindings_repo.remove_binding(b["id"])
+    materialize_primitives({"id": "proj-sh"}, ["hook"], tmp_path)
+    assert (tmp_path / ".claude" / "settings.json").exists()
