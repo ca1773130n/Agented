@@ -42,79 +42,134 @@ def _seed_project(project_id: str, name: str = "Test Project") -> None:
 # validate_patch — kind-specific shape checks
 # --------------------------------------------------------------------------
 
+
 def test_validate_accepts_clean_rule_hook_command_mcp():
-    patch = EvolutionPatch(entries=[
-        PatchEntry(op="create", kind="rule", name="r", payload={
-            "description": "Quote spaced cols.",
-        }),
-        PatchEntry(op="create", kind="hook", name="h", payload={
-            "event": "PreToolUse", "content": "#!/bin/sh\nexit 0",
-        }),
-        PatchEntry(op="create", kind="command", name="c", payload={
-            "content": "Do the thing.",
-        }),
-        PatchEntry(op="create", kind="mcp_server", name="m", payload={
-            "command": "node",
-        }),
-    ])
+    patch = EvolutionPatch(
+        entries=[
+            PatchEntry(
+                op="create",
+                kind="rule",
+                name="r",
+                payload={
+                    "description": "Quote spaced cols.",
+                },
+            ),
+            PatchEntry(
+                op="create",
+                kind="hook",
+                name="h",
+                payload={
+                    "event": "PreToolUse",
+                    "content": "#!/bin/sh\nexit 0",
+                },
+            ),
+            PatchEntry(
+                op="create",
+                kind="command",
+                name="c",
+                payload={
+                    "content": "Do the thing.",
+                },
+            ),
+            PatchEntry(
+                op="create",
+                kind="mcp_server",
+                name="m",
+                payload={
+                    "command": "node",
+                },
+            ),
+        ]
+    )
     assert validate_patch(patch) == []
 
 
 def test_validate_rejects_unknown_kind():
-    patch = EvolutionPatch(entries=[
-        PatchEntry(op="create", kind="banana", name="x", payload={}),
-    ])
+    patch = EvolutionPatch(
+        entries=[
+            PatchEntry(op="create", kind="banana", name="x", payload={}),
+        ]
+    )
     problems = validate_patch(patch)
     assert problems and "not an auto-evolvable" in problems[0]
 
 
-def test_validate_rejects_skill_create():
-    """Skill create/update isn't auto-applied — Codex must propose those
-    in NOTES.md, not as patch entries."""
-    patch = EvolutionPatch(entries=[
-        PatchEntry(op="create", kind="skill", name="s",
-                   payload={"description": "x"}),
-    ])
+def test_validate_accepts_skill_create():
+    """Skill create is now auto-evolvable — validate_patch must not reject it."""
+    patch = EvolutionPatch(
+        entries=[
+            PatchEntry(op="create", kind="skill", name="s", payload={"description": "x"}),
+        ]
+    )
     problems = validate_patch(patch)
-    assert problems and "not an auto-evolvable" in problems[0]
+    assert not problems
 
 
 def test_validate_hook_requires_known_event():
-    patch = EvolutionPatch(entries=[
-        PatchEntry(op="create", kind="hook", name="h", payload={
-            "event": "MadeUpEvent", "content": "echo hi",
-        }),
-    ])
+    patch = EvolutionPatch(
+        entries=[
+            PatchEntry(
+                op="create",
+                kind="hook",
+                name="h",
+                payload={
+                    "event": "MadeUpEvent",
+                    "content": "echo hi",
+                },
+            ),
+        ]
+    )
     problems = validate_patch(patch)
     assert problems and "unknown hook event" in problems[0]
 
 
 def test_validate_hook_requires_content():
-    patch = EvolutionPatch(entries=[
-        PatchEntry(op="create", kind="hook", name="h", payload={
-            "event": "PreToolUse",
-        }),
-    ])
+    patch = EvolutionPatch(
+        entries=[
+            PatchEntry(
+                op="create",
+                kind="hook",
+                name="h",
+                payload={
+                    "event": "PreToolUse",
+                },
+            ),
+        ]
+    )
     problems = validate_patch(patch)
     assert any("hook.content is required" in p for p in problems)
 
 
 def test_validate_mcp_server_requires_command_or_url():
-    patch = EvolutionPatch(entries=[
-        PatchEntry(op="create", kind="mcp_server", name="m", payload={
-            "description": "missing transport",
-        }),
-    ])
+    patch = EvolutionPatch(
+        entries=[
+            PatchEntry(
+                op="create",
+                kind="mcp_server",
+                name="m",
+                payload={
+                    "description": "missing transport",
+                },
+            ),
+        ]
+    )
     problems = validate_patch(patch)
     assert any("mcp_server needs command" in p for p in problems)
 
 
 def test_validate_update_requires_existing_asset_id():
-    patch = EvolutionPatch(entries=[
-        PatchEntry(op="update", kind="rule", name="r", payload={
-            "description": "x",
-        }),
-    ])
+    patch = EvolutionPatch(
+        entries=[
+            PatchEntry(
+                op="update",
+                kind="rule",
+                name="r",
+                payload={
+                    "description": "x",
+                },
+            ),
+        ]
+    )
     problems = validate_patch(patch)
     assert any("missing existing_asset_id" in p for p in problems)
 
@@ -123,14 +178,22 @@ def test_validate_update_requires_existing_asset_id():
 # apply_patch — calls into the Forge repos + binds new assets to project
 # --------------------------------------------------------------------------
 
+
 def test_apply_create_rule_persists_and_binds(isolated_db):
     _seed_project("proj-test-a")
-    patch = EvolutionPatch(entries=[
-        PatchEntry(op="create", kind="rule", name="quote-cols", payload={
-            "description": "Quote spaced cols.",
-            "rule_type": "validation",
-        }),
-    ])
+    patch = EvolutionPatch(
+        entries=[
+            PatchEntry(
+                op="create",
+                kind="rule",
+                name="quote-cols",
+                payload={
+                    "description": "Quote spaced cols.",
+                    "rule_type": "validation",
+                },
+            ),
+        ]
+    )
     applied = apply_patch(patch, "proj-test-a")
     assert len(applied) == 1
     assert applied[0]["kind"] == "rule"
@@ -143,20 +206,24 @@ def test_apply_create_rule_persists_and_binds(isolated_db):
     assert persisted["project_id"] == "proj-test-a"
 
     bindings = bindings_repo.list_bindings("proj-test-a")
-    assert any(
-        b["kind"] == "rule" and str(b["asset_id"]) == str(new_id)
-        for b in bindings
-    )
+    assert any(b["kind"] == "rule" and str(b["asset_id"]) == str(new_id) for b in bindings)
 
 
 def test_apply_create_hook_persists_and_binds(isolated_db):
     _seed_project("proj-test-h")
-    patch = EvolutionPatch(entries=[
-        PatchEntry(op="create", kind="hook", name="block-rm", payload={
-            "event": "PreToolUse",
-            "content": "#!/bin/sh\necho '{\"decision\":\"block\"}'",
-        }),
-    ])
+    patch = EvolutionPatch(
+        entries=[
+            PatchEntry(
+                op="create",
+                kind="hook",
+                name="block-rm",
+                payload={
+                    "event": "PreToolUse",
+                    "content": '#!/bin/sh\necho \'{"decision":"block"}\'',
+                },
+            ),
+        ]
+    )
     applied = apply_patch(patch, "proj-test-h")
     assert applied[0]["kind"] == "hook"
 
@@ -168,15 +235,24 @@ def test_apply_create_hook_persists_and_binds(isolated_db):
 def test_apply_update_modifies_existing(isolated_db):
     _seed_project("proj-update")
     rid = rules_repo.create_rule(
-        name="r", description="v1", project_id="proj-update",
+        name="r",
+        description="v1",
+        project_id="proj-update",
     )
-    patch = EvolutionPatch(entries=[
-        PatchEntry(op="update", kind="rule", name="r",
-                   existing_asset_id=rid, payload={
-                       "description": "v2",
-                       "rule_type": "validation",
-                   }),
-    ])
+    patch = EvolutionPatch(
+        entries=[
+            PatchEntry(
+                op="update",
+                kind="rule",
+                name="r",
+                existing_asset_id=rid,
+                payload={
+                    "description": "v2",
+                    "rule_type": "validation",
+                },
+            ),
+        ]
+    )
     apply_patch(patch, "proj-update")
     assert rules_repo.get_rule(rid)["description"] == "v2"
 
@@ -184,12 +260,15 @@ def test_apply_update_modifies_existing(isolated_db):
 def test_apply_delete_removes(isolated_db):
     _seed_project("proj-del")
     cid = commands_repo.create_command(
-        name="c", content="hi", project_id="proj-del",
+        name="c",
+        content="hi",
+        project_id="proj-del",
     )
-    patch = EvolutionPatch(entries=[
-        PatchEntry(op="delete", kind="command", name="c",
-                   existing_asset_id=cid),
-    ])
+    patch = EvolutionPatch(
+        entries=[
+            PatchEntry(op="delete", kind="command", name="c", existing_asset_id=cid),
+        ]
+    )
     apply_patch(patch, "proj-del")
     assert commands_repo.get_command(cid) is None
 
@@ -198,16 +277,20 @@ def test_apply_delete_removes(isolated_db):
 # parse_patch — diff Forge directories before/after Codex edits
 # --------------------------------------------------------------------------
 
+
 def test_parse_patch_classifies_create_update_delete(tmp_path, isolated_db):
     # Seed: one rule + one hook bound to the project.
     _seed_project("proj-parse")
     rid = rules_repo.create_rule(
-        name="existing-rule", description="keep me",
+        name="existing-rule",
+        description="keep me",
         project_id="proj-parse",
     )
     bindings_repo.add_binding("proj-parse", "rule", str(rid))
     hid = hooks_repo.create_hook(
-        name="existing-hook", event="PreToolUse", content="echo hi",
+        name="existing-hook",
+        event="PreToolUse",
+        content="echo hi",
         project_id="proj-parse",
     )
     bindings_repo.add_binding("proj-parse", "hook", str(hid))
@@ -223,11 +306,15 @@ def test_parse_patch_classifies_create_update_delete(tmp_path, isolated_db):
 
     (scratch / "forge" / "hooks" / "existing-hook.json").unlink()
 
-    (scratch / "forge" / "commands" / "new-cmd.json").write_text(json.dumps({
-        "id": None,
-        "name": "new-cmd",
-        "payload": {"content": "do the thing"},
-    }))
+    (scratch / "forge" / "commands" / "new-cmd.json").write_text(
+        json.dumps(
+            {
+                "id": None,
+                "name": "new-cmd",
+                "payload": {"content": "do the thing"},
+            }
+        )
+    )
 
     patch = parse_patch(scratch, inputs)
     ops = sorted((e.op, e.kind, e.name) for e in patch.entries)
@@ -242,6 +329,7 @@ def test_parse_patch_classifies_create_update_delete(tmp_path, isolated_db):
 # Takeaways → workspace (positive-learning evidence stream)
 # --------------------------------------------------------------------------
 
+
 def test_build_workspace_writes_takeaways_to_disk(tmp_path, isolated_db):
     """Each gathered takeaway lands as a JSON file under ``takeaways/``
     so Codex can read it alongside trajectories. The projection contains
@@ -250,30 +338,32 @@ def test_build_workspace_writes_takeaways_to_disk(tmp_path, isolated_db):
     from app.db import harness_takeaways as takeaways_repo
 
     _seed_project("proj-tk-evol")
-    [tk1, tk2] = takeaways_repo.insert_many([
-        {
-            "session_kind": "trigger_execution",
-            "session_id": "exec-tk-1",
-            "project_id": "proj-tk-evol",
-            "kind": "discovered_procedure",
-            "content": "Run migrations with `just db-migrate` before each deploy.",
-            "confidence": 0.85,
-            "suggested_target": "skill",
-            "suggested_payload": {"title": "deploy-flow"},
-            "extractor_version": "test",
-        },
-        {
-            "session_kind": "team_session",
-            "session_id": "team-exec-tk-1",
-            "project_id": "proj-tk-evol",
-            "kind": "user_preference",
-            "content": "Prefer pytest over unittest for new test files.",
-            "confidence": 0.9,
-            "suggested_target": "rule",
-            "suggested_payload": {},
-            "extractor_version": "test",
-        },
-    ])
+    [tk1, tk2] = takeaways_repo.insert_many(
+        [
+            {
+                "session_kind": "trigger_execution",
+                "session_id": "exec-tk-1",
+                "project_id": "proj-tk-evol",
+                "kind": "discovered_procedure",
+                "content": "Run migrations with `just db-migrate` before each deploy.",
+                "confidence": 0.85,
+                "suggested_target": "skill",
+                "suggested_payload": {"title": "deploy-flow"},
+                "extractor_version": "test",
+            },
+            {
+                "session_kind": "team_session",
+                "session_id": "team-exec-tk-1",
+                "project_id": "proj-tk-evol",
+                "kind": "user_preference",
+                "content": "Prefer pytest over unittest for new test files.",
+                "confidence": 0.9,
+                "suggested_target": "rule",
+                "suggested_payload": {},
+                "extractor_version": "test",
+            },
+        ]
+    )
 
     inputs = gather_inputs("proj-tk-evol", limit=10)
     assert len(inputs["takeaways"]) == 2
@@ -329,6 +419,7 @@ def test_build_workspace_prompt_references_takeaways(tmp_path, isolated_db):
 # Codex CLI invocation defaults
 # --------------------------------------------------------------------------
 
+
 def test_default_codex_cmd_includes_workspace_write_sandbox(monkeypatch):
     """Regression from the live-data dogfood: ``codex exec`` defaults
     to ``--sandbox read-only``, which silently rejects every file
@@ -355,6 +446,7 @@ def test_default_codex_cmd_includes_workspace_write_sandbox(monkeypatch):
 # Full round with Codex mocked
 # --------------------------------------------------------------------------
 
+
 @pytest.fixture
 def mock_codex():
     """Patch Codex; tests configure what files the fake Codex creates / edits."""
@@ -374,21 +466,29 @@ def mock_codex():
             (scratch_dir / "NOTES.md").write_text(edits["notes"])
 
     with patch.object(evolver, "_run_codex_in_workspace", _fake):
+
         def _configure(*, files=None, deletes=None, notes=""):
             edits["files"] = files or {}
             edits["deletes"] = deletes or []
             edits["notes"] = notes
+
         yield _configure
 
 
 def test_run_evolution_round_applies_codex_edits(isolated_db, mock_codex):
     _seed_project("proj-run")
-    mock_codex(files={
-        "forge/rules/new-rule.json": json.dumps({
-            "id": None, "name": "new-rule",
-            "payload": {"description": "Codex added me"},
-        }),
-    }, notes="Found 3 H3 mismatches — added a rule.")
+    mock_codex(
+        files={
+            "forge/rules/new-rule.json": json.dumps(
+                {
+                    "id": None,
+                    "name": "new-rule",
+                    "payload": {"description": "Codex added me"},
+                }
+            ),
+        },
+        notes="Found 3 H3 mismatches — added a rule.",
+    )
 
     result = evolver.run_evolution_round("proj-run")
     assert result.status == "applied"
@@ -400,12 +500,17 @@ def test_run_evolution_round_applies_codex_edits(isolated_db, mock_codex):
 def test_run_evolution_round_rejects_invalid_patch(isolated_db, mock_codex):
     """Codex emits a hook without content → validation fails, no Forge writes."""
     _seed_project("proj-rej")
-    mock_codex(files={
-        "forge/hooks/broken.json": json.dumps({
-            "id": None, "name": "broken",
-            "payload": {"event": "PreToolUse"},
-        }),
-    })
+    mock_codex(
+        files={
+            "forge/hooks/broken.json": json.dumps(
+                {
+                    "id": None,
+                    "name": "broken",
+                    "payload": {"event": "PreToolUse"},
+                }
+            ),
+        }
+    )
     result = evolver.run_evolution_round("proj-rej")
     assert result.status == "failed"
     assert "patch validation failed" in (result.error or "")
@@ -414,12 +519,17 @@ def test_run_evolution_round_rejects_invalid_patch(isolated_db, mock_codex):
 
 def test_run_evolution_round_dry_run_holds_for_approval(isolated_db, mock_codex):
     _seed_project("proj-dry")
-    mock_codex(files={
-        "forge/rules/dr.json": json.dumps({
-            "id": None, "name": "dr",
-            "payload": {"description": "dr"},
-        }),
-    })
+    mock_codex(
+        files={
+            "forge/rules/dr.json": json.dumps(
+                {
+                    "id": None,
+                    "name": "dr",
+                    "payload": {"description": "dr"},
+                }
+            ),
+        }
+    )
     result = evolver.run_evolution_round("proj-dry", dry_run=True)
     assert result.status == "awaiting_approval"
     # No rule was written yet.
@@ -431,14 +541,21 @@ def test_run_evolution_round_dry_run_holds_for_approval(isolated_db, mock_codex)
 
 
 def test_run_evolution_round_abort_drops_pending_patch(
-    isolated_db, mock_codex,
+    isolated_db,
+    mock_codex,
 ):
     _seed_project("proj-abort")
-    mock_codex(files={
-        "forge/rules/x.json": json.dumps({
-            "id": None, "name": "x", "payload": {"description": "x"},
-        }),
-    })
+    mock_codex(
+        files={
+            "forge/rules/x.json": json.dumps(
+                {
+                    "id": None,
+                    "name": "x",
+                    "payload": {"description": "x"},
+                }
+            ),
+        }
+    )
     dr = evolver.run_evolution_round("proj-abort", dry_run=True)
     res = evolver.abort_dry_run_round(dr.round_id, reason="nope")
     assert res.status == "aborted"
@@ -467,6 +584,7 @@ def test_rate_limit_ignores_failed_rounds(isolated_db, mock_codex):
     # First call: simulate Codex crash.
     def _crash(scratch_dir, *, timeout=600):
         raise RuntimeError("codex CLI exited 2: --auto not found")
+
     with patch.object(evolver, "_run_codex_in_workspace", _crash):
         first = evolver.run_evolution_round("proj-retry", dry_run=True)
     assert first.status == "failed"
@@ -507,8 +625,10 @@ def test_rate_limit_reaps_stale_running_round(isolated_db, mock_codex):
     # accepts ``project_id``; we set started_at via UPDATE.
     rid = evo_repo.start_round(
         project_id="proj-reap",
-        input_window_since=None, input_window_until=None,
-        input_execution_count=0, input_forge={},
+        input_window_since=None,
+        input_window_until=None,
+        input_execution_count=0,
+        input_forge={},
         scratch_dir="/tmp/x",
     )
     evo_repo.mark_running(rid)
@@ -530,15 +650,16 @@ def test_rate_limit_reaps_stale_running_round(isolated_db, mock_codex):
     # And the stale round is now marked failed with a reaper message.
     with get_connection() as conn:
         row = conn.execute(
-            "SELECT status, error_message FROM harness_evolution_rounds "
-            "WHERE id = ?", (rid,),
+            "SELECT status, error_message FROM harness_evolution_rounds WHERE id = ?",
+            (rid,),
         ).fetchone()
     assert row["status"] == "failed"
     assert "reaped" in (row["error_message"] or "").lower()
 
 
 def test_rate_limit_does_not_reap_fresh_in_flight_round(
-    isolated_db, mock_codex,
+    isolated_db,
+    mock_codex,
 ):
     """An in-flight round STARTED RECENTLY should still block — the
     reaper must only fire on truly stale rounds, not interrupt a
@@ -549,8 +670,10 @@ def test_rate_limit_does_not_reap_fresh_in_flight_round(
 
     rid = evo_repo.start_round(
         project_id="proj-no-reap",
-        input_window_since=None, input_window_until=None,
-        input_execution_count=0, input_forge={},
+        input_window_since=None,
+        input_window_until=None,
+        input_execution_count=0,
+        input_forge={},
         scratch_dir="/tmp/y",
     )
     evo_repo.mark_running(rid)
