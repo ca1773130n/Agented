@@ -27,3 +27,21 @@ def test_invalid_tool_call_scored_high():
     ev = out[0]["evidence"]
     assert ev["confidence"] >= 0.9
     assert ev["severity"] == "high"
+
+
+def test_h3_missing_file_detected():
+    out = _apply_priority_protocol(
+        [_tool_result(0, "ENOENT: no such file or directory, open '/tmp/x'")],
+        outcome="failed",
+    )
+    kinds = {i["kind"] for i in out}
+    assert "h3_missing_file" in kinds
+
+
+def test_h3_permission_denied_detected():
+    out = _apply_priority_protocol(
+        [_tool_result(0, "EACCES: permission denied, open '/etc/shadow'")],
+        outcome="failed",
+    )
+    kinds = {i["kind"] for i in out}
+    assert "h3_permission_denied" in kinds

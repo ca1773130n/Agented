@@ -457,6 +457,24 @@ def detect_h3(events: list[TurnEvent]) -> list[dict]:
                     "event_index": ev.index,
                     "evidence": {"error": ev.tool_error[:240]},
                 })
+            elif "permission denied" in err or "eacces" in err:
+                incidents.append({
+                    "layer": "h3",
+                    "kind": "h3_permission_denied",
+                    "event_index": ev.index,
+                    "evidence": {"error": ev.tool_error[:240]},
+                })
+            elif (
+                "no such file or directory" in err
+                or "enoent" in err
+                or "file not found" in err
+            ):
+                incidents.append({
+                    "layer": "h3",
+                    "kind": "h3_missing_file",
+                    "event_index": ev.index,
+                    "evidence": {"error": ev.tool_error[:240]},
+                })
     return incidents
 
 
