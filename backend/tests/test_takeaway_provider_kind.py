@@ -83,3 +83,65 @@ def test_extract_for_session_explicit_provider_overrides_env(monkeypatch, isolat
     ):
         tx.extract_for_session("super_agent", "s-1", project_id="proj-1", provider_kind="gemini")
     assert seen["provider_kind"] == "gemini"
+
+
+# ---------------------------------------------------------------------------
+# Regression: invalid provider-kind must not discard heuristic takeaways
+# ---------------------------------------------------------------------------
+
+
+def test_invalid_env_provider_preserves_heuristic_takeaways(monkeypatch, isolated_db):
+    """A bad AGENTED_TAKEAWAY_PROVIDER must NOT discard heuristic takeaways.
+
+    Fix 2 (_default_provider_kind validation) falls back to "anthropic".
+    Fix 1 (_extract_llm ValueError catch) ensures even a direct invalid
+    provider_kind passed to _extract_llm returns [] rather than raising.
+    The combination means heuristic takeaways are always persisted.
+    """
+    monkeypatch.setenv("AGENTED_TAKEAWAY_PROVIDER", "not-a-provider")
+
+    fake_payload = SessionPayload(
+        text="x" * 5000, backend_type="claude", project_id="proj-1", outcome="completed"
+    )
+
+    heuristic_item = {
+        "session_kind": "super_agent",
+        "session_id": "s-1",
+        "project_id": "proj-1",
+        "kind": "domain_fact",
+        "content": "X",
+        "confidence": 0.9,
+        "evidence": {"extractor": "heuristic", "pattern": "test"},
+        "suggested_target": None,
+        "suggested_payload": None,
+        "extractor_version": tx.EXTRACTOR_VERSION,
+    }
+
+    with (
+        patch.object(tx, "_FETCHERS", {"super_agent": lambda _id: fake_payload}),
+        patch.object(tx, "_extract_heuristic", lambda *a, **k: [heuristic_item]),
+        # _extract_llm returns [] (simulating LLM not available / disabled)
+        patch.object(tx, "_extract_llm", lambda *a, **k: []),
+        patch.object(tx.repo, "insert_many", lambda items: ["tk-1"]),
+    ):
+        ids = tx.extract_for_session("super_agent", "s-1", project_id="proj-1")
+
+    assert ids == ["tk-1"], "heuristic takeaway survived despite invalid AGENTED_TAKEAWAY_PROVIDER"
+
+
+def test_default_provider_kind_rejects_invalid_env(monkeypatch):
+    """_default_provider_kind must fall back to anthropic for unknown env values."""
+    monkeypatch.setenv("AGENTED_TAKEAWAY_PROVIDER", "bogus")
+    assert tx._default_provider_kind("proj-1") == "anthropic"
+
+
+def test_extract_llm_catches_valueerror_from_resolve(monkeypatch):
+    """resolve_llm_cmd ValueError for unknown provider_kind is caught inside _extract_llm."""
+    monkeypatch.setenv("AGENTED_TAKEAWAY_LLM", "1")
+    big_text = "x" * 5000
+
+    # Pass an invalid provider_kind directly — resolve_llm_cmd raises ValueError
+    result = tx._extract_llm(
+        "super_agent", "s-1", "proj-1", _payload(big_text), provider_kind="not-a-real-provider"
+    )
+    assert result == []

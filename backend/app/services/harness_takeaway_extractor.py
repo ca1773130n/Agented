@@ -561,14 +561,14 @@ def _extract_llm(
     # Provider CLI + overrides come from resolve_llm_cmd; the old codex-only
     # AGENTED_TAKEAWAY_CODEX_CMD/AGENTED_CODEX_CMD are replaced by per-provider
     # AGENTED_TAKEAWAY_<PROVIDER>_CMD (e.g. AGENTED_TAKEAWAY_OPENAI_CMD for the codex CLI).
-    cmd_template = resolve_llm_cmd(provider_kind, model_override)
     try:
+        cmd_template = resolve_llm_cmd(provider_kind, model_override)
         raw_output = _run_llm_for_extraction(
             prompt,
             cmd_template=cmd_template,
             timeout=_llm_timeout(),
         )
-    except RuntimeError as exc:
+    except (RuntimeError, ValueError) as exc:
         logger.warning("takeaway LLM: %s", exc)
         return []
 
@@ -1038,7 +1038,18 @@ def _default_provider_kind(
 ) -> str:  # project_id reserved for future per-project backend lookup
     """Resolve the provider kind for extraction. Single seam to extend with
     per-project backend lookup later; for now env override -> anthropic."""
-    return os.environ.get("AGENTED_TAKEAWAY_PROVIDER", "anthropic")
+    from app.services.provider_cli_map import SUPPORTED_PROVIDER_KINDS
+
+    kind = os.environ.get("AGENTED_TAKEAWAY_PROVIDER", "anthropic")
+    if kind not in SUPPORTED_PROVIDER_KINDS:
+        logger.warning(
+            "AGENTED_TAKEAWAY_PROVIDER=%r is not a supported provider kind %s; "
+            "falling back to anthropic",
+            kind,
+            SUPPORTED_PROVIDER_KINDS,
+        )
+        return "anthropic"
+    return kind
 
 
 def extract_for_session(
