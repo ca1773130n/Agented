@@ -523,6 +523,34 @@ def detect_h4(events: list[TurnEvent], *, outcome: Optional[str]) -> list[dict]:
     return incidents
 
 
+# (confidence, severity) keyed by incident kind. Unknown kinds fall back to
+# a low-confidence general score.
+_INCIDENT_SCORES: dict[str, tuple[float, str]] = {
+    "h2_invalid_tool_call": (0.95, "high"),
+    "h2_tool_in_content": (0.55, "low"),
+    "h2_repeated_tool_failure": (0.90, "high"),
+    "h3_contract_violation": (0.80, "medium"),
+    "h3_setup_failure": (0.90, "high"),
+    "h3_missing_file": (0.70, "medium"),
+    "h3_permission_denied": (0.90, "high"),
+    "h4_repeat_action": (0.75, "medium"),
+    "h4_stagnation": (0.55, "low"),
+    "h4_budget_exhausted": (0.85, "high"),
+    "h4_abandoned_goal": (0.60, "medium"),
+    "general_unclassified": (0.40, "low"),
+}
+
+
+def _score_incident(incident: dict) -> dict:
+    """Attach confidence + severity into the incident's evidence blob."""
+    conf, sev = _INCIDENT_SCORES.get(incident.get("kind", ""), (0.40, "low"))
+    evidence = dict(incident.get("evidence") or {})
+    evidence.setdefault("confidence", conf)
+    evidence.setdefault("severity", sev)
+    incident["evidence"] = evidence
+    return incident
+
+
 def _apply_priority_protocol(
     events: list[TurnEvent],
     *,
@@ -559,7 +587,7 @@ def _apply_priority_protocol(
             "evidence": {"outcome": outcome},
         })
 
-    return out
+    return [_score_incident(inc) for inc in out]
 
 
 # ---------------------------------------------------------------------------
