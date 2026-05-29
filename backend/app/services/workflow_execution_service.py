@@ -663,7 +663,8 @@ class WorkflowExecutionService:
                 output_data = json.loads(last_output)
             except (json.JSONDecodeError, TypeError):
                 pass  # Intentionally silenced: malformed data handled gracefully
-        emit_execution_complete("workflow", workflow_id, final_status, output_data)
+        # Capture keys on the execution-row id, not the workflow template id
+        emit_execution_complete("workflow", execution_id, final_status, output_data)
 
         cls._schedule_cleanup(execution_id)
 
