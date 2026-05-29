@@ -505,7 +505,9 @@ def _run_llm_for_extraction(prompt: str, *, cmd_template: list[str], timeout: in
             text=True,
         )
     except FileNotFoundError as exc:
-        raise RuntimeError(f"LLM CLI not found ({cmd_template[0]})") from exc
+        raise RuntimeError(
+            f"LLM CLI not found ({cmd_template[0]}); set AGENTED_TAKEAWAY_<PROVIDER>_CMD to override the command"
+        ) from exc
     except subprocess.TimeoutExpired as exc:
         raise RuntimeError(f"LLM extraction timed out after {timeout}s") from exc
     if result.returncode != 0:
@@ -556,6 +558,9 @@ def _extract_llm(
         transcript=transcript,
     )
 
+    # Provider CLI + overrides come from resolve_llm_cmd; the old codex-only
+    # AGENTED_TAKEAWAY_CODEX_CMD/AGENTED_CODEX_CMD are replaced by per-provider
+    # AGENTED_TAKEAWAY_<PROVIDER>_CMD (e.g. AGENTED_TAKEAWAY_OPENAI_CMD for the codex CLI).
     cmd_template = resolve_llm_cmd(provider_kind, model_override)
     try:
         raw_output = _run_llm_for_extraction(
@@ -1028,7 +1033,9 @@ def _autoapply_enabled() -> bool:
     return os.environ.get("AGENTED_TAKEAWAY_AUTOAPPLY", "0") == "1"
 
 
-def _default_provider_kind(project_id: Optional[str]) -> str:
+def _default_provider_kind(
+    project_id: Optional[str],
+) -> str:  # project_id reserved for future per-project backend lookup
     """Resolve the provider kind for extraction. Single seam to extend with
     per-project backend lookup later; for now env override -> anthropic."""
     return os.environ.get("AGENTED_TAKEAWAY_PROVIDER", "anthropic")

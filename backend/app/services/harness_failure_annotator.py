@@ -45,6 +45,7 @@ _TOOL_FENCE_RE = re.compile(r"```\s*(tool|tool_call|action)\b", re.IGNORECASE)
 @dataclass
 class TurnEvent:
     """One parsed turn from a session trajectory."""
+
     index: int
     role: str
     content_text: str = ""
@@ -57,6 +58,7 @@ class TurnEvent:
 # ---------------------------------------------------------------------------
 # Per-kind fetchers: pull (text, backend_type, project_id, outcome)
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class SessionPayload:
@@ -135,10 +137,7 @@ def _to_claude_jsonl(text: str) -> str:
     # Case 3: already-Claude-shaped entries wrapped in a JSON array.
     # Unwrap each to its own JSONL line; the parser handles the rest.
     if "type" in first:
-        return "\n".join(
-            json.dumps(entry) for entry in parsed
-            if isinstance(entry, dict)
-        )
+        return "\n".join(json.dumps(entry) for entry in parsed if isinstance(entry, dict))
 
     # Cases 1 + 2: role/content dialogue → wrap each into the
     # ``{"type": ..., "message": {"content": [...]}}`` shape.
@@ -154,21 +153,33 @@ def _to_claude_jsonl(text: str) -> str:
         if not isinstance(content, str):
             content_blocks = content if isinstance(content, list) else []
             if role in ("assistant", "user") and content_blocks:
-                lines.append(json.dumps({
-                    "type": role,
-                    "message": {"content": content_blocks},
-                }))
+                lines.append(
+                    json.dumps(
+                        {
+                            "type": role,
+                            "message": {"content": content_blocks},
+                        }
+                    )
+                )
             continue
         if role == "assistant":
-            lines.append(json.dumps({
-                "type": "assistant",
-                "message": {"content": [{"type": "text", "text": content}]},
-            }))
+            lines.append(
+                json.dumps(
+                    {
+                        "type": "assistant",
+                        "message": {"content": [{"type": "text", "text": content}]},
+                    }
+                )
+            )
         elif role == "user":
-            lines.append(json.dumps({
-                "type": "user",
-                "message": {"content": [{"type": "text", "text": content}]},
-            }))
+            lines.append(
+                json.dumps(
+                    {
+                        "type": "user",
+                        "message": {"content": [{"type": "text", "text": content}]},
+                    }
+                )
+            )
     return "\n".join(lines)
 
 
@@ -308,6 +319,7 @@ def register_session_fetcher(session_kind: str, fetcher: SessionFetcher) -> None
 # Parsing
 # ---------------------------------------------------------------------------
 
+
 def parse_claude_stream(stdout: str) -> list[TurnEvent]:
     events: list[TurnEvent] = []
     idx = 0
@@ -346,9 +358,9 @@ def parse_claude_stream(stdout: str) -> list[TurnEvent]:
                 )
             if err_text:
                 events.append(
-                    TurnEvent(idx, "tool_result",
-                              content_text=err_text,
-                              tool_error=err_text, raw=obj)
+                    TurnEvent(
+                        idx, "tool_result", content_text=err_text, tool_error=err_text, raw=obj
+                    )
                 )
                 idx += 1
             continue
@@ -358,15 +370,17 @@ def parse_claude_stream(stdout: str) -> list[TurnEvent]:
                 btype = block.get("type")
                 if btype == "text":
                     events.append(
-                        TurnEvent(idx, "assistant",
-                                  content_text=block.get("text", ""), raw=block)
+                        TurnEvent(idx, "assistant", content_text=block.get("text", ""), raw=block)
                     )
                 elif btype == "tool_use":
                     events.append(
-                        TurnEvent(idx, "assistant",
-                                  tool_name=block.get("name"),
-                                  tool_args=block.get("input") or {},
-                                  raw=block)
+                        TurnEvent(
+                            idx,
+                            "assistant",
+                            tool_name=block.get("name"),
+                            tool_args=block.get("input") or {},
+                            raw=block,
+                        )
                     )
                 idx += 1
         elif ev_type == "user":
@@ -376,9 +390,13 @@ def parse_claude_stream(stdout: str) -> list[TurnEvent]:
                     if block.get("is_error"):
                         err = _stringify(block.get("content"))
                     events.append(
-                        TurnEvent(idx, "tool_result",
-                                  content_text=_stringify(block.get("content")),
-                                  tool_error=err, raw=block)
+                        TurnEvent(
+                            idx,
+                            "tool_result",
+                            content_text=_stringify(block.get("content")),
+                            tool_error=err,
+                            raw=block,
+                        )
                     )
                     idx += 1
     return events
@@ -405,31 +423,56 @@ def _stringify(value: Any) -> str:
 # Detectors
 # ---------------------------------------------------------------------------
 
+_ABANDON_PHRASES = (
+    "i can't continue",
+    "i cannot continue",
+    "unable to proceed",
+    "giving up",
+    "cannot complete",
+    "i give up",
+)
+
+
 def detect_h2(events: list[TurnEvent]) -> list[dict]:
     incidents: list[dict] = []
     for ev in events:
         if ev.role == "assistant" and ev.tool_name is None and ev.content_text:
-            if _TOOL_IN_CONTENT_RE.search(ev.content_text) or \
-               _TOOL_FENCE_RE.search(ev.content_text):
-                incidents.append({
-                    "layer": "h2",
-                    "kind": "h2_tool_in_content",
-                    "event_index": ev.index,
-                    "evidence": {"snippet": ev.content_text[:240]},
-                })
+            if _TOOL_IN_CONTENT_RE.search(ev.content_text) or _TOOL_FENCE_RE.search(
+                ev.content_text
+            ):
+                incidents.append(
+                    {
+                        "layer": "h2",
+                        "kind": "h2_tool_in_content",
+                        "event_index": ev.index,
+                        "evidence": {"snippet": ev.content_text[:240]},
+                    }
+                )
         if ev.role == "tool_result" and ev.tool_error:
             err = ev.tool_error.lower()
-            if any(k in err for k in (
-                "json", "missing required", "unknown argument", "invalid",
-                "no such tool", "not found",
-            )):
-                incidents.append({
-                    "layer": "h2",
-                    "kind": "h2_invalid_tool_call",
-                    "event_index": ev.index,
-                    "evidence": {"error": ev.tool_error[:240]},
-                })
+            if any(
+                k in err
+                for k in (
+                    "json",
+                    "missing required",
+                    "unknown argument",
+                    "invalid",
+                    "no such tool",
+                    "not found",
+                )
+            ):
+                incidents.append(
+                    {
+                        "layer": "h2",
+                        "kind": "h2_invalid_tool_call",
+                        "event_index": ev.index,
+                        "evidence": {"error": ev.tool_error[:240]},
+                    }
+                )
 
+    # NOTE: a repeated error that also matches h2_invalid_tool_call will emit BOTH kinds
+    # (orthogonal signals: "this call was malformed" + "it recurred"). Downstream scoring
+    # treats them independently.
     # Repeated identical tool errors → systemic failure, not a one-off.
     err_counts: dict[str, int] = {}
     err_first: dict[str, int] = {}
@@ -440,12 +483,14 @@ def detect_h2(events: list[TurnEvent]) -> list[dict]:
             err_first.setdefault(key, ev.index)
     for key, count in err_counts.items():
         if count >= 2:
-            incidents.append({
-                "layer": "h2",
-                "kind": "h2_repeated_tool_failure",
-                "event_index": err_first[key],
-                "evidence": {"error": key, "count": count},
-            })
+            incidents.append(
+                {
+                    "layer": "h2",
+                    "kind": "h2_repeated_tool_failure",
+                    "event_index": err_first[key],
+                    "evidence": {"error": key, "count": count},
+                }
+            )
     return incidents
 
 
@@ -454,44 +499,51 @@ def detect_h3(events: list[TurnEvent]) -> list[dict]:
     for ev in events:
         if ev.role == "tool_result" and ev.tool_error:
             err = ev.tool_error.lower()
-            if "unknown parameter" in err or "unsupported" in err or \
-               "must be called after" in err or "out of order" in err:
-                incidents.append({
-                    "layer": "h3",
-                    "kind": "h3_contract_violation",
-                    "event_index": ev.index,
-                    "evidence": {"error": ev.tool_error[:240]},
-                })
+            if (
+                "unknown parameter" in err
+                or "unsupported" in err
+                or "must be called after" in err
+                or "out of order" in err
+            ):
+                incidents.append(
+                    {
+                        "layer": "h3",
+                        "kind": "h3_contract_violation",
+                        "event_index": ev.index,
+                        "evidence": {"error": ev.tool_error[:240]},
+                    }
+                )
             # Setup-level contract failures surfaced by parse_claude_stream
             # from the final ``type: result`` event. Dogfood caught two
             # weekly cron triggers silently no-op-running for weeks
             # because their slash-command was unregistered.
-            elif "unknown command" in err or "command not found" in err \
-                    or "zero turns" in err:
-                incidents.append({
-                    "layer": "h3",
-                    "kind": "h3_setup_failure",
-                    "event_index": ev.index,
-                    "evidence": {"error": ev.tool_error[:240]},
-                })
+            elif "unknown command" in err or "command not found" in err or "zero turns" in err:
+                incidents.append(
+                    {
+                        "layer": "h3",
+                        "kind": "h3_setup_failure",
+                        "event_index": ev.index,
+                        "evidence": {"error": ev.tool_error[:240]},
+                    }
+                )
             elif "permission denied" in err or "eacces" in err:
-                incidents.append({
-                    "layer": "h3",
-                    "kind": "h3_permission_denied",
-                    "event_index": ev.index,
-                    "evidence": {"error": ev.tool_error[:240]},
-                })
-            elif (
-                "no such file or directory" in err
-                or "enoent" in err
-                or "file not found" in err
-            ):
-                incidents.append({
-                    "layer": "h3",
-                    "kind": "h3_missing_file",
-                    "event_index": ev.index,
-                    "evidence": {"error": ev.tool_error[:240]},
-                })
+                incidents.append(
+                    {
+                        "layer": "h3",
+                        "kind": "h3_permission_denied",
+                        "event_index": ev.index,
+                        "evidence": {"error": ev.tool_error[:240]},
+                    }
+                )
+            elif "no such file or directory" in err or "enoent" in err or "file not found" in err:
+                incidents.append(
+                    {
+                        "layer": "h3",
+                        "kind": "h3_missing_file",
+                        "event_index": ev.index,
+                        "evidence": {"error": ev.tool_error[:240]},
+                    }
+                )
     return incidents
 
 
@@ -507,12 +559,14 @@ def detect_h4(events: list[TurnEvent], *, outcome: Optional[str]) -> list[dict]:
             sig_first.setdefault(sig, ev.index)
     for sig, count in sig_counts.items():
         if count >= 3:
-            incidents.append({
-                "layer": "h4",
-                "kind": "h4_repeat_action",
-                "event_index": sig_first[sig],
-                "evidence": {"tool": sig[0], "count": count},
-            })
+            incidents.append(
+                {
+                    "layer": "h4",
+                    "kind": "h4_repeat_action",
+                    "event_index": sig_first[sig],
+                    "evidence": {"tool": sig[0], "count": count},
+                }
+            )
 
     # H4 stagnation = "agent talking to itself instead of making progress".
     # Meaningful only when the agent CAN call tools but doesn't — for pure
@@ -524,9 +578,7 @@ def detect_h4(events: list[TurnEvent], *, outcome: Optional[str]) -> list[dict]:
     # Also gate by outcome: a session that completed successfully with a
     # verbose chat run isn't a "failure" the operator needs to act on.
     # Stagnation incidents only matter when the run actually went wrong.
-    has_any_tool_call = any(
-        ev.role == "assistant" and ev.tool_name for ev in events
-    )
+    has_any_tool_call = any(ev.role == "assistant" and ev.tool_name for ev in events)
     if has_any_tool_call and outcome in FAILED_OUTCOMES:
         streak = 0
         streak_start: Optional[int] = None
@@ -537,38 +589,40 @@ def detect_h4(events: list[TurnEvent], *, outcome: Optional[str]) -> list[dict]:
                     if streak_start is None:
                         streak_start = ev.index
                     if streak == 5:
-                        incidents.append({
-                            "layer": "h4",
-                            "kind": "h4_stagnation",
-                            "event_index": streak_start,
-                            "evidence": {"consecutive_text_turns": streak},
-                        })
+                        incidents.append(
+                            {
+                                "layer": "h4",
+                                "kind": "h4_stagnation",
+                                "event_index": streak_start,
+                                "evidence": {"consecutive_text_turns": streak},
+                            }
+                        )
                 else:
                     streak = 0
                     streak_start = None
 
     if outcome == "timeout":
-        incidents.append({
-            "layer": "h4",
-            "kind": "h4_budget_exhausted",
-            "event_index": None,
-            "evidence": {"outcome": outcome},
-        })
+        incidents.append(
+            {
+                "layer": "h4",
+                "kind": "h4_budget_exhausted",
+                "event_index": None,
+                "evidence": {"outcome": outcome},
+            }
+        )
 
-    _ABANDON_PHRASES = (
-        "i can't continue", "i cannot continue", "unable to proceed",
-        "giving up", "cannot complete", "i give up",
-    )
     for ev in events:
         if ev.role == "assistant" and ev.content_text:
             low = ev.content_text.lower()
             if any(p in low for p in _ABANDON_PHRASES):
-                incidents.append({
-                    "layer": "h4",
-                    "kind": "h4_abandoned_goal",
-                    "event_index": ev.index,
-                    "evidence": {"snippet": ev.content_text[:240]},
-                })
+                incidents.append(
+                    {
+                        "layer": "h4",
+                        "kind": "h4_abandoned_goal",
+                        "event_index": ev.index,
+                        "evidence": {"snippet": ev.content_text[:240]},
+                    }
+                )
                 break
 
     return incidents
@@ -594,7 +648,9 @@ _INCIDENT_SCORES: dict[str, tuple[float, str]] = {
 
 def _score_incident(incident: dict) -> dict:
     """Attach confidence + severity into the incident's evidence blob."""
-    conf, sev = _INCIDENT_SCORES.get(incident.get("kind", ""), (0.40, "low"))
+    conf, sev = _INCIDENT_SCORES.get(
+        incident.get("kind", ""), _INCIDENT_SCORES["general_unclassified"]
+    )
     evidence = dict(incident.get("evidence") or {})
     evidence.setdefault("confidence", conf)
     evidence.setdefault("severity", sev)
@@ -631,12 +687,14 @@ def _apply_priority_protocol(
         out.append(incident)
 
     if not out and outcome in FAILED_OUTCOMES:
-        out.append({
-            "layer": "general",
-            "kind": "general_unclassified",
-            "event_index": None,
-            "evidence": {"outcome": outcome},
-        })
+        out.append(
+            {
+                "layer": "general",
+                "kind": "general_unclassified",
+                "event_index": None,
+                "evidence": {"outcome": outcome},
+            }
+        )
 
     return [_score_incident(inc) for inc in out]
 
@@ -644,6 +702,7 @@ def _apply_priority_protocol(
 # ---------------------------------------------------------------------------
 # Public entry points
 # ---------------------------------------------------------------------------
+
 
 def annotate_from_text(
     session_kind: str,
@@ -661,7 +720,9 @@ def annotate_from_text(
         events = []
     incidents = _apply_priority_protocol(events, outcome=outcome)
     return repo.replace_incidents(
-        session_kind, session_id, incidents,
+        session_kind,
+        session_id,
+        incidents,
         project_id=project_id,
         detector_version=DETECTOR_VERSION,
         annotator_version=ANNOTATOR_VERSION,
@@ -687,13 +748,17 @@ def annotate_session(
     except Exception:
         logger.warning(
             "annotate_session: fetcher for %s/%s raised",
-            session_kind, session_id, exc_info=True,
+            session_kind,
+            session_id,
+            exc_info=True,
         )
         return None
     if payload is None:
         return None
     return annotate_from_text(
-        session_kind, session_id, payload.text,
+        session_kind,
+        session_id,
+        payload.text,
         project_id=project_id or payload.project_id,
         backend_type=payload.backend_type,
         outcome=payload.outcome,
@@ -720,13 +785,17 @@ def on_session_complete(
 # Legacy entry point retained for any code path still calling the old API
 # ---------------------------------------------------------------------------
 
+
 def annotate_execution(execution_id: str) -> Optional[dict[str, int]]:
     """Compat: triggered against an execution_logs row by execution_id."""
     return annotate_session("trigger_execution", execution_id)
 
 
 def on_execution_complete(
-    entity_type: str, entity_id: str, status: str, output: Optional[dict],
+    entity_type: str,
+    entity_id: str,
+    status: str,
+    output: Optional[dict],
 ) -> None:
     """Compat for the 4-arg legacy handler signature. Maps entity_type to
     a session_kind (workflow → workflow; trigger → trigger_execution)."""

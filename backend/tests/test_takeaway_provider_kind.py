@@ -63,3 +63,23 @@ def test_extract_for_session_passes_provider_to_llm(monkeypatch, isolated_db):
 def test_default_provider_kind_falls_back_to_anthropic(monkeypatch):
     monkeypatch.delenv("AGENTED_TAKEAWAY_PROVIDER", raising=False)
     assert tx._default_provider_kind("proj-1") == "anthropic"
+
+
+def test_extract_for_session_explicit_provider_overrides_env(monkeypatch, isolated_db):
+    monkeypatch.setenv("AGENTED_TAKEAWAY_PROVIDER", "openai")
+    seen = {}
+
+    def _fake_llm(sk, sid, pid, payload, *, provider_kind="anthropic", model_override=None):
+        seen["provider_kind"] = provider_kind
+        return []
+
+    fake_payload = SessionPayload(
+        text="x" * 5000, backend_type="claude", project_id="proj-1", outcome="completed"
+    )
+    with (
+        patch.object(tx, "_FETCHERS", {"super_agent": lambda _id: fake_payload}),
+        patch.object(tx, "_extract_heuristic", lambda *a, **k: []),
+        patch.object(tx, "_extract_llm", _fake_llm),
+    ):
+        tx.extract_for_session("super_agent", "s-1", project_id="proj-1", provider_kind="gemini")
+    assert seen["provider_kind"] == "gemini"

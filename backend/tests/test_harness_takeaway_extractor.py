@@ -514,9 +514,9 @@ def test_llm_explicit_disable_skips_codex(isolated_db, monkeypatch):
     with patch.object(
         extractor,
         "_run_llm_for_extraction",
-    ) as mock_codex:
+    ) as mock_llm:
         _extract("exec-llm-off", "proj-tk-llm-off")
-    mock_codex.assert_not_called()
+    mock_llm.assert_not_called()
 
 
 def test_llm_enabled_with_short_transcript_skips_codex(isolated_db, monkeypatch):
@@ -527,9 +527,9 @@ def test_llm_enabled_with_short_transcript_skips_codex(isolated_db, monkeypatch)
     with patch.object(
         extractor,
         "_run_llm_for_extraction",
-    ) as mock_codex:
+    ) as mock_llm:
         _extract("exec-llm-short", "proj-tk-llm-short")
-    mock_codex.assert_not_called()
+    mock_llm.assert_not_called()
 
 
 def test_llm_extracts_takeaways_from_long_transcript(isolated_db, monkeypatch):
