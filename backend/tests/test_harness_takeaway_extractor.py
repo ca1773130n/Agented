@@ -13,16 +13,22 @@ def _make_assistant_stream(*texts: str) -> str:
     """Fake Claude JSONL stream — each text becomes one assistant turn."""
     lines = []
     for t in texts:
-        lines.append(json.dumps({
-            "type": "assistant", "message": {"content": [
-                {"type": "text", "text": t},
-            ]},
-        }))
+        lines.append(
+            json.dumps(
+                {
+                    "type": "assistant",
+                    "message": {
+                        "content": [
+                            {"type": "text", "text": t},
+                        ]
+                    },
+                }
+            )
+        )
     return "\n".join(lines)
 
 
-def _seed_execution(execution_id: str, stream: str, *,
-                    status: str = "completed") -> None:
+def _seed_execution(execution_id: str, stream: str, *, status: str = "completed") -> None:
     """Plant an execution_logs row. ``trigger_id`` left NULL to dodge
     the triggers(id) FK."""
     from app.db.connection import get_connection
@@ -40,58 +46,72 @@ def _seed_execution(execution_id: str, stream: str, *,
 
 def _extract(execution_id: str, project_id: str) -> list[str]:
     return extractor.extract_for_session(
-        "trigger_execution", execution_id, project_id=project_id,
+        "trigger_execution",
+        execution_id,
+        project_id=project_id,
     )
 
 
 # ---------- pattern detection -----------------------------------------------
 
+
 def test_extracts_user_preference_from_remember_phrase(isolated_db):
-    _seed_execution("exec-pref", _make_assistant_stream(
-        "Got it, I'll remember that you prefer snake_case for all "
-        "Python variables going forward.",
-    ))
+    _seed_execution(
+        "exec-pref",
+        _make_assistant_stream(
+            "Got it, I'll remember that you prefer snake_case for all "
+            "Python variables going forward.",
+        ),
+    )
     ids = _extract("exec-pref", "proj-tk-a")
     assert ids
-    prefs = [r for r in repo.list_for_project("proj-tk-a")
-             if r["kind"] == "user_preference"]
+    prefs = [r for r in repo.list_for_project("proj-tk-a") if r["kind"] == "user_preference"]
     assert prefs
     assert any("snake_case" in r["content"] for r in prefs)
     assert prefs[0]["suggested_target"] == "memory"
 
 
 def test_extracts_domain_fact_path(isolated_db):
-    _seed_execution("exec-fact", _make_assistant_stream(
-        "The deploy script lives at `scripts/deploy.sh` in this repo.",
-    ))
+    _seed_execution(
+        "exec-fact",
+        _make_assistant_stream(
+            "The deploy script lives at `scripts/deploy.sh` in this repo.",
+        ),
+    )
     _extract("exec-fact", "proj-tk-b")
-    facts = [r for r in repo.list_for_project("proj-tk-b")
-             if r["kind"] == "domain_fact"]
+    facts = [r for r in repo.list_for_project("proj-tk-b") if r["kind"] == "domain_fact"]
     assert facts
     assert any("deploy.sh" in r["content"] for r in facts)
     assert facts[0]["suggested_target"] == "knowledge_graph"
 
 
 def test_extracts_discovered_procedure(isolated_db):
-    _seed_execution("exec-proc", _make_assistant_stream(
-        "I learned that to deploy this service you must first run migrations.",
-    ))
+    _seed_execution(
+        "exec-proc",
+        _make_assistant_stream(
+            "I learned that to deploy this service you must first run migrations.",
+        ),
+    )
     _extract("exec-proc", "proj-tk-c")
-    procs = [r for r in repo.list_for_project("proj-tk-c")
-             if r["kind"] == "discovered_procedure"]
+    procs = [r for r in repo.list_for_project("proj-tk-c") if r["kind"] == "discovered_procedure"]
     assert procs
     assert procs[0]["suggested_target"] == "skill"
 
 
 def test_extractor_deduplicates_within_session(isolated_db):
-    _seed_execution("exec-dup", _make_assistant_stream(
-        "I'll remember that you prefer snake_case for Python variables.",
-        "Just noting again: I'll remember that you prefer snake_case for Python variables.",
-    ))
+    _seed_execution(
+        "exec-dup",
+        _make_assistant_stream(
+            "I'll remember that you prefer snake_case for Python variables.",
+            "Just noting again: I'll remember that you prefer snake_case for Python variables.",
+        ),
+    )
     _extract("exec-dup", "proj-tk-d")
-    prefs = [r for r in repo.list_for_project("proj-tk-d")
-             if r["kind"] == "user_preference"
-             and "snake_case" in r["content"]]
+    prefs = [
+        r
+        for r in repo.list_for_project("proj-tk-d")
+        if r["kind"] == "user_preference" and "snake_case" in r["content"]
+    ]
     assert len(prefs) == 1
 
 
@@ -106,15 +126,18 @@ def test_unknown_session_kind_is_noop(isolated_db):
 
 # ---------- apply / dismiss --------------------------------------------------
 
+
 def test_apply_takeaway_to_memory(isolated_db):
-    _seed_execution("exec-apply", _make_assistant_stream(
-        "Got it, I'll remember that you prefer kebab-case URL paths.",
-    ))
+    _seed_execution(
+        "exec-apply",
+        _make_assistant_stream(
+            "Got it, I'll remember that you prefer kebab-case URL paths.",
+        ),
+    )
     ids = _extract("exec-apply", "proj-tk-apply")
     assert ids
     memory_tk = next(
-        repo.get(i) for i in ids
-        if (repo.get(i) or {}).get("suggested_target") == "memory"
+        repo.get(i) for i in ids if (repo.get(i) or {}).get("suggested_target") == "memory"
     )
     result = extractor.apply_takeaway(memory_tk["id"])
     assert result["applied"] is True
@@ -125,9 +148,12 @@ def test_apply_takeaway_to_memory(isolated_db):
 
 
 def test_dismiss_takeaway(isolated_db):
-    _seed_execution("exec-dismiss", _make_assistant_stream(
-        "I'll remember that you prefer something irrelevant for now.",
-    ))
+    _seed_execution(
+        "exec-dismiss",
+        _make_assistant_stream(
+            "I'll remember that you prefer something irrelevant for now.",
+        ),
+    )
     ids = _extract("exec-dismiss", "proj-tk-dis")
     assert ids
     res = extractor.dismiss_takeaway(ids[0], reason="not useful")
@@ -144,14 +170,14 @@ def test_apply_unknown_returns_failed(isolated_db):
 
 
 def test_apply_already_applied_returns_failed(isolated_db):
-    _seed_execution("exec-twice", _make_assistant_stream(
-        "Got it, I'll remember that you prefer Vue 3 composition API.",
-    ))
-    ids = _extract("exec-twice", "proj-tk-twice")
-    tk = next(
-        repo.get(i) for i in ids
-        if (repo.get(i) or {}).get("suggested_target") == "memory"
+    _seed_execution(
+        "exec-twice",
+        _make_assistant_stream(
+            "Got it, I'll remember that you prefer Vue 3 composition API.",
+        ),
     )
+    ids = _extract("exec-twice", "proj-tk-twice")
+    tk = next(repo.get(i) for i in ids if (repo.get(i) or {}).get("suggested_target") == "memory")
     assert extractor.apply_takeaway(tk["id"])["applied"] is True
     second = extractor.apply_takeaway(tk["id"])
     assert second["applied"] is False
@@ -160,11 +186,15 @@ def test_apply_already_applied_returns_failed(isolated_db):
 
 # ---------- autoapply env-var gate ------------------------------------------
 
+
 def test_autoapply_disabled_by_default(isolated_db, monkeypatch):
     monkeypatch.delenv("AGENTED_TAKEAWAY_AUTOAPPLY", raising=False)
-    _seed_execution("exec-auto-off", _make_assistant_stream(
-        "Got it, I'll remember that you prefer descriptive variable names.",
-    ))
+    _seed_execution(
+        "exec-auto-off",
+        _make_assistant_stream(
+            "Got it, I'll remember that you prefer descriptive variable names.",
+        ),
+    )
     ids = _extract("exec-auto-off", "proj-tk-auto-off")
     rows = [r for r in (repo.get(i) for i in ids) if r is not None]
     assert all(not r["applied"] for r in rows)
@@ -172,9 +202,12 @@ def test_autoapply_disabled_by_default(isolated_db, monkeypatch):
 
 def test_autoapply_enabled_applies_high_confidence(isolated_db, monkeypatch):
     monkeypatch.setenv("AGENTED_TAKEAWAY_AUTOAPPLY", "1")
-    _seed_execution("exec-auto-on", _make_assistant_stream(
-        "Got it, I'll remember that you prefer pytest fixtures over setUp.",
-    ))
+    _seed_execution(
+        "exec-auto-on",
+        _make_assistant_stream(
+            "Got it, I'll remember that you prefer pytest fixtures over setUp.",
+        ),
+    )
     ids = _extract("exec-auto-on", "proj-tk-auto-on")
     rows = [r for r in (repo.get(i) for i in ids) if r is not None]
     memory_rows = [r for r in rows if r["suggested_target"] == "memory"]
@@ -184,6 +217,7 @@ def test_autoapply_enabled_applies_high_confidence(isolated_db, monkeypatch):
 
 # ---------- skill auto-writer -----------------------------------------------
 
+
 def _seed_project_with_local_path(project_id: str, local_path) -> None:
     """Plant a projects row with a local_path so the skill auto-writer
     targets the project's own .claude/skills tree."""
@@ -191,8 +225,7 @@ def _seed_project_with_local_path(project_id: str, local_path) -> None:
 
     with get_connection() as conn:
         conn.execute(
-            "INSERT OR IGNORE INTO projects (id, name, local_path) "
-            "VALUES (?, 'Test', ?)",
+            "INSERT OR IGNORE INTO projects (id, name, local_path) VALUES (?, 'Test', ?)",
             (project_id, str(local_path)),
         )
         conn.commit()
@@ -202,14 +235,16 @@ def test_apply_skill_materializes_skill_md_and_binds(isolated_db, tmp_path):
     """Skill auto-writer writes a SKILL.md package under the project's
     .claude/skills/<name>/ and registers it via add_project_skill."""
     _seed_project_with_local_path("proj-skill-a", tmp_path)
-    _seed_execution("exec-skill", _make_assistant_stream(
-        "I learned that to spin up the dev server you must run "
-        "`just dev-backend` and `just dev-frontend` in separate terminals.",
-    ))
+    _seed_execution(
+        "exec-skill",
+        _make_assistant_stream(
+            "I learned that to spin up the dev server you must run "
+            "`just dev-backend` and `just dev-frontend` in separate terminals.",
+        ),
+    )
     ids = _extract("exec-skill", "proj-skill-a")
     skill_tk = next(
-        repo.get(i) for i in ids
-        if (repo.get(i) or {}).get("suggested_target") == "skill"
+        repo.get(i) for i in ids if (repo.get(i) or {}).get("suggested_target") == "skill"
     )
 
     result = extractor.apply_takeaway(skill_tk["id"])
@@ -232,13 +267,16 @@ def test_apply_skill_materializes_skill_md_and_binds(isolated_db, tmp_path):
 
     # And the project_skills binding was registered.
     from app.db.projects import get_project_skills
+
     bindings = get_project_skills("proj-skill-a")
     assert bindings
     assert any(b["skill_name"] == result["asset_id"] for b in bindings)
 
 
 def test_apply_skill_falls_back_to_user_dir_when_no_local_path(
-    isolated_db, monkeypatch, tmp_path,
+    isolated_db,
+    monkeypatch,
+    tmp_path,
 ):
     """Project with no local_path → skill lands under
     ``~/.claude/skills/.agented-takeaways/<project_id>/`` (sandboxed
@@ -252,22 +290,20 @@ def test_apply_skill_falls_back_to_user_dir_when_no_local_path(
             ("proj-skill-noloc",),
         )
         conn.commit()
-    _seed_execution("exec-skill-noloc", _make_assistant_stream(
-        "I learned that the deploy script must be run with sudo because "
-        "it writes to /etc.",
-    ))
+    _seed_execution(
+        "exec-skill-noloc",
+        _make_assistant_stream(
+            "I learned that the deploy script must be run with sudo because it writes to /etc.",
+        ),
+    )
     ids = _extract("exec-skill-noloc", "proj-skill-noloc")
     skill_tk = next(
-        repo.get(i) for i in ids
-        if (repo.get(i) or {}).get("suggested_target") == "skill"
+        repo.get(i) for i in ids if (repo.get(i) or {}).get("suggested_target") == "skill"
     )
     result = extractor.apply_takeaway(skill_tk["id"])
     assert result["applied"] is True
 
-    expected_root = (
-        tmp_path / ".claude" / "skills" / ".agented-takeaways"
-        / "proj-skill-noloc"
-    )
+    expected_root = tmp_path / ".claude" / "skills" / ".agented-takeaways" / "proj-skill-noloc"
     skill_dirs = list(expected_root.iterdir())
     assert skill_dirs
     assert (skill_dirs[0] / "SKILL.md").is_file()
@@ -277,22 +313,27 @@ def test_apply_skill_without_project_id_fails(isolated_db):
     """A skill takeaway with no project_id can't be materialized — no
     target directory to write to."""
     # Insert directly (bypass extractor) with project_id=None.
-    [tk_id] = repo.insert_many([{
-        "session_kind": "trigger_execution",
-        "session_id": "exec-orphan",
-        "project_id": None,
-        "kind": "discovered_procedure",
-        "content": "Some procedure",
-        "confidence": 0.7,
-        "suggested_target": "skill",
-        "suggested_payload": {"title": "orphan-skill", "recipe": "do X"},
-        "extractor_version": "heuristic-test",
-    }])
+    [tk_id] = repo.insert_many(
+        [
+            {
+                "session_kind": "trigger_execution",
+                "session_id": "exec-orphan",
+                "project_id": None,
+                "kind": "discovered_procedure",
+                "content": "Some procedure",
+                "confidence": 0.7,
+                "suggested_target": "skill",
+                "suggested_payload": {"title": "orphan-skill", "recipe": "do X"},
+                "extractor_version": "heuristic-test",
+            }
+        ]
+    )
     result = extractor.apply_takeaway(tk_id)
     assert result["applied"] is False
 
 
 # ---------- claude_md auto-writer -------------------------------------------
+
 
 def _plant_claude_md_takeaway(
     project_id: str,
@@ -300,22 +341,27 @@ def _plant_claude_md_takeaway(
 ) -> str:
     """Insert a claude_md-targeted takeaway directly (extractor doesn't
     surface claude_md from heuristic patterns)."""
-    [tk_id] = repo.insert_many([{
-        "session_kind": "trigger_execution",
-        "session_id": f"exec-cm-{project_id}",
-        "project_id": project_id,
-        "kind": "user_preference",
-        "content": content,
-        "confidence": 0.9,
-        "suggested_target": "claude_md",
-        "suggested_payload": {},
-        "extractor_version": "test-claude-md",
-    }])
+    [tk_id] = repo.insert_many(
+        [
+            {
+                "session_kind": "trigger_execution",
+                "session_id": f"exec-cm-{project_id}",
+                "project_id": project_id,
+                "kind": "user_preference",
+                "content": content,
+                "confidence": 0.9,
+                "suggested_target": "claude_md",
+                "suggested_payload": {},
+                "extractor_version": "test-claude-md",
+            }
+        ]
+    )
     return tk_id
 
 
 def test_apply_claude_md_appends_managed_section_preserving_user_content(
-    isolated_db, tmp_path,
+    isolated_db,
+    tmp_path,
 ):
     """An existing CLAUDE.md gets a new marker-bracketed section appended;
     operator-authored content stays untouched."""
@@ -368,8 +414,7 @@ def test_apply_claude_md_is_idempotent_on_reapply(isolated_db, tmp_path):
 
     with get_connection() as conn:
         conn.execute(
-            "UPDATE session_takeaways SET applied = 0, applied_at = NULL "
-            "WHERE id = ?",
+            "UPDATE session_takeaways SET applied = 0, applied_at = NULL WHERE id = ?",
             (tk_id,),
         )
         conn.commit()
@@ -381,7 +426,8 @@ def test_apply_claude_md_is_idempotent_on_reapply(isolated_db, tmp_path):
 
 
 def test_apply_claude_md_multiple_takeaways_share_one_section(
-    isolated_db, tmp_path,
+    isolated_db,
+    tmp_path,
 ):
     """Multiple takeaways for the same project end up as bullets inside
     the SAME marker-bracketed section, not duplicated section blocks."""
@@ -400,23 +446,29 @@ def test_apply_claude_md_multiple_takeaways_share_one_section(
 
 def test_apply_claude_md_without_project_id_fails(isolated_db):
     """No project_id → no target file path. Returns failed without writing."""
-    [tk_id] = repo.insert_many([{
-        "session_kind": "trigger_execution",
-        "session_id": "exec-cm-orphan",
-        "project_id": None,
-        "kind": "user_preference",
-        "content": "something",
-        "confidence": 0.9,
-        "suggested_target": "claude_md",
-        "suggested_payload": {},
-        "extractor_version": "test",
-    }])
+    [tk_id] = repo.insert_many(
+        [
+            {
+                "session_kind": "trigger_execution",
+                "session_id": "exec-cm-orphan",
+                "project_id": None,
+                "kind": "user_preference",
+                "content": "something",
+                "confidence": 0.9,
+                "suggested_target": "claude_md",
+                "suggested_payload": {},
+                "extractor_version": "test",
+            }
+        ]
+    )
     result = extractor.apply_takeaway(tk_id)
     assert result["applied"] is False
 
 
 def test_apply_claude_md_falls_back_to_user_dir(
-    isolated_db, monkeypatch, tmp_path,
+    isolated_db,
+    monkeypatch,
+    tmp_path,
 ):
     """Project with no local_path → writes to ``$HOME/.claude/CLAUDE.md``."""
     monkeypatch.setenv("HOME", str(tmp_path))
@@ -440,6 +492,7 @@ def test_apply_claude_md_falls_back_to_user_dir(
 
 # ---------- LLM extraction --------------------------------------------------
 
+
 def _long_subtle_stream() -> str:
     """A transcript with NO heuristic-matching phrases — only the LLM
     should surface anything. Long enough to clear the min-bytes gate."""
@@ -459,7 +512,8 @@ def test_llm_explicit_disable_skips_codex(isolated_db, monkeypatch):
     _seed_execution("exec-llm-off", _long_subtle_stream())
 
     with patch.object(
-        extractor, "_run_codex_for_extraction",
+        extractor,
+        "_run_llm_for_extraction",
     ) as mock_codex:
         _extract("exec-llm-off", "proj-tk-llm-off")
     mock_codex.assert_not_called()
@@ -471,7 +525,8 @@ def test_llm_enabled_with_short_transcript_skips_codex(isolated_db, monkeypatch)
     _seed_execution("exec-llm-short", _make_assistant_stream("brief"))
 
     with patch.object(
-        extractor, "_run_codex_for_extraction",
+        extractor,
+        "_run_llm_for_extraction",
     ) as mock_codex:
         _extract("exec-llm-short", "proj-tk-llm-short")
     mock_codex.assert_not_called()
@@ -500,7 +555,8 @@ def test_llm_extracts_takeaways_from_long_transcript(isolated_db, monkeypatch):
         },
     ]
     with patch.object(
-        extractor, "_run_codex_for_extraction",
+        extractor,
+        "_run_llm_for_extraction",
         return_value=json.dumps(llm_payload),
     ):
         ids = _extract("exec-llm-on", "proj-tk-llm-on")
@@ -523,15 +579,23 @@ def test_llm_handles_codex_preamble(isolated_db, monkeypatch):
 
     noisy = (
         "Reading prompt...\nOK, here's the JSON:\n"
-        + json.dumps([{
-            "kind": "domain_fact", "content": "x is at /path/to/x",
-            "confidence": 0.7, "suggested_target": "knowledge_graph",
-            "rationale": "explicit reference",
-        }])
+        + json.dumps(
+            [
+                {
+                    "kind": "domain_fact",
+                    "content": "x is at /path/to/x",
+                    "confidence": 0.7,
+                    "suggested_target": "knowledge_graph",
+                    "rationale": "explicit reference",
+                }
+            ]
+        )
         + "\n\n(end of output)\n"
     )
     with patch.object(
-        extractor, "_run_codex_for_extraction", return_value=noisy,
+        extractor,
+        "_run_llm_for_extraction",
+        return_value=noisy,
     ):
         ids = _extract("exec-llm-preamble", "proj-tk-llm-preamble")
 
@@ -556,7 +620,9 @@ def test_llm_codex_failure_does_not_block_heuristic(isolated_db, monkeypatch):
         raise RuntimeError("codex CLI exited 1: boom")
 
     with patch.object(
-        extractor, "_run_codex_for_extraction", _exploding,
+        extractor,
+        "_run_llm_for_extraction",
+        _exploding,
     ):
         ids = _extract("exec-llm-error", "proj-tk-llm-error")
 
@@ -577,7 +643,8 @@ def test_llm_malformed_output_is_dropped_silently(isolated_db, monkeypatch):
     _seed_execution("exec-llm-bad", stream)
 
     with patch.object(
-        extractor, "_run_codex_for_extraction",
+        extractor,
+        "_run_llm_for_extraction",
         return_value="this is not json at all",
     ):
         ids = _extract("exec-llm-bad", "proj-tk-llm-bad")
@@ -598,15 +665,21 @@ def test_llm_dedups_when_overlapping_with_heuristic(isolated_db, monkeypatch):
     _seed_execution("exec-llm-dedup", stream)
 
     # LLM proposes the SAME preference content the heuristic already caught.
-    overlap = json.dumps([{
-        "kind": "user_preference",
-        "content": "flake8 over pylint",
-        "confidence": 0.8,
-        "suggested_target": "memory",
-        "rationale": "explicit preference statement",
-    }])
+    overlap = json.dumps(
+        [
+            {
+                "kind": "user_preference",
+                "content": "flake8 over pylint",
+                "confidence": 0.8,
+                "suggested_target": "memory",
+                "rationale": "explicit preference statement",
+            }
+        ]
+    )
     with patch.object(
-        extractor, "_run_codex_for_extraction", return_value=overlap,
+        extractor,
+        "_run_llm_for_extraction",
+        return_value=overlap,
     ):
         ids = _extract("exec-llm-dedup", "proj-tk-llm-dedup")
 
@@ -625,18 +698,21 @@ def test_llm_dedups_when_overlapping_with_heuristic(isolated_db, monkeypatch):
 # instead of the full claim, and the "need to" / "required to" triggers
 # matched agent-intent narrative.
 
+
 def test_constraint_captures_full_claim_not_fragment(isolated_db):
     """Real example from the dogfood: ``I can't browse the web — I don't
     have web search or internet access in this environment``. The full
     claim should land as a single takeaway, not the 10-char fragment
     "browse the"."""
-    _seed_execution("exec-c1", _make_assistant_stream(
-        "I can't browse the web - I don't have web search or internet "
-        "access in this environment.",
-    ))
+    _seed_execution(
+        "exec-c1",
+        _make_assistant_stream(
+            "I can't browse the web - I don't have web search or internet "
+            "access in this environment.",
+        ),
+    )
     _extract("exec-c1", "proj-c1")
-    constraints = [r for r in repo.list_for_project("proj-c1")
-                   if r["kind"] == "constraint"]
+    constraints = [r for r in repo.list_for_project("proj-c1") if r["kind"] == "constraint"]
     assert constraints, "expected at least one constraint"
     # The full sentence after "can't" should be in the content — not a
     # tiny word-boundary fragment.
@@ -651,17 +727,16 @@ def test_constraint_skips_intent_narrative(isolated_db):
     branches are structured`` shouldn't be a constraint — it's agent
     intent narrative, not an environmental block. Achieved by dropping
     ``need to`` from the trigger verb set."""
-    _seed_execution("exec-c2", _make_assistant_stream(
-        "I need to see exactly how those branches are structured in "
-        "the template.",
-        "I'll need to consider whether the parent re-renders matter.",
-    ))
-    _extract("exec-c2", "proj-c2")
-    constraints = [r for r in repo.list_for_project("proj-c2")
-                   if r["kind"] == "constraint"]
-    assert constraints == [], (
-        f"intent narrative leaked: {[c['content'] for c in constraints]}"
+    _seed_execution(
+        "exec-c2",
+        _make_assistant_stream(
+            "I need to see exactly how those branches are structured in the template.",
+            "I'll need to consider whether the parent re-renders matter.",
+        ),
     )
+    _extract("exec-c2", "proj-c2")
+    constraints = [r for r in repo.list_for_project("proj-c2") if r["kind"] == "constraint"]
+    assert constraints == [], f"intent narrative leaked: {[c['content'] for c in constraints]}"
 
 
 def test_truncate_slug_avoids_mid_token_and_trailing_dash():
@@ -681,9 +756,7 @@ def test_truncate_slug_avoids_mid_token_and_trailing_dash():
     assert out == "when-a-user-requests-deep-web-competitor-research"
 
     # Mid-token case: 60-char window cuts ``multi`` to ``m``.
-    slug = (
-        "for-agented-competitor-research-segment-the-landscape-into-multi-harness"
-    )
+    slug = "for-agented-competitor-research-segment-the-landscape-into-multi-harness"
     out = _truncate_slug(slug, 60)
     assert not out.endswith("-")
     # Should NOT contain the truncated ``into-m`` token.
@@ -694,6 +767,7 @@ def test_truncate_slug_avoids_mid_token_and_trailing_dash():
 
 def test_truncate_slug_short_slug_passes_through():
     from app.services.harness_takeaway_extractor import _truncate_slug
+
     assert _truncate_slug("short-slug", 60) == "short-slug"
 
 
@@ -703,13 +777,15 @@ def test_file_mention_pattern_surfaces_backticked_paths(isolated_db):
     dogfood pass against agented.db showed the English-keyed pattern
     missed 124 of these mentions across 4 sessions. The new pattern
     should surface them as domain_fact takeaways keyed on the path."""
-    _seed_execution("exec-fm", _make_assistant_stream(
-        "The fix is in `frontend/src/webmcp/generic-tools.ts` and the "
-        "regression test is in `frontend/src/webmcp/__tests__/generic-tools.test.ts`.",
-    ))
+    _seed_execution(
+        "exec-fm",
+        _make_assistant_stream(
+            "The fix is in `frontend/src/webmcp/generic-tools.ts` and the "
+            "regression test is in `frontend/src/webmcp/__tests__/generic-tools.test.ts`.",
+        ),
+    )
     _extract("exec-fm", "proj-fm")
-    facts = [r for r in repo.list_for_project("proj-fm")
-             if r["kind"] == "domain_fact"]
+    facts = [r for r in repo.list_for_project("proj-fm") if r["kind"] == "domain_fact"]
     paths = {(r.get("evidence") or {}).get("path") for r in facts}
     assert "frontend/src/webmcp/generic-tools.ts" in paths
     assert "frontend/src/webmcp/__tests__/generic-tools.test.ts" in paths
@@ -721,26 +797,33 @@ def test_file_mention_pattern_surfaces_backticked_paths(isolated_db):
 def test_file_mention_pattern_dedupes_repeated_path(isolated_db):
     """A chatty conversation mentioning the same path 8 times shouldn't
     produce 8 takeaways. Dedup is keyed on the canonical path."""
-    _seed_execution("exec-fm-dup", _make_assistant_stream(
-        "Editing `src/App.vue`. Then again in `src/App.vue`. And once "
-        "more in `src/App.vue`. Finally `src/App.vue` works.",
-    ))
+    _seed_execution(
+        "exec-fm-dup",
+        _make_assistant_stream(
+            "Editing `src/App.vue`. Then again in `src/App.vue`. And once "
+            "more in `src/App.vue`. Finally `src/App.vue` works.",
+        ),
+    )
     _extract("exec-fm-dup", "proj-fm-dup")
-    facts = [r for r in repo.list_for_project("proj-fm-dup")
-             if r["kind"] == "domain_fact"
-             and (r.get("evidence") or {}).get("path") == "src/App.vue"]
+    facts = [
+        r
+        for r in repo.list_for_project("proj-fm-dup")
+        if r["kind"] == "domain_fact" and (r.get("evidence") or {}).get("path") == "src/App.vue"
+    ]
     assert len(facts) == 1
 
 
 def test_file_mention_pattern_skips_version_numbers(isolated_db):
     """Backticked tokens like ``1.0`` and ``3.11.2`` shouldn't be treated
     as filepaths."""
-    _seed_execution("exec-fm-ver", _make_assistant_stream(
-        "Bumped to `3.11.2` and updated the schema version to `1.0`.",
-    ))
+    _seed_execution(
+        "exec-fm-ver",
+        _make_assistant_stream(
+            "Bumped to `3.11.2` and updated the schema version to `1.0`.",
+        ),
+    )
     _extract("exec-fm-ver", "proj-fm-ver")
-    facts = [r for r in repo.list_for_project("proj-fm-ver")
-             if r["kind"] == "domain_fact"]
+    facts = [r for r in repo.list_for_project("proj-fm-ver") if r["kind"] == "domain_fact"]
     assert facts == []
 
 
@@ -748,12 +831,14 @@ def test_constraint_still_catches_environment_block(isolated_db):
     """Real example: ``cannot reach the server (ERR-NETWORK)`` IS an
     environmental constraint and should still surface after the
     tightening."""
-    _seed_execution("exec-c3", _make_assistant_stream(
-        "The proxy cannot reach the server at all (sidecar :20001 "
-        "restarted, network blip, CORS preflight denied).",
-    ))
+    _seed_execution(
+        "exec-c3",
+        _make_assistant_stream(
+            "The proxy cannot reach the server at all (sidecar :20001 "
+            "restarted, network blip, CORS preflight denied).",
+        ),
+    )
     _extract("exec-c3", "proj-c3")
-    constraints = [r for r in repo.list_for_project("proj-c3")
-                   if r["kind"] == "constraint"]
+    constraints = [r for r in repo.list_for_project("proj-c3") if r["kind"] == "constraint"]
     assert constraints
     assert any("reach the server" in c["content"] for c in constraints)

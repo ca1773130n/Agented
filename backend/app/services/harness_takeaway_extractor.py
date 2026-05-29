@@ -32,7 +32,6 @@ import json
 import logging
 import os
 import re
-import shlex
 import subprocess
 import tempfile
 from dataclasses import dataclass
@@ -44,6 +43,7 @@ from app.services.harness_failure_annotator import (
     _FETCHERS,
     parse_claude_stream,
 )
+from app.services.provider_cli_map import resolve_llm_cmd
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +56,7 @@ HIGH_CONFIDENCE = 0.85
 # Heuristic patterns
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class _Pattern:
     """A regex-based takeaway detector.
@@ -66,6 +67,7 @@ class _Pattern:
     present) projects the regex match into the target's expected payload
     shape.
     """
+
     regex: re.Pattern
     kind: str
     confidence: float
@@ -198,9 +200,7 @@ _PATTERNS: tuple[_Pattern, ...] = (
 # path (not the surrounding sentence), and per-session matches are
 # capped so a chatty conversation can't noise-bomb the operator
 # queue. Confidence stays at 0.40 — review-only, never auto-applies.
-_FILE_MENTION_RE = re.compile(
-    r"`([A-Za-z0-9_./\-]+\.[a-zA-Z0-9]{1,8})`"
-)
+_FILE_MENTION_RE = re.compile(r"`([A-Za-z0-9_./\-]+\.[a-zA-Z0-9]{1,8})`")
 _FILE_MENTION_MAX_PER_SESSION = 8
 
 
@@ -250,26 +250,28 @@ def _extract_file_mentions(
             if len(content) < 10:
                 content = f"Path `{path}` was referenced in this session."
 
-            out.append({
-                "session_kind": session_kind,
-                "session_id": session_id,
-                "project_id": project_id,
-                "kind": "domain_fact",
-                "content": content[:500],
-                "confidence": 0.40,
-                "evidence": {
-                    "event_index": ev.index,
-                    "pattern": "backticked filepath inline mention",
-                    "path": path,
-                },
-                "suggested_target": "knowledge_graph",
-                "suggested_payload": {
-                    "name": path,
-                    "entity_type": "domain_fact",
-                    "context_sentence": content[:500],
-                },
-                "extractor_version": EXTRACTOR_VERSION,
-            })
+            out.append(
+                {
+                    "session_kind": session_kind,
+                    "session_id": session_id,
+                    "project_id": project_id,
+                    "kind": "domain_fact",
+                    "content": content[:500],
+                    "confidence": 0.40,
+                    "evidence": {
+                        "event_index": ev.index,
+                        "pattern": "backticked filepath inline mention",
+                        "path": path,
+                    },
+                    "suggested_target": "knowledge_graph",
+                    "suggested_payload": {
+                        "name": path,
+                        "entity_type": "domain_fact",
+                        "context_sentence": content[:500],
+                    },
+                    "extractor_version": EXTRACTOR_VERSION,
+                }
+            )
             if len(out) >= _FILE_MENTION_MAX_PER_SESSION:
                 return out
 
@@ -279,6 +281,7 @@ def _extract_file_mentions(
 # ---------------------------------------------------------------------------
 # Extraction
 # ---------------------------------------------------------------------------
+
 
 def _extract_heuristic(
     session_kind: str,
@@ -304,36 +307,49 @@ def _extract_heuristic(
                 content = m.group(1).strip() if m.groups() else m.group(0).strip()
                 if not content or len(content) < 5:
                     continue
-                out.append({
-                    "session_kind": session_kind,
-                    "session_id": session_id,
-                    "project_id": project_id,
-                    "kind": pat.kind,
-                    "content": content[:500],
-                    "confidence": pat.confidence,
-                    "evidence": {
-                        "event_index": ev.index,
-                        "pattern": pat.description,
-                        "match_snippet": m.group(0)[:240],
-                    },
-                    "suggested_target": pat.target,
-                    "suggested_payload": _build_payload(
-                        pat.target, pat.kind, content, project_id,
-                    ),
-                    "extractor_version": EXTRACTOR_VERSION,
-                })
+                out.append(
+                    {
+                        "session_kind": session_kind,
+                        "session_id": session_id,
+                        "project_id": project_id,
+                        "kind": pat.kind,
+                        "content": content[:500],
+                        "confidence": pat.confidence,
+                        "evidence": {
+                            "event_index": ev.index,
+                            "pattern": pat.description,
+                            "match_snippet": m.group(0)[:240],
+                        },
+                        "suggested_target": pat.target,
+                        "suggested_payload": _build_payload(
+                            pat.target,
+                            pat.kind,
+                            content,
+                            project_id,
+                        ),
+                        "extractor_version": EXTRACTOR_VERSION,
+                    }
+                )
 
     # File-mention domain_fact pass (English-trigger-free; path-keyed dedup
     # internal to the helper, then the global _dedupe collapses any
     # cross-event repetition).
-    out.extend(_extract_file_mentions(
-        events, session_kind, session_id, project_id,
-    ))
+    out.extend(
+        _extract_file_mentions(
+            events,
+            session_kind,
+            session_id,
+            project_id,
+        )
+    )
     return _dedupe(out)
 
 
 def _build_payload(
-    target: Optional[str], kind: str, content: str, project_id: Optional[str],
+    target: Optional[str],
+    kind: str,
+    content: str,
+    project_id: Optional[str],
 ) -> dict[str, Any]:
     """Project the takeaway into a target-shaped payload so the applier
     doesn't have to re-derive it."""
@@ -447,7 +463,8 @@ def _llm_enabled() -> bool:
 
 def _llm_min_text_bytes() -> int:
     raw = os.environ.get(
-        "AGENTED_TAKEAWAY_LLM_MIN_BYTES", str(_TAKEAWAY_LLM_MIN_BYTES_DEFAULT),
+        "AGENTED_TAKEAWAY_LLM_MIN_BYTES",
+        str(_TAKEAWAY_LLM_MIN_BYTES_DEFAULT),
     )
     try:
         return max(0, int(raw))
@@ -457,7 +474,8 @@ def _llm_min_text_bytes() -> int:
 
 def _llm_timeout() -> int:
     raw = os.environ.get(
-        "AGENTED_TAKEAWAY_LLM_TIMEOUT", str(_TAKEAWAY_LLM_TIMEOUT_DEFAULT),
+        "AGENTED_TAKEAWAY_LLM_TIMEOUT",
+        str(_TAKEAWAY_LLM_TIMEOUT_DEFAULT),
     )
     try:
         return max(5, int(raw))
@@ -465,33 +483,16 @@ def _llm_timeout() -> int:
         return _TAKEAWAY_LLM_TIMEOUT_DEFAULT
 
 
-def _llm_codex_cmd() -> list[str]:
-    """Codex argv for extraction. Same {PROMPT} substitution as the
-    evolver. Independent override via ``AGENTED_TAKEAWAY_CODEX_CMD`` so
-    operators can pin a cheaper model for extraction vs. evolution."""
-    raw = os.environ.get("AGENTED_TAKEAWAY_CODEX_CMD") or os.environ.get(
-        "AGENTED_CODEX_CMD",
-    )
-    if raw:
-        try:
-            return shlex.split(raw)
-        except ValueError:
-            logger.warning("AGENTED_TAKEAWAY_CODEX_CMD malformed; using default")
-    return ["codex", "exec", "--skip-git-repo-check", "{PROMPT}"]
+def _run_llm_for_extraction(prompt: str, *, cmd_template: list[str], timeout: int) -> str:
+    """Invoke the provider CLI with the extraction prompt; return stdout.
 
-
-def _run_codex_for_extraction(prompt: str, *, timeout: int) -> str:
-    """Invoke Codex with the extraction prompt and return its stdout.
-
-    Mockable: tests patch this entire function to return canned JSON
-    without spawning a real Codex CLI.
+    Mockable: tests patch this function to return canned JSON.
     """
-    template = _llm_codex_cmd()
-    if "{PROMPT}" in template:
-        cmd = [prompt if part == "{PROMPT}" else part for part in template]
+    if "{PROMPT}" in cmd_template:
+        cmd = [prompt if part == "{PROMPT}" else part for part in cmd_template]
         stdin_input = None
     else:
-        cmd = list(template)
+        cmd = list(cmd_template)
         stdin_input = prompt
 
     try:
@@ -504,21 +505,19 @@ def _run_codex_for_extraction(prompt: str, *, timeout: int) -> str:
             text=True,
         )
     except FileNotFoundError as exc:
-        raise RuntimeError(
-            f"codex CLI not found ({template[0]}); set "
-            f"AGENTED_TAKEAWAY_CODEX_CMD or AGENTED_CODEX_CMD"
-        ) from exc
+        raise RuntimeError(f"LLM CLI not found ({cmd_template[0]})") from exc
     except subprocess.TimeoutExpired as exc:
-        raise RuntimeError(
-            f"codex extraction timed out after {timeout}s"
-        ) from exc
+        raise RuntimeError(f"LLM extraction timed out after {timeout}s") from exc
     if result.returncode != 0:
-        err = (result.stderr or "").replace(
-            "Reading additional input from stdin...", "",
-        ).strip()
-        raise RuntimeError(
-            f"codex extraction exited {result.returncode}: {err[:300]}"
+        err = (
+            (result.stderr or "")
+            .replace(
+                "Reading additional input from stdin...",
+                "",
+            )
+            .strip()
         )
+        raise RuntimeError(f"LLM extraction exited {result.returncode}: {err[:300]}")
     return result.stdout or ""
 
 
@@ -537,9 +536,12 @@ def _extract_llm(
     session_id: str,
     project_id: Optional[str],
     payload: SessionPayload,
+    *,
+    provider_kind: str = "anthropic",
+    model_override: Optional[str] = None,
 ) -> list[dict[str, Any]]:
-    """Call Codex on the transcript and parse takeaways from its JSON
-    output. Returns ``[]`` when extraction is disabled, the transcript is
+    """Call the provider LLM on the transcript and parse takeaways from its
+    JSON output. Returns ``[]`` when extraction is disabled, the transcript is
     too short to be worth the LLM cost, or anything goes wrong."""
     if not _llm_enabled():
         return []
@@ -554,8 +556,13 @@ def _extract_llm(
         transcript=transcript,
     )
 
+    cmd_template = resolve_llm_cmd(provider_kind, model_override)
     try:
-        raw_output = _run_codex_for_extraction(prompt, timeout=_llm_timeout())
+        raw_output = _run_llm_for_extraction(
+            prompt,
+            cmd_template=cmd_template,
+            timeout=_llm_timeout(),
+        )
     except RuntimeError as exc:
         logger.warning("takeaway LLM: %s", exc)
         return []
@@ -586,27 +593,30 @@ def _extract_llm(
         except (TypeError, ValueError):
             confidence = 0.5
         confidence = max(0.0, min(1.0, confidence))
-        out.append({
-            "session_kind": session_kind,
-            "session_id": session_id,
-            "project_id": project_id,
-            "kind": kind,
-            "content": content[:500],
-            "confidence": confidence,
-            "evidence": {
-                "extractor": "llm",
-                "rationale": str(raw.get("rationale") or "")[:500],
-            },
-            "suggested_target": target,
-            "suggested_payload": _build_payload(target, kind, content, project_id),
-            "extractor_version": LLM_EXTRACTOR_VERSION,
-        })
+        out.append(
+            {
+                "session_kind": session_kind,
+                "session_id": session_id,
+                "project_id": project_id,
+                "kind": kind,
+                "content": content[:500],
+                "confidence": confidence,
+                "evidence": {
+                    "extractor": "llm",
+                    "rationale": str(raw.get("rationale") or "")[:500],
+                },
+                "suggested_target": target,
+                "suggested_payload": _build_payload(target, kind, content, project_id),
+                "extractor_version": LLM_EXTRACTOR_VERSION,
+            }
+        )
     return out
 
 
 # ---------------------------------------------------------------------------
 # Apply-target writers (auto-apply path)
 # ---------------------------------------------------------------------------
+
 
 def _apply_to_memory(takeaway: dict[str, Any]) -> Optional[str]:
     """Write to ``agent_memory`` working-memory keyed on project_id. Returns
@@ -622,6 +632,7 @@ def _apply_to_memory(takeaway: dict[str, Any]) -> Optional[str]:
             get_working_memory,
             upsert_working_memory,
         )
+
         existing = get_working_memory(project_id, entity_type="project")
         existing_content = (existing or {}).get("content") or "{}"
         try:
@@ -643,7 +654,9 @@ def _apply_to_memory(takeaway: dict[str, Any]) -> Optional[str]:
         return key
     except Exception:
         logger.warning(
-            "takeaway: memory write failed for %s", takeaway["id"], exc_info=True,
+            "takeaway: memory write failed for %s",
+            takeaway["id"],
+            exc_info=True,
         )
         return None
 
@@ -670,6 +683,7 @@ def _apply_to_knowledge_graph(takeaway: dict[str, Any]) -> Optional[str]:
         properties["context"] = ctx[:500]
     try:
         from app.db.knowledge_graph import upsert_entity
+
         result = upsert_entity(
             agent_id=project_id,
             name=name,
@@ -678,7 +692,9 @@ def _apply_to_knowledge_graph(takeaway: dict[str, Any]) -> Optional[str]:
         )
     except Exception:
         logger.warning(
-            "takeaway: KG write failed for %s", takeaway["id"], exc_info=True,
+            "takeaway: KG write failed for %s",
+            takeaway["id"],
+            exc_info=True,
         )
         return None
     # upsert_entity returns the full entity dict; the asset_id is the
@@ -750,7 +766,8 @@ def _render_skill_md(takeaway: dict[str, Any]) -> str:
     """
     payload = takeaway.get("suggested_payload") or {}
     title = payload.get("title") or _truncate_slug(
-        _slugify(takeaway["content"]), 60,
+        _slugify(takeaway["content"]),
+        60,
     )
     when = payload.get("when") or "extracted from session takeaway"
     recipe = payload.get("recipe") or takeaway["content"]
@@ -758,12 +775,12 @@ def _render_skill_md(takeaway: dict[str, Any]) -> str:
 
     frontmatter = (
         "---\n"
-        f'name: {title}\n'
-        f'description: {description!s}\n'
-        f'source: agented-takeaway\n'
-        f'takeaway_id: {takeaway["id"]}\n'
-        f'kind: {takeaway["kind"]}\n'
-        f'confidence: {takeaway.get("confidence", 0.5)}\n'
+        f"name: {title}\n"
+        f"description: {description!s}\n"
+        f"source: agented-takeaway\n"
+        f"takeaway_id: {takeaway['id']}\n"
+        f"kind: {takeaway['kind']}\n"
+        f"confidence: {takeaway.get('confidence', 0.5)}\n"
         "---\n"
     )
     body = (
@@ -786,11 +803,7 @@ def _apply_to_skill(takeaway: dict[str, Any]) -> Optional[str]:
         return None
 
     payload = takeaway.get("suggested_payload") or {}
-    skill_name = (
-        payload.get("title")
-        or payload.get("name")
-        or _slugify(takeaway["content"])
-    )
+    skill_name = payload.get("title") or payload.get("name") or _slugify(takeaway["content"])
     skill_name = _truncate_slug(_slugify(skill_name), 60)
     if not skill_name:
         return None
@@ -804,7 +817,8 @@ def _apply_to_skill(takeaway: dict[str, Any]) -> Optional[str]:
     except OSError as exc:
         logger.warning(
             "takeaway: skill write failed for %s: %s",
-            takeaway["id"], exc,
+            takeaway["id"],
+            exc,
         )
         return None
 
@@ -820,7 +834,8 @@ def _apply_to_skill(takeaway: dict[str, Any]) -> Optional[str]:
     except Exception:
         logger.warning(
             "takeaway: add_project_skill failed for %s",
-            takeaway["id"], exc_info=True,
+            takeaway["id"],
+            exc_info=True,
         )
         # Filesystem artifact survives even if DB binding fails; operator
         # can manually re-bind. Return the skill_name so the takeaway is
@@ -880,7 +895,8 @@ def _apply_to_claude_md(takeaway: dict[str, Any]) -> Optional[str]:
     except OSError as exc:
         logger.warning(
             "takeaway: CLAUDE.md read failed for %s: %s",
-            takeaway["id"], exc,
+            takeaway["id"],
+            exc,
         )
         return None
 
@@ -924,7 +940,8 @@ def _apply_to_claude_md(takeaway: dict[str, Any]) -> Optional[str]:
     except OSError as exc:
         logger.warning(
             "takeaway: CLAUDE.md write failed for %s: %s",
-            takeaway["id"], exc,
+            takeaway["id"],
+            exc,
         )
         return None
 
@@ -938,6 +955,7 @@ def _apply_to_rule(takeaway: dict[str, Any]) -> Optional[str]:
     payload = takeaway.get("suggested_payload") or {}
     try:
         from app.db.rules import create_rule
+
         rid = create_rule(
             name=payload.get("name") or _slugify(takeaway["content"]),
             description=payload.get("description") or takeaway["content"],
@@ -947,7 +965,9 @@ def _apply_to_rule(takeaway: dict[str, Any]) -> Optional[str]:
         return str(rid) if rid else None
     except Exception:
         logger.warning(
-            "takeaway: rule write failed for %s", takeaway["id"], exc_info=True,
+            "takeaway: rule write failed for %s",
+            takeaway["id"],
+            exc_info=True,
         )
         return None
 
@@ -976,8 +996,7 @@ def apply_takeaway(takeaway_id: str) -> dict[str, Any]:
         return {
             "applied": False,
             "reason": (
-                f"no auto-applier for target {target!r}"
-                if target else "no suggested target"
+                f"no auto-applier for target {target!r}" if target else "no suggested target"
             ),
         }
     asset_id = applier(tk)
@@ -985,7 +1004,9 @@ def apply_takeaway(takeaway_id: str) -> dict[str, Any]:
         return {"applied": False, "reason": "applier returned no id"}
     repo.mark_applied(takeaway_id, target=target, asset_id=asset_id)
     return {
-        "applied": True, "target": target, "asset_id": asset_id,
+        "applied": True,
+        "target": target,
+        "asset_id": asset_id,
         "takeaway_id": takeaway_id,
     }
 
@@ -1001,6 +1022,7 @@ def dismiss_takeaway(takeaway_id: str, *, reason: Optional[str] = None) -> dict:
 # ---------------------------------------------------------------------------
 # Session-completion handler
 # ---------------------------------------------------------------------------
+
 
 def _autoapply_enabled() -> bool:
     return os.environ.get("AGENTED_TAKEAWAY_AUTOAPPLY", "0") == "1"
@@ -1022,17 +1044,25 @@ def extract_for_session(
     except Exception:
         logger.debug(
             "takeaway: fetcher %s/%s raised",
-            session_kind, session_id, exc_info=True,
+            session_kind,
+            session_id,
+            exc_info=True,
         )
         return []
     if payload is None:
         return []
     resolved_project_id = project_id or payload.project_id
     heuristic = _extract_heuristic(
-        session_kind, session_id, resolved_project_id, payload,
+        session_kind,
+        session_id,
+        resolved_project_id,
+        payload,
     )
     llm = _extract_llm(
-        session_kind, session_id, resolved_project_id, payload,
+        session_kind,
+        session_id,
+        resolved_project_id,
+        payload,
     )
     # Cross-source dedup: LLM may surface the same takeaway the regex
     # already caught. Heuristic comes first so it wins ties (cheaper,
@@ -1076,5 +1106,7 @@ def on_session_complete(
     except Exception:
         logger.warning(
             "takeaway: extract failed for %s/%s",
-            session_kind, session_id, exc_info=True,
+            session_kind,
+            session_id,
+            exc_info=True,
         )
