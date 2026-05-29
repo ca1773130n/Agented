@@ -158,10 +158,30 @@ def materialize_primitives(
             except (OSError, json.JSONDecodeError):
                 settings = {}
         hooks_block = settings.setdefault("hooks", {})
+
+        # Idempotence: drop all previously Agented-managed entries (marked with
+        # "_agented_asset_id") from every event list before re-adding the
+        # current bound set. Operator-authored entries (no marker) are kept.
+        had_prior_agented = False
+        for event, entries in list(hooks_block.items()):
+            if isinstance(entries, list):
+                kept = [
+                    e for e in entries if not (isinstance(e, dict) and e.get("_agented_asset_id"))
+                ]
+                if len(kept) != len(entries):
+                    had_prior_agented = True
+                if kept:
+                    hooks_block[event] = kept
+                else:
+                    del hooks_block[event]
+
+        hook_count = 0
         for asset in _bound_assets(project_id, "hook"):
             safe = _safe(asset.get("name") or str(asset.get("id")))
             rel = _unique_rel(used_rels, f".claude/hooks/{safe}.sh", asset.get("id"))
             _write(workspace_path, rel, (asset.get("content") or "") + "\n")
+            # committed hook scripts must be executable
+            (workspace_path / rel).chmod(0o755)
             event = asset.get("event") or "PreToolUse"
             event_block = hooks_block.setdefault(event, [])
             if not isinstance(event_block, list):
@@ -171,14 +191,19 @@ def materialize_primitives(
                 {
                     "matcher": asset.get("matcher") or ".*",
                     "hooks": [{"type": "command", "command": rel}],
+                    "_agented_asset_id": str(asset.get("id")),
                 }
             )
             result.written.append(WrittenFile(rel, "hook", str(asset.get("id"))))
-        _write(
-            workspace_path,
-            ".claude/settings.json",
-            json.dumps(settings, indent=2, ensure_ascii=False) + "\n",
-        )
-        result.written.append(WrittenFile(".claude/settings.json", "hook", "settings"))
+            hook_count += 1
+
+        # Only (re)write settings.json if we added entries or removed stale ones.
+        if hook_count > 0 or had_prior_agented:
+            _write(
+                workspace_path,
+                ".claude/settings.json",
+                json.dumps(settings, indent=2, ensure_ascii=False) + "\n",
+            )
+            result.written.append(WrittenFile(".claude/settings.json", "hook", "settings"))
 
     return result

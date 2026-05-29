@@ -128,3 +128,64 @@ def test_materialize_writes_hook_and_settings(isolated_db, tmp_path):
     entry = data["hooks"]["PreToolUse"][0]
     assert entry["hooks"][0]["command"] == ".claude/hooks/guard.sh"
     assert entry["hooks"][0]["type"] == "command"
+
+
+def test_hook_materialization_is_idempotent(isolated_db, tmp_path):
+    import json as _json
+    from app.db import hooks as hooks_repo
+    from app.db import project_forge_bindings as bindings_repo
+    from app.database import get_connection
+
+    with get_connection() as conn:
+        conn.execute("INSERT INTO projects (id, name, status) VALUES ('proj-hi', 'P', 'active')")
+        conn.commit()
+    hid = hooks_repo.create_hook(
+        name="guard",
+        event="PreToolUse",
+        description="d",
+        content="#!/bin/sh\necho x",
+        project_id="proj-hi",
+    )
+    bindings_repo.add_binding("proj-hi", "hook", str(hid))
+    materialize_primitives({"id": "proj-hi"}, ["hook"], tmp_path)
+    materialize_primitives({"id": "proj-hi"}, ["hook"], tmp_path)  # second run
+    data = _json.loads((tmp_path / ".claude" / "settings.json").read_text())
+    assert len(data["hooks"]["PreToolUse"]) == 1  # not duplicated
+    # executable bit set
+    import os, stat
+
+    mode = (tmp_path / ".claude" / "hooks" / "guard.sh").stat().st_mode
+    assert mode & stat.S_IXUSR
+
+
+def test_hook_materialization_preserves_operator_entries(isolated_db, tmp_path):
+    import json as _json
+    from app.db import hooks as hooks_repo
+    from app.db import project_forge_bindings as bindings_repo
+    from app.database import get_connection
+
+    # Pre-seed an operator-authored settings.json with a hook entry (no marker).
+    (tmp_path / ".claude").mkdir(parents=True)
+    (tmp_path / ".claude" / "settings.json").write_text(
+        _json.dumps(
+            {
+                "hooks": {
+                    "PreToolUse": [
+                        {"matcher": ".*", "hooks": [{"type": "command", "command": "operator.sh"}]}
+                    ]
+                }
+            }
+        )
+    )
+    with get_connection() as conn:
+        conn.execute("INSERT INTO projects (id, name, status) VALUES ('proj-ho', 'P', 'active')")
+        conn.commit()
+    hid = hooks_repo.create_hook(
+        name="guard", event="PreToolUse", description="d", content="echo x", project_id="proj-ho"
+    )
+    bindings_repo.add_binding("proj-ho", "hook", str(hid))
+    materialize_primitives({"id": "proj-ho"}, ["hook"], tmp_path)
+    data = _json.loads((tmp_path / ".claude" / "settings.json").read_text())
+    cmds = [h["command"] for e in data["hooks"]["PreToolUse"] for h in e["hooks"]]
+    assert "operator.sh" in cmds  # operator entry preserved
+    assert ".claude/hooks/guard.sh" in cmds  # agented entry added
