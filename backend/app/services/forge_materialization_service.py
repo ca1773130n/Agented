@@ -7,6 +7,7 @@ docs/superpowers/specs/2026-05-29-life-harness-phaseB-forge-design.md.
 
 from __future__ import annotations
 
+import json
 import logging
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -40,14 +41,18 @@ class MaterializationResult:
 # rule/hook/command getters take INT ids; mcp_server takes STR.
 # Bindings store asset_id as str, so coerce per kind.
 def _get_asset(kind: str, asset_id: str) -> Optional[dict]:
-    if kind == "rule":
-        return get_rule(int(asset_id))
-    if kind == "hook":
-        return get_hook(int(asset_id))
-    if kind == "command":
-        return get_command(int(asset_id))
-    if kind == "mcp_server":
-        return get_mcp_server(str(asset_id))
+    try:
+        if kind == "rule":
+            return get_rule(int(asset_id))
+        if kind == "hook":
+            return get_hook(int(asset_id))
+        if kind == "command":
+            return get_command(int(asset_id))
+        if kind == "mcp_server":
+            return get_mcp_server(str(asset_id))
+    except (ValueError, TypeError):
+        logger.warning("forge materialize: bad asset_id %r for kind %s; skipping", asset_id, kind)
+        return None
     return None
 
 
@@ -60,9 +65,21 @@ def _frontmatter(d: dict[str, Any]) -> str:
     for k, v in d.items():
         if v is None:
             continue
-        lines.append(f"{k}: {v}")
+        lines.append(f"{k}: {json.dumps(str(v))}")
     lines.append("---")
     return "\n".join(lines)
+
+
+def _unique_rel(used: set[str], base_rel: str, asset_id: Any) -> str:
+    """Return base_rel, or a deterministic asset-id-suffixed variant if base_rel
+    is already used this run."""
+    if base_rel not in used:
+        used.add(base_rel)
+        return base_rel
+    stem, _, ext = base_rel.rpartition(".")
+    alt = f"{stem}-{asset_id}.{ext}" if stem else f"{base_rel}-{asset_id}"
+    used.add(alt)
+    return alt
 
 
 def _bound_assets(project_id: str, kind: str) -> list[dict]:
@@ -92,11 +109,13 @@ def materialize_primitives(
     workspace_path/.claude. Deterministic; creates no git commit."""
     result = MaterializationResult()
     project_id = project["id"]
+    used_rels: set[str] = set()
 
     if "command" in kinds:
         for asset in _bound_assets(project_id, "command"):
             safe = _safe(asset.get("name") or str(asset.get("id")))
-            rel = f".claude/commands/{safe}.md"
+            base_rel = f".claude/commands/{safe}.md"
+            rel = _unique_rel(used_rels, base_rel, asset.get("id"))
             fm = _frontmatter(
                 {
                     "name": asset.get("name"),
@@ -113,7 +132,8 @@ def materialize_primitives(
     if "rule" in kinds:
         for asset in _bound_assets(project_id, "rule"):
             safe = _safe(asset.get("name") or str(asset.get("id")))
-            rel = f".claude/agented-forge/rules/{safe}.md"
+            base_rel = f".claude/agented-forge/rules/{safe}.md"
+            rel = _unique_rel(used_rels, base_rel, asset.get("id"))
             fm = _frontmatter(
                 {
                     "name": asset.get("name"),
