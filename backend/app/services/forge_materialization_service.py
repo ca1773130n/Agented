@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import logging
+import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Optional
@@ -314,3 +315,113 @@ def materialize_primitives(
 
     _finalize_manifest(workspace_path, result, kinds)
     return result
+
+
+# ---------------------------------------------------------------------------
+# Git helper
+# ---------------------------------------------------------------------------
+
+
+def _is_git_repo(root: Path) -> bool:
+    return (root / ".git").exists()
+
+
+def commit_materialization(
+    project: dict,
+    result: MaterializationResult,
+    round_id: str,
+) -> Optional[str]:
+    """Stage only the materialized paths and commit. Returns the commit SHA,
+    or None if the project has no git repo, no local_path, or nothing changed."""
+    root_str = project.get("local_path") or project.get("clone_path")
+    if not root_str:
+        return None
+    root = Path(root_str)
+    if not _is_git_repo(root):
+        return None
+
+    # Written + manifest are staged with git add (file must exist on disk).
+    add_paths = sorted(
+        p for p in (set(result.rel_paths()) | {_MANIFEST_REL}) if (root / p).exists()
+    )
+    # Deleted paths are staged with git rm --cached (file no longer on disk).
+    rm_paths = sorted(set(result.deleted))
+    all_paths = sorted(set(add_paths) | set(rm_paths))
+    if not all_paths:
+        return None
+    try:
+        if add_paths:
+            subprocess.run(
+                ["git", "add", "--", *add_paths],
+                cwd=root,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+        if rm_paths:
+            subprocess.run(
+                ["git", "rm", "--cached", "--ignore-unmatch", "--", *rm_paths],
+                cwd=root,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+        status = subprocess.run(
+            ["git", "status", "--porcelain", "--", *all_paths],
+            cwd=root,
+            capture_output=True,
+            text=True,
+        )
+        if not status.stdout.strip():
+            return None
+        asset_ids = ", ".join(w.asset_id for w in result.written) or "none"
+        msg = (
+            f"chore(forge): apply evolution round {round_id}\n\n"
+            f"Materialized {len(result.written)} primitive(s); "
+            f"removed {len(result.deleted)}.\nassets: {asset_ids}\nround: {round_id}"
+        )
+        subprocess.run(
+            ["git", "commit", "-m", msg],
+            cwd=root,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        return subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=root,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+    except subprocess.CalledProcessError as exc:
+        logger.warning("forge commit failed for round %s: %s", round_id, exc)
+        return None
+
+
+# ---------------------------------------------------------------------------
+# Round-aware wrapper (consumed by Phase C eval + rollback)
+# ---------------------------------------------------------------------------
+
+
+def materialize_round(round_id: str, workspace_dir: Path) -> MaterializationResult:
+    """Resolve the project + applied kinds from the round, then materialize."""
+    from app.db.harness_evolution import get_round
+    from app.db.projects import get_project
+
+    rnd = get_round(round_id)
+    if rnd is None:
+        return MaterializationResult()
+    project = get_project(rnd["project_id"])
+    if project is None:
+        return MaterializationResult()
+    applied = rnd.get("applied_asset_ids") or []
+    # applied_asset_ids is already parsed by _row_to_dict; guard for raw json strings defensively.
+    if isinstance(applied, str):
+        try:
+            applied = json.loads(applied)
+        except (ValueError, TypeError):
+            applied = []
+    kinds = sorted({a["kind"] for a in applied if isinstance(a, dict) and "kind" in a})
+    if not kinds:
+        kinds = ["rule", "hook", "command", "mcp_server", "skill"]
+    return materialize_primitives(project, kinds, workspace_dir)
