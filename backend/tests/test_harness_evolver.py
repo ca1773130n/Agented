@@ -194,7 +194,7 @@ def test_apply_create_rule_persists_and_binds(isolated_db):
             ),
         ]
     )
-    applied = apply_patch(patch, "proj-test-a")
+    applied, _journal = apply_patch(patch, "proj-test-a")
     assert len(applied) == 1
     assert applied[0]["kind"] == "rule"
     assert applied[0]["op"] == "create"
@@ -224,7 +224,7 @@ def test_apply_create_hook_persists_and_binds(isolated_db):
             ),
         ]
     )
-    applied = apply_patch(patch, "proj-test-h")
+    applied, _journal = apply_patch(patch, "proj-test-h")
     assert applied[0]["kind"] == "hook"
 
     persisted = hooks_repo.get_hook(applied[0]["asset_id"])

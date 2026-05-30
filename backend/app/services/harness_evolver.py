@@ -956,10 +956,17 @@ def _validate_payload(kind: str, payload: dict, prefix: str) -> list[str]:
 # --------------------------------------------------------------------------
 
 
-def apply_patch(patch: EvolutionPatch, project_id: str) -> list[dict]:
+def apply_patch(patch: EvolutionPatch, project_id: str) -> tuple[list[dict], list[dict]]:
     """Apply each patch entry against the appropriate Forge repo, and bind
-    new primitives to the project. Returns ``[{kind, asset_id, op}, ...]``."""
+    new primitives to the project.
+
+    Returns ``(applied, journal)`` where:
+    - ``applied`` is ``[{kind, asset_id, op}, ...]``
+    - ``journal`` is ``[{kind, op, asset_id, before}, ...]`` — before-image snapshots
+      captured PRE-mutation for update/delete entries (before=None for create).
+    """
     applied: list[dict] = []
+    journal: list[dict] = []
     for entry in patch.entries:
         kind = entry.kind
         payload = entry.payload or {}
@@ -986,8 +993,12 @@ def apply_patch(patch: EvolutionPatch, project_id: str) -> list[dict]:
                     exc_info=True,
                 )
             applied.append({"kind": kind, "op": "create", "asset_id": asset_id})
+            journal.append(
+                {"kind": kind, "op": "create", "asset_id": str(asset_id), "before": None}
+            )
 
         elif entry.op == "update":
+            before = _fetch_primitive(kind, entry.existing_asset_id)
             _update_dispatch[kind](
                 asset_id=entry.existing_asset_id,
                 payload=payload,
@@ -999,8 +1010,17 @@ def apply_patch(patch: EvolutionPatch, project_id: str) -> list[dict]:
                     "asset_id": entry.existing_asset_id,
                 }
             )
+            journal.append(
+                {
+                    "kind": kind,
+                    "op": "update",
+                    "asset_id": str(entry.existing_asset_id),
+                    "before": before,
+                }
+            )
 
         elif entry.op == "delete":
+            before = _fetch_primitive(kind, entry.existing_asset_id)
             _delete_dispatch[kind](asset_id=entry.existing_asset_id)
             # Unbind: remove the project→asset binding so it doesn't dangle
             # pointing at a now-deleted asset (and so materialize/manifest
@@ -1025,8 +1045,33 @@ def apply_patch(patch: EvolutionPatch, project_id: str) -> list[dict]:
                     "asset_id": entry.existing_asset_id,
                 }
             )
+            journal.append(
+                {
+                    "kind": kind,
+                    "op": "delete",
+                    "asset_id": str(entry.existing_asset_id),
+                    "before": before,
+                }
+            )
 
-    return applied
+    return applied, journal
+
+
+# _PAYLOAD_KEYS maps each primitive kind to the payload keys accepted by its
+# create/update functions. Used by _asset_to_payload (Task 4 reversal).
+_PAYLOAD_KEYS: dict[str, tuple[str, ...]] = {
+    "rule": ("rule_type", "description", "condition", "action", "enabled"),
+    "hook": ("event", "description", "content", "enabled"),
+    "command": ("description", "content", "arguments", "enabled"),
+    "mcp_server": ("description", "server_type", "command", "args", "env_json", "url"),
+    "skill": ("description", "content"),
+}
+
+
+def _asset_to_payload(kind: str, asset: dict) -> dict:
+    """Extract the mutable payload fields from a fetched asset dict."""
+    keys = _PAYLOAD_KEYS.get(kind, ())
+    return {k: asset[k] for k in keys if k in asset and asset[k] is not None}
 
 
 def _create_rule(*, name, payload, project_id):
@@ -1419,7 +1464,7 @@ def run_evolution_round(
                 notes=notes,
             )
 
-        applied = apply_patch(patch, project_id)
+        applied, journal = apply_patch(patch, project_id)
 
         # Materialize the applied primitives into the project's .claude/ layout
         # and git-commit them (git-traceable per round). Best-effort: a
@@ -1455,6 +1500,7 @@ def run_evolution_round(
             notes=notes,
             materialization_result_json=mat_json,
             git_commit_sha=commit_sha,
+            apply_journal_json=json.dumps(journal, default=str),
         )
 
         if not keep_scratch_on_failure:
@@ -1506,7 +1552,7 @@ def apply_dry_run_round(round_id: str) -> EvolutionResult:
         )
 
     try:
-        applied = apply_patch(patch, row["project_id"])
+        applied, journal = apply_patch(patch, row["project_id"])
     except Exception as exc:  # noqa: BLE001
         evolution_repo.mark_failed(
             round_id,
@@ -1523,6 +1569,7 @@ def apply_dry_run_round(round_id: str) -> EvolutionResult:
         output_patch=patch_data,
         applied_asset_ids=applied,
         notes=row.get("notes"),
+        apply_journal_json=json.dumps(journal, default=str),
     )
     return EvolutionResult(
         round_id=round_id,
