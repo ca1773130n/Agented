@@ -68,6 +68,9 @@ _ROUND_COLUMNS_IN_ORDER = (
     "materialization_result_json",
     "git_commit_sha",
     "eval_verdict_json",
+    "apply_journal_json",
+    "reverted_at",
+    "revert_error",
 )
 
 
@@ -110,6 +113,14 @@ def _ensure_eval_columns(conn) -> None:
     conn.execute("DROP TABLE _her_old")
 
 
+def _ensure_revert_columns(conn) -> None:
+    _ensure_eval_columns(conn)
+    cols = {r["name"] for r in conn.execute("PRAGMA table_info(harness_evolution_rounds)")}
+    for col in ("apply_journal_json", "reverted_at", "revert_error"):
+        if col not in cols:
+            conn.execute(f"ALTER TABLE harness_evolution_rounds ADD COLUMN {col} TEXT")
+
+
 def mark_applied(
     round_id: str,
     *,
@@ -118,9 +129,10 @@ def mark_applied(
     notes: Optional[str] = None,
     materialization_result_json: Optional[str] = None,
     git_commit_sha: Optional[str] = None,
+    apply_journal_json: Optional[str] = None,
 ) -> None:
     with get_connection() as conn:
-        _ensure_materialization_columns(conn)
+        _ensure_revert_columns(conn)
         conn.execute(
             """UPDATE harness_evolution_rounds SET
                    status                      = 'applied',
@@ -129,7 +141,8 @@ def mark_applied(
                    applied_asset_ids_json      = ?,
                    notes                       = ?,
                    materialization_result_json = ?,
-                   git_commit_sha              = ?
+                   git_commit_sha              = ?,
+                   apply_journal_json          = ?
                WHERE id = ?""",
             (
                 json.dumps(output_patch, default=str),
@@ -137,6 +150,7 @@ def mark_applied(
                 notes,
                 materialization_result_json,
                 git_commit_sha,
+                apply_journal_json,
                 round_id,
             ),
         )
@@ -237,6 +251,27 @@ def mark_eval_failed(round_id: str, *, verdict) -> None:
         conn.commit()
 
 
+def mark_reverted(round_id: str) -> None:
+    with get_connection() as conn:
+        _ensure_revert_columns(conn)
+        conn.execute(
+            "UPDATE harness_evolution_rounds SET status='reverted', reverted_at=datetime('now') "
+            "WHERE id=? AND status='applied'",
+            (round_id,),
+        )
+        conn.commit()
+
+
+def set_revert_error(round_id: str, error: str) -> None:
+    with get_connection() as conn:
+        _ensure_revert_columns(conn)
+        conn.execute(
+            "UPDATE harness_evolution_rounds SET revert_error=? WHERE id=?",
+            ((error or "")[:2000], round_id),
+        )
+        conn.commit()
+
+
 def get_round(round_id: str) -> Optional[dict]:
     with get_connection() as conn:
         row = conn.execute(
@@ -278,6 +313,7 @@ def _row_to_dict(row) -> dict:
         ("output_patch_json", "null"),
         ("applied_asset_ids_json", "[]"),
         ("eval_verdict_json", "null"),
+        ("apply_journal_json", "null"),
     ):
         out_key = key.replace("_json", "")
         try:

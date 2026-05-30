@@ -44,7 +44,10 @@ def create_harness_evolution_tables(conn) -> None:
             scratch_dir              TEXT,
             materialization_result_json TEXT,
             git_commit_sha           TEXT,
-            eval_verdict_json        TEXT
+            eval_verdict_json        TEXT,
+            apply_journal_json       TEXT,
+            reverted_at              TEXT,
+            revert_error             TEXT
         )
         """
     )
