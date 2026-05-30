@@ -100,7 +100,11 @@ def _ensure_eval_columns(conn) -> None:
     cols_now = [r["name"] for r in conn.execute("PRAGMA table_info(harness_evolution_rounds)")]
     shared = [c for c in _ROUND_COLUMNS_IN_ORDER if c in cols_now]
     collist = ", ".join(shared)
+    conn.execute("DROP TABLE IF EXISTS _her_old")  # clear any crash-orphan first
     conn.execute("ALTER TABLE harness_evolution_rounds RENAME TO _her_old")
+    # indexes follow the table on RENAME — free their names so create can rebuild them
+    conn.execute("DROP INDEX IF EXISTS idx_her_project")
+    conn.execute("DROP INDEX IF EXISTS idx_her_status")
     create_harness_evolution_tables(conn)
     conn.execute(f"INSERT INTO harness_evolution_rounds ({collist}) SELECT {collist} FROM _her_old")
     conn.execute("DROP TABLE _her_old")
