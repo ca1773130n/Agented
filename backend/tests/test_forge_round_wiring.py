@@ -87,3 +87,35 @@ def test_skill_unbind_records_deletion_for_staging(isolated_db, tmp_path):
     # second materialize: prior skill is stale → recorded in result.deleted
     result = materialize_primitives({"id": "pd"}, ["skill"], tmp_path)
     assert ".claude/skills/gone/SKILL.md" in result.deleted
+
+
+def test_apply_patch_delete_removes_binding(isolated_db):
+    """apply_patch with op=delete must remove the project→asset binding."""
+    from app.db import commands as commands_repo
+    from app.db import project_forge_bindings as bindings_repo
+    from app.services.harness_evolver import EvolutionPatch, PatchEntry, apply_patch
+
+    with get_connection() as conn:
+        conn.execute("INSERT INTO projects (id, name, status) VALUES ('pdel', 'P', 'active')")
+        conn.commit()
+
+    cid = commands_repo.create_command(name="bye", description="d", content="x", project_id="pdel")
+    assert cid is not None
+    bindings_repo.add_binding("pdel", "command", str(cid))
+    assert any(
+        b["kind"] == "command" and str(b["asset_id"]) == str(cid)
+        for b in bindings_repo.list_bindings("pdel")
+    )
+
+    patch = EvolutionPatch(
+        entries=[
+            PatchEntry(op="delete", kind="command", name="bye", existing_asset_id=cid, payload={})
+        ],
+        notes="",
+    )
+    apply_patch(patch, "pdel")
+
+    assert not any(
+        b["kind"] == "command" and str(b["asset_id"]) == str(cid)
+        for b in bindings_repo.list_bindings("pdel")
+    )

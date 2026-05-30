@@ -1001,6 +1001,22 @@ def apply_patch(patch: EvolutionPatch, project_id: str) -> list[dict]:
 
         elif entry.op == "delete":
             _delete_dispatch[kind](asset_id=entry.existing_asset_id)
+            # Unbind: remove the project→asset binding so it doesn't dangle
+            # pointing at a now-deleted asset (and so materialize/manifest
+            # cleanup reliably stages the file removal).
+            try:
+                for _b in bindings_repo.list_bindings(project_id):
+                    if _b.get("kind") == kind and str(_b.get("asset_id")) == str(
+                        entry.existing_asset_id
+                    ):
+                        bindings_repo.remove_binding(_b["id"])
+            except Exception:
+                logger.warning(
+                    "apply_patch: unbind failed for %s %s",
+                    kind,
+                    entry.existing_asset_id,
+                    exc_info=True,
+                )
             applied.append(
                 {
                     "kind": kind,
