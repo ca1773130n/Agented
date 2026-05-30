@@ -83,8 +83,8 @@ def test_reverse_journal_update_restores_before(isolated_db):
             },
         }
     ]
-    n = reverse_apply_journal("prj", journal)
-    assert n == 1
+    n, failures = reverse_apply_journal("prj", journal)
+    assert n == 1 and failures == []
     assert rules_repo.get_rule(int(rid))["description"] == "OLD"
 
 
@@ -102,7 +102,8 @@ def test_reverse_journal_create_deletes_and_unbinds(isolated_db):
     )
     bindings_repo.add_binding("prc", "rule", str(rid))
     journal = [{"kind": "rule", "op": "create", "asset_id": str(rid), "before": None}]
-    reverse_apply_journal("prc", journal)
+    n, failures = reverse_apply_journal("prc", journal)
+    assert n == 1 and failures == []
     assert rules_repo.get_rule(int(rid)) is None
     assert not any(
         b["kind"] == "rule" and str(b["asset_id"]) == str(rid)
@@ -133,8 +134,8 @@ def test_reverse_journal_delete_recreates_and_rebinds(isolated_db):
             },
         }
     ]
-    n = reverse_apply_journal("prd", journal)
-    assert n == 1
+    n, failures = reverse_apply_journal("prd", journal)
+    assert n == 1 and failures == []
     # a rule named restoreme now exists + is bound (new id, restored content)
     from app.db import rules as rules_repo
 
@@ -156,5 +157,41 @@ def test_reverse_journal_reverse_order(isolated_db):
         {"kind": "rule", "op": "create", "asset_id": "1", "before": None},
         {"kind": "rule", "op": "create", "asset_id": "2", "before": None},
     ]
-    n = reverse_apply_journal("pnone", journal)
-    assert n == 2
+    n, failures = reverse_apply_journal("pnone", journal)
+    assert n == 2 and failures == []
+
+
+def test_reverse_delete_idempotent_no_duplicate(isolated_db):
+    from app.database import get_connection
+    from app.db import rules as rules_repo
+    from app.services.harness_evolution_rollback import reverse_apply_journal
+
+    with get_connection() as conn:
+        conn.execute("INSERT INTO projects (id, name, status) VALUES ('pid', 'P', 'active')")
+        conn.commit()
+    journal = [
+        {
+            "kind": "rule",
+            "op": "delete",
+            "asset_id": "1",
+            "before": {
+                "name": "uniq",
+                "rule_type": "validation",
+                "description": "d",
+                "action": "a",
+                "enabled": 1,
+            },
+        }
+    ]
+    reverse_apply_journal("pid", journal)
+    reverse_apply_journal("pid", journal)  # retry must NOT duplicate
+    matches = [r for r in rules_repo.get_rules_by_project("pid") if r["name"] == "uniq"]
+    assert len(matches) == 1
+
+
+def test_reverse_update_missing_before_is_failure(isolated_db):
+    from app.services.harness_evolution_rollback import reverse_apply_journal
+
+    journal = [{"kind": "rule", "op": "update", "asset_id": "5", "before": None}]
+    n, failures = reverse_apply_journal("pany", journal)
+    assert n == 0 and len(failures) == 1 and failures[0]["op"] == "update"

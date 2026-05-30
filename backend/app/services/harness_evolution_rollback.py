@@ -15,10 +15,35 @@ def _unbind(project_id: str, kind: str, asset_id: str) -> None:
             bindings_repo.remove_binding(b["id"])
 
 
-def reverse_apply_journal(project_id: str, journal: list[dict]) -> int:
-    """Reverse each journal entry in reverse order. Returns count reversed.
+def _already_restored(project_id: str, kind: str, name: str) -> bool:
+    """True if a same-named asset of this kind already exists for the project
+    (so a delete-reversal retry doesn't create a duplicate)."""
+    try:
+        if kind == "rule":
+            from app.db.rules import get_rules_by_project
 
-    Best-effort per entry (failures logged, loop continues).
+            return any(r.get("name") == name for r in get_rules_by_project(project_id))
+        if kind == "hook":
+            from app.db.hooks import get_hooks_by_project
+
+            return any(r.get("name") == name for r in get_hooks_by_project(project_id))
+        if kind == "command":
+            from app.db.commands import get_commands_by_project
+
+            return any(r.get("name") == name for r in get_commands_by_project(project_id))
+        if kind == "skill":
+            from app.db.skills import get_user_skill_by_name
+
+            return get_user_skill_by_name(name) is not None
+    except Exception:
+        return False
+    return False  # mcp_server: best-effort, no idempotence guard
+
+
+def reverse_apply_journal(project_id: str, journal: list[dict]) -> tuple[int, list[dict]]:
+    """Reverse each journal entry in reverse order. Returns (reversed_count, failures).
+
+    Best-effort per entry; a failure is recorded (not counted) and the loop continues.
     """
     from app.services.harness_evolver import (
         _asset_to_payload,
@@ -28,23 +53,23 @@ def reverse_apply_journal(project_id: str, journal: list[dict]) -> int:
     )
 
     reversed_count = 0
+    failures: list[dict] = []
     for entry in reversed(journal):
-        kind = entry["kind"]
-        op = entry["op"]
-        asset_id = entry["asset_id"]
+        kind, op, asset_id = entry["kind"], entry["op"], entry["asset_id"]
         before = entry.get("before")
         try:
             if op == "create":
                 _delete_dispatch[kind](asset_id=asset_id)
                 _unbind(project_id, kind, asset_id)
             elif op == "update":
-                if before:
-                    _update_dispatch[kind](
-                        asset_id=asset_id, payload=_asset_to_payload(kind, before)
-                    )
+                if not before:
+                    raise ValueError("update entry has no before-image")
+                _update_dispatch[kind](asset_id=asset_id, payload=_asset_to_payload(kind, before))
             elif op == "delete":
-                if before:
-                    name = before.get("name") or before.get("skill_name") or "restored"
+                if not before:
+                    raise ValueError("delete entry has no before-image")
+                name = before.get("name") or before.get("skill_name") or "restored"
+                if not _already_restored(project_id, kind, name):
                     new_id = _create_dispatch[kind](
                         name=name,
                         payload=_asset_to_payload(kind, before),
@@ -52,13 +77,17 @@ def reverse_apply_journal(project_id: str, journal: list[dict]) -> int:
                     )
                     if new_id is not None:
                         bindings_repo.add_binding(project_id, kind, str(new_id))
+            else:
+                raise ValueError(f"unknown op {op}")
             reversed_count += 1
-        except Exception:
+        except Exception as exc:
             logger.warning(
-                "reverse journal: failed to reverse %s %s %s",
+                "reverse journal: failed to reverse %s %s %s: %s",
                 op,
                 kind,
                 asset_id,
+                exc,
                 exc_info=True,
             )
-    return reversed_count
+            failures.append({"kind": kind, "op": op, "asset_id": str(asset_id), "error": str(exc)})
+    return reversed_count, failures
