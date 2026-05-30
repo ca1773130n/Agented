@@ -64,3 +64,69 @@ def test_list_enabled(isolated_db):
     cfg.upsert_policy("pa2", AutonomyPolicy(enabled=False))
     ids = {row["project_id"] for row in cfg.list_enabled()}
     assert "pa1" in ids and "pa2" not in ids
+
+
+from app.db import harness_evolution as evo
+
+
+def _awaiting_round(project_id="pr", verdict=None, entries=1):
+    from app.database import get_connection
+
+    with get_connection() as conn:
+        conn.execute(
+            "INSERT INTO projects (id, name, status) VALUES (?, 'P', 'active')", (project_id,)
+        )
+        conn.commit()
+    rid = evo.start_round(
+        project_id=project_id,
+        input_window_since=None,
+        input_window_until=None,
+        input_execution_count=0,
+        input_forge={},
+        scratch_dir="/tmp/x",
+    )
+    evo.mark_running(rid)
+    evo.mark_awaiting_approval(
+        rid, output_patch={"entries": [{"op": "create", "kind": "rule"}] * entries}
+    )
+    if verdict is not None:
+        evo.store_eval_verdict(rid, verdict)
+    return rid
+
+
+def test_mark_applied_records_auto_fields(isolated_db):
+    rid = _awaiting_round()
+    evo.mark_applied(
+        rid,
+        output_patch={"entries": []},
+        applied_asset_ids=[],
+        notes="",
+        auto_applied=True,
+        auto_apply_reason={"eligible": True, "score": 0.9},
+    )
+    row = evo.get_round(rid)
+    assert row["auto_applied"] == 1
+    assert row["auto_apply_reason"]["score"] == 0.9
+
+
+def test_mark_auto_apply_blocked(isolated_db):
+    rid = _awaiting_round("prb")
+    evo.mark_auto_apply_blocked(rid, {"eligible": False, "gate": "confidence"})
+    row = evo.get_round(rid)
+    assert row["status"] == "awaiting_approval"
+    assert row["auto_apply_blocked_reason"]["gate"] == "confidence"
+
+
+def test_count_recent_auto_applies(isolated_db):
+    rid = _awaiting_round("prc")
+    evo.mark_applied(
+        rid,
+        output_patch={"entries": []},
+        applied_asset_ids=[],
+        notes="",
+        auto_applied=True,
+        auto_apply_reason={"eligible": True},
+    )
+    assert evo.count_recent_auto_applies("prc", since="2000-01-01T00:00:00") >= 1
+    # a far-future 'since' excludes it
+    assert evo.count_recent_auto_applies("prc", since="2999-01-01T00:00:00") == 0

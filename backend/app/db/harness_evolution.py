@@ -71,6 +71,9 @@ _ROUND_COLUMNS_IN_ORDER = (
     "apply_journal_json",
     "reverted_at",
     "revert_error",
+    "auto_applied",
+    "auto_apply_reason",
+    "auto_apply_blocked_reason",
 )
 
 
@@ -121,6 +124,18 @@ def _ensure_revert_columns(conn) -> None:
             conn.execute(f"ALTER TABLE harness_evolution_rounds ADD COLUMN {col} TEXT")
 
 
+def _ensure_autonomy_columns(conn) -> None:
+    _ensure_revert_columns(conn)
+    cols = {r["name"] for r in conn.execute("PRAGMA table_info(harness_evolution_rounds)")}
+    if "auto_applied" not in cols:
+        conn.execute(
+            "ALTER TABLE harness_evolution_rounds ADD COLUMN auto_applied INTEGER NOT NULL DEFAULT 0"
+        )
+    for col in ("auto_apply_reason", "auto_apply_blocked_reason"):
+        if col not in cols:
+            conn.execute(f"ALTER TABLE harness_evolution_rounds ADD COLUMN {col} TEXT")
+
+
 def mark_applied(
     round_id: str,
     *,
@@ -130,9 +145,11 @@ def mark_applied(
     materialization_result_json: Optional[str] = None,
     git_commit_sha: Optional[str] = None,
     apply_journal_json: Optional[str] = None,
+    auto_applied: bool = False,
+    auto_apply_reason: Optional[dict] = None,
 ) -> None:
     with get_connection() as conn:
-        _ensure_revert_columns(conn)
+        _ensure_autonomy_columns(conn)
         conn.execute(
             """UPDATE harness_evolution_rounds SET
                    status                      = 'applied',
@@ -142,7 +159,9 @@ def mark_applied(
                    notes                       = ?,
                    materialization_result_json = ?,
                    git_commit_sha              = ?,
-                   apply_journal_json          = ?
+                   apply_journal_json          = ?,
+                   auto_applied                = ?,
+                   auto_apply_reason           = ?
                WHERE id = ?""",
             (
                 json.dumps(output_patch, default=str),
@@ -151,6 +170,8 @@ def mark_applied(
                 materialization_result_json,
                 git_commit_sha,
                 apply_journal_json,
+                1 if auto_applied else 0,
+                json.dumps(auto_apply_reason) if auto_apply_reason else None,
                 round_id,
             ),
         )
@@ -273,6 +294,28 @@ def set_revert_error(round_id: str, error: str) -> None:
         conn.commit()
 
 
+def mark_auto_apply_blocked(round_id: str, reason: dict) -> None:
+    with get_connection() as conn:
+        _ensure_autonomy_columns(conn)
+        conn.execute(
+            "UPDATE harness_evolution_rounds SET auto_apply_blocked_reason = ? "
+            "WHERE id = ? AND status = 'awaiting_approval'",
+            (json.dumps(reason), round_id),
+        )
+        conn.commit()
+
+
+def count_recent_auto_applies(project_id: str, *, since: str) -> int:
+    with get_connection() as conn:
+        _ensure_autonomy_columns(conn)
+        row = conn.execute(
+            "SELECT COUNT(*) AS c FROM harness_evolution_rounds "
+            "WHERE project_id = ? AND auto_applied = 1 AND finished_at >= ?",
+            (project_id, since),
+        ).fetchone()
+    return int(row["c"]) if row else 0
+
+
 def get_round(round_id: str) -> Optional[dict]:
     with get_connection() as conn:
         row = conn.execute(
@@ -321,4 +364,9 @@ def _row_to_dict(row) -> dict:
             d[out_key] = json.loads(d.pop(key) or default)
         except (TypeError, ValueError):
             d[out_key] = None
+    for key in ("auto_apply_reason", "auto_apply_blocked_reason"):
+        try:
+            d[key] = json.loads(d[key] or "null")
+        except (TypeError, ValueError):
+            d[key] = None
     return d

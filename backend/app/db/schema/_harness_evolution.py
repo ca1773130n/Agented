@@ -47,7 +47,10 @@ def create_harness_evolution_tables(conn) -> None:
             eval_verdict_json        TEXT,
             apply_journal_json       TEXT,
             reverted_at              TEXT,
-            revert_error             TEXT
+            revert_error             TEXT,
+            auto_applied             INTEGER NOT NULL DEFAULT 0,
+            auto_apply_reason        TEXT,
+            auto_apply_blocked_reason TEXT
         )
         """
     )
