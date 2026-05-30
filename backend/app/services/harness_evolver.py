@@ -472,7 +472,19 @@ def _fetch_primitive(kind: str, asset_id: Any) -> Optional[dict]:
             # build.
             from app.db.skills import get_user_skill
 
-            return get_user_skill(int(asset_id))
+            row = get_user_skill(int(asset_id))
+            if row and row.get("skill_path"):
+                try:
+                    from pathlib import Path
+
+                    p = Path(row["skill_path"])
+                    if p.exists():
+                        # carry the SKILL.md body so a journal before-image can
+                        # faithfully recreate the skill on rollback
+                        row = {**row, "content": p.read_text(encoding="utf-8")}
+                except OSError:
+                    pass
+            return row
     except Exception:
         return None
     return None
@@ -1069,9 +1081,11 @@ _PAYLOAD_KEYS: dict[str, tuple[str, ...]] = {
 
 
 def _asset_to_payload(kind: str, asset: dict) -> dict:
-    """Extract the mutable payload fields from a fetched asset dict."""
+    """Project a before-image asset row into the create/update payload shape.
+    Includes None values so an update-reversal faithfully restores cleared
+    fields (omitting them would leave the post-mutation value in place)."""
     keys = _PAYLOAD_KEYS.get(kind, ())
-    return {k: asset[k] for k in keys if k in asset and asset[k] is not None}
+    return {k: asset[k] for k in keys if k in asset}
 
 
 def _create_rule(*, name, payload, project_id):

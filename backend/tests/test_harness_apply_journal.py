@@ -134,3 +134,35 @@ def test_apply_patch_journal_is_json_serializable(isolated_db):
     serialized = json.dumps(journal, default=str)
     parsed = json.loads(serialized)
     assert parsed[0]["op"] == "update"
+
+
+def test_asset_to_payload_includes_none_for_restore_fidelity():
+    from app.services.harness_evolver import _asset_to_payload
+
+    before = {
+        "rule_type": "validation",
+        "description": "d",
+        "condition": None,
+        "action": "a",
+        "enabled": 1,
+    }
+    payload = _asset_to_payload("rule", before)
+    # condition=None must be PRESENT (so a restore re-clears it), not dropped
+    assert "condition" in payload
+    assert payload["condition"] is None
+
+
+def test_skill_before_image_carries_body(isolated_db, tmp_path):
+    from app.database import get_connection
+    from app.db import skills as skills_repo
+    from app.services.harness_evolver import _fetch_primitive
+
+    skill_dir = tmp_path / ".claude" / "skills" / "demo"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text("---\nname: demo\n---\nthe body\n")
+    sid = skills_repo.add_user_skill(
+        skill_name="demo", skill_path=str(skill_dir / "SKILL.md"), description="d"
+    )
+    asset = _fetch_primitive("skill", sid)
+    assert asset is not None
+    assert "the body" in (asset.get("content") or "")
