@@ -39,7 +39,9 @@ def create_harness_evolution_tables(conn) -> None:
             applied_asset_ids_json   TEXT NOT NULL DEFAULT '[]',
             error_message            TEXT,
             notes                    TEXT,
-            scratch_dir              TEXT
+            scratch_dir              TEXT,
+            materialization_result_json TEXT,
+            git_commit_sha           TEXT
         )
         """
     )
@@ -47,7 +49,4 @@ def create_harness_evolution_tables(conn) -> None:
         "CREATE INDEX IF NOT EXISTS idx_her_project "
         "ON harness_evolution_rounds(project_id, started_at DESC)"
     )
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_her_status "
-        "ON harness_evolution_rounds(status)"
-    )
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_her_status ON harness_evolution_rounds(status)")

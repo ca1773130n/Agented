@@ -50,26 +50,43 @@ def mark_running(round_id: str) -> None:
         conn.commit()
 
 
+def _ensure_materialization_columns(conn) -> None:
+    cols = {r["name"] for r in conn.execute("PRAGMA table_info(harness_evolution_rounds)")}
+    if "materialization_result_json" not in cols:
+        conn.execute(
+            "ALTER TABLE harness_evolution_rounds ADD COLUMN materialization_result_json TEXT"
+        )
+    if "git_commit_sha" not in cols:
+        conn.execute("ALTER TABLE harness_evolution_rounds ADD COLUMN git_commit_sha TEXT")
+
+
 def mark_applied(
     round_id: str,
     *,
     output_patch: dict[str, Any],
     applied_asset_ids: list[Any],
     notes: Optional[str] = None,
+    materialization_result_json: Optional[str] = None,
+    git_commit_sha: Optional[str] = None,
 ) -> None:
     with get_connection() as conn:
+        _ensure_materialization_columns(conn)
         conn.execute(
             """UPDATE harness_evolution_rounds SET
-                   status                 = 'applied',
-                   finished_at            = datetime('now'),
-                   output_patch_json      = ?,
-                   applied_asset_ids_json = ?,
-                   notes                  = ?
+                   status                      = 'applied',
+                   finished_at                 = datetime('now'),
+                   output_patch_json           = ?,
+                   applied_asset_ids_json      = ?,
+                   notes                       = ?,
+                   materialization_result_json = ?,
+                   git_commit_sha              = ?
                WHERE id = ?""",
             (
                 json.dumps(output_patch, default=str),
                 json.dumps(applied_asset_ids, default=str),
                 notes,
+                materialization_result_json,
+                git_commit_sha,
                 round_id,
             ),
         )

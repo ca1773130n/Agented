@@ -1326,11 +1326,46 @@ def run_evolution_round(
             )
 
         applied = apply_patch(patch, project_id)
+
+        # Materialize the applied primitives into the project's .claude/ layout
+        # and git-commit them (git-traceable per round). Best-effort: a
+        # materialize/commit failure must not unwind the DB apply.
+        import dataclasses
+
+        from app.db.projects import get_project
+        from app.services.forge_materialization_service import (
+            commit_materialization,
+            materialize_primitives,
+        )
+
+        mat_json: Optional[str] = None
+        commit_sha: Optional[str] = None
+        project = get_project(project_id)
+        if project and (project.get("local_path") or project.get("clone_path")):
+            try:
+                root = Path(project.get("local_path") or project["clone_path"])
+                kinds = sorted({a["kind"] for a in applied})
+                # record skill deletes so the commit stages their removal
+                deleted_skill_rels: list[str] = []
+                result = materialize_primitives(project, kinds, root)
+                result.deleted.extend(deleted_skill_rels)
+                commit_sha = commit_materialization(project, result, round_id)
+                mat_json = json.dumps(
+                    {
+                        "written": [dataclasses.asdict(w) for w in result.written],
+                        "deleted": result.deleted,
+                    }
+                )
+            except Exception:
+                logger.warning("forge materialize/commit failed for %s", round_id, exc_info=True)
+
         evolution_repo.mark_applied(
             round_id,
             output_patch=_patch_to_dict(patch),
             applied_asset_ids=applied,
             notes=notes,
+            materialization_result_json=mat_json,
+            git_commit_sha=commit_sha,
         )
 
         if not keep_scratch_on_failure:

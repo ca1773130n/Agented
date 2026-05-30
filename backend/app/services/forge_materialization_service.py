@@ -55,6 +55,10 @@ def _get_asset(kind: str, asset_id: str) -> Optional[dict]:
             return get_command(int(asset_id))
         if kind == "mcp_server":
             return get_mcp_server(str(asset_id))
+        if kind == "skill":
+            from app.db.skills import get_user_skill
+
+            return get_user_skill(int(asset_id))
     except (ValueError, TypeError):
         logger.warning("forge materialize: bad asset_id %r for kind %s; skipping", asset_id, kind)
         return None
@@ -312,6 +316,14 @@ def materialize_primitives(
                 json.dumps(doc, indent=2, ensure_ascii=False) + "\n",
             )
             result.written.append(WrittenFile(".claude/mcp.json", "mcp_server", "mcp"))
+
+    if "skill" in kinds:
+        for asset in _bound_assets(project_id, "skill"):
+            safe = _safe(asset.get("skill_name") or str(asset.get("id")))
+            rel = f".claude/skills/{safe}/SKILL.md"
+            # Body lives on disk (written by the evolver's _create_skill); record
+            # it for staging + manifest tracking. Don't rewrite from the DB.
+            result.written.append(WrittenFile(rel, "skill", str(asset.get("id"))))
 
     _finalize_manifest(workspace_path, result, kinds)
     return result
