@@ -1,7 +1,10 @@
 from pathlib import Path
+from unittest.mock import patch
 
 from app.services.harness_evolution_eval import _static_checks
 from app.services.forge_materialization_service import MaterializationResult, WrittenFile
+from app.services import harness_evolution_eval as ev
+from app.models.harness_evolution import ReplaySample
 
 
 def test_static_checks_pass_for_valid_files(tmp_path):
@@ -69,3 +72,59 @@ def test_valid_closed_frontmatter_passes(tmp_path):
     result = MaterializationResult(written=[WrittenFile(".claude/commands/ok.md", "command", "c7")])
     checks = _static_checks(tmp_path, result)
     assert all(c.passed for c in checks)
+
+
+def _samples():
+    return [ReplaySample(incident_kind="h2_invalid_tool_call", layer="h2",
+                         evidence={"error": "missing arg"}, trajectory_excerpt="...")]
+
+
+def test_judge_replay_parses_checkresult():
+    fake = '{"name": "replay", "passed": true, "detail": "addressed", "confidence": 0.85}'
+    with patch.object(ev, "_run_judge", lambda prompt, provider_kind: fake):
+        checks = ev._replay_checks(_samples(), patched_summary="rule X added", provider_kind="anthropic")
+    assert len(checks) == 1 and checks[0].passed is True and checks[0].confidence == 0.85
+
+
+def test_judge_malformed_output_is_failed_low_confidence():
+    with patch.object(ev, "_run_judge", lambda prompt, provider_kind: "garbage not json"):
+        checks = ev._replay_checks(_samples(), patched_summary="x", provider_kind="anthropic")
+    assert checks[0].passed is False and checks[0].confidence <= 0.3
+
+
+def test_judge_subprocess_error_is_failed_check():
+    def _boom(prompt, provider_kind):
+        raise RuntimeError("cli missing")
+    with patch.object(ev, "_run_judge", _boom):
+        checks = ev._replay_checks(_samples(), patched_summary="x", provider_kind="anthropic")
+    assert checks[0].passed is False
+
+
+def test_evaluate_patch_combines_static_and_replay(tmp_path):
+    (tmp_path / ".claude" / "commands").mkdir(parents=True)
+    (tmp_path / ".claude" / "commands" / "d.md").write_text('---\nname: "d"\n---\nb\n')
+    mat = MaterializationResult(written=[WrittenFile(".claude/commands/d.md", "command", "c1")])
+    good = '{"name":"replay","passed":true,"detail":"ok","confidence":0.9}'
+    with patch.object(ev, "materialize_round", lambda rid, ws: mat), \
+         patch.object(ev, "_run_judge", lambda prompt, provider_kind: good):
+        verdict = ev.evaluate_patch(round_id="r1", workspace_dir=tmp_path,
+                                    samples=_samples(), patched_summary="x", provider_kind="anthropic")
+    assert verdict.passed is True
+    assert 0.0 <= verdict.score <= 1.0
+    assert any(c.name.startswith("frontmatter") for c in verdict.per_check)
+
+
+def test_evaluate_patch_static_fail_skips_replay(tmp_path):
+    (tmp_path / ".claude").mkdir(parents=True)
+    (tmp_path / ".claude" / "settings.json").write_text("{ bad json")
+    mat = MaterializationResult(written=[WrittenFile(".claude/settings.json", "hook", "settings")])
+    judge_called = {"n": 0}
+    def _judge(prompt, provider_kind):
+        judge_called["n"] += 1
+        return '{"name":"r","passed":true,"confidence":0.9}'
+    with patch.object(ev, "materialize_round", lambda rid, ws: mat), \
+         patch.object(ev, "_run_judge", _judge):
+        verdict = ev.evaluate_patch(round_id="r2", workspace_dir=tmp_path,
+                                    samples=_samples(), patched_summary="x", provider_kind="anthropic")
+    assert verdict.passed is False
+    assert judge_called["n"] == 0   # static failure short-circuits replay
