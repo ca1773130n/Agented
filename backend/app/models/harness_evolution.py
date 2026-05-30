@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -27,3 +27,21 @@ class EvalVerdict(BaseModel):
     score: float = Field(ge=0.0, le=1.0)
     per_check: list[CheckResult] = Field(default_factory=list)
     notes: str = ""
+
+
+class ApplyJournalEntry(BaseModel):
+    kind: str
+    op: Literal["create", "update", "delete"]
+    asset_id: str
+    # before-image of the asset (for update/delete reversal); None for create.
+    before: Optional[dict] = None
+    # binding row info captured at apply time, if any (for rebind on delete-reverse).
+    binding: Optional[dict] = None
+
+
+class RevertResult(BaseModel):
+    status: Literal["reverted", "conflict", "failed"]
+    reversed_count: int = 0
+    git_reverted: bool = False
+    error: str = ""
+    conflicts: list[dict] = Field(default_factory=list)
