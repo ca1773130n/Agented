@@ -1276,8 +1276,13 @@ def _patched_summary(patch) -> str:
 def _replay_samples_from_inputs(inputs: dict) -> list:
     from app.models.harness_evolution import ReplaySample
 
+    incidents = [
+        inc for t in (inputs.get("trajectories") or []) for inc in (t.get("incidents") or [])
+    ]
+    if not incidents:
+        logger.debug("eval gate: no incidents in input window; replay judge skipped (static-only)")
     out = []
-    for inc in (inputs.get("incidents") or [])[:8]:
+    for inc in incidents[:8]:  # cap judge cost
         out.append(
             ReplaySample(
                 incident_kind=inc.get("kind", "unknown"),

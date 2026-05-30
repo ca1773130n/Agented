@@ -85,3 +85,39 @@ def test_reaper_reaps_stale_evaluating_round(isolated_db):
     hv._check_rate_limit("pg", 1)  # triggers the reaper
     status = evo.get_round(rid)["status"]
     assert status in ("failed", "aborted")  # reaped, no longer in-flight
+
+
+def test_replay_samples_flatten_from_trajectories():
+    """ReplaySamples must be flattened out of trajectories[i]['incidents'] —
+    the real gather_inputs shape — not a (nonexistent) top-level 'incidents' key."""
+    inputs = {
+        "project_id": "p",
+        "primitives": {},
+        "takeaways": [],
+        "trajectories": [
+            {
+                "session_id": "s1",
+                "incidents": [
+                    {"kind": "h2_invalid_tool_call", "layer": "h2", "evidence": {"error": "x"}},
+                    {"kind": "h3_missing_file", "layer": "h3", "evidence": {"error": "enoent"}},
+                ],
+            },
+            {"session_id": "s2", "incidents": []},
+        ],
+    }
+    samples = hv._replay_samples_from_inputs(inputs)
+    assert len(samples) == 2
+    kinds = {s.incident_kind for s in samples}
+    assert kinds == {"h2_invalid_tool_call", "h3_missing_file"}
+    assert {s.layer for s in samples} == {"h2", "h3"}
+
+
+def test_replay_samples_empty_when_no_incidents():
+    inputs = {"trajectories": [{"session_id": "s", "incidents": []}]}
+    assert hv._replay_samples_from_inputs(inputs) == []
+
+
+def test_replay_samples_cap_at_8():
+    incs = [{"kind": f"k{i}", "layer": "h2", "evidence": {}} for i in range(20)]
+    inputs = {"trajectories": [{"session_id": "s", "incidents": incs}]}
+    assert len(hv._replay_samples_from_inputs(inputs)) == 8
