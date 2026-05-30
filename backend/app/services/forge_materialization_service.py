@@ -295,6 +295,8 @@ def materialize_primitives(
                     env = json.loads(env)
                 except (ValueError, TypeError):
                     env = None
+            if args is not None and not isinstance(args, list):
+                args = None
             for key, val in (
                 ("command", asset.get("command")),
                 ("args", args),
@@ -387,6 +389,8 @@ def commit_materialization(
         if not status.stdout.strip():
             return None
         asset_ids = ", ".join(w.asset_id for w in result.written) or "none"
+        if len(asset_ids) > 200:
+            asset_ids = asset_ids[:200] + "…"
         msg = (
             f"chore(forge): apply evolution round {round_id}\n\n"
             f"Materialized {len(result.written)} primitive(s); "
@@ -423,7 +427,10 @@ def materialize_round(round_id: str, workspace_dir: Path) -> MaterializationResu
     rnd = get_round(round_id)
     if rnd is None:
         return MaterializationResult()
-    project = get_project(rnd["project_id"])
+    project_id = rnd.get("project_id")
+    if not project_id:
+        return MaterializationResult()
+    project = get_project(project_id)
     if project is None:
         return MaterializationResult()
     applied = rnd.get("applied_asset_ids") or []

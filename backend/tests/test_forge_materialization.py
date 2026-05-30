@@ -322,3 +322,34 @@ def test_cleanup_never_deletes_shared_files(isolated_db, tmp_path):
             bindings_repo.remove_binding(b["id"])
     materialize_primitives({"id": "proj-sh"}, ["hook"], tmp_path)
     assert (tmp_path / ".claude" / "settings.json").exists()
+
+
+def test_mcp_json_idempotent_marker_length_and_bad_file_recovery(isolated_db, tmp_path):
+    import json as _json
+    from app.db import mcp_servers as mcp_repo
+    from app.db import project_forge_bindings as bindings_repo
+    from app.services.harness_evolver import _find_mcp_server_id_by_name
+    from app.database import get_connection
+
+    with get_connection() as conn:
+        conn.execute("INSERT INTO projects (id, name, status) VALUES ('proj-mj', 'P', 'active')")
+        conn.commit()
+    # corrupt existing mcp.json — writer must recover (treat as empty), not crash
+    (tmp_path / ".claude").mkdir(parents=True)
+    (tmp_path / ".claude" / "mcp.json").write_text("{ not valid json")
+    mcp_repo.create_mcp_server(
+        name="ctx",
+        description="c",
+        server_type="stdio",
+        command="ctx",
+        args=None,
+        env_json=None,
+        url=None,
+    )
+    mid = _find_mcp_server_id_by_name("ctx")
+    bindings_repo.add_binding("proj-mj", "mcp_server", str(mid))
+    materialize_primitives({"id": "proj-mj"}, ["mcp_server"], tmp_path)
+    materialize_primitives({"id": "proj-mj"}, ["mcp_server"], tmp_path)
+    data = _json.loads((tmp_path / ".claude" / "mcp.json").read_text())
+    assert data["_agented_mcp_servers"] == ["ctx"]  # exactly one, no growth
+    assert "ctx" in data["mcpServers"]

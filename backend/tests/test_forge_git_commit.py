@@ -83,3 +83,11 @@ def test_materialize_round_resolves_project_and_kinds(isolated_db, tmp_path):
     )
     materialize_round(rid, tmp_path)
     assert (tmp_path / ".claude" / "commands" / "deploy.md").exists()
+
+
+def test_materialize_round_returns_empty_for_missing_round(isolated_db, tmp_path):
+    from app.services.forge_materialization_service import materialize_round, MaterializationResult
+
+    result = materialize_round("her-does-not-exist", tmp_path)
+    assert isinstance(result, MaterializationResult)
+    assert result.written == []
