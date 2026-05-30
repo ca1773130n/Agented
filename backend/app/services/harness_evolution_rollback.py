@@ -106,7 +106,8 @@ def _later_applied_conflicts(round_row: dict) -> list[dict]:
     """Return conflict entries from later applied rounds touching the same assets."""
     mine = {(e["kind"], str(e["asset_id"])) for e in (round_row.get("apply_journal") or [])}
     out: list[dict] = []
-    for other in evo_repo.list_for_project(round_row["project_id"], limit=200):
+    # high cap: conflict detection must not silently miss a later round
+    for other in evo_repo.list_for_project(round_row["project_id"], limit=10000):
         if other["id"] == round_row["id"] or other.get("status") != "applied":
             continue
         if (other.get("started_at") or "") <= (round_row.get("started_at") or ""):
@@ -134,6 +135,8 @@ def _git_revert(project_id: str, sha: str) -> bool:
     root = (proj or {}).get("local_path") or (proj or {}).get("clone_path")
     if not root or not (Path(root) / ".git").exists():
         return False
+    # Clear any in-progress revert from a prior failed attempt (best-effort).
+    subprocess.run(["git", "revert", "--abort"], cwd=root, capture_output=True, text=True)
     subprocess.run(
         ["git", "revert", "--no-edit", sha],
         cwd=root,

@@ -225,7 +225,9 @@ def test_revert_round_reverts_applied(isolated_db):
     with get_connection() as conn:
         conn.execute("INSERT INTO projects (id, name, status) VALUES ('prv', 'P', 'active')")
         conn.commit()
-    asset = rules_repo.create_rule(name="c", rule_type="validation", description="x", project_id="prv")
+    asset = rules_repo.create_rule(
+        name="c", rule_type="validation", description="x", project_id="prv"
+    )
     bindings_repo.add_binding("prv", "rule", str(asset))
     round_id = evo.start_round(
         project_id="prv",
@@ -312,8 +314,58 @@ def test_revert_round_conflict_with_later_round(isolated_db):
         git_commit_sha=None,
         apply_journal_json=json.dumps(j),
     )
-    result = revert_round(a, revert_git=False)  # reverting A: B is a later applied round touching asset 7
+    result = revert_round(
+        a, revert_git=False
+    )  # reverting A: B is a later applied round touching asset 7
     assert result.status == "conflict"
     assert any(str(c.get("asset_id")) == "7" for c in result.conflicts)
     forced = revert_round(a, revert_git=False, force=True)
     assert forced.status == "reverted"
+
+
+def test_revert_round_retry_after_db_reversed_is_idempotent(isolated_db):
+    """A round whose DB was already reversed (e.g. git failed on first attempt,
+    leaving status applied) must revert cleanly on retry — the DB reversal is
+    idempotent, so a second revert_round (revert_git=False) succeeds."""
+    from app.database import get_connection
+    from app.db import rules as rules_repo
+    from app.db import project_forge_bindings as bindings_repo
+    from app.services.harness_evolution_rollback import revert_round
+
+    with get_connection() as conn:
+        conn.execute("INSERT INTO projects (id, name, status) VALUES ('pretry', 'P', 'active')")
+        conn.commit()
+    asset = rules_repo.create_rule(
+        name="c", rule_type="validation", description="x", project_id="pretry"
+    )
+    bindings_repo.add_binding("pretry", "rule", str(asset))
+    rid = evo.start_round(
+        project_id="pretry",
+        input_window_since=None,
+        input_window_until=None,
+        input_execution_count=0,
+        input_forge={},
+        scratch_dir="/t",
+    )
+    evo.mark_running(rid)
+    journal = [{"kind": "rule", "op": "create", "asset_id": str(asset), "before": None}]
+    evo.mark_applied(
+        rid,
+        output_patch={"entries": []},
+        applied_asset_ids=[],
+        notes="",
+        git_commit_sha=None,
+        apply_journal_json=json.dumps(journal),
+    )
+    # first revert (no git) succeeds
+    r1 = revert_round(rid, revert_git=False)
+    assert r1.status == "reverted"
+    # simulate a retry scenario: force status back to applied and revert again — must not error
+    with get_connection() as conn:
+        conn.execute("UPDATE harness_evolution_rounds SET status='applied' WHERE id=?", (rid,))
+        conn.commit()
+    r2 = revert_round(rid, revert_git=False)
+    assert (
+        r2.status == "reverted"
+    )  # idempotent: asset already gone, delete-reversal is a no-op success
+    assert r2.error == ""
