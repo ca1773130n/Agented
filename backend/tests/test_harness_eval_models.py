@@ -1,3 +1,6 @@
+import pytest
+from pydantic import ValidationError
+
 from app.models.harness_evolution import CheckResult, EvalVerdict, ReplaySample
 
 
@@ -29,3 +32,18 @@ def test_replay_sample_shape():
         trajectory_excerpt="...",
     )
     assert s.layer == "h2"
+
+
+def test_score_is_required():
+    with pytest.raises(ValidationError):
+        EvalVerdict(passed=True)  # no score -> invalid by design
+
+
+def test_confidence_out_of_range_rejected():
+    with pytest.raises(ValidationError):
+        CheckResult(name="x", passed=True, confidence=1.1)
+
+
+def test_empty_check_name_rejected():
+    with pytest.raises(ValidationError):
+        CheckResult(name="", passed=True)
