@@ -137,11 +137,11 @@ def _finalize_manifest(
         for stale in previous - current:
             if stale in _NEVER_DELETE:
                 continue
+            result.deleted.append(stale)  # record for git staging even if already gone
             target = workspace / stale
             try:
                 if target.exists():
                     target.unlink()
-                    result.deleted.append(stale)
                     # best-effort: drop the now-empty parent dir
                     parent = target.parent
                     try:

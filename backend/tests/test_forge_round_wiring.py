@@ -54,3 +54,36 @@ def test_skill_recorded_in_materialization(isolated_db, tmp_path):
     bindings_repo.add_binding("ps", "skill", str(sid))
     result = materialize_primitives({"id": "ps"}, ["skill"], tmp_path)
     assert ".claude/skills/demo/SKILL.md" in {w.rel_path for w in result.written}
+
+
+def test_skill_unbind_records_deletion_for_staging(isolated_db, tmp_path):
+    """When a skill is unbound, the next materialize records its prior SKILL.md
+    in result.deleted so the forge commit can stage the removal — even though
+    the file was already unlinked at apply time."""
+    from app.db import skills as skills_repo
+    from app.db import project_forge_bindings as bindings_repo
+    from app.services.forge_materialization_service import materialize_primitives
+
+    with get_connection() as conn:
+        conn.execute(
+            "INSERT INTO projects (id, name, status, local_path) VALUES ('pd', 'P', 'active', ?)",
+            (str(tmp_path),),
+        )
+        conn.commit()
+    skill_dir = tmp_path / ".claude" / "skills" / "gone"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text("---\nname: gone\n---\nx\n")
+    sid = skills_repo.add_user_skill(
+        skill_name="gone", skill_path=str(skill_dir / "SKILL.md"), description="d"
+    )
+    bindings_repo.add_binding("pd", "skill", str(sid))
+    # first materialize records the skill + writes the manifest skill bucket
+    materialize_primitives({"id": "pd"}, ["skill"], tmp_path)
+    # simulate _delete_skill: unbind + remove file from disk
+    for row in bindings_repo.list_bindings("pd"):
+        if row["kind"] == "skill":
+            bindings_repo.remove_binding(row["id"])
+    (skill_dir / "SKILL.md").unlink()
+    # second materialize: prior skill is stale → recorded in result.deleted
+    result = materialize_primitives({"id": "pd"}, ["skill"], tmp_path)
+    assert ".claude/skills/gone/SKILL.md" in result.deleted

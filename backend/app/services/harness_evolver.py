@@ -23,6 +23,7 @@ Reference: arXiv 2605.22166 §5.2 Evolution Dynamics.
 
 from __future__ import annotations
 
+import dataclasses
 import json
 import logging
 import os
@@ -1330,8 +1331,6 @@ def run_evolution_round(
         # Materialize the applied primitives into the project's .claude/ layout
         # and git-commit them (git-traceable per round). Best-effort: a
         # materialize/commit failure must not unwind the DB apply.
-        import dataclasses
-
         from app.db.projects import get_project
         from app.services.forge_materialization_service import (
             commit_materialization,
@@ -1345,10 +1344,7 @@ def run_evolution_round(
             try:
                 root = Path(project.get("local_path") or project["clone_path"])
                 kinds = sorted({a["kind"] for a in applied})
-                # record skill deletes so the commit stages their removal
-                deleted_skill_rels: list[str] = []
                 result = materialize_primitives(project, kinds, root)
-                result.deleted.extend(deleted_skill_rels)
                 commit_sha = commit_materialization(project, result, round_id)
                 mat_json = json.dumps(
                     {
