@@ -54,3 +54,34 @@ def test_eval_pass_returns_none_to_continue(isolated_db, tmp_path):
         result = hv._eval_gate(rid, patch=_FakePatch(), inputs={"incidents": []}, scratch=tmp_path)
     assert result is None  # None => continue to dry-run/apply
     assert evo.get_round(rid)["status"] == "evaluating"  # stored verdict, not terminal
+
+
+def test_gate_error_records_bypass_verdict_and_continues(isolated_db, tmp_path):
+    rid = _round()
+
+    def _boom(**kwargs):
+        raise RuntimeError("eval infra down")
+
+    with patch.object(hv, "evaluate_patch", _boom, create=True):
+        result = hv._eval_gate(rid, patch=_FakePatch(), inputs={"incidents": []}, scratch=tmp_path)
+    assert result is None  # fail-open: continue
+    row = evo.get_round(rid)
+    assert row["eval_verdict"] is not None
+    assert row["eval_verdict"]["score"] == 0.0  # untrusted → autonomy won't auto-apply
+    assert "bypass" in (row["eval_verdict"]["notes"] or "").lower()
+
+
+def test_reaper_reaps_stale_evaluating_round(isolated_db):
+    """A round stuck in 'evaluating' (crash during eval) must be reaped, not block forever."""
+    rid = _round()
+    evo.mark_evaluating(rid)
+    # Backdate started_at far past the reaper threshold.
+    with get_connection() as conn:
+        conn.execute(
+            "UPDATE harness_evolution_rounds SET started_at = '2000-01-01T00:00:00' WHERE id = ?",
+            (rid,),
+        )
+        conn.commit()
+    hv._check_rate_limit("pg", 1)  # triggers the reaper
+    status = evo.get_round(rid)["status"]
+    assert status in ("failed", "aborted")  # reaped, no longer in-flight

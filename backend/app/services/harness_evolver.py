@@ -1302,10 +1302,24 @@ def _eval_gate(round_id: str, *, patch, inputs: dict, scratch: Path) -> Optional
             samples=_replay_samples_from_inputs(inputs),
             patched_summary=_patched_summary(patch),
         )
-    except Exception:
-        logger.warning(
-            "eval gate errored for %s; treating as non-blocking", round_id, exc_info=True
-        )
+    except Exception as exc:
+        logger.warning("eval gate errored for %s; bypassing (fail-open)", round_id, exc_info=True)
+        try:
+            from app.models.harness_evolution import EvalVerdict
+
+            evolution_repo.store_eval_verdict(
+                round_id,
+                EvalVerdict(
+                    passed=True,
+                    score=0.0,
+                    per_check=[],
+                    notes=f"eval gate bypassed (fail-open) due to error: {exc}"[:300],
+                ),
+            )
+        except Exception:
+            logger.warning(
+                "eval gate: could not store bypass verdict for %s", round_id, exc_info=True
+            )
         return None
     evolution_repo.store_eval_verdict(round_id, verdict)
     if not verdict.passed:
