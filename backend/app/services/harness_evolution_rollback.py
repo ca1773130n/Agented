@@ -3,8 +3,12 @@
 from __future__ import annotations
 
 import logging
+import subprocess
+from pathlib import Path
 
+from app.db import harness_evolution as evo_repo
 from app.db import project_forge_bindings as bindings_repo
+from app.models.harness_evolution import RevertResult
 
 logger = logging.getLogger(__name__)
 
@@ -91,3 +95,118 @@ def reverse_apply_journal(project_id: str, journal: list[dict]) -> tuple[int, li
             )
             failures.append({"kind": kind, "op": op, "asset_id": str(asset_id), "error": str(exc)})
     return reversed_count, failures
+
+
+# ---------------------------------------------------------------------------
+# Conflict detection
+# ---------------------------------------------------------------------------
+
+
+def _later_applied_conflicts(round_row: dict) -> list[dict]:
+    """Return conflict entries from later applied rounds touching the same assets."""
+    mine = {(e["kind"], str(e["asset_id"])) for e in (round_row.get("apply_journal") or [])}
+    out: list[dict] = []
+    for other in evo_repo.list_for_project(round_row["project_id"], limit=200):
+        if other["id"] == round_row["id"] or other.get("status") != "applied":
+            continue
+        if (other.get("started_at") or "") <= (round_row.get("started_at") or ""):
+            continue
+        for e in other.get("apply_journal") or []:
+            if (e["kind"], str(e["asset_id"])) in mine:
+                out.append({"round_id": other["id"], "kind": e["kind"], "asset_id": e["asset_id"]})
+    return out
+
+
+# ---------------------------------------------------------------------------
+# Git helper
+# ---------------------------------------------------------------------------
+
+
+def _git_revert(project_id: str, sha: str) -> bool:
+    """Run `git revert --no-edit <sha>` in the project root. Returns True on success.
+
+    Returns False (not an error) when there is no git repo to revert.
+    Raises subprocess.CalledProcessError on git failure.
+    """
+    from app.db.projects import get_project
+
+    proj = get_project(project_id)
+    root = (proj or {}).get("local_path") or (proj or {}).get("clone_path")
+    if not root or not (Path(root) / ".git").exists():
+        return False
+    subprocess.run(
+        ["git", "revert", "--no-edit", sha],
+        cwd=root,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return True
+
+
+# ---------------------------------------------------------------------------
+# Orchestration
+# ---------------------------------------------------------------------------
+
+
+def revert_round(round_id: str, *, force: bool = False, revert_git: bool = True) -> RevertResult:
+    """Orchestrate a full rollback of an applied evolution round.
+
+    Steps:
+    1. Validate round exists and is applied.
+    2. Check for a non-empty apply journal.
+    3. Detect conflicts with later applied rounds (skip when force=True).
+    4. Reverse the DB journal entries.
+    5. Optionally revert the git commit.
+    6. Mark the round as reverted.
+    """
+    row = evo_repo.get_round(round_id)
+    if row is None:
+        return RevertResult(status="failed", error="round not found")
+
+    if row.get("status") != "applied":
+        return RevertResult(
+            status="failed",
+            error=f"status is {row.get('status')}, not applied",
+        )
+
+    journal = row.get("apply_journal")
+    if not journal:
+        return RevertResult(
+            status="failed",
+            error="no apply journal (round predates rollback support)",
+        )
+
+    conflicts = _later_applied_conflicts(row)
+    if conflicts and not force:
+        return RevertResult(
+            status="conflict",
+            conflicts=conflicts,
+            error="later applied round(s) touched the same assets",
+        )
+
+    n, failures = reverse_apply_journal(row["project_id"], journal)
+    if failures:
+        evo_repo.set_revert_error(round_id, f"partial reversal: {len(failures)} op(s) failed")
+        return RevertResult(
+            status="failed",
+            reversed_count=n,
+            error="partial DB reversal — see revert_error",
+        )
+
+    git_done = False
+    sha = row.get("git_commit_sha")
+    if revert_git and sha:
+        try:
+            git_done = _git_revert(row["project_id"], sha)
+        except Exception as exc:
+            evo_repo.set_revert_error(round_id, f"db reversed but git revert failed: {exc}")
+            return RevertResult(
+                status="failed",
+                reversed_count=n,
+                git_reverted=False,
+                error="git revert failed (db reversed; see revert_error)",
+            )
+
+    evo_repo.mark_reverted(round_id)
+    return RevertResult(status="reverted", reversed_count=n, git_reverted=git_done)

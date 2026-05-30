@@ -195,3 +195,125 @@ def test_reverse_update_missing_before_is_failure(isolated_db):
     journal = [{"kind": "rule", "op": "update", "asset_id": "5", "before": None}]
     n, failures = reverse_apply_journal("pany", journal)
     assert n == 0 and len(failures) == 1 and failures[0]["op"] == "update"
+
+
+def test_revert_round_refuses_non_applied(isolated_db):
+    from app.services.harness_evolution_rollback import revert_round
+
+    rid = _applied_round("prr")
+    evo.mark_reverted(rid)
+    result = revert_round(rid, revert_git=False)
+    assert result.status == "failed"
+
+
+def test_revert_round_refuses_missing_journal(isolated_db):
+    from app.services.harness_evolution_rollback import revert_round
+
+    # _applied_round with empty journal []
+    rid = _applied_round("prm", journal=[])
+    result = revert_round(rid, revert_git=False)
+    assert result.status == "failed"
+    assert "journal" in result.error.lower()
+
+
+def test_revert_round_reverts_applied(isolated_db):
+    from app.database import get_connection
+    from app.db import rules as rules_repo
+    from app.db import project_forge_bindings as bindings_repo
+    from app.services.harness_evolution_rollback import revert_round
+
+    with get_connection() as conn:
+        conn.execute("INSERT INTO projects (id, name, status) VALUES ('prv', 'P', 'active')")
+        conn.commit()
+    asset = rules_repo.create_rule(name="c", rule_type="validation", description="x", project_id="prv")
+    bindings_repo.add_binding("prv", "rule", str(asset))
+    round_id = evo.start_round(
+        project_id="prv",
+        input_window_since=None,
+        input_window_until=None,
+        input_execution_count=0,
+        input_forge={},
+        scratch_dir="/tmp/x",
+    )
+    evo.mark_running(round_id)
+    journal = [{"kind": "rule", "op": "create", "asset_id": str(asset), "before": None}]
+    evo.mark_applied(
+        round_id,
+        output_patch={"entries": []},
+        applied_asset_ids=[{"kind": "rule", "op": "create", "asset_id": str(asset)}],
+        notes="",
+        git_commit_sha=None,
+        apply_journal_json=json.dumps(journal),
+    )
+    result = revert_round(round_id, revert_git=False)
+    assert result.status == "reverted"
+    assert rules_repo.get_rule(int(asset)) is None
+    assert evo.get_round(round_id)["status"] == "reverted"
+
+
+def test_revert_round_conflict_with_later_round(isolated_db):
+    from app.database import get_connection
+    from app.services.harness_evolution_rollback import revert_round
+
+    with get_connection() as conn:
+        conn.execute("INSERT INTO projects (id, name, status) VALUES ('prx', 'P', 'active')")
+        conn.commit()
+    j = [
+        {
+            "kind": "rule",
+            "op": "update",
+            "asset_id": "7",
+            "before": {
+                "name": "r",
+                "rule_type": "validation",
+                "description": "o",
+                "action": "a",
+                "enabled": 1,
+            },
+        }
+    ]
+    # round A (older), round B (newer) both touch asset 7. Backdate A so B sorts later.
+    a = evo.start_round(
+        project_id="prx",
+        input_window_since=None,
+        input_window_until=None,
+        input_execution_count=0,
+        input_forge={},
+        scratch_dir="/t",
+    )
+    evo.mark_running(a)
+    evo.mark_applied(
+        a,
+        output_patch={"entries": []},
+        applied_asset_ids=[],
+        notes="",
+        git_commit_sha=None,
+        apply_journal_json=json.dumps(j),
+    )
+    with get_connection() as conn:
+        conn.execute(
+            "UPDATE harness_evolution_rounds SET started_at='2000-01-01T00:00:00' WHERE id=?", (a,)
+        )
+        conn.commit()
+    b = evo.start_round(
+        project_id="prx",
+        input_window_since=None,
+        input_window_until=None,
+        input_execution_count=0,
+        input_forge={},
+        scratch_dir="/t",
+    )
+    evo.mark_running(b)
+    evo.mark_applied(
+        b,
+        output_patch={"entries": []},
+        applied_asset_ids=[],
+        notes="",
+        git_commit_sha=None,
+        apply_journal_json=json.dumps(j),
+    )
+    result = revert_round(a, revert_git=False)  # reverting A: B is a later applied round touching asset 7
+    assert result.status == "conflict"
+    assert any(str(c.get("asset_id")) == "7" for c in result.conflicts)
+    forced = revert_round(a, revert_git=False, force=True)
+    assert forced.status == "reverted"
