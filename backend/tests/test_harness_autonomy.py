@@ -255,3 +255,74 @@ def test_blast_radius_cooldown_rate_limit(monkeypatch):
         ).eligible
         is False
     )
+
+
+# ---------------------------------------------------------------------------
+# Task 5: process_project_autonomy poller
+# ---------------------------------------------------------------------------
+from unittest.mock import patch
+
+from app.models.harness_evolution import CheckResult, EvalVerdict
+
+
+def test_poller_auto_applies_eligible(isolated_db, monkeypatch):
+    monkeypatch.setenv("AGENTED_AUTONOMY", "1")
+    from app.db import project_autonomy_config as cfg
+    from app.services.harness_autonomy import process_project_autonomy
+
+    _awaiting_round(
+        "ppa",
+        verdict=EvalVerdict(
+            passed=True, score=0.95, per_check=[CheckResult(name="s", passed=True)]
+        ),
+        entries=1,
+    )
+    cfg.upsert_policy("ppa", AutonomyPolicy(enabled=True, allowed_kinds=["rule"]))
+    with patch("app.services.harness_autonomy.apply_dry_run_round") as mock_apply:
+        process_project_autonomy("ppa")
+    assert mock_apply.called
+    _, kwargs = mock_apply.call_args
+    assert kwargs.get("auto_applied") is True
+    assert kwargs.get("auto_apply_reason") is not None
+
+
+def test_poller_blocks_low_score(isolated_db, monkeypatch):
+    monkeypatch.setenv("AGENTED_AUTONOMY", "1")
+    from app.db import harness_evolution as evo
+    from app.db import project_autonomy_config as cfg
+    from app.services.harness_autonomy import process_project_autonomy
+
+    rid = _awaiting_round(
+        "ppb",
+        verdict=EvalVerdict(passed=True, score=0.4, per_check=[CheckResult(name="s", passed=True)]),
+        entries=1,
+    )
+    cfg.upsert_policy("ppb", AutonomyPolicy(enabled=True, allowed_kinds=["rule"]))
+    with patch("app.services.harness_autonomy.apply_dry_run_round") as mock_apply:
+        process_project_autonomy("ppb")
+    assert not mock_apply.called
+    assert evo.get_round(rid)["auto_apply_blocked_reason"] is not None
+
+
+def test_poller_skips_disabled(isolated_db, monkeypatch):
+    monkeypatch.setenv("AGENTED_AUTONOMY", "1")
+    from app.db import project_autonomy_config as cfg
+    from app.services.harness_autonomy import process_project_autonomy
+
+    _awaiting_round("ppd", verdict=EvalVerdict(passed=True, score=0.95), entries=1)
+    cfg.upsert_policy("ppd", AutonomyPolicy(enabled=False))
+    with patch("app.services.harness_autonomy.apply_dry_run_round") as mock_apply:
+        process_project_autonomy("ppd")
+    assert not mock_apply.called
+
+
+def test_poller_skips_empty_patch(isolated_db, monkeypatch):
+    monkeypatch.setenv("AGENTED_AUTONOMY", "1")
+    from app.db import project_autonomy_config as cfg
+    from app.services.harness_autonomy import process_project_autonomy
+
+    _awaiting_round("ppe", verdict=EvalVerdict(passed=True, score=0.99), entries=0)
+    cfg.upsert_policy("ppe", AutonomyPolicy(enabled=True, allowed_kinds=["rule"]))
+    with patch("app.services.harness_autonomy.apply_dry_run_round") as mock_apply:
+        process_project_autonomy("ppe")
+    assert not mock_apply.called  # 0-entry round must NOT auto-apply

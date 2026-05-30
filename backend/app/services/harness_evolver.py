@@ -1536,7 +1536,12 @@ def run_evolution_round(
         )
 
 
-def apply_dry_run_round(round_id: str) -> EvolutionResult:
+def apply_dry_run_round(
+    round_id: str,
+    *,
+    auto_applied: bool = False,
+    auto_apply_reason: Optional[dict] = None,
+) -> EvolutionResult:
     row = evolution_repo.get_round(round_id)
     if row is None:
         return EvolutionResult(
@@ -1584,6 +1589,8 @@ def apply_dry_run_round(round_id: str) -> EvolutionResult:
         applied_asset_ids=applied,
         notes=row.get("notes"),
         apply_journal_json=json.dumps(journal, default=str),
+        auto_applied=auto_applied,
+        auto_apply_reason=auto_apply_reason,
     )
     return EvolutionResult(
         round_id=round_id,

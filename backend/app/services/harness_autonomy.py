@@ -2,12 +2,21 @@
 
 from __future__ import annotations
 
+import datetime as _dt
 import logging
 import os
+from typing import Optional  # noqa: F401 — used by harness_evolver import chain
 
+from app.db import harness_evolution as evo_repo
+from app.db import project_autonomy_config as autonomy_cfg
 from app.models.autonomy_policy import AutonomyDecision, AutonomyPolicy, GateResult
+from app.services.harness_evolver import apply_dry_run_round
 
 logger = logging.getLogger(__name__)
+
+
+def _utc_minus(**kw) -> str:
+    return (_dt.datetime.utcnow() - _dt.timedelta(**kw)).strftime("%Y-%m-%dT%H:%M:%S")
 
 
 def _kill_switch_on() -> bool:
@@ -105,3 +114,49 @@ def autonomous_apply_eligible(
         else "; ".join(f"{g.name}:{g.detail or 'fail'}" for g in gates if not g.passed)
     )
     return AutonomyDecision(eligible=eligible, gates=gates, reason=reason)
+
+
+def process_project_autonomy(project_id: str) -> list[dict]:
+    """Evaluate + auto-apply eligible awaiting_approval rounds for one project."""
+    policy = autonomy_cfg.get_policy(project_id)
+    if policy is None or not policy.enabled:
+        return []
+    results: list[dict] = []
+    day_cut = _utc_minus(days=1)
+    cooldown_cut = _utc_minus(seconds=policy.cooldown_seconds)
+    for rnd in evo_repo.list_for_project(project_id, limit=50):
+        if rnd.get("status") != "awaiting_approval":
+            continue
+        if rnd.get("auto_applied") == 1 or rnd.get("auto_apply_blocked_reason"):
+            continue
+        if not rnd.get("eval_verdict"):
+            continue
+        entries = ((rnd.get("output_patch") or {}).get("entries")) or []
+        if not entries:  # skip 0-entry (no-op) rounds
+            continue
+        recent = evo_repo.count_recent_auto_applies(project_id, since=day_cut)
+        within_cooldown = evo_repo.count_recent_auto_applies(project_id, since=cooldown_cut) > 0
+        decision = autonomous_apply_eligible(
+            rnd,
+            policy,
+            recent_auto_applies=recent,
+            recent_within_cooldown=within_cooldown,
+        )
+        reason = {
+            "eligible": decision.eligible,
+            "gates": [g.model_dump() for g in decision.gates],
+            "reason": decision.reason,
+            "score": float((rnd.get("eval_verdict") or {}).get("score", 0.0)),
+        }
+        if decision.eligible:
+            try:
+                apply_dry_run_round(rnd["id"], auto_applied=True, auto_apply_reason=reason)
+                results.append({"round_id": rnd["id"], "action": "auto_applied"})
+            except Exception:  # noqa: BLE001
+                logger.warning("autonomy: auto-apply failed for %s", rnd["id"], exc_info=True)
+                evo_repo.mark_auto_apply_blocked(rnd["id"], {**reason, "error": "apply failed"})
+                results.append({"round_id": rnd["id"], "action": "apply_error"})
+        else:
+            evo_repo.mark_auto_apply_blocked(rnd["id"], reason)
+            results.append({"round_id": rnd["id"], "action": "blocked", "reason": decision.reason})
+    return results
