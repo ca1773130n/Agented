@@ -7,13 +7,10 @@ EvalVerdict. See docs/superpowers/specs/2026-05-29-life-harness-phaseC-trust-des
 from __future__ import annotations
 
 import json
-import logging
 from pathlib import Path
 
 from app.models.harness_evolution import CheckResult
 from app.services.forge_materialization_service import MaterializationResult
-
-logger = logging.getLogger(__name__)
 
 
 def _static_checks(workspace: Path, result: MaterializationResult) -> list[CheckResult]:
@@ -22,6 +19,13 @@ def _static_checks(workspace: Path, result: MaterializationResult) -> list[Check
     for w in result.written:
         target = workspace / w.rel_path
         if not target.exists():
+            checks.append(
+                CheckResult(
+                    name=f"exists:{w.rel_path}",
+                    passed=False,
+                    detail="expected materialized file is missing",
+                )
+            )
             continue
         text = target.read_text(encoding="utf-8", errors="replace")
         if w.rel_path.endswith(".json"):
@@ -35,7 +39,11 @@ def _static_checks(workspace: Path, result: MaterializationResult) -> list[Check
                     )
                 )
         elif w.rel_path.endswith(".md"):
-            ok = text.lstrip().startswith("---") and text.count("---") >= 2
+            lines = [ln.strip() for ln in text.splitlines()]
+            non_empty = [ln for ln in lines if ln]
+            opens = bool(non_empty) and non_empty[0] == "---"
+            closes = opens and any(ln == "---" for ln in lines[lines.index("---") + 1 :])
+            ok = opens and closes
             checks.append(
                 CheckResult(
                     name=f"frontmatter:{w.rel_path}",
