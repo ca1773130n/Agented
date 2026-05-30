@@ -130,3 +130,128 @@ def test_count_recent_auto_applies(isolated_db):
     assert evo.count_recent_auto_applies("prc", since="2000-01-01T00:00:00") >= 1
     # a far-future 'since' excludes it
     assert evo.count_recent_auto_applies("prc", since="2999-01-01T00:00:00") == 0
+
+
+# ---------------------------------------------------------------------------
+# Task 4: autonomous_apply_eligible
+# ---------------------------------------------------------------------------
+from app.services.harness_autonomy import autonomous_apply_eligible
+
+
+def _round(entries, score=0.9, passed=True):
+    return {
+        "id": "r",
+        "project_id": "p",
+        "status": "awaiting_approval",
+        "output_patch": {"entries": entries},
+        "eval_verdict": {"passed": passed, "score": score, "per_check": []},
+    }
+
+
+def test_eligible_when_all_gates_pass(monkeypatch):
+    monkeypatch.setenv("AGENTED_AUTONOMY", "1")
+    policy = AutonomyPolicy(enabled=True, allowed_kinds=["rule"], confidence_threshold=0.85)
+    rnd = _round([{"op": "create", "kind": "rule"}])
+    d = autonomous_apply_eligible(rnd, policy, recent_auto_applies=0, recent_within_cooldown=False)
+    assert d.eligible is True
+
+
+def test_low_score_blocks(monkeypatch):
+    monkeypatch.setenv("AGENTED_AUTONOMY", "1")
+    policy = AutonomyPolicy(enabled=True, allowed_kinds=["rule"])
+    d = autonomous_apply_eligible(
+        _round([{"op": "create", "kind": "rule"}], score=0.4),
+        policy,
+        recent_auto_applies=0,
+        recent_within_cooldown=False,
+    )
+    assert d.eligible is False
+    assert any(g.name == "confidence" and not g.passed for g in d.gates)
+
+
+def test_failed_verdict_blocks(monkeypatch):
+    monkeypatch.setenv("AGENTED_AUTONOMY", "1")
+    policy = AutonomyPolicy(enabled=True, allowed_kinds=["rule"])
+    d = autonomous_apply_eligible(
+        _round([{"op": "create", "kind": "rule"}], score=0.99, passed=False),
+        policy,
+        recent_auto_applies=0,
+        recent_within_cooldown=False,
+    )
+    assert d.eligible is False
+    assert any(g.name == "eval_present" and not g.passed for g in d.gates)
+
+
+def test_kill_switch_blocks(monkeypatch):
+    monkeypatch.setenv("AGENTED_AUTONOMY", "0")
+    policy = AutonomyPolicy(enabled=True, allowed_kinds=["rule"])
+    d = autonomous_apply_eligible(
+        _round([{"op": "create", "kind": "rule"}]),
+        policy,
+        recent_auto_applies=0,
+        recent_within_cooldown=False,
+    )
+    assert d.eligible is False and any(g.name == "kill_switch" and not g.passed for g in d.gates)
+
+
+def test_disabled_policy_blocks(monkeypatch):
+    monkeypatch.setenv("AGENTED_AUTONOMY", "1")
+    policy = AutonomyPolicy(enabled=False, allowed_kinds=["rule"])
+    d = autonomous_apply_eligible(
+        _round([{"op": "create", "kind": "rule"}]),
+        policy,
+        recent_auto_applies=0,
+        recent_within_cooldown=False,
+    )
+    assert d.eligible is False and any(g.name == "enabled" and not g.passed for g in d.gates)
+
+
+def test_delete_blocked_by_default(monkeypatch):
+    monkeypatch.setenv("AGENTED_AUTONOMY", "1")
+    policy = AutonomyPolicy(enabled=True, allowed_kinds=["rule"], block_deletes=True)
+    d = autonomous_apply_eligible(
+        _round([{"op": "delete", "kind": "rule"}]),
+        policy,
+        recent_auto_applies=0,
+        recent_within_cooldown=False,
+    )
+    assert d.eligible is False and any(g.name == "block_deletes" and not g.passed for g in d.gates)
+
+
+def test_disallowed_kind_blocks(monkeypatch):
+    monkeypatch.setenv("AGENTED_AUTONOMY", "1")
+    policy = AutonomyPolicy(enabled=True, allowed_kinds=["rule"])
+    d = autonomous_apply_eligible(
+        _round([{"op": "create", "kind": "hook"}]),
+        policy,
+        recent_auto_applies=0,
+        recent_within_cooldown=False,
+    )
+    assert d.eligible is False and any(g.name == "allowed_kinds" and not g.passed for g in d.gates)
+
+
+def test_blast_radius_cooldown_rate_limit(monkeypatch):
+    monkeypatch.setenv("AGENTED_AUTONOMY", "1")
+    policy = AutonomyPolicy(
+        enabled=True, allowed_kinds=["rule"], max_ops_per_round=2, rate_limit_per_day=3
+    )
+    big = _round([{"op": "create", "kind": "rule"}] * 5)
+    assert (
+        autonomous_apply_eligible(
+            big, policy, recent_auto_applies=0, recent_within_cooldown=False
+        ).eligible
+        is False
+    )
+    ok = _round([{"op": "create", "kind": "rule"}])
+    assert (
+        autonomous_apply_eligible(
+            ok, policy, recent_auto_applies=3, recent_within_cooldown=False
+        ).eligible
+        is False
+    )
+    assert (
+        autonomous_apply_eligible(
+            ok, policy, recent_auto_applies=0, recent_within_cooldown=True
+        ).eligible
+        is False
+    )
