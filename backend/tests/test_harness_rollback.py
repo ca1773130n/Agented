@@ -376,3 +376,33 @@ def test_revert_round_retry_after_db_reversed_is_idempotent(isolated_db):
         r2.status == "reverted"
     )  # idempotent: asset already gone, delete-reversal is a no-op success
     assert r2.error == ""
+
+
+def test_reverse_delete_mcp_idempotent_no_duplicate(isolated_db):
+    from app.database import get_connection
+    from app.db import mcp_servers as mcp_repo
+    from app.services.harness_evolution_rollback import reverse_apply_journal
+
+    with get_connection() as conn:
+        conn.execute("INSERT INTO projects (id, name, status) VALUES ('pmcp', 'P', 'active')")
+        conn.commit()
+    journal = [
+        {
+            "kind": "mcp_server",
+            "op": "delete",
+            "asset_id": "old",
+            "before": {
+                "name": "ctxsrv",
+                "description": "d",
+                "server_type": "stdio",
+                "command": "ctx",
+                "args": None,
+                "env_json": None,
+                "url": None,
+            },
+        }
+    ]
+    reverse_apply_journal("pmcp", journal)
+    reverse_apply_journal("pmcp", journal)  # retry must NOT duplicate
+    servers = [s for s in mcp_repo.get_all_mcp_servers() if s.get("name") == "ctxsrv"]
+    assert len(servers) == 1

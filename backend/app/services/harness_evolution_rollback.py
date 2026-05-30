@@ -39,9 +39,13 @@ def _already_restored(project_id: str, kind: str, name: str) -> bool:
             from app.db.skills import get_user_skill_by_name
 
             return get_user_skill_by_name(name) is not None
+        if kind == "mcp_server":
+            from app.services.harness_evolver import _find_mcp_server_id_by_name
+
+            return _find_mcp_server_id_by_name(name) is not None
     except Exception:
         return False
-    return False  # mcp_server: best-effort, no idempotence guard
+    return False
 
 
 def reverse_apply_journal(project_id: str, journal: list[dict]) -> tuple[int, list[dict]]:
