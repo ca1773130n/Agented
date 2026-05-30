@@ -28,8 +28,10 @@ def create_harness_evolution_tables(conn) -> None:
             finished_at              TEXT,
             status                   TEXT NOT NULL DEFAULT 'pending'
                                      CHECK (status IN (
-                                         'pending', 'running', 'awaiting_approval',
-                                         'applied', 'failed', 'aborted'
+                                         'pending', 'running', 'evaluating',
+                                         'awaiting_approval', 'applied',
+                                         'eval_failed', 'failed', 'aborted',
+                                         'reverted'
                                      )),
             input_window_since       TEXT,
             input_window_until       TEXT,
@@ -41,7 +43,8 @@ def create_harness_evolution_tables(conn) -> None:
             notes                    TEXT,
             scratch_dir              TEXT,
             materialization_result_json TEXT,
-            git_commit_sha           TEXT
+            git_commit_sha           TEXT,
+            eval_verdict_json        TEXT
         )
         """
     )

@@ -50,6 +50,27 @@ def mark_running(round_id: str) -> None:
         conn.commit()
 
 
+_ROUND_COLUMNS_IN_ORDER = (
+    "id",
+    "project_id",
+    "started_at",
+    "finished_at",
+    "status",
+    "input_window_since",
+    "input_window_until",
+    "input_execution_count",
+    "input_forge_json",
+    "output_patch_json",
+    "applied_asset_ids_json",
+    "error_message",
+    "notes",
+    "scratch_dir",
+    "materialization_result_json",
+    "git_commit_sha",
+    "eval_verdict_json",
+)
+
+
 def _ensure_materialization_columns(conn) -> None:
     cols = {r["name"] for r in conn.execute("PRAGMA table_info(harness_evolution_rounds)")}
     if "materialization_result_json" not in cols:
@@ -58,6 +79,31 @@ def _ensure_materialization_columns(conn) -> None:
         )
     if "git_commit_sha" not in cols:
         conn.execute("ALTER TABLE harness_evolution_rounds ADD COLUMN git_commit_sha TEXT")
+
+
+def _check_allows_evaluating(conn) -> bool:
+    row = conn.execute(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='harness_evolution_rounds'"
+    ).fetchone()
+    return bool(row) and "evaluating" in (row["sql"] or "")
+
+
+def _ensure_eval_columns(conn) -> None:
+    _ensure_materialization_columns(conn)
+    cols = {r["name"] for r in conn.execute("PRAGMA table_info(harness_evolution_rounds)")}
+    if "eval_verdict_json" not in cols:
+        conn.execute("ALTER TABLE harness_evolution_rounds ADD COLUMN eval_verdict_json TEXT")
+    if _check_allows_evaluating(conn):
+        return
+    from app.db.schema._harness_evolution import create_harness_evolution_tables
+
+    cols_now = [r["name"] for r in conn.execute("PRAGMA table_info(harness_evolution_rounds)")]
+    shared = [c for c in _ROUND_COLUMNS_IN_ORDER if c in cols_now]
+    collist = ", ".join(shared)
+    conn.execute("ALTER TABLE harness_evolution_rounds RENAME TO _her_old")
+    create_harness_evolution_tables(conn)
+    conn.execute(f"INSERT INTO harness_evolution_rounds ({collist}) SELECT {collist} FROM _her_old")
+    conn.execute("DROP TABLE _her_old")
 
 
 def mark_applied(
@@ -153,6 +199,40 @@ def mark_aborted(round_id: str, *, reason: Optional[str] = None) -> None:
         conn.commit()
 
 
+def mark_evaluating(round_id: str) -> None:
+    with get_connection() as conn:
+        _ensure_eval_columns(conn)
+        conn.execute(
+            "UPDATE harness_evolution_rounds SET status = 'evaluating' "
+            "WHERE id = ? AND status = 'running'",
+            (round_id,),
+        )
+        conn.commit()
+
+
+def store_eval_verdict(round_id: str, verdict) -> None:
+    with get_connection() as conn:
+        _ensure_eval_columns(conn)
+        conn.execute(
+            "UPDATE harness_evolution_rounds SET eval_verdict_json = ? WHERE id = ?",
+            (verdict.model_dump_json(), round_id),
+        )
+        conn.commit()
+
+
+def mark_eval_failed(round_id: str, *, verdict) -> None:
+    with get_connection() as conn:
+        _ensure_eval_columns(conn)
+        conn.execute(
+            """UPDATE harness_evolution_rounds SET
+                   status = 'eval_failed', finished_at = datetime('now'),
+                   eval_verdict_json = ?
+               WHERE id = ?""",
+            (verdict.model_dump_json(), round_id),
+        )
+        conn.commit()
+
+
 def get_round(round_id: str) -> Optional[dict]:
     with get_connection() as conn:
         row = conn.execute(
@@ -193,6 +273,7 @@ def _row_to_dict(row) -> dict:
         ("input_forge_json", "{}"),
         ("output_patch_json", "null"),
         ("applied_asset_ids_json", "[]"),
+        ("eval_verdict_json", "null"),
     ):
         out_key = key.replace("_json", "")
         try:
