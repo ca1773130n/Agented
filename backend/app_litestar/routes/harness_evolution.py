@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
-from litestar import Router, get, post
+from litestar import Router, get, post, put
 from litestar.exceptions import NotFoundException
 
 from app.db import harness_evolution as evolution_repo
@@ -112,6 +112,32 @@ def revert_round_route(
     return {"round_id": round_id, **result.model_dump()}
 
 
+@get("/projects/{project_id:str}/autonomy", sync_to_thread=False)
+def get_autonomy_config(project_id: str) -> dict[str, Any]:
+    from app.db.project_autonomy_config import get_policy
+    from app.models.autonomy_policy import AutonomyPolicy
+
+    p = get_policy(project_id)
+    return {
+        "project_id": project_id,
+        "policy": (p or AutonomyPolicy()).model_dump(),
+        "configured": p is not None,
+    }
+
+
+@put("/projects/{project_id:str}/autonomy", sync_to_thread=True)
+def set_autonomy_config(
+    project_id: str,
+    data: Optional[dict[str, Any]] = None,
+) -> dict[str, Any]:
+    from app.db.project_autonomy_config import upsert_policy
+    from app.models.autonomy_policy import AutonomyPolicy
+
+    policy = AutonomyPolicy.model_validate((data or {}).get("policy") or {})
+    upsert_policy(project_id, policy)
+    return {"project_id": project_id, "policy": policy.model_dump()}
+
+
 def _result_payload(result) -> dict[str, Any]:
     return {
         "round_id": result.round_id,
@@ -134,5 +160,7 @@ harness_evolution_router = Router(
         approve_round,
         abort_round,
         revert_round_route,
+        get_autonomy_config,
+        set_autonomy_config,
     ],
 )

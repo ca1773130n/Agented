@@ -34,9 +34,7 @@ def _seed_system_agent() -> None:
     from app.db.connection import get_connection
 
     with get_connection() as conn:
-        existing = conn.execute(
-            "SELECT id FROM super_agents WHERE id = 'sa-system'"
-        ).fetchone()
+        existing = conn.execute("SELECT id FROM super_agents WHERE id = 'sa-system'").fetchone()
         if existing:
             return
         conn.execute(
@@ -183,6 +181,25 @@ def refresh_stale_model_caches_job() -> None:
         logger.warning("Model cache refresh job failed: %s", e, exc_info=True)
 
 
+def autonomous_apply_job() -> None:
+    """Periodic: evaluate + auto-apply eligible rounds for autonomy-enabled projects."""
+    try:
+        from app.db import project_autonomy_config as cfg
+        from app.services.harness_autonomy import process_project_autonomy
+
+        for row in cfg.list_enabled():
+            try:
+                process_project_autonomy(row["project_id"])
+            except Exception:
+                logger.warning(
+                    "autonomy job: project %s failed",
+                    row.get("project_id"),
+                    exc_info=True,
+                )
+    except Exception:
+        logger.warning("autonomous_apply_job failed", exc_info=True)
+
+
 def _setup_scheduler(app: Any) -> None:
     from app.services.scheduler_service import SchedulerService
 
@@ -241,6 +258,8 @@ def _setup_scheduler(app: Any) -> None:
                 {"hours": 24},
                 "model_cache_refresh",
             ),
+            # Phase D: periodic autonomy poller — auto-apply eligible rounds.
+            (autonomous_apply_job, {"minutes": 5}, "harness_autonomous_apply"),
         ]
         for func, interval_kwargs, job_id in periodic_jobs:
             SchedulerService._scheduler.add_job(
@@ -304,9 +323,7 @@ def _register_cleanup_handlers() -> None:
         CLIProxyManager.kill_orphans()
         if CLIProxyManager.install_if_needed():
             if CLIProxyManager.start():
-                logger.info(
-                    "CLIProxyAPI global proxy started on port %d", CLIProxyManager._port
-                )
+                logger.info("CLIProxyAPI global proxy started on port %d", CLIProxyManager._port)
             else:
                 logger.info("CLIProxyAPI not started (no config or not ready)")
             atexit.register(CLIProxyManager.stop)
@@ -328,6 +345,7 @@ def on_startup(app: Any) -> None:
         # only, no DB or subprocess work.
         try:
             from .rate_limit_guard import eager_register_from_app
+
             eager_register_from_app(app)
         except Exception as exc:  # noqa: BLE001
             logger.warning("rate-limit eager registration skipped: %s", exc)
@@ -367,9 +385,7 @@ def on_startup(app: Any) -> None:
 
         register_session_handler(on_session_complete)
     except Exception:
-        logger.warning(
-            "harness_failure_annotator registration failed", exc_info=True
-        )
+        logger.warning("harness_failure_annotator registration failed", exc_info=True)
     # Takeaway extractor — the positive-learning counterpart to the
     # annotator. Fires on the same session-completion channel. Separate
     # try/except so an extractor failure doesn't take out the annotator.
@@ -381,9 +397,7 @@ def on_startup(app: Any) -> None:
 
         register_session_handler(on_takeaway_extract)
     except Exception:
-        logger.warning(
-            "harness_takeaway_extractor registration failed", exc_info=True
-        )
+        logger.warning("harness_takeaway_extractor registration failed", exc_info=True)
     # Tesserae integration — opt-in per project via
     # ``projects.tesserae_project_root``. Fires on every completed
     # session; cheap no-op for projects without the column set.
@@ -397,9 +411,7 @@ def on_startup(app: Any) -> None:
 
         register_session_handler(on_tesserae_export)
     except Exception:
-        logger.warning(
-            "tesserae_integration registration failed", exc_info=True
-        )
+        logger.warning("tesserae_integration registration failed", exc_info=True)
     # Life-Harness: sweep stale /tmp/agented-claude-overlay-* dirs left
     # behind by crashes / SIGKILLs where the per-session finally block
     # didn't run. Best-effort; never blocks startup.
@@ -419,6 +431,7 @@ def on_startup(app: Any) -> None:
     # the right limit (instead of the more permissive coarse default).
     try:
         from .rate_limit_guard import eager_register_from_app
+
         eager_register_from_app(app)
     except Exception as exc:  # noqa: BLE001
         logger.warning("rate-limit eager registration skipped: %s", exc)

@@ -255,6 +255,11 @@ onMounted(loadData);
               class="round__pill"
               :style="{ background: EVOLUTION_STATUS_COLOR_VAR[r.status] }"
             >{{ EVOLUTION_STATUS_LABEL[r.status] }}</span>
+            <span
+              v-if="r.status === 'applied' && r.auto_applied"
+              class="round__auto-badge"
+              data-testid="auto-applied-badge"
+            >Auto-applied{{ r.auto_apply_reason?.score != null ? ` · ${r.auto_apply_reason.score}` : '' }}</span>
             <code class="round__project">{{ r.project_id }}</code>
             <span class="round__when">{{ r.started_at }}</span>
           </div>
@@ -384,6 +389,7 @@ onMounted(loadData);
 
 .round__head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .round__pill { font-size: 10px; font-weight: 700; color: white; padding: 2px 6px; border-radius: 4px; letter-spacing: 0.04em; }
+.round__auto-badge { font-size: 10px; font-weight: 600; color: var(--accent-cyan, #06b6d4); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--accent-cyan, #06b6d4); letter-spacing: 0.04em; }
 .round__project { font-family: var(--font-mono, monospace); font-size: 12px; color: var(--text-secondary); }
 .round__when { font-size: 11px; color: var(--text-tertiary); margin-left: auto; }
 .round__body { display: flex; gap: 6px; font-size: 12px; color: var(--text-secondary); }

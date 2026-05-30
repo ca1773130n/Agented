@@ -55,6 +55,9 @@ export interface EvolutionRound {
   error_message: string | null;
   notes: string | null;
   scratch_dir: string | null;
+  auto_applied?: number;
+  auto_apply_reason?: Record<string, unknown> | null;
+  auto_apply_blocked_reason?: Record<string, unknown> | null;
 }
 
 export interface EvolutionRunOptions {

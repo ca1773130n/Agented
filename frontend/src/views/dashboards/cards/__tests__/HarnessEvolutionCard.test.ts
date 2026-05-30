@@ -222,4 +222,31 @@ describe('HarnessEvolutionCard (project-scoped)', () => {
         .attributes('disabled'),
     ).toBeDefined();
   });
+
+  it('renders auto-applied badge for an applied round with auto_applied set', async () => {
+    listAll.mockResolvedValue({
+      rounds: [
+        {
+          ..._round({ id: 'her-auto', status: 'applied' }),
+          auto_applied: 1,
+          auto_apply_reason: { score: 0.95 },
+        },
+      ],
+    });
+    const w = mount(HarnessEvolutionCard);
+    await flushPromises();
+    const badge = w.find('[data-testid="auto-applied-badge"]');
+    expect(badge.exists()).toBe(true);
+    expect(badge.text()).toContain('Auto-applied');
+    expect(badge.text()).toContain('0.95');
+  });
+
+  it('does not render auto-applied badge for a plain applied round', async () => {
+    listAll.mockResolvedValue({
+      rounds: [_round({ id: 'her-plain', status: 'applied' })],
+    });
+    const w = mount(HarnessEvolutionCard);
+    await flushPromises();
+    expect(w.find('[data-testid="auto-applied-badge"]').exists()).toBe(false);
+  });
 });
