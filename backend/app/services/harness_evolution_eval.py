@@ -153,6 +153,7 @@ def _replay_checks(
 
 def _verdict(checks: list[CheckResult]) -> EvalVerdict:
     if not checks:
+        logger.warning("eval verdict: no checks ran (empty patch/sample set) — passing by default")
         return EvalVerdict(passed=True, score=1.0, per_check=[], notes="no checks")
     failed = [c for c in checks if not c.passed]
     blocking = [
@@ -162,7 +163,10 @@ def _verdict(checks: list[CheckResult]) -> EvalVerdict:
     ]
     blocking += [c for c in failed if not c.name.startswith("replay")]
     passed = not blocking
-    score = sum(c.confidence if c.passed else 0.0 for c in checks) / len(checks)
+    raw = sum(c.confidence if c.passed else 0.0 for c in checks) / len(checks)
+    # Keep score consistent with `passed`: a failed verdict must not report a
+    # score at/above the trust floor (Phase D gates on score).
+    score = raw if passed else min(raw, _REPLAY_CONFIDENCE_FLOOR - 0.01)
     return EvalVerdict(passed=passed, score=round(score, 3), per_check=checks)
 
 

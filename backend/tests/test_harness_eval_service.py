@@ -128,3 +128,24 @@ def test_evaluate_patch_static_fail_skips_replay(tmp_path):
                                     samples=_samples(), patched_summary="x", provider_kind="anthropic")
     assert verdict.passed is False
     assert judge_called["n"] == 0   # static failure short-circuits replay
+
+
+def test_failed_verdict_score_below_floor():
+    """A failed verdict must report a score below the trust floor (consistency)."""
+    from app.models.harness_evolution import CheckResult
+    checks = [
+        CheckResult(name="frontmatter:x", passed=False, detail="bad", confidence=1.0),
+        CheckResult(name="replay:y", passed=True, detail="ok", confidence=0.95),
+    ]
+    v = ev._verdict(checks)
+    assert v.passed is False
+    assert v.score < 0.5
+
+
+def test_passed_verdict_score_reflects_confidence():
+    from app.models.harness_evolution import CheckResult
+    checks = [CheckResult(name="frontmatter:x", passed=True, confidence=0.9),
+              CheckResult(name="replay:y", passed=True, confidence=0.8)]
+    v = ev._verdict(checks)
+    assert v.passed is True
+    assert v.score > 0.5
