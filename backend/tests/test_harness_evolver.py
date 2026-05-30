@@ -8,12 +8,12 @@ from unittest.mock import patch
 
 import pytest
 
-from app.db import harness_evolution as evolution_repo
+from app.db import commands as commands_repo
 from app.db import hooks as hooks_repo
 from app.db import project_forge_bindings as bindings_repo
 from app.db import rules as rules_repo
-from app.db import commands as commands_repo
 from app.db.connection import get_connection
+from app.models.harness_evolution import CheckResult, EvalVerdict
 from app.services import harness_evolver as evolver
 from app.services.harness_evolver import (
     EvolutionPatch,
@@ -449,7 +449,12 @@ def test_default_codex_cmd_includes_workspace_write_sandbox(monkeypatch):
 
 @pytest.fixture
 def mock_codex():
-    """Patch Codex; tests configure what files the fake Codex creates / edits."""
+    """Patch Codex; tests configure what files the fake Codex creates / edits.
+
+    Also patches ``evaluate_patch`` to return a passing verdict so that the
+    eval gate does not block any existing round tests — those tests are not
+    about the gate and should not require a live eval environment.
+    """
     edits = {"files": {}, "deletes": [], "notes": ""}
 
     def _fake(scratch_dir: Path, *, timeout: int = 600) -> None:
@@ -465,7 +470,14 @@ def mock_codex():
         if edits["notes"]:
             (scratch_dir / "NOTES.md").write_text(edits["notes"])
 
-    with patch.object(evolver, "_run_codex_in_workspace", _fake):
+    _passing_verdict = EvalVerdict(
+        passed=True, score=1.0, per_check=[CheckResult(name="static", passed=True, detail="ok")]
+    )
+
+    with (
+        patch.object(evolver, "_run_codex_in_workspace", _fake),
+        patch.object(evolver, "evaluate_patch", return_value=_passing_verdict),
+    ):
 
         def _configure(*, files=None, deletes=None, notes=""):
             edits["files"] = files or {}

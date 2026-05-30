@@ -56,6 +56,7 @@ from app.db.mcp_servers import (
     update_mcp_server,
 )
 from app.db.rules import create_rule, delete_rule, get_rule, update_rule
+from app.services.harness_evolution_eval import evaluate_patch
 
 logger = logging.getLogger(__name__)
 
@@ -138,7 +139,7 @@ def _check_rate_limit(
         return None
 
     in_flight = next(
-        (r for r in recent if r.get("status") in ("pending", "running")),
+        (r for r in recent if r.get("status") in ("pending", "running", "evaluating")),
         None,
     )
     if in_flight is not None:
@@ -1219,7 +1220,7 @@ def _update_skill(*, asset_id, payload):
 
 
 def _delete_skill(*, asset_id):
-    from app.db.skills import get_user_skill, delete_user_skill
+    from app.db.skills import delete_user_skill, get_user_skill
 
     row = get_user_skill(int(asset_id))
     if row and row.get("skill_path"):
@@ -1262,6 +1263,59 @@ _delete_dispatch = {
 # --------------------------------------------------------------------------
 # Step 7 — orchestrators
 # --------------------------------------------------------------------------
+
+
+def _patched_summary(patch) -> str:
+    lines = []
+    for e in getattr(patch, "entries", []):
+        ident = getattr(e, "name", None) or getattr(e, "existing_asset_id", None) or ""
+        lines.append(f"{e.op} {e.kind} {ident}")
+    return "\n".join(lines) or "(no entries)"
+
+
+def _replay_samples_from_inputs(inputs: dict) -> list:
+    from app.models.harness_evolution import ReplaySample
+
+    out = []
+    for inc in (inputs.get("incidents") or [])[:8]:
+        out.append(
+            ReplaySample(
+                incident_kind=inc.get("kind", "unknown"),
+                layer=inc.get("layer", "general"),
+                evidence=inc.get("evidence") or {},
+                trajectory_excerpt="",
+            )
+        )
+    return out
+
+
+def _eval_gate(round_id: str, *, patch, inputs: dict, scratch: Path) -> Optional["EvolutionResult"]:
+    """Run the eval gate. Returns an EvolutionResult to short-circuit (eval_failed),
+    or None to continue to the dry-run/apply branches."""
+    evolution_repo.mark_evaluating(round_id)
+    eval_ws = Path(scratch) / "eval"
+    eval_ws.mkdir(parents=True, exist_ok=True)
+    try:
+        verdict = evaluate_patch(
+            round_id=round_id,
+            workspace_dir=eval_ws,
+            samples=_replay_samples_from_inputs(inputs),
+            patched_summary=_patched_summary(patch),
+        )
+    except Exception:
+        logger.warning(
+            "eval gate errored for %s; treating as non-blocking", round_id, exc_info=True
+        )
+        return None
+    evolution_repo.store_eval_verdict(round_id, verdict)
+    if not verdict.passed:
+        evolution_repo.mark_eval_failed(round_id, verdict=verdict)
+        return EvolutionResult(
+            round_id=round_id,
+            status="eval_failed",
+            error="eval gate failed",
+        )
+    return None
 
 
 def run_evolution_round(
@@ -1329,6 +1383,10 @@ def run_evolution_round(
                 error=f"patch validation failed: {joined}",
                 notes=notes,
             )
+
+        gate_result = _eval_gate(round_id, patch=patch, inputs=inputs, scratch=scratch)
+        if gate_result is not None:
+            return gate_result
 
         if dry_run:
             evolution_repo.mark_awaiting_approval(
