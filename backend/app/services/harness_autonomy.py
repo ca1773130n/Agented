@@ -16,7 +16,9 @@ logger = logging.getLogger(__name__)
 
 
 def _utc_minus(**kw) -> str:
-    return (_dt.datetime.utcnow() - _dt.timedelta(**kw)).strftime("%Y-%m-%dT%H:%M:%S")
+    # SQLite stores finished_at as "YYYY-MM-DD HH:MM:SS" (space separator via datetime('now')).
+    # Must use the same format for lexicographic comparison in count_recent_auto_applies.
+    return (_dt.datetime.utcnow() - _dt.timedelta(**kw)).strftime("%Y-%m-%d %H:%M:%S")
 
 
 def _kill_switch_on() -> bool:

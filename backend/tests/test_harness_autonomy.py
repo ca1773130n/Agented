@@ -326,3 +326,70 @@ def test_poller_skips_empty_patch(isolated_db, monkeypatch):
     with patch("app.services.harness_autonomy.apply_dry_run_round") as mock_apply:
         process_project_autonomy("ppe")
     assert not mock_apply.called  # 0-entry round must NOT auto-apply
+
+
+def test_poller_rate_limit_actually_blocks(isolated_db, monkeypatch):
+    """With a real prior auto-applied round and rate_limit_per_day=1, the poller
+    must BLOCK the next round — proves the timestamp comparison works (space not T)."""
+    monkeypatch.setenv("AGENTED_AUTONOMY", "1")
+    from app.database import get_connection
+    from app.db import harness_evolution as evo
+    from app.db import project_autonomy_config as cfg
+    from app.services.harness_autonomy import process_project_autonomy
+
+    # Insert the shared project once; both rounds share it.
+    with get_connection() as conn:
+        conn.execute("INSERT INTO projects (id, name, status) VALUES ('prl', 'P', 'active')")
+        conn.commit()
+
+    # Prior round: auto-applied today (sets finished_at = datetime('now') with space separator).
+    prior = evo.start_round(
+        project_id="prl",
+        input_window_since=None,
+        input_window_until=None,
+        input_execution_count=0,
+        input_forge={},
+        scratch_dir="/tmp/x",
+    )
+    evo.mark_running(prior)
+    evo.mark_awaiting_approval(prior, output_patch={"entries": [{"op": "create", "kind": "rule"}]})
+    evo.store_eval_verdict(prior, EvalVerdict(passed=True, score=0.95))
+    evo.mark_applied(
+        prior,
+        output_patch={"entries": []},
+        applied_asset_ids=[],
+        notes="",
+        auto_applied=True,
+        auto_apply_reason={"eligible": True},
+    )
+
+    # New eligible round in the same project.
+    new_round = evo.start_round(
+        project_id="prl",
+        input_window_since=None,
+        input_window_until=None,
+        input_execution_count=0,
+        input_forge={},
+        scratch_dir="/tmp/x",
+    )
+    evo.mark_running(new_round)
+    evo.mark_awaiting_approval(
+        new_round, output_patch={"entries": [{"op": "create", "kind": "rule"}]}
+    )
+    evo.store_eval_verdict(
+        new_round,
+        EvalVerdict(passed=True, score=0.95, per_check=[CheckResult(name="s", passed=True)]),
+    )
+
+    cfg.upsert_policy(
+        "prl", AutonomyPolicy(enabled=True, allowed_kinds=["rule"], rate_limit_per_day=1)
+    )
+
+    with patch("app.services.harness_autonomy.apply_dry_run_round") as mock_apply:
+        process_project_autonomy("prl")
+
+    # The new round must NOT auto-apply: 1 prior apply >= rate_limit 1.
+    assert not mock_apply.called
+    blocked = evo.get_round(new_round)["auto_apply_blocked_reason"]
+    assert blocked is not None
+    assert any(g["name"] == "rate_limit" and not g["passed"] for g in blocked["gates"])
