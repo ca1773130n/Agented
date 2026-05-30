@@ -266,7 +266,8 @@ def set_revert_error(round_id: str, error: str) -> None:
     with get_connection() as conn:
         _ensure_revert_columns(conn)
         conn.execute(
-            "UPDATE harness_evolution_rounds SET revert_error=? WHERE id=?",
+            "UPDATE harness_evolution_rounds SET revert_error=? "
+            "WHERE id=? AND status IN ('applied', 'reverted')",
             ((error or "")[:2000], round_id),
         )
         conn.commit()

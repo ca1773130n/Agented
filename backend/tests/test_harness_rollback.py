@@ -323,6 +323,13 @@ def test_revert_round_conflict_with_later_round(isolated_db):
     assert forced.status == "reverted"
 
 
+def test_set_revert_error_truncates_at_2000(isolated_db):
+    rid = _applied_round("ptrunc")
+    evo.set_revert_error(rid, "x" * 2500)
+    row = evo.get_round(rid)
+    assert len(row["revert_error"]) == 2000
+
+
 def test_revert_round_retry_after_db_reversed_is_idempotent(isolated_db):
     """A round whose DB was already reversed (e.g. git failed on first attempt,
     leaving status applied) must revert cleanly on retry — the DB reversal is
