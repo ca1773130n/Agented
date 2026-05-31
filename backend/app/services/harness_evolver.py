@@ -1525,13 +1525,16 @@ def run_evolution_round(
             )
 
             _verdict = (evolution_repo.get_round(round_id) or {}).get("eval_verdict") or {}
-            _score = float(_verdict.get("score", 1.0))
-            record_promotion_evidence(project_id, applied, eval_score=_score)
-            for _e in applied:
-                if _e.get("op") in ("create", "update"):
-                    _asset = _fetch_primitive(_e["kind"], _e["asset_id"])
-                    if _asset:
-                        promote_if_qualified(_e["kind"], _fp(_e["kind"], _asset), _asset)
+            # Only eval-PASSED rounds contribute promotion evidence — global
+            # propagation must not inherit a force-apply / missing-verdict at full weight.
+            if _verdict.get("passed") and _verdict.get("score") is not None:
+                _score = float(_verdict["score"])
+                record_promotion_evidence(project_id, applied, eval_score=_score)
+                for _e in applied:
+                    if _e.get("op") in ("create", "update"):
+                        _asset = _fetch_primitive(_e["kind"], _e["asset_id"])
+                        if _asset:
+                            promote_if_qualified(_e["kind"], _fp(_e["kind"], _asset), _asset)
         except Exception:
             logger.warning("propagation hook failed for %s", round_id, exc_info=True)
 

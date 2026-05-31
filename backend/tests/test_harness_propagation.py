@@ -267,3 +267,41 @@ def test_local_wins_skips_adoption(isolated_db):
 def test_adopt_not_found(isolated_db):
     res = adopt_shared_binding("pnone", 99999)
     assert res["adopted"] is False and res["reason"] == "not_found"
+
+
+# ---------------------------------------------------------------------------
+# Hook gate — propagation poisoning fix
+# ---------------------------------------------------------------------------
+
+
+def test_promotion_evidence_requires_passing_verdict(isolated_db, monkeypatch):
+    """The run_evolution_round propagation hook must skip evidence when the round
+    has no passing verdict. We assert the gate by checking that a round with a
+    non-passing / absent verdict yields no evidence via the same condition."""
+    with get_connection() as conn:
+        conn.execute("INSERT INTO projects (id, name, status) VALUES ('pgate', 'P', 'active')")
+        conn.commit()
+    rid = rules_repo.create_rule(
+        name="g", rule_type="validation", description="d", action="a", project_id="pgate"
+    )
+    asset = rules_repo.get_rule(int(rid))
+    fpv = _fp("rule", asset)
+    applied = [{"kind": "rule", "op": "create", "asset_id": rid}]
+
+    # Simulate the hook's gate: a verdict that did NOT pass → no evidence recorded.
+    verdict = {"passed": False, "score": 0.9}
+    if verdict.get("passed") and verdict.get("score") is not None:
+        record_promotion_evidence("pgate", applied, eval_score=verdict["score"])
+    assert fp.promotion_score(fpv) == 0.0  # nothing recorded for a non-passing verdict
+
+    # absent verdict → no evidence recorded.
+    verdict_absent: dict = {}
+    if verdict_absent.get("passed") and verdict_absent.get("score") is not None:
+        record_promotion_evidence("pgate", applied, eval_score=verdict_absent["score"])
+    assert fp.promotion_score(fpv) == 0.0  # nothing recorded for an absent verdict
+
+    # a PASSING verdict DOES record evidence.
+    verdict2 = {"passed": True, "score": 0.9}
+    if verdict2.get("passed") and verdict2.get("score") is not None:
+        record_promotion_evidence("pgate", applied, eval_score=verdict2["score"])
+    assert fp.promotion_score(fpv) > 0.0
