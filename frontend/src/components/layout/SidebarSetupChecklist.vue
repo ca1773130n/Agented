@@ -1,5 +1,8 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n';
 import type { ChecklistItem } from '../../composables/useTourChecklist';
+
+const { t } = useI18n();
 
 defineProps<{
   items: ChecklistItem[];
@@ -15,7 +18,7 @@ const emit = defineEmits<{
 <template>
   <div class="sidebar-setup-checklist">
     <div class="setup-checklist-header">
-      <span class="setup-checklist-title">Setup</span>
+      <span class="setup-checklist-title">{{ t('nav.setup') }}</span>
       <span class="setup-checklist-progress">{{ completedCount }}/{{ totalCount }}</span>
     </div>
     <ul class="setup-checklist-items">

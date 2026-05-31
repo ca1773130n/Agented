@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
 import type { Trigger, Product, Project, Team, Plugin, AIBackend, ProjectSAInstance } from '../../services/api';
 import { projectInstanceApi } from '../../services/api';
@@ -9,6 +10,8 @@ import SidebarSectionLabel from './SidebarSectionLabel.vue';
 import SidebarGroupToggle from './SidebarGroupToggle.vue';
 import SidebarFlatLink from './SidebarFlatLink.vue';
 import SidebarSetupChecklist from './SidebarSetupChecklist.vue';
+
+const { t } = useI18n();
 
 const route = useRoute();
 const router = useRouter();
@@ -373,17 +376,17 @@ function handleSidebarKeydown(e: KeyboardEvent) {
   <nav
     id="app-sidebar-nav"
     :class="['sidebar', { collapsed: isCollapsedDesktop(), 'mobile-open': props.isMobile && props.mobileOpen }]"
-    aria-label="Main navigation"
+    :aria-label="t('nav.mainNavigation')"
     @keydown="handleSidebarKeydown"
   >
     <div class="sidebar-nav">
-      <div class="nav-section-label">Work</div>
+      <div class="nav-section-label">{{ t('nav.sectionWork') }}</div>
       <!-- Dashboards (expandable) — PR-E: moved into the Work group so
            it sits next to Sketch and Scheduling, the other daily-Work
            surfaces. PR-F: reordered to top of Work group — Dashboards is
            the daily entry-point. -->
       <SidebarGroupToggle
-        label="Dashboards"
+        :label="t('nav.dashboards')"
         :expanded="expandedSections.dashboards"
         :active="isDashboardSectionActive()"
         :collapsed-desktop="isCollapsedDesktop()"
@@ -401,21 +404,21 @@ function handleSidebarKeydown(e: KeyboardEvent) {
       <!-- PR-D — Dashboards submenu collapsed from 13 entries to 5
            (1 landing + 4 lanes). Old links are still reachable via
            function-form redirects on their original names. -->
-      <div v-show="expandedSections.dashboards" class="nav-submenu" role="region" aria-label="Dashboards">
+      <div v-show="expandedSections.dashboards" class="nav-submenu" role="region" :aria-label="t('nav.dashboards')">
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('dashboards') }" :aria-current="sidebarActive('dashboards') ? 'page' : undefined" @click="navTo('dashboards')">
-          All Dashboards
+          {{ t('nav.allDashboards') }}
         </button>
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('dashboards-quality') }" :aria-current="sidebarActive('dashboards-quality') ? 'page' : undefined" @click="navTo('dashboards-quality')">
-          Quality
+          {{ t('nav.quality') }}
         </button>
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('dashboards-cost') }" :aria-current="sidebarActive('dashboards-cost') ? 'page' : undefined" @click="navTo('dashboards-cost')">
-          Cost
+          {{ t('nav.cost') }}
         </button>
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('dashboards-health') }" :aria-current="sidebarActive('dashboards-health') ? 'page' : undefined" @click="navTo('dashboards-health')">
-          Health
+          {{ t('nav.health') }}
         </button>
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('dashboards-activity') }" :aria-current="sidebarActive('dashboards-activity') ? 'page' : undefined" @click="navTo('dashboards-activity')">
-          Activity
+          {{ t('nav.activity') }}
         </button>
         <button v-for="b in props.customTriggers" :key="b.id" type="button" class="submenu-item"
           :class="{ active: currentRouteName === 'trigger-dashboard' && route.params.triggerId === b.id }"
@@ -426,7 +429,7 @@ function handleSidebarKeydown(e: KeyboardEvent) {
       </div>
 
       <SidebarFlatLink
-        label="Sketch"
+        :label="t('nav.sketch')"
         :active="sidebarActive('sketch-chat')"
         :collapsed-desktop="isCollapsedDesktop()"
         @click="navTo('sketch-chat')"
@@ -440,14 +443,14 @@ function handleSidebarKeydown(e: KeyboardEvent) {
 
 
       <SidebarSectionLabel
-        label="Organization"
+        :label="t('nav.sectionOrganization')"
         :error-keys="['products', 'projects', 'teams']"
         :errors="props.sidebarErrors"
         @retry="(k) => emit('retrySidebarSection', k)"
       />
       <!-- Products (expandable) -->
       <SidebarGroupToggle
-        label="Products"
+        :label="t('nav.products')"
         :expanded="expandedSections.products"
         :active="isProductsSectionActive()"
         :collapsed-desktop="isCollapsedDesktop()"
@@ -461,9 +464,9 @@ function handleSidebarKeydown(e: KeyboardEvent) {
           </svg>
         </template>
       </SidebarGroupToggle>
-      <div v-show="expandedSections.products" class="nav-submenu" role="region" aria-label="Products">
+      <div v-show="expandedSections.products" class="nav-submenu" role="region" :aria-label="t('nav.products')">
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('products') }" :aria-current="sidebarActive('products') ? 'page' : undefined" @click="navTo('products')">
-          All Products
+          {{ t('nav.allProducts') }}
         </button>
         <div v-for="product in props.products" :key="product.id" class="submenu-item-row">
           <button type="button" class="submenu-item"
@@ -472,7 +475,7 @@ function handleSidebarKeydown(e: KeyboardEvent) {
             @click="navToProductDashboard(product.id)">
             {{ product.name }}
           </button>
-          <button type="button" class="submenu-settings-btn" title="Settings" @click="navToProductSettings(product.id)">
+          <button type="button" class="submenu-settings-btn" :title="t('nav.settings')" @click="navToProductSettings(product.id)">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
               <circle cx="12" cy="12" r="3"/>
               <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
@@ -482,7 +485,7 @@ function handleSidebarKeydown(e: KeyboardEvent) {
       </div>
       <!-- Projects (expandable) -->
       <SidebarGroupToggle
-        label="Projects"
+        :label="t('nav.projects')"
         :expanded="expandedSections.projects"
         :active="isProjectsSectionActive()"
         :collapsed-desktop="isCollapsedDesktop()"
@@ -494,9 +497,9 @@ function handleSidebarKeydown(e: KeyboardEvent) {
           </svg>
         </template>
       </SidebarGroupToggle>
-      <div v-show="expandedSections.projects" class="nav-submenu" role="region" aria-label="Projects">
+      <div v-show="expandedSections.projects" class="nav-submenu" role="region" :aria-label="t('nav.projects')">
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('projects') }" :aria-current="sidebarActive('projects') ? 'page' : undefined" @click="navTo('projects')">
-          All Projects
+          {{ t('nav.allProjects') }}
         </button>
         <div v-for="project in props.projects" :key="project.id" class="submenu-project-group">
           <div class="submenu-item-row">
@@ -506,18 +509,18 @@ function handleSidebarKeydown(e: KeyboardEvent) {
               @click="navToProjectDashboard(project.id)">
               {{ project.name }}
             </button>
-            <button type="button" class="submenu-settings-btn" title="Instances" @click.stop="toggleProjectInstances(project.id)">
+            <button type="button" class="submenu-settings-btn" :title="t('nav.instances')" @click.stop="toggleProjectInstances(project.id)">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
                 <circle cx="12" cy="8" r="4"/>
                 <path d="M6 21v-2a4 4 0 014-4h4a4 4 0 014 4v2"/>
               </svg>
             </button>
-            <button type="button" class="submenu-settings-btn" title="Planning" @click="router.push({ name: 'project-planning', params: { projectId: project.id } })">
+            <button type="button" class="submenu-settings-btn" :title="t('nav.planning')" @click="router.push({ name: 'project-planning', params: { projectId: project.id } })">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
                 <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>
               </svg>
             </button>
-            <button type="button" class="submenu-settings-btn" title="Settings" @click="navToProjectSettings(project.id)">
+            <button type="button" class="submenu-settings-btn" :title="t('nav.settings')" @click="navToProjectSettings(project.id)">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
                 <circle cx="12" cy="12" r="3"/>
                 <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
@@ -545,7 +548,7 @@ function handleSidebarKeydown(e: KeyboardEvent) {
       </div>
       <!-- Teams (expandable) -->
       <SidebarGroupToggle
-        label="Teams"
+        :label="t('nav.teams')"
         :expanded="expandedSections.teams"
         :active="isTeamsSectionActive()"
         :collapsed-desktop="isCollapsedDesktop()"
@@ -560,9 +563,9 @@ function handleSidebarKeydown(e: KeyboardEvent) {
           </svg>
         </template>
       </SidebarGroupToggle>
-      <div v-show="expandedSections.teams" class="nav-submenu" role="region" aria-label="Teams">
+      <div v-show="expandedSections.teams" class="nav-submenu" role="region" :aria-label="t('nav.teams')">
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('teams') }" :aria-current="sidebarActive('teams') ? 'page' : undefined" @click="navTo('teams')">
-          All Teams
+          {{ t('nav.allTeams') }}
         </button>
         <div v-for="team in props.teams" :key="team.id" class="submenu-item-row">
           <button type="button" class="submenu-item"
@@ -571,7 +574,7 @@ function handleSidebarKeydown(e: KeyboardEvent) {
             @click="navToTeamDashboard(team.id)">
             {{ team.name }}
           </button>
-          <button type="button" class="submenu-settings-btn" title="Settings" @click="navToTeamSettings(team.id)">
+          <button type="button" class="submenu-settings-btn" :title="t('nav.settings')" @click="navToTeamSettings(team.id)">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
               <circle cx="12" cy="12" r="3"/>
               <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
@@ -581,7 +584,7 @@ function handleSidebarKeydown(e: KeyboardEvent) {
       </div>
       <!-- Agents (expandable) -->
       <SidebarGroupToggle
-        label="Agents"
+        :label="t('nav.agents')"
         :expanded="expandedSections.agents"
         :active="isAgentsSectionActive()"
         :collapsed-desktop="isCollapsedDesktop()"
@@ -596,18 +599,18 @@ function handleSidebarKeydown(e: KeyboardEvent) {
           </svg>
         </template>
       </SidebarGroupToggle>
-      <div v-show="expandedSections.agents" class="nav-submenu" role="region" aria-label="Agents">
+      <div v-show="expandedSections.agents" class="nav-submenu" role="region" :aria-label="t('nav.agents')">
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('agents') }" :aria-current="sidebarActive('agents') ? 'page' : undefined" @click="navTo('agents')">
-          All Agents
+          {{ t('nav.allAgents') }}
         </button>
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('agent-create') }" :aria-current="sidebarActive('agent-create') ? 'page' : undefined" @click="navToAgentCreate()">
-          Design an Agent
+          {{ t('nav.designAnAgent') }}
         </button>
       </div>
 
       <!-- SuperAgents (expandable) -->
       <SidebarGroupToggle
-        label="SuperAgents"
+        :label="t('nav.superAgents')"
         :expanded="expandedSections.superAgents"
         :active="isSuperAgentsSectionActive()"
         :collapsed-desktop="isCollapsedDesktop()"
@@ -620,14 +623,14 @@ function handleSidebarKeydown(e: KeyboardEvent) {
           </svg>
         </template>
       </SidebarGroupToggle>
-      <div v-show="expandedSections.superAgents" class="nav-submenu" role="region" aria-label="SuperAgents">
+      <div v-show="expandedSections.superAgents" class="nav-submenu" role="region" :aria-label="t('nav.superAgents')">
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('super-agents') }" :aria-current="sidebarActive('super-agents') ? 'page' : undefined" @click="navTo('super-agents')">
-          All SuperAgents
+          {{ t('nav.allSuperAgents') }}
         </button>
       </div>
 
       <SidebarSectionLabel
-        label="Forge"
+        :label="t('nav.sectionForge')"
         :error-keys="['plugins', 'triggers']"
         :errors="props.sidebarErrors"
         @retry="(k) => emit('retrySidebarSection', k)"
@@ -635,7 +638,7 @@ function handleSidebarKeydown(e: KeyboardEvent) {
 
       <!-- Workflows (expandable) -->
       <SidebarGroupToggle
-        label="Workflows"
+        :label="t('nav.workflows')"
         :expanded="expandedSections.workflows"
         :active="isWorkflowsSectionActive()"
         :collapsed-desktop="isCollapsedDesktop()"
@@ -651,18 +654,18 @@ function handleSidebarKeydown(e: KeyboardEvent) {
           </svg>
         </template>
       </SidebarGroupToggle>
-      <div v-show="expandedSections.workflows" class="nav-submenu" role="region" aria-label="Workflows">
+      <div v-show="expandedSections.workflows" class="nav-submenu" role="region" :aria-label="t('nav.workflows')">
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('workflows') }" :aria-current="sidebarActive('workflows') ? 'page' : undefined" @click="navTo('workflows')">
-          All Workflows
+          {{ t('nav.allWorkflows') }}
         </button>
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('workflow-playground') }" :aria-current="sidebarActive('workflow-playground') ? 'page' : undefined" @click="navTo('workflow-playground')">
-          Playground
+          {{ t('nav.playground') }}
         </button>
       </div>
 
       <!-- Triggers (expandable) — PR-F: collapsed back into Forge after operator-feel testing showed the standalone section overweighted itself. -->
       <SidebarGroupToggle
-        label="Triggers"
+        :label="t('nav.triggers')"
         :expanded="expandedSections.triggers"
         :active="isTriggersSectionActive()"
         :collapsed-desktop="isCollapsedDesktop()"
@@ -674,89 +677,89 @@ function handleSidebarKeydown(e: KeyboardEvent) {
           </svg>
         </template>
       </SidebarGroupToggle>
-      <div v-show="expandedSections.triggers" class="nav-submenu nav-submenu-blocks" role="region" aria-label="Triggers">
-        <div class="submenu-block-label" aria-hidden="true">Core</div>
+      <div v-show="expandedSections.triggers" class="nav-submenu nav-submenu-blocks" role="region" :aria-label="t('nav.triggers')">
+        <div class="submenu-block-label" aria-hidden="true">{{ t('nav.blockCore') }}</div>
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('triggers') }" :aria-current="sidebarActive('triggers') ? 'page' : undefined" @click="navTo('triggers')">
-          Triggers
+          {{ t('nav.triggers') }}
         </button>
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('bot-templates') }" :aria-current="sidebarActive('bot-templates') ? 'page' : undefined" @click="navTo('bot-templates')">
-          Bot Templates
+          {{ t('nav.botTemplates') }}
         </button>
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('bot-clone-fork') }" :aria-current="sidebarActive('bot-clone-fork') ? 'page' : undefined" @click="navTo('bot-clone-fork')">
-          Clone &amp; Fork Bot
+          {{ t('nav.cloneForkBot') }}
         </button>
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('cross-team-bot-sharing') }" :aria-current="sidebarActive('cross-team-bot-sharing') ? 'page' : undefined" @click="navTo('cross-team-bot-sharing')">
-          Cross-Team Sharing
+          {{ t('nav.crossTeamSharing') }}
         </button>
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('incident-response-playbooks') }" :aria-current="sidebarActive('incident-response-playbooks') ? 'page' : undefined" @click="navTo('incident-response-playbooks')">
-          Incident Playbooks
+          {{ t('nav.incidentPlaybooks') }}
         </button>
 
-        <div class="submenu-block-label" aria-hidden="true">Configuration</div>
+        <div class="submenu-block-label" aria-hidden="true">{{ t('nav.blockConfiguration') }}</div>
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('inline-prompt-editor') }" :aria-current="sidebarActive('inline-prompt-editor') ? 'page' : undefined" @click="navTo('inline-prompt-editor')">
-          Live Prompt Sandbox
+          {{ t('nav.livePromptSandbox') }}
         </button>
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('visual-cron-wizard') }" :aria-current="sidebarActive('visual-cron-wizard') ? 'page' : undefined" @click="navTo('visual-cron-wizard')">
-          NL Cron Builder
+          {{ t('nav.nlCronBuilder') }}
         </button>
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('conditional-trigger-rules') }" :aria-current="sidebarActive('conditional-trigger-rules') ? 'page' : undefined" @click="navTo('conditional-trigger-rules')">
-          Trigger Conditions
+          {{ t('nav.triggerConditions') }}
         </button>
         <!-- NL rule editor: free-text -> trigger rule. -->
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('nl-trigger-rule-editor') }" :aria-current="sidebarActive('nl-trigger-rule-editor') ? 'page' : undefined" @click="navTo('nl-trigger-rule-editor')">
-          NL Rule Editor
+          {{ t('nav.nlRuleEditor') }}
         </button>
         <!-- PR-J2 — Webhook payload transformer for normalising incoming JSON. -->
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('webhook-payload-transformer') }" :aria-current="sidebarActive('webhook-payload-transformer') ? 'page' : undefined" @click="navTo('webhook-payload-transformer')">
-          Payload Transformer
+          {{ t('nav.payloadTransformer') }}
         </button>
 
-        <div class="submenu-block-label" aria-hidden="true">PR-Review</div>
+        <div class="submenu-block-label" aria-hidden="true">{{ t('nav.blockPrReview') }}</div>
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('pr-auto-assignment') }" :aria-current="sidebarActive('pr-auto-assignment') ? 'page' : undefined" @click="navTo('pr-auto-assignment')">
-          PR Auto-Assignment
+          {{ t('nav.prAutoAssignment') }}
         </button>
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('pr-review-learning-loop') }" :aria-current="sidebarActive('pr-review-learning-loop') ? 'page' : undefined" @click="navTo('pr-review-learning-loop')">
-          PR Review Learning
+          {{ t('nav.prReviewLearning') }}
         </button>
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('github-actions') }" :aria-current="sidebarActive('github-actions') ? 'page' : undefined" @click="navTo('github-actions')">
-          GitHub Actions
+          {{ t('nav.githubActions') }}
         </button>
 
-        <div class="submenu-block-label" aria-hidden="true">Ops</div>
+        <div class="submenu-block-label" aria-hidden="true">{{ t('nav.blockOps') }}</div>
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('webhook-recorder') }" :aria-current="sidebarActive('webhook-recorder') ? 'page' : undefined" @click="navTo('webhook-recorder')">
-          Webhook Recorder
+          {{ t('nav.webhookRecorder') }}
         </button>
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('dependency-impact-bot') }" :aria-current="sidebarActive('dependency-impact-bot') ? 'page' : undefined" @click="navTo('dependency-impact-bot')">
-          Dependency Updates
+          {{ t('nav.dependencyUpdates') }}
         </button>
         <!-- Bot dry-run: simulate a trigger without side-effects. -->
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('bot-dry-run') }" :aria-current="sidebarActive('bot-dry-run') ? 'page' : undefined" @click="navTo('bot-dry-run')">
-          Bot Dry-Run
+          {{ t('nav.botDryRun') }}
         </button>
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('bot-output-piping') }" :aria-current="sidebarActive('bot-output-piping') ? 'page' : undefined" @click="navTo('bot-output-piping')">
-          Output Piping
+          {{ t('nav.outputPiping') }}
         </button>
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('bot-output-webhook-forwarding') }" :aria-current="sidebarActive('bot-output-webhook-forwarding') ? 'page' : undefined" @click="navTo('bot-output-webhook-forwarding')">
-          Webhook Forwarding
+          {{ t('nav.webhookForwarding') }}
         </button>
 
-        <div class="submenu-block-label" aria-hidden="true">Introspection</div>
+        <div class="submenu-block-label" aria-hidden="true">{{ t('nav.blockIntrospection') }}</div>
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('bot-runbooks') }" :aria-current="sidebarActive('bot-runbooks') ? 'page' : undefined" @click="navTo('bot-runbooks')">
-          Bot Runbooks
+          {{ t('nav.botRunbooks') }}
         </button>
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('execution-tagging') }" :aria-current="sidebarActive('execution-tagging') ? 'page' : undefined" @click="navTo('execution-tagging')">
-          Execution Tagging
+          {{ t('nav.executionTagging') }}
         </button>
 
-        <div class="submenu-block-label" aria-hidden="true">Authoring</div>
+        <div class="submenu-block-label" aria-hidden="true">{{ t('nav.blockAuthoring') }}</div>
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('prompt-snippets') }" :aria-current="sidebarActive('prompt-snippets') ? 'page' : undefined" @click="navTo('prompt-snippets')">
-          Prompt Snippets
+          {{ t('nav.promptSnippets') }}
         </button>
       </div>
 
       <!-- Plugins (expandable) -->
       <SidebarGroupToggle
-        label="Plugins"
+        :label="t('nav.plugins')"
         :expanded="expandedSections.plugins"
         :active="isPluginsSectionActive()"
         :collapsed-desktop="isCollapsedDesktop()"
@@ -768,19 +771,19 @@ function handleSidebarKeydown(e: KeyboardEvent) {
           </svg>
         </template>
       </SidebarGroupToggle>
-      <div v-show="expandedSections.plugins" class="nav-submenu" role="region" aria-label="Plugins">
+      <div v-show="expandedSections.plugins" class="nav-submenu" role="region" :aria-label="t('nav.plugins')">
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('plugins') }" :aria-current="sidebarActive('plugins') ? 'page' : undefined" @click="navTo('plugins')">
-          All Plugins
+          {{ t('nav.allPlugins') }}
         </button>
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('plugin-design') }" :aria-current="sidebarActive('plugin-design') ? 'page' : undefined" @click="navTo('plugin-design')">
-          Design a Plugin
+          {{ t('nav.designAPlugin') }}
         </button>
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('harness-integration') }" :aria-current="sidebarActive('harness-integration') ? 'page' : undefined" @click="navTo('harness-integration')">
-          Harness Integration
+          {{ t('nav.harnessIntegration') }}
         </button>
         <!-- PR-J2 — Plugin SDK reference & scaffolding. -->
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('plugin-sdk') }" :aria-current="sidebarActive('plugin-sdk') ? 'page' : undefined" @click="navTo('plugin-sdk')">
-          Plugin SDK
+          {{ t('nav.pluginSdk') }}
         </button>
         <button v-for="plugin in props.plugins" :key="plugin.id" type="button" class="submenu-item"
           :class="{ active: currentRouteName === 'plugin-detail' && route.params.pluginId === plugin.id }"
@@ -794,7 +797,7 @@ function handleSidebarKeydown(e: KeyboardEvent) {
            to "MCPs" for parity with Plugins / Skills / Hooks / Rules /
            Commands. Route name + page title unchanged. -->
       <SidebarGroupToggle
-        label="MCPs"
+        :label="t('nav.mcps')"
         :expanded="expandedSections.mcpServers"
         :active="isMcpServersSectionActive()"
         :collapsed-desktop="isCollapsedDesktop()"
@@ -809,15 +812,15 @@ function handleSidebarKeydown(e: KeyboardEvent) {
           </svg>
         </template>
       </SidebarGroupToggle>
-      <div v-show="expandedSections.mcpServers" class="nav-submenu" role="region" aria-label="MCPs">
+      <div v-show="expandedSections.mcpServers" class="nav-submenu" role="region" :aria-label="t('nav.mcps')">
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('mcp-servers') }" :aria-current="sidebarActive('mcp-servers') ? 'page' : undefined" @click="navTo('mcp-servers')">
-          All MCP Servers
+          {{ t('nav.allMcpServers') }}
         </button>
       </div>
 
       <!-- Skills (expandable) -->
       <SidebarGroupToggle
-        label="Skills"
+        :label="t('nav.skills')"
         :expanded="expandedSections.skills"
         :active="isSkillsSectionActive()"
         :collapsed-desktop="isCollapsedDesktop()"
@@ -831,21 +834,21 @@ function handleSidebarKeydown(e: KeyboardEvent) {
           </svg>
         </template>
       </SidebarGroupToggle>
-      <div v-show="expandedSections.skills" class="nav-submenu" role="region" aria-label="Skills">
+      <div v-show="expandedSections.skills" class="nav-submenu" role="region" :aria-label="t('nav.skills')">
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('skills-playground') }" :aria-current="sidebarActive('skills-playground') ? 'page' : undefined" @click="navTo('skills-playground')">
-          Playground
+          {{ t('nav.playground') }}
         </button>
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('skill-create') }" :aria-current="sidebarActive('skill-create') ? 'page' : undefined" @click="navTo('skill-create')">
-          Design a Skill
+          {{ t('nav.designASkill') }}
         </button>
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('my-skills') }" :aria-current="sidebarActive('my-skills') ? 'page' : undefined" @click="navTo('my-skills')">
-          Skill Library
+          {{ t('nav.skillLibrary') }}
         </button>
       </div>
 
       <!-- Commands (expandable) -->
       <SidebarGroupToggle
-        label="Commands"
+        :label="t('nav.commands')"
         :expanded="expandedSections.commands"
         :active="isCommandsSectionActive()"
         :collapsed-desktop="isCollapsedDesktop()"
@@ -858,18 +861,18 @@ function handleSidebarKeydown(e: KeyboardEvent) {
           </svg>
         </template>
       </SidebarGroupToggle>
-      <div v-show="expandedSections.commands" class="nav-submenu" role="region" aria-label="Commands">
+      <div v-show="expandedSections.commands" class="nav-submenu" role="region" :aria-label="t('nav.commands')">
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('commands') }" :aria-current="sidebarActive('commands') ? 'page' : undefined" @click="navTo('commands')">
-          All Commands
+          {{ t('nav.allCommands') }}
         </button>
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('command-design') }" :aria-current="sidebarActive('command-design') ? 'page' : undefined" @click="navTo('command-design')">
-          Design a Command
+          {{ t('nav.designACommand') }}
         </button>
       </div>
 
       <!-- Hooks (expandable) -->
       <SidebarGroupToggle
-        label="Hooks"
+        :label="t('nav.hooks')"
         :expanded="expandedSections.hooks"
         :active="isHooksSectionActive()"
         :collapsed-desktop="isCollapsedDesktop()"
@@ -882,18 +885,18 @@ function handleSidebarKeydown(e: KeyboardEvent) {
           </svg>
         </template>
       </SidebarGroupToggle>
-      <div v-show="expandedSections.hooks" class="nav-submenu" role="region" aria-label="Hooks">
+      <div v-show="expandedSections.hooks" class="nav-submenu" role="region" :aria-label="t('nav.hooks')">
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('hooks') }" :aria-current="sidebarActive('hooks') ? 'page' : undefined" @click="navTo('hooks')">
-          All Hooks
+          {{ t('nav.allHooks') }}
         </button>
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('hook-design') }" :aria-current="sidebarActive('hook-design') ? 'page' : undefined" @click="navTo('hook-design')">
-          Design a Hook
+          {{ t('nav.designAHook') }}
         </button>
       </div>
 
       <!-- Rules (expandable) -->
       <SidebarGroupToggle
-        label="Rules"
+        :label="t('nav.rules')"
         :expanded="expandedSections.rules"
         :active="isRulesSectionActive()"
         :collapsed-desktop="isCollapsedDesktop()"
@@ -908,12 +911,12 @@ function handleSidebarKeydown(e: KeyboardEvent) {
           </svg>
         </template>
       </SidebarGroupToggle>
-      <div v-show="expandedSections.rules" class="nav-submenu" role="region" aria-label="Rules">
+      <div v-show="expandedSections.rules" class="nav-submenu" role="region" :aria-label="t('nav.rules')">
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('rules') }" :aria-current="sidebarActive('rules') ? 'page' : undefined" @click="navTo('rules')">
-          All Rules
+          {{ t('nav.allRules') }}
         </button>
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('rule-design') }" :aria-current="sidebarActive('rule-design') ? 'page' : undefined" @click="navTo('rule-design')">
-          Design a Rule
+          {{ t('nav.designARule') }}
         </button>
       </div>
 
@@ -923,7 +926,7 @@ function handleSidebarKeydown(e: KeyboardEvent) {
            get more. Keeping them as siblings (not parent/child) matches
            the operator's mental model. -->
       <SidebarFlatLink
-        label="Marketplace"
+        :label="t('nav.marketplace')"
         :active="sidebarActive('marketplace')"
         :collapsed-desktop="isCollapsedDesktop()"
         @click="navTo('marketplace')"
@@ -938,10 +941,10 @@ function handleSidebarKeydown(e: KeyboardEvent) {
         </template>
       </SidebarFlatLink>
 
-      <div class="nav-section-label">History</div>
+      <div class="nav-section-label">{{ t('nav.sectionHistory') }}</div>
       <!-- Triggers History (expandable) -->
       <SidebarGroupToggle
-        label="Triggers"
+        :label="t('nav.triggers')"
         :expanded="expandedSections.history"
         :active="isHistorySectionActive()"
         :collapsed-desktop="isCollapsedDesktop()"
@@ -954,7 +957,7 @@ function handleSidebarKeydown(e: KeyboardEvent) {
           </svg>
         </template>
       </SidebarGroupToggle>
-      <div v-show="expandedSections.history" class="nav-submenu" role="region" aria-label="Trigger History">
+      <div v-show="expandedSections.history" class="nav-submenu" role="region" :aria-label="t('nav.triggerHistory')">
         <button v-for="b in props.customTriggers" :key="b.id" type="button" class="submenu-item"
           :class="{ active: currentRouteName === 'trigger-history' && route.params.triggerId === b.id }"
           :aria-current="(currentRouteName === 'trigger-history' && route.params.triggerId === b.id) ? 'page' : undefined"
@@ -965,7 +968,7 @@ function handleSidebarKeydown(e: KeyboardEvent) {
 
       <!-- Audit Log Trail (standalone nav item) -->
       <SidebarFlatLink
-        label="Audit Log"
+        :label="t('nav.auditLog')"
         :active="sidebarActive('audit-history')"
         :collapsed-desktop="isCollapsedDesktop()"
         @click="navTo('audit-history')"
@@ -979,7 +982,7 @@ function handleSidebarKeydown(e: KeyboardEvent) {
 
       <!-- Execution Replay (standalone nav item) -->
       <SidebarFlatLink
-        label="Replay & Diff"
+        :label="t('nav.replayDiff')"
         :active="sidebarActive('execution-replay-diff')"
         :collapsed-desktop="isCollapsedDesktop()"
         @click="navTo('execution-replay-diff')"
@@ -994,7 +997,7 @@ function handleSidebarKeydown(e: KeyboardEvent) {
 
       <!-- Execution Annotations -->
       <SidebarFlatLink
-        label="Annotations"
+        :label="t('nav.annotations')"
         :active="sidebarActive('execution-annotation')"
         :collapsed-desktop="isCollapsedDesktop()"
         @click="navTo('execution-annotation')"
@@ -1008,19 +1011,19 @@ function handleSidebarKeydown(e: KeyboardEvent) {
       </SidebarFlatLink>
 
       <!-- Execution Search (standalone nav item) -->
-      <button type="button" class="nav-group-toggle" :class="{ active: currentRouteName === 'execution-search' }" :aria-current="currentRouteName === 'execution-search' ? 'page' : undefined" :title="isCollapsedDesktop() ? 'Execution Search' : undefined" @click="navTo('execution-search')">
+      <button type="button" class="nav-group-toggle" :class="{ active: currentRouteName === 'execution-search' }" :aria-current="currentRouteName === 'execution-search' ? 'page' : undefined" :title="isCollapsedDesktop() ? t('nav.executionSearch') : undefined" @click="navTo('execution-search')">
         <span class="nav-icon">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
             <circle cx="11" cy="11" r="8"/>
             <line x1="21" y1="21" x2="16.65" y2="16.65"/>
           </svg>
         </span>
-        <span class="nav-text">Execution Search</span>
+        <span class="nav-text">{{ t('nav.executionSearch') }}</span>
         <span class="nav-indicator"></span>
       </button>
 
       <!-- Usage History (expandable) -->
-      <button type="button" class="nav-group-toggle" :class="{ active: currentRouteName === 'usage-history' }" :aria-expanded="expandedSections.usage" :aria-current="sidebarActive('usage-history') ? 'page' : undefined" :title="isCollapsedDesktop() ? 'Usage' : undefined" @click="toggleSection( 'usage')">
+      <button type="button" class="nav-group-toggle" :class="{ active: currentRouteName === 'usage-history' }" :aria-expanded="expandedSections.usage" :aria-current="sidebarActive('usage-history') ? 'page' : undefined" :title="isCollapsedDesktop() ? t('nav.usage') : undefined" @click="toggleSection( 'usage')">
         <span class="nav-icon">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
             <rect x="3" y="12" width="4" height="9" rx="1"/>
@@ -1028,19 +1031,19 @@ function handleSidebarKeydown(e: KeyboardEvent) {
             <rect x="17" y="3" width="4" height="18" rx="1"/>
           </svg>
         </span>
-        <span class="nav-text">Usage</span>
+        <span class="nav-text">{{ t('nav.usage') }}</span>
         <svg class="chevron-icon" :class="{ expanded: expandedSections.usage }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <polyline points="9,18 15,12 9,6"/>
         </svg>
         <span class="nav-indicator"></span>
       </button>
-      <div v-show="expandedSections.usage" class="nav-submenu" role="region" aria-label="Usage">
+      <div v-show="expandedSections.usage" class="nav-submenu" role="region" :aria-label="t('nav.usage')">
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('usage-history') }" :aria-current="sidebarActive('usage-history') ? 'page' : undefined" @click="navTo('usage-history')">
-          Token Usage
+          {{ t('nav.tokenUsage') }}
         </button>
       </div>
 
-      <div class="nav-section-label">Resources</div>
+      <div class="nav-section-label">{{ t('nav.sectionResources') }}</div>
       <a href="/docs" target="_blank" class="external-link">
         <span class="nav-icon">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
@@ -1048,20 +1051,20 @@ function handleSidebarKeydown(e: KeyboardEvent) {
             <path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/>
           </svg>
         </span>
-        <span class="nav-text">API Docs</span>
+        <span class="nav-text">{{ t('nav.apiDocs') }}</span>
         <svg class="external-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
           <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3"/>
         </svg>
       </a>
 
       <SidebarSectionLabel
-        label="System"
+        :label="t('nav.sectionSystem')"
         :error-keys="['backends']"
         :errors="props.sidebarErrors"
         @retry="(k) => emit('retrySidebarSection', k)"
       />
       <!-- AI Backends (expandable) -->
-      <button type="button" class="nav-group-toggle" :class="{ active: currentRouteName === 'ai-backends' || currentRouteName === 'backend-detail' }" :aria-expanded="expandedSections.aiBackends" :aria-current="(currentRouteName === 'ai-backends' || currentRouteName === 'backend-detail') ? 'page' : undefined" :title="isCollapsedDesktop() ? 'AI Backends' : undefined" @click="toggleSection( 'aiBackends')">
+      <button type="button" class="nav-group-toggle" :class="{ active: currentRouteName === 'ai-backends' || currentRouteName === 'backend-detail' }" :aria-expanded="expandedSections.aiBackends" :aria-current="(currentRouteName === 'ai-backends' || currentRouteName === 'backend-detail') ? 'page' : undefined" :title="isCollapsedDesktop() ? t('nav.aiBackends') : undefined" @click="toggleSection( 'aiBackends')">
         <span class="nav-icon">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
             <circle cx="12" cy="12" r="3"/>
@@ -1069,15 +1072,15 @@ function handleSidebarKeydown(e: KeyboardEvent) {
             <path d="M4.93 4.93l2.83 2.83m8.48 8.48l2.83 2.83M4.93 19.07l2.83-2.83m8.48-8.48l2.83-2.83"/>
           </svg>
         </span>
-        <span class="nav-text">AI Backends</span>
+        <span class="nav-text">{{ t('nav.aiBackends') }}</span>
         <svg class="chevron-icon" :class="{ expanded: expandedSections.aiBackends }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <polyline points="9,18 15,12 9,6"/>
         </svg>
         <span class="nav-indicator"></span>
       </button>
-      <div v-show="expandedSections.aiBackends" class="nav-submenu" role="region" aria-label="AI Backends">
+      <div v-show="expandedSections.aiBackends" class="nav-submenu" role="region" :aria-label="t('nav.aiBackends')">
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('ai-backends') }" :aria-current="sidebarActive('ai-backends') ? 'page' : undefined" @click="navTo('ai-backends')">
-          All Backends
+          {{ t('nav.allBackends') }}
         </button>
         <button v-for="b in props.sidebarBackends" :key="b.id" type="button" class="submenu-item"
           :class="{ active: currentRouteName === 'backend-detail' && route.params.backendId === b.id }"
@@ -1091,7 +1094,7 @@ function handleSidebarKeydown(e: KeyboardEvent) {
            KEEP+WIRE observability/cost dashboards. `trace-detail` is a
            deep-link reached from `traces-list` rows. -->
       <SidebarGroupToggle
-        label="Analytics"
+        :label="t('nav.analytics')"
         :expanded="expandedSections.analytics"
         :active="isAnalyticsSectionActive()"
         :collapsed-desktop="isCollapsedDesktop()"
@@ -1104,15 +1107,15 @@ function handleSidebarKeydown(e: KeyboardEvent) {
           </svg>
         </template>
       </SidebarGroupToggle>
-      <div v-show="expandedSections.analytics" class="nav-submenu" role="region" aria-label="Analytics">
+      <div v-show="expandedSections.analytics" class="nav-submenu" role="region" :aria-label="t('nav.analytics')">
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('ai-cost-dashboard') }" :aria-current="sidebarActive('ai-cost-dashboard') ? 'page' : undefined" @click="navTo('ai-cost-dashboard')">
-          AI Cost
+          {{ t('nav.aiCost') }}
         </button>
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('provider-benchmark-dashboard') }" :aria-current="sidebarActive('provider-benchmark-dashboard') ? 'page' : undefined" @click="navTo('provider-benchmark-dashboard')">
-          Provider Benchmarks
+          {{ t('nav.providerBenchmarks') }}
         </button>
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('traces-list') }" :aria-current="sidebarActive('traces-list') ? 'page' : undefined" @click="navTo('traces-list')">
-          Traces
+          {{ t('nav.traces') }}
         </button>
       </div>
 
@@ -1123,7 +1126,7 @@ function handleSidebarKeydown(e: KeyboardEvent) {
            helper (`isExternalIntegrationsSectionActive`) intentionally
            keep their old names — only the user-visible label changes. -->
       <SidebarGroupToggle
-        label="Integrations"
+        :label="t('nav.integrations')"
         :expanded="expandedSections.externalIntegrations"
         :active="isExternalIntegrationsSectionActive()"
         :collapsed-desktop="isCollapsedDesktop()"
@@ -1135,21 +1138,21 @@ function handleSidebarKeydown(e: KeyboardEvent) {
           </svg>
         </template>
       </SidebarGroupToggle>
-      <div v-show="expandedSections.externalIntegrations" class="nav-submenu" role="region" aria-label="Integrations">
+      <div v-show="expandedSections.externalIntegrations" class="nav-submenu" role="region" :aria-label="t('nav.integrations')">
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('slack-notifications') }" :aria-current="sidebarActive('slack-notifications') ? 'page' : undefined" @click="navTo('slack-notifications')">
-          Slack Notifications
+          {{ t('nav.slackNotifications') }}
         </button>
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('integration-ticketing') }" :aria-current="sidebarActive('integration-ticketing') ? 'page' : undefined" @click="navTo('integration-ticketing')">
-          Jira / Linear
+          {{ t('nav.jiraLinear') }}
         </button>
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('notification-channels') }" :aria-current="sidebarActive('notification-channels') ? 'page' : undefined" @click="navTo('notification-channels')">
-          Notification Channels
+          {{ t('nav.notificationChannels') }}
         </button>
       </div>
 
       <!-- Platform Admin (expandable) -->
       <SidebarGroupToggle
-        label="Platform"
+        :label="t('nav.platform')"
         :expanded="expandedSections.platform"
         :active="isPlatformSectionActive()"
         :collapsed-desktop="isCollapsedDesktop()"
@@ -1162,45 +1165,45 @@ function handleSidebarKeydown(e: KeyboardEvent) {
           </svg>
         </template>
       </SidebarGroupToggle>
-      <div v-show="expandedSections.platform" class="nav-submenu" role="region" aria-label="Platform">
+      <div v-show="expandedSections.platform" class="nav-submenu" role="region" :aria-label="t('nav.platform')">
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('secrets-vault') }" :aria-current="sidebarActive('secrets-vault') ? 'page' : undefined" @click="navTo('secrets-vault')">
-          Secrets Vault
+          {{ t('nav.secretsVault') }}
         </button>
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('rbac-settings') }" :aria-current="sidebarActive('rbac-settings') ? 'page' : undefined" @click="navTo('rbac-settings')">
-          RBAC Settings
+          {{ t('nav.rbacSettings') }}
         </button>
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('sso-settings') }" :aria-current="sidebarActive('sso-settings') ? 'page' : undefined" @click="navTo('sso-settings')">
-          SSO / SAML
+          {{ t('nav.ssoSaml') }}
         </button>
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('team-budgets') }" :aria-current="sidebarActive('team-budgets') ? 'page' : undefined" @click="navTo('team-budgets')">
-          Team Budgets
+          {{ t('nav.teamBudgets') }}
         </button>
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('execution-quota-controls') }" :aria-current="sidebarActive('execution-quota-controls') ? 'page' : undefined" @click="navTo('execution-quota-controls')">
-          Execution Quotas
+          {{ t('nav.executionQuotas') }}
         </button>
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('report-digests') }" :aria-current="sidebarActive('report-digests') ? 'page' : undefined" @click="navTo('report-digests')">
-          Digest Reports
+          {{ t('nav.digestReports') }}
         </button>
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('mobile-execution-monitor') }" :aria-current="sidebarActive('mobile-execution-monitor') ? 'page' : undefined" @click="navTo('mobile-execution-monitor')">
-          Mobile Monitor
+          {{ t('nav.mobileMonitor') }}
         </button>
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('bot-sla-uptime') }" :aria-current="sidebarActive('bot-sla-uptime') ? 'page' : undefined" @click="navTo('bot-sla-uptime')">
-          Bot SLA &amp; Uptime
+          {{ t('nav.botSlaUptime') }}
         </button>
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('api-keys') }" :aria-current="sidebarActive('api-keys') ? 'page' : undefined" @click="navTo('api-keys')">
-          API Keys
+          {{ t('nav.apiKeys') }}
         </button>
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('findings-triage-board') }" :aria-current="sidebarActive('findings-triage-board') ? 'page' : undefined" @click="navTo('findings-triage-board')">
-          Findings Triage
+          {{ t('nav.findingsTriage') }}
         </button>
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('skill-version-pinning') }" :aria-current="sidebarActive('skill-version-pinning') ? 'page' : undefined" @click="navTo('skill-version-pinning')">
-          Version Pinning
+          {{ t('nav.versionPinning') }}
         </button>
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('conversation-history-viewer') }" :aria-current="sidebarActive('conversation-history-viewer') ? 'page' : undefined" @click="navTo('conversation-history-viewer')">
-          Conversation History
+          {{ t('nav.conversationHistory') }}
         </button>
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('system-errors') }" :aria-current="sidebarActive('system-errors') ? 'page' : undefined" @click="navTo('system-errors')">
-          System Errors
+          {{ t('nav.systemErrors') }}
         </button>
       </div>
 
@@ -1215,7 +1218,7 @@ function handleSidebarKeydown(e: KeyboardEvent) {
 
       <!-- Settings (flat link) -->
       <SidebarFlatLink
-        label="Settings"
+        :label="t('nav.settings')"
         :active="sidebarActive('settings')"
         :collapsed-desktop="isCollapsedDesktop()"
         @click="navTo('settings')"

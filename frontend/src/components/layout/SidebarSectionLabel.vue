@@ -1,4 +1,8 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
+
 defineProps<{
   label: string;
   errorKeys?: string[];
@@ -19,7 +23,7 @@ function defaultTitle(errs: Record<string, string | null> | undefined, keys: str
   if (!errs || !keys) return '';
   const named = keys.filter(k => !!errs[k]);
   if (named.length === 1) return errs[named[0]] || '';
-  return named.map(k => k.charAt(0).toUpperCase() + k.slice(1)).join(', ') + ' failed to load';
+  return t('nav.failedToLoad', { sections: named.map(k => k.charAt(0).toUpperCase() + k.slice(1)).join(', ') });
 }
 
 function onRetry(key: string) {
@@ -47,7 +51,7 @@ defineExpose({ hasAnyError, defaultTitle, onRetry });
           v-if="errors && errors[key]"
           class="section-retry-btn"
           @click.stop="onRetry(key)"
-        >Retry</button>
+        >{{ t('common.retry') }}</button>
       </template>
     </span>
   </div>

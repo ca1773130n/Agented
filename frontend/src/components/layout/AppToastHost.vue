@@ -10,7 +10,10 @@
  * Styles (`.toast-container`, `.toast`, etc.) live globally in App.vue
  * to keep CSS class contracts unchanged.
  */
+import { useI18n } from 'vue-i18n';
 import type { Toast } from '../../composables/useToastSystem';
+
+const { t } = useI18n();
 
 defineProps<{ toasts: Toast[] }>();
 defineEmits<{ (e: 'dismiss', id: number): void }>();
@@ -44,7 +47,7 @@ defineEmits<{ (e: 'dismiss', id: number): void }>();
             </svg>
           </div>
           <span class="toast-message">{{ toast.message }}</span>
-          <button class="toast-dismiss" @click="$emit('dismiss', toast.id)" aria-label="Dismiss notification">
+          <button class="toast-dismiss" @click="$emit('dismiss', toast.id)" :aria-label="t('common.dismiss')">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M18 6L6 18M6 6l12 12"/>
             </svg>

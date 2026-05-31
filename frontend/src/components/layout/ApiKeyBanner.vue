@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { ref } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { healthApi, setApiKey } from '../../services/api';
+
+const { t } = useI18n();
 
 const emit = defineEmits<{
   authenticated: [];
@@ -14,7 +17,7 @@ const dismissed = ref(false);
 async function submit() {
   const key = apiKeyInput.value.trim();
   if (!key) {
-    error.value = 'Please enter an API key';
+    error.value = t('apiKeyBanner.errorEmpty');
     return;
   }
 
@@ -27,10 +30,10 @@ async function submit() {
       setApiKey(key);
       emit('authenticated');
     } else {
-      error.value = result.message || 'Invalid API key';
+      error.value = result.message || t('apiKeyBanner.errorInvalid');
     }
   } catch {
-    error.value = 'Failed to verify key. Is the backend running?';
+    error.value = t('apiKeyBanner.errorVerifyFailed');
   } finally {
     verifying.value = false;
   }
@@ -50,23 +53,23 @@ function dismiss() {
         </svg>
       </div>
       <div class="banner-text">
-        <strong>API key required</strong>
-        <span class="banner-description">Enter your API key to continue.</span>
+        <strong>{{ t('apiKeyBanner.title') }}</strong>
+        <span class="banner-description">{{ t('apiKeyBanner.description') }}</span>
       </div>
       <form class="banner-form" @submit.prevent="submit">
         <input
           v-model="apiKeyInput"
           type="password"
-          placeholder="Enter API key..."
+          :placeholder="t('apiKeyBanner.placeholder')"
           class="banner-input"
           autocomplete="off"
           :disabled="verifying"
         />
         <button type="submit" class="banner-submit" :disabled="verifying || !apiKeyInput.trim()">
-          {{ verifying ? 'Verifying...' : 'Connect' }}
+          {{ verifying ? t('apiKeyBanner.verifying') : t('apiKeyBanner.connect') }}
         </button>
       </form>
-      <button class="banner-dismiss" @click="dismiss" aria-label="Dismiss">
+      <button class="banner-dismiss" @click="dismiss" :aria-label="t('common.dismiss')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
           <path d="M18 6L6 18M6 6l12 12" />
         </svg>

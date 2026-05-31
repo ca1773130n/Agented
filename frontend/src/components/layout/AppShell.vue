@@ -15,10 +15,13 @@
  * Styles for `.sidebar`, `.collapse-toggle`, `.main-content`, etc. are
  * defined globally in App.vue and remain unchanged.
  */
+import { useI18n } from 'vue-i18n';
 import AppHeader from './AppHeader.vue';
 import AppSidebar from './AppSidebar.vue';
 import ApiKeyBanner from './ApiKeyBanner.vue';
 import type { Trigger, Product, Project, Team, Plugin, AIBackend } from '../../services/api';
+
+const { t } = useI18n();
 
 defineProps<{
   // Sidebar collapse / mobile drawer state
@@ -70,7 +73,7 @@ defineEmits<{
     <button
       v-if="!isMobile"
       class="collapse-toggle"
-      :aria-label="isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'"
+      :aria-label="isCollapsed ? t('nav.expandSidebar') : t('nav.collapseSidebar')"
       :aria-expanded="!isCollapsed"
       aria-controls="app-sidebar-nav"
       @click="$emit('toggle-collapse')"

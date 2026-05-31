@@ -1,8 +1,11 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter, type RouteLocationRaw } from 'vue-router';
 import { productApi, projectApi, teamApi, agentApi, superAgentApi } from '../../services/api';
 import CommandPalette from './CommandPalette.vue';
+
+const { t } = useI18n();
 
 const emit = defineEmits<{
   toggleSidebar: [];
@@ -246,7 +249,7 @@ const mobileSegments = computed<BreadcrumbSegment[]>(() => {
 <template>
   <header class="app-header">
     <!-- Mobile hamburger -->
-    <button class="header-hamburger" @click="emit('toggleSidebar')" aria-label="Toggle sidebar">
+    <button class="header-hamburger" @click="emit('toggleSidebar')" :aria-label="t('nav.toggleSidebar')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <line x1="3" y1="6" x2="21" y2="6" />
         <line x1="3" y1="12" x2="21" y2="12" />
