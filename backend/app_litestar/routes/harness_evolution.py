@@ -112,6 +112,20 @@ def revert_round_route(
     return {"round_id": round_id, **result.model_dump()}
 
 
+@get("/shared-forge", sync_to_thread=False)
+def list_shared_forge() -> dict[str, Any]:
+    from app.db.forge_promotion import list_shared_bindings
+
+    return {"shared": list_shared_bindings(enabled_only=True)}
+
+
+@post("/projects/{project_id:str}/adopt-shared/{shared_binding_id:int}", sync_to_thread=True)
+def adopt_shared_route(project_id: str, shared_binding_id: int) -> dict[str, Any]:
+    from app.services.harness_propagation import adopt_shared_binding
+
+    return {"project_id": project_id, **adopt_shared_binding(project_id, shared_binding_id)}
+
+
 @get("/projects/{project_id:str}/autonomy", sync_to_thread=False)
 def get_autonomy_config(project_id: str) -> dict[str, Any]:
     from app.db.project_autonomy_config import get_policy
@@ -162,5 +176,7 @@ harness_evolution_router = Router(
         revert_round_route,
         get_autonomy_config,
         set_autonomy_config,
+        list_shared_forge,
+        adopt_shared_route,
     ],
 )
