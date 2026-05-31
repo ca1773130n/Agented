@@ -19,6 +19,7 @@ from ._misc import create_misc_tables
 from ._monitoring import create_monitoring_tables
 from ._orgs import create_org_tables
 from ._plugins import create_plugin_tables
+from ._forge_promotion import create_forge_promotion_tables
 from ._project_autonomy import create_project_autonomy_tables
 from ._security import create_security_tables
 from ._setup import create_setup_tables
@@ -66,4 +67,5 @@ def create_fresh_schema(conn):
     create_harness_takeaway_tables(conn)
     create_team_execution_tables(conn)
     create_project_autonomy_tables(conn)
+    create_forge_promotion_tables(conn)
     conn.commit()
