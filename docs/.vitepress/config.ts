@@ -74,5 +74,53 @@ export default defineConfig({
         ],
       },
     },
+
+    ja: {
+      label: '日本語',
+      lang: 'ja',
+      link: '/ja/',
+      themeConfig: {
+        nav: [
+          { text: 'ホーム', link: '/ja/' },
+          { text: 'アーキテクチャ', link: '/ja/self-improving-harness-architecture' },
+          { text: 'ブログ', link: `${GITHUB}/blob/main/BLOG-self-improving-harness.md` },
+        ],
+        sidebar: [
+          {
+            text: 'ドキュメント',
+            items: [
+              {
+                text: '自己改善ハーネス',
+                link: '/ja/self-improving-harness-architecture',
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    zh: {
+      label: '中文',
+      lang: 'zh',
+      link: '/zh/',
+      themeConfig: {
+        nav: [
+          { text: '首页', link: '/zh/' },
+          { text: '架构', link: '/zh/self-improving-harness-architecture' },
+          { text: '博客', link: `${GITHUB}/blob/main/BLOG-self-improving-harness.md` },
+        ],
+        sidebar: [
+          {
+            text: '文档',
+            items: [
+              {
+                text: '自我改进 harness',
+                link: '/zh/self-improving-harness-architecture',
+              },
+            ],
+          },
+        ],
+      },
+    },
   },
 })
