@@ -351,6 +351,9 @@ failed trajectories and editing the Forge primitives under ``forge/``.
   confidence takeaways. When present, USE IT to ground proposals in
   concrete files / symbols / past sessions — cite Tesserae node IDs
   or file paths in NOTES.md alongside takeaway IDs.
+- ``KG_SIGNALS.md`` (OPTIONAL): KG-surfaced candidates for new primitives,
+  weighted by salience. High-weight, not-yet-forged signals are the
+  strongest candidates for a new rule / hook / command / skill.
 - ``DESIGN_GUIDE.md``: four-layer principles + editing rules + how to
   weigh the two evidence streams.
 
@@ -448,11 +451,30 @@ def gather_inputs(
     except Exception:
         takeaways = []
 
+    # KG signals — Tesserae's compiled graph surfaces recurring, un-codified
+    # patterns/decisions as weighted candidates. Best-effort + gated: a KG
+    # outage or a project without Tesserae yields [] and never blocks a round.
+    try:
+        from app.services.harness_kg_signals import gather_kg_signals
+
+        forged_index = [
+            (p["asset"].get("content") or "") for plist in primitives.values() for p in plist
+        ]
+        kg_signals = [
+            s.model_dump() for s in gather_kg_signals(project_id, forged_index=forged_index)
+        ]
+    except Exception:
+        logger.warning(
+            "harness_evolver: kg_signals gather failed for %s", project_id, exc_info=True
+        )
+        kg_signals = []
+
     return {
         "project_id": project_id,
         "primitives": primitives,
         "trajectories": trajectories,
         "takeaways": takeaways,
+        "kg_signals": kg_signals,
     }
 
 
@@ -614,6 +636,36 @@ def build_workspace(inputs: dict[str, Any], scratch_dir: Path) -> Path:
             json.dumps(projection, indent=2, ensure_ascii=False, default=str),
             encoding="utf-8",
         )
+
+    # KG signals — recurring, not-yet-codified patterns surfaced from the
+    # compiled Tesserae knowledge graph (separate from tesserae_context.md,
+    # which is a per-takeaway lookup). Each carries a salience weight; we
+    # rank by it and only write the file when there's at least one signal.
+    kg_signals = inputs.get("kg_signals") or []
+    if kg_signals:
+        ranked = sorted(kg_signals, key=lambda s: float(s.get("weight") or 0), reverse=True)
+        lines = [
+            "# KG signals (from the compiled Tesserae knowledge graph)",
+            "",
+            "These are recurring, **not-yet-codified** patterns / decisions / "
+            "missing-guardrails surfaced from the project's knowledge graph. Each "
+            "has a `weight` in [0.3, 0.7] (higher = fresher / more salient; lower = "
+            "stale or already resembling an existing primitive). Treat high-weight, "
+            "`already_forged: false` signals as the strongest candidates for a NEW "
+            "rule / hook / command / skill. Cite the signal in NOTES.md when one "
+            "motivates a primitive change.",
+            "",
+        ]
+        for s in ranked:
+            lines.append(
+                f"## weight {float(s.get('weight') or 0):.2f}"
+                f"{' · already-forged' if s.get('already_forged') else ''}"
+            )
+            lines.append(f"**Q:** {s.get('question', '')}")
+            lines.append("")
+            lines.append((s.get("content") or "").strip())
+            lines.append("")
+        (scratch_dir / "KG_SIGNALS.md").write_text("\n".join(lines), encoding="utf-8")
 
     # Tesserae context — opt-in per project. When the project has a
     # ``tesserae_project_root`` set, query the compiled graph for code/
@@ -1435,6 +1487,7 @@ def run_evolution_round(
         input_window_until=until,
         input_execution_count=len(inputs["trajectories"]),
         input_forge=_summarize_primitives(inputs["primitives"]),
+        input_kg_signals=inputs.get("kg_signals") or [],
         scratch_dir=str(scratch),
     )
 
