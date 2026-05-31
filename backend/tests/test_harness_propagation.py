@@ -214,3 +214,56 @@ def test_promote_idempotent(isolated_db):
     assert (
         len([s for s in fp.list_shared_bindings(enabled_only=True) if s["fingerprint"] == fpv]) == 1
     )
+
+
+# ---------------------------------------------------------------------------
+# Task 5 — adopt_shared_binding + local_wins conflict resolution
+# ---------------------------------------------------------------------------
+from app.services.harness_propagation import adopt_shared_binding
+
+
+def test_adopt_creates_shared_binding(isolated_db):
+    with get_connection() as conn:
+        conn.execute("INSERT INTO projects (id, name, status) VALUES ('pad', 'P', 'active')")
+        conn.commit()
+    sbid = fp.create_shared_binding(scope="global", kind="rule", asset_id="77", fingerprint="fpZ")
+    res = adopt_shared_binding("pad", sbid)
+    assert res["adopted"] is True
+    bound = [
+        b
+        for b in bindings_repo.list_bindings("pad")
+        if b["kind"] == "rule" and str(b["asset_id"]) == "77"
+    ]
+    assert bound and bound[0]["source_scope"] == "shared"
+    assert fp.is_adopted("pad", sbid) is True
+
+
+def test_adopt_idempotent_no_duplicate(isolated_db):
+    with get_connection() as conn:
+        conn.execute("INSERT INTO projects (id, name, status) VALUES ('pad2', 'P', 'active')")
+        conn.commit()
+    sbid = fp.create_shared_binding(scope="global", kind="rule", asset_id="78", fingerprint="fpZ2")
+    adopt_shared_binding("pad2", sbid)
+    adopt_shared_binding("pad2", sbid)
+    bound = [b for b in bindings_repo.list_bindings("pad2") if str(b["asset_id"]) == "78"]
+    assert len(bound) == 1
+
+
+def test_local_wins_skips_adoption(isolated_db):
+    with get_connection() as conn:
+        conn.execute("INSERT INTO projects (id, name, status) VALUES ('plw', 'P', 'active')")
+        conn.commit()
+    # project already has a LOCAL binding with the same fingerprint
+    bindings_repo.add_binding(
+        "plw", "rule", "5", fingerprint="fpL"
+    )  # source_scope defaults 'project'
+    sbid = fp.create_shared_binding(scope="global", kind="rule", asset_id="88", fingerprint="fpL")
+    res = adopt_shared_binding("plw", sbid)
+    assert res["adopted"] is False and res["reason"] == "local_wins"
+    # the shared asset 88 was NOT bound
+    assert not [b for b in bindings_repo.list_bindings("plw") if str(b["asset_id"]) == "88"]
+
+
+def test_adopt_not_found(isolated_db):
+    res = adopt_shared_binding("pnone", 99999)
+    assert res["adopted"] is False and res["reason"] == "not_found"

@@ -82,3 +82,39 @@ def promote_if_qualified(kind: str, fp_value: str, asset: dict) -> bool:
     except Exception:
         logger.warning("propagation: promote failed for %s %s", kind, fp_value[:12], exc_info=True)
         return False
+
+
+def adopt_shared_binding(project_id: str, shared_binding_id: int) -> dict:
+    """Adopt a shared (promoted) binding into a project.
+
+    Returns:
+        {"adopted": True, "binding_id": <id>}          — newly adopted
+        {"adopted": True, "reason": "already"}          — already adopted (idempotent)
+        {"adopted": False, "reason": "local_wins"}      — project has own local binding
+        {"adopted": False, "reason": "not_found"}       — shared binding doesn't exist
+    """
+    sb = fp.get_shared_binding(shared_binding_id)
+    if sb is None:
+        return {"adopted": False, "reason": "not_found"}
+
+    from app.db import project_forge_bindings as bindings_repo
+
+    for row in bindings_repo.list_bindings(project_id):
+        if (
+            row.get("kind") == sb["kind"]
+            and str(row.get("fingerprint")) == str(sb["fingerprint"])
+            and row.get("source_scope") != "shared"
+        ):
+            return {"adopted": False, "reason": "local_wins"}
+
+    binding = bindings_repo.add_binding(
+        project_id,
+        sb["kind"],
+        sb["asset_id"],
+        source_scope="shared",
+        source_shared_binding_id=shared_binding_id,
+        fingerprint=sb["fingerprint"],
+    )
+    fp.record_adoption(project_id=project_id, shared_binding_id=shared_binding_id)
+    bid = binding.get("id") if isinstance(binding, dict) else binding
+    return {"adopted": True, "binding_id": bid}
